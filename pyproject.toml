@@ -1,0 +1,7 @@
+[project]
+name = "pyguara"
+version = "0.1.0"
+description = "Python game engine featuring a event and data driven archictecture."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
