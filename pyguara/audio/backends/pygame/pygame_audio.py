@@ -1,7 +1,7 @@
 """Pygame implementation of the Audio System."""
 
 import pygame
-from pyguara.audio.system import IAudioSystem
+from pyguara.audio.audio_system import IAudioSystem
 from pyguara.resources.types import AudioClip
 
 
