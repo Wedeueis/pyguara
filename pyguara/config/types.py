@@ -2,10 +2,11 @@
 
 from dataclasses import dataclass, field, asdict
 from typing import Dict, Any
+from pyguara.common.types import Color
 
 
 @dataclass
-class DisplayConfig:
+class WindowConfig:
     """Display and rendering configuration."""
 
     screen_width: int = 1200
@@ -14,6 +15,8 @@ class DisplayConfig:
     fullscreen: bool = False
     vsync: bool = True
     ui_scale: float = 1.0
+    default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
+    title: str = "Pyguara Engine"
 
 
 @dataclass
@@ -39,7 +42,7 @@ class InputConfig:
 class GameConfig:
     """Master configuration container."""
 
-    display: DisplayConfig = field(default_factory=DisplayConfig)
+    display: WindowConfig = field(default_factory=WindowConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     input: InputConfig = field(default_factory=InputConfig)
 
@@ -58,8 +61,8 @@ class GameConfig:
         # Display
         if "display" in data:
             d = data["display"]
-            cfg.display = DisplayConfig(
-                **{k: v for k, v in d.items() if k in DisplayConfig.__annotations__}
+            cfg.display = WindowConfig(
+                **{k: v for k, v in d.items() if k in WindowConfig.__annotations__}
             )
 
         # Audio

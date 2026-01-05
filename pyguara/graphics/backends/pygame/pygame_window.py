@@ -2,28 +2,30 @@
 
 import pygame
 from typing import Any, Iterable, cast
+from pyguara.config.types import WindowConfig
 from pyguara.graphics.protocols import IWindowBackend
 
 
 class PygameWindow(IWindowBackend):
     """Handles window lifecycle using Pygame."""
 
-    def create_window(
-        self, width: int, height: int, title: str, fullscreen: bool, vsync: bool
-    ) -> Any:
+    def open(self, config: WindowConfig) -> bool:
         """Create a Pygame display surface."""
         # Standard Pygame setup
         flags = pygame.DOUBLEBUF | pygame.HWSURFACE
-        if fullscreen:
+        self._default_color = config.default_color
+        if config.fullscreen:
             flags |= pygame.FULLSCREEN
 
-        surface = pygame.display.set_mode(
-            (width, height), flags, vsync=1 if vsync else 0
+        self._screen = pygame.display.set_mode(
+            (config.screen_width, config.screen_height),
+            flags,
+            vsync=1 if config.vsync else 0,
         )
-        pygame.display.set_caption(title)
-        return surface
+        pygame.display.set_caption(config.title)
+        return True
 
-    def destroy_window(self) -> None:
+    def close(self) -> None:
         """Quit the display module."""
         # Pygame uses quit() to kill the window context
         pygame.display.quit()
@@ -37,6 +39,10 @@ class PygameWindow(IWindowBackend):
         # The window manages the flip, not the renderer
         pygame.display.flip()
 
+    def clear(self) -> None:
+        """Clear the window context screen with default clear color."""
+        self._screen.fill(self._default_color)
+
     def poll_events(self) -> Iterable[Any]:
         """Fetch pygame events and handle internal window state."""
         events = pygame.event.get()
@@ -47,3 +53,7 @@ class PygameWindow(IWindowBackend):
                 self._running = False
 
         return cast(Iterable[Any], events)
+
+    def get_screen(self) -> Any:
+        """Return the native OS window."""
+        return self._screen

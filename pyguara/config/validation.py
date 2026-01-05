@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
 
-from pyguara.config.types import GameConfig, DisplayConfig, AudioConfig
+from pyguara.config.types import GameConfig, WindowConfig, AudioConfig
 
 
 class ValidationSeverity(Enum):
@@ -37,7 +37,7 @@ class ConfigValidator:
         issues.extend(self._validate_audio(config.audio))
         return issues
 
-    def _validate_display(self, display: DisplayConfig) -> List[ValidationIssue]:
+    def _validate_display(self, display: WindowConfig) -> List[ValidationIssue]:
         """Validate display settings."""
         issues = []
         if display.screen_width < 640:

@@ -16,6 +16,7 @@ from typing import Protocol, Any, Tuple, Optional, Iterable, runtime_checkable
 from pyguara.common.types import Vector2, Color, Rect
 from pyguara.resources.types import Texture
 from pyguara.graphics.types import RenderBatch
+from pyguara.config.types import WindowConfig
 
 
 @runtime_checkable
@@ -225,14 +226,16 @@ class IWindowBackend(Protocol):
     This protocol abstracts the lifecycle of the operating system window.
     """
 
-    def create_window(
-        self, width: int, height: int, title: str, fullscreen: bool, vsync: bool
-    ) -> Any:
-        """Create the native OS window and returns its handle."""
+    def open(self, config: WindowConfig) -> Any:
+        """Create the native OS window."""
         ...
 
-    def destroy_window(self) -> None:
+    def close(self) -> None:
         """Close and destroys the window context."""
+        ...
+
+    def clear(self) -> None:
+        """Clear the window context screen with default clear color."""
         ...
 
     def set_caption(self, title: str) -> None:
@@ -253,6 +256,10 @@ class IWindowBackend(Protocol):
         Returns:
             Iterable of opaque event objects to be passed to InputManager.
         """
+        ...
+
+    def get_screen(self) -> Any:
+        """Return the native OS window."""
         ...
 
 

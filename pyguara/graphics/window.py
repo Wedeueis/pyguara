@@ -1,19 +1,8 @@
 """Core Window management module."""
 
-from dataclasses import dataclass
 from typing import Any, Iterable
+from pyguara.config.types import WindowConfig
 from pyguara.graphics.protocols import IWindowBackend
-
-
-@dataclass
-class WindowConfig:
-    """Configuration parameters for window creation."""
-
-    width: int = 1280
-    height: int = 720
-    title: str = "pyGuara Engine"
-    fullscreen: bool = False
-    vsync: bool = True
 
 
 class Window:
@@ -34,21 +23,25 @@ class Window:
         if self._is_open:
             return
 
-        self._native_handle = self._backend.create_window(
-            self._config.width,
-            self._config.height,
-            self._config.title,
-            self._config.fullscreen,
-            self._config.vsync,
-        )
+        if self._backend.open(self._config):
+            print("Sucessefully openned window!")
+        else:
+            raise Exception("Cannot load pygame window!")
+
+        self._native_handle = self._backend.get_screen()
+
         self._is_open = True
 
     def close(self) -> None:
         """Destroy the window."""
         if self._is_open:
-            self._backend.destroy_window()
+            self._backend.close()
             self._native_handle = None
             self._is_open = False
+
+    def clear(self) -> None:
+        """Clear the window with configured default Color."""
+        self._backend.clear()
 
     def present(self) -> None:
         """Update the window with the latest rendered frame."""
@@ -73,12 +66,12 @@ class Window:
     @property
     def width(self) -> int:
         """Get the configured window width."""
-        return self._config.width
+        return self._config.screen_width
 
     @property
     def height(self) -> int:
         """Get the configured window height."""
-        return self._config.height
+        return self._config.screen_height
 
     @property
     def is_open(self) -> bool:
