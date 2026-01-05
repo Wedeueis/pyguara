@@ -34,7 +34,7 @@ def create_application() -> Application:
 
     # 1. Event System (Core)
     event_dispatcher = EventDispatcher()
-    container.register_instance(EventDispatcher, EventDispatcher)
+    container.register_instance(EventDispatcher, event_dispatcher)
 
     # 2. Configuration
     config_manager = ConfigManager(event_dispatcher=event_dispatcher)

@@ -3,9 +3,9 @@
 import json
 from typing import List
 
-from pyguara.resource.loader import IResourceLoader
-from pyguara.resource.data import DataResource
-from pyguara.resource.types import Resource
+from pyguara.resources.loader import IResourceLoader
+from pyguara.resources.data import DataResource
+from pyguara.resources.types import Resource
 
 
 class JsonLoader(IResourceLoader):
