@@ -11,7 +11,7 @@ By adhering to these protocols:
 """
 
 from __future__ import annotations
-from typing import Protocol, Any, runtime_checkable
+from typing import Protocol, Any, Tuple, Optional, runtime_checkable
 
 from pyguara.common.types import Vector2, Color, Rect
 from pyguara.resources.types import Texture
@@ -245,3 +245,44 @@ class IWindowBackend(Protocol):
         The Window owns the swap chain, so it should handle presentation.
         """
         ...
+
+
+class UIRenderer(Protocol):
+    """Abstract interface for drawing UI elements."""
+
+    def draw_rect(
+        self, rect: Rect, color: Color, width: int = 0, border_radius: int = 0
+    ) -> None:
+        """Draw a filled or outlined rectangle."""
+        ...
+
+    def draw_circle(self, center: Vector2, radius: float, color: Color) -> None:
+        """Draw a circle (e.g. for Radio buttons or Slider knobs)."""
+        ...
+
+    def draw_line(
+        self, start: Vector2, end: Vector2, color: Color, width: int = 1
+    ) -> None:
+        """Draw a line."""
+        ...
+
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        """Draw text string."""
+        ...
+
+    def draw_texture(
+        self, texture: Any, rect: Rect, color: Optional[Color] = None
+    ) -> None:
+        """Draw an image texture.
+
+        Args:
+            texture: The engine specific texture object (e.g. pygame.Surface)
+            rect: Where to draw it
+            color: Optional tint color
+        """
+        ...
+
+    def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
+        """Calculate dimensions of text."""
