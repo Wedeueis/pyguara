@@ -3,27 +3,35 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
+from pyguara.ecs.component import BaseComponent
 from pyguara.physics.types import BodyType
 from pyguara.physics.protocols import IPhysicsBody
 
 
 @dataclass
-class RigidBody:
+class RigidBody(BaseComponent):
     """
     Component representing a physical object.
 
     Attributes:
+        mass: The mass of the body (default 1.0).
         body_type: Static, Dynamic, or Kinematic.
         fixed_rotation: If True, physics won't rotate the object.
-        _body_handle: Internal reference to the backend body.
+        gravity_scale: Scale factor for gravity applied to this body.
     """
 
+    # Dataclass fields
+    mass: float = 1.0
     body_type: BodyType = BodyType.DYNAMIC
     fixed_rotation: bool = False
     gravity_scale: float = 1.0
 
-    # Runtime handle (injected by system)
+    # Internal handle (injected by system)
     _body_handle: Optional[IPhysicsBody] = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        """Initialize base component state."""
+        super().__init__()
 
     @property
     def handle(self) -> Optional[IPhysicsBody]:

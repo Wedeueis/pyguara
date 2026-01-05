@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 import time
 from typing import Any, Dict
-from pyguara.logging.types import LogLevel, LogCategory
+from pyguara.log.types import LogLevel, LogCategory
 from pyguara.events.protocols import Event
 
 

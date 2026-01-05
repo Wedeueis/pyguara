@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, cast, Iterator  # FIX: Added Iterator
 
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.logging.events import OnExceptionEvent
-from pyguara.logging.handlers import ContextualFilter, EventIntegratedHandler
-from pyguara.logging.types import LogCategory, LogLevel
+from pyguara.log.events import OnExceptionEvent
+from pyguara.log.handlers import ContextualFilter, EventIntegratedHandler
+from pyguara.log.types import LogCategory, LogLevel
 
 
 class EngineLogger:

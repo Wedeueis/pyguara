@@ -4,9 +4,10 @@ import math
 from typing import List, Optional, cast
 
 from pyguara.common.types import Vector2
+from pyguara.ecs.component import BaseComponent
 
 
-class Transform:
+class Transform(BaseComponent):
     """Component representing position, rotation, and scale in 2D space."""
 
     def __init__(
@@ -16,6 +17,8 @@ class Transform:
         scale: Optional[Vector2] = None,
     ) -> None:
         """Initialize the transform."""
+        super().__init__()  # Initialize BaseComponent (sets self.entity = None)
+
         self._local_position = position or Vector2(0.0, 0.0)
         self._local_rotation = rotation
         self._local_scale = scale or Vector2(1.0, 1.0)
@@ -151,7 +154,6 @@ class Transform:
 
         # Restore world state relative to new parent
         if keep_world_transform and world_pos is not None:
-            # FIX: Explicit assertions for MyPy
             assert world_rot is not None
             assert world_scl is not None
 
@@ -263,17 +265,14 @@ class Transform:
             self._parent._update_world_transform()
 
             # Apply parent transform
-            # 1. Scale local pos by parent scale
             scaled_pos = Vector2(
                 self._local_position.x * self._parent._world_scale.x,
                 self._local_position.y * self._parent._world_scale.y,
             )
-            # 2. Rotate local pos by parent rotation
             rotated_pos = cast(
                 Vector2, scaled_pos.rotated(self._parent._world_rotation)
             )
 
-            # 3. Combine
             self._world_position = self._parent._world_position + rotated_pos
             self._world_rotation = self._parent._world_rotation + self._local_rotation
             self._world_scale = Vector2(

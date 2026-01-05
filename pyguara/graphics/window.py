@@ -1,7 +1,7 @@
 """Core Window management module."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable
 from pyguara.graphics.protocols import IWindowBackend
 
 
@@ -53,6 +53,10 @@ class Window:
     def present(self) -> None:
         """Update the window with the latest rendered frame."""
         self._backend.present()
+
+    def poll_events(self) -> Iterable[Any]:
+        """Fetch pygame events and handle internal window state."""
+        return self._backend.poll_events()
 
     def set_title(self, title: str) -> None:
         """Update the window title dynamically."""

@@ -13,7 +13,7 @@ from pyguara.config.events import (
 from pyguara.config.types import GameConfig
 from pyguara.config.validation import ConfigValidator
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.logging.logger import EngineLogger
+from pyguara.log.logger import EngineLogger
 
 
 class ConfigManager:

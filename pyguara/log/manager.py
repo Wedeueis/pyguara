@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Dict, Optional, Union
 
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.logging.logger import EngineLogger
-from pyguara.logging.types import LogCategory, LogLevel
+from pyguara.log.logger import EngineLogger
+from pyguara.log.types import LogCategory, LogLevel
 
 
 class LogManager:

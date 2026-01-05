@@ -4,8 +4,8 @@ import logging
 from typing import Any, Dict
 
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.logging.events import OnLogEvent
-from pyguara.logging.types import LogCategory, LogLevel
+from pyguara.log.events import OnLogEvent
+from pyguara.log.types import LogCategory, LogLevel
 
 
 class ContextualFilter(logging.Filter):

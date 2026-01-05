@@ -11,7 +11,7 @@ By adhering to these protocols:
 """
 
 from __future__ import annotations
-from typing import Protocol, Any, Tuple, Optional, runtime_checkable
+from typing import Protocol, Any, Tuple, Optional, Iterable, runtime_checkable
 
 from pyguara.common.types import Vector2, Color, Rect
 from pyguara.resources.types import Texture
@@ -243,6 +243,15 @@ class IWindowBackend(Protocol):
         """Swap the video buffers (flips the screen).
 
         The Window owns the swap chain, so it should handle presentation.
+        """
+        ...
+
+    def poll_events(self) -> Iterable[Any]:
+        """
+        Poll system events (input, window events).
+
+        Returns:
+            Iterable of opaque event objects to be passed to InputManager.
         """
         ...
 

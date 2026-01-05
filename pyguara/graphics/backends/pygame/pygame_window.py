@@ -1,7 +1,7 @@
 """Pygame implementation of the Window Backend."""
 
 import pygame
-from typing import Any
+from typing import Any, Iterable, cast
 from pyguara.graphics.protocols import IWindowBackend
 
 
@@ -36,3 +36,14 @@ class PygameWindow(IWindowBackend):
         """Flip the display buffer."""
         # The window manages the flip, not the renderer
         pygame.display.flip()
+
+    def poll_events(self) -> Iterable[Any]:
+        """Fetch pygame events and handle internal window state."""
+        events = pygame.event.get()
+
+        # Check for quit event internally to update state
+        for event in events:
+            if event.type == pygame.QUIT:
+                self._running = False
+
+        return cast(Iterable[Any], events)
