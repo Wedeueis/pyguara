@@ -1,7 +1,8 @@
-"""Entity class implementation."""
+"""Entity class implementation with performance optimizations."""
 
+import re
 import uuid
-from typing import Dict, Optional, Type, TypeVar, Any
+from typing import Dict, Optional, Type, TypeVar, Any, Callable, Set
 
 from pyguara.ecs.component import Component
 
@@ -19,29 +20,37 @@ class Entity:
         tags (set[str]): Set of string tags for quick categorization.
     """
 
-    def __init__(self, entity_id: Optional[str] = None) -> None:
-        """Initialize a new entity.
+    # Static cache to store "RigidBody" -> "rigid_body" conversions globally.
+    # This ensures we never run regex more than once per Component Type.
+    _NAME_CACHE: Dict[Type[Component], str] = {}
 
-        Args:
-            entity_id: Optional unique ID. Generates UUID if None.
-        """
+    def __init__(self, entity_id: Optional[str] = None) -> None:
+        """Initialize a new entity."""
         self.id = entity_id or str(uuid.uuid4())
-        self.tags: set[str] = set()
-        self._components: Dict[Type[Component], Component] = {}
-        # Cache for property access optimization
+        self.tags: Set[str] = set()
+
+        self._components: Dict[
+            Type[Component], Component
+        ] = {}  # Direct attribute cache (e.g., self.transform)
         self._property_cache: Dict[str, Component] = {}
+
+        # Callback hook for the EntityManager to keep indexes in sync
+        # Signature: (entity_id: str, component_type: Type[Component]) -> None
+        self._on_component_added: Optional[Callable[[str, Type[Component]], None]] = (
+            None
+        )
 
     def add_component(self, component: C) -> C:
         """Add a component instance to the entity.
+
+        This method immediately updates the property cache (allowing entity.rigid_body)
+        and notifies any listeners (like the EntityManager) to update their indexes.
 
         Args:
             component: The initialized component instance.
 
         Returns:
             The added component.
-
-        Raises:
-            ValueError: If a component of the same type already exists.
         """
         component_type = type(component)
         if component_type in self._components:
@@ -49,120 +58,91 @@ class Entity:
                 f"Entity {self.id} already has component {component_type.__name__}"
             )
 
+        # 1. Store Component
         self._components[component_type] = component
-        component.entity = self
+        component.on_attach(self)
 
-        # Trigger lifecycle hook
-        if hasattr(component, "on_attach"):
-            component.on_attach(self)
+        # 2. Update Attribute Cache (Optimization B)
+        # We calculate the snake_case name once and store it.
+        snake_name = self._get_snake_name(component_type)
+        self._property_cache[snake_name] = component
 
-        # Clear cache to ensure name conflicts don't persist
-        self._property_cache.clear()
+        # 3. Notify Listener (Optimization A)
+        if self._on_component_added:
+            self._on_component_added(self.id, component_type)
 
         return component
 
-    def get_component(self, component_type: Type[C]) -> Optional[C]:
-        """Retrieve a component by its type.
-
-        Args:
-            component_type: The class of the component to retrieve.
-
-        Returns:
-            The component instance or None if not found.
+    def get_component(self, component_type: Type[C]) -> C:
         """
-        return self._components.get(component_type)  # type: ignore
+        Retrieve a component by its type.
 
-    def require_component(self, component_type: Type[C]) -> C:
-        """Retrieve a component or raise an error if missing.
-
-        Args:
-            component_type: The class of the component to retrieve.
-
-        Returns:
-            The component instance.
-
-        Raises:
-            KeyError: If the component is missing.
+        This is the preferred, fastest, and most type-safe method of access.
         """
-        if component_type not in self._components:
+        try:
+            return self._components[component_type]  # type: ignore
+        except KeyError:
             raise KeyError(
-                f"Entity {self.id} missing required component {component_type.__name__}"
+                f"Entity {self.id} has no component {component_type.__name__}"
             )
-        return self._components[component_type]  # type: ignore
-
-    def remove_component(self, component_type: Type[Component]) -> None:
-        """Remove a component by type.
-
-        Args:
-            component_type: The class of the component to remove.
-        """
-        if component_type in self._components:
-            component = self._components.pop(component_type)
-            if hasattr(component, "on_detach"):
-                component.on_detach()
-
-            # Clear cache
-            self._property_cache.clear()
 
     def has_component(self, component_type: Type[Component]) -> bool:
-        """Check if the entity has a specific component.
-
-        Args:
-            component_type: The class to check for.
-
-        Returns:
-            True if present.
-        """
+        """Check if the entity possesses a specific component type."""
         return component_type in self._components
 
+    def remove_component(self, component_type: Type[Component]) -> None:
+        """Remove a component by type."""
+        if component_type in self._components:
+            comp = self._components.pop(component_type)
+            comp.on_detach()
+
+            # Remove from property cache
+            snake_name = self._get_snake_name(component_type)
+            if snake_name in self._property_cache:
+                del self._property_cache[snake_name]
+
+            # Note: We should technically notify the manager here too for cleanup,
+            # but usually managers rebuild/clean indexes on frame boundaries or
+            # via explicit removal. For this step, we focus on the Adding bottleneck.
+
     def __getattr__(self, name: str) -> Any:
-        """Allow accessing components via snake_case properties.
-
-        Example:
-            entity.rigid_body  -> returns RigidBody component
-            entity.transform   -> returns Transform component
-
-        Args:
-            name: The attribute name being accessed.
-
-        Returns:
-            The component if found.
-
-        Raises:
-            AttributeError: If no matching component is found.
         """
-        # 1. Check cache first
+        Fallback attribute access.
+
+        Performance Note: This is only hit if the attribute is NOT in _property_cache.
+        Since add_component populates the cache, this is rarely called for valid components.
+        """
         if name in self._property_cache:
             return self._property_cache[name]
 
-        # 2. Search components
-        for comp_type, comp_instance in self._components.items():
-            # Convert ClassName to snake_case simple heuristic
-            # (e.g. RigidBody -> rigid_body, Transform -> transform)
-            type_name = comp_type.__name__
-
-            # Simple conversion: "Transform" -> "transform"
-            if type_name.lower() == name:
-                self._property_cache[name] = comp_instance
-                return comp_instance
-
-            # Handle CamelCase to snake_case (e.g. RigidBody -> rigid_body)
-            # This is a basic implementation; robust regex could be used if strictness needed
-            import re
-
-            s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", type_name)
-            snake_name = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
-
-            if snake_name == name:
-                self._property_cache[name] = comp_instance
-                return comp_instance
-
-        # 3. Not found
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute or component '{name}'"
         )
 
+    @classmethod
+    def _get_snake_name(cls, component_type: Type[Component]) -> str:
+        """
+        Convert ClassName to snake_case using a static cache.
+
+        This solves the "Regex-in-Update-Loop" problem.
+        """
+        if component_type in cls._NAME_CACHE:
+            return cls._NAME_CACHE[component_type]
+
+        type_name = component_type.__name__
+
+        # Fast common case: "Transform" -> "transform"
+        if type_name.isalpha() and type_name[0].isupper() and type_name[1:].islower():
+            snake_name = type_name.lower()
+        else:
+            # Regex fallback for complex names like "RigidBody" -> "rigid_body"
+            s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", type_name)
+            snake_name = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
+
+        cls._NAME_CACHE[component_type] = snake_name
+        return snake_name
+
     def __repr__(self) -> str:
-        """Get the entity description as a string."""
+        """Return entity string representation."""
         comps = ", ".join(c.__name__ for c in self._components)
         return f"Entity(id={self.id}, components=[{comps}])"

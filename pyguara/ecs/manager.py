@@ -1,6 +1,7 @@
-"""Entity Manager implementation for ECS."""
+"""Entity Manager implementation for ECS with Spatial Indexing."""
 
-from typing import Dict, List, Optional, Type, Iterator
+from typing import Dict, Optional, Type, Iterator, Set
+from collections import defaultdict
 
 from pyguara.ecs.component import Component
 from pyguara.ecs.entity import Entity
@@ -10,75 +11,85 @@ class EntityManager:
     """Manages the lifecycle and querying of entities.
 
     Acts as the central database for the game world.
+    Optimized with Inverted Indexes for O(1) component lookups.
     """
 
     def __init__(self) -> None:
         """Initialize the entity manager."""
         self._entities: Dict[str, Entity] = {}
-        # Cache for queries: Signature (Component Types) -> List[Entity]
-        self._query_cache: Dict[frozenset[Type[Component]], List[Entity]] = {}
+
+        # The Inverted Index: ComponentType -> Set[EntityID]
+        # This solves the O(N) Query Problem.
+        self._component_index: Dict[Type[Component], Set[str]] = defaultdict(set)
 
     def create_entity(self, entity_id: Optional[str] = None) -> Entity:
-        """Create and register a new entity.
-
-        Args:
-            entity_id: Optional custom ID.
-
-        Returns:
-            The created entity.
-        """
+        """Create and register a new entity."""
         entity = Entity(entity_id)
         self.add_entity(entity)
         return entity
 
     def add_entity(self, entity: Entity) -> None:
-        """Register an existing entity.
-
-        Args:
-            entity: The entity to add.
-        """
-        if entity.id in self._entities:
-            # If ID exists but object is different, warning/error
-            # For now, overwrite
-            pass
+        """Register an existing entity."""
         self._entities[entity.id] = entity
-        self._invalidate_query_cache()
+
+        # Hook into the entity's lifecycle to keep our index updated
+        # This dependency injection allows the Entity to notify us without
+        # knowing who we are (Observer pattern light).
+        entity._on_component_added = self._on_entity_component_added
+
+        # Index any components that might already exist on this entity
+        for comp_type in entity._components:
+            self._component_index[comp_type].add(entity.id)
 
     def remove_entity(self, entity_id: str) -> None:
-        """Destroy an entity.
-
-        Args:
-            entity_id: ID of the entity to remove.
-        """
+        """Destroy an entity and clean up indexes."""
         if entity_id in self._entities:
+            entity = self._entities[entity_id]
+
+            # Remove from all indexes
+            # This is O(C) where C is number of components on the entity
+            for comp_type in entity._components:
+                if comp_type in self._component_index:
+                    self._component_index[comp_type].discard(entity_id)
+
             del self._entities[entity_id]
-            self._invalidate_query_cache()
 
     def get_entity(self, entity_id: str) -> Optional[Entity]:
         """Retrieve an entity by ID."""
         return self._entities.get(entity_id)
 
     def get_entities_with(self, *component_types: Type[Component]) -> Iterator[Entity]:
-        """Query for entities containing ALL specified component types.
-
-        This is the primary method Systems use to find relevant entities.
-
-        Args:
-            *component_types: Variable list of Component classes.
-
-        Yields:
-            Entities that have instances of all requested component types.
         """
-        # Check cache if query is complex, but for now simple iteration is fine
-        # for a Python engine unless entity count > 10,000
+        Query for entities containing ALL specified component types.
 
-        # Optimization: Find component type with fewest entities (if we maintained reverse map)
-        # For simplicity in this version:
+        Performance: O(K) where K is the number of entities matching the query,
+        independent of the total number of entities in the world.
+        """
+        if not component_types:
+            return
 
-        for entity in self._entities.values():
-            if all(entity.has_component(ctype) for ctype in component_types):
-                yield entity
+        # 1. Get the sets of entity IDs for each requested component
+        # If any component type has no entities, the intersection is empty.
+        sets = []
+        for c_type in component_types:
+            if c_type not in self._component_index:
+                return  # Empty result
+            sets.append(self._component_index[c_type])
 
-    def _invalidate_query_cache(self) -> None:
-        """Clear query cache when entity composition changes."""
-        self._query_cache.clear()
+        # 2. Sort by size (optimization: intersection is faster if we start small)
+        sets.sort(key=len)
+
+        # 3. Perform intersection
+        result_ids = sets[0]
+        for i in range(1, len(sets)):
+            result_ids = result_ids & sets[i]  # Intersection
+
+        # 4. Yield actual entities
+        for eid in result_ids:
+            yield self._entities[eid]
+
+    def _on_entity_component_added(
+        self, entity_id: str, component_type: Type[Component]
+    ) -> None:
+        """Call when an entity adds a component."""
+        self._component_index[component_type].add(entity_id)
