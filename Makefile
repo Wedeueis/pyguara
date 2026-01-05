@@ -78,7 +78,7 @@ docs-deploy:  ## Deploy documentation (for CI/CD)
 
 # Demos - Gameplay
 play: ## Run the main game
-	uv run pyguara play
+	uv run main.py
 
 # Build and Distribution
 build:  ## Build the package
