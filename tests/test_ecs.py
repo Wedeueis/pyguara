@@ -1,7 +1,6 @@
 from pyguara.ecs import EntityManager
 from pyguara.common.components import Transform, Vector2
-from pyguara.physics.components.rigid_body import RigidBody
-from pyguara.physics.components.collider import Collider
+from pyguara.physics.components import RigidBody, Collider
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.events.dispatcher import EventDispatcher
