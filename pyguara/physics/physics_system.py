@@ -1,85 +1,100 @@
-"""Physics system handling simulation and synchronization."""
+"""System responsible for syncing ECS entities with the Physics Engine."""
 
-from typing import Any, List
+from typing import List
 
 from pyguara.common.components import Transform
-from pyguara.common.types import Vector2
+from pyguara.ecs.entity import Entity
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.physics.components.rigid_body import RigidBody
-from pyguara.physics.components.collider import Collider
+from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.types import BodyType
 
 
 class PhysicsSystem:
     """
-    Synchronizes ECS entities with the physics backend.
+    The bridge between the ECS world and the Physics Backend (Pymunk).
 
-    Responsibilities:
-    1. Initialize RigidBodies for entities that have them.
-    2. Sync Transform -> PhysicsBody (for Kinematic/Teleport).
-    3. Step the Physics Engine.
-    4. Sync PhysicsBody -> Transform (for Dynamic).
-    5. Dispatch collision events.
+    It synchronizes the state of ECS 'Transform' components with the
+    underlying physics simulation bodies.
     """
 
     def __init__(
         self, engine: IPhysicsEngine, event_dispatcher: EventDispatcher
     ) -> None:
-        """Initialize the physics system."""
-        self.engine = engine
-        self.dispatcher = event_dispatcher
-        self.engine.initialize(gravity=Vector2(0, 0))  # Default top-down gravity
-
-    def update(self, entities: List[Any], dt: float) -> None:
-        """Run the main physics loop.
+        """
+        Initialize the physics system.
 
         Args:
-            entities: List of entities with (Transform, RigidBody, Collider).
+            engine: The physics engine backend.
+            event_dispatcher: The global event dispatcher.
+        """
+        self._engine = engine
+        self._dispatcher = event_dispatcher
+
+    def update(self, entities: List[Entity], dt: float) -> None:
+        """
+        Advance the physics simulation and sync transforms.
+
+        Args:
+            entities: List of entities that have both RigidBody and Transform.
             dt: Delta time in seconds.
         """
-        # 1. Initialization & Sync (Input to Physics)
+        # 1. Sync ECS -> Physics Engine
         for entity in entities:
-            transform: Transform = entity.transform
-            rb: RigidBody = entity.rigidbody
+            # OPTIMIZATION: Use get_component instead of attribute access
+            transform = entity.get_component(Transform)
+            rb = entity.get_component(RigidBody)
 
-            # Create body if missing
+            # If the body hasn't been created in the engine yet, create it
+            # FIX: Check backing field directly
             if rb._body_handle is None:
                 self._create_physics_entity(entity, transform, rb)
 
             # Sync Transform -> Physics (Kinematic or manual overrides)
-            if rb.body_type == BodyType.KINEMATIC:
-                if rb._body_handle:
-                    rb._body_handle.position = transform.position
-                    rb._body_handle.rotation = transform.rotation
+            # If we move a kinematic body in game, we must update physics engine
+            # FIX: Use backing field
+            if rb.body_type == BodyType.KINEMATIC and rb._body_handle:
+                rb._body_handle.position = transform.position
+                rb._body_handle.rotation = transform.rotation
 
-        # 2. Simulation Step
-        self.engine.update(dt)
+        # 2. Step the Simulation
+        # FIX: Protocol defines this as 'update', not 'step'
+        self._engine.update(dt)
 
-        # 3. Sync (Output from Physics)
+        # 3. Sync Physics Engine -> ECS
         for entity in entities:
-            rb_sync = entity.rigidbody
+            transform = entity.get_component(Transform)
+            rb = entity.get_component(RigidBody)
 
-            if rb_sync.body_type == BodyType.DYNAMIC and rb_sync._body_handle:
-                transform_sync = entity.transform
-                transform_sync.position = rb_sync._body_handle.position
-                transform_sync.rotation = rb_sync._body_handle.rotation
+            # If physics moved the object, update the game transform
+            # FIX: Use backing field
+            if rb._body_handle and rb.body_type == BodyType.DYNAMIC:
+                transform.position = rb._body_handle.position
+                transform.rotation = rb._body_handle.rotation
 
     def _create_physics_entity(
-        self, entity: Any, transform: Transform, rb: RigidBody
+        self, entity: Entity, transform: Transform, rb: RigidBody
     ) -> None:
-        """Register ECS entity with the physics backend."""
-        # Create Body
-        body_handle = self.engine.create_body(
+        """
+        Register ECS entity with the physics backend.
+
+        Internal helper that handles the specific sequence of body creation
+        and shape attachment.
+        """
+        # 1. Create Body in the backend
+        body_handle = self._engine.create_body(
             entity.id, rb.body_type, transform.position
         )
         body_handle.rotation = transform.rotation
+
+        # FIX: Assign to backing field (handle is read-only property)
         rb._body_handle = body_handle
 
-        # Add Collider if present
-        if hasattr(entity, "collider"):
-            col: Collider = entity.collider
-            self.engine.add_shape(
+        # 2. Add Collider if present (Optimized Check)
+        if entity.has_component(Collider):
+            col = entity.get_component(Collider)
+
+            self._engine.add_shape(
                 body_handle,
                 col.shape_type,
                 col.dimensions,

@@ -11,8 +11,7 @@ from pyguara.graphics.window import Window, WindowConfig
 from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.input.manager import InputManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
-from pyguara.physics.components.rigid_body import RigidBody
-from pyguara.physics.components.collider import Collider
+from pyguara.physics.components import RigidBody, Collider
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.types import BodyType, ShapeType
 from pyguara.scene.manager import SceneManager
