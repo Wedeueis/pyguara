@@ -949,15 +949,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pathfinding"
-version = "1.0.18"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7d/cd/c2595565117441961a63b95cae9e6ec0dca5e863c6eb58acf5188df5fe32/pathfinding-1.0.18.tar.gz", hash = "sha256:faaf3943882187755f9e65361d22c7785595f38d1f77e2ace18e5c89ba1eb253", size = 23635, upload-time = "2025-10-06T16:48:47.123Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ea/b4/9dd0d545d1cbdc4949b180cff945759d591d03037d90ef7e44ce7798c8e4/pathfinding-1.0.18-py3-none-any.whl", hash = "sha256:228bc3a8c5dc8ec12b49877313f9ce109edd7b85bd227afb0e2efec62b80b954", size = 24738, upload-time = "2025-10-06T16:48:46.294Z" },
-]
-
-[[package]]
 name = "pathspec"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1176,7 +1167,6 @@ dependencies = [
     { name = "click" },
     { name = "dataclasses-json" },
     { name = "msgpack" },
-    { name = "pathfinding" },
     { name = "pillow" },
     { name = "pygame-ce" },
     { name = "pymunk" },
@@ -1224,7 +1214,6 @@ requires-dist = [
     { name = "mkdocs-mermaid2-plugin", marker = "extra == 'docs'", specifier = ">=0.6.0" },
     { name = "msgpack", specifier = ">=1.1.2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
-    { name = "pathfinding", specifier = ">=1.0.18" },
     { name = "pillow", specifier = ">=12.1.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "py-spy", marker = "extra == 'benchmark'", specifier = ">=0.3.0" },

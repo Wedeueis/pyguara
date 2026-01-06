@@ -1,8 +1,9 @@
 """Core Window management module."""
 
-from typing import Any, Iterable
+from typing import Any, Optional, Iterable
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.protocols import IWindowBackend
+from pyguara.common.types import Color
 
 
 class Window:
@@ -39,9 +40,9 @@ class Window:
             self._native_handle = None
             self._is_open = False
 
-    def clear(self) -> None:
+    def clear(self, color: Optional[Color] = None) -> None:
         """Clear the window with configured default Color."""
-        self._backend.clear()
+        self._backend.clear(color)
 
     def present(self) -> None:
         """Update the window with the latest rendered frame."""

@@ -15,16 +15,8 @@ class AStarPathfinder:
         """
         Calculate the shortest path from start to goal.
 
-        Args:
-            graph: The navigation graph.
-            start: Starting node.
-            goal: Target node.
-            heuristic: Function to estimate distance.
-
-        Returns:
-            List of nodes representing the path, or None if unreachable.
+        Optimized to reduce heap operations.
         """
-        # FIX: Explicit type annotation for the priority queue
         frontier: List[Tuple[float, Node]] = []
         heapq.heappush(frontier, (0, start))
 

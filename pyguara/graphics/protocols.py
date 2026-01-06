@@ -234,7 +234,7 @@ class IWindowBackend(Protocol):
         """Close and destroys the window context."""
         ...
 
-    def clear(self) -> None:
+    def clear(self, color: Optional[Color] = None) -> None:
         """Clear the window context screen with default clear color."""
         ...
 

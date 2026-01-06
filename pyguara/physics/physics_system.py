@@ -3,6 +3,7 @@
 from typing import List
 
 from pyguara.common.components import Transform
+from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.physics.components import Collider, RigidBody
@@ -30,6 +31,9 @@ class PhysicsSystem:
         """
         self._engine = engine
         self._dispatcher = event_dispatcher
+
+        # We use (0,0) for top-down games. Use (0, 980) for side-scrollers.
+        self._engine.initialize(gravity=Vector2(0, 0))
 
     def update(self, entities: List[Entity], dt: float) -> None:
         """

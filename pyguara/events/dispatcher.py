@@ -14,7 +14,7 @@ E = TypeVar("E", bound=Event)
 
 @dataclass
 class HandlerRecord:
-    """Internal wrapper for registered listeners."""
+    """DTO with information to handle the event call."""
 
     callback: Callable[[Any], Optional[bool]]
     priority: int
@@ -25,13 +25,13 @@ class EventDispatcher(IEventDispatcher):
     """Advanced event dispatcher with filtering, priority, and thread-safety support."""
 
     def __init__(self, logger: Optional[logging.Logger] = None) -> None:
-        """Initialize the dispatcher."""
+        """Initialize the Event Dispatcher."""
         self._listeners: DefaultDict[Type[Event], List[HandlerRecord]] = defaultdict(
             list
         )
         self._global_listeners: List[HandlerRecord] = []
 
-        # Thread-safe queue for events from background threads
+        # Thread-safe queue
         self._event_queue: queue.Queue[Event] = queue.Queue()
 
         self._event_history: List[Event] = []
@@ -45,7 +45,7 @@ class EventDispatcher(IEventDispatcher):
         priority: int = 0,
         filter_func: Optional[Callable[[E], bool]] = None,
     ) -> None:
-        """Subscribe to a specific event type."""
+        """Subscribe a handler to a specific event type."""
         record = HandlerRecord(
             callback=handler, priority=priority, filter_func=filter_func
         )
@@ -53,38 +53,9 @@ class EventDispatcher(IEventDispatcher):
         target_list.append(record)
         target_list.sort(key=lambda r: r.priority, reverse=True)
 
-    def subscribe_global(
-        self,
-        handler: EventHandler[Event],
-        priority: int = 0,
-        filter_func: Optional[Callable[[Event], bool]] = None,
-    ) -> None:
-        """Subscribe to ALL events."""
-        record = HandlerRecord(
-            callback=handler, priority=priority, filter_func=filter_func
-        )
-        self._global_listeners.append(record)
-        self._global_listeners.sort(key=lambda r: r.priority, reverse=True)
-
-    def unsubscribe(self, event_type: Type[E], handler: EventHandler[E]) -> None:
-        """Unsubscribe a specific handler."""
-        if event_type in self._listeners:
-            self._listeners[event_type] = [
-                r for r in self._listeners[event_type] if r.callback != handler
-            ]
-
-    def clear_subscribers(self, event_type: Optional[Type[Event]] = None) -> None:
-        """Clear subscribers."""
-        if event_type:
-            if event_type in self._listeners:
-                del self._listeners[event_type]
-        else:
-            self._listeners.clear()
-            self._global_listeners.clear()
-
     def dispatch(self, event: Event) -> None:
         """
-        Dispatch an event immediately to all subscribers.
+        Dispatch an event immediately to all subscribers (Synchronous).
 
         WARNING: This runs on the calling thread. For background threads,
         use queue_event() instead.
@@ -102,20 +73,13 @@ class EventDispatcher(IEventDispatcher):
         self._process_handlers(self._global_listeners, event)
 
     def queue_event(self, event: Event) -> None:
-        """
-        Queue an event to be dispatched on the main thread later.
-
-        This method is thread-safe and non-blocking.
-        """
+        """Queue event for next frame (Thread-Safe)."""
         self._event_queue.put(event)
 
     def process_queue(self) -> None:
-        """
-        Process all currently queued events.
-
-        Call this in your main game loop (e.g. at the start of update()).
-        """
-        while not self._event_queue.empty():
+        """Safely process currently queued events."""
+        count = self._event_queue.qsize()
+        for _ in range(count):
             try:
                 event = self._event_queue.get_nowait()
                 self.dispatch(event)
@@ -123,38 +87,42 @@ class EventDispatcher(IEventDispatcher):
                 break
 
     def _process_handlers(self, records: List[HandlerRecord], event: Event) -> bool:
-        """Process a list of handlers.
-
-        Returns:
-            bool: False if a handler stopped propagation, True otherwise.
-        """
         for record in records:
             if record.filter_func and not record.filter_func(event):
                 continue
-
             try:
-                if self._logger:
-                    self._logger.debug(f"Dispatching {type(event).__name__}")
-
                 result = record.callback(event)
-
                 if result is False:
                     return False
-
             except Exception as e:
                 if self._logger:
                     self._logger.error(f"Error in listener: {e}")
-
         return True
 
+    def unsubscribe(self, event_type: Type[E], handler: EventHandler[E]) -> None:
+        """Remove a handler of an event type listeners."""
+        if event_type in self._listeners:
+            self._listeners[event_type] = [
+                r for r in self._listeners[event_type] if r.callback != handler
+            ]
+
+    def clear_subscribers(self, event_type: Optional[Type[Event]] = None) -> None:
+        """Clear all listeners or all listeners of a specific event type."""
+        if event_type:
+            if event_type in self._listeners:
+                del self._listeners[event_type]
+        else:
+            self._listeners.clear()
+            self._global_listeners.clear()
+
     def _record_history(self, event: Event) -> None:
-        """Add event to history buffer."""
+        """Register an event in history."""
         self._event_history.append(event)
         if len(self._event_history) > self._max_history_size:
             self._event_history.pop(0)
 
     def get_history(self, event_type: Optional[Type[Event]] = None) -> List[Event]:
-        """Retrieve recent events, optionally filtered."""
+        """Return all history records or all history records of an event type."""
         if event_type:
             return [e for e in self._event_history if isinstance(e, event_type)]
         return list(self._event_history)

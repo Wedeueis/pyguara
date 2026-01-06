@@ -73,7 +73,6 @@ def create_application() -> Application:
     res_manager = ResourceManager()
     res_manager.register_loader(JsonLoader())
     container.register_instance(ResourceManager, res_manager)
-
     container.register_singleton(IPhysicsEngine, PymunkEngine)  # type: ignore[type-abstract]
 
     # 7. Create Application
