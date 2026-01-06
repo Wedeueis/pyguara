@@ -93,6 +93,10 @@ class Application:
 
     def _update(self, dt: float) -> None:
         """Update game logic."""
+        # 1. Process queued events from background threads (Network/Loader)
+        self._event_dispatcher.process_queue()
+
+        # 2. Standard updates
         self._ui_manager.update(dt)
         self._scene_manager.update(dt)
 

@@ -1,6 +1,6 @@
 """Core protocols defining the contracts for the Event System."""
 
-from typing import Any, Optional, Protocol, Type, TypeVar, runtime_checkable
+from typing import Any, Protocol, Optional, Type, TypeVar, runtime_checkable
 from pyguara.events.types import EventHandler
 
 # Define a generic type variable bound to the Event protocol
@@ -34,10 +34,30 @@ class IEventDispatcher(Protocol):
     """
 
     def dispatch(self, event: Event) -> None:
-        """Dispatch an event to all subscribers.
+        """Dispatch an event to all subscribers immediately (Synchronous).
 
         Args:
             event: The event instance to broadcast.
+        """
+        ...
+
+    def queue_event(self, event: Event) -> None:
+        """
+        Thread-Safe: Queue an event to be dispatched on the next frame.
+
+        Use this when firing events from background threads (e.g., Network, Loader)
+        to ensure handlers run on the Main Thread.
+
+        Args:
+            event: The event to queue.
+        """
+        ...
+
+    def process_queue(self) -> None:
+        """
+        Flush the event queue and dispatch pending events.
+
+        This should be called once per frame by the Application main loop.
         """
         ...
 
