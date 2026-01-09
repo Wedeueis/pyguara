@@ -15,6 +15,9 @@ from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
+from pyguara.scene.serializer import SceneSerializer
+from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.storage import FileStorageBackend
 from pyguara.ui.manager import UIManager
 from .sandbox import SandboxApplication
 
@@ -96,5 +99,11 @@ def _setup_container() -> DIContainer:
     res_manager.register_loader(JsonLoader())
     container.register_instance(ResourceManager, res_manager)
     container.register_singleton(IPhysicsEngine, PymunkEngine)  # type: ignore[type-abstract]
+
+    # 7. Persistence
+    storage = FileStorageBackend(base_path="saves")
+    persistence = PersistenceManager(storage)
+    container.register_instance(PersistenceManager, persistence)
+    container.register_singleton(SceneSerializer, SceneSerializer)
 
     return container

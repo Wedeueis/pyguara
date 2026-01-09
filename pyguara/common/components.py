@@ -2,9 +2,32 @@
 
 import math
 from typing import List, Optional, cast
+from dataclasses import dataclass
 
 from pyguara.common.types import Vector2
 from pyguara.ecs.component import BaseComponent
+
+
+@dataclass
+class Tag(BaseComponent):
+    """Component for labeling entities with a human-readable name."""
+
+    name: str = "Entity"
+
+    def __post_init__(self) -> None:
+        """Initialize the component."""
+        super().__init__()
+
+
+@dataclass
+class ResourceLink(BaseComponent):
+    """Component that links an entity/component to its source DataResource."""
+
+    resource_path: str
+
+    def __post_init__(self) -> None:
+        """Initialize the component."""
+        super().__init__()
 
 
 class Transform(BaseComponent):
@@ -201,7 +224,7 @@ class Transform(BaseComponent):
 
     def translate(self, translation: Vector2) -> None:
         """Move the transform by the given vector in local space."""
-        self.position += translation  # type: ignore[assignment]
+        self.position += translation
 
     def rotate(self, angle: float) -> None:
         """Rotate the transform by the given angle in radians."""
@@ -273,7 +296,7 @@ class Transform(BaseComponent):
                 Vector2, scaled_pos.rotated(self._parent._world_rotation)
             )
 
-            self._world_position = self._parent._world_position + rotated_pos  # type: ignore[assignment]
+            self._world_position = self._parent._world_position + rotated_pos
             self._world_rotation = self._parent._world_rotation + self._local_rotation
             self._world_scale = Vector2(
                 self._parent._world_scale.x * self._local_scale.x,
