@@ -10,20 +10,24 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.tools.base import Tool
 
 # Events to monitor
-from pyguara.input.events import KeyDownEvent, MouseMotionEvent, OnActionEvent  # type: ignore[attr-defined]
-from pyguara.events.lifecycle import QuitEvent  # Changed from pyguara.lifecycle to pyguara.events.lifecycle
+from pyguara.input.events import OnRawKeyEvent, OnActionEvent
+from pyguara.events.lifecycle import QuitEvent
+
 
 class EventMonitor(Tool):
     """Logs the last N events processed by the engine."""
 
     def __init__(self, container: DIContainer) -> None:
+        """Initialize the event monitor."""
         super().__init__("event_monitor", container)
         self._dispatcher = container.get(EventDispatcher)
         self._log: deque[str] = deque(maxlen=20)
         self._panel_rect = Rect(10, 600, 400, 200)
-        
+
         # Subscribe to interesting events
-        self._dispatcher.subscribe(KeyDownEvent, self._on_key_down)
+        self._dispatcher.subscribe(
+            OnRawKeyEvent, self._on_key_down, filter_func=lambda e: e.is_down
+        )
         self._dispatcher.subscribe(OnActionEvent, self._on_action)
         self._dispatcher.subscribe(QuitEvent, self._on_quit)
         # We omit MouseMotion to avoid spamming the log, or we could sample it
@@ -38,7 +42,7 @@ class EventMonitor(Tool):
         timestamp = time.strftime("%H:%M:%S")
         self._log.append(f"[{timestamp}] [{category}] {msg}")
 
-    def _on_key_down(self, event: KeyDownEvent) -> None:
+    def _on_key_down(self, event: OnRawKeyEvent) -> None:
         self._log_msg("KEY", f"Down: {event.key_code}")
 
     def _on_action(self, event: OnActionEvent) -> None:
@@ -63,16 +67,16 @@ class EventMonitor(Tool):
 
         # Title
         renderer.draw_text(
-            "Event Monitor", 
-            Vector2(self._panel_rect.x + 10, self._panel_rect.y + 10), 
-            Color(100, 200, 100), 
-            18
+            "Event Monitor",
+            Vector2(self._panel_rect.x + 10, self._panel_rect.y + 10),
+            Color(100, 200, 100),
+            18,
         )
 
         # Log Lines
         x = self._panel_rect.x + 10
         y = self._panel_rect.y + 35
-        
+
         # Draw newest last
         for line in self._log:
             renderer.draw_text(line, Vector2(x, y), Color(200, 200, 200), 14)

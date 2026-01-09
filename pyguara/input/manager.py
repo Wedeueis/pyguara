@@ -36,6 +36,37 @@ class InputManager:
                 self._joysticks[i] = joy
                 print(f"Controller detected: {joy.get_name()}")
 
+    def register_action(
+        self, name: str, action_type: ActionType, deadzone: float = 0.1
+    ) -> None:
+        """
+        Register a new action definition.
+
+        Args:
+            name: Unique name (e.g., "Jump").
+            action_type: Behavior (PRESS, RELEASE, HOLD, ANALOG).
+            deadzone: Threshold for analog inputs.
+        """
+        self._registered_actions[name] = InputAction(name, action_type, deadzone)
+
+    def bind_input(
+        self,
+        device: InputDevice,
+        code: int,
+        action: str,
+        context: InputContext = InputContext.GAMEPLAY,
+    ) -> None:
+        """
+        Bind a physical key/button to an action.
+
+        Args:
+            device: KEYBOARD, MOUSE, GAMEPAD.
+            code: KeyCode or ButtonIndex.
+            action: The action name to trigger.
+            context: The input context for this binding.
+        """
+        self._bindings.bind(device, code, action, context)
+
     def process_event(self, event: Any) -> None:
         """Ingest raw Pygame events."""
         # --- Keyboard ---
