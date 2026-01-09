@@ -23,16 +23,18 @@ class InputManager:
 
         # Gamepad State
         pygame.joystick.init()
-        self._joysticks: Dict[int, pygame.joystick.Joystick] = {}
+        self._joysticks: Dict[int, Any] = {}  # Use Any to bypass valid-type error
         self._detect_controllers()
 
     def _detect_controllers(self) -> None:
         """Find and init plugged-in controllers."""
-        for i in range(pygame.joystick.get_count()):
-            joy = pygame.joystick.Joystick(i)
-            joy.init()
-            self._joysticks[joy.get_instance_id()] = joy
-            print(f"Controller detected: {joy.get_name()}")
+        if pygame.joystick.get_count() > 0:
+            for i in range(pygame.joystick.get_count()):
+                # Use Any to avoid mypy confusion with pygame.joystick.Joystick vs function
+                joy: Any = pygame.joystick.Joystick(i)
+                joy.init()
+                self._joysticks[i] = joy
+                print(f"Controller detected: {joy.get_name()}")
 
     def process_event(self, event: Any) -> None:
         """Ingest raw Pygame events."""

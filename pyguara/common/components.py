@@ -201,7 +201,7 @@ class Transform(BaseComponent):
 
     def translate(self, translation: Vector2) -> None:
         """Move the transform by the given vector in local space."""
-        self.position += translation
+        self.position += translation  # type: ignore[assignment]
 
     def rotate(self, angle: float) -> None:
         """Rotate the transform by the given angle in radians."""
@@ -273,7 +273,7 @@ class Transform(BaseComponent):
                 Vector2, scaled_pos.rotated(self._parent._world_rotation)
             )
 
-            self._world_position = self._parent._world_position + rotated_pos
+            self._world_position = self._parent._world_position + rotated_pos  # type: ignore[assignment]
             self._world_rotation = self._parent._world_rotation + self._local_rotation
             self._world_scale = Vector2(
                 self._parent._world_scale.x * self._local_scale.x,

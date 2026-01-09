@@ -58,6 +58,10 @@ class EntityManager:
         """Retrieve an entity by ID."""
         return self._entities.get(entity_id)
 
+    def get_all_entities(self) -> Iterator[Entity]:
+        """Return all registered entities."""
+        return iter(self._entities.values())
+
     def get_entities_with(self, *component_types: Type[Component]) -> Iterator[Entity]:
         """
         Query for entities containing ALL specified component types.

@@ -138,7 +138,8 @@ class PymunkEngine(IPhysicsEngine):
             shape = pymunk.Circle(body, radius, (offset.x, offset.y))
         elif shape_type == ShapeType.BOX:
             width, height = dimensions
-            shape = pymunk.Poly.create_box(body, (width, height))
+            # Pymunk Box is a Poly
+            shape = pymunk.Poly.create_box(body, size=(width, height))  # type: ignore[assignment]
 
         if shape:
             shape.density = material.density

@@ -72,7 +72,7 @@ class Camera2D:
 
         # 3. Rotate (around camera center)
         if self.rotation != 0:
-            local_pos = local_pos.rotate(-self.rotation)
+            local_pos = local_pos.rotate(-self.rotation)  # type: ignore[attr-defined]
 
         screen_pos = local_pos + self.offset
 
@@ -97,7 +97,7 @@ class Camera2D:
 
         # 2. Inverse Rotate
         if self.rotation != 0:
-            local_pos = local_pos.rotate(self.rotation)
+            local_pos = local_pos.rotate(self.rotation)  # type: ignore[attr-defined]
 
         # 3. Inverse Scale
         # Avoid division by zero

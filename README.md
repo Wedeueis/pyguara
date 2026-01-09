@@ -63,10 +63,10 @@ from pyguara.common.types import Vector2
 class MyGameScene(Scene):
     def on_enter(self) -> None:
         print("Welcome to PyGuara!")
-        
+
         # Create an entity
         player = self.entity_manager.create_entity("player")
-        
+
         # Add components
         player.add_component(Transform(position=Vector2(100, 100)))
         player.add_component(Sprite(texture_path="assets/player.png"))

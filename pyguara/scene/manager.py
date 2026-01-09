@@ -20,6 +20,11 @@ class SceneManager:
         """Receive the DI container from the Application."""
         self._container = container
 
+    @property
+    def current_scene(self) -> Optional[Scene]:
+        """Get the currently active scene."""
+        return self._current_scene
+
     def register(self, scene: Scene) -> None:
         """Add a scene to the manager and inject dependencies."""
         self._scenes[scene.name] = scene

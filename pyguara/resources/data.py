@@ -57,10 +57,10 @@ class DataResource(Resource):
             raise TypeError(f"Target type {cls.__name__} must be a dataclass")
 
         # Filter data to match dataclass fields (for safety)
-        valid_keys = cls.__dataclass_fields__.keys()
+        valid_keys = cls.__dataclass_fields__.keys()  # type: ignore[unreachable]
         filtered = {k: v for k, v in self._data.items() if k in valid_keys}
 
-        return cls(**filtered)  # type: ignore
+        return cls(**filtered)
 
     def save(self) -> None:
         """Serialize the current data state back to disk."""

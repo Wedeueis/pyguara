@@ -21,7 +21,7 @@ class PygameAudioSystem(IAudioSystem):
         Args adjusted for low latency (small buffer).
         """
         if not pygame.mixer.get_init():
-            pygame.mixer.init(frequency, size, channels, buffer)
+            pygame.mixer.init(frequency, size, channels, buffer)  # type: ignore[unreachable]
             # Alocates enough channels for simultaneos sounds
             pygame.mixer.set_num_channels(32)
 
@@ -72,3 +72,4 @@ class PygameAudioSystem(IAudioSystem):
         # Pygame only implements a global volume for music
         # TODO: implement a global volume for SFX and channel groups
         pygame.mixer.music.set_volume(volume)
+        # pygame.mixer.Sound.set_volume(volume) # Unreachable: Sound is a class, not a global mixer concept in this way

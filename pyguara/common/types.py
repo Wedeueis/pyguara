@@ -9,7 +9,7 @@ a standardized, engine-specific API surface.
 
 from __future__ import annotations
 import math
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Any
 
 import pymunk
 import pygame
@@ -52,7 +52,7 @@ class Vector2(pymunk.Vec2d):
         Returns:
             float: The squared length.
         """
-        return float(self.length_sqrd)
+        return float(self.length_sqrd)  # type: ignore[attr-defined]
 
     def normalize(self) -> Vector2:
         """
@@ -173,7 +173,7 @@ class Color(pygame.Color):
         return Color(hex_str)
 
     @property
-    def normalized(self) -> Tuple[float, float, float, float]:
+    def normalized(self) -> Tuple[float, float, float, float]:  # type: ignore[override]
         """
         Get the RGBA values normalized to the 0.0 - 1.0 range.
 
@@ -184,7 +184,7 @@ class Color(pygame.Color):
         """
         return (self.r / 255.0, self.g / 255.0, self.b / 255.0, self.a / 255.0)
 
-    def lerp(self, target: Color, t: float) -> Color:
+    def lerp(self, target: Any, t: float) -> Color:
         """
         Linearly interpolate this color towards a target color.
 
