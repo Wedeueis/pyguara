@@ -8,6 +8,7 @@ except ImportError:
 
 from pyguara.ecs.manager import EntityManager
 from pyguara.ecs.entity import Entity
+from pyguara.common.components import Tag
 
 
 class HierarchyPanel:
@@ -41,8 +42,12 @@ class HierarchyPanel:
         
         for entity in entities:
             # Determine display name
-            label = f"{entity.id}" 
-            # Ideally we'd have a 'name' component or tag, but ID is default
+            label = f"{entity.id[:8]}" 
+            
+            # Check for Tag component
+            if entity.has_component(Tag):
+                tag = entity.get_component(Tag)
+                label = f"{tag.name} ({label})"
             
             flags = imgui.SELECTABLE_NONE
             if self.selected_entity and self.selected_entity.id == entity.id:

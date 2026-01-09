@@ -16,8 +16,11 @@ except ImportError:
 from pyguara.di.container import DIContainer
 from pyguara.ecs.manager import EntityManager
 from pyguara.scene.manager import SceneManager
+from pyguara.scene.serializer import SceneSerializer
+from pyguara.resources.manager import ResourceManager
 from pyguara.editor.panels.hierarchy import HierarchyPanel
 from pyguara.editor.panels.inspector import InspectorPanel
+from pyguara.editor.panels.assets import AssetsPanel
 from pyguara.tools.base import Tool
 from pyguara.graphics.protocols import UIRenderer
 
@@ -37,9 +40,14 @@ class EditorTool(Tool):
         # Panels
         self._show_hierarchy = True
         self._show_inspector = True
+        self._show_assets = True
+        
+        resource_manager = self._container.get(ResourceManager)
         
         self._hierarchy_panel = HierarchyPanel(self._get_current_manager)
-        self._inspector_panel = InspectorPanel()
+        self._inspector_panel = InspectorPanel(resource_manager)
+        
+        self._assets_panel = AssetsPanel(resource_manager, self._get_current_manager)
 
     def _get_current_manager(self) -> Optional[EntityManager]:
         """Resolve the active EntityManager from the current scene."""
@@ -107,7 +115,20 @@ class EditorTool(Tool):
         if imgui.begin_main_menu_bar():
             if imgui.begin_menu("File", True):
                 if imgui.menu_item("Save Scene", "Ctrl+S")[0]:
-                    print("[Editor] Save triggered (TODO)")
+                    # Implement Save Logic
+                    scene_manager = self._container.get(SceneManager)
+                    if scene_manager.current_scene:
+                        serializer = self._container.get(SceneSerializer)
+                        success = serializer.save_scene(scene_manager.current_scene, "current_scene")
+                        print(f"[Editor] Save Triggered: {'Success' if success else 'Failed'}")
+                
+                if imgui.menu_item("Load Scene", "Ctrl+L")[0]:
+                    scene_manager = self._container.get(SceneManager)
+                    if scene_manager.current_scene:
+                        serializer = self._container.get(SceneSerializer)
+                        success = serializer.load_scene(scene_manager.current_scene, "current_scene")
+                        print(f"[Editor] Load Triggered: {'Success' if success else 'Failed'}")
+                    
                 imgui.end_menu()
             
             if imgui.begin_menu("View", True):
@@ -116,6 +137,9 @@ class EditorTool(Tool):
                 )
                 clicked, self._show_inspector = imgui.menu_item(
                     "Inspector", None, self._show_inspector
+                )
+                clicked, self._show_assets = imgui.menu_item(
+                    "Assets", None, self._show_assets
                 )
                 imgui.end_menu()
                 
@@ -127,6 +151,9 @@ class EditorTool(Tool):
         
         if self._show_inspector:
             self._inspector_panel.render()
+            
+        if self._show_assets:
+            self._assets_panel.render()
 
         imgui.render()
         if self._renderer:
