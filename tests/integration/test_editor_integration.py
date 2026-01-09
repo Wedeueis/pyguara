@@ -1,29 +1,30 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from pyguara.application.sandbox import SandboxApplication
 from pyguara.editor.layer import EditorTool
-from pyguara.di.container import DIContainer
 from pyguara.graphics.window import Window
 
-def test_editor_tool_registration():
+
+def test_editor_tool_registration() -> None:
     """Verify that EditorTool is registered in SandboxApplication."""
     # Setup Mock Container
     container = MagicMock()
     container.get.return_value = MagicMock()
     container.get(Window).is_open = True
-    
+
     # SandboxApplication calls _initialize_tools in __init__
     app = SandboxApplication(container)
-    
+
     # Check if EditorTool is in tool manager
     tool_manager = app._tool_manager
     assert tool_manager is not None
     assert tool_manager.get_tool("Editor") is not None
 
-def test_editor_tool_logic():
+
+def test_editor_tool_logic() -> None:
     """Verify EditorTool methods."""
     container = MagicMock()
     tool = EditorTool(container)
-    
+
     assert tool.name == "Editor"
     assert hasattr(tool, "render")
     assert hasattr(tool, "process_event")

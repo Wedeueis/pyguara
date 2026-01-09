@@ -1,5 +1,5 @@
 import pytest
-from typing import Any, Generator
+from typing import Any
 from unittest.mock import MagicMock, patch
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
@@ -51,10 +51,10 @@ def app_container() -> DIContainer:
     # However, MyPy might complain if Window definition says it's read-only property.
     # We'll ignore the assignment here if needed, or rely on MagicMock flexibility.
     mock_window.is_open = True
-    
+
     c.register_instance(Window, mock_window)
     c.register_instance(UIRenderer, MagicMock())  # type: ignore[type-abstract]
-    c.register_instance(IRenderer, MagicMock())   # type: ignore[type-abstract]
+    c.register_instance(IRenderer, MagicMock())  # type: ignore[type-abstract]
 
     return c
 
@@ -62,7 +62,7 @@ def app_container() -> DIContainer:
 def test_app_lifecycle_run_once(app_container: DIContainer) -> None:
     """
     Scenario: Application Start and Single Frame Execution.
-    
+
     Given a configured Application with a Starting Scene
     When run() is called
     Then the scene should be entered, updated, and rendered
@@ -101,7 +101,7 @@ def test_app_lifecycle_run_once(app_container: DIContainer) -> None:
 def test_scene_switching_integration(app_container: DIContainer) -> None:
     """
     Scenario: Scene Switching.
-    
+
     Given an Application running Scene A
     When SceneManager.switch_to("B") is called
     Then Scene A should exit and Scene B should enter
