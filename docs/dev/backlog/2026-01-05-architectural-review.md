@@ -45,3 +45,16 @@ The PyGuara engine demonstrates high-maturity architectural patterns, specifical
 1. **Formalize the 'System' in ECS:** Create a `System` base class and a `SystemManager` to handle lifecycle and dependency injection for logic modules.
 2. **Abstract Debug Drawing:** Implement a `DebugRenderer` service that accepts primitives (Circles, Rects) and submits them to the `RenderQueue` via the existing `IRenderer` protocol.
 3. **Component Array Iteration:** Add methods to `EntityManager` to return joined component tuples (e.g., `zip_components(Transform, RigidBody)`) to minimize lookup overhead.
+
+
+# Extra
+
+1. Fix Rendering Injection: Split your rendering pipeline in Application.py.
+     # Application.run
+     self._scene_manager.render(self._world_renderer, self._ui_renderer)
+       * In Application.py, you inject a UIRenderer and pass it to scene_manager.render().
+       * In Scene.render(self, renderer: UIRenderer), the type hint forces a UI Renderer.
+       * The Issue: A "World Renderer" (for sprites, tiles, particles) appears to be conflated with, or missing from, this pipeline. Usually, a Scene needs a WorldRenderer (with camera matrices, sorting layers) and a UIRenderer (screen space, no
+         camera) separately. Currently, it seems you are forcing the Scene to render everything via the UI interface, or the naming is misleading.
+2. Strict Type Guards: In ECS, add a check to ensure Components are actually data classes or Pydantic models. Python allows putting logic in classes easily; enforcing "Data Only" in components requires discipline or validation.
+3. Documentation: Your docstrings are excellent. Keep this up. It is the single biggest differentiator between a "toy" engine and a usable tool.
