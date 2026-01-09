@@ -15,6 +15,7 @@ from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.manager import UIManager
+from .sandbox import SandboxApplication
 
 
 def create_application() -> Application:
@@ -30,6 +31,21 @@ def create_application() -> Application:
     Returns:
         A fully configured Application ready to run.
     """
+    container = _setup_container()
+    return Application(container)
+
+
+def create_sandbox_application() -> SandboxApplication:
+    """
+    Construct and configure the SandboxApplication instance.
+    Includes developer tools.
+    """
+    container = _setup_container()
+    return SandboxApplication(container)
+
+
+def _setup_container() -> DIContainer:
+    """Internal helper to setup common dependencies."""
     container = DIContainer()
 
     # 1. Event System (Core)
@@ -75,5 +91,4 @@ def create_application() -> Application:
     container.register_instance(ResourceManager, res_manager)
     container.register_singleton(IPhysicsEngine, PymunkEngine)  # type: ignore[type-abstract]
 
-    # 7. Create Application
-    return Application(container)
+    return container

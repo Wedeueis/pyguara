@@ -437,6 +437,12 @@ wheels = [
 ]
 
 [[package]]
+name = "imgui"
+version = "2.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f1/aa/4abb0d3d6054da9a4390160fc25ca743a824263a9931cc6a95f30e3d75b4/imgui-2.0.0.tar.gz", hash = "sha256:2fbdb8eed3b8dbd7ea98af9e4c1c6582b0bc4da942a258de16333d8c653d67e1", size = 1473795, upload-time = "2023-04-19T16:46:44.547Z" }
+
+[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1199,6 +1205,7 @@ docs = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "imgui" },
     { name = "pillow" },
     { name = "syrupy" },
 ]
@@ -1233,6 +1240,7 @@ provides-extras = ["dev", "docs", "benchmark"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "imgui", specifier = ">=2.0.0" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "syrupy", specifier = ">=4.9.1" },
 ]
