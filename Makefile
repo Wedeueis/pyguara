@@ -1,6 +1,6 @@
 # Makefile for Pyguara development
 
-.PHONY: help install install-dev test test-cov test-unit test-slow test-integration test-performance test-cli lint format format-check type-check pre-commit-install pre-commit-run docs-build docs-serve docs-deploy play benchmark build clean dev-setup dev-check ci quick-test debug-test version info
+.PHONY: help install install-dev test test-cov coverage coverage-html coverage-xml coverage-check test-unit test-slow test-integration test-bdd test-performance test-cli lint format format-check type-check pre-commit-install pre-commit-run docs-build docs-serve docs-deploy play benchmark build clean dev-setup dev-check ci quick-test debug-test version info
 
 # Default target
 help:  ## Show this help message
@@ -19,11 +19,33 @@ install-dev:  ## Install with development dependencies
 test:  ## Run all tests without coverage
 	uv run pytest -m "not performance"
 
-test-cov:  ## Run tests with coverage report (85%+ target)
-	uv run pytest --cov=pyguara --cov-report=html --cov-report=term --cov-fail-under=85
+test-cov: coverage ## Alias for coverage
+
+coverage:  ## Run tests with coverage report (terminal + html)
+	uv run pytest --cov=pyguara --cov-report=html --cov-report=term
+
+coverage-html: coverage ## Run tests and open HTML coverage report
+	@if command -v xdg-open > /dev/null; then \
+		xdg-open htmlcov/index.html; \
+	elif command -v open > /dev/null; then \
+		open htmlcov/index.html; \
+	else \
+		echo "Report generated at htmlcov/index.html"; \
+	fi
+
+coverage-xml: ## Generate XML coverage report (for CI)
+	uv run pytest --cov=pyguara --cov-report=xml
+
+coverage-check: ## Fail if coverage is below 85%
+	uv run pytest --cov=pyguara --cov-report=term --cov-fail-under=85
 
 test-unit:  ## Run core and combat unit tests
-	uv run pytest tests/ -m "not slow"
+	uv run pytest tests/ -m "not slow and not integration"
+
+test-integration:  ## Run full system integration tests
+	uv run pytest tests/integration/
+
+test-bdd: test-integration ## Alias for integration tests (Behavior Driven)
 
 test-slow:  ## Run slow/performance tests
 	uv run pytest -m slow
@@ -37,9 +59,6 @@ debug-test:  ## Run tests with verbose debugging output
 benchmark:  ## Run performance benchmarks
 	uv run pytest -m performance --benchmark-only --benchmark-sort=mean
 
-test-integration:  ## Run full system integration tests
-	uv run pytest tests/integration/ --no-cov
-
 test-performance:  ## Run performance analysis tests
 	uv run pytest -m performance --no-cov
 
@@ -48,7 +67,7 @@ test-cli:  ## Run CLI system tests
 
 # Code Quality
 lint:  ## Run all linting tools
-	uv run ruff --check pyguara tests
+	uv run ruff check pyguara tests
 
 format:  ## Format code with black and isort
 	uv run ruff format pyguara tests
@@ -92,6 +111,7 @@ clean:  ## Clean build artifacts and caches
 	rm -rf .mypy_cache/
 	rm -rf .coverage
 	rm -rf htmlcov/
+	rm -rf coverage.xml
 	rm -rf .tox/
 	find . -type d -name __pycache__ -delete
 	find . -type f -name "*.pyc" -delete
@@ -108,7 +128,7 @@ dev-setup: install-dev pre-commit-install  ## Set up development environment
 
 dev-check: format-check lint type-check test-cov ## Run all quality checks
 
-ci: format-check lint type-check test-cov benchmark  ## Run CI pipeline with comprehensive tests
+ci: format-check lint type-check coverage-check benchmark  ## Run CI pipeline with comprehensive tests
 
 # Utilities
 version:  ## Show current version

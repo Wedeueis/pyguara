@@ -1,0 +1,25 @@
+site_name: PyGuara Documentation
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: light blue
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Core:
+      - Architecture: core/architecture.md
+      - Application & Lifecycle: core/application.md
+  - Graphics:
+      - Rendering & UI: graphics/rendering.md
+  - Simulation:
+      - Physics & AI: physics/simulation.md
+  - Systems:
+      - Resources & Persistence: systems/resources.md
+  - Dev Backlog:
+      - Architectural Review: dev/backlog/2026-01-05-architectural-review.md
+      - TODO List: dev/backlog/TODO.md

@@ -190,6 +190,7 @@ docstring-code-line-length = "dynamic"
 # Type Checking
 [tool.mypy]
 python_version = "3.10"
+exclude = ["tests"]
 warn_return_any = true
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -263,6 +264,7 @@ commands =
 
 [dependency-groups]
 dev = [
+    "imgui>=2.0.0",
     "pillow>=11.3.0",
     "syrupy>=4.9.1",
 ]
