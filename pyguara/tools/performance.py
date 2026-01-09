@@ -53,10 +53,7 @@ class PerformanceMonitor(Tool):
         color = Color(100, 255, 100)
         if self._avg_fps < 30:
             color = Color(255, 50, 50)
-            
+
         renderer.draw_text(
-            f"FPS: {int(self._avg_fps)}", 
-            Vector2(20, 20), 
-            color, 
-            size=20
+            f"FPS: {int(self._avg_fps)}", Vector2(20, 20), color, size=20
         )

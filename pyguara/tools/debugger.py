@@ -39,43 +39,42 @@ class PhysicsDebugger(Tool):
         # Assuming renderer exposes a surface or primitive methods
         if not hasattr(renderer, "_surface"):
             return
-            
+
         surface = renderer._surface
 
         entities = self._entity_manager.get_entities_with(Transform, Collider)
-        
+
         for entity in entities:
             transform = entity.get_component(Transform)
             collider = entity.get_component(Collider)
-            
+
             pos = transform.position
             dims = collider.dimensions
-            
-            color = self._trigger_color if getattr(collider, "is_trigger", False) else self._collider_color
-            
+
+            color = (
+                self._trigger_color
+                if getattr(collider, "is_trigger", False)
+                else self._collider_color
+            )
+
             # Draw based on shape type (Simplified logic)
-            if len(dims) == 2: # Box
+            if len(dims) == 2:  # Box
                 rect = pygame.Rect(
                     int(pos.x - dims[0] / 2),
                     int(pos.y - dims[1] / 2),
                     int(dims[0]),
-                    int(dims[1])
+                    int(dims[1]),
                 )
                 pygame.draw.rect(surface, (color.r, color.g, color.b), rect, 1)
-            
-            elif len(dims) == 1: # Circle
+
+            elif len(dims) == 1:  # Circle
                 pygame.draw.circle(
-                    surface, 
-                    (color.r, color.g, color.b), 
-                    (int(pos.x), int(pos.y)), 
-                    int(dims[0]), 
-                    1
+                    surface,
+                    (color.r, color.g, color.b),
+                    (int(pos.x), int(pos.y)),
+                    int(dims[0]),
+                    1,
                 )
-                
+
             # Draw Center Point
-            pygame.draw.circle(
-                surface, 
-                (255, 0, 0), 
-                (int(pos.x), int(pos.y)), 
-                2
-            )
+            pygame.draw.circle(surface, (255, 0, 0), (int(pos.x), int(pos.y)), 2)

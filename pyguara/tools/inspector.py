@@ -28,7 +28,7 @@ class EntityInspector(Tool):
         self._entity_manager: EntityManager = container.get(EntityManager)
         self._selected_index: int = 0
         self._selected_entity: Optional[Entity] = None
-        
+
         # UI Layout
         self._panel_rect = Rect(10, 80, 300, 500)
         self._bg_color = Color(30, 30, 40, 230)
@@ -56,10 +56,10 @@ class EntityInspector(Tool):
 
         # Header
         renderer.draw_text(
-            "Entity Inspector (TAB to Cycle)", 
-            Vector2(self._panel_rect.x + 10, self._panel_rect.y + 10), 
-            self._highlight_color, 
-            size=18
+            "Entity Inspector (TAB to Cycle)",
+            Vector2(self._panel_rect.x + 10, self._panel_rect.y + 10),
+            self._highlight_color,
+            size=18,
         )
 
         # Get Entities (Privileged access for debugging)
@@ -71,10 +71,10 @@ class EntityInspector(Tool):
 
         if not entities:
             renderer.draw_text(
-                "No Entities Active", 
-                Vector2(self._panel_rect.x + 10, self._panel_rect.y + 40), 
-                Color(150, 150, 150), 
-                16
+                "No Entities Active",
+                Vector2(self._panel_rect.x + 10, self._panel_rect.y + 40),
+                Color(150, 150, 150),
+                16,
             )
             return
 
@@ -90,13 +90,15 @@ class EntityInspector(Tool):
         # Footer
         footer_y = self._panel_rect.y + self._panel_rect.height - 30
         renderer.draw_text(
-            f"Entity {self._selected_index + 1}/{len(entities)}", 
-            Vector2(self._panel_rect.x + 10, footer_y), 
-            Color(150, 150, 150), 
-            14
+            f"Entity {self._selected_index + 1}/{len(entities)}",
+            Vector2(self._panel_rect.x + 10, footer_y),
+            Color(150, 150, 150),
+            14,
         )
 
-    def _render_entity_details(self, renderer: UIRenderer, entity: Entity, start_y: int) -> None:
+    def _render_entity_details(
+        self, renderer: UIRenderer, entity: Entity, start_y: int
+    ) -> None:
         """Render components of the selected entity.
 
         Args:
@@ -116,33 +118,37 @@ class EntityInspector(Tool):
 
         # Separator
         renderer.draw_line(
-            Vector2(x, y), 
-            Vector2(x + self._panel_rect.width - 20, y), 
-            Color(100, 100, 100), 
-            1
+            Vector2(x, y),
+            Vector2(x + self._panel_rect.width - 20, y),
+            Color(100, 100, 100),
+            1,
         )
         y += 10
 
         # Components
         for comp_type, component in entity.components.items():
             comp_name = comp_type.__name__
-            renderer.draw_text(f"[{comp_name}]", Vector2(x, y), self._highlight_color, 16)
+            renderer.draw_text(
+                f"[{comp_name}]", Vector2(x, y), self._highlight_color, 16
+            )
             y += 20
 
             # Inspect Component Data (Primitives only for brevity)
             for attr, value in component.__dict__.items():
-                if attr.startswith("_"): 
+                if attr.startswith("_"):
                     continue
-                
+
                 # Format value string
                 val_str = str(value)
                 if isinstance(value, float):
                     val_str = f"{value:.2f}"
-                
-                renderer.draw_text(f"  {attr}: {val_str}", Vector2(x, y), self._text_color, 14)
+
+                renderer.draw_text(
+                    f"  {attr}: {val_str}", Vector2(x, y), self._text_color, 14
+                )
                 y += 16
-            
-            y += 10 # Spacing between components
+
+            y += 10  # Spacing between components
 
     def process_event(self, event: Any) -> bool:
         """Handle cycling selection.

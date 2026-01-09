@@ -3,6 +3,7 @@
 import os
 import dataclasses
 from typing import Optional, Dict, Any, Callable, Type, cast
+
 try:
     import imgui  # type: ignore
 except ImportError:
@@ -17,7 +18,11 @@ from pyguara.common.components import Tag, Transform, ResourceLink
 class AssetsPanel:
     """Displays and manages game resources."""
 
-    def __init__(self, resource_manager: ResourceManager, manager_provider: Callable[[], Optional[EntityManager]]) -> None:
+    def __init__(
+        self,
+        resource_manager: ResourceManager,
+        manager_provider: Callable[[], Optional[EntityManager]],
+    ) -> None:
         self._resource_manager = resource_manager
         self._manager_provider = manager_provider
         self.selected_resource_path: Optional[str] = None
@@ -32,9 +37,9 @@ class AssetsPanel:
         # 1. List Indexed Files
         if imgui.collapsing_header("Registry", imgui.TREE_NODE_DEFAULT_OPEN):
             for name, path in self._resource_manager._path_index.items():
-                if name.endswith((".json", ".png", ".jpg")): 
+                if name.endswith((".json", ".png", ".jpg")):
                     continue
-                
+
                 if imgui.selectable(f"{name} -> {path}")[0]:
                     self.selected_resource_path = path
 
@@ -43,7 +48,7 @@ class AssetsPanel:
         if imgui.collapsing_header("Cache (Loaded)", imgui.TREE_NODE_DEFAULT_OPEN):
             for path, resource in self._resource_manager._cache.items():
                 label = f"[{type(resource).__name__}] {os.path.basename(path)}"
-                
+
                 is_selected = self.selected_resource_path == path
                 if imgui.selectable(label, is_selected)[0]:
                     self.selected_resource_path = path
@@ -63,20 +68,20 @@ class AssetsPanel:
             return
 
         resource = self._resource_manager._cache[path]
-        
+
         imgui.begin("Resource Inspector", True)
         imgui.text(f"Path: {path}")
-        
+
         if isinstance(resource, DataResource):
             if imgui.button("Save to Disk"):
                 resource.save()
                 print(f"[Editor] Saved {path}")
-            
+
             imgui.same_line()
-            
+
             if imgui.button("Spawn into Scene"):
                 self._spawn_resource(resource)
-            
+
             imgui.separator()
             self._draw_dict_editor(resource._data)
         else:
@@ -96,21 +101,25 @@ class AssetsPanel:
 
         entity = manager.create_entity()
         entity.add_component(ResourceLink(resource.path))
-        
+
         from pyguara.physics.components import RigidBody, Collider
-        
+
         comp_map: Dict[str, Type] = {
             "Tag": Tag,
             "Transform": Transform,
             "RigidBody": RigidBody,
-            "Collider": Collider
+            "Collider": Collider,
         }
-        
+
         for comp_name, comp_data in resource._data.items():
             if comp_name in comp_map:
                 cls = comp_map[comp_name]
                 if dataclasses.is_dataclass(cls):
-                    filtered = {k: v for k, v in comp_data.items() if k in cls.__dataclass_fields__}
+                    filtered = {
+                        k: v
+                        for k, v in comp_data.items()
+                        if k in cls.__dataclass_fields__
+                    }
                     instance = cls(**filtered)
                     entity.add_component(cast(Any, instance))
                 elif cls == Transform:
@@ -122,7 +131,7 @@ class AssetsPanel:
                     if "scale" in comp_data:
                         t.scale = comp_data["scale"]
                     entity.add_component(t)
-            
+
         print(f"[Editor] Spawned entity from {resource.path}")
 
     def _draw_dict_editor(self, data: Dict[str, Any]) -> None:

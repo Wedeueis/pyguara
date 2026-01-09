@@ -56,10 +56,10 @@ class InspectorDrawer:
         for field in dataclasses.fields(obj):
             if field.name.startswith("_"):
                 continue
-            
+
             val = getattr(obj, field.name)
             new_val = cls._draw_field(field.name, val, field.type)
-            
+
             if new_val is not None:
                 setattr(obj, field.name, new_val)
 
@@ -110,12 +110,12 @@ class InspectorDrawer:
                 current_idx = options.index(value.name)
             except ValueError:
                 current_idx = 0
-            
+
             clicked, new_idx = imgui.combo(label, current_idx, options)
             if clicked:
                 return list(enum_type)[new_idx]
             return None
-        
+
         # 4. Primitives
         if isinstance(value, bool):
             changed, new_val = imgui.checkbox(label, value)
@@ -140,11 +140,11 @@ class InspectorDrawer:
             if changed:
                 return new_val
             return None
-            
+
         # 5. Lists (Basic support)
         if isinstance(value, list):
             if imgui.tree_node(label):
-                # We can't easily edit lists without more context (add/remove), 
+                # We can't easily edit lists without more context (add/remove),
                 # but we can visualize them
                 for i, item in enumerate(value):
                     imgui.text(f"[{i}] {item}")
@@ -154,12 +154,16 @@ class InspectorDrawer:
         imgui.text(f"{label}: {value} (Read Only)")
         return None
 
+
 # --- Custom Drawer Implementations ---
+
 
 def draw_transform(label: str, transform: Transform) -> bool:
     """Specialized drawer for Transform component."""
     # Position
-    changed_p, (px, py) = imgui.drag_float2("Position", transform.position.x, transform.position.y, 1.0)
+    changed_p, (px, py) = imgui.drag_float2(
+        "Position", transform.position.x, transform.position.y, 1.0
+    )
     if changed_p:
         transform.position = Vector2(px, py)
 
@@ -169,11 +173,14 @@ def draw_transform(label: str, transform: Transform) -> bool:
         transform.rotation_degrees = rot
 
     # Scale
-    changed_s, (sx, sy) = imgui.drag_float2("Scale", transform.scale.x, transform.scale.y, 0.1)
+    changed_s, (sx, sy) = imgui.drag_float2(
+        "Scale", transform.scale.x, transform.scale.y, 0.1
+    )
     if changed_s:
         transform.scale = Vector2(sx, sy)
 
     return False
+
 
 # Register Default Drawers
 InspectorDrawer.register(Transform, draw_transform)

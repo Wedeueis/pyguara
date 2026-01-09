@@ -40,11 +40,11 @@ class ToolManager:
 
         if shortcut_key:
             self._shortcuts[shortcut_key] = tool.name
-            
+
         # By default, tools start hidden until the global toggle (F12) is active
         # or the specific tool is toggled.
         tool.hide()
-        
+
         print(f"[ToolManager] Registered {tool.name} (Key: {shortcut_key})")
 
     def get_tool(self, name: str) -> Optional[Tool]:
@@ -125,8 +125,8 @@ class ToolManager:
     def toggle_global_visibility(self) -> None:
         """Toggle the visibility of the entire tool overlay."""
         self._is_globally_visible = not self._is_globally_visible
-        
-        # When turning on, ensure at least one tool is visible? 
+
+        # When turning on, ensure at least one tool is visible?
         # For now, we respect individual tool state.
         state = "Enabled" if self._is_globally_visible else "Disabled"
         print(f"[ToolManager] Global Overlay {state}")

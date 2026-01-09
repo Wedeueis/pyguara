@@ -18,7 +18,7 @@ class ShortcutsPanel(Tool):
         super().__init__("shortcuts_panel", container)
         # Centered Panel (approximate)
         self._rect = Rect(300, 200, 400, 300)
-        
+
         self._shortcuts = [
             ("F1", "Performance Monitor"),
             ("F2", "Entity Inspector"),
