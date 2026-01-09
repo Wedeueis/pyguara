@@ -39,9 +39,9 @@ class SandboxApplication(Application):
         self._initialize_tools()
 
     def _initialize_tools(self) -> None:
-        """Setup the tool manager and register all available tools."""
+        """Configure the tool manager and register all available tools."""
         print("[Sandbox] Initializing Developer Tools...")
-        
+
         self._tool_manager = ToolManager(self._container)
 
         # 1. Performance Monitor (F1) - FPS and Stats
@@ -59,7 +59,7 @@ class SandboxApplication(Application):
         # 4. Physics Debugger (F4) - Collision Wireframes
         debugger = PhysicsDebugger(self._container)
         self._tool_manager.register_tool(debugger, pygame.K_F4)
-        
+
         # 5. Robust Editor (F5) - ImGui Based
         editor_tool = EditorTool(self._container)
         self._tool_manager.register_tool(editor_tool, pygame.K_F5)
@@ -70,14 +70,14 @@ class SandboxApplication(Application):
 
         # Enable global visibility by default in Sandbox mode
         self._tool_manager.toggle_global_visibility()
-        
+
         print("[Sandbox] Tools loaded. Press F8 for help.")
 
     def _process_input(self) -> None:
         """Process input events, prioritizing developer tools."""
         # Poll events from the window backend
         events = self._window.poll_events()
-        
+
         for event in events:
             # 1. Update Internal State (Quit, etc.)
             if hasattr(event, "type") and event.type == pygame.QUIT:
@@ -106,7 +106,7 @@ class SandboxApplication(Application):
 
         # 2. Render Game Scene
         if self._scene_manager:
-            self._scene_manager.render(self._ui_renderer)
+            self._scene_manager.render(self._world_renderer, self._ui_renderer)
 
         # 3. Render Tools (On top of everything)
         if self._tool_manager:

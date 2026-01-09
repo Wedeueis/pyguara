@@ -1,4 +1,5 @@
 import pytest
+from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
@@ -9,32 +10,32 @@ from pyguara.config.manager import ConfigManager
 from pyguara.input.manager import InputManager
 from pyguara.ui.manager import UIManager
 from pyguara.graphics.window import Window
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import UIRenderer, IRenderer
 
 
 # --- Mocks ---
 class MockScene(Scene):
-    def __init__(self, name, disp):
+    def __init__(self, name: str, disp: Any) -> None:
         super().__init__(name, disp)
         self.enter_called = False
         self.update_called = False
         self.render_called = False
 
-    def on_enter(self):
+    def on_enter(self) -> None:
         self.enter_called = True
 
-    def on_exit(self):
+    def on_exit(self) -> None:
         pass
 
-    def update(self, dt):
+    def update(self, dt: float) -> None:
         self.update_called = True
 
-    def render(self, r):
+    def render(self, w: IRenderer, u: UIRenderer) -> None:
         self.render_called = True
 
 
-@pytest.fixture
-def app_container():
+@pytest.fixture  # type: ignore[misc]
+def app_container() -> DIContainer:
     c = DIContainer()
 
     # Core Services
@@ -46,19 +47,22 @@ def app_container():
 
     # Graphics Mocks
     mock_window = MagicMock()
+    # We can't mock read-only properties easily on some types, but MagicMock works
+    # However, MyPy might complain if Window definition says it's read-only property.
+    # We'll ignore the assignment here if needed, or rely on MagicMock flexibility.
     mock_window.is_open = True
-    # Logic to close window after 1 frame
-    # We'll handle loop breaking in the test logic or via side_effect
-
+    
     c.register_instance(Window, mock_window)
-    c.register_instance(UIRenderer, MagicMock())
+    c.register_instance(UIRenderer, MagicMock())  # type: ignore[type-abstract]
+    c.register_instance(IRenderer, MagicMock())   # type: ignore[type-abstract]
 
     return c
 
 
-def test_app_lifecycle_run_once(app_container):
+def test_app_lifecycle_run_once(app_container: DIContainer) -> None:
     """
-    Scenario: Application Start and Single Frame Execution
+    Scenario: Application Start and Single Frame Execution.
+    
     Given a configured Application with a Starting Scene
     When run() is called
     Then the scene should be entered, updated, and rendered
@@ -68,19 +72,15 @@ def test_app_lifecycle_run_once(app_container):
     scene = MockScene("start", app_container.get(EventDispatcher))
 
     # Mock loop control: Run once then stop
-    # app._window.is_open is checked in while loop.
-    # We can use side_effect on poll_events to close app?
-    # Or just mock the clock to throw an exception to break loop?
-    # Better: Mock app._window.is_open to return True then False
-
-    app._window.is_open = True
+    # App checks self._window.is_open
+    app._window.is_open = True  # type: ignore[misc]
 
     # We need to break the loop.
     # Strategy: Replace the app._clock with a mock that stops execution
 
     app._clock = MagicMock()
 
-    def stop_app(*args):
+    def stop_app(*args: Any) -> int:
         app._is_running = False
         return 16  # dt
 
@@ -95,12 +95,13 @@ def test_app_lifecycle_run_once(app_container):
     assert scene.update_called
     assert scene.render_called
     # App should have called shutdown
-    app._window.close.assert_called_once()
+    app._window.close.assert_called_once()  # type: ignore[attr-defined]
 
 
-def test_scene_switching_integration(app_container):
+def test_scene_switching_integration(app_container: DIContainer) -> None:
     """
-    Scenario: Scene Switching
+    Scenario: Scene Switching.
+    
     Given an Application running Scene A
     When SceneManager.switch_to("B") is called
     Then Scene A should exit and Scene B should enter

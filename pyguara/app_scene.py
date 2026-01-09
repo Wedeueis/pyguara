@@ -7,6 +7,7 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
 from pyguara.graphics.window import Window, WindowConfig
 from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.input.manager import InputManager
@@ -44,6 +45,7 @@ class GameEngine:
         self.physics_system = PhysicsSystem(self.physics_engine, self.event_dispatcher)
 
         # 4. Rendering & UI
+        self.world_renderer = PygameBackend(self.window.native_handle)
         self.ui_renderer = PygameUIRenderer(self.window.native_handle)
         self.ui_manager = UIManager(self.event_dispatcher)
 
@@ -117,7 +119,7 @@ class GameEngine:
         # self.window.clear(Color(30, 30, 30))
 
         # Render Scene
-        self.scene_manager.render(self.ui_renderer)
+        self.scene_manager.render(self.world_renderer, self.ui_renderer)
 
         # Render Global UI
         self.ui_manager.render(self.ui_renderer)

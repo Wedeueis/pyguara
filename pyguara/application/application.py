@@ -5,7 +5,7 @@ import pygame
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.scene.base import Scene
@@ -30,6 +30,7 @@ class Application:
         self._ui_manager = container.get(UIManager)
 
         # Retrieve Renderer
+        self._world_renderer = container.get(IRenderer)  # type: ignore[type-abstract]
         self._ui_renderer = container.get(UIRenderer)  # type: ignore[type-abstract]
 
         self._scene_manager.set_container(container)
@@ -89,7 +90,7 @@ class Application:
     def _render(self) -> None:
         """Render frame."""
         self._window.clear()
-        self._scene_manager.render(self._ui_renderer)
+        self._scene_manager.render(self._world_renderer, self._ui_renderer)
         self._ui_manager.render(self._ui_renderer)
         self._window.present()
 

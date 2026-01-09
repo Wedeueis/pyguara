@@ -73,6 +73,14 @@ class PygameBackend(IRenderer):
         """Draw a rectangle primitive."""
         pygame.draw.rect(self._screen, color, rect, width)
 
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """Draw a circle primitive."""
+        pygame.draw.circle(
+            self._screen, color, (int(center.x), int(center.y)), int(radius), width
+        )
+
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:

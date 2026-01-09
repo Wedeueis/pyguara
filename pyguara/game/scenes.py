@@ -2,15 +2,17 @@
 
 from typing import Optional
 
-import pygame
-
-from pyguara.common.components import Transform
-from pyguara.common.types import Vector2
+from pyguara.common.components import Transform, Tag
+from pyguara.common.types import Vector2, Rect, Color
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.input.manager import InputManager
+from pyguara.input.types import InputDevice, ActionType
+from pyguara.input.keys import SPACE
+from pyguara.input.events import OnActionEvent
 from pyguara.physics.components import RigidBody, Collider
 from pyguara.physics.physics_system import PhysicsSystem
-from pyguara.physics.protocols import IPhysicsEngine  # Changed import
+from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.types import BodyType, ShapeType
 from pyguara.scene.base import Scene
 from pyguara.ui.components import Button, Label, Panel
@@ -68,49 +70,45 @@ class GameplayScene(Scene):
         self.fps_label.set_text(f"FPS: {int(1 / dt) if dt > 0 else 0}")
         self.fps_label.set_text(f"Entities: {len(physics_entities)}")
 
-    def render(self, renderer: UIRenderer) -> None:
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Scene Render Loop."""
         # 1. Debug Render Physics
-        # Note: In a real engine, we'd use a dedicated DebugDrawer service
-        if hasattr(renderer, "_surface"):
-            surface = renderer._surface
+        # Use the World Renderer (IRenderer) for game entities
+        for entity in self.entity_manager.get_entities_with(Transform, Collider):
+            # OPTIMIZATION: Use get_component
+            pos = entity.get_component(Transform).position
+            col = entity.get_component(Collider)
+            dims = col.dimensions
 
-            for entity in self.entity_manager.get_entities_with(Transform, Collider):
-                # OPTIMIZATION: Use get_component
-                pos = entity.get_component(Transform).position
-                col = entity.get_component(Collider)
-                dims = col.dimensions
+            # Handle Circle vs Box render
+            if len(dims) == 1:
+                world_renderer.draw_circle(
+                    pos,
+                    dims[0],
+                    Color(100, 255, 100),  # Color
+                    2,  # Width
+                )
+            else:
+                rect = Rect(
+                    int(pos.x - dims[0] / 2),
+                    int(pos.y - dims[1] / 2),
+                    int(dims[0]),
+                    int(dims[1]),
+                )
 
-                # Handle Circle vs Box render
-                if len(dims) == 1:
-                    pygame.draw.circle(
-                        surface,
-                        (100, 255, 100),
-                        (int(pos.x), int(pos.y)),
-                        int(dims[0]),
-                        2,
-                    )
-                else:
-                    rect = pygame.Rect(
-                        int(pos.x - dims[0] / 2),
-                        int(pos.y - dims[1] / 2),
-                        int(dims[0]),
-                        int(dims[1]),
-                    )
+                # Check body type for color
+                rb = (
+                    entity.get_component(RigidBody)
+                    if entity.has_component(RigidBody)
+                    else None
+                )
+                is_dynamic = rb and rb.body_type == BodyType.DYNAMIC
 
-                    # Check body type for color
-                    rb = (
-                        entity.get_component(RigidBody)
-                        if entity.has_component(RigidBody)
-                        else None
-                    )
-                    is_dynamic = rb and rb.body_type == BodyType.DYNAMIC
-
-                    color = (100, 255, 100) if is_dynamic else (255, 100, 100)
-                    pygame.draw.rect(surface, color, rect, 2)
+                color = Color(100, 255, 100) if is_dynamic else Color(255, 100, 100)
+                world_renderer.draw_rect(rect, color, 2)
 
         # 2. Render UI
-        self.ui_manager.render(renderer)
+        self.ui_manager.render(ui_renderer)
 
     # --- Setup Helpers ---
 
@@ -118,18 +116,21 @@ class GameplayScene(Scene):
         """Populate the ECS with game objects."""
         # -- Floor --
         floor = self.entity_manager.create_entity("floor")
+        floor.add_component(Tag("Floor"))
         floor.add_component(Transform(position=Vector2(640, 650)))
         floor.add_component(RigidBody(body_type=BodyType.STATIC))
         floor.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[1280, 50]))
 
         # -- Player --
         player = self.entity_manager.create_entity("player")
+        player.add_component(Tag("Player"))
         player.add_component(Transform(position=Vector2(640, 100)))
         player.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=10.0))
         player.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[40, 40]))
 
         # -- Random Box --
         box = self.entity_manager.create_entity("box_1")
+        box.add_component(Tag("Crate"))
         box.add_component(Transform(position=Vector2(600, 0)))
         box.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=5.0))
         box.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[30, 30]))
@@ -176,31 +177,40 @@ class TestScene(Scene):
         print("[TestScene] Entered. If you see this, the Scene Manager is working.")
         print("[TestScene] The window should be BLUE with a RED box.")
 
+        # Register Input Test
+        if self.container:
+            input_mgr = self.container.get(InputManager)
+            # Register "Jump" action if not exists
+            if "Jump" not in input_mgr._registered_actions:
+                input_mgr.register_action("Jump", ActionType.PRESS)
+                input_mgr.bind_input(InputDevice.KEYBOARD, SPACE, "Jump")
+
+            # Subscribe
+            self.event_dispatcher.subscribe(OnActionEvent, self._on_input)
+
     def on_exit(self) -> None:
         """Call when leaving the scene."""
         print("[TestScene] Exited.")
+        self.event_dispatcher.unsubscribe(OnActionEvent, self._on_input)
+
+    def _on_input(self, event: OnActionEvent) -> None:
+        if event.action_name == "Jump":
+            print(f"[TestScene] Space Pressed! Value: {event.value}")
 
     def update(self, dt: float) -> None:
         """Scene Logic Loop."""
-        # Simple test: Print to console if Space is pressed
-        # This proves the Input System is working
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_SPACE]:
-            print(f"[TestScene] Input Alive! dt={dt:.4f}")
+        pass
 
-    def render(self, renderer: UIRenderer) -> None:
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Scene Render Loop."""
-        # Access the raw Pygame surface to draw directly
-        # This proves the Window and Render Pipeline are working
-        if hasattr(renderer, "_surface"):
-            surface = renderer._surface
+        # 1. Fill Background (Blue)
+        world_renderer.clear(Color(50, 50, 200))
 
-            # 1. Fill Background (Blue)
-            surface.fill((50, 50, 200))
+        # 2. Draw a Box (Red)
+        rect = Rect(100, 100, 200, 200)
+        world_renderer.draw_rect(rect, Color(255, 50, 50))
 
-            # 2. Draw a Box (Red)
-            rect = pygame.Rect(100, 100, 200, 200)
-            pygame.draw.rect(surface, (255, 50, 50), rect)
-
-            # 3. Draw diagonal line (White)
-            pygame.draw.line(surface, (255, 255, 255), (0, 0), (800, 600), 5)
+        # 3. Draw diagonal line (White)
+        world_renderer.draw_line(
+            Vector2(0, 0), Vector2(800, 600), Color(255, 255, 255), 5
+        )

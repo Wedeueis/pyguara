@@ -5,8 +5,9 @@ from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
+from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
 from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.graphics.window import Window, WindowConfig
 from pyguara.input.manager import InputManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
@@ -38,6 +39,7 @@ def create_application() -> Application:
 def create_sandbox_application() -> SandboxApplication:
     """
     Construct and configure the SandboxApplication instance.
+
     Includes developer tools.
     """
     container = _setup_container()
@@ -45,7 +47,7 @@ def create_sandbox_application() -> SandboxApplication:
 
 
 def _setup_container() -> DIContainer:
-    """Internal helper to setup common dependencies."""
+    """Configure common dependencies internally."""
     container = DIContainer()
 
     # 1. Event System (Core)
@@ -75,8 +77,12 @@ def _setup_container() -> DIContainer:
     window.create()
     container.register_instance(Window, window)
 
-    # 4. Rendering (UI)
-    # We register the concrete renderer bound to the window surface
+    # 4. Rendering
+    # World Renderer
+    world_renderer = PygameBackend(window.native_handle)
+    container.register_instance(IRenderer, world_renderer)  # type: ignore[type-abstract]
+
+    # UI Renderer
     ui_renderer = PygameUIRenderer(window.native_handle)
     container.register_instance(UIRenderer, ui_renderer)  # type: ignore[type-abstract]
 

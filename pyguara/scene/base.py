@@ -6,7 +6,7 @@ from typing import Optional
 from pyguara.di.container import DIContainer  # Import Container
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import UIRenderer, IRenderer
 
 
 class Scene(ABC):
@@ -50,6 +50,6 @@ class Scene(ABC):
         ...
 
     @abstractmethod
-    def render(self, renderer: UIRenderer) -> None:
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Frame render logic."""
         ...

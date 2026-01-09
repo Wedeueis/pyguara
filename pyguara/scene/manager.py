@@ -3,7 +3,7 @@
 from typing import Dict, Optional
 
 from pyguara.di.container import DIContainer
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.scene.base import Scene
 
 
@@ -49,7 +49,7 @@ class SceneManager:
         if self._current_scene:
             self._current_scene.update(dt)
 
-    def render(self, renderer: UIRenderer) -> None:
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Delegate render to current scene."""
         if self._current_scene:
-            self._current_scene.render(renderer)
+            self._current_scene.render(world_renderer, ui_renderer)

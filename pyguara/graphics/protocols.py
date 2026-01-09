@@ -193,6 +193,20 @@ class IRenderer(Protocol):
         """
         ...
 
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """
+        Draw a circle primitive.
+
+        Args:
+            center (Vector2): Center position.
+            radius (float): Radius in pixels.
+            color (Color): Color to draw.
+            width (int): Border thickness. 0 fills the circle.
+        """
+        ...
+
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
