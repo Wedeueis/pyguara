@@ -78,20 +78,23 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 ### 2.2 Critical Issues Identified
 
-#### P0-001: Component Removal Tracking (ECS)
+#### P0-001: Component Removal Tracking (ECS) ✅ RESOLVED
 - **Location:** `pyguara/ecs/entity.py:94-106`
 - **Impact:** Queries may return entities with deleted components
 - **Risk:** HIGH - Data corruption potential
+- **Resolution:** Implemented bidirectional observer pattern (see IMPLEMENTATION_P0-001.md)
 
-#### P0-002: DIScope Public API Missing (DI)
+#### P0-002: DIScope Public API Missing (DI) ✅ RESOLVED
 - **Location:** `pyguara/di/container.py:247-298`
 - **Impact:** Scoped services unusable in production code
 - **Risk:** MEDIUM - Limits DI usefulness
+- **Resolution:** Added DIScope.get() public API (see IMPLEMENTATION_P0-002.md)
 
-#### P0-003: String-Based UI Events (UI)
+#### P0-003: String-Based UI Events (UI) ✅ RESOLVED
 - **Location:** `pyguara/ui/manager.py:41-47`
 - **Impact:** Typos cause silent failures, no IDE autocomplete
 - **Risk:** MEDIUM - Developer experience
+- **Resolution:** Implemented UIEventType enum (commit 5ec8d1b, merged fb8290c)
 
 #### P0-004: Resource Memory Leak (Resources)
 - **Location:** `pyguara/resources/manager.py`
@@ -155,9 +158,9 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 **Goal:** Resolve all P0 issues, achieve zero known crashes
 
 #### Week 1: Core System Fixes
-- [ ] **P0-001**: Implement component removal tracking
-- [ ] **P0-002**: Add DIScope.get() public API
-- [ ] **P0-003**: Create UIEventType enum
+- [x] **P0-001**: Implement component removal tracking
+- [x] **P0-002**: Add DIScope.get() public API
+- [x] **P0-003**: Create UIEventType enum
 - [ ] **P0-005**: Configurable error handling strategy
 - [ ] Test coverage for all fixes ≥ 90%
 
