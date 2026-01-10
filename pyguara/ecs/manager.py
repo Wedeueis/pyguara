@@ -36,6 +36,7 @@ class EntityManager:
         # This dependency injection allows the Entity to notify us without
         # knowing who we are (Observer pattern light).
         entity._on_component_added = self._on_entity_component_added
+        entity._on_component_removed = self._on_entity_component_removed
 
         # Index any components that might already exist on this entity
         for comp_type in entity._components:
@@ -95,5 +96,28 @@ class EntityManager:
     def _on_entity_component_added(
         self, entity_id: str, component_type: Type[Component]
     ) -> None:
-        """Call when an entity adds a component."""
+        """Update inverted index when an entity adds a component.
+
+        Adds the entity to the inverted index for the component type,
+        ensuring it appears in queries for this component.
+
+        Args:
+            entity_id: The ID of the entity that added a component.
+            component_type: The type of component that was added.
+        """
         self._component_index[component_type].add(entity_id)
+
+    def _on_entity_component_removed(
+        self, entity_id: str, component_type: Type[Component]
+    ) -> None:
+        """Update inverted index when an entity removes a component.
+
+        Removes the entity from the inverted index for the component type,
+        ensuring it no longer appears in queries for this component.
+
+        Args:
+            entity_id: The ID of the entity that removed a component.
+            component_type: The type of component that was removed.
+        """
+        if component_type in self._component_index:
+            self._component_index[component_type].discard(entity_id)

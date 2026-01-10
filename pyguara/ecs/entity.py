@@ -39,6 +39,9 @@ class Entity:
         self._on_component_added: Optional[Callable[[str, Type[Component]], None]] = (
             None
         )
+        self._on_component_removed: Optional[Callable[[str, Type[Component]], None]] = (
+            None
+        )
 
     def add_component(self, component: C) -> C:
         """Add a component instance to the entity.
@@ -91,7 +94,14 @@ class Entity:
         return component_type in self._components
 
     def remove_component(self, component_type: Type[Component]) -> None:
-        """Remove a component by type."""
+        """Remove a component by type.
+
+        This method removes the component from the entity and updates the
+        EntityManager's inverted indexes to ensure queries remain consistent.
+
+        Args:
+            component_type: The type of component to remove.
+        """
         if component_type in self._components:
             comp = self._components.pop(component_type)
             comp.on_detach()
@@ -101,9 +111,9 @@ class Entity:
             if snake_name in self._property_cache:
                 del self._property_cache[snake_name]
 
-            # Note: We should technically notify the manager here too for cleanup,
-            # but usually managers rebuild/clean indexes on frame boundaries or
-            # via explicit removal. For this step, we focus on the Adding bottleneck.
+            # Notify the manager to update indexes
+            if self._on_component_removed:
+                self._on_component_removed(self.id, component_type)
 
     def __getattr__(self, name: str) -> Any:
         """
