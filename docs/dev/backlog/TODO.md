@@ -25,3 +25,9 @@
   - Implement automatic texture batching in the `Batcher` class.
 - [ ] **Task: Multi-Camera Support**
   - Update `RenderSystem` to handle multiple Viewports/Cameras for UI overlays and Split-screen.
+
+# Feedbacks
+1. Renderer Optimization: Ensure Batcher handles texture atlas switching smartly. If you draw Sprite A (Tex1) -> Sprite B (Tex2) -> Sprite C (Tex1), you break batching. Sorting by Z-Index then by Texture ID is a common optimization.
+2. Input Mapping: I saw InputManager but on_mouse_event in UI used raw strings ("MOUSE_DOWN"). Consider using an Enum for internal event types to avoid stringly-typed errors.
+3. Editor Tools: Since you have a di system and inspector in the file list, your next big leap is an In-Game Editor/Console. With DI, you can easily inject a "DebugRenderer" or "PropertyInspector" to tweak Component values at runtime.
+4. The submit method in RenderSystem manually extracts rotation and scale with getattr. Ideally, Renderable protocol should enforce these, or you should query the Transform component directly to avoid getattr overhead in the hot loop.
