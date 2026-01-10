@@ -1,10 +1,13 @@
 import pytest
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 from pyguara.di.exceptions import (
     ServiceNotFoundException,
     CircularDependencyException,
     DIException,
 )
+
+if TYPE_CHECKING:
+    from pyguara.di.container import DIContainer
 
 
 class IService(Protocol):
@@ -32,77 +35,64 @@ class CircularB:
 
 
 class DisposableService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.disposed = False
 
-    def dispose(self):
+    def dispose(self) -> None:
         self.disposed = True
 
 
-def test_singleton_registration(container):
-    container.register_singleton(IService, ServiceImpl)
+def test_singleton_registration(container: DIContainer) -> None:
+    container.register_singleton(IService, ServiceImpl)  # type: ignore[type-abstract]
 
-    s1 = container.get(IService)
-    s2 = container.get(IService)
+    s1 = container.get(IService)  # type: ignore[type-abstract]
+    s2 = container.get(IService)  # type: ignore[type-abstract]
 
     assert isinstance(s1, ServiceImpl)
     assert s1 is s2  # Same instance
 
 
-def test_transient_registration(container):
-    container.register_transient(IService, ServiceImpl)
+def test_transient_registration(container: DIContainer) -> None:
+    container.register_transient(IService, ServiceImpl)  # type: ignore[type-abstract]
 
-    s1 = container.get(IService)
-    s2 = container.get(IService)
+    s1 = container.get(IService)  # type: ignore[type-abstract]
+    s2 = container.get(IService)  # type: ignore[type-abstract]
 
     assert isinstance(s1, ServiceImpl)
     assert s1 is not s2  # Different instances
 
 
-def test_dependency_resolution(container):
-    container.register_singleton(IService, ServiceImpl)
+def test_dependency_resolution(container: DIContainer) -> None:
+    container.register_singleton(IService, ServiceImpl)  # type: ignore[type-abstract]
     container.register_transient(ServiceWithDep, ServiceWithDep)
 
     dependent = container.get(ServiceWithDep)
     assert isinstance(dependent.service, ServiceImpl)
 
 
-def test_scoped_resolution(container):
-    container.register_scoped(IService, ServiceImpl)
+def test_scoped_resolution(container: DIContainer) -> None:
+    """Test scoped service resolution within different scopes."""
+    container.register_scoped(IService, ServiceImpl)  # type: ignore[type-abstract]
 
-    # Getting scoped service from root container implies a default or error depending on impl
-    # The current impl requires explicit scope
+    # Scoped services require an active scope
     with pytest.raises(DIException):
-        container.get(IService)
+        container.get(IService)  # type: ignore[type-abstract]
 
+    # Within a scope, the same instance is returned
     with container.create_scope() as scope:
-        # Access private method or exposed method if available (container._resolve_service with scope)
-        # But standard way is scope._get_scoped_service or container logic handling scope
-        # In this implementation, DIContainer.get() doesn't take a scope.
-        # We must assume the container design intends scopes to be used via scope object?
-        # Checking implementation: `container._resolve_service` takes optional scope.
-        # But `container.get` does not.
+        s1 = scope.get(IService)  # type: ignore[type-abstract]
+        s2 = scope.get(IService)  # type: ignore[type-abstract]
+        assert isinstance(s1, ServiceImpl)
+        assert s1 is s2  # Same instance within scope
 
-        # NOTE: The current DIContainer public API doesn't expose getting a service *within* a scope easily
-        # except via internal methods or if `DIScope` had a `get` method?
-        # Let's check DIScope implementation... it doesn't have `get`.
-        # It relies on DIContainer calling `scope._get_scoped_service`.
-        # Wait, if I can't ask the Scope for a service, how do I use it?
-        # Ah, usually scopes are passed implicitly or there is a `scope.resolve(Type)` method.
-        # The current implementation seems to lack a public `resolve` on `DIScope`.
-        # I will test what is possible, or maybe just `_resolve_service`.
-
-        # Using internal method for test verification since public API seems incomplete for Scopes
-        s1 = container._resolve_service(IService, scope)
-        s2 = container._resolve_service(IService, scope)
-        assert s1 is s2
-
+    # Different scope returns different instance
     with container.create_scope() as scope2:
-        s3 = container._resolve_service(IService, scope2)
-        assert s1 is not s3
+        s3 = scope2.get(IService)  # type: ignore[type-abstract]
+        assert isinstance(s3, ServiceImpl)
+        assert s1 is not s3  # Different instance in different scope
 
 
-def test_circular_dependency(container):
+def test_circular_dependency(container: DIContainer) -> None:
     container.register_transient(CircularA, CircularA)
     container.register_transient(CircularB, CircularB)
 
@@ -110,17 +100,85 @@ def test_circular_dependency(container):
         container.get(CircularA)
 
 
-def test_service_not_found(container):
+def test_service_not_found(container: DIContainer) -> None:
     with pytest.raises(ServiceNotFoundException):
         container.get(str)  # Random type
 
 
-def test_scope_disposal(container):
+def test_scope_disposal(container: DIContainer) -> None:
+    """Test that scoped services are properly disposed when scope ends."""
     container.register_scoped(DisposableService, DisposableService)
 
     scope = container.create_scope()
-    service = container._resolve_service(DisposableService, scope)
+    service = scope.get(DisposableService)
 
     assert not service.disposed
     scope.dispose()
+    assert service.disposed
+
+
+def test_scope_resolves_singleton_correctly(container: DIContainer) -> None:
+    """Test that singletons resolved via scope return the global instance."""
+    container.register_singleton(IService, ServiceImpl)  # type: ignore[type-abstract]
+
+    # Get singleton from container
+    singleton_instance = container.get(IService)  # type: ignore[type-abstract]
+
+    # Get same singleton from scope
+    with container.create_scope() as scope:
+        scoped_singleton = scope.get(IService)  # type: ignore[type-abstract]
+        assert scoped_singleton is singleton_instance  # Same global instance
+
+    # Get from another scope - still same instance
+    with container.create_scope() as scope2:
+        another_scoped_singleton = scope2.get(IService)  # type: ignore[type-abstract]
+        assert another_scoped_singleton is singleton_instance
+
+
+def test_scope_resolves_transient_correctly(container: DIContainer) -> None:
+    """Test that transients resolved via scope create new instances."""
+    container.register_transient(IService, ServiceImpl)  # type: ignore[type-abstract]
+
+    with container.create_scope() as scope:
+        t1 = scope.get(IService)  # type: ignore[type-abstract]
+        t2 = scope.get(IService)  # type: ignore[type-abstract]
+        assert isinstance(t1, ServiceImpl)
+        assert isinstance(t2, ServiceImpl)
+        assert t1 is not t2  # Transients always create new instances
+
+
+def test_scope_mixed_lifetimes(container: DIContainer) -> None:
+    """Test resolving services with mixed lifetimes from a scope."""
+    # Setup different lifetimes
+    container.register_singleton(IService, ServiceImpl)  # type: ignore[type-abstract]
+
+    class ScopedService:
+        def __init__(self, service: IService):
+            self.service = service
+
+    container.register_scoped(ScopedService, ScopedService)
+
+    # Get singleton outside scope
+    singleton = container.get(IService)  # type: ignore[type-abstract]
+
+    # Resolve scoped service that depends on singleton
+    with container.create_scope() as scope:
+        scoped = scope.get(ScopedService)
+        assert scoped.service is singleton  # Scoped service gets global singleton
+
+        # Verify scoped service is reused within scope
+        scoped2 = scope.get(ScopedService)
+        assert scoped2 is scoped
+
+
+def test_scope_context_manager_cleanup(container: DIContainer) -> None:
+    """Test that scope automatically disposes resources when used as context manager."""
+    container.register_scoped(DisposableService, DisposableService)
+
+    service = None
+    with container.create_scope() as scope:
+        service = scope.get(DisposableService)
+        assert not service.disposed
+
+    # After exiting context, service should be disposed
     assert service.disposed
