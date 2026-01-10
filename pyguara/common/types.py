@@ -70,13 +70,13 @@ class Vector2(pymunk.Vec2d):
         v = super().__sub__(other)
         return Vector2(v.x, v.y)
 
-    def __mul__(self, other: float) -> Vector2:
+    def __mul__(self, other: float) -> Vector2:  # type: ignore[override]
         """Scalar multiplication (Vector * float)."""
         # Ignored override because Tuple expects int (repetition), we want float (math)
         v = super().__mul__(other)
         return Vector2(v.x, v.y)
 
-    def __rmul__(self, other: float) -> Vector2:
+    def __rmul__(self, other: float) -> Vector2:  # type: ignore[override]
         """Reverse scalar multiplication (float * Vector)."""
         # Ignored override because Tuple expects int (repetition), we want float (math)
         v = super().__rmul__(other)
@@ -237,7 +237,7 @@ class Color(pygame.Color):
         return Color(hex_str)
 
     @property
-    def normalized(self) -> Tuple[float, float, float, float]:
+    def normalized(self) -> Tuple[float, float, float, float]:  # type: ignore[override]
         """
         Get the RGBA values normalized to the 0.0 - 1.0 range.
 

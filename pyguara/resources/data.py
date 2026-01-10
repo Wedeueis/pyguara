@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import fields, is_dataclass
-from typing import Any, Dict, Type, TypeVar, cast
+from typing import Any, Dict, Type, TypeVar
 
 from pyguara.resources.types import Resource
 
@@ -61,7 +61,7 @@ class DataResource(Resource):
         valid_keys = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in self._data.items() if k in valid_keys}
 
-        return cast(T, cls(**filtered))
+        return cls(**filtered)
 
     def save(self) -> None:
         """Serialize the current data state back to disk."""

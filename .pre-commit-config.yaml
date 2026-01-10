@@ -26,10 +26,19 @@ repos:
       - id: trailing-whitespace
 
   # Type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
+  - repo: local
     hooks:
       - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        require_serial: true
+        # Matches Makefile behavior (checks 'pyguara' folder)
+        # Use pass_filenames: false to check the whole project,
+        # or true to check only changed files (faster but might miss context)
+        pass_filenames: false
+        args: ["pyguara"]
 
   # Documentation
   - repo: https://github.com/pycqa/pydocstyle
