@@ -245,7 +245,22 @@ class DIContainer:
 
 
 class DIScope:
-    """Service scope for managing scoped lifetimes and cleanup."""
+    """Service scope for managing scoped lifetimes and cleanup.
+
+    Scopes are used to manage the lifetime of scoped services. Services
+    registered as scoped will have one instance per scope, shared across
+    all requests within that scope.
+
+    Example:
+        >>> container = DIContainer()
+        >>> container.register_scoped(IDatabase, DatabaseConnection)
+        >>>
+        >>> with container.create_scope() as scope:
+        ...     db1 = scope.get(IDatabase)  # Creates new instance
+        ...     db2 = scope.get(IDatabase)  # Returns same instance
+        ...     assert db1 is db2
+        >>> # Scope disposed, resources cleaned up
+    """
 
     def __init__(self, container: DIContainer) -> None:
         """Initialize a new scope."""
@@ -254,6 +269,35 @@ class DIScope:
         self._disposed = False
         self._disposables: List[Any] = []
         self._lock = threading.RLock()
+
+    def get(self, service_type: Type[T]) -> T:
+        """Resolve and retrieve a service instance within this scope.
+
+        This is the primary public API for resolving services within a scope.
+        Scoped services will be shared within this scope, while singletons
+        will return the global instance, and transients will create new instances.
+
+        Args:
+            service_type: The type of service to resolve.
+
+        Returns:
+            An instance of the requested service.
+
+        Raises:
+            ServiceNotFoundException: If the service is not registered.
+            CircularDependencyException: If a circular dependency is detected.
+            DIException: If attempting to resolve a scoped service without a scope.
+
+        Example:
+            >>> container = DIContainer()
+            >>> container.register_scoped(ILogger, FileLogger)
+            >>> container.register_singleton(IConfig, AppConfig)
+            >>>
+            >>> with container.create_scope() as scope:
+            ...     logger = scope.get(ILogger)  # Scoped instance
+            ...     config = scope.get(IConfig)  # Singleton instance
+        """
+        return self._container._resolve_service(service_type, scope=self)
 
     def _get_scoped_service(
         self, service_type: Type[T], registration: ServiceRegistration
