@@ -26,6 +26,7 @@ class ResourceManager:
         self._cache: Dict[str, Resource] = {}
         self._extension_map: Dict[str, IResourceLoader] = {}
         self._path_index: Dict[str, str] = {}
+        self._reference_counts: Dict[str, int] = {}
 
     def register_loader(self, loader: IResourceLoader) -> None:
         """
@@ -105,6 +106,10 @@ class ResourceManager:
                     f"Resource '{path_or_name}' is cached as {type(res).__name__}, "
                     f"but {resource_type.__name__} was requested."
                 )
+            # Increment ref count for cached resource too
+            if actual_path not in self._reference_counts:
+                self._reference_counts[actual_path] = 0
+            self._reference_counts[actual_path] += 1
             return res
 
         # 3. Find Loader (O(1) Lookup)
@@ -125,16 +130,168 @@ class ResourceManager:
             )
 
         self._cache[actual_path] = resource
+
+        # Initialize reference count for new resource
+        if actual_path not in self._reference_counts:
+            self._reference_counts[actual_path] = 0
+
+        # Auto-increment ref count on load
+        self._reference_counts[actual_path] += 1
+
         return resource
 
-    def unload(self, path_or_name: str) -> None:
+    def acquire(self, path_or_name: str) -> None:
         """
-        Remove a resource from the cache, allowing the garbage collector to free memory.
+        Increment the reference count for a resource.
+
+        Use this when you want to explicitly hold a reference to prevent
+        automatic unloading. Must be balanced with release() calls.
 
         Args:
             path_or_name (str): The identifier used to load the resource.
+
+        Raises:
+            KeyError: If the resource is not loaded in cache.
         """
         actual_path = self._path_index.get(path_or_name, path_or_name)
-        if actual_path in self._cache:
+
+        if actual_path not in self._cache:
+            raise KeyError(
+                f"Cannot acquire reference to unloaded resource: {path_or_name}"
+            )
+
+        if actual_path not in self._reference_counts:
+            self._reference_counts[actual_path] = 0
+
+        self._reference_counts[actual_path] += 1
+
+    def release(self, path_or_name: str) -> None:
+        """
+        Decrement the reference count for a resource.
+
+        When the reference count reaches zero, the resource is automatically
+        unloaded from the cache to free memory.
+
+        Args:
+            path_or_name (str): The identifier used to load the resource.
+
+        Raises:
+            KeyError: If the resource is not loaded in cache.
+            ValueError: If reference count is already zero.
+        """
+        actual_path = self._path_index.get(path_or_name, path_or_name)
+
+        if actual_path not in self._cache:
+            raise KeyError(
+                f"Cannot release reference to unloaded resource: {path_or_name}"
+            )
+
+        if (
+            actual_path not in self._reference_counts
+            or self._reference_counts[actual_path] <= 0
+        ):
+            raise ValueError(
+                f"Reference count for {path_or_name} is already zero. "
+                "Cannot release more references than acquired."
+            )
+
+        self._reference_counts[actual_path] -= 1
+
+        # Auto-unload when ref count reaches zero
+        if self._reference_counts[actual_path] == 0:
             del self._cache[actual_path]
-            print(f"[ResourceManager] Unloaded {actual_path}")
+            del self._reference_counts[actual_path]
+            print(
+                f"[ResourceManager] Auto-unloaded {actual_path} (ref count reached 0)"
+            )
+
+    def unload(self, path_or_name: str, force: bool = False) -> None:
+        """
+        Remove a resource from the cache, allowing the garbage collector to free memory.
+
+        By default, this decrements the reference count and only removes the resource
+        when the count reaches zero. Use force=True to bypass reference counting.
+
+        Args:
+            path_or_name (str): The identifier used to load the resource.
+            force (bool): If True, unload regardless of reference count. Use with caution.
+        """
+        actual_path = self._path_index.get(path_or_name, path_or_name)
+
+        if actual_path not in self._cache:
+            return  # Already unloaded
+
+        if force:
+            # Force unload regardless of ref count
+            if actual_path in self._cache:
+                del self._cache[actual_path]
+            if actual_path in self._reference_counts:
+                del self._reference_counts[actual_path]
+            print(f"[ResourceManager] Force unloaded {actual_path}")
+        else:
+            # Respect reference counting (same as release())
+            if (
+                actual_path not in self._reference_counts
+                or self._reference_counts[actual_path] <= 0
+            ):
+                # No references, safe to unload
+                del self._cache[actual_path]
+                if actual_path in self._reference_counts:
+                    del self._reference_counts[actual_path]
+                print(f"[ResourceManager] Unloaded {actual_path}")
+            else:
+                # Has references, just decrement
+                self._reference_counts[actual_path] -= 1
+                if self._reference_counts[actual_path] == 0:
+                    del self._cache[actual_path]
+                    del self._reference_counts[actual_path]
+                    print(
+                        f"[ResourceManager] Unloaded {actual_path} (ref count reached 0)"
+                    )
+                else:
+                    print(
+                        f"[ResourceManager] Decremented ref count for {actual_path} (now {self._reference_counts[actual_path]})"
+                    )
+
+    def unload_unused(self) -> int:
+        """
+        Batch-unload all resources with zero reference count.
+
+        This is useful for cleanup between scenes or game states.
+
+        Returns:
+            int: The number of resources unloaded.
+        """
+        to_unload = [
+            path for path, count in self._reference_counts.items() if count == 0
+        ]
+
+        for path in to_unload:
+            if path in self._cache:
+                del self._cache[path]
+            del self._reference_counts[path]
+            print(f"[ResourceManager] Batch unloaded {path}")
+
+        return len(to_unload)
+
+    def get_cache_stats(self) -> dict:
+        """
+        Get statistics about the current resource cache state.
+
+        Returns:
+            dict: Statistics including resource count, total refs, and resource details.
+        """
+        total_refs = sum(self._reference_counts.values())
+        resources_info = {
+            path: {
+                "type": type(res).__name__,
+                "ref_count": self._reference_counts.get(path, 0),
+            }
+            for path, res in self._cache.items()
+        }
+
+        return {
+            "resource_count": len(self._cache),
+            "total_references": total_refs,
+            "resources": resources_info,
+        }
