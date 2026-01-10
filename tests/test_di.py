@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pytest
 from typing import Protocol, TYPE_CHECKING
 from pyguara.di.exceptions import (
