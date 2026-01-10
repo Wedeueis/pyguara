@@ -1,10 +1,10 @@
 # Product Enhancement Proposal (PEP-2026.01)
 ## PyGuara Game Engine - Roadmap to Beta
 
-**Document Version:** 1.0
-**Date:** January 9, 2026
+**Document Version:** 1.1
+**Date:** January 10, 2026
 **Author:** Comprehensive Engine Review Committee
-**Status:** DRAFT - Awaiting Approval
+**Status:** ACTIVE - Phase 1 Complete
 
 ---
 
@@ -25,10 +25,10 @@
 ## 1. Executive Summary
 
 ### 1.1 Current Status
-- **Version:** Pre-Alpha
-- **Codebase:** ~10,000 lines across 100+ files
-- **Overall Grade:** B+ (Excellent architecture, incomplete features)
-- **Production Readiness:** 35% (suitable for prototypes, not commercial)
+- **Version:** Alpha (Phase 1 Complete)
+- **Codebase:** ~11,500 lines across 115+ files
+- **Overall Grade:** A- (Excellent architecture, core systems stable)
+- **Production Readiness:** 45% (suitable for prototypes and small games)
 
 ### 1.2 Vision Statement
 Transform PyGuara from a pre-alpha engine with excellent architecture into a **production-ready, Python-native 2D game engine** suitable for indie game development, educational projects, and rapid prototyping.
@@ -55,17 +55,17 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 | System | Architecture | Completeness | Testing | Documentation | Priority |
 |--------|-------------|--------------|---------|---------------|----------|
-| ECS Core | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
-| DI Container | ⭐⭐⭐⭐ | 85% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
-| Event System | ⭐⭐⭐⭐½ | 80% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
+| ECS Core | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 |
+| DI Container | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
+| Event System | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 |
 | Graphics/Rendering | ⭐⭐⭐⭐ | 70% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P0 |
 | Physics | ⭐⭐⭐⭐ | 60% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
-| Input | ⭐⭐⭐½ | 50% | ⭐⭐ | ⭐⭐ | P0 |
-| Audio | ⭐⭐ | 10% | ⭐ | ⭐ | P0 |
-| UI | ⭐⭐⭐½ | 40% | ⭐⭐ | ⭐⭐ | P1 |
+| Input | ⭐⭐⭐⭐½ | 85% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
+| Audio | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
+| UI | ⭐⭐⭐⭐ | 65% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | AI | ⭐⭐⭐ | 30% | ⭐⭐ | ⭐⭐ | P2 |
 | Scene Mgmt | ⭐⭐⭐⭐ | 75% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
-| Resources | ⭐⭐⭐⭐ | 70% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
+| Resources | ⭐⭐⭐⭐⭐ | 85% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | Persistence | ⭐⭐⭐ | 50% | ⭐⭐ | ⭐⭐ | P2 |
 | Config | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P2 |
 | Editor | ⭐⭐⭐ | 25% | ⭐ | ⭐ | P3 |
@@ -76,42 +76,35 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - **P2**: Medium priority - nice to have
 - **P3**: Low priority - future enhancements
 
-### 2.2 Critical Issues Identified
+### 2.2 Critical Issues (Resolved)
 
-#### P0-001: Component Removal Tracking (ECS)
-- **Location:** `pyguara/ecs/entity.py:94-106`
-- **Impact:** Queries may return entities with deleted components
-- **Risk:** HIGH - Data corruption potential
+#### P0-001: Component Removal Tracking (ECS) - ✅ RESOLVED
+- **Status:** Fixed. `EntityManager` now uses bidirectional callbacks to sync indexes.
+- **Impact:** Query consistency guaranteed.
 
-#### P0-002: DIScope Public API Missing (DI)
-- **Location:** `pyguara/di/container.py:247-298`
-- **Impact:** Scoped services unusable in production code
-- **Risk:** MEDIUM - Limits DI usefulness
+#### P0-002: DIScope Public API Missing (DI) - ✅ RESOLVED
+- **Status:** Fixed. `DIScope.get()` implemented as public API.
+- **Impact:** Scoped services fully usable.
 
-#### P0-003: String-Based UI Events (UI)
-- **Location:** `pyguara/ui/manager.py:41-47`
-- **Impact:** Typos cause silent failures, no IDE autocomplete
-- **Risk:** MEDIUM - Developer experience
+#### P0-003: String-Based UI Events (UI) - ✅ RESOLVED
+- **Status:** Fixed. Refactored to use `UIEventType` Enum.
+- **Impact:** Type-safe UI event handling.
 
-#### P0-004: Resource Memory Leak (Resources)
-- **Location:** `pyguara/resources/manager.py`
-- **Impact:** Memory grows unbounded in long-running games
-- **Risk:** HIGH - Performance degradation
+#### P0-004: Resource Memory Leak (Resources) - ✅ RESOLVED
+- **Status:** Fixed. Reference counting and auto-unloading implemented.
+- **Impact:** Stable memory usage in long sessions.
 
-#### P0-005: Event Error Swallowing (Events/DI)
-- **Location:** `pyguara/events/dispatcher.py:98-99`, `pyguara/di/container.py:242-244`
-- **Impact:** Debugging is extremely difficult
-- **Risk:** MEDIUM - Developer experience
+#### P0-005: Event Error Swallowing (Events/DI) - ✅ RESOLVED
+- **Status:** Fixed. Configurable `ErrorHandlingStrategy` added to both systems.
+- **Impact:** Greatly improved debuggability.
 
-#### P0-006: No Gamepad Support (Input)
-- **Location:** `pyguara/input/manager.py`
-- **Impact:** Cannot ship console-style games
-- **Risk:** HIGH - Feature gap
+#### P0-006: No Gamepad Support (Input) - ✅ RESOLVED
+- **Status:** Fixed. `GamepadManager` implemented with hot-plug support.
+- **Impact:** Console-style games possible.
 
-#### P0-007: Audio System Stub Only (Audio)
-- **Location:** `pyguara/audio/`
-- **Impact:** No sound in games (critical UX gap)
-- **Risk:** CRITICAL - Minimum viable product
+#### P0-007: Audio System Stub Only (Audio) - ✅ RESOLVED
+- **Status:** Fixed. Full `AudioManager` with music/SFX support implemented.
+- **Impact:** Immersive audio experience enabled.
 
 ---
 
@@ -150,28 +143,28 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 ## 4. Implementation Roadmap
 
-### Phase 1: Critical Fixes & Stability (Weeks 1-3)
+### Phase 1: Critical Fixes & Stability (Weeks 1-3) - ✅ COMPLETE
 
 **Goal:** Resolve all P0 issues, achieve zero known crashes
 
 #### Week 1: Core System Fixes
-- [ ] **P0-001**: Implement component removal tracking
-- [ ] **P0-002**: Add DIScope.get() public API
-- [ ] **P0-003**: Create UIEventType enum
-- [ ] **P0-005**: Configurable error handling strategy
-- [ ] Test coverage for all fixes ≥ 90%
+- [x] **P0-001**: Implement component removal tracking
+- [x] **P0-002**: Add DIScope.get() public API
+- [x] **P0-003**: Create UIEventType enum
+- [x] **P0-005**: Configurable error handling strategy
+- [x] Test coverage for all fixes ≥ 90%
 
 #### Week 2: Input & Audio Foundation
-- [ ] **P0-006**: Gamepad support (SDL2 backend)
-- [ ] **P0-007**: Audio system implementation (pygame.mixer wrapper)
-- [ ] Input action mapping system
-- [ ] Audio manager with spatial audio support
+- [x] **P0-006**: Gamepad support (SDL2 backend)
+- [x] **P0-007**: Audio system implementation (pygame.mixer wrapper)
+- [x] Input action mapping system
+- [x] Audio manager with spatial audio support
 
 #### Week 3: Resource Management & Testing
-- [ ] **P0-004**: Resource reference counting and unloading
-- [ ] Memory leak detection in tests
-- [ ] Integration test suite expansion
-- [ ] Performance benchmarking harness
+- [x] **P0-004**: Resource reference counting and unloading
+- [x] Memory leak detection in tests
+- [x] Integration test suite expansion
+- [x] Performance benchmarking harness
 
 **Phase 1 Exit Criteria:**
 - ✅ All P0 issues closed
@@ -181,7 +174,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 ---
 
-### Phase 2: Feature Completeness (Weeks 4-11)
+### Phase 2: Feature Completeness (Weeks 4-11) - 🚀 IN PROGRESS
 
 **Goal:** Bring all systems to production-ready state
 
@@ -191,6 +184,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Animation state machine
 - [ ] Particle system enhancements
 - [ ] Camera zoom/shake effects
+- [ ] **P2-001**: RenderSystem hot-loop optimization (`getattr` removal)
 
 #### Weeks 6-7: Physics & Collision
 - [ ] Physics material presets
@@ -198,6 +192,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Joint support (distance, revolute, prismatic)
 - [ ] Trigger volumes
 - [ ] Platformer controller helper
+- [ ] **P1-008**: Cached Component Queries (Physics/ECS Optimization)
 
 #### Weeks 8-9: UI & Scene Management
 - [ ] UI theme system (JSON-based)
@@ -205,6 +200,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Scene transition effects
 - [ ] Scene stack (push/pop for overlays)
 - [ ] Nine-patch sprite support
+- [ ] **P2-002**: SystemManager (Logic Orchestration)
 
 #### Weeks 10-11: AI & Advanced Features
 - [ ] Behavior tree implementation
@@ -212,6 +208,13 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Navmesh generation
 - [ ] Tween/easing library
 - [ ] Coroutine-based scripting
+- [ ] **P1-009**: Event Queue Time Budget & Safety
+- [ ] **P2-003**: DI Hot-path Audit (remove resolution from loops)
+
+#### Parallel Work Stream: Editor & Tooling
+- [ ] **P2-004**: Atomic Writes for Data Safety
+- [ ] **P2-005**: Gizmos & Visual Handles
+- [ ] **P2-006**: Strict Component Typing (Data-only enforcement)
 
 **Phase 2 Exit Criteria:**
 - ✅ Feature completeness ≥ 70% all systems
@@ -852,7 +855,7 @@ What are the trade-offs?
 
 ## 8. Implementation Specifications
 
-### 8.1 P0-001: Component Removal Tracking
+### 8.1 P0-001: Component Removal Tracking - ✅ COMPLETED
 
 **File:** `pyguara/ecs/entity.py`, `pyguara/ecs/manager.py`
 
@@ -862,115 +865,19 @@ Currently, when a component is removed from an entity via `Entity.remove_compone
 **Root Cause:** Lines 94-106 in `entity.py` acknowledge the issue but don't implement the fix.
 
 #### Acceptance Criteria
-- [ ] `Entity.remove_component()` notifies EntityManager via callback
-- [ ] `EntityManager._component_index` correctly removes entity ID from set
-- [ ] Queries never return entities without requested components
-- [ ] Test: Create entity with component, remove it, verify query excludes it
-- [ ] Test: Remove component from 1 of 3 entities, verify query returns only 2
-- [ ] Performance: Component removal remains O(1) amortized
+- [x] `Entity.remove_component()` notifies EntityManager via callback
+- [x] `EntityManager._component_index` correctly removes entity ID from set
+- [x] Queries never return entities without requested components
+- [x] Test: Create entity with component, remove it, verify query excludes it
+- [x] Test: Remove component from 1 of 3 entities, verify query returns only 2
+- [x] Performance: Component removal remains O(1) amortized
 
-#### Implementation Steps
-
-**Step 1: Add callback field to Entity**
-```python
-# entity.py
-class Entity:
-    def __init__(self, entity_id: Optional[str] = None) -> None:
-        # ... existing code ...
-        self._on_component_removed: Optional[Callable[[str, Type[Component]], None]] = None
-```
-
-**Step 2: Modify remove_component to call callback**
-```python
-# entity.py
-def remove_component(self, component_type: Type[Component]) -> None:
-    """Remove a component by type."""
-    if component_type in self._components:
-        comp = self._components.pop(component_type)
-        comp.on_detach()
-
-        # Remove from property cache
-        snake_name = self._get_snake_name(component_type)
-        if snake_name in self._property_cache:
-            del self._property_cache[snake_name]
-
-        # NEW: Notify the manager
-        if self._on_component_removed:
-            self._on_component_removed(self.id, component_type)
-```
-
-**Step 3: Implement handler in EntityManager**
-```python
-# manager.py
-def add_entity(self, entity: Entity) -> None:
-    """Register an existing entity."""
-    self._entities[entity.id] = entity
-
-    # Existing hook
-    entity._on_component_added = self._on_entity_component_added
-
-    # NEW: Hook for removal
-    entity._on_component_removed = self._on_entity_component_removed
-
-    # Index existing components...
-
-def _on_entity_component_removed(
-    self, entity_id: str, component_type: Type[Component]
-) -> None:
-    """Called when an entity removes a component."""
-    if component_type in self._component_index:
-        self._component_index[component_type].discard(entity_id)
-```
-
-**Step 4: Add comprehensive tests**
-```python
-# tests/test_ecs.py
-def test_component_removal_updates_index():
-    """Ensure removing a component updates manager's index."""
-    manager = EntityManager()
-    e1 = manager.create_entity()
-    e1.add_component(Position())
-
-    # Verify in index
-    assert len(list(manager.get_entities_with(Position))) == 1
-
-    # Remove component
-    e1.remove_component(Position)
-
-    # Verify no longer in index
-    assert len(list(manager.get_entities_with(Position))) == 0
-
-def test_partial_removal_from_multiple_entities():
-    """Removing from one entity shouldn't affect others."""
-    manager = EntityManager()
-    e1 = manager.create_entity()
-    e2 = manager.create_entity()
-    e3 = manager.create_entity()
-
-    e1.add_component(Position())
-    e2.add_component(Position())
-    e3.add_component(Position())
-
-    # All 3 have Position
-    assert len(list(manager.get_entities_with(Position))) == 3
-
-    # Remove from e2 only
-    e2.remove_component(Position)
-
-    # Should have exactly 2 now
-    results = list(manager.get_entities_with(Position))
-    assert len(results) == 2
-    assert set(results) == {e1, e3}
-```
-
-**Step 5: Update documentation**
-- Update docstring for `remove_component()` noting index update
-- Add note in architecture.md about bidirectional callbacks
-- Add example in ECS tutorial
+#### Implementation Summary
+Implemented bidirectional notification between `Entity` and `EntityManager`. `Entity.remove_component()` now triggers a callback that updates the manager's inverted index.
 
 ---
 
-### 8.2 P0-002: DIScope Public API
+### 8.2 P0-002: DIScope Public API - ✅ COMPLETED
 
 **File:** `pyguara/di/container.py`
 
@@ -980,122 +887,19 @@ The `DIScope` class currently lacks a public `get()` method, forcing users to ca
 **Design Flaw:** Scoped services can't be resolved in a user-friendly way.
 
 #### Acceptance Criteria
-- [ ] `DIScope.get(service_type)` method added
-- [ ] Method delegates to container's resolver with self as scope
-- [ ] Type hints preserve generic type information
-- [ ] Tests use public API exclusively
-- [ ] Documentation shows scoped service usage pattern
-- [ ] Backward compatibility maintained (don't break existing code)
+- [x] `DIScope.get(service_type)` method added
+- [x] Method delegates to container's resolver with self as scope
+- [x] Type hints preserve generic type information
+- [x] Tests use public API exclusively
+- [x] Documentation shows scoped service usage pattern
+- [x] Backward compatibility maintained (don't break existing code)
 
-#### Implementation Steps
-
-**Step 1: Add public get method to DIScope**
-```python
-# container.py
-class DIScope:
-    """Service scope for managing scoped lifetimes and cleanup."""
-
-    def __init__(self, container: DIContainer) -> None:
-        # ... existing code ...
-
-    def get(self, service_type: Type[T]) -> T:
-        """Resolve a service within this scope.
-
-        For scoped services, returns the same instance throughout
-        the scope's lifetime. For singleton/transient services,
-        delegates to container's normal resolution logic.
-
-        Args:
-            service_type: The service interface or class to resolve.
-
-        Returns:
-            An instance of the requested service.
-
-        Raises:
-            ServiceNotFoundException: If service not registered.
-            DIException: If scoped service accessed without scope.
-
-        Example:
-            >>> with container.create_scope() as scope:
-            ...     db = scope.get(IDatabase)
-            ...     service = scope.get(MyService)  # Gets same db instance
-        """
-        return self._container._resolve_service(service_type, scope=self)
-
-    # ... rest of existing methods ...
-```
-
-**Step 2: Update tests to use public API**
-```python
-# tests/test_di.py
-def test_scoped_resolution(container):
-    container.register_scoped(IService, ServiceImpl)
-
-    with container.create_scope() as scope:
-        # OLD: container._resolve_service(IService, scope)
-        # NEW: Use public API
-        s1 = scope.get(IService)
-        s2 = scope.get(IService)
-        assert s1 is s2
-
-    with container.create_scope() as scope2:
-        s3 = scope2.get(IService)
-        assert s1 is not s3
-```
-
-**Step 3: Add usage examples to documentation**
-```python
-# docs/core/dependency-injection.md
-## Using Scoped Services
-
-Scoped services are useful for request-scoped resources like database
-connections, transactions, or scene-specific managers.
-
-```python
-# Register a scoped service
-container.register_scoped(IDatabase, SqliteDatabase)
-
-# Use within a scope
-with container.create_scope() as scope:
-    db = scope.get(IDatabase)
-    service1 = scope.get(UserService)  # Injects same db
-    service2 = scope.get(OrderService)  # Injects same db
-
-    # db is automatically cleaned up on scope exit
-```
-```
-
-**Step 4: Integration test for typical game usage**
-```python
-def test_scoped_scene_services(container):
-    """Verify scoped services work for scene lifecycle."""
-
-    class ScenePhysics:
-        def __init__(self):
-            self.initialized = True
-            self.disposed = False
-        def dispose(self):
-            self.disposed = True
-
-    container.register_scoped(ScenePhysics, ScenePhysics)
-
-    # Scene 1
-    with container.create_scope() as scene1_scope:
-        physics1 = scene1_scope.get(ScenePhysics)
-        assert physics1.initialized
-
-    # Physics1 should be disposed after scope exit
-    assert physics1.disposed
-
-    # Scene 2 gets a fresh instance
-    with container.create_scope() as scene2_scope:
-        physics2 = scene2_scope.get(ScenePhysics)
-        assert physics2 is not physics1
-```
+#### Implementation Summary
+Added `DIScope.get()` which delegates to `_resolve_service`. Updated all tests and internal usages to prefer this public API.
 
 ---
 
-### 8.3 P0-007: Audio System Implementation
+### 8.3 P0-007: Audio System Implementation - ✅ COMPLETED
 
 **Files:** `pyguara/audio/manager.py`, `pyguara/audio/backends/pygame_audio.py`, `pyguara/audio/types.py`
 
@@ -1111,364 +915,23 @@ The audio system currently exists only as stubs. This is a critical gap as audio
 - Fade in/out support
 
 #### Acceptance Criteria
-- [ ] Can play music with looping
-- [ ] Can play sound effects with volume/pitch variation
-- [ ] 2D positional audio (left/right pan based on position)
-- [ ] Volume controls work (master, music, sfx independently)
-- [ ] Audio files loaded via ResourceManager
-- [ ] Fade in/out animations supported
-- [ ] No audio crackling or popping
-- [ ] Test: Play overlapping sounds without issues
-- [ ] Test: Spatial audio pans correctly based on listener position
-- [ ] Performance: Can handle 32+ simultaneous sounds
-
-#### Implementation Steps
-
-**Step 1: Define audio types and protocols**
-```python
-# types.py
-from dataclasses import dataclass
-from enum import Enum
-from typing import Protocol
-
-class AudioType(Enum):
-    """Classification of audio resources."""
-    MUSIC = "music"
-    SFX = "sfx"
-    VOICE = "voice"
-
-@dataclass
-class AudioClip:
-    """Represents a loaded audio resource."""
-    path: str
-    audio_type: AudioType
-    native_handle: Any  # pygame.mixer.Sound or Music
-    duration: float  # seconds
-
-@dataclass
-class AudioSettings:
-    """Global audio configuration."""
-    master_volume: float = 1.0  # 0.0 to 1.0
-    music_volume: float = 0.8
-    sfx_volume: float = 1.0
-    max_channels: int = 32
-    frequency: int = 44100
-    buffer_size: int = 512
-
-class IAudioBackend(Protocol):
-    """Interface for audio backend implementations."""
-
-    def initialize(self, settings: AudioSettings) -> None:
-        """Initialize the audio system."""
-        ...
-
-    def load_music(self, path: str) -> Any:
-        """Load a music track."""
-        ...
-
-    def load_sound(self, path: str) -> Any:
-        """Load a sound effect."""
-        ...
-
-    def play_music(self, music: Any, loops: int, fade_ms: int) -> None:
-        """Play background music."""
-        ...
-
-    def play_sound(self, sound: Any, volume: float, pan: float) -> int:
-        """Play a sound effect. Returns channel ID."""
-        ...
-
-    def stop_music(self, fade_ms: int) -> None:
-        """Stop music playback."""
-        ...
-
-    def set_master_volume(self, volume: float) -> None:
-        """Set master volume."""
-        ...
-```
-
-**Step 2: Implement pygame backend**
-```python
-# backends/pygame_audio.py
-import pygame.mixer
-from pyguara.audio.types import AudioSettings, IAudioBackend
-from pyguara.common.types import Vector2
-
-class PygameAudioBackend(IAudioBackend):
-    """Audio backend using pygame.mixer."""
-
-    def __init__(self):
-        self._settings: Optional[AudioSettings] = None
-        self._initialized = False
-
-    def initialize(self, settings: AudioSettings) -> None:
-        """Initialize pygame.mixer."""
-        pygame.mixer.init(
-            frequency=settings.frequency,
-            size=-16,  # 16-bit
-            channels=2,  # Stereo
-            buffer=settings.buffer_size
-        )
-        pygame.mixer.set_num_channels(settings.max_channels)
-        self._settings = settings
-        self._initialized = True
-
-    def load_music(self, path: str) -> Any:
-        """Load music (pygame handles this globally)."""
-        # pygame.mixer.music is a singleton, return path
-        return path
-
-    def load_sound(self, path: str) -> Any:
-        """Load sound effect."""
-        return pygame.mixer.Sound(path)
-
-    def play_music(self, music: Any, loops: int, fade_ms: int) -> None:
-        """Play music track."""
-        pygame.mixer.music.load(music)  # music is path
-        pygame.mixer.music.play(loops=loops, fade_ms=fade_ms)
-
-    def play_sound(self, sound: Any, volume: float, pan: float) -> int:
-        """Play sound with panning.
-
-        Args:
-            sound: pygame.mixer.Sound object
-            volume: 0.0 to 1.0
-            pan: -1.0 (left) to 1.0 (right)
-
-        Returns:
-            Channel ID or -1 if no channels available
-        """
-        channel = sound.play()
-        if channel:
-            channel.set_volume(volume)
-            # Stereo panning: pan -1 = left only, +1 = right only
-            left_vol = (1.0 - pan) / 2.0
-            right_vol = (1.0 + pan) / 2.0
-            channel.set_volume(left_vol, right_vol)
-            return channel
-        return -1
-
-    def stop_music(self, fade_ms: int) -> None:
-        """Stop music."""
-        pygame.mixer.music.fadeout(fade_ms)
-
-    def set_master_volume(self, volume: float) -> None:
-        """Set master volume (affects all channels)."""
-        # pygame.mixer doesn't have true master volume,
-        # but we can scale music volume
-        pygame.mixer.music.set_volume(volume)
-```
-
-**Step 3: Implement AudioManager**
-```python
-# manager.py
-from typing import Dict, Optional
-from pyguara.audio.types import AudioClip, AudioSettings, AudioType, IAudioBackend
-from pyguara.common.types import Vector2
-from pyguara.resources.manager import ResourceManager
-
-class AudioManager:
-    """Manages audio playback and resources."""
-
-    def __init__(
-        self,
-        backend: IAudioBackend,
-        resource_manager: ResourceManager,
-        settings: Optional[AudioSettings] = None
-    ):
-        self._backend = backend
-        self._resources = resource_manager
-        self._settings = settings or AudioSettings()
-
-        # Cache loaded audio
-        self._clips: Dict[str, AudioClip] = {}
-
-        # Listener position for 3D audio
-        self._listener_position = Vector2(0, 0)
-
-        # Current music track
-        self._current_music: Optional[str] = None
-
-        # Initialize backend
-        self._backend.initialize(self._settings)
-
-    def set_listener_position(self, position: Vector2) -> None:
-        """Update the audio listener position for spatial audio."""
-        self._listener_position = position
-
-    def play_music(self, music_name: str, loops: int = -1, fade_ms: int = 0) -> None:
-        """Play background music.
-
-        Args:
-            music_name: Resource name or path
-            loops: -1 for infinite loop, 0 for once, N for N+1 times
-            fade_ms: Fade in duration in milliseconds
-        """
-        if music_name == self._current_music and pygame.mixer.music.get_busy():
-            return  # Already playing
-
-        # Stop current music
-        if self._current_music:
-            self._backend.stop_music(fade_ms=fade_ms)
-
-        # Load if not cached
-        if music_name not in self._clips:
-            music_handle = self._backend.load_music(music_name)
-            self._clips[music_name] = AudioClip(
-                path=music_name,
-                audio_type=AudioType.MUSIC,
-                native_handle=music_handle,
-                duration=0.0  # TODO: Get duration
-            )
-
-        clip = self._clips[music_name]
-        self._backend.play_music(clip.native_handle, loops, fade_ms)
-        self._current_music = music_name
-
-    def play_sound(
-        self,
-        sound_name: str,
-        volume: float = 1.0,
-        position: Optional[Vector2] = None
-    ) -> int:
-        """Play a sound effect.
-
-        Args:
-            sound_name: Resource name or path
-            volume: 0.0 to 1.0 (scaled by sfx volume setting)
-            position: World position for spatial audio (optional)
-
-        Returns:
-            Channel ID or -1 if failed
-        """
-        # Load if not cached
-        if sound_name not in self._clips:
-            sound_handle = self._backend.load_sound(sound_name)
-            self._clips[sound_name] = AudioClip(
-                path=sound_name,
-                audio_type=AudioType.SFX,
-                native_handle=sound_handle,
-                duration=0.0  # TODO: Get duration
-            )
-
-        clip = self._clips[sound_name]
-
-        # Calculate panning if position provided
-        pan = 0.0
-        if position:
-            pan = self._calculate_pan(position)
-
-        # Apply volume scaling
-        final_volume = volume * self._settings.sfx_volume * self._settings.master_volume
-
-        return self._backend.play_sound(clip.native_handle, final_volume, pan)
-
-    def _calculate_pan(self, sound_position: Vector2) -> float:
-        """Calculate stereo pan based on relative position.
-
-        Args:
-            sound_position: World position of sound source
-
-        Returns:
-            Pan value from -1.0 (left) to 1.0 (right)
-        """
-        # Simple linear panning based on X offset
-        # Can be enhanced with distance falloff, etc.
-        offset = sound_position.x - self._listener_position.x
-
-        # Normalize to -1 to 1 range (assuming reasonable game world scale)
-        pan = offset / 1000.0  # Adjust divisor based on game scale
-        return max(-1.0, min(1.0, pan))  # Clamp
-
-    def stop_music(self, fade_ms: int = 0) -> None:
-        """Stop currently playing music."""
-        self._backend.stop_music(fade_ms)
-        self._current_music = None
-
-    def set_master_volume(self, volume: float) -> None:
-        """Set master volume (0.0 to 1.0)."""
-        self._settings.master_volume = max(0.0, min(1.0, volume))
-        self._backend.set_master_volume(self._settings.master_volume)
-
-    def set_music_volume(self, volume: float) -> None:
-        """Set music volume (0.0 to 1.0)."""
-        self._settings.music_volume = max(0.0, min(1.0, volume))
-        # Reapply if music is playing
-        if self._current_music:
-            pygame.mixer.music.set_volume(
-                self._settings.music_volume * self._settings.master_volume
-            )
-
-    def set_sfx_volume(self, volume: float) -> None:
-        """Set sound effects volume (0.0 to 1.0)."""
-        self._settings.sfx_volume = max(0.0, min(1.0, volume))
-```
-
-**Step 4: Register in bootstrap**
-```python
-# application/bootstrap.py
-def _setup_container() -> DIContainer:
-    # ... existing code ...
-
-    # Audio System
-    audio_backend = PygameAudioBackend()
-    audio_manager = AudioManager(
-        backend=audio_backend,
-        resource_manager=res_manager,
-        settings=AudioSettings()  # Could load from config
-    )
-    container.register_instance(AudioManager, audio_manager)
-
-    return container
-```
-
-**Step 5: Add comprehensive tests**
-```python
-# tests/test_audio.py
-import pytest
-from pyguara.audio.manager import AudioManager
-from pyguara.audio.types import AudioSettings
-from pyguara.common.types import Vector2
-
-@pytest.fixture
-def audio_manager(mock_backend, mock_resources):
-    return AudioManager(mock_backend, mock_resources)
-
-def test_play_music(audio_manager):
-    """Verify music playback."""
-    audio_manager.play_music("theme.mp3")
-    # Verify backend.play_music was called
-    assert audio_manager._current_music == "theme.mp3"
-
-def test_spatial_audio_panning(audio_manager):
-    """Verify sounds pan correctly based on position."""
-    audio_manager.set_listener_position(Vector2(0, 0))
-
-    # Sound to the right
-    pan_right = audio_manager._calculate_pan(Vector2(500, 0))
-    assert pan_right > 0
-
-    # Sound to the left
-    pan_left = audio_manager._calculate_pan(Vector2(-500, 0))
-    assert pan_left < 0
-
-    # Sound centered
-    pan_center = audio_manager._calculate_pan(Vector2(0, 0))
-    assert pan_center == 0.0
-
-def test_volume_stacking(audio_manager):
-    """Verify volume settings multiply correctly."""
-    audio_manager.set_master_volume(0.5)
-    audio_manager.set_sfx_volume(0.8)
-
-    # When playing sound at volume 1.0
-    # Final should be 1.0 * 0.8 (sfx) * 0.5 (master) = 0.4
-    # Test implementation details...
-```
+- [x] Can play music with looping
+- [x] Can play sound effects with volume/pitch variation
+- [x] 2D positional audio (left/right pan based on position)
+- [x] Volume controls work (master, music, sfx independently)
+- [x] Audio files loaded via ResourceManager
+- [x] Fade in/out animations supported
+- [x] No audio crackling or popping
+- [x] Test: Play overlapping sounds without issues
+- [x] Test: Spatial audio pans correctly based on listener position
+- [x] Performance: Can handle 32+ simultaneous sounds
+
+#### Implementation Summary
+Implemented `AudioManager` using `pygame-ce` mixer backend. Integrated with `ResourceManager` for clip loading. Added 2D spatial panning and multi-track volume management.
 
 ---
 
-### 8.4 P0-006: Gamepad Support
+### 8.4 P0-006: Gamepad Support - ✅ COMPLETED
 
 **Files:** `pyguara/input/gamepad.py`, `pyguara/input/manager.py`, `pyguara/input/types.py`
 
@@ -1484,278 +947,61 @@ Modern games require gamepad support. The input system currently only handles ke
 - Vibration/rumble support
 
 #### Acceptance Criteria
-- [ ] Detects connected gamepads on startup
-- [ ] Hot-plug support (connect controller during gameplay)
-- [ ] All standard buttons accessible
-- [ ] Analog stick input with configurable deadzones
-- [ ] Trigger input (L2/R2, LT/RT)
-- [ ] Action mapping system (logical actions -> physical inputs)
-- [ ] Test: Button press events fired correctly
-- [ ] Test: Analog stick values accurate with deadzone
-- [ ] Test: Multiple controllers distinguished
-- [ ] Documentation: Controller setup guide
+- [x] Detects connected gamepads on startup
+- [x] Hot-plug support (connect controller during gameplay)
+- [x] All standard buttons accessible
+- [x] Analog stick input with configurable deadzones
+- [x] Trigger input (L2/R2, LT/RT)
+- [x] Action mapping system (logical actions -> physical inputs)
+- [x] Test: Button press events fired correctly
+- [x] Test: Analog stick values accurate with deadzone
+- [x] Test: Multiple controllers distinguished
+- [x] Documentation: Controller setup guide
 
-#### Implementation Steps
+#### Implementation Summary
+Created `GamepadManager` with hot-plug support via `JOYDEVICEADDED`/`JOYDEVICEREMOVED`. Implemented deadzone scaling and axis normalization. Integrated with semantic `OnActionEvent` system.
 
-**Step 1: Define gamepad types**
-```python
-# input/types.py
-from enum import IntEnum
+---
 
-class GamepadButton(IntEnum):
-    """Standard gamepad buttons (Xbox layout)."""
-    A = 0  # Cross on PlayStation
-    B = 1  # Circle on PlayStation
-    X = 2  # Square on PlayStation
-    Y = 3  # Triangle on PlayStation
+### 8.5 P1-008: Cached Component Queries (Physics/ECS Optimization)
 
-    LEFT_BUMPER = 4   # L1
-    RIGHT_BUMPER = 5  # R1
+**Files:** `pyguara/ecs/manager.py`, `pyguara/physics/physics_system.py`
 
-    BACK = 6   # Select/Share
-    START = 7
-    GUIDE = 8  # Home/PS button
+#### Context
+Currently, `get_entities_with()` performs set intersections every time it is called. Systems like Physics call this every frame, creating unnecessary overhead. Additionally, systems often convert the generator result to a list (`list(manager.get_entities_with(...))`), causing list allocation pressure.
 
-    LEFT_STICK_CLICK = 9
-    RIGHT_STICK_CLICK = 10
+**Optimization:** The ECS should maintain a cached `Set[Entity]` for specific queries (e.g., `(Transform, RigidBody)`) that is updated only when relevant components are added/removed.
 
-    DPAD_UP = 11
-    DPAD_DOWN = 12
-    DPAD_LEFT = 13
-    DPAD_RIGHT = 14
+#### Acceptance Criteria
+- [ ] `EntityManager` supports "Cached Queries" or "Archetypes"
+- [ ] PhysicsSystem uses cached query instead of ad-hoc intersection
+- [ ] No list allocations in hot-loops for entity retrieval
+- [ ] Benchmark: 10,000 entities physics update < 16ms
 
-class GamepadAxis(IntEnum):
-    """Standard gamepad axes."""
-    LEFT_STICK_X = 0
-    LEFT_STICK_Y = 1
-    RIGHT_STICK_X = 2
-    RIGHT_STICK_Y = 3
-    LEFT_TRIGGER = 4
-    RIGHT_TRIGGER = 5
+### 8.6 P1-009: Event Queue Safety
 
-@dataclass
-class GamepadState:
-    """Current state of a gamepad."""
-    device_id: int
-    name: str
-    buttons: Dict[GamepadButton, bool]  # Pressed state
-    axes: Dict[GamepadAxis, float]  # -1.0 to 1.0
-    connected: bool = True
+**File:** `pyguara/application/application.py`
 
-@dataclass
-class GamepadConfig:
-    """Configuration for gamepad input processing."""
-    deadzone: float = 0.15  # Ignore input below this threshold
-    trigger_threshold: float = 0.1  # Treat as button press if above
-```
+#### Context
+`Application._update` calls `_event_dispatcher.process_queue()` without limits. If systems produce events faster than they can be consumed (e.g., a loop creating events), the application will hang in a "death spiral."
 
-**Step 2: Create Gamepad Manager**
-```python
-# input/gamepad.py
-import pygame
-from typing import Dict, Optional
-from pyguara.input.types import GamepadState, GamepadButton, GamepadAxis, GamepadConfig
-from pyguara.events.dispatcher import EventDispatcher
+#### Acceptance Criteria
+- [ ] `EventDispatcher.process_queue()` accepts a `max_time_ms` or `max_events` parameter
+- [ ] Application loop enforces this budget (e.g., 2-5ms per frame)
+- [ ] Unprocessed events remain in queue for next frame
+- [ ] Warning logged if queue size exceeds safety threshold (e.g., 10k events)
 
-@dataclass
-class GamepadButtonEvent:
-    """Fired when gamepad button state changes."""
-    device_id: int
-    button: GamepadButton
-    pressed: bool
-    timestamp: float = field(default_factory=time)
-    source: Any = None
+### 8.7 P2-003: DI Hot-path Audit
 
-@dataclass
-class GamepadAxisEvent:
-    """Fired when gamepad axis moves significantly."""
-    device_id: int
-    axis: GamepadAxis
-    value: float  # -1.0 to 1.0
-    timestamp: float = field(default_factory=time)
-    source: Any = None
+**File:** `pyguara/physics/physics_system.py`, `pyguara/graphics/pipeline/render_system.py`
 
-class GamepadManager:
-    """Manages gamepad input and state."""
+#### Context
+Code reviews indicate `inspect.signature` usage during runtime and potential service resolution inside update loops. This is too slow for production.
 
-    def __init__(self, dispatcher: EventDispatcher, config: Optional[GamepadConfig] = None):
-        self._dispatcher = dispatcher
-        self._config = config or GamepadConfig()
-
-        # Device ID -> pygame.joystick.Joystick
-        self._joysticks: Dict[int, pygame.joystick.Joystick] = {}
-
-        # Device ID -> GamepadState
-        self._states: Dict[int, GamepadState] = {}
-
-        # Initialize pygame joystick module
-        pygame.joystick.init()
-
-        # Detect connected controllers
-        self._scan_devices()
-
-    def _scan_devices(self) -> None:
-        """Scan for connected gamepad devices."""
-        for i in range(pygame.joystick.get_count()):
-            if i not in self._joysticks:
-                self._connect_device(i)
-
-    def _connect_device(self, device_id: int) -> None:
-        """Initialize a gamepad device."""
-        joystick = pygame.joystick.Joystick(device_id)
-        joystick.init()
-
-        self._joysticks[device_id] = joystick
-        self._states[device_id] = GamepadState(
-            device_id=device_id,
-            name=joystick.get_name(),
-            buttons={btn: False for btn in GamepadButton},
-            axes={axis: 0.0 for axis in GamepadAxis}
-        )
-
-        print(f"[Input] Gamepad connected: {joystick.get_name()} (ID: {device_id})")
-
-    def _disconnect_device(self, device_id: int) -> None:
-        """Handle gamepad disconnection."""
-        if device_id in self._joysticks:
-            self._joysticks[device_id].quit()
-            del self._joysticks[device_id]
-
-            if device_id in self._states:
-                self._states[device_id].connected = False
-
-            print(f"[Input] Gamepad disconnected: ID {device_id}")
-
-    def update(self) -> None:
-        """Update gamepad states (call each frame)."""
-        # Check for new devices (hot-plug)
-        self._scan_devices()
-
-        for device_id, joystick in self._joysticks.items():
-            state = self._states[device_id]
-
-            # Update button states
-            for button in GamepadButton:
-                if button.value < joystick.get_numbuttons():
-                    pressed = joystick.get_button(button.value)
-
-                    # Fire event on state change
-                    if pressed != state.buttons[button]:
-                        state.buttons[button] = pressed
-                        self._dispatcher.dispatch(GamepadButtonEvent(
-                            device_id=device_id,
-                            button=button,
-                            pressed=pressed
-                        ))
-
-            # Update axis states
-            for axis in GamepadAxis:
-                if axis.value < joystick.get_numaxes():
-                    raw_value = joystick.get_axis(axis.value)
-
-                    # Apply deadzone
-                    if abs(raw_value) < self._config.deadzone:
-                        value = 0.0
-                    else:
-                        # Scale to account for deadzone
-                        sign = 1 if raw_value > 0 else -1
-                        value = sign * (abs(raw_value) - self._config.deadzone) / (1.0 - self._config.deadzone)
-
-                    # Fire event if changed significantly
-                    if abs(value - state.axes[axis]) > 0.01:
-                        state.axes[axis] = value
-                        self._dispatcher.dispatch(GamepadAxisEvent(
-                            device_id=device_id,
-                            axis=axis,
-                            value=value
-                        ))
-
-    def get_button(self, device_id: int, button: GamepadButton) -> bool:
-        """Check if a button is currently pressed."""
-        if device_id in self._states:
-            return self._states[device_id].buttons.get(button, False)
-        return False
-
-    def get_axis(self, device_id: int, axis: GamepadAxis) -> float:
-        """Get current axis value (-1.0 to 1.0)."""
-        if device_id in self._states:
-            return self._states[device_id].axes.get(axis, 0.0)
-        return 0.0
-
-    def get_connected_gamepads(self) -> list[GamepadState]:
-        """Return list of all connected gamepads."""
-        return [s for s in self._states.values() if s.connected]
-
-    def set_rumble(self, device_id: int, low_freq: float, high_freq: float, duration_ms: int) -> None:
-        """Trigger controller vibration (if supported).
-
-        Args:
-            device_id: Controller to vibrate
-            low_freq: Low frequency motor strength (0.0 to 1.0)
-            high_freq: High frequency motor strength (0.0 to 1.0)
-            duration_ms: Duration in milliseconds
-        """
-        if device_id in self._joysticks:
-            joystick = self._joysticks[device_id]
-            # Note: pygame 2.0+ supports rumble
-            if hasattr(joystick, 'rumble'):
-                joystick.rumble(low_freq, high_freq, duration_ms)
-```
-
-**Step 3: Integrate with InputManager**
-```python
-# input/manager.py (modifications)
-class InputManager:
-    def __init__(self, dispatcher: EventDispatcher):
-        self._dispatcher = dispatcher
-        # ... existing code ...
-
-        # NEW: Add gamepad manager
-        self._gamepad_manager = GamepadManager(dispatcher)
-
-    def update(self) -> None:
-        """Update input state (call each frame)."""
-        # ... existing keyboard/mouse updates ...
-
-        # NEW: Update gamepads
-        self._gamepad_manager.update()
-
-    @property
-    def gamepads(self) -> GamepadManager:
-        """Access to gamepad subsystem."""
-        return self._gamepad_manager
-```
-
-**Step 4: Add tests**
-```python
-# tests/test_input.py
-def test_gamepad_button_press(mock_joystick):
-    """Verify button press events fire correctly."""
-    dispatcher = EventDispatcher()
-    gamepad_mgr = GamepadManager(dispatcher)
-
-    events_received = []
-    dispatcher.subscribe(GamepadButtonEvent, lambda e: events_received.append(e))
-
-    # Simulate button press
-    mock_joystick.get_button.return_value = True
-    gamepad_mgr.update()
-
-    assert len(events_received) == 1
-    assert events_received[0].button == GamepadButton.A
-    assert events_received[0].pressed == True
-
-def test_deadzone_application():
-    """Verify deadzone filters small movements."""
-    config = GamepadConfig(deadzone=0.15)
-    gamepad_mgr = GamepadManager(EventDispatcher(), config)
-
-    # Simulate small stick movement (within deadzone)
-    # Should return 0.0
-
-    # Simulate large stick movement (outside deadzone)
-    # Should return scaled value
-```
+#### Acceptance Criteria
+- [ ] Verify no `container.get()` calls inside `update()` or `render()` methods
+- [ ] All dependencies resolved in `__init__` and stored as attributes
+- [ ] `inspect` usage restricted to registration time only
 
 ---
 
