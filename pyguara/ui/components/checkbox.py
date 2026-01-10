@@ -3,7 +3,7 @@
 from pyguara.common.types import Vector2, Rect, Color
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
-from pyguara.ui.types import UIElementState
+from pyguara.ui.types import UIElementState, UIEventType
 
 
 class Checkbox(Widget):
@@ -46,11 +46,13 @@ class Checkbox(Widget):
         text_w, _ = renderer.get_text_size(self.label, 16)
         self.rect.width = self.box_size + self.padding + text_w
 
-    def _process_input(self, event_type: str, position: Vector2, button: int) -> bool:
+    def _process_input(
+        self, event_type: UIEventType, position: Vector2, button: int
+    ) -> bool:
         # Standard input processing + toggle logic
         consumed = super()._process_input(event_type, position, button)
         if (
-            event_type == "MOUSE_UP"
+            event_type == UIEventType.MOUSE_UP
             and self.state == UIElementState.HOVERED
             and consumed
         ):

@@ -7,6 +7,7 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.events import OnMouseEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.base import UIElement
+from pyguara.ui.types import UIEventType
 
 
 class UIManager:
@@ -38,13 +39,12 @@ class UIManager:
     def _on_mouse_event(self, event: OnMouseEvent) -> None:
         """Handle engine mouse events and route them to UI elements."""
         # Map Engine Event -> UI Event Type
-        event_type = ""
         if event.is_motion:
-            event_type = "MOUSE_MOVE"
+            event_type = UIEventType.MOUSE_MOVE
         elif event.is_down:
-            event_type = "MOUSE_DOWN"
+            event_type = UIEventType.MOUSE_DOWN
         else:
-            event_type = "MOUSE_UP"
+            event_type = UIEventType.MOUSE_UP
 
         # Convert tuple pos to Vector2
         pos = Vector2(event.position[0], event.position[1])

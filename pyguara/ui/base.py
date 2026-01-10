@@ -5,7 +5,7 @@ from typing import List, Optional, Callable
 
 from pyguara.common.types import Vector2, Rect
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.ui.types import UIAnchor, UIElementState
+from pyguara.ui.types import UIAnchor, UIElementState, UIEventType
 from pyguara.ui.theme import get_theme
 
 
@@ -47,11 +47,22 @@ class UIElement(ABC):
             if child.visible:
                 child.update(dt)
 
-    def handle_event(self, event_type: str, position: Vector2, button: int = 0) -> bool:
+    def handle_event(
+        self, event_type: UIEventType, position: Vector2, button: int = 0
+    ) -> bool:
         """Process generic input event.
 
+        Args:
+            event_type: The type of UI event (mouse, focus, etc.).
+            position: The position of the event in screen coordinates.
+            button: The mouse button number (1=left, 2=middle, 3=right).
+
         Returns:
-            True if consumed.
+            True if the event was consumed by this element or its children.
+
+        Example:
+            >>> element.handle_event(UIEventType.MOUSE_DOWN, Vector2(100, 50), 1)
+            True
         """
         if not self.visible or not self.enabled:
             return False
@@ -64,7 +75,9 @@ class UIElement(ABC):
         # 2. Self Processing
         return self._process_input(event_type, position, button)
 
-    def _process_input(self, event_type: str, position: Vector2, button: int) -> bool:
+    def _process_input(
+        self, event_type: UIEventType, position: Vector2, button: int
+    ) -> bool:
         """Perform internal input logic (e.g. click detection)."""
         # Simple containment check using our Rect type
         contains = (
@@ -72,7 +85,7 @@ class UIElement(ABC):
             and self.rect.y <= position.y <= self.rect.y + self.rect.height
         )
 
-        if event_type == "MOUSE_MOVE":
+        if event_type == UIEventType.MOUSE_MOVE:
             if contains:
                 if self.state != UIElementState.PRESSED:
                     self.state = UIElementState.HOVERED
@@ -81,12 +94,12 @@ class UIElement(ABC):
                 if self.state == UIElementState.HOVERED:
                     self.state = UIElementState.NORMAL
 
-        elif event_type == "MOUSE_DOWN":
+        elif event_type == UIEventType.MOUSE_DOWN:
             if contains and button == 1:
                 self.state = UIElementState.PRESSED
                 return True  # Consume click
 
-        elif event_type == "MOUSE_UP":
+        elif event_type == UIEventType.MOUSE_UP:
             if self.state == UIElementState.PRESSED:
                 if contains:
                     self.state = UIElementState.HOVERED

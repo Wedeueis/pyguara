@@ -47,6 +47,44 @@ class LayoutAlignment(Enum):
     STRETCH = auto()
 
 
+class UIEventType(Enum):
+    """UI interaction event types.
+
+    Type-safe enumeration for UI events to prevent typos and enable
+    IDE autocomplete. Each event represents a specific user interaction
+    with UI elements.
+
+    Example:
+        >>> # Type-safe event handling
+        >>> if event_type == UIEventType.MOUSE_DOWN:
+        ...     element.handle_click()
+        >>>
+        >>> # IDE provides autocomplete
+        >>> element.handle_event(UIEventType.MOUSE_MOVE, position)
+    """
+
+    MOUSE_DOWN = "mouse_down"
+    """Mouse button pressed within element bounds."""
+
+    MOUSE_UP = "mouse_up"
+    """Mouse button released (may be outside element)."""
+
+    MOUSE_MOVE = "mouse_move"
+    """Mouse cursor moved (used for hover detection)."""
+
+    MOUSE_ENTER = "mouse_enter"
+    """Mouse cursor entered element bounds."""
+
+    MOUSE_LEAVE = "mouse_leave"
+    """Mouse cursor left element bounds."""
+
+    FOCUS_GAINED = "focus_gained"
+    """Element received input focus (keyboard/gamepad)."""
+
+    FOCUS_LOST = "focus_lost"
+    """Element lost input focus."""
+
+
 # --- Theme Structures ---
 
 
