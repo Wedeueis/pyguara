@@ -1,7 +1,7 @@
 """Common ECS components used across the engine."""
 
 import math
-from typing import List, Optional, cast
+from typing import List, Optional
 from dataclasses import dataclass
 
 from pyguara.common.types import Vector2
@@ -208,12 +208,12 @@ class Transform(BaseComponent):
     @property
     def right(self) -> Vector2:
         """Get the world-space Right direction vector."""
-        return cast(Vector2, Vector2(1, 0).rotated(self.world_rotation))
+        return Vector2(1, 0).rotated(self.world_rotation)
 
     @property
     def up(self) -> Vector2:
         """Get the world-space Up direction vector."""
-        return cast(Vector2, Vector2(0, 1).rotated(self.world_rotation))
+        return Vector2(0, 1).rotated(self.world_rotation)
 
     @property
     def forward(self) -> Vector2:
@@ -250,9 +250,9 @@ class Transform(BaseComponent):
             local_point.x * self._world_scale.x, local_point.y * self._world_scale.y
         )
         # Rotate
-        rotated = cast(Vector2, scaled.rotated(self._world_rotation))
+        rotated = scaled.rotated(self._world_rotation)
         # Translate
-        return cast(Vector2, rotated + self._world_position)
+        return rotated + self._world_position
 
     def world_to_local(self, world_point: Vector2) -> Vector2:
         """Transform a point from world space to local space."""
@@ -261,7 +261,7 @@ class Transform(BaseComponent):
         # Inverse Translate
         translated = world_point - self._world_position
         # Inverse Rotate
-        unrotated = cast(Vector2, translated.rotated(-self._world_rotation))
+        unrotated = translated.rotated(-self._world_rotation)
         # Inverse Scale
         if self._world_scale.x == 0 or self._world_scale.y == 0:
             return Vector2(0, 0)
@@ -292,9 +292,7 @@ class Transform(BaseComponent):
                 self._local_position.x * self._parent._world_scale.x,
                 self._local_position.y * self._parent._world_scale.y,
             )
-            rotated_pos = cast(
-                Vector2, scaled_pos.rotated(self._parent._world_rotation)
-            )
+            rotated_pos = scaled_pos.rotated(self._parent._world_rotation)
 
             self._world_position = self._parent._world_position + rotated_pos
             self._world_rotation = self._parent._world_rotation + self._local_rotation

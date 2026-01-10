@@ -1,6 +1,6 @@
 """Pygame implementation of the UI Renderer."""
 
-from typing import Tuple, Dict, Optional, Any, cast
+from typing import Tuple, Dict, Optional, Any
 import pygame
 
 from pyguara.common.types import Rect, Color, Vector2
@@ -107,7 +107,8 @@ class PygameUIRenderer(UIRenderer):
     def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
         """Calculate the width/height of a string."""
         font = self._get_font(size)
-        return cast(Tuple[int, int], font.size(text))
+        txt_size = font.size(text)
+        return (txt_size[0], txt_size[1])
 
     def set_target(self, surface: pygame.Surface) -> None:
         """Switch render targets."""

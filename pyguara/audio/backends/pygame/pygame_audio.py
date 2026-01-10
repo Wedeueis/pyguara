@@ -25,10 +25,9 @@ class PygameAudioSystem(IAudioSystem):
             channels: Number of audio channels (2 for stereo).
             buffer: Buffer size (512 is low latency).
         """
-        if not pygame.mixer.get_init():
-            pygame.mixer.init(frequency, size, channels, buffer)
-            # Allocate enough channels for simultaneous sounds
-            pygame.mixer.set_num_channels(32)
+        pygame.mixer.init(frequency, size, channels, buffer)
+        # Allocate enough channels for simultaneous sounds
+        pygame.mixer.set_num_channels(32)
 
         # Volume tracking
         self._master_volume: float = 1.0

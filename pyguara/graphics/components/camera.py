@@ -8,7 +8,6 @@ of "viewing" from the logic of "drawing".
 """
 
 from __future__ import annotations
-from typing import cast
 
 from pyguara.common.types import Vector2, Rect
 
@@ -72,12 +71,12 @@ class Camera2D:
 
         # 3. Rotate (around camera center)
         if self.rotation != 0:
-            local_pos = local_pos.rotate(-self.rotation)  # type: ignore[attr-defined]
+            local_pos = local_pos.rotate(-self.rotation)
 
         screen_pos = local_pos + self.offset
 
         # 4. Translate to screen center
-        return cast(Vector2, screen_pos)
+        return screen_pos
 
     def screen_to_world(self, screen_pos: Vector2) -> Vector2:
         """
@@ -97,7 +96,7 @@ class Camera2D:
 
         # 2. Inverse Rotate
         if self.rotation != 0:
-            local_pos = local_pos.rotate(self.rotation)  # type: ignore[attr-defined]
+            local_pos = local_pos.rotate(self.rotation)
 
         # 3. Inverse Scale
         # Avoid division by zero
@@ -106,7 +105,7 @@ class Camera2D:
         world_pos = local_pos + self.position
 
         # 4. Translate back to world
-        return cast(Vector2, world_pos)
+        return world_pos
 
     def get_view_bounds(self) -> Rect:
         """

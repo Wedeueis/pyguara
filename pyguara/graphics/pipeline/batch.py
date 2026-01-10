@@ -1,7 +1,6 @@
 """Logic for grouping render calls to minimize CPU/GPU overhead."""
 
-from typing import List, Tuple, cast
-from pyguara.common.types import Vector2
+from typing import List, Tuple
 from pyguara.graphics.types import RenderCommand, RenderBatch
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
@@ -31,10 +30,9 @@ class Batcher:
 
         # Optimization: Pre-calculate viewport offset
         # screen_pos = (world * zoom) + offset
-        offset = cast(
-            Vector2,
-            (viewport.center_vec - (camera.position * camera.zoom)) + viewport.position,
-        )
+        offset = (
+            viewport.center_vec - (camera.position * camera.zoom)
+        ) + viewport.position
         zoom = camera.zoom
 
         for cmd in sorted_commands:
@@ -51,7 +49,7 @@ class Batcher:
                 current_dests = []
 
             # Transform to Screen Space HERE (CPU) so the Backend just draws
-            screen_pos = cast(Vector2, (cmd.world_position * zoom) + offset)
+            screen_pos = (cmd.world_position * zoom) + offset
 
             # For Pygame 'blits', we just need the tuple (x, y)
             current_dests.append((screen_pos.x, screen_pos.y))

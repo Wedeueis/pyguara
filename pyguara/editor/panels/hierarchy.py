@@ -3,7 +3,7 @@
 from typing import Optional, Callable
 
 try:
-    import imgui
+    import imgui  #
 except ImportError:
     imgui = None
 

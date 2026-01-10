@@ -52,7 +52,60 @@ class Vector2(pymunk.Vec2d):
         Returns:
             float: The squared length.
         """
-        return float(self.length_sqrd)
+        return float(self.x * self.x + self.y * self.y)
+
+    # --- Operator Overloads (Fixing Return Types) ---
+
+    def __add__(self, other: Any) -> Vector2:
+        """Vector addition."""
+        if hasattr(other, "x") and hasattr(other, "y"):
+            return Vector2(self.x + other.x, self.y + other.y)
+        v = super().__add__(other)
+        return Vector2(v.x, v.y)
+
+    def __sub__(self, other: Any) -> Vector2:
+        """Vector subtraction."""
+        if hasattr(other, "x") and hasattr(other, "y"):
+            return Vector2(self.x - other.x, self.y - other.y)
+        v = super().__sub__(other)
+        return Vector2(v.x, v.y)
+
+    def __mul__(self, other: float) -> Vector2:
+        """Scalar multiplication (Vector * float)."""
+        # Ignored override because Tuple expects int (repetition), we want float (math)
+        v = super().__mul__(other)
+        return Vector2(v.x, v.y)
+
+    def __rmul__(self, other: float) -> Vector2:
+        """Reverse scalar multiplication (float * Vector)."""
+        # Ignored override because Tuple expects int (repetition), we want float (math)
+        v = super().__rmul__(other)
+        return Vector2(v.x, v.y)
+
+    def __truediv__(self, other: float) -> Vector2:
+        """Scalar division (Vector / float)."""
+        v = super().__truediv__(other)
+        return Vector2(v.x, v.y)
+
+    def __neg__(self) -> Vector2:
+        """Negation (-Vector)."""
+        return Vector2(-self.x, -self.y)
+
+    def dot(self, other: Any) -> float:
+        """
+        Dot product.
+
+        Accepts Any (tuples or Vectors) to satisfy LSP against pymunk.Vec2d.
+        """
+        return float(super().dot(other))
+
+    def cross(self, other: Any) -> float:
+        """
+        Cross product / Determinant.
+
+        Accepts Any (tuples or Vectors) to satisfy LSP against pymunk.Vec2d.
+        """
+        return float(super().cross(other))
 
     def normalize(self) -> Vector2:
         """
@@ -65,6 +118,21 @@ class Vector2(pymunk.Vec2d):
         v = super().normalized()
         return Vector2(v.x, v.y)
 
+    def rotated(self, angle_radians: float) -> Vector2:
+        """
+        Return a new vector rotated by the given angle in radians.
+
+        Overrides pymunk.Vec2d.rotated to ensure Vector2 return type.
+
+        Args:
+            angle_radians (float): Rotation angle in radians.
+
+        Returns:
+            Vector2: The rotated vector.
+        """
+        v = super().rotated(angle_radians)
+        return Vector2(v.x, v.y)
+
     def rotate(self, angle_degrees: float) -> Vector2:
         """
         Return a new vector rotated by the given angle.
@@ -75,11 +143,7 @@ class Vector2(pymunk.Vec2d):
         Returns:
             Vector2: The rotated vector.
         """
-        # Pymunk uses radians and complex numbers for rotation internally.
-        # We standardize on degrees for Game Developer Quality of Life.
-        rads = math.radians(angle_degrees)
-        v = super().rotated(rads)
-        return Vector2(v.x, v.y)
+        return self.rotated(math.radians(angle_degrees))
 
     def distance_to(self, other: Vector2) -> float:
         """

@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Color
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.batch import Batcher
 from pyguara.graphics.pipeline.queue import RenderQueue
@@ -40,17 +40,14 @@ class RenderSystem:
         Args:
             item: An entity or component that complies with the Renderable protocol.
         """
-        # Safely get rotation/scale with defaults if they aren't present
-        rotation = getattr(item, "rotation", 0.0)
-        scale = item.scale if item.scale is not None else Vector2(1, 1)
-
+        # Direct access - protocol guarantees these attributes exist
         cmd = RenderCommand(
             texture=item.texture,
             world_position=item.position,
             layer=item.layer,
             z_index=item.z_index,
-            rotation=rotation,
-            scale=scale,
+            rotation=item.rotation,
+            scale=item.scale,
         )
         self._queue.push(cmd)
 

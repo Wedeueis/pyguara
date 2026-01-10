@@ -10,9 +10,9 @@ ensuring smooth frame rates even when emitting hundreds of particles per second.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import random
-from typing import Dict, List, Tuple, Optional, cast
+from typing import Dict, List, Tuple, Optional
 
 from pyguara.common.types import Vector2
 from pyguara.resources.types import Texture
@@ -33,6 +33,8 @@ class Particle:
         life (float): Time remaining in seconds.
         texture (Texture): The visual representation.
         active (bool): Whether this particle is currently in use.
+        rotation (float): Rotation in degrees (for Renderable protocol).
+        scale (Vector2): Scale factor (for Renderable protocol).
     """
 
     position: Vector2
@@ -40,6 +42,10 @@ class Particle:
     life: float
     texture: Texture | None = None
     active: bool = False
+
+    # Protocol compliance for Renderable (required for rendering)
+    rotation: float = 0.0
+    scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
 
 
 class ParticleSystem:
@@ -106,7 +112,7 @@ class ParticleSystem:
                 # (Assuming (1,0) is base direction, rotate by angle)
                 direction = Vector2(1, 0).rotate(angle)
                 random_velocity = direction * random.uniform(speed * 0.5, speed * 1.5)
-                p.velocity = cast(Vector2, random_velocity)
+                p.velocity = random_velocity
 
                 spawned += 1
 
@@ -153,9 +159,7 @@ class ParticleSystem:
         batches: Dict[Texture, List[Tuple[float, float]]] = {}
         zoom = camera.zoom
 
-        offset_vec: Vector2 = cast(
-            Vector2, viewport.center_vec - (camera.position * zoom)
-        )
+        offset_vec = viewport.center_vec - (camera.position * zoom)
         offset_x, offset_y = offset_vec.x, offset_vec.y
 
         for p in self._pool:

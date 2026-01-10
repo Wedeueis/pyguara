@@ -208,6 +208,19 @@ no_implicit_optional = true
 module = "pygame.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["imgui", "imgui.*"]
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
+
+[[tool.mypy.overrides]]
+module = "pymunk.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pyguara.game.*"
+ignore_missing_imports = true
+
 # Coverage
 [tool.coverage.run]
 source = ["pyguara"]

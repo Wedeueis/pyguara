@@ -1,12 +1,13 @@
 """Data resource implementation for structured game assets."""
 
 import json
-from dataclasses import is_dataclass
+from dataclasses import fields, is_dataclass
 from typing import Any, Dict, Type, TypeVar, cast
 
 from pyguara.resources.types import Resource
 
-T = TypeVar("T", bound="DataResource")
+# Removed bound="DataResource" to allow conversion to any dataclass DTO
+T = TypeVar("T")
 
 
 class DataResource(Resource):
@@ -56,8 +57,8 @@ class DataResource(Resource):
         if not is_dataclass(cls):
             raise TypeError(f"Target type {cls.__name__} must be a dataclass")
 
-        # Filter data to match dataclass fields (for safety)
-        valid_keys = cls.__dataclass_fields__.keys()
+        # Filter data to match dataclass fields (for safety) using the official API
+        valid_keys = {f.name for f in fields(cls)}
         filtered = {k: v for k, v in self._data.items() if k in valid_keys}
 
         return cast(T, cls(**filtered))

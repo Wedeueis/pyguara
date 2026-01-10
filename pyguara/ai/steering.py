@@ -19,7 +19,7 @@ class SteeringBehavior:
         """Calculate steering force to move toward a target."""
         # FIX: Cast the result of vector math to Vector2
         desired = cast(Vector2, (target - transform.position).normalized() * max_speed)
-        return cast(Vector2, desired - current_velocity)
+        return desired - current_velocity
 
     @staticmethod
     def arrive(
@@ -44,7 +44,7 @@ class SteeringBehavior:
 
         if distance < 0.1:
             # Stop completely - return inverse of current velocity to cancel it out
-            return cast(Vector2, -current_velocity)
+            return -current_velocity
 
         if distance < slowing_radius:
             target_speed = max_speed * (distance / slowing_radius)
@@ -52,4 +52,4 @@ class SteeringBehavior:
             target_speed = max_speed
 
         desired = cast(Vector2, direction.normalized() * target_speed)
-        return cast(Vector2, desired - current_velocity)
+        return desired - current_velocity

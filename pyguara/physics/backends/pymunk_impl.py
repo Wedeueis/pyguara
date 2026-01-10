@@ -131,7 +131,7 @@ class PymunkEngine(IPhysicsEngine):
             raise TypeError("Invalid body handle for Pymunk backend")
 
         body = body_handle._body
-        shape = None
+        shape: Optional[pymunk.Shape] = None
 
         if shape_type == ShapeType.CIRCLE:
             radius = dimensions[0]
