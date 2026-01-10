@@ -24,7 +24,7 @@ from pyguara.di.exceptions import (
     DIException,
     ServiceNotFoundException,
 )
-from pyguara.di.types import ServiceLifetime, ServiceRegistration
+from pyguara.di.types import ServiceLifetime, ServiceRegistration, ErrorHandlingStrategy
 
 T = TypeVar("T")
 TInterface = TypeVar("TInterface")
@@ -34,12 +34,21 @@ TImplementation = TypeVar("TImplementation")
 class DIContainer:
     """Lightweight dependency injection container with lifecycle management."""
 
-    def __init__(self) -> None:
-        """Initialize an empty container."""
+    def __init__(
+        self, error_strategy: ErrorHandlingStrategy = ErrorHandlingStrategy.RAISE
+    ) -> None:
+        """Initialize an empty container.
+
+        Args:
+            error_strategy: How to handle errors during dependency resolution.
+                Defaults to RAISE for fail-fast behavior in development.
+                Use LOG for production graceful degradation.
+        """
         self._services: Dict[Type[Any], ServiceRegistration] = {}
         self._singletons: Dict[Type[Any], Any] = {}
         self._lock = threading.RLock()
         self._resolution_stack: List[Type] = []
+        self._error_strategy = error_strategy
 
     def register_singleton(
         self, interface: Type[TInterface], implementation: Type[TImplementation]
@@ -240,8 +249,26 @@ class DIContainer:
                     dependencies[param_name] = param_type
             return dependencies
         except Exception as e:
-            print(f"[DI] Warning: dependency extraction failed for {target}: {e}")
-            return {}
+            # Handle error based on configured strategy
+            target_name = getattr(target, "__name__", str(target))
+            error_msg = (
+                f"[DI] Dependency extraction failed for '{target_name}': {e}. "
+                f"This may cause injection failures if the service is requested."
+            )
+
+            if self._error_strategy == ErrorHandlingStrategy.IGNORE:
+                # Silently ignore (not recommended)
+                return {}
+            elif self._error_strategy == ErrorHandlingStrategy.LOG:
+                # Log and return empty dict (graceful degradation)
+                print(error_msg)
+                return {}
+            else:  # ErrorHandlingStrategy.RAISE
+                # Log and re-raise
+                print(error_msg)
+                raise DIException(
+                    f"Failed to extract dependencies from {target_name}: {e}"
+                ) from e
 
 
 class DIScope:

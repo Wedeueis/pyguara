@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, DefaultDict, List, Optional, Type, TypeVar
 
 from pyguara.events.protocols import Event, IEventDispatcher
-from pyguara.events.types import EventHandler
+from pyguara.events.types import EventHandler, ErrorHandlingStrategy
 
 E = TypeVar("E", bound=Event)
 
@@ -24,8 +24,19 @@ class HandlerRecord:
 class EventDispatcher(IEventDispatcher):
     """Advanced event dispatcher with filtering, priority, and thread-safety support."""
 
-    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
-        """Initialize the Event Dispatcher."""
+    def __init__(
+        self,
+        logger: Optional[logging.Logger] = None,
+        error_strategy: ErrorHandlingStrategy = ErrorHandlingStrategy.RAISE,
+    ) -> None:
+        """Initialize the Event Dispatcher.
+
+        Args:
+            logger: Optional logger for error reporting.
+            error_strategy: How to handle errors in event handlers. Defaults to RAISE
+                for fail-fast behavior in development. Use LOG for production
+                graceful degradation.
+        """
         self._listeners: DefaultDict[Type[Event], List[HandlerRecord]] = defaultdict(
             list
         )
@@ -37,6 +48,7 @@ class EventDispatcher(IEventDispatcher):
         self._event_history: List[Event] = []
         self._max_history_size: int = 1000
         self._logger = logger
+        self._error_strategy = error_strategy
 
     def subscribe(
         self,
@@ -95,8 +107,29 @@ class EventDispatcher(IEventDispatcher):
                 if result is False:
                     return False
             except Exception as e:
-                if self._logger:
-                    self._logger.error(f"Error in listener: {e}")
+                # Handle error based on configured strategy
+                event_type = type(event).__name__
+                handler_name = getattr(
+                    record.callback, "__name__", str(record.callback)
+                )
+
+                error_msg = (
+                    f"Error in event handler '{handler_name}' "
+                    f"for event type '{event_type}': {e}"
+                )
+
+                if self._error_strategy == ErrorHandlingStrategy.IGNORE:
+                    # Silently ignore (not recommended)
+                    pass
+                elif self._error_strategy == ErrorHandlingStrategy.LOG:
+                    # Log and continue
+                    if self._logger:
+                        self._logger.error(error_msg, exc_info=True)
+                else:  # ErrorHandlingStrategy.RAISE
+                    # Log and re-raise
+                    if self._logger:
+                        self._logger.error(error_msg, exc_info=True)
+                    raise
         return True
 
     def unsubscribe(self, event_type: Type[E], handler: EventHandler[E]) -> None:
