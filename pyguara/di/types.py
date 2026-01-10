@@ -13,6 +13,36 @@ class ServiceLifetime(Enum):
     SCOPED = "scoped"  # One instance per active scope
 
 
+class ErrorHandlingStrategy(Enum):
+    """Strategy for handling errors during dependency resolution.
+
+    Attributes:
+        LOG: Log the error and return None or raise.
+            Use this in production for graceful degradation.
+        RAISE: Log the error and re-raise the exception.
+            Use this in development for fail-fast debugging (default).
+        IGNORE: Silently ignore errors without logging.
+            Not recommended - use only for testing or specific edge cases.
+
+    Example:
+        >>> from pyguara.di.container import DIContainer
+        >>> from pyguara.di.types import ErrorHandlingStrategy
+        >>> # Development mode - fail fast
+        >>> container = DIContainer(error_strategy=ErrorHandlingStrategy.RAISE)
+        >>> # Production mode - graceful degradation
+        >>> container = DIContainer(error_strategy=ErrorHandlingStrategy.LOG)
+    """
+
+    LOG = "log"
+    """Log the error and continue (may return None or raise depending on context)."""
+
+    RAISE = "raise"
+    """Log the error and re-raise the exception (fail-fast)."""
+
+    IGNORE = "ignore"
+    """Silently ignore errors (not recommended)."""
+
+
 @dataclass
 class ServiceRegistration:
     """Storage for service registration metadata.

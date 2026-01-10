@@ -39,7 +39,7 @@ class DisposableService:
         self.disposed = True
 
 
-def test_singleton_registration(container):
+def test_singleton_registration(container) -> None:
     container.register_singleton(IService, ServiceImpl)
 
     s1 = container.get(IService)
@@ -49,7 +49,7 @@ def test_singleton_registration(container):
     assert s1 is s2  # Same instance
 
 
-def test_transient_registration(container):
+def test_transient_registration(container) -> None:
     container.register_transient(IService, ServiceImpl)
 
     s1 = container.get(IService)
@@ -59,7 +59,7 @@ def test_transient_registration(container):
     assert s1 is not s2  # Different instances
 
 
-def test_dependency_resolution(container):
+def test_dependency_resolution(container) -> None:
     container.register_singleton(IService, ServiceImpl)
     container.register_transient(ServiceWithDep, ServiceWithDep)
 
@@ -67,7 +67,7 @@ def test_dependency_resolution(container):
     assert isinstance(dependent.service, ServiceImpl)
 
 
-def test_scoped_resolution(container):
+def test_scoped_resolution(container) -> None:
     container.register_scoped(IService, ServiceImpl)
 
     # Getting scoped service from root container implies a default or error depending on impl
@@ -102,7 +102,7 @@ def test_scoped_resolution(container):
         assert s1 is not s3
 
 
-def test_circular_dependency(container):
+def test_circular_dependency(container) -> None:
     container.register_transient(CircularA, CircularA)
     container.register_transient(CircularB, CircularB)
 
@@ -110,12 +110,12 @@ def test_circular_dependency(container):
         container.get(CircularA)
 
 
-def test_service_not_found(container):
+def test_service_not_found(container) -> None:
     with pytest.raises(ServiceNotFoundException):
         container.get(str)  # Random type
 
 
-def test_scope_disposal(container):
+def test_scope_disposal(container) -> None:
     container.register_scoped(DisposableService, DisposableService)
 
     scope = container.create_scope()
@@ -124,3 +124,73 @@ def test_scope_disposal(container):
     assert not service.disposed
     scope.dispose()
     assert service.disposed
+
+
+def test_error_handling_strategy_raise_on_dependency_extraction():
+    """Test that RAISE strategy raises exceptions during dependency extraction."""
+    from pyguara.di.container import DIContainer
+    from pyguara.di.types import ErrorHandlingStrategy
+
+    container = DIContainer(error_strategy=ErrorHandlingStrategy.RAISE)
+
+    # Create a class with problematic dependency hints that will fail extraction
+    class ProblematicService:
+        def __init__(self, dep: "NonExistent"):  # type: ignore[name-defined]  # noqa: F821
+            self.dep = dep
+
+    # Should raise when trying to register with broken dependencies
+    with pytest.raises(DIException):
+        container.register_transient(ProblematicService, ProblematicService)
+
+
+def test_error_handling_strategy_log_on_dependency_extraction():
+    """Test that LOG strategy logs and continues with dependency extraction failures."""
+    from pyguara.di.container import DIContainer
+    from pyguara.di.types import ErrorHandlingStrategy
+    from unittest.mock import patch
+    from io import StringIO
+
+    container = DIContainer(error_strategy=ErrorHandlingStrategy.LOG)
+
+    # Create a class with problematic dependency hints
+    class ProblematicService:
+        def __init__(self, dep: "NonExistent"):  # type: ignore[name-defined]  # noqa: F821
+            self.dep = dep
+
+    # Capture print output
+    captured_output = StringIO()
+    with patch("sys.stdout", captured_output):
+        # Should log warning but not raise
+        container.register_transient(ProblematicService, ProblematicService)
+
+    # The service should be registered but with empty dependencies
+    assert ProblematicService in container._services
+
+
+def test_error_handling_strategy_ignore_on_dependency_extraction():
+    """Test that IGNORE strategy silently ignores dependency extraction failures."""
+    from pyguara.di.container import DIContainer
+    from pyguara.di.types import ErrorHandlingStrategy
+
+    container = DIContainer(error_strategy=ErrorHandlingStrategy.IGNORE)
+
+    # Create a class with problematic dependency hints
+    class ProblematicService:
+        def __init__(self, dep: "NonExistent"):  # type: ignore[name-defined]  # noqa: F821
+            self.dep = dep
+
+    # Should silently ignore the error
+    container.register_transient(ProblematicService, ProblematicService)
+
+    # The service should be registered but with empty dependencies
+    assert ProblematicService in container._services
+
+
+def test_default_error_strategy_is_raise():
+    """Test that the default error strategy is RAISE for fail-fast behavior."""
+    from pyguara.di.container import DIContainer
+    from pyguara.di.types import ErrorHandlingStrategy
+
+    container = DIContainer()
+
+    assert container._error_strategy == ErrorHandlingStrategy.RAISE
