@@ -1,19 +1,35 @@
 """Core input processing system."""
 
 import pygame
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.binding import KeyBindingManager
 from pyguara.input.events import OnActionEvent
-from pyguara.input.types import ActionType, InputAction, InputContext, InputDevice
+from pyguara.input.types import (
+    ActionType,
+    InputAction,
+    InputContext,
+    InputDevice,
+    GamepadConfig,
+)
+from pyguara.input.gamepad import GamepadManager
 
 
 class InputManager:
     """Translates Hardware Events (Keyboard/Mouse/Gamepad) into Actions."""
 
-    def __init__(self, dispatcher: EventDispatcher) -> None:
-        """Initialize input manager, bindings, and detect controllers."""
+    def __init__(
+        self,
+        dispatcher: EventDispatcher,
+        gamepad_config: Optional[GamepadConfig] = None,
+    ) -> None:
+        """Initialize input manager, bindings, and detect controllers.
+
+        Args:
+            dispatcher: Event dispatcher for firing input events.
+            gamepad_config: Optional gamepad configuration (deadzone, vibration, etc.).
+        """
         self._dispatcher = dispatcher
         self._bindings = KeyBindingManager()
 
@@ -21,13 +37,36 @@ class InputManager:
         self._registered_actions: Dict[str, InputAction] = {}
         self._cooldowns: Dict[str, float] = {}
 
-        # Gamepad State
+        # Initialize GamepadManager for comprehensive gamepad support
+        self._gamepad_manager = GamepadManager(dispatcher, gamepad_config)
+
+        # Legacy gamepad support (kept for backwards compatibility with process_event)
         pygame.joystick.init()
         self._joysticks: Dict[int, Any] = {}  # Use Any to bypass valid-type error
         self._detect_controllers()
 
+    @property
+    def gamepad(self) -> GamepadManager:
+        """Access the gamepad manager for direct controller queries.
+
+        Returns:
+            The GamepadManager instance.
+        """
+        return self._gamepad_manager
+
+    def update(self) -> None:
+        """Update input state. Call this once per frame before processing events.
+
+        This updates the gamepad manager which handles:
+        - Hot-plug detection
+        - Button state tracking
+        - Axis state tracking with deadzone
+        - Event firing for changes
+        """
+        self._gamepad_manager.update()
+
     def _detect_controllers(self) -> None:
-        """Find and init plugged-in controllers."""
+        """Find and init plugged-in controllers (legacy support)."""
         if pygame.joystick.get_count() > 0:
             for i in range(pygame.joystick.get_count()):
                 # Use Any to avoid mypy confusion with pygame.joystick.Joystick vs function
