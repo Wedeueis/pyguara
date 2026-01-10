@@ -102,10 +102,11 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - **Risk:** HIGH - Performance degradation
 - **Resolution:** Implemented reference counting system (commit 394e073, merged 2cbd35d)
 
-#### P0-005: Event Error Swallowing (Events/DI)
+#### P0-005: Event Error Swallowing (Events/DI) ✅ RESOLVED
 - **Location:** `pyguara/events/dispatcher.py:98-99`, `pyguara/di/container.py:242-244`
 - **Impact:** Debugging is extremely difficult
 - **Risk:** MEDIUM - Developer experience
+- **Resolution:** Implemented ErrorHandlingStrategy enum (commit 3b25641, merged 00fb8ad)
 
 #### P0-006: No Gamepad Support (Input)
 - **Location:** `pyguara/input/manager.py`
@@ -162,7 +163,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [x] **P0-001**: Implement component removal tracking
 - [x] **P0-002**: Add DIScope.get() public API
 - [x] **P0-003**: Create UIEventType enum
-- [ ] **P0-005**: Configurable error handling strategy
+- [x] **P0-005**: Configurable error handling strategy
 - [ ] Test coverage for all fixes ≥ 90%
 
 #### Week 2: Input & Audio Foundation
