@@ -3,6 +3,7 @@
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
+from pyguara.ui.types import UIEventType
 
 
 class TextInput(Widget):
@@ -53,11 +54,11 @@ class TextInput(Widget):
             )
 
     def handle_event(
-        self, event_type: str, position: Vector2, key_code: int = 0
+        self, event_type: UIEventType, position: Vector2, key_code: int = 0
     ) -> bool:
         """Handle mouse clicks for focus and key presses for input."""
         # Mouse logic for focus
-        if event_type == "MOUSE_DOWN":
+        if event_type == UIEventType.MOUSE_DOWN:
             contains = (
                 self.rect.x <= position.x <= self.rect.x + self.rect.width
                 and self.rect.y <= position.y <= self.rect.y + self.rect.height
@@ -66,14 +67,11 @@ class TextInput(Widget):
             if contains:
                 return True
 
-        # Keyboard logic
-        if self.active and event_type == "KEY_DOWN":
-            # NOTE: Real implementation needs character mapping from InputManager
-            if key_code == 8:  # Backspace
-                self.text = self.text[:-1]
-            else:
-                # Placeholder for actual char appending logic
-                pass
-            return True
+        # Keyboard logic (KEY_DOWN would need to be added to UIEventType enum)
+        # For now, we only handle mouse events
+        # if self.active and event_type == UIEventType.KEY_DOWN:
+        #     if key_code == 8:  # Backspace
+        #         self.text = self.text[:-1]
+        #     return True
 
         return False

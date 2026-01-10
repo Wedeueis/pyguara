@@ -3,7 +3,7 @@
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
-from pyguara.ui.types import UIElementState
+from pyguara.ui.types import UIElementState, UIEventType
 
 
 class Slider(Widget):
@@ -51,8 +51,10 @@ class Slider(Widget):
 
         renderer.draw_circle(Vector2(handle_x, mid_y), 8, handle_color)
 
-    def _process_input(self, event_type: str, position: Vector2, button: int) -> bool:
-        if event_type == "MOUSE_DOWN":
+    def _process_input(
+        self, event_type: UIEventType, position: Vector2, button: int
+    ) -> bool:
+        if event_type == UIEventType.MOUSE_DOWN:
             if (
                 self.rect.x <= position.x <= self.rect.x + self.rect.width
                 and self.rect.y <= position.y <= self.rect.y + self.rect.height
@@ -61,10 +63,10 @@ class Slider(Widget):
                 self._update_value_from_pos(position.x)
                 return True
 
-        elif event_type == "MOUSE_UP":
+        elif event_type == UIEventType.MOUSE_UP:
             self._dragging = False
 
-        elif event_type == "MOUSE_MOVE":
+        elif event_type == UIEventType.MOUSE_MOVE:
             if self._dragging:
                 self._update_value_from_pos(position.x)
                 return True

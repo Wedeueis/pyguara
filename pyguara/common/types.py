@@ -52,7 +52,7 @@ class Vector2(pymunk.Vec2d):
         Returns:
             float: The squared length.
         """
-        return float(self.length_sqrd)  # type: ignore[attr-defined]
+        return float(self.length_sqrd)
 
     def normalize(self) -> Vector2:
         """
@@ -173,7 +173,7 @@ class Color(pygame.Color):
         return Color(hex_str)
 
     @property
-    def normalized(self) -> Tuple[float, float, float, float]:  # type: ignore[override]
+    def normalized(self) -> Tuple[float, float, float, float]:
         """
         Get the RGBA values normalized to the 0.0 - 1.0 range.
 
