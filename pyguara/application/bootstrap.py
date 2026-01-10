@@ -19,6 +19,10 @@ from pyguara.scene.serializer import SceneSerializer
 from pyguara.persistence.manager import PersistenceManager
 from pyguara.persistence.storage import FileStorageBackend
 from pyguara.ui.manager import UIManager
+from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
+from pyguara.audio.manager import AudioManager
 from .sandbox import SandboxApplication
 
 
@@ -94,13 +98,19 @@ def _setup_container() -> DIContainer:
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)
 
-    # 6. Resources & Physics
+    # 6. Audio System
+    audio_system = PygameAudioSystem()
+    container.register_instance(IAudioSystem, audio_system)  # type: ignore[type-abstract]
+    container.register_singleton(AudioManager, AudioManager)
+
+    # 7. Resources & Physics
     res_manager = ResourceManager()
     res_manager.register_loader(JsonLoader())
+    res_manager.register_loader(PygameSoundLoader())  # Register audio loader
     container.register_instance(ResourceManager, res_manager)
     container.register_singleton(IPhysicsEngine, PymunkEngine)  # type: ignore[type-abstract]
 
-    # 7. Persistence
+    # 8. Persistence
     storage = FileStorageBackend(base_path="saves")
     persistence = PersistenceManager(storage)
     container.register_instance(PersistenceManager, persistence)
