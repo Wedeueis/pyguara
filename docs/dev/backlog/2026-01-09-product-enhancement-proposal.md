@@ -96,10 +96,11 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - **Risk:** MEDIUM - Developer experience
 - **Resolution:** Implemented UIEventType enum (commit 5ec8d1b, merged fb8290c)
 
-#### P0-004: Resource Memory Leak (Resources)
+#### P0-004: Resource Memory Leak (Resources) ✅ RESOLVED
 - **Location:** `pyguara/resources/manager.py`
 - **Impact:** Memory grows unbounded in long-running games
 - **Risk:** HIGH - Performance degradation
+- **Resolution:** Implemented reference counting system (commit 394e073, merged 2cbd35d)
 
 #### P0-005: Event Error Swallowing (Events/DI)
 - **Location:** `pyguara/events/dispatcher.py:98-99`, `pyguara/di/container.py:242-244`
@@ -171,7 +172,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Audio manager with spatial audio support
 
 #### Week 3: Resource Management & Testing
-- [ ] **P0-004**: Resource reference counting and unloading
+- [x] **P0-004**: Resource reference counting and unloading
 - [ ] Memory leak detection in tests
 - [ ] Integration test suite expansion
 - [ ] Performance benchmarking harness
