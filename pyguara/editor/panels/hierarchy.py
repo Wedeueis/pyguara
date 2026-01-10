@@ -3,7 +3,7 @@
 from typing import Optional, Callable
 
 try:
-    import imgui  # type: ignore
+    import imgui
 except ImportError:
     imgui = None
 
@@ -17,6 +17,8 @@ class HierarchyPanel:
 
     def __init__(self, manager_provider: Callable[[], Optional[EntityManager]]) -> None:
         """
+        Initialize the Hierarchical Panel.
+
         Args:
             manager_provider: A function that returns the current EntityManager.
                               (Because scenes change, we can't store a static reference).

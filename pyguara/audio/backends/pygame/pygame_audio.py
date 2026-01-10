@@ -26,7 +26,7 @@ class PygameAudioSystem(IAudioSystem):
             buffer: Buffer size (512 is low latency).
         """
         if not pygame.mixer.get_init():
-            pygame.mixer.init(frequency, size, channels, buffer)  # type: ignore[unreachable]
+            pygame.mixer.init(frequency, size, channels, buffer)
             # Allocate enough channels for simultaneous sounds
             pygame.mixer.set_num_channels(32)
 

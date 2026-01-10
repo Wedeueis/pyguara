@@ -57,7 +57,6 @@ class GameplayScene(Scene):
         """Scene Logic Loop."""
         # 1. Update Physics
         if self.physics_system:
-            print("Physics System Active... simulating entities...")
             physics_entities = list(
                 self.entity_manager.get_entities_with(Transform, RigidBody)
             )

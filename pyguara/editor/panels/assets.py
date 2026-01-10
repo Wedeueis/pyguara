@@ -5,7 +5,7 @@ import dataclasses
 from typing import Optional, Dict, Any, Callable, Type, cast
 
 try:
-    import imgui  # type: ignore
+    import imgui
 except ImportError:
     imgui = None
 
@@ -23,6 +23,7 @@ class AssetsPanel:
         resource_manager: ResourceManager,
         manager_provider: Callable[[], Optional[EntityManager]],
     ) -> None:
+        """Initialize the Asset Paanel."""
         self._resource_manager = resource_manager
         self._manager_provider = manager_provider
         self.selected_resource_path: Optional[str] = None
@@ -135,7 +136,7 @@ class AssetsPanel:
         print(f"[Editor] Spawned entity from {resource.path}")
 
     def _draw_dict_editor(self, data: Dict[str, Any]) -> None:
-        """Simple recursive dictionary editor using ImGui primitives."""
+        """Draw using simple recursive dictionary editor based on ImGui primitives."""
         for key, value in data.items():
             if isinstance(value, dict):
                 if imgui.tree_node(str(key)):

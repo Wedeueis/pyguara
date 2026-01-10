@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Type
 
 # Try importing ImGui, degrade gracefully
 try:
-    import imgui  # type: ignore
+    import imgui
 except ImportError:
     imgui = None
 
@@ -34,7 +34,7 @@ class InspectorDrawer:
 
     @classmethod
     def draw_component(cls, component: Any) -> None:
-        """Main entry point to draw a component."""
+        """Draw a component."""
         if not imgui:
             return
 
@@ -79,6 +79,7 @@ class InspectorDrawer:
     def _draw_field(cls, label: str, value: Any, type_hint: Any = None) -> Any:
         """
         Draw a single field based on its type.
+
         Returns the new value if changed, or None.
         """
         # 1. Vector2

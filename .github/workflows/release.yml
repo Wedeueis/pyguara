@@ -1,0 +1,63 @@
+name: Release / Deploy
+
+on:
+  push:
+    tags:
+      - 'v*' # Triggers only on tags like v0.2.0, v1.0.0
+
+jobs:
+  pypi-publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # IMPORTANT: for trusted publishing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: make install
+
+      - name: Build Package
+        run: make build
+
+      - name: Publish to PyPI
+        # Uses twine (included in your dev dependencies) or uv publish (if supported)
+        # Assuming typical token auth:
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          uv run twine upload dist/*
+
+  docs-deploy:
+    name: Deploy Documentation
+    runs-on: ubuntu-latest
+    needs: pypi-publish
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Docs Dependencies
+        run: |
+           uv venv
+           make install-dev
+
+      - name: Configure Git User
+        run: |
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Deploy to GitHub Pages
+        run: make docs-deploy

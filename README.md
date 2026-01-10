@@ -29,7 +29,7 @@ PyGuara requires **Python 3.12** or higher.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/pyguara.git
+git clone https://github.com/Wedeueis/pyguara
 cd pyguara
 
 # Sync dependencies

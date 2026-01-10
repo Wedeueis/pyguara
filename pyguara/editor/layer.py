@@ -1,12 +1,10 @@
-"""
-The Editor Tool manages the ImGui context and tool overlays.
-"""
+"""The Editor Tool manages the ImGui context and tool overlays."""
 
 from typing import Optional, Any
 
 try:
-    import imgui  # type: ignore
-    from imgui.integrations.pygame import PygameRenderer  # type: ignore
+    import imgui
+    from imgui.integrations.pygame import PygameRenderer
 
     HAS_IMGUI = True
 except ImportError:
@@ -27,9 +25,7 @@ from pyguara.graphics.protocols import UIRenderer
 
 
 class EditorTool(Tool):
-    """
-    A robust ImGui-based editor integrated into the Tool system.
-    """
+    """A robust ImGui-based editor integrated into the Tool system."""
 
     def __init__(self, container: DIContainer) -> None:
         """Initialize the editor tool."""
@@ -58,7 +54,7 @@ class EditorTool(Tool):
         return None
 
     def initialize(self) -> None:
-        """Setup ImGui context."""
+        """Configure ImGui context."""
         if not HAS_IMGUI:
             print("[Editor] ImGui not found. Editor disabled.")
             return

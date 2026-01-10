@@ -1,8 +1,8 @@
 """Main module defining the application entry point."""
 
 from pyguara.application import create_application
-from pyguara.game.scenes import GameplayScene
 from pyguara.events.dispatcher import EventDispatcher
+from game.scenes import GameplayScene
 
 
 def main() -> None:
