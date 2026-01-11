@@ -12,12 +12,13 @@ authors = [
     {name = "Wedeueis Braz", email = "wedeueisbraz@gmail.com"}
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Games/Entertainment",
-    "Topic :: Software Development :: Libraries :: Python Modules"
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License"
 ]
 keywords = ["game-engine", "action-rpg", "2d", "event-driven", "data-driven"]
 dependencies = [
