@@ -72,6 +72,22 @@ class Scene(ABC):
         """Lifecycle hook: Called when scene is removed/swapped."""
         ...
 
+    def on_pause(self) -> None:
+        """Lifecycle hook: Called when scene is covered by another scene.
+
+        Override this to pause game logic, music, etc. when the scene is no longer
+        the top of the stack. By default, does nothing.
+        """
+        pass
+
+    def on_resume(self) -> None:
+        """Lifecycle hook: Called when scene becomes top of stack again.
+
+        Override this to resume game logic, music, etc. when returning to this scene
+        after a scene above it is popped. By default, does nothing.
+        """
+        pass
+
     @abstractmethod
     def update(self, dt: float) -> None:
         """Frame update logic."""
