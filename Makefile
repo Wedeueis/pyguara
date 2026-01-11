@@ -42,6 +42,9 @@ benchmark:  ## Run benchmarks (User requested)
 coverage:  ## Generate coverage report
 	uv run pytest --cov=pyguara --cov-report=html --cov-report=term
 
+coverage-check:  ## Fail if coverage is below 60%
+	uv run pytest --cov=pyguara --cov-report=term --cov-fail-under=60
+
 # --- Code Quality ---
 lint:  ## Check code style
 	uv run ruff check pyguara tests
