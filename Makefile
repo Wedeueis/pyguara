@@ -1,27 +1,29 @@
 # Makefile for Pyguara
 
-.PHONY: help install install-dev test test-unit test-integration test-performance benchmark coverage lint format type-check clean clean-all docs-build docs-serve play version ci
+.PHONY: help install test test-unit test-integration test-performance benchmark coverage coverage-check lint format format-check type-check clean clean-all docs-build docs-serve run version ci pre-commit-install build
 
 # --- Default ---
 help:  ## Show this help message
 	@echo "PyGuara Development Commands:"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2}'
 
-# --- Installation (The Fix) ---
-# "uv sync --all-extras" installs Core + Dev + Docs + Benchmark dependencies in one go.
+# --- Installation ---
 install:  ## Install ALL dependencies (core, dev, docs, benchmark)
 	uv sync --all-extras
 
-install-dev: install ## Alias for consistency
+pre-commit-install: ## Install git hooks
+	uv run pre-commit install
 
 # --- Development ---
-play:  ## Run the main game (User requested)
+run:  ## Run the main game
 	uv run main.py
 
-run: play ## Alias for 'play'
-
-version:  ## Show current version (User requested)
+version:  ## Show current version
 	uv run python -c "from pyguara import __version__; print(__version__)"
+
+# --- Build & Distribution ---
+build:  ## Build the package (sdist and wheel)
+	uv build
 
 # --- Testing ---
 test:  ## Run standard tests (skips slow/perf)
@@ -33,10 +35,10 @@ test-unit:  ## Run fast unit tests
 test-integration:  ## Run integration tests
 	uv run pytest tests/integration/
 
-test-performance:  ## Run performance analysis (User requested)
+test-performance:  ## Run performance analysis
 	uv run pytest -m performance --no-cov
 
-benchmark:  ## Run benchmarks (User requested)
+benchmark:  ## Run benchmarks
 	uv run pytest -m performance --benchmark-only --benchmark-sort=mean
 
 coverage:  ## Generate coverage report
@@ -52,26 +54,22 @@ lint:  ## Check code style
 format:  ## Format code
 	uv run ruff format pyguara tests
 
-format-check:  ## Checks format without changing
+format-check:  ## Verify formatting (for CI)
 	uv run ruff format --check pyguara tests
 
 type-check:  ## Run static type analysis
 	uv run mypy pyguara
 
-pre-commit-install: ## Install git hooks
-	uv run pre-commit install
-
 # --- Documentation ---
-docs-build:  ## Build site (User requested)
+docs-build:  ## Build site
 	uv run mkdocs build
 
 docs-serve:  ## Live preview of docs
 	uv run mkdocs serve
 
-# --- Cleanup (The Fix) ---
+# --- Cleanup ---
 clean:  ## Clean standard build artifacts
 	rm -rf build/ dist/ *.egg-info .pytest_cache .mypy_cache .coverage htmlcov .tox
-	# FIX: Use exec rm -rf for folders
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type f -name "*.pyc" -delete
 
@@ -80,4 +78,4 @@ clean-all: clean ## Clean everything (including venv and logs)
 	@echo "Deep clean complete."
 
 # --- CI Pipeline ---
-ci: format lint type-check test-unit  ## Run local CI check
+ci: format-check lint type-check test-unit coverage-check build ## Run full local CI pipeline

@@ -50,9 +50,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Docs Dependencies
-        run: |
-           uv venv
-           make install-dev
+        run: make install
 
       - name: Configure Git User
         run: |
