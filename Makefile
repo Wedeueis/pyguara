@@ -61,11 +61,14 @@ type-check:  ## Run static type analysis
 	uv run mypy pyguara
 
 # --- Documentation ---
-docs-build:  ## Build site
+docs-build:  ## Build documentation site
 	uv run mkdocs build
 
 docs-serve:  ## Live preview of docs
 	uv run mkdocs serve
+
+docs-deploy:  ## Deploy documentation to GitHub Pages
+	uv run mkdocs gh-deploy --force
 
 # --- Cleanup ---
 clean:  ## Clean standard build artifacts
