@@ -25,7 +25,7 @@ from pyguara.graphics.pipeline.viewport import Viewport
 @dataclass
 class Particle:
     """
-    A single particle instance.
+    A single particle instance with physics and visual effects.
 
     Attributes:
         position (Vector2): Current world position.
@@ -33,8 +33,23 @@ class Particle:
         life (float): Time remaining in seconds.
         texture (Texture): The visual representation.
         active (bool): Whether this particle is currently in use.
-        rotation (float): Rotation in degrees (for Renderable protocol).
-        scale (Vector2): Scale factor (for Renderable protocol).
+
+        # Physics
+        acceleration (Vector2): Constant acceleration (e.g., gravity).
+        damping (float): Velocity damping factor (0.0 = no damping, 1.0 = instant stop).
+
+        # Transform (Renderable protocol)
+        rotation (float): Rotation in degrees.
+        scale (Vector2): Scale factor.
+
+        # Visual effects
+        angular_velocity (float): Rotation speed in degrees per second.
+        scale_velocity (Vector2): Scale change per second.
+
+        # Color animation
+        color_start (Color): Initial color.
+        color_end (Color): Final color (lerped based on lifetime).
+        life_total (float): Total lifetime for calculating color lerp.
     """
 
     position: Vector2
@@ -43,9 +58,22 @@ class Particle:
     texture: Texture | None = None
     active: bool = False
 
-    # Protocol compliance for Renderable (required for rendering)
+    # Physics
+    acceleration: Vector2 = field(default_factory=Vector2.zero)
+    damping: float = 1.0  # 1.0 = no damping, 0.98 = slight air resistance
+
+    # Protocol compliance for Renderable
     rotation: float = 0.0
     scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
+
+    # Visual effects
+    angular_velocity: float = 0.0  # degrees per second
+    scale_velocity: Vector2 = field(default_factory=Vector2.zero)
+
+    # Color animation (optional, None = no color animation)
+    color_start: Optional[tuple[int, int, int, int]] = None
+    color_end: Optional[tuple[int, int, int, int]] = None
+    life_total: float = 1.0
 
 
 class ParticleSystem:
@@ -80,9 +108,16 @@ class ParticleSystem:
         speed: float = 100.0,
         spread: float = 360.0,
         life: float = 1.0,
+        acceleration: Vector2 = Vector2.zero(),
+        damping: float = 1.0,
+        angular_velocity: float = 0.0,
+        scale: Vector2 = Vector2.one(),
+        scale_velocity: Vector2 = Vector2.zero(),
+        color_start: Optional[tuple[int, int, int, int]] = None,
+        color_end: Optional[tuple[int, int, int, int]] = None,
     ) -> None:
         """
-        Spawn new particles.
+        Spawn new particles with optional physics and visual effects.
 
         Args:
             texture (Texture): The image to use.
@@ -91,6 +126,13 @@ class ParticleSystem:
             speed (float): Initial speed magnitude.
             spread (float): Angle spread in degrees (360 = circle, 0 = laser).
             life (float): Duration in seconds before disappearing.
+            acceleration (Vector2): Constant acceleration (e.g., Vector2(0, 200) for gravity).
+            damping (float): Velocity damping (1.0 = none, 0.98 = slight air resistance).
+            angular_velocity (float): Rotation speed in degrees per second.
+            scale (Vector2): Initial scale.
+            scale_velocity (Vector2): Scale change per second.
+            color_start (Optional[tuple]): Initial RGBA color (r, g, b, a).
+            color_end (Optional[tuple]): Final RGBA color for fade effect.
         """
         spawned = 0
         search_start = self._next_index
@@ -105,14 +147,27 @@ class ParticleSystem:
                 p.position = Vector2(position.x, position.y)
                 p.texture = texture
                 p.life = life
+                p.life_total = life
 
                 # Random Velocity Calculation
                 angle = random.uniform(0, spread)
-                # Create a unit vector and rotate it
-                # (Assuming (1,0) is base direction, rotate by angle)
                 direction = Vector2(1, 0).rotate(angle)
                 random_velocity = direction * random.uniform(speed * 0.5, speed * 1.5)
                 p.velocity = random_velocity
+
+                # Physics
+                p.acceleration = acceleration
+                p.damping = damping
+
+                # Visual effects
+                p.rotation = random.uniform(0, 360)  # Random initial rotation
+                p.angular_velocity = angular_velocity
+                p.scale = Vector2(scale.x, scale.y)
+                p.scale_velocity = scale_velocity
+
+                # Color animation
+                p.color_start = color_start
+                p.color_end = color_end
 
                 spawned += 1
 
@@ -124,11 +179,54 @@ class ParticleSystem:
                 # Optional: Force overwrite oldest? For now, just stop emitting.
                 break
 
+    def emit_preset(
+        self,
+        preset_name: str,
+        texture: Texture,
+        position: Vector2,
+    ) -> None:
+        """
+        Emit particles using a pre-configured preset.
+
+        Args:
+            preset_name (str): Name of the preset ("fire", "smoke", "explosion", etc.).
+            texture (Texture): The particle texture to use.
+            position (Vector2): Emission position in world space.
+
+        Raises:
+            KeyError: If preset_name doesn't exist.
+
+        Example:
+            particle_system.emit_preset("fire", fire_texture, player_pos)
+        """
+        if preset_name not in PARTICLE_PRESETS:
+            available = ", ".join(PARTICLE_PRESETS.keys())
+            raise KeyError(f"Preset '{preset_name}' not found. Available: {available}")
+
+        config = PARTICLE_PRESETS[preset_name]
+
+        self.emit(
+            texture=texture,
+            position=position,
+            count=config.count,
+            speed=config.speed,
+            spread=config.spread,
+            life=config.life,
+            acceleration=config.acceleration,
+            damping=config.damping,
+            angular_velocity=config.angular_velocity,
+            scale=config.scale,
+            scale_velocity=config.scale_velocity,
+            color_start=config.color_start,
+            color_end=config.color_end,
+        )
+
     def update(self, dt: float) -> None:
         """
-        Advance the simulation.
+        Advance the simulation with physics and visual effects.
 
-        Updates positions and kills particles that ran out of life.
+        Updates positions, applies physics (acceleration, damping),
+        visual effects (rotation, scale), and color animation.
 
         Args:
             dt (float): Delta time in seconds.
@@ -140,13 +238,31 @@ class ParticleSystem:
                     p.active = False
                     p.texture = None  # Release reference
                 else:
-                    # Euler Integration
-                    # p.position += p.velocity * dt
-                    # Optimization: Vector math can be slow in loops.
-                    # If strictly needed, unpack to floats here.
+                    # Physics: Apply acceleration
+                    p.velocity = Vector2(
+                        p.velocity.x + p.acceleration.x * dt,
+                        p.velocity.y + p.acceleration.y * dt,
+                    )
+
+                    # Physics: Apply damping (air resistance)
+                    p.velocity = Vector2(
+                        p.velocity.x * p.damping,
+                        p.velocity.y * p.damping,
+                    )
+
+                    # Euler Integration for position
                     p.position = Vector2(
                         p.position.x + p.velocity.x * dt,
                         p.position.y + p.velocity.y * dt,
+                    )
+
+                    # Visual effects: Rotation
+                    p.rotation += p.angular_velocity * dt
+
+                    # Visual effects: Scale
+                    p.scale = Vector2(
+                        p.scale.x + p.scale_velocity.x * dt,
+                        p.scale.y + p.scale_velocity.y * dt,
                     )
 
     def render(
@@ -175,3 +291,97 @@ class ParticleSystem:
         for texture, destinations in batches.items():
             batch = RenderBatch(texture, destinations)
             backend.render_batch(batch)
+
+
+# ===== Particle Emitter Presets =====
+
+
+@dataclass
+class ParticleEmitterConfig:
+    """
+    Configuration preset for particle effects.
+
+    Stores all parameters needed to emit a specific particle effect style.
+    """
+
+    count: int = 10
+    speed: float = 100.0
+    spread: float = 360.0
+    life: float = 1.0
+    acceleration: Vector2 = field(default_factory=Vector2.zero)
+    damping: float = 1.0
+    angular_velocity: float = 0.0
+    scale: Vector2 = field(default_factory=Vector2.one)
+    scale_velocity: Vector2 = field(default_factory=Vector2.zero)
+    color_start: Optional[tuple[int, int, int, int]] = None
+    color_end: Optional[tuple[int, int, int, int]] = None
+
+
+# Pre-configured particle presets
+PARTICLE_PRESETS: Dict[str, ParticleEmitterConfig] = {
+    "fire": ParticleEmitterConfig(
+        count=20,
+        speed=50.0,
+        spread=45.0,  # Upward cone
+        life=0.8,
+        acceleration=Vector2(0, -100),  # Float upward
+        damping=0.95,  # Slight air resistance
+        angular_velocity=180.0,  # Spin moderately
+        scale=Vector2(0.5, 0.5),
+        scale_velocity=Vector2(0.3, 0.3),  # Grow over time
+        color_start=(255, 200, 50, 255),  # Bright yellow-orange
+        color_end=(255, 50, 0, 0),  # Fade to transparent red
+    ),
+    "smoke": ParticleEmitterConfig(
+        count=15,
+        speed=30.0,
+        spread=90.0,  # Wide spread
+        life=2.0,
+        acceleration=Vector2(0, -20),  # Slow float upward
+        damping=0.98,  # Strong air resistance
+        angular_velocity=45.0,  # Slow spin
+        scale=Vector2(0.3, 0.3),
+        scale_velocity=Vector2(0.5, 0.5),  # Expand significantly
+        color_start=(100, 100, 100, 200),  # Gray, semi-transparent
+        color_end=(50, 50, 50, 0),  # Fade to transparent
+    ),
+    "explosion": ParticleEmitterConfig(
+        count=50,
+        speed=300.0,
+        spread=360.0,  # Full circle
+        life=0.5,
+        acceleration=Vector2(0, 200),  # Strong gravity
+        damping=0.92,  # Rapid slowdown
+        angular_velocity=720.0,  # Fast spin
+        scale=Vector2(0.8, 0.8),
+        scale_velocity=Vector2(-1.0, -1.0),  # Shrink over time
+        color_start=(255, 255, 150, 255),  # Bright white-yellow
+        color_end=(255, 100, 0, 0),  # Fade to orange
+    ),
+    "sparks": ParticleEmitterConfig(
+        count=30,
+        speed=200.0,
+        spread=180.0,  # Upward hemisphere
+        life=0.6,
+        acceleration=Vector2(0, 400),  # Strong gravity
+        damping=0.96,
+        angular_velocity=360.0,
+        scale=Vector2(0.2, 0.2),
+        scale_velocity=Vector2(-0.2, -0.2),  # Shrink
+        color_start=(255, 255, 200, 255),  # Bright yellow
+        color_end=(255, 150, 0, 0),  # Fade to orange
+    ),
+    "rain": ParticleEmitterConfig(
+        count=100,
+        speed=400.0,
+        spread=10.0,  # Narrow, downward
+        life=1.5,
+        acceleration=Vector2(0, 200),  # Gravity
+        damping=1.0,  # No air resistance
+        angular_velocity=0.0,  # No rotation
+        scale=Vector2(0.1, 0.4),  # Elongated
+        scale_velocity=Vector2(0, 0),  # No size change
+        color_start=(100, 150, 255, 150),  # Blue, semi-transparent
+        color_end=(100, 150, 255, 50),  # Fade slightly
+    ),
+}
