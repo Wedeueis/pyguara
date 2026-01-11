@@ -15,7 +15,7 @@ class Button(Widget):
         """Initialize the button."""
         super().__init__(position, size)
         self.text = text
-        self.padding = 5
+        self.text_padding = 5
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the button in its current state."""

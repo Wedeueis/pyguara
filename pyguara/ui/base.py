@@ -1,12 +1,15 @@
 """Base UI Component classes."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, TYPE_CHECKING
 
 from pyguara.common.types import Vector2, Rect
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.types import UIAnchor, UIElementState, UIEventType
 from pyguara.ui.theme import get_theme
+
+if TYPE_CHECKING:
+    from pyguara.ui.constraints import LayoutConstraints, Padding
 
 
 class UIElement(ABC):
@@ -29,6 +32,10 @@ class UIElement(ABC):
         self.state = UIElementState.NORMAL
         self.parent: Optional["UIElement"] = None
         self.children: List["UIElement"] = []
+
+        # Layout
+        self.constraints: Optional["LayoutConstraints"] = None
+        self.padding: Optional["Padding"] = None
 
         # Theme Integration
         self.theme = get_theme()
@@ -115,3 +122,33 @@ class UIElement(ABC):
         """Add a child element to this container."""
         child.parent = self
         self.children.append(child)
+
+    def apply_layout(self) -> None:
+        """Apply layout constraints to this element and its children.
+
+        Applies constraints relative to parent if present.
+        Then recursively applies layout to children.
+        """
+        # Apply own constraints if present and has parent
+        if self.constraints and self.parent:
+            self.rect = self.constraints.apply(self.rect, self.parent.rect)
+
+        # Apply layout to children
+        for child in self.children:
+            if child.visible:
+                child.apply_layout()
+
+    def get_content_rect(self) -> Rect:
+        """Get the rectangle for content area (rect minus padding).
+
+        Returns:
+            Content rectangle accounting for padding
+        """
+        if self.padding:
+            return Rect(
+                self.rect.x + self.padding.left,
+                self.rect.y + self.padding.top,
+                self.rect.width - self.padding.horizontal_total,
+                self.rect.height - self.padding.vertical_total,
+            )
+        return self.rect

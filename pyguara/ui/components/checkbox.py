@@ -15,7 +15,7 @@ class Checkbox(Widget):
         self.label = label
         self.checked = checked
         self.box_size = 20
-        self.padding = 5
+        self.label_spacing = 5
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the checkbox and label."""
@@ -39,12 +39,14 @@ class Checkbox(Widget):
             renderer.draw_rect(check_rect, self.theme.colors.secondary)
 
         # 3. Draw Label text
-        text_pos = Vector2(self.rect.x + self.box_size + self.padding, self.rect.y)
+        text_pos = Vector2(
+            self.rect.x + self.box_size + self.label_spacing, self.rect.y
+        )
         renderer.draw_text(self.label, text_pos, self.theme.colors.text)
 
         # Update total bounds for hit testing (Box + Text)
         text_w, _ = renderer.get_text_size(self.label, 16)
-        self.rect.width = self.box_size + self.padding + text_w
+        self.rect.width = self.box_size + self.label_spacing + text_w
 
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int
