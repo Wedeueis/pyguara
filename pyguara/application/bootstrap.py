@@ -11,6 +11,7 @@ from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.graphics.window import Window, WindowConfig
 from pyguara.input.manager import InputManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
@@ -110,7 +111,17 @@ def _setup_container() -> DIContainer:
     res_manager.register_loader(JsonLoader())
     res_manager.register_loader(PygameSoundLoader())  # Register audio loader
     container.register_instance(ResourceManager, res_manager)
-    container.register_singleton(IPhysicsEngine, PymunkEngine)  # type: ignore[type-abstract]
+
+    # Physics Engine
+    physics_engine = PymunkEngine()
+    container.register_instance(IPhysicsEngine, physics_engine)  # type: ignore[type-abstract]
+
+    # Collision System (bridges pymunk callbacks to PyGuara events)
+    collision_system = CollisionSystem(event_dispatcher)
+    container.register_instance(CollisionSystem, collision_system)
+
+    # Wire collision system to physics engine
+    physics_engine.set_collision_system(collision_system)
 
     # 8. Persistence
     storage = FileStorageBackend(base_path="saves")

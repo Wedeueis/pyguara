@@ -72,11 +72,144 @@ class PymunkEngine(IPhysicsEngine):
         self.space: Optional[pymunk.Space] = None
         # Map entity_id -> PymunkBodyAdapter
         self._bodies: Dict[Union[int, str], PymunkBodyAdapter] = {}
+        # Collision system for event routing (injected after construction)
+        self._collision_system: Optional[Any] = None
 
     def initialize(self, gravity: Vector2) -> None:
         """Initialize the physics space with gravity."""
         self.space = pymunk.Space()
         self.space.gravity = (gravity.x, gravity.y)
+
+        # Setup collision handlers if collision system is already registered
+        if self._collision_system:
+            self._setup_collision_handlers()
+
+    def set_collision_system(self, collision_system: Any) -> None:
+        """Register the CollisionSystem for event routing.
+
+        Args:
+            collision_system: CollisionSystem instance to handle callbacks.
+        """
+        self._collision_system = collision_system
+
+        # Setup handlers if space is already initialized
+        if self.space:
+            self._setup_collision_handlers()
+
+    def _setup_collision_handlers(self) -> None:
+        """Configure pymunk collision handlers to route to CollisionSystem."""
+        if not self.space:
+            return
+
+        # Default collision handler for all collision types
+        handler = self.space.add_default_collision_handler()  # type: ignore[attr-defined]
+        handler.begin = self._on_pymunk_begin
+        handler.pre_solve = self._on_pymunk_persist
+        handler.separate = self._on_pymunk_end
+
+    def _on_pymunk_begin(
+        self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict
+    ) -> bool:
+        """Pymunk callback when collision begins.
+
+        Args:
+            arbiter: Pymunk collision arbiter with collision data.
+            space: Pymunk space.
+            data: User data dict.
+
+        Returns:
+            True to process collision, False to ignore.
+        """
+        if not self._collision_system:
+            return True
+
+        shape_a, shape_b = arbiter.shapes
+        entity_a = getattr(shape_a.body, "entity_id", None)
+        entity_b = getattr(shape_b.body, "entity_id", None)
+
+        if entity_a is None or entity_b is None:
+            return True
+
+        # Extract collision details
+        contact_points = arbiter.contact_point_set.points
+        if contact_points:
+            contact = contact_points[0]
+            point = Vector2(contact.point_a.x, contact.point_a.y)
+            normal = Vector2(contact.normal.x, contact.normal.y)  # type: ignore[attr-defined]
+        else:
+            point = Vector2.zero()
+            normal = Vector2(0, 1)
+
+        impulse = arbiter.total_impulse.length
+        is_sensor = shape_a.sensor or shape_b.sensor
+
+        return self._collision_system.on_collision_begin(  # type: ignore[no-any-return]
+            str(entity_a), str(entity_b), point, normal, impulse, is_sensor
+        )
+
+    def _on_pymunk_persist(
+        self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict
+    ) -> bool:
+        """Pymunk callback during collision (each frame).
+
+        Args:
+            arbiter: Pymunk collision arbiter with collision data.
+            space: Pymunk space.
+            data: User data dict.
+
+        Returns:
+            True to continue processing, False to ignore.
+        """
+        if not self._collision_system:
+            return True
+
+        shape_a, shape_b = arbiter.shapes
+        entity_a = getattr(shape_a.body, "entity_id", None)
+        entity_b = getattr(shape_b.body, "entity_id", None)
+
+        if entity_a is None or entity_b is None:
+            return True
+
+        # Extract collision details
+        contact_points = arbiter.contact_point_set.points
+        if contact_points:
+            contact = contact_points[0]
+            point = Vector2(contact.point_a.x, contact.point_a.y)
+            normal = Vector2(contact.normal.x, contact.normal.y)  # type: ignore[attr-defined]
+        else:
+            point = Vector2.zero()
+            normal = Vector2(0, 1)
+
+        impulse = arbiter.total_impulse.length
+        is_sensor = shape_a.sensor or shape_b.sensor
+
+        return self._collision_system.on_collision_persist(  # type: ignore[no-any-return]
+            str(entity_a), str(entity_b), point, normal, impulse, is_sensor
+        )
+
+    def _on_pymunk_end(
+        self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict
+    ) -> None:
+        """Pymunk callback when collision ends.
+
+        Args:
+            arbiter: Pymunk collision arbiter.
+            space: Pymunk space.
+            data: User data dict.
+        """
+        if not self._collision_system:
+            return
+
+        shape_a, shape_b = arbiter.shapes
+        entity_a = getattr(shape_a.body, "entity_id", None)
+        entity_b = getattr(shape_b.body, "entity_id", None)
+
+        if entity_a is None or entity_b is None:
+            return
+
+        is_sensor = shape_a.sensor or shape_b.sensor
+
+        self._collision_system.on_collision_end(str(entity_a), str(entity_b), is_sensor)
 
     def update(self, delta_time: float) -> None:
         """Step the physics simulation forward."""
