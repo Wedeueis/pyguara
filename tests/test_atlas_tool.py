@@ -19,11 +19,12 @@ def pygame_init():
     yield
     pygame.quit()
 
+
 # Only run atlas generator tests if PIL is available
 PIL_AVAILABLE = False
 try:
     from PIL import Image
-    from tools.atlas_generator import AtlasGenerator, Shelf, PackedSprite
+    from tools.atlas_generator import AtlasGenerator, Shelf
 
     PIL_AVAILABLE = True
 except ImportError:
