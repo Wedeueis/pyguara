@@ -49,6 +49,9 @@ lint:  ## Check code style
 format:  ## Format code
 	uv run ruff format pyguara tests
 
+format-check:  ## Checks format without changing
+	uv run ruff format --check pyguara tests
+
 type-check:  ## Run static type analysis
 	uv run mypy pyguara
 
