@@ -111,3 +111,34 @@ class SpacingScheme:
     padding: int = 8
     margin: int = 4
     gap: int = 8
+
+
+@dataclass
+class FontScheme:
+    """Font configuration for UI elements."""
+
+    family: str = "Arial"
+    size_small: int = 12
+    size_normal: int = 16
+    size_large: int = 24
+    size_title: int = 32
+
+
+@dataclass
+class BorderScheme:
+    """Border styling configuration."""
+
+    width: int = 2
+    radius: int = 0
+    color: Color = field(default_factory=lambda: Color(96, 96, 96))
+
+
+@dataclass
+class ShadowScheme:
+    """Shadow effect configuration."""
+
+    enabled: bool = False
+    offset_x: int = 2
+    offset_y: int = 2
+    blur: int = 4
+    color: Color = field(default_factory=lambda: Color(0, 0, 0, 128))
