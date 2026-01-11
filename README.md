@@ -4,6 +4,13 @@
 
 > **Note:** This project is currently in **Pre-Alpha**. APIs are subject to change.
 
+[![CI](https://github.com/Wedeueis/pyguara/actions/workflows/ci.yml/badge.svg)](https://github.com/Wedeueis/pyguara/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Wedeueis/pyguara/graph/badge.svg?token=YOUR_CODECOV_TOKEN)](https://codecov.io/gh/Wedeueis/pyguara)
+[![PyPI version](https://badge.fury.io/py/pyguara.svg)](https://badge.fury.io/py/pyguara)
+[![Python versions](https://img.shields.io/pypi/pyversions/pyguara.svg)](https://pypi.org/project/pyguara/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License](https://img.shields.io/github/license/Wedeueis/pyguara)](https://github.com/Wedeueis/pyguara/blob/main/LICENSE)
+
 ## 🚀 Key Features
 
 *   **⚡ Performance-First ECS**:

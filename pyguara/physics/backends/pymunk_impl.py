@@ -10,6 +10,7 @@ from pyguara.physics.protocols import IPhysicsBody, IPhysicsEngine
 from pyguara.physics.types import (
     BodyType,
     CollisionLayer,
+    JointType,
     PhysicsMaterial,
     RaycastHit,
     ShapeType,
@@ -313,3 +314,135 @@ class PymunkEngine(IPhysicsEngine):
                 entity_id=getattr(query.shape.body, "entity_id", None),
             )
         return None
+
+    def create_joint(
+        self,
+        body_a: IPhysicsBody,
+        body_b: IPhysicsBody,
+        joint_type: JointType,
+        anchor_a: Vector2,
+        anchor_b: Vector2,
+        min_distance: float,
+        max_distance: float,
+        stiffness: float,
+        damping: float,
+        max_force: float,
+        collide_connected: bool,
+    ) -> Any:
+        """Create a pymunk constraint between two bodies.
+
+        Args:
+            body_a: First physics body.
+            body_b: Second physics body.
+            joint_type: Type of joint to create.
+            anchor_a: Local anchor point on body A.
+            anchor_b: Local anchor point on body B.
+            min_distance: Minimum distance for distance/slider joints.
+            max_distance: Maximum distance for distance/slider joints.
+            stiffness: Spring stiffness coefficient.
+            damping: Spring damping coefficient.
+            max_force: Maximum force the joint can apply (0 = infinite).
+            collide_connected: Whether connected bodies can collide.
+
+        Returns:
+            Pymunk constraint object.
+        """
+        if not self.space:
+            return None
+
+        if not isinstance(body_a, PymunkBodyAdapter) or not isinstance(
+            body_b, PymunkBodyAdapter
+        ):
+            raise TypeError("Invalid body handles for Pymunk backend")
+
+        pm_body_a = body_a._body
+        pm_body_b = body_b._body
+
+        constraint: Optional[pymunk.Constraint] = None
+
+        if joint_type == JointType.PIN:
+            # Pin joint (revolute) - allows rotation around shared point
+            constraint = pymunk.PinJoint(
+                pm_body_a, pm_body_b, (anchor_a.x, anchor_a.y), (anchor_b.x, anchor_b.y)
+            )
+
+        elif joint_type == JointType.DISTANCE:
+            # Distance joint - maintains fixed or bounded distance
+            if min_distance == max_distance:
+                # Fixed distance - use damped spring with high stiffness
+                constraint = pymunk.DampedSpring(
+                    pm_body_a,
+                    pm_body_b,
+                    (anchor_a.x, anchor_a.y),
+                    (anchor_b.x, anchor_b.y),
+                    rest_length=min_distance,
+                    stiffness=10000.0,  # Very stiff for rigid connection
+                    damping=100.0,
+                )
+            else:
+                # Bounded distance - use slide joint
+                constraint = pymunk.SlideJoint(
+                    pm_body_a,
+                    pm_body_b,
+                    (anchor_a.x, anchor_a.y),
+                    (anchor_b.x, anchor_b.y),
+                    min_distance,
+                    max_distance,
+                )
+
+        elif joint_type == JointType.SPRING:
+            # Spring-damper joint
+            constraint = pymunk.DampedSpring(
+                pm_body_a,
+                pm_body_b,
+                (anchor_a.x, anchor_a.y),
+                (anchor_b.x, anchor_b.y),
+                rest_length=min_distance,  # Use min_distance as rest length
+                stiffness=stiffness,
+                damping=damping,
+            )
+
+        elif joint_type == JointType.SLIDER:
+            # Slider/prismatic joint
+            constraint = pymunk.SlideJoint(
+                pm_body_a,
+                pm_body_b,
+                (anchor_a.x, anchor_a.y),
+                (anchor_b.x, anchor_b.y),
+                min_distance,
+                max_distance,
+            )
+
+        elif joint_type == JointType.GEAR:
+            # Gear joint - links rotation
+            constraint = pymunk.GearJoint(pm_body_a, pm_body_b, phase=0.0, ratio=1.0)
+
+        elif joint_type == JointType.MOTOR:
+            # Simple motor - applies rotational force
+            constraint = pymunk.SimpleMotor(pm_body_a, pm_body_b, rate=0.0)
+
+        if constraint:
+            # Apply max force limit if specified
+            if max_force > 0:
+                constraint.max_force = max_force
+
+            # Set collision behavior
+            constraint.collide_bodies = collide_connected
+
+            # Add to space
+            self.space.add(constraint)
+
+        return constraint
+
+    def destroy_joint(self, joint_handle: Any) -> None:
+        """Remove a joint from the simulation.
+
+        Args:
+            joint_handle: Pymunk constraint object to remove.
+        """
+        if self.space and joint_handle:
+            try:
+                self.space.remove(joint_handle)
+            except Exception:
+                # Joint may have already been removed
+                pass

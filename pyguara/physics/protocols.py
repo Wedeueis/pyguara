@@ -6,6 +6,7 @@ from pyguara.common.types import Vector2
 from pyguara.physics.types import (
     BodyType,
     CollisionLayer,
+    JointType,
     PhysicsMaterial,
     RaycastHit,
     ShapeType,
@@ -92,4 +93,46 @@ class IPhysicsEngine(Protocol):
         self, start: Vector2, end: Vector2, mask: int = 0xFFFFFFFF
     ) -> Optional[RaycastHit]:
         """Cast a ray in the physics world."""
+        ...
+
+    def create_joint(
+        self,
+        body_a: IPhysicsBody,
+        body_b: IPhysicsBody,
+        joint_type: JointType,
+        anchor_a: Vector2,
+        anchor_b: Vector2,
+        min_distance: float,
+        max_distance: float,
+        stiffness: float,
+        damping: float,
+        max_force: float,
+        collide_connected: bool,
+    ) -> Any:
+        """Create a joint/constraint between two bodies.
+
+        Args:
+            body_a: First physics body.
+            body_b: Second physics body.
+            joint_type: Type of joint (PIN, DISTANCE, SPRING, etc.).
+            anchor_a: Local anchor point on body A.
+            anchor_b: Local anchor point on body B.
+            min_distance: Minimum distance (for DISTANCE/SLIDER joints).
+            max_distance: Maximum distance (for DISTANCE/SLIDER joints).
+            stiffness: Spring stiffness (for SPRING joints).
+            damping: Spring damping (for SPRING joints).
+            max_force: Maximum force limit (0 = infinite).
+            collide_connected: Allow connected bodies to collide.
+
+        Returns:
+            Physics engine-specific joint handle.
+        """
+        ...
+
+    def destroy_joint(self, joint_handle: Any) -> None:
+        """Remove a joint from the simulation.
+
+        Args:
+            joint_handle: Physics engine-specific joint handle.
+        """
         ...

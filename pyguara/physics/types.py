@@ -31,6 +31,28 @@ class ShapeType(Enum):
     POLYGON = auto()
 
 
+class JointType(Enum):
+    """Types of physics joints/constraints.
+
+    Joints connect two RigidBodies and constrain their relative motion.
+
+    Attributes:
+        PIN: Revolute/pivot joint - allows rotation around a shared point.
+        DISTANCE: Maintains fixed distance between two points on bodies.
+        SPRING: Spring-damper joint - connects bodies with elastic force.
+        SLIDER: Prismatic joint - allows sliding along a fixed axis.
+        GEAR: Links the rotation of two bodies.
+        MOTOR: Applies continuous rotational or linear force.
+    """
+
+    PIN = auto()
+    DISTANCE = auto()
+    SPRING = auto()
+    SLIDER = auto()
+    GEAR = auto()
+    MOTOR = auto()
+
+
 @dataclass
 class CollisionLayer:
     """
