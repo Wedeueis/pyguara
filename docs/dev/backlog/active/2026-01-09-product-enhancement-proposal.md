@@ -25,15 +25,18 @@
 ## 1. Executive Summary
 
 ### 1.1 Current Status
+
 - **Version:** Alpha (Phase 1 Complete)
 - **Codebase:** ~11,500 lines across 115+ files
 - **Overall Grade:** A- (Excellent architecture, core systems stable)
 - **Production Readiness:** 45% (suitable for prototypes and small games)
 
 ### 1.2 Vision Statement
+
 Transform PyGuara from a pre-alpha engine with excellent architecture into a **production-ready, Python-native 2D game engine** suitable for indie game development, educational projects, and rapid prototyping.
 
 ### 1.3 Success Criteria (Beta Release)
+
 - ✅ All P0 (Critical) issues resolved
 - ✅ Feature completeness ≥ 70% across all systems
 - ✅ Test coverage ≥ 80%
@@ -42,6 +45,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - ✅ Performance benchmarks published
 
 ### 1.4 Timeline Estimate
+
 - **Phase 1 (Critical Fixes):** 2-3 weeks
 - **Phase 2 (Core Features):** 6-8 weeks
 - **Phase 3 (Polish & Docs):** 4-6 weeks
@@ -71,6 +75,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 | Editor | ⭐⭐⭐ | 25% | ⭐ | ⭐ | P3 |
 
 **Priority Levels:**
+
 - **P0**: Blocking issues - cannot ship without
 - **P1**: High priority - critical for good UX
 - **P2**: Medium priority - nice to have
@@ -79,30 +84,37 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 ### 2.2 Critical Issues (Resolved)
 
 #### P0-001: Component Removal Tracking (ECS) - ✅ RESOLVED
+
 - **Status:** Fixed. `EntityManager` now uses bidirectional callbacks to sync indexes.
 - **Impact:** Query consistency guaranteed.
 
 #### P0-002: DIScope Public API Missing (DI) - ✅ RESOLVED
+
 - **Status:** Fixed. `DIScope.get()` implemented as public API.
 - **Impact:** Scoped services fully usable.
 
 #### P0-003: String-Based UI Events (UI) - ✅ RESOLVED
+
 - **Status:** Fixed. Refactored to use `UIEventType` Enum.
 - **Impact:** Type-safe UI event handling.
 
 #### P0-004: Resource Memory Leak (Resources) - ✅ RESOLVED
+
 - **Status:** Fixed. Reference counting and auto-unloading implemented.
 - **Impact:** Stable memory usage in long sessions.
 
 #### P0-005: Event Error Swallowing (Events/DI) - ✅ RESOLVED
+
 - **Status:** Fixed. Configurable `ErrorHandlingStrategy` added to both systems.
 - **Impact:** Greatly improved debuggability.
 
 #### P0-006: No Gamepad Support (Input) - ✅ RESOLVED
+
 - **Status:** Fixed. `GamepadManager` implemented with hot-plug support.
 - **Impact:** Console-style games possible.
 
 #### P0-007: Audio System Stub Only (Audio) - ✅ RESOLVED
+
 - **Status:** Fixed. Full `AudioManager` with music/SFX support implemented.
 - **Impact:** Immersive audio experience enabled.
 
@@ -120,18 +132,21 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 ### 3.2 Target Audience
 
 **Primary:**
+
 - Python developers wanting to make 2D games
 - Educational institutions teaching game development
 - Game jam participants
 - Indie developers prototyping concepts
 
 **Secondary:**
+
 - Hobbyists learning game engine architecture
 - Developers porting existing Pygame projects
 
 ### 3.3 Competitive Positioning
 
 **Differentiation:**
+
 - **vs Pygame**: High-level ECS architecture, batteries included
 - **vs Arcade**: Better separation of concerns, enterprise patterns
 - **vs Godot (Python)**: Pure Python, simpler for Python-first devs
@@ -148,6 +163,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 **Goal:** Resolve all P0 issues, achieve zero known crashes
 
 #### Week 1: Core System Fixes
+
 - [x] **P0-001**: Implement component removal tracking
 - [x] **P0-002**: Add DIScope.get() public API
 - [x] **P0-003**: Create UIEventType enum
@@ -155,18 +171,21 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [x] Test coverage for all fixes ≥ 90%
 
 #### Week 2: Input & Audio Foundation
+
 - [x] **P0-006**: Gamepad support (SDL2 backend)
 - [x] **P0-007**: Audio system implementation (pygame.mixer wrapper)
 - [x] Input action mapping system
 - [x] Audio manager with spatial audio support
 
 #### Week 3: Resource Management & Testing
+
 - [x] **P0-004**: Resource reference counting and unloading
 - [x] Memory leak detection in tests
 - [x] Integration test suite expansion
 - [x] Performance benchmarking harness
 
 **Phase 1 Exit Criteria:**
+
 - ✅ All P0 issues closed
 - ✅ Test coverage ≥ 75%
 - ✅ Zero critical bugs in issue tracker
@@ -179,6 +198,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 **Goal:** Bring all systems to production-ready state
 
 #### Weeks 4-5: Rendering & Animation - ✅ COMPLETE
+
 - [x] Automatic sprite batching implementation
 - [x] Sprite atlas generation tool
 - [x] Animation state machine
@@ -187,14 +207,18 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [x] **P2-001**: RenderSystem hot-loop optimization (`getattr` removal)
 
 #### Weeks 6-7: Physics & Collision
+
 - [ ] Physics material presets
 - [ ] Collision callback integration with events
 - [ ] Joint support (distance, revolute, prismatic)
 - [ ] Trigger volumes
 - [ ] Platformer controller helper
 - [ ] **P1-008**: Cached Component Queries (Physics/ECS Optimization)
+- [ ] **P1-010**: ModernGL Rendering Backend (High-Performance GPU Path)
+- [ ] **P1-011**: Advanced Graphics Pipeline (Materials, Lighting, VFX)
 
 #### Weeks 8-9: UI & Scene Management
+
 - [ ] UI theme system (JSON-based)
 - [ ] Layout constraints (anchors, margins)
 - [ ] Scene transition effects
@@ -203,6 +227,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] **P2-002**: SystemManager (Logic Orchestration)
 
 #### Weeks 10-11: AI & Advanced Features
+
 - [ ] Behavior tree implementation
 - [ ] A* pathfinding integration
 - [ ] Navmesh generation
@@ -212,11 +237,15 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] **P2-003**: DI Hot-path Audit (remove resolution from loops)
 
 #### Parallel Work Stream: Editor & Tooling
+
 - [ ] **P2-004**: Atomic Writes for Data Safety
 - [ ] **P2-005**: Gizmos & Visual Handles
 - [ ] **P2-006**: Strict Component Typing (Data-only enforcement)
+- [ ] **P2-012**: Logging Standardization (Replace print with logging)
+- [ ] **P2-013**: Architecture Cleanup (Standardize ECS patterns, Abstract Input)
 
 **Phase 2 Exit Criteria:**
+
 - ✅ Feature completeness ≥ 70% all systems
 - ✅ Test coverage ≥ 80%
 - ✅ Performance benchmarks meet targets
@@ -229,6 +258,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 **Goal:** Production-ready release with excellent DX
 
 #### Weeks 12-13: Documentation Sprint
+
 - [ ] Complete API reference (Sphinx)
 - [ ] Architecture decision records (ADR)
 - [ ] Tutorial series (5+ complete tutorials)
@@ -237,6 +267,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Example game: Puzzle game
 
 #### Weeks 14-15: Developer Experience
+
 - [ ] Error message quality pass
 - [ ] Type stub improvements
 - [ ] VSCode extension (snippets, templates)
@@ -244,6 +275,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Asset pipeline documentation
 
 #### Weeks 16-17: Performance & Stability
+
 - [ ] Performance profiling and optimization
 - [ ] Memory leak auditing
 - [ ] Fuzz testing
@@ -251,6 +283,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [ ] Migration guide from raw Pygame
 
 **Phase 3 Exit Criteria:**
+
 - ✅ All documentation complete
 - ✅ 3+ example games published
 - ✅ Beta release tagged
@@ -262,7 +295,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 ### 5.1 Critical Path Analysis
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                     DEPENDENCY GRAPH                        │
 └─────────────────────────────────────────────────────────────┘
@@ -329,23 +362,28 @@ Testing ──────────────┘                           
 ### 5.3 Parallelizable Work Streams
 
 **Stream A (Core Systems):**
+
 - P0-001, P0-002, P0-005 → ECS/DI hardening
 - Can be done by: Core engine developer
 
 **Stream B (Input/Audio):**
+
 - P0-006, P0-007 → Input/Audio implementation
 - Can be done by: Systems programmer (independent)
 
 **Stream C (Resources):**
+
 - P0-004 → Resource management
 - Can be done by: Tools programmer (independent)
 
 **Stream D (Rendering):**
+
 - Batching, Atlas, Animation
 - Depends on: Stream A completion
 - Can be done by: Graphics programmer
 
 **Stream E (Documentation):**
+
 - Can start immediately (in parallel with all)
 - Can be done by: Technical writer / community
 
@@ -356,6 +394,7 @@ Testing ──────────────┘                           
 ### 6.1 Design Principles
 
 #### 6.1.1 SOLID Compliance
+
 - **S - Single Responsibility**: Each class has ONE reason to change
 - **O - Open/Closed**: Extend via protocols, not modification
 - **L - Liskov Substitution**: Subtypes must be substitutable
@@ -365,6 +404,7 @@ Testing ──────────────┘                           
 #### 6.1.2 PyGuara-Specific Patterns
 
 **DO:**
+
 - ✅ Use `Protocol` for all interfaces
 - ✅ Use `dataclass` for DTOs and components
 - ✅ Use type hints for ALL public APIs
@@ -374,6 +414,7 @@ Testing ──────────────┘                           
 - ✅ Use context managers for resource management
 
 **DON'T:**
+
 - ❌ Don't use inheritance for behavior sharing (use composition)
 - ❌ Don't put logic in components (data only)
 - ❌ Don't import pygame outside `backends/` directory
@@ -385,6 +426,7 @@ Testing ──────────────┘                           
 ### 6.2 Code Style Standards
 
 #### 6.2.1 Formatting (Enforced by Ruff)
+
 ```python
 # Line length: 88 characters (Black style)
 # Quotes: Double quotes for strings
@@ -394,6 +436,7 @@ Testing ──────────────┘                           
 ```
 
 #### 6.2.2 Naming Conventions
+
 ```python
 # Classes: PascalCase
 class EntityManager: ...
@@ -416,6 +459,7 @@ class IRenderer(Protocol): ...
 ```
 
 #### 6.2.3 Type Annotations
+
 ```python
 # Always annotate function signatures
 def create_entity(self, entity_id: Optional[str] = None) -> Entity:
@@ -435,6 +479,7 @@ class Renderable(Protocol):
 ```
 
 #### 6.2.4 Docstring Format (Google Style)
+
 ```python
 def complex_function(param1: int, param2: str) -> dict[str, Any]:
     """Brief one-line summary.
@@ -462,6 +507,7 @@ def complex_function(param1: int, param2: str) -> dict[str, Any]:
 ### 6.3 Architectural Patterns
 
 #### 6.3.1 Component Definition
+
 ```python
 from dataclasses import dataclass
 from pyguara.ecs.component import BaseComponent
@@ -482,6 +528,7 @@ class Transform(BaseComponent):
 ```
 
 #### 6.3.2 System Definition
+
 ```python
 from pyguara.ecs.manager import EntityManager
 from pyguara.common.components import Transform
@@ -516,6 +563,7 @@ class PhysicsSystem:
 ```
 
 #### 6.3.3 Service Registration
+
 ```python
 # In bootstrap.py or scene setup
 def _setup_container() -> DIContainer:
@@ -535,6 +583,7 @@ def _setup_container() -> DIContainer:
 ```
 
 #### 6.3.4 Event Definition and Usage
+
 ```python
 from dataclasses import dataclass, field
 from time import time
@@ -561,7 +610,7 @@ def _on_entity_died(self, event: EntityDiedEvent) -> None:
 
 ### 6.4 File Organization
 
-```
+```text
 pyguara/
 ├── subsystem_name/
 │   ├── __init__.py          # Public API exports
@@ -614,7 +663,7 @@ def process(self, entity: Entity) -> None:
 
 ### 7.1 Branch Strategy
 
-```
+```text
 main (protected)
   ├── develop (integration branch)
   │   ├── feature/P0-001-component-removal-tracking
@@ -625,6 +674,7 @@ main (protected)
 ```
 
 **Branch Naming:**
+
 - `feature/` - New features
 - `bugfix/` - Bug fixes
 - `hotfix/` - Critical production fixes
@@ -634,7 +684,7 @@ main (protected)
 
 ### 7.2 Commit Message Format
 
-```
+```xml
 <type>(<scope>): <subject>
 
 <body>
@@ -643,6 +693,7 @@ main (protected)
 ```
 
 **Types:**
+
 - `feat`: New feature
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -653,7 +704,8 @@ main (protected)
 - `chore`: Build process, tooling
 
 **Example:**
-```
+
+```markdown
 feat(input): add gamepad support with SDL2 backend
 
 Implements Xbox and PlayStation controller support using
@@ -671,6 +723,7 @@ Relates to P0-006
 ### 7.3 Pull Request Process
 
 #### 7.3.1 PR Template
+
 ```markdown
 ## Description
 Brief summary of changes
@@ -701,6 +754,7 @@ Relates to #YYY
 ```
 
 #### 7.3.2 Review Requirements
+
 - **Minimum Reviewers:** 1 (for large changes: 2)
 - **Required Checks:**
   - ✅ CI tests pass
@@ -712,7 +766,8 @@ Relates to #YYY
 ### 7.4 Issue Management
 
 #### 7.4.1 Issue Labels
-```
+
+```text
 Priority:
 - P0-critical: Blocking release
 - P1-high: Important but not blocking
@@ -735,6 +790,7 @@ Status:
 ```
 
 #### 7.4.2 Issue Template
+
 ```markdown
 **Describe the Issue**
 Clear description of the problem or request
@@ -763,12 +819,14 @@ Screenshots, code snippets, error traces
 ### 7.5 Testing Requirements
 
 #### 7.5.1 Test Coverage Targets
+
 - **Overall:** ≥ 80%
 - **Core Systems (ECS, DI, Events):** ≥ 90%
 - **New Features:** ≥ 85%
 - **Bug Fixes:** 100% (must include regression test)
 
 #### 7.5.2 Test Structure
+
 ```python
 # tests/test_subsystem.py
 import pytest
@@ -802,6 +860,7 @@ class TestThing:
 ```
 
 #### 7.5.3 CI/CD Pipeline
+
 ```yaml
 # .github/workflows/ci.yml structure
 Jobs:
@@ -817,12 +876,14 @@ Jobs:
 ### 7.6 Documentation Standards
 
 #### 7.6.1 Required Documentation for Features
+
 1. **API Reference**: Auto-generated from docstrings
 2. **Tutorial**: Step-by-step guide for common use case
 3. **Example**: Working code snippet in examples/
 4. **Architecture Decision Record**: For significant design choices
 
 #### 7.6.2 ADR Template
+
 ```markdown
 # ADR-XXX: Title
 
@@ -860,11 +921,13 @@ What are the trade-offs?
 **File:** `pyguara/ecs/entity.py`, `pyguara/ecs/manager.py`
 
 #### Context
+
 Currently, when a component is removed from an entity via `Entity.remove_component()`, the `EntityManager`'s inverted index is not updated. This means queries like `get_entities_with(ComponentType)` may return entities that no longer have that component, leading to `KeyError` when attempting to access it.
 
 **Root Cause:** Lines 94-106 in `entity.py` acknowledge the issue but don't implement the fix.
 
 #### Acceptance Criteria
+
 - [x] `Entity.remove_component()` notifies EntityManager via callback
 - [x] `EntityManager._component_index` correctly removes entity ID from set
 - [x] Queries never return entities without requested components
@@ -873,6 +936,7 @@ Currently, when a component is removed from an entity via `Entity.remove_compone
 - [x] Performance: Component removal remains O(1) amortized
 
 #### Implementation Summary
+
 Implemented bidirectional notification between `Entity` and `EntityManager`. `Entity.remove_component()` now triggers a callback that updates the manager's inverted index.
 
 ---
@@ -882,11 +946,13 @@ Implemented bidirectional notification between `Entity` and `EntityManager`. `En
 **File:** `pyguara/di/container.py`
 
 #### Context
+
 The `DIScope` class currently lacks a public `get()` method, forcing users to call the internal `container._resolve_service(service_type, scope)`. This is evident in the test file (test_di.py:96) where internal methods are used directly.
 
 **Design Flaw:** Scoped services can't be resolved in a user-friendly way.
 
 #### Acceptance Criteria
+
 - [x] `DIScope.get(service_type)` method added
 - [x] Method delegates to container's resolver with self as scope
 - [x] Type hints preserve generic type information
@@ -895,6 +961,7 @@ The `DIScope` class currently lacks a public `get()` method, forcing users to ca
 - [x] Backward compatibility maintained (don't break existing code)
 
 #### Implementation Summary
+
 Added `DIScope.get()` which delegates to `_resolve_service`. Updated all tests and internal usages to prefer this public API.
 
 ---
@@ -904,9 +971,11 @@ Added `DIScope.get()` which delegates to `_resolve_service`. Updated all tests a
 **Files:** `pyguara/audio/manager.py`, `pyguara/audio/backends/pygame_audio.py`, `pyguara/audio/types.py`
 
 #### Context
+
 The audio system currently exists only as stubs. This is a critical gap as audio is essential for game feel. We need a production-ready audio manager with support for music, sound effects, and basic spatial audio.
 
 **Requirements:**
+
 - Music playback (looping background tracks)
 - Sound effect playback (one-shot sounds)
 - Volume control (master, music, sfx)
@@ -915,6 +984,7 @@ The audio system currently exists only as stubs. This is a critical gap as audio
 - Fade in/out support
 
 #### Acceptance Criteria
+
 - [x] Can play music with looping
 - [x] Can play sound effects with volume/pitch variation
 - [x] 2D positional audio (left/right pan based on position)
@@ -963,7 +1033,21 @@ Created `GamepadManager` with hot-plug support via `JOYDEVICEADDED`/`JOYDEVICERE
 
 ---
 
-### 8.5 P1-008: Cached Component Queries (Physics/ECS Optimization)
+### 8.5 P1-010: ModernGL Rendering Backend
+
+**Status:** Proposed (Design Drafted)
+**Specification:** [docs/dev/backlog/active/2026-01-11-modern-gl-migration.md](2026-01-11-modern-gl-migration.md)
+
+---
+
+### 8.6 P1-011: Advanced Graphics Pipeline
+
+**Status:** Proposed (Design Drafted)
+**Specification:** [docs/dev/backlog/active/2026-01-11-advanced-graphics-pipeline.md](2026-01-11-advanced-graphics-pipeline.md)
+
+---
+
+### 8.7 P1-008: Cached Component Queries (Physics/ECS Optimization)
 
 **Files:** `pyguara/ecs/manager.py`, `pyguara/physics/physics_system.py`
 
@@ -1002,6 +1086,20 @@ Code reviews indicate `inspect.signature` usage during runtime and potential ser
 - [ ] Verify no `container.get()` calls inside `update()` or `render()` methods
 - [ ] All dependencies resolved in `__init__` and stored as attributes
 - [ ] `inspect` usage restricted to registration time only
+
+---
+
+### 8.8 P2-012: Logging Standardization
+
+**Status:** Proposed (Design Drafted)
+**Specification:** [docs/dev/backlog/active/2026-01-11-logging-refactor.md](2026-01-11-logging-refactor.md)
+
+---
+
+### 8.9 P2-013: Architecture Cleanup
+
+**Status:** Proposed (Design Drafted)
+**Specification:** [docs/dev/backlog/active/2026-01-11-architecture-cleanup.md](2026-01-11-architecture-cleanup.md)
 
 ---
 
