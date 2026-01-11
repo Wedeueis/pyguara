@@ -45,7 +45,7 @@ coverage:  ## Generate coverage report
 	uv run pytest --cov=pyguara --cov-report=html --cov-report=term
 
 coverage-check:  ## Fail if coverage is below 60%
-	uv run pytest --cov=pyguara --cov-report=term --cov-fail-under=60
+	uv run pytest --cov=pyguara --cov-report=term --cov-report=xml --cov-fail-under=60
 
 # --- Code Quality ---
 lint:  ## Check code style
