@@ -60,14 +60,35 @@ class PygameBackend(IRenderer):
     def render_batch(self, batch: RenderBatch) -> None:
         """Optimized method to draw many instances of the same texture.
 
-        Uses pygame.Surface.blits for C-level looping performance.
+        Supports two modes:
+        - Fast path: No transforms, uses pygame.Surface.blits for C-level performance
+        - Transform path: Rotation/scale enabled, transforms each sprite individually
         """
         texture = batch.texture.native_handle
 
-        # Generator for blits
-        blit_sequence = ((texture, dest) for dest in batch.destinations)
+        if not batch.transforms_enabled:
+            # FAST PATH: Simple blits without transforms
+            blit_sequence = ((texture, dest) for dest in batch.destinations)
+            self._screen.blits(blit_sequence, doreturn=0)
+        else:
+            # TRANSFORM PATH: Apply rotation and/or scale per sprite
+            for i, dest in enumerate(batch.destinations):
+                surf = texture
 
-        self._screen.blits(blit_sequence, doreturn=0)
+                # Apply rotation if needed
+                if i < len(batch.rotations) and batch.rotations[i] != 0.0:
+                    surf = pygame.transform.rotate(surf, -batch.rotations[i])
+
+                # Apply scale if needed
+                if i < len(batch.scales):
+                    scale_x, scale_y = batch.scales[i]
+                    if scale_x != 1.0 or scale_y != 1.0:
+                        new_width = int(surf.get_width() * scale_x)
+                        new_height = int(surf.get_height() * scale_y)
+                        surf = pygame.transform.scale(surf, (new_width, new_height))
+
+                # Draw the transformed sprite
+                self._screen.blit(surf, dest)
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
         """Draw a rectangle primitive."""

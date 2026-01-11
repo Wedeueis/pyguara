@@ -50,8 +50,17 @@ class RenderBatch:
     A collection of draw calls that share a common state (Texture).
 
     This allows backends to use optimized bulk-drawing methods.
+
+    Supports two modes:
+    - Fast path: transforms_enabled=False, only positions (for simple sprites)
+    - Transform path: transforms_enabled=True, includes rotation/scale data
     """
 
     texture: Texture
     # List of (screen_x, screen_y) tuples for this texture
     destinations: List[tuple[float, float]]
+
+    # Optional transform data (only used when transforms_enabled=True)
+    rotations: List[float] = field(default_factory=list)
+    scales: List[tuple[float, float]] = field(default_factory=list)
+    transforms_enabled: bool = False
