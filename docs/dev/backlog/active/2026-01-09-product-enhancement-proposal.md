@@ -1,4 +1,5 @@
 # Product Enhancement Proposal (PEP-2026.01)
+
 ## PyGuara Game Engine - Roadmap to Beta
 
 **Document Version:** 1.2
@@ -58,7 +59,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 ### 2.1 System Health Matrix
 
 | System | Architecture | Completeness | Testing | Documentation | Priority |
-|--------|-------------|--------------|---------|---------------|----------|
+|--------|--------------|--------------|---------|---------------|----------|
 | ECS Core | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 |
 | DI Container | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | Event System | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 |
@@ -206,27 +207,27 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [x] Camera zoom/shake effects
 - [x] **P2-001**: RenderSystem hot-loop optimization (`getattr` removal)
 
-#### Weeks 6-7: Physics & Collision
+#### Weeks 6-7: Physics & Collision - ✅ COMPLETE
 
-- [ ] Physics material presets
-- [ ] Collision callback integration with events
-- [ ] Joint support (distance, revolute, prismatic)
-- [ ] Trigger volumes
-- [ ] Platformer controller helper
-- [ ] **P1-008**: Cached Component Queries (Physics/ECS Optimization)
-- [ ] **P1-010**: ModernGL Rendering Backend (High-Performance GPU Path)
-- [ ] **P1-011**: Advanced Graphics Pipeline (Materials, Lighting, VFX)
+- [x] Physics material presets
+- [x] Collision callback integration with events
+- [x] Joint support (distance, revolute, prismatic, spring, gear, motor)
+- [x] Trigger volumes
+- [x] Platformer controller helper
+- [x] **P1-008**: Cached Component Queries (Physics/ECS Optimization)
+- [ ] **P1-010**: ModernGL Rendering Backend (High-Performance GPU Path) - DEFERRED
+- [ ] **P1-011**: Advanced Graphics Pipeline (Materials, Lighting, VFX) - DEFERRED
 
-#### Weeks 8-9: UI & Scene Management
+#### Weeks 8-9: UI & Scene Management - ✅ COMPLETE
 
-- [ ] UI theme system (JSON-based)
-- [ ] Layout constraints (anchors, margins)
-- [ ] Scene transition effects
-- [ ] Scene stack (push/pop for overlays)
-- [ ] Nine-patch sprite support
-- [ ] **P2-002**: SystemManager (Logic Orchestration)
+- [x] UI theme system (JSON-based)
+- [x] Layout constraints (anchors, margins)
+- [x] Scene transition effects
+- [x] Scene stack (push/pop for overlays)
+- [x] Nine-patch sprite support
+- [x] **P2-002**: SystemManager (Logic Orchestration)
 
-#### Weeks 10-11: AI & Advanced Features
+#### Weeks 10-11: AI & Advanced Features - 🚀 IN PROGRESS
 
 - [ ] Behavior tree implementation
 - [ ] A* pathfinding integration
@@ -997,6 +998,7 @@ The audio system currently exists only as stubs. This is a critical gap as audio
 - [x] Performance: Can handle 32+ simultaneous sounds
 
 #### Implementation Summary
+
 Implemented `AudioManager` using `pygame-ce` mixer backend. Integrated with `ResourceManager` for clip loading. Added 2D spatial panning and multi-track volume management.
 
 ---
@@ -1006,9 +1008,11 @@ Implemented `AudioManager` using `pygame-ce` mixer backend. Integrated with `Res
 **Files:** `pyguara/input/gamepad.py`, `pyguara/input/manager.py`, `pyguara/input/types.py`
 
 #### Context
+
 Modern games require gamepad support. The input system currently only handles keyboard and mouse. We need to add comprehensive gamepad support with action mapping.
 
 **Requirements:**
+
 - Support Xbox, PlayStation, Nintendo controllers
 - Button and axis input
 - Deadzone configuration
@@ -1017,6 +1021,7 @@ Modern games require gamepad support. The input system currently only handles ke
 - Vibration/rumble support
 
 #### Acceptance Criteria
+
 - [x] Detects connected gamepads on startup
 - [x] Hot-plug support (connect controller during gameplay)
 - [x] All standard buttons accessible
@@ -1029,6 +1034,7 @@ Modern games require gamepad support. The input system currently only handles ke
 - [x] Documentation: Controller setup guide
 
 #### Implementation Summary
+
 Created `GamepadManager` with hot-plug support via `JOYDEVICEADDED`/`JOYDEVICEREMOVED`. Implemented deadzone scaling and axis normalization. Integrated with semantic `OnActionEvent` system.
 
 ---
@@ -1052,11 +1058,13 @@ Created `GamepadManager` with hot-plug support via `JOYDEVICEADDED`/`JOYDEVICERE
 **Files:** `pyguara/ecs/manager.py`, `pyguara/physics/physics_system.py`
 
 #### Context
+
 Currently, `get_entities_with()` performs set intersections every time it is called. Systems like Physics call this every frame, creating unnecessary overhead. Additionally, systems often convert the generator result to a list (`list(manager.get_entities_with(...))`), causing list allocation pressure.
 
 **Optimization:** The ECS should maintain a cached `Set[Entity]` for specific queries (e.g., `(Transform, RigidBody)`) that is updated only when relevant components are added/removed.
 
 #### Acceptance Criteria
+
 - [ ] `EntityManager` supports "Cached Queries" or "Archetypes"
 - [ ] PhysicsSystem uses cached query instead of ad-hoc intersection
 - [ ] No list allocations in hot-loops for entity retrieval
@@ -1067,9 +1075,11 @@ Currently, `get_entities_with()` performs set intersections every time it is cal
 **File:** `pyguara/application/application.py`
 
 #### Context
+
 `Application._update` calls `_event_dispatcher.process_queue()` without limits. If systems produce events faster than they can be consumed (e.g., a loop creating events), the application will hang in a "death spiral."
 
 #### Acceptance Criteria
+
 - [ ] `EventDispatcher.process_queue()` accepts a `max_time_ms` or `max_events` parameter
 - [ ] Application loop enforces this budget (e.g., 2-5ms per frame)
 - [ ] Unprocessed events remain in queue for next frame
@@ -1080,9 +1090,11 @@ Currently, `get_entities_with()` performs set intersections every time it is cal
 **File:** `pyguara/physics/physics_system.py`, `pyguara/graphics/pipeline/render_system.py`
 
 #### Context
+
 Code reviews indicate `inspect.signature` usage during runtime and potential service resolution inside update loops. This is too slow for production.
 
 #### Acceptance Criteria
+
 - [ ] Verify no `container.get()` calls inside `update()` or `render()` methods
 - [ ] All dependencies resolved in `__init__` and stored as attributes
 - [ ] `inspect` usage restricted to registration time only
@@ -1110,6 +1122,7 @@ Code reviews indicate `inspect.signature` usage during runtime and potential ser
 A feature/fix is considered "Done" when ALL of the following are true:
 
 #### Code Quality
+
 - [ ] Code follows style guide (ruff check passes)
 - [ ] Type hints complete (mypy passes with no errors)
 - [ ] No TODO/FIXME comments (unless tracked in issues)
@@ -1118,6 +1131,7 @@ A feature/fix is considered "Done" when ALL of the following are true:
 - [ ] Docstrings added for all public APIs (Google style)
 
 #### Testing
+
 - [ ] Unit tests written (coverage ≥ 85% for new code)
 - [ ] Integration tests added (if applicable)
 - [ ] All tests pass locally
@@ -1126,6 +1140,7 @@ A feature/fix is considered "Done" when ALL of the following are true:
 - [ ] Manual testing completed (test plan documented)
 
 #### Documentation
+
 - [ ] API reference updated (docstrings)
 - [ ] Tutorial/guide written (for features)
 - [ ] Example code added (if applicable)
@@ -1133,12 +1148,14 @@ A feature/fix is considered "Done" when ALL of the following are true:
 - [ ] Architecture decision recorded (for significant changes)
 
 #### Review
+
 - [ ] Code reviewed and approved
 - [ ] No unresolved review comments
 - [ ] Breaking changes flagged and documented
 - [ ] Migration guide provided (if breaking change)
 
 #### Integration
+
 - [ ] Merged to develop branch
 - [ ] No merge conflicts
 - [ ] Build succeeds
@@ -1147,12 +1164,14 @@ A feature/fix is considered "Done" when ALL of the following are true:
 ### 9.2 Release Criteria
 
 #### Alpha Release (Current)
+
 - ✅ Core systems functional
 - ✅ Basic example works
 - ⚠️ Known bugs acceptable
 - ⚠️ Documentation minimal
 
 #### Beta Release (Target)
+
 - [ ] All P0 issues resolved
 - [ ] All P1 issues resolved
 - [ ] Test coverage ≥ 80%
@@ -1166,6 +1185,7 @@ A feature/fix is considered "Done" when ALL of the following are true:
 - [ ] Known issues documented
 
 #### 1.0 Release (Future)
+
 - [ ] All P0-P2 issues resolved
 - [ ] Test coverage ≥ 90%
 - [ ] Production games shipped
@@ -1192,6 +1212,7 @@ All releases must meet these minimum performance targets on reference hardware (
 | Asset Load | < 100ms per 1MB | `benchmark_asset_loading()` |
 
 **Reference Hardware:**
+
 - CPU: Intel i5-8250U or equivalent
 - RAM: 8GB DDR4
 - GPU: Integrated graphics
