@@ -1186,13 +1186,16 @@ benchmark = [
 ]
 dev = [
     { name = "build" },
+    { name = "imgui" },
     { name = "mypy" },
+    { name = "pillow" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-benchmark" },
     { name = "pytest-cov" },
     { name = "pytest-mock" },
     { name = "ruff" },
+    { name = "syrupy" },
     { name = "tox" },
     { name = "twine" },
 ]
@@ -1203,18 +1206,12 @@ docs = [
     { name = "pymdown-extensions" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "imgui" },
-    { name = "pillow" },
-    { name = "syrupy" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=0.10.0" },
     { name = "click", specifier = ">=8.1.7" },
     { name = "dataclasses-json", specifier = ">=0.6.0" },
+    { name = "imgui", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "memory-profiler", marker = "extra == 'benchmark'", specifier = ">=0.61.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.5.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0.0" },
@@ -1222,6 +1219,7 @@ requires-dist = [
     { name = "msgpack", specifier = ">=1.1.2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "pillow", specifier = ">=12.1.0" },
+    { name = "pillow", marker = "extra == 'dev'", specifier = ">=11.3.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "py-spy", marker = "extra == 'benchmark'", specifier = ">=0.3.0" },
     { name = "pygame-ce", specifier = ">=2.5.6" },
@@ -1233,17 +1231,11 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.10.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.14.0" },
+    { name = "syrupy", marker = "extra == 'dev'", specifier = ">=4.9.1" },
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=4.0.0" },
 ]
 provides-extras = ["dev", "docs", "benchmark"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "imgui", specifier = ">=2.0.0" },
-    { name = "pillow", specifier = ">=11.3.0" },
-    { name = "syrupy", specifier = ">=4.9.1" },
-]
 
 [[package]]
 name = "pymdown-extensions"

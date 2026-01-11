@@ -24,9 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Dependencies
-        run: |
-          uv venv
-          make install-dev
+        run: make install
 
       - name: Check Formatting
         run: make format-check
@@ -53,9 +51,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Dependencies
-        run: |
-          uv venv
-          make install-dev
+        run: make install
 
       - name: Run Unit Tests
         run: make test-unit
