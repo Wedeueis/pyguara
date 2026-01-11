@@ -23,6 +23,7 @@ from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.manager import AudioManager
+from pyguara.graphics.animation_system import AnimationSystem
 from .sandbox import SandboxApplication
 
 
@@ -97,6 +98,7 @@ def _setup_container() -> DIContainer:
     container.register_singleton(InputManager, InputManager)
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)
+    container.register_singleton(AnimationSystem, AnimationSystem)
 
     # 6. Audio System
     audio_system = PygameAudioSystem()

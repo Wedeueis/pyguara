@@ -17,7 +17,7 @@ class Batcher:
     Includes static batch caching for pre-computed, reusable batches.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the batcher with static batch cache."""
         # Cache for static sprite batches (pre-computed, reused every frame)
         self._static_batches: Dict[int, RenderBatch] = {}

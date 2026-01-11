@@ -341,7 +341,7 @@ class ResourceManager:
             )
 
         # Load the atlas texture using existing infrastructure
-        texture = self.load(atlas_path, Texture)
+        texture = self.load(atlas_path, Texture)  # type: ignore[type-abstract]
 
         # Parse regions from metadata
         regions: Dict[str, AtlasRegion] = {}
@@ -355,9 +355,7 @@ class ResourceManager:
 
             # Create region object
             rect = Rect(x, y, width, height)
-            region = AtlasRegion(
-                name=name, rect=rect, original_size=original_size
-            )
+            region = AtlasRegion(name=name, rect=rect, original_size=original_size)
             regions[name] = region
 
         # Create and return the atlas

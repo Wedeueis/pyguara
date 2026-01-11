@@ -55,6 +55,9 @@ format-check:  ## Checks format without changing
 type-check:  ## Run static type analysis
 	uv run mypy pyguara
 
+pre-commit-install: ## Install git hooks
+	uv run pre-commit install
+
 # --- Documentation ---
 docs-build:  ## Build site (User requested)
 	uv run mkdocs build
