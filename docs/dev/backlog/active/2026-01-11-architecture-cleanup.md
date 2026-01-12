@@ -12,17 +12,20 @@ The architectural review identified several inconsistencies and legacy patterns 
 ## 3. Implementation Tasks
 
 ### Task A: ECS Pattern Standardization (PhysicsSystem)
-**Current State:** `PhysicsSystem.update(entities, dt)` follows a "Push" pattern where the caller must query entities and pass them in. `AISystem` follows a "Pull" pattern where it holds `EntityManager` and queries internally.
-**Target State:** "Pull" pattern for all Systems.
+**Current State:** `PhysicsSystem.update(entities, dt)` follows a "Push" pattern (Pure System), requiring the caller to query entities. This creates a critical architectural conflict with `SystemManager`, which expects a uniform `update(dt)` interface (Self-Sufficient System) for orchestration. Currently, `PhysicsSystem` cannot be managed by `SystemManager` without a wrapper or manual orchestration in the Scene.
+**Target State:** "Pull" pattern (Self-Sufficient System) for all Systems by injecting dependencies.
 
-1.  **Refactor `PhysicsSystem.__init__`**:
-    -   Add `entity_manager: EntityManager` parameter.
-    -   Store `self._entity_manager`.
+1.  **Refactor `PhysicsSystem.__init__` (Dependency Injection)**:
+    -   Inject `entity_manager: EntityManager` into the constructor.
+    -   Store `self._entity_manager` for internal querying.
+    -   *Rationale:* This enables the system to be self-contained and managed generically by `SystemManager`.
 2.  **Refactor `PhysicsSystem.update`**:
-    -   Remove `entities` parameter.
-    -   Implement query internally: `entities = self._entity_manager.get_entities_with(Transform, RigidBody)`.
+    -   Change signature to `update(self, dt: float) -> None`.
+    -   Implement internal query: `entities = self._entity_manager.get_entities_with(Transform, RigidBody)`.
     -   (Future optimization: Use Cached Query from P1-008 here).
-3.  **Update Call Sites**: Update `Application` or `GameLoop` to call `physics_system.update(dt)` without arguments.
+3.  **Update Call Sites**:
+    -   Refactor `Scene` or `Application` code to stop manually querying entities for physics.
+    -   Call `physics_system.update(dt)` directly or via `SystemManager`.
 
 ### Task B: Input Backend Abstraction
 **Current State:** `InputManager` calls `pygame.joystick.init()` directly in `__init__`, causing crashes in headless environments (CI/CD).
