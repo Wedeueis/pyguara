@@ -229,10 +229,10 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 #### Weeks 10-11: AI & Advanced Features - 🚀 IN PROGRESS
 
-- [ ] Behavior tree implementation
-- [ ] A* pathfinding integration
+- [x] Tween/easing library
+- [x] Behavior tree implementation
+- [x] A* pathfinding integration
 - [ ] Navmesh generation
-- [ ] Tween/easing library
 - [ ] Coroutine-based scripting
 - [ ] **P1-009**: Event Queue Time Budget & Safety
 - [ ] **P2-003**: DI Hot-path Audit (remove resolution from loops)
