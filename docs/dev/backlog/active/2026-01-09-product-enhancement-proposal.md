@@ -232,7 +232,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [x] Tween/easing library
 - [x] Behavior tree implementation
 - [x] A* pathfinding integration
-- [ ] Navmesh generation
+- [x] Navmesh generation
 - [ ] Coroutine-based scripting
 - [ ] **P1-009**: Event Queue Time Budget & Safety
 - [ ] **P2-003**: DI Hot-path Audit (remove resolution from loops)
