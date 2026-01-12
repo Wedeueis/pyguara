@@ -24,6 +24,13 @@ from pyguara.ai.behavior_tree import (
 from pyguara.ai.blackboard import Blackboard
 from pyguara.ai.components import AIComponent
 from pyguara.ai.fsm import State, StateMachine
+from pyguara.ai.navmesh import (
+    NavMesh,
+    NavMeshEdge,
+    NavMeshPathfinder,
+    NavMeshPolygon,
+    create_rectangle_polygon,
+)
 from pyguara.ai.pathfinding import (
     AStar,
     GridMap,
@@ -72,4 +79,10 @@ __all__ = [
     "smooth_path",
     "path_to_world_coords",
     "world_to_grid_coords",
+    # Navmesh
+    "NavMesh",
+    "NavMeshPolygon",
+    "NavMeshEdge",
+    "NavMeshPathfinder",
+    "create_rectangle_polygon",
 ]
