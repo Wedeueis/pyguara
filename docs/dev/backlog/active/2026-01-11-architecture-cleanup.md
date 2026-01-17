@@ -57,7 +57,14 @@ The architectural review identified several inconsistencies and legacy patterns 
     -   Raise `InvalidMetadataError` with clear message (filename, line number) on failure.
 
 ## 4. Acceptance Criteria
-- [ ] `PhysicsSystem.update(dt)` takes only delta time.
-- [ ] Tests can instantiate `InputManager` with a Mock Backend (no Pygame dependency).
-- [ ] `mypy` check passes with strict settings (no implicit `Any` from `__getattr__`).
-- [ ] Invalid JSON in atlas metadata raises a helpful error message.
+- [x] `PhysicsSystem.update(dt)` takes only delta time.
+- [x] Tests can instantiate `InputManager` with a Mock Backend (no Pygame dependency).
+- [x] `mypy` check passes with strict settings (no implicit `Any` from `__getattr__`).
+- [x] Invalid JSON in atlas metadata raises a helpful error message.
+
+## 5. Completion Notes (2026-01-17)
+All tasks completed:
+- **Task A**: PhysicsSystem refactored to Pull pattern with EntityManager injection
+- **Task B**: IInputBackend protocol created, PygameInputBackend implemented, InputManager/GamepadManager updated
+- **Task C**: AISystem updated to use explicit `get_component()` calls
+- **Task D**: ResourceLoadError and InvalidMetadataError exceptions created, load_atlas updated with detailed error handling

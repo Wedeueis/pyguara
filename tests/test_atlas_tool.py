@@ -291,6 +291,7 @@ def test_atlas_generator_generate():
 def test_resource_manager_load_atlas_invalid_metadata(tmp_path):
     """ResourceManager should raise error for invalid metadata."""
     from pyguara.resources.manager import ResourceManager
+    from pyguara.resources.exceptions import InvalidMetadataError
     from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
 
     # Create a temporary atlas image
@@ -308,17 +309,20 @@ def test_resource_manager_load_atlas_invalid_metadata(tmp_path):
         img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
         img.save(atlas_path)
 
-        with pytest.raises(ValueError, match="missing 'regions' key"):
+        with pytest.raises(
+            InvalidMetadataError, match="Missing required 'regions' key"
+        ):
             manager.load_atlas(str(atlas_path), str(metadata_path))
 
 
 def test_resource_manager_load_atlas_missing_metadata():
     """ResourceManager should raise error for missing metadata file."""
     from pyguara.resources.manager import ResourceManager
+    from pyguara.resources.exceptions import InvalidMetadataError
 
     manager = ResourceManager()
 
-    with pytest.raises(FileNotFoundError, match="Atlas metadata not found"):
+    with pytest.raises(InvalidMetadataError, match="File not found"):
         manager.load_atlas("atlas.png", "/nonexistent/metadata.json")
 
 

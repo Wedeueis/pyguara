@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.binding import KeyBindingManager
 from pyguara.input.events import OnActionEvent
+from pyguara.input.protocols import IInputBackend, IJoystick
 from pyguara.input.types import (
     ActionType,
     InputAction,
@@ -26,26 +27,35 @@ class InputManager:
         self,
         dispatcher: EventDispatcher,
         gamepad_config: Optional[GamepadConfig] = None,
+        input_backend: Optional[IInputBackend] = None,
     ) -> None:
         """Initialize input manager, bindings, and detect controllers.
 
         Args:
             dispatcher: Event dispatcher for firing input events.
             gamepad_config: Optional gamepad configuration (deadzone, vibration, etc.).
+            input_backend: Optional input backend for joystick access.
+                If None, uses PygameInputBackend by default.
         """
         self._dispatcher = dispatcher
         self._bindings = KeyBindingManager()
+        self._input_backend = input_backend
 
         self._context = InputContext.GAMEPLAY
         self._registered_actions: Dict[str, InputAction] = {}
         self._cooldowns: Dict[str, float] = {}
 
         # Initialize GamepadManager for comprehensive gamepad support
-        self._gamepad_manager = GamepadManager(dispatcher, gamepad_config)
+        self._gamepad_manager = GamepadManager(
+            dispatcher, gamepad_config, input_backend
+        )
 
         # Legacy gamepad support (kept for backwards compatibility with process_event)
-        pygame.joystick.init()
-        self._joysticks: Dict[int, Any] = {}  # Use Any to bypass valid-type error
+        if self._input_backend is not None:
+            self._input_backend.init_joysticks()
+        else:
+            pygame.joystick.init()
+        self._joysticks: Dict[int, IJoystick] = {}
         self._detect_controllers()
 
     @property
@@ -70,13 +80,24 @@ class InputManager:
 
     def _detect_controllers(self) -> None:
         """Find and init plugged-in controllers (legacy support)."""
-        if pygame.joystick.get_count() > 0:
-            for i in range(pygame.joystick.get_count()):
-                # Use Any to avoid mypy confusion with pygame.joystick.Joystick vs function
-                joy: Any = pygame.joystick.Joystick(i)
-                joy.init()
-                self._joysticks[i] = joy
-                logger.info("Controller detected: %s", joy.get_name())
+        if self._input_backend is not None:
+            count = self._input_backend.get_joystick_count()
+            if count > 0:
+                for i in range(count):
+                    joy = self._input_backend.get_joystick(i)
+                    joy.init()
+                    self._joysticks[i] = joy
+                    logger.info("Controller detected: %s", joy.get_name())
+        else:
+            # Fallback to direct pygame calls for backwards compatibility
+            if pygame.joystick.get_count() > 0:
+                for i in range(pygame.joystick.get_count()):
+                    from pyguara.input.backends.pygame_backend import PygameJoystick
+
+                    joy = PygameJoystick(i)
+                    joy.init()
+                    self._joysticks[i] = joy
+                    logger.info("Controller detected: %s", joy.get_name())
 
     def register_action(
         self, name: str, action_type: ActionType, deadzone: float = 0.1

@@ -14,10 +14,11 @@ import json
 from pathlib import Path
 from typing import Dict, Type, TypeVar
 
-from .types import Resource, Texture
+from .exceptions import InvalidMetadataError, ResourceLoadError
 from .loader import IResourceLoader
-from pyguara.graphics.atlas import Atlas, AtlasRegion
+from .types import Resource, Texture
 from pyguara.common.types import Rect
+from pyguara.graphics.atlas import Atlas, AtlasRegion
 
 logger = logging.getLogger(__name__)
 
@@ -317,8 +318,10 @@ class ResourceManager:
             Atlas: The loaded atlas with all sprite regions.
 
         Raises:
-            FileNotFoundError: If either file doesn't exist.
-            ValueError: If the metadata format is invalid.
+            ResourceLoadError: If the atlas texture fails to load.
+            InvalidMetadataError: If the metadata file is missing, malformed,
+                or has an invalid structure. Includes line/column info for
+                JSON parsing errors.
 
         Example:
             atlas = resource_manager.load_atlas(
@@ -330,35 +333,58 @@ class ResourceManager:
         # Check metadata file exists first (fail fast)
         metadata_file = Path(metadata_path)
         if not metadata_file.exists():
-            raise FileNotFoundError(f"Atlas metadata not found: {metadata_path}")
+            raise InvalidMetadataError(metadata_path, "File not found")
 
-        # Load and parse the metadata JSON
-        with open(metadata_file, "r") as f:
-            metadata = json.load(f)
+        # Load and parse the metadata JSON with detailed error reporting
+        try:
+            with open(metadata_file, "r") as f:
+                metadata = json.load(f)
+        except json.JSONDecodeError as e:
+            raise InvalidMetadataError(
+                metadata_path,
+                f"JSON parsing failed: {e.msg}",
+                line=e.lineno,
+                column=e.colno,
+            ) from e
 
         # Validate metadata structure
         if "regions" not in metadata:
-            raise ValueError(
-                f"Invalid atlas metadata format: missing 'regions' key in {metadata_path}"
+            raise InvalidMetadataError(
+                metadata_path,
+                "Missing required 'regions' key",
             )
 
         # Load the atlas texture using existing infrastructure
-        texture = self.load(atlas_path, Texture)  # type: ignore[type-abstract]
+        try:
+            texture = self.load(atlas_path, Texture)  # type: ignore[type-abstract]
+        except Exception as e:
+            raise ResourceLoadError(atlas_path, str(e)) from e
 
-        # Parse regions from metadata
+        # Parse regions from metadata with detailed error reporting
         regions: Dict[str, AtlasRegion] = {}
         for name, region_data in metadata["regions"].items():
-            # Extract region properties
-            x = region_data["x"]
-            y = region_data["y"]
-            width = region_data["width"]
-            height = region_data["height"]
-            original_size = tuple(region_data["original_size"])
+            try:
+                # Extract region properties
+                x = region_data["x"]
+                y = region_data["y"]
+                width = region_data["width"]
+                height = region_data["height"]
+                original_size = tuple(region_data["original_size"])
 
-            # Create region object
-            rect = Rect(x, y, width, height)
-            region = AtlasRegion(name=name, rect=rect, original_size=original_size)
-            regions[name] = region
+                # Create region object
+                rect = Rect(x, y, width, height)
+                region = AtlasRegion(name=name, rect=rect, original_size=original_size)
+                regions[name] = region
+            except KeyError as e:
+                raise InvalidMetadataError(
+                    metadata_path,
+                    f"Region '{name}' is missing required field: {e}",
+                ) from e
+            except (TypeError, ValueError) as e:
+                raise InvalidMetadataError(
+                    metadata_path,
+                    f"Region '{name}' has invalid data: {e}",
+                ) from e
 
         # Create and return the atlas
         atlas = Atlas(texture=texture, regions=regions)

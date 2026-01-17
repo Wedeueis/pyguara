@@ -15,7 +15,7 @@ class AISystem:
         """Update all AI components."""
         # Query entities with AI
         for entity in self.manager.get_entities_with(AIComponent):
-            ai: AIComponent = entity.ai_component  # Using __getattr__ magic
+            ai = entity.get_component(AIComponent)
 
             if not ai.enabled:
                 continue
