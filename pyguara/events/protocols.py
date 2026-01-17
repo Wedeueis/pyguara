@@ -53,11 +53,20 @@ class IEventDispatcher(Protocol):
         """
         ...
 
-    def process_queue(self) -> None:
+    def process_queue(
+        self, max_time_ms: Optional[float] = None, max_events: Optional[int] = None
+    ) -> int:
         """
-        Flush the event queue and dispatch pending events.
+        Flush the event queue and dispatch pending events with optional limits.
 
         This should be called once per frame by the Application main loop.
+
+        Args:
+            max_time_ms: Optional time budget in milliseconds.
+            max_events: Optional maximum number of events to process.
+
+        Returns:
+            Number of events processed.
         """
         ...
 

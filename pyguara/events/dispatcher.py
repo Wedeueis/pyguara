@@ -2,6 +2,7 @@
 
 import logging
 import queue
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Callable, DefaultDict, List, Optional, Type, TypeVar
@@ -10,6 +11,9 @@ from pyguara.events.protocols import Event, IEventDispatcher
 from pyguara.events.types import EventHandler, ErrorHandlingStrategy
 
 E = TypeVar("E", bound=Event)
+
+# Default safety thresholds
+DEFAULT_QUEUE_WARNING_THRESHOLD = 10000
 
 
 @dataclass
@@ -28,6 +32,7 @@ class EventDispatcher(IEventDispatcher):
         self,
         logger: Optional[logging.Logger] = None,
         error_strategy: ErrorHandlingStrategy = ErrorHandlingStrategy.RAISE,
+        queue_warning_threshold: int = DEFAULT_QUEUE_WARNING_THRESHOLD,
     ) -> None:
         """Initialize the Event Dispatcher.
 
@@ -36,6 +41,8 @@ class EventDispatcher(IEventDispatcher):
             error_strategy: How to handle errors in event handlers. Defaults to RAISE
                 for fail-fast behavior in development. Use LOG for production
                 graceful degradation.
+            queue_warning_threshold: Queue size threshold for warning logs.
+                Defaults to 10000 events.
         """
         self._listeners: DefaultDict[Type[Event], List[HandlerRecord]] = defaultdict(
             list
@@ -49,6 +56,7 @@ class EventDispatcher(IEventDispatcher):
         self._max_history_size: int = 1000
         self._logger = logger
         self._error_strategy = error_strategy
+        self._queue_warning_threshold = queue_warning_threshold
 
     def subscribe(
         self,
@@ -88,15 +96,55 @@ class EventDispatcher(IEventDispatcher):
         """Queue event for next frame (Thread-Safe)."""
         self._event_queue.put(event)
 
-    def process_queue(self) -> None:
-        """Safely process currently queued events."""
-        count = self._event_queue.qsize()
+    def process_queue(
+        self, max_time_ms: Optional[float] = None, max_events: Optional[int] = None
+    ) -> int:
+        """Safely process currently queued events with time and count budgets.
+
+        Args:
+            max_time_ms: Maximum time budget in milliseconds. If None, no time limit.
+            max_events: Maximum number of events to process. If None, no count limit.
+
+        Returns:
+            Number of events processed.
+
+        Note:
+            Unprocessed events remain in queue for next frame.
+            Logs warning if queue size exceeds threshold.
+        """
+        queue_size = self._event_queue.qsize()
+
+        # Log warning if queue is getting too large
+        if queue_size > self._queue_warning_threshold and self._logger:
+            self._logger.warning(
+                f"Event queue size ({queue_size}) exceeds threshold "
+                f"({self._queue_warning_threshold}). Possible event death spiral."
+            )
+
+        # Determine how many events to process
+        if max_events is not None:
+            count = min(queue_size, max_events)
+        else:
+            count = queue_size
+
+        start_time = time.perf_counter() if max_time_ms is not None else None
+        processed = 0
+
         for _ in range(count):
+            # Check time budget before processing each event
+            if start_time is not None:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                if elapsed_ms >= max_time_ms:  # type: ignore
+                    break
+
             try:
                 event = self._event_queue.get_nowait()
                 self.dispatch(event)
+                processed += 1
             except queue.Empty:
                 break
+
+        return processed
 
     def _process_handlers(self, records: List[HandlerRecord], event: Event) -> bool:
         for record in records:

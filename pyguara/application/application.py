@@ -12,14 +12,28 @@ from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.manager import UIManager
 
+# Event queue processing budget (milliseconds per frame)
+DEFAULT_EVENT_QUEUE_TIME_BUDGET_MS = 5.0
+
 
 class Application:
     """The main runtime loop coordinator."""
 
-    def __init__(self, container: DIContainer) -> None:
-        """Initialize Application with a DI container."""
+    def __init__(
+        self,
+        container: DIContainer,
+        event_queue_time_budget_ms: float = DEFAULT_EVENT_QUEUE_TIME_BUDGET_MS,
+    ) -> None:
+        """Initialize Application with a DI container.
+
+        Args:
+            container: The dependency injection container.
+            event_queue_time_budget_ms: Time budget in milliseconds for processing
+                event queue per frame. Defaults to 5ms.
+        """
         self._container = container
         self._is_running = False
+        self._event_queue_time_budget_ms = event_queue_time_budget_ms
 
         # Resolve Core Dependencies
         self._window = container.get(Window)
@@ -77,9 +91,11 @@ class Application:
 
     def _update(self, dt: float) -> None:
         """Update game logic."""
-        # 1. Process background thread events (CRITICAL FIX)
-        # We call the dispatcher to flush any pending queued events
-        self._event_dispatcher.process_queue()
+        # 1. Process background thread events with time budget (P1-009)
+        # Enforce time budget to prevent event death spirals
+        self._event_dispatcher.process_queue(
+            max_time_ms=self._event_queue_time_budget_ms
+        )
 
         # 2. Update UI
         self._ui_manager.update(dt)
