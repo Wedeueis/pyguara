@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import threading
 from typing import (
     Any,
@@ -25,6 +26,8 @@ from pyguara.di.exceptions import (
     ServiceNotFoundException,
 )
 from pyguara.di.types import ServiceLifetime, ServiceRegistration, ErrorHandlingStrategy
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 TInterface = TypeVar("TInterface")
@@ -284,11 +287,11 @@ class DIContainer:
                 return {}, set()
             elif self._error_strategy == ErrorHandlingStrategy.LOG:
                 # Log and return empty dict/set (graceful degradation)
-                print(error_msg)
+                logger.error(error_msg)
                 return {}, set()
             else:  # ErrorHandlingStrategy.RAISE
                 # Log and re-raise
-                print(error_msg)
+                logger.error(error_msg)
                 raise DIException(
                     f"Failed to extract dependencies from {target_name}: {e}"
                 ) from e

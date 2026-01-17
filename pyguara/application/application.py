@@ -1,5 +1,6 @@
 """Main application runtime."""
 
+import logging
 import pygame
 
 from pyguara.config.manager import ConfigManager
@@ -11,6 +12,8 @@ from pyguara.input.manager import InputManager
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.manager import UIManager
+
+logger = logging.getLogger(__name__)
 
 # Event queue processing budget (milliseconds per frame)
 DEFAULT_EVENT_QUEUE_TIME_BUDGET_MS = 5.0
@@ -53,7 +56,7 @@ class Application:
 
     def run(self, starting_scene: Scene) -> None:
         """Execute the main game loop."""
-        print(f"[Application] Starting with scene: {starting_scene.name}")
+        logger.info("Starting with scene: %s", starting_scene.name)
 
         self._scene_manager.register(starting_scene)
         self._scene_manager.switch_to(starting_scene.name)
@@ -112,5 +115,5 @@ class Application:
 
     def shutdown(self) -> None:
         """Close Application."""
-        print("[Application] Shutting down...")
+        logger.info("Shutting down application")
         self._window.close()

@@ -8,14 +8,18 @@ of truth for all game assets. It handles:
 3. Type safety validation using Generics.
 """
 
+import logging
 import os
 import json
 from pathlib import Path
 from typing import Dict, Type, TypeVar
+
 from .types import Resource, Texture
 from .loader import IResourceLoader
 from pyguara.graphics.atlas import Atlas, AtlasRegion
 from pyguara.common.types import Rect
+
+logger = logging.getLogger(__name__)
 
 # T must be a subclass of Resource (e.g., Texture)
 T = TypeVar("T", bound=Resource)
@@ -47,7 +51,7 @@ class ResourceManager:
 
             # Opcional: Aviso se já existir um loader para essa extensão
             if clean_ext in self._extension_map:
-                print(f"[Warning] Overwriting loader for {clean_ext}")
+                logger.warning("Overwriting loader for extension: %s", clean_ext)
 
             self._extension_map[clean_ext] = loader
 
@@ -64,7 +68,7 @@ class ResourceManager:
         """
         path_obj = Path(root_path)
         if not path_obj.exists():
-            print(f"[ResourceManager] Warning: Directory {root_path} does not exist.")
+            logger.warning("Directory does not exist: %s", root_path)
             return
 
         iterator = path_obj.rglob("*") if recursive else path_obj.glob("*")
@@ -123,7 +127,7 @@ class ResourceManager:
             raise ValueError(f"No loader registered for extension: {extension}")
 
         # 4. Load & Verify
-        print(f"[ResourceManager] Loading {actual_path}...")
+        logger.debug("Loading resource: %s", actual_path)
         resource = loader.load(actual_path)
 
         if not isinstance(resource, resource_type):
@@ -204,9 +208,7 @@ class ResourceManager:
         if self._reference_counts[actual_path] == 0:
             del self._cache[actual_path]
             del self._reference_counts[actual_path]
-            print(
-                f"[ResourceManager] Auto-unloaded {actual_path} (ref count reached 0)"
-            )
+            logger.debug("Auto-unloaded resource (ref count 0): %s", actual_path)
 
     def unload(self, path_or_name: str, force: bool = False) -> None:
         """
@@ -230,7 +232,7 @@ class ResourceManager:
                 del self._cache[actual_path]
             if actual_path in self._reference_counts:
                 del self._reference_counts[actual_path]
-            print(f"[ResourceManager] Force unloaded {actual_path}")
+            logger.debug("Force unloaded resource: %s", actual_path)
         else:
             # Respect reference counting (same as release())
             if (
@@ -241,19 +243,19 @@ class ResourceManager:
                 del self._cache[actual_path]
                 if actual_path in self._reference_counts:
                     del self._reference_counts[actual_path]
-                print(f"[ResourceManager] Unloaded {actual_path}")
+                logger.debug("Unloaded resource: %s", actual_path)
             else:
                 # Has references, just decrement
                 self._reference_counts[actual_path] -= 1
                 if self._reference_counts[actual_path] == 0:
                     del self._cache[actual_path]
                     del self._reference_counts[actual_path]
-                    print(
-                        f"[ResourceManager] Unloaded {actual_path} (ref count reached 0)"
-                    )
+                    logger.debug("Unloaded resource (ref count 0): %s", actual_path)
                 else:
-                    print(
-                        f"[ResourceManager] Decremented ref count for {actual_path} (now {self._reference_counts[actual_path]})"
+                    logger.debug(
+                        "Decremented ref count for %s (now %d)",
+                        actual_path,
+                        self._reference_counts[actual_path],
                     )
 
     def unload_unused(self) -> int:
@@ -273,7 +275,7 @@ class ResourceManager:
             if path in self._cache:
                 del self._cache[path]
             del self._reference_counts[path]
-            print(f"[ResourceManager] Batch unloaded {path}")
+            logger.debug("Batch unloaded resource: %s", path)
 
         return len(to_unload)
 
@@ -361,8 +363,6 @@ class ResourceManager:
         # Create and return the atlas
         atlas = Atlas(texture=texture, regions=regions)
 
-        print(
-            f"[ResourceManager] Loaded atlas '{atlas_path}' with {len(regions)} regions"
-        )
+        logger.debug("Loaded atlas '%s' with %d regions", atlas_path, len(regions))
 
         return atlas

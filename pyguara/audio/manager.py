@@ -1,10 +1,14 @@
 """High-level Audio Manager for game audio management."""
 
+import logging
 from typing import Optional, Dict
+
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.resources.types import AudioClip
 from pyguara.resources.manager import ResourceManager
 from pyguara.events.dispatcher import EventDispatcher
+
+logger = logging.getLogger(__name__)
 
 
 class AudioManager:
@@ -232,10 +236,12 @@ class AudioManager:
                 self._loaded_clips[path] = clip
                 return clip
             except Exception as e:
-                print(f"[AudioManager] Failed to load audio clip '{path}': {e}")
+                logger.error(
+                    "Failed to load audio clip '%s': %s", path, e, exc_info=True
+                )
                 return None
 
-        print(f"[AudioManager] No resource manager available to load '{path}'")
+        logger.warning("No resource manager available to load '%s'", path)
         return None
 
     # ========== Cleanup ==========

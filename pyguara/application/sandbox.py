@@ -6,6 +6,7 @@ with the developer tool suite (Inspector, Debugger, Profiler, etc.).
 It is intended for use during development and testing phases.
 """
 
+import logging
 import pygame
 from typing import Optional
 
@@ -18,6 +19,8 @@ from pyguara.tools.event_monitor import EventMonitor
 from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.shortcuts_panel import ShortcutsPanel
 from pyguara.editor.layer import EditorTool
+
+logger = logging.getLogger(__name__)
 
 
 class SandboxApplication(Application):
@@ -40,7 +43,7 @@ class SandboxApplication(Application):
 
     def _initialize_tools(self) -> None:
         """Configure the tool manager and register all available tools."""
-        print("[Sandbox] Initializing Developer Tools...")
+        logger.info("Initializing Developer Tools")
 
         self._tool_manager = ToolManager(self._container)
 
@@ -71,7 +74,7 @@ class SandboxApplication(Application):
         # Enable global visibility by default in Sandbox mode
         self._tool_manager.toggle_global_visibility()
 
-        print("[Sandbox] Tools loaded. Press F8 for help.")
+        logger.info("Tools loaded. Press F8 for help")
 
     def _process_input(self) -> None:
         """Process input events, prioritizing developer tools."""

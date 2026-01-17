@@ -1,5 +1,6 @@
 """Core input processing system."""
 
+import logging
 import pygame
 from typing import Any, Dict, Optional
 
@@ -14,6 +15,8 @@ from pyguara.input.types import (
     GamepadConfig,
 )
 from pyguara.input.gamepad import GamepadManager
+
+logger = logging.getLogger(__name__)
 
 
 class InputManager:
@@ -73,7 +76,7 @@ class InputManager:
                 joy: Any = pygame.joystick.Joystick(i)
                 joy.init()
                 self._joysticks[i] = joy
-                print(f"Controller detected: {joy.get_name()}")
+                logger.info("Controller detected: %s", joy.get_name())
 
     def register_action(
         self, name: str, action_type: ActionType, deadzone: float = 0.1
