@@ -54,6 +54,8 @@ class ServiceRegistration:
         instance: A pre-created object instance (for singletons).
         lifetime: The lifecycle strategy for this service.
         dependencies: A map of parameter names to their required types.
+        param_defaults: A set of parameter names that have default values.
+            Cached during registration to avoid inspect.signature at runtime.
     """
 
     interface: Type[Any]
@@ -63,8 +65,11 @@ class ServiceRegistration:
     lifetime: ServiceLifetime = ServiceLifetime.TRANSIENT
     # FIX: Explicitly mark as Optional to avoid 'unreachable' errors in post_init
     dependencies: Optional[Dict[str, Type[Any]]] = None
+    param_defaults: Optional[set[str]] = None
 
     def __post_init__(self) -> None:
-        """Ensure dependencies dict is initialized."""
+        """Ensure dependencies dict and param_defaults set are initialized."""
         if self.dependencies is None:
             self.dependencies = {}
+        if self.param_defaults is None:
+            self.param_defaults = set()

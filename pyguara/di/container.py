@@ -113,10 +113,13 @@ class DIContainer:
                 )
 
             dependencies: Dict[str, Type] = {}
+            param_defaults: set[str] = set()
             if implementation:
-                dependencies = self._extract_dependencies(implementation)
+                dependencies, param_defaults = self._extract_dependencies(
+                    implementation
+                )
             elif factory:
-                dependencies = self._extract_dependencies(factory)
+                dependencies, param_defaults = self._extract_dependencies(factory)
 
             registration = ServiceRegistration(
                 interface=interface,
@@ -125,6 +128,7 @@ class DIContainer:
                 instance=instance,
                 lifetime=lifetime,
                 dependencies=dependencies,
+                param_defaults=param_defaults,
             )
 
             self._services[interface] = registration
@@ -180,8 +184,11 @@ class DIContainer:
         if target is None:
             raise DIException("Invalid registration state")
 
+        # P2-003: Pass cached param_defaults instead of target
         kwargs = self._resolve_dependencies(
-            registration.dependencies or {}, target, scope
+            registration.dependencies or {},
+            registration.param_defaults or set(),
+            scope,
         )
 
         if registration.factory:
@@ -193,35 +200,46 @@ class DIContainer:
     def _resolve_dependencies(
         self,
         dependencies: Dict[str, Type],
-        target: Union[Type, Callable],
+        param_defaults: set[str],
         scope: Optional[DIScope],
     ) -> Dict[str, Any]:
-        """Resolve dependencies recursively, respecting default arguments."""
-        resolved_kwargs = {}
+        """Resolve dependencies recursively, respecting default arguments.
 
-        # FIX: Use inspect.signature directly. It handles classes and functions automatically.
-        # This avoids unsafe access to 'target.__init__'.
-        try:
-            sig = inspect.signature(target)
-        except ValueError:
-            # Fallback if signature fails (unlikely for classes/functions)
-            sig = inspect.Signature()
+        Args:
+            dependencies: Map of parameter names to types.
+            param_defaults: Set of parameter names with default values
+                (cached during registration to avoid inspect at runtime).
+            scope: Optional scope for scoped services.
+
+        Returns:
+            Dict of resolved parameter name to instance.
+
+        Note:
+            P2-003: This method no longer uses inspect.signature() at runtime.
+            Default parameters are cached during registration.
+        """
+        resolved_kwargs = {}
 
         for param_name, dep_type in dependencies.items():
             try:
                 instance = self._resolve_service(dep_type, scope)
                 resolved_kwargs[param_name] = instance
             except ServiceNotFoundException:
-                # Fallback: check if the parameter has a default value
-                param = sig.parameters.get(param_name)
-                if param and param.default != inspect.Parameter.empty:
-                    continue  # Let Python use the default
+                # P2-003: Use cached default info instead of inspect.signature
+                if param_name in param_defaults:
+                    continue  # Let Python use the default value
                 raise
 
         return resolved_kwargs
 
-    def _extract_dependencies(self, target: Union[Type, Callable]) -> Dict[str, Type]:
-        """Extract type hints using typing.get_type_hints."""
+    def _extract_dependencies(
+        self, target: Union[Type, Callable]
+    ) -> tuple[Dict[str, Type], set[str]]:
+        """Extract type hints and default parameters at registration time.
+
+        Returns:
+            Tuple of (dependencies dict, param_defaults set)
+        """
         try:
             # We still need explicit check here for get_type_hints
             # But we wrap it safely or assume inspect.isclass handles it.
@@ -234,9 +252,14 @@ class DIContainer:
             sig = inspect.signature(func)
 
             dependencies = {}
-            for param_name, _ in sig.parameters.items():
+            param_defaults = set()
+            for param_name, param in sig.parameters.items():
                 if param_name == "self":
                     continue
+
+                # Cache which parameters have defaults (P2-003: avoid runtime inspect)
+                if param.default != inspect.Parameter.empty:
+                    param_defaults.add(param_name)
 
                 if param_name in hints:
                     param_type = hints[param_name]
@@ -247,7 +270,7 @@ class DIContainer:
                             param_type = valid_args[0]
 
                     dependencies[param_name] = param_type
-            return dependencies
+            return dependencies, param_defaults
         except Exception as e:
             # Handle error based on configured strategy
             target_name = getattr(target, "__name__", str(target))
@@ -258,11 +281,11 @@ class DIContainer:
 
             if self._error_strategy == ErrorHandlingStrategy.IGNORE:
                 # Silently ignore (not recommended)
-                return {}
+                return {}, set()
             elif self._error_strategy == ErrorHandlingStrategy.LOG:
-                # Log and return empty dict (graceful degradation)
+                # Log and return empty dict/set (graceful degradation)
                 print(error_msg)
-                return {}
+                return {}, set()
             else:  # ErrorHandlingStrategy.RAISE
                 # Log and re-raise
                 print(error_msg)
