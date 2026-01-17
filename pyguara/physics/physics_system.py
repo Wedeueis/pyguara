@@ -1,10 +1,9 @@
 """System responsible for syncing ECS entities with the Physics Engine."""
 
-from typing import List
-
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.protocols import IPhysicsEngine
@@ -17,32 +16,46 @@ class PhysicsSystem:
 
     It synchronizes the state of ECS 'Transform' components with the
     underlying physics simulation bodies.
+
+    Architecture: Self-Sufficient System (Pull Pattern)
+    - Queries entities internally via EntityManager
+    - Compatible with SystemManager orchestration
     """
 
     def __init__(
-        self, engine: IPhysicsEngine, event_dispatcher: EventDispatcher
+        self,
+        engine: IPhysicsEngine,
+        entity_manager: EntityManager,
+        event_dispatcher: EventDispatcher,
     ) -> None:
         """
         Initialize the physics system.
 
         Args:
             engine: The physics engine backend.
+            entity_manager: The entity manager for querying physics entities.
             event_dispatcher: The global event dispatcher.
         """
         self._engine = engine
+        self._entity_manager = entity_manager
         self._dispatcher = event_dispatcher
 
         # We use (0,0) for top-down games. Use (0, 980) for side-scrollers.
         self._engine.initialize(gravity=Vector2(0, 0))
 
-    def update(self, entities: List[Entity], dt: float) -> None:
+    def update(self, dt: float) -> None:
         """
         Advance the physics simulation and sync transforms.
 
         Args:
-            entities: List of entities that have both RigidBody and Transform.
             dt: Delta time in seconds.
+
+        Note:
+            P2-013: Refactored to Pull pattern. System queries entities internally.
         """
+        # Query physics entities (Pull pattern)
+        entities = list(self._entity_manager.get_entities_with(Transform, RigidBody))
+
         # 1. Sync ECS -> Physics Engine
         for entity in entities:
             # OPTIMIZATION: Use get_component instead of attribute access

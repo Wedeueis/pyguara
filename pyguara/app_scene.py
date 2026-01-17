@@ -42,7 +42,9 @@ class GameEngine:
         self.entity_manager = EntityManager()
 
         self.physics_engine = PymunkEngine()
-        self.physics_system = PhysicsSystem(self.physics_engine, self.event_dispatcher)
+        self.physics_system = PhysicsSystem(
+            self.physics_engine, self.entity_manager, self.event_dispatcher
+        )
 
         # 4. Rendering & UI
         self.world_renderer = PygameBackend(self.window.native_handle)
@@ -105,11 +107,8 @@ class GameEngine:
         self.ui_manager.update(dt)
         self.fps_label.set_text(f"Engine FPS: {self.clock.get_fps():.0f}")
 
-        # Update Global Physics (Test entities)
-        physics_entities = list(
-            self.entity_manager.get_entities_with(Transform, RigidBody)
-        )
-        self.physics_system.update(physics_entities, dt)
+        # Update Global Physics (Test entities) - P2-013: Pull pattern
+        self.physics_system.update(dt)
 
         # Update Scenes
         self.scene_manager.update(dt)

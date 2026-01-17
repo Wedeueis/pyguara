@@ -42,7 +42,9 @@ class GameplayScene(Scene):
         # We grab the global engine from the container we inherited
         if self.container:
             physics_engine = self.container.get(IPhysicsEngine)  # type: ignore[type-abstract]
-            self.physics_system = PhysicsSystem(physics_engine, self.event_dispatcher)
+            self.physics_system = PhysicsSystem(
+                physics_engine, self.entity_manager, self.event_dispatcher
+            )
         else:
             raise RuntimeError("Scene has no DI Container!")
 
@@ -55,19 +57,19 @@ class GameplayScene(Scene):
 
     def update(self, dt: float) -> None:
         """Scene Logic Loop."""
-        # 1. Update Physics
+        # 1. Update Physics - P2-013: Pull pattern
         if self.physics_system:
-            physics_entities = list(
-                self.entity_manager.get_entities_with(Transform, RigidBody)
-            )
-            self.physics_system.update(physics_entities, dt)
+            self.physics_system.update(dt)
 
         # 2. Update UI
         self.ui_manager.update(dt)
 
         # 3. Update FPS Label
         self.fps_label.set_text(f"FPS: {int(1 / dt) if dt > 0 else 0}")
-        self.fps_label.set_text(f"Entities: {len(physics_entities)}")
+        physics_count = len(
+            list(self.entity_manager.get_entities_with(Transform, RigidBody))
+        )
+        self.fps_label.set_text(f"Entities: {physics_count}")
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Scene Render Loop."""
