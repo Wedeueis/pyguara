@@ -9,7 +9,7 @@ PyGuara is built on four core pillars:
 1.  **Decoupled Logic**: Using a robust **Entity-Component-System (ECS)** and **Dependency Injection** to keep your game code clean and testable.
 2.  **Flexible Rendering**: A multi-stage pipeline that supports batching and sorting, abstracted from the underlying hardware.
 3.  **Physical Simulation**: Native integration with Pymunk for 2D physics.
-4.  **Extensible Systems**: Comprehensive suites for AI (FSMs, Steering), UI, Audio, and Resource Management.
+4.  **Extensible Systems**: Comprehensive suites for AI, UI, Audio, and Resource Management.
 
 ## 📚 Documentation Sections
 
@@ -18,6 +18,7 @@ Understand the foundational systems:
 *   **ECS**: High-performance entity management with inverted indexing.
 *   **Dependency Injection**: Auto-wired service management.
 *   **Event System**: Thread-safe, decoupled communication.
+*   **[Logging](core/logging.md)**: Standardized logging configuration.
 
 ### [Application & Lifecycle](core/application.md)
 How the engine starts and runs:
@@ -32,15 +33,22 @@ Bringing your game to life:
 *   **UI System**: Flexible, themeable widget system.
 
 ### [Physics & Simulation](physics/simulation.md)
-Interactions and Intelligence:
+Interactions and world dynamics:
 *   **Physics**: Rigid bodies, colliders, and raycasting.
-*   **AI**: Finite State Machines, Steering behaviors, and Pathfinding.
 
-### [Engine Systems](systems/resources.md)
-Essential utilities:
-*   **Resources**: Caching and type-safe asset loading.
-*   **Audio**: SFX and Music management.
-*   **Persistence**: Secure and versioned Save/Load logic.
+### [AI & Logic](ai/intelligence.md)
+Creating intelligent behaviors:
+*   **Behavior Trees**: Complex hierarchical decision making.
+*   **FSM**: Finite State Machines.
+*   **Pathfinding**: A* and Navmesh support.
+
+### [Systems & Tools](systems/resources.md)
+Essential engine features:
+*   **[Input System](systems/input.md)**: Action-based input mapping for Keyboard/Gamepad.
+*   **[Animation](systems/animation.md)**: Powerful tweening and easing system.
+*   **[Scripting](systems/scripting.md)**: Coroutine-based sequential logic.
+*   **[Resources](systems/resources.md)**: Caching and type-safe asset loading.
+*   **[Editor & Tools](systems/editor.md)**: In-game debug overlay and inspector.
 
 ## 🚀 Quick Start
 
