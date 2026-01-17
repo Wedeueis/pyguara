@@ -103,10 +103,12 @@ class PymunkEngine(IPhysicsEngine):
             return
 
         # Default collision handler for all collision types
-        handler = self.space.add_default_collision_handler()  # type: ignore[attr-defined]
-        handler.begin = self._on_pymunk_begin
-        handler.pre_solve = self._on_pymunk_persist
-        handler.separate = self._on_pymunk_end
+        # Pymunk 7.0+ uses on_collision(None, None) for default handler
+        self.space.on_collision(
+            begin=self._on_pymunk_begin,  # type: ignore[arg-type]
+            pre_solve=self._on_pymunk_persist,  # type: ignore[arg-type]
+            separate=self._on_pymunk_end,
+        )
 
     def _on_pymunk_begin(
         self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict

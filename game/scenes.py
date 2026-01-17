@@ -1,5 +1,6 @@
-"""Concrete scene implementations for the game."""
+"""Concrete scene implementations for the demo game."""
 
+import logging
 from typing import Optional
 
 from pyguara.common.components import Transform, Tag
@@ -17,6 +18,8 @@ from pyguara.physics.types import BodyType, ShapeType
 from pyguara.scene.base import Scene
 from pyguara.ui.components import Button, Label, Panel
 from pyguara.ui.manager import UIManager
+
+logger = logging.getLogger(__name__)
 
 
 class GameplayScene(Scene):
@@ -37,7 +40,7 @@ class GameplayScene(Scene):
 
     def on_enter(self) -> None:
         """Call when the scene becomes active."""
-        print(f"[{self.name}] Entering Scene...")
+        logger.info("[%s] Entering Scene...", self.name)
         # 1. RESOLVE DEPENDENCIES
         # We grab the global engine from the container we inherited
         if self.container:
@@ -53,7 +56,7 @@ class GameplayScene(Scene):
 
     def on_exit(self) -> None:
         """Call when leaving the scene."""
-        print(f"[{self.name}] Exiting Scene...")
+        logger.info("[%s] Exiting Scene...", self.name)
 
     def update(self, dt: float) -> None:
         """Scene Logic Loop."""
@@ -153,21 +156,21 @@ class GameplayScene(Scene):
 
     def _reset_physics(self) -> None:
         """Call the callback to teleport entities back to start."""
-        print("Resetting Physics...")
+        logger.info("Resetting Physics...")
 
         player = self.entity_manager.get_entity("player")
         if player:
             rb = player.get_component(RigidBody)
-            if rb._body_handle:  # Access backing field directly
-                rb._body_handle.position = Vector2(640, 100)
-                rb._body_handle.velocity = Vector2(0, 0)
+            if rb.handle:
+                rb.handle.position = Vector2(640, 100)
+                rb.handle.velocity = Vector2(0, 0)
 
         box = self.entity_manager.get_entity("box_1")
         if box:
             rb = box.get_component(RigidBody)
-            if rb._body_handle:
-                rb._body_handle.position = Vector2(600, 0)
-                rb._body_handle.velocity = Vector2(0, 0)
+            if rb.handle:
+                rb.handle.position = Vector2(600, 0)
+                rb.handle.velocity = Vector2(0, 0)
 
 
 class TestScene(Scene):
@@ -175,8 +178,10 @@ class TestScene(Scene):
 
     def on_enter(self) -> None:
         """Call when the scene becomes active."""
-        print("[TestScene] Entered. If you see this, the Scene Manager is working.")
-        print("[TestScene] The window should be BLUE with a RED box.")
+        logger.info(
+            "[TestScene] Entered. If you see this, the Scene Manager is working."
+        )
+        logger.info("[TestScene] The window should be BLUE with a RED box.")
 
         # Register Input Test
         if self.container:
@@ -191,12 +196,12 @@ class TestScene(Scene):
 
     def on_exit(self) -> None:
         """Call when leaving the scene."""
-        print("[TestScene] Exited.")
+        logger.info("[TestScene] Exited.")
         self.event_dispatcher.unsubscribe(OnActionEvent, self._on_input)
 
     def _on_input(self, event: OnActionEvent) -> None:
         if event.action_name == "Jump":
-            print(f"[TestScene] Space Pressed! Value: {event.value}")
+            logger.info("[TestScene] Space Pressed! Value: %s", event.value)
 
     def update(self, dt: float) -> None:
         """Scene Logic Loop."""
