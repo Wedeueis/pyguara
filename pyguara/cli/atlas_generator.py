@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Sprite Atlas Generator CLI Tool
+Sprite Atlas Generator CLI Tool.
 
 Packs multiple sprite images into a single texture atlas using a shelf-packing
 algorithm. Generates both the packed image and JSON metadata for runtime loading.
 
 Usage:
-    python -m tools.atlas_generator \
+    python -m pyguara.cli.atlas_generator \
         --input assets/sprites/ \
         --output assets/atlas/characters.png \
         --metadata assets/atlas/characters.json \
@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Any
 
 try:
     from PIL import Image
@@ -88,9 +88,7 @@ class Shelf:
         Returns:
             bool: True if the sprite fits, False otherwise.
         """
-        return (
-            self.current_x + width <= self.max_width and height <= self.height
-        )
+        return self.current_x + width <= self.max_width and height <= self.height
 
     def add(self, width: int) -> int:
         """
@@ -152,13 +150,13 @@ class AtlasGenerator:
         if not input_path.is_dir():
             raise ValueError(f"Input path is not a directory: {input_path}")
 
-        images = []
+        images: List[Tuple[str, Image.Image]] = []
         supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".tga"}
 
         for file_path in sorted(input_path.iterdir()):
             if file_path.suffix.lower() in supported_formats:
                 try:
-                    img = Image.open(file_path)
+                    img: Image.Image = Image.open(file_path)
                     # Convert to RGBA to ensure consistent format
                     if img.mode != "RGBA":
                         img = img.convert("RGBA")
@@ -175,7 +173,7 @@ class AtlasGenerator:
 
     def pack(
         self, images: List[Tuple[str, Image.Image]]
-    ) -> Tuple[Image.Image, Dict[str, dict]]:
+    ) -> Tuple[Image.Image, Dict[str, Any]]:
         """
         Pack images into an atlas using shelf-packing algorithm.
 
@@ -183,15 +181,13 @@ class AtlasGenerator:
             images (List[Tuple[str, Image.Image]]): List of (name, image) tuples.
 
         Returns:
-            Tuple[Image.Image, Dict[str, dict]]: The atlas image and metadata dict.
+            Tuple[Image.Image, Dict[str, Any]]: The atlas image and metadata dict.
 
         Raises:
             ValueError: If sprites don't fit in atlas size.
         """
         # Sort images by height (descending) for better packing
-        sorted_images = sorted(
-            images, key=lambda x: x[1].height, reverse=True
-        )
+        sorted_images = sorted(images, key=lambda x: x[1].height, reverse=True)
 
         # Create blank atlas with transparency
         atlas = Image.new("RGBA", (self.atlas_size, self.atlas_size), (0, 0, 0, 0))
@@ -304,9 +300,7 @@ class AtlasGenerator:
             with open(metadata_path, "w") as f:
                 json.dump(metadata, f, indent=2)
 
-        print(
-            f"Atlas generation complete: {metadata['sprite_count']} sprites packed"
-        )
+        print(f"Atlas generation complete: {metadata['sprite_count']} sprites packed")
 
 
 def main() -> None:
@@ -317,13 +311,13 @@ def main() -> None:
         epilog="""
 Examples:
   # Basic usage
-  python -m tools.atlas_generator -i assets/sprites/ -o atlas.png
+  python -m pyguara.cli.atlas_generator -i assets/sprites/ -o atlas.png
 
   # With metadata
-  python -m tools.atlas_generator -i assets/sprites/ -o atlas.png -m atlas.json
+  python -m pyguara.cli.atlas_generator -i assets/sprites/ -o atlas.png -m atlas.json
 
   # Custom size and padding
-  python -m tools.atlas_generator -i assets/sprites/ -o atlas.png -s 4096 -p 4
+  python -m pyguara.cli.atlas_generator -i assets/sprites/ -o atlas.png -s 4096 -p 4
         """,
     )
 

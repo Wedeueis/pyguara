@@ -24,7 +24,7 @@ def pygame_init():
 PIL_AVAILABLE = False
 try:
     from PIL import Image
-    from tools.atlas_generator import AtlasGenerator, Shelf
+    from pyguara.cli.atlas_generator import AtlasGenerator, Shelf
 
     PIL_AVAILABLE = True
 except ImportError:
