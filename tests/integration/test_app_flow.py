@@ -9,6 +9,7 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import GameConfig
 from pyguara.input.manager import InputManager
+from pyguara.log.manager import LogManager
 from pyguara.ui.manager import UIManager
 from pyguara.graphics.window import Window
 from pyguara.graphics.protocols import UIRenderer, IRenderer
@@ -41,6 +42,7 @@ def app_container() -> DIContainer:
 
     # Core Services
     c.register_instance(EventDispatcher, EventDispatcher())
+    c.register_instance(LogManager, LogManager())
 
     # ConfigManager with real GameConfig for physics settings
     mock_config_manager = MagicMock()

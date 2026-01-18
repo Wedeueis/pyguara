@@ -1,6 +1,7 @@
 """Central configuration management."""
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -10,10 +11,11 @@ from pyguara.config.events import (
     OnConfigurationLoaded,
     OnConfigurationSaved,
 )
-from pyguara.config.types import GameConfig
+from pyguara.config.types import GameConfig, RenderingBackend
 from pyguara.config.validation import ConfigValidator
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.log.logger import EngineLogger
+from pyguara.log.types import LogLevel
 
 
 class ConfigManager:
@@ -53,6 +55,8 @@ class ConfigManager:
                 data = json.load(f)
 
             self._config = GameConfig.from_dict(data)
+
+            self._apply_env_overrides()
 
             # Run validation after load
             issues = self._validator.validate(self._config)
@@ -126,3 +130,42 @@ class ConfigManager:
             )
 
         return True
+
+    def _apply_env_overrides(self) -> None:
+        """Allow environment variables to override config."""
+        # --- Debug / Engine Settings ---
+        # Map PYGUARA_LOG_LEVEL -> config.debug.log_level
+        env_log = os.getenv("PYGUARA_LOG_LEVEL")
+        if env_log:
+            try:
+                # Convert string "DEBUG" to Enum LogLevel.DEBUG
+                self._config.debug.log_level = LogLevel[env_log.upper()]
+            except KeyError:
+                pass  # Invalid value, keep default
+
+        # --- Display Settings ---
+        # Map PYGUARA_BACKEND -> config.display.backend
+        env_backend = os.getenv("PYGUARA_BACKEND")
+        if env_backend:
+            try:
+                self._config.display.backend = RenderingBackend(env_backend.lower())
+            except ValueError:
+                pass
+
+        # Map PYGUARA_WINDOW_WIDTH -> config.display.screen_width
+        env_width = os.getenv("PYGUARA_WINDOW_WIDTH")
+        if env_width:
+            try:
+                self._config.display.screen_width = int(env_width)
+            except ValueError:
+                pass
+
+        # Map PYGUARA_WINDOW_HEIGHT -> config.display.screen_height
+        env_height = os.getenv("PYGUARA_WINDOW_HEIGHT")
+        if env_height:
+            try:
+                self._config.display.screen_height = int(env_height)
+            except ValueError:
+                pass
+
+        return

@@ -11,6 +11,7 @@ from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 from pyguara.graphics.protocols import UIRenderer, IRenderer, TextureFactory
 from pyguara.graphics.window import Window, WindowConfig
 from pyguara.input.manager import InputManager
+from pyguara.log.manager import LogManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.protocols import IPhysicsEngine
@@ -36,8 +37,9 @@ def create_application() -> Application:
     This factory function handles the Dependency Injection wiring:
     1. Creates the container.
     2. Loads configuration.
-    3. Initializes the Window based on config.
-    4. Registers all core subsystems (Input, Physics, UI, Resources).
+    3. Setup logging.
+    4. Initializes the Window based on config.
+    5., 6., 7. ... Registers all core subsystems (Input, Physics, UI, Resources).
 
     Returns:
         A fully configured Application ready to run.
@@ -58,18 +60,37 @@ def create_sandbox_application() -> SandboxApplication:
 
 def _setup_container() -> DIContainer:
     """Configure common dependencies internally."""
-    container = DIContainer()
-
     # 1. Event System (Core)
     event_dispatcher = EventDispatcher()
-    container.register_instance(EventDispatcher, event_dispatcher)
 
-    # 2. Configuration
+    # 2. Configuration System
     config_manager = ConfigManager(event_dispatcher=event_dispatcher)
     config_manager.load()  # Loads from disk or defaults
-    container.register_instance(ConfigManager, config_manager)
 
-    # 3. Window System
+    # 3. Logging System
+    debug_cfg = config_manager.config.debug
+    log_manager = LogManager(event_dispatcher=event_dispatcher)
+    log_manager.configure(
+        level=debug_cfg.log_level,
+        console=debug_cfg.console_logging,
+        dispatcher=event_dispatcher,
+        log_file=debug_cfg.log_file_path if debug_cfg.log_to_file else None,
+    )
+
+    # 3.2 Setup bootrap temp logger
+    logger = log_manager.get_logger("Bootstrap")
+    logger.info("Core services (Events, Config, Log) initialized.")
+
+    # Initialize the container to register the core services
+    container = DIContainer()
+
+    container.register_instance(EventDispatcher, event_dispatcher)
+    container.register_instance(ConfigManager, config_manager)
+    container.register_instance(LogManager, log_manager)
+
+    logger.debug("Core instances registered in DI Container.")
+
+    # 4. Window System
     # Extract settings from loaded config
     disp_cfg = config_manager.config.display
 
@@ -183,5 +204,7 @@ def _setup_container() -> DIContainer:
     persistence = PersistenceManager(storage)
     container.register_instance(PersistenceManager, persistence)
     container.register_singleton(SceneSerializer, SceneSerializer)
+
+    logger.info("Engine bootstrap complete. Handing over to Application.")
 
     return container

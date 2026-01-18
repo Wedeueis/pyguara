@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Dict, Any
 from pyguara.common.types import Color
+from pyguara.log.types import LogLevel
 
 
 class RenderingBackend(Enum):
@@ -77,6 +78,25 @@ class PhysicsConfig:
 
 
 @dataclass
+class DebugConfig:
+    """Engine debugging and logging configuration."""
+
+    # Logging
+    log_level: LogLevel = LogLevel.INFO
+    log_to_file: bool = True
+    log_file_path: str = "logs/engine.log"
+    console_logging: bool = True
+
+    # Tooling
+    enable_profiler: bool = False
+    enable_inspector: bool = False
+
+    # Visual Debugging
+    show_colliders: bool = False
+    show_fps: bool = False
+
+
+@dataclass
 class GameConfig:
     """Master configuration container."""
 
@@ -84,6 +104,7 @@ class GameConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)
     input: InputConfig = field(default_factory=InputConfig)
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
+    debug: DebugConfig = field(default_factory=DebugConfig)
 
     # Metadata
     version: str = "1.0"
@@ -126,6 +147,25 @@ class GameConfig:
             p = data["physics"]
             cfg.physics = PhysicsConfig(
                 **{k: v for k, v in p.items() if k in PhysicsConfig.__annotations__}
+            )
+
+        # Debug
+        if "debug" in data:
+            d = data["debug"]
+            # Handle Enum conversion manually if needed
+            if "log_level" in d and isinstance(d["log_level"], (str, int)):
+                # If string "DEBUG", convert to LogLevel.DEBUG
+                # If int 10, convert to LogLevel(10)
+                try:
+                    if isinstance(d["log_level"], str):
+                        d["log_level"] = LogLevel[d["log_level"].upper()]
+                    else:
+                        d["log_level"] = LogLevel(d["log_level"])
+                except (KeyError, ValueError):
+                    d["log_level"] = LogLevel.INFO
+
+            cfg.debug = DebugConfig(
+                **{k: v for k, v in d.items() if k in DebugConfig.__annotations__}
             )
 
         return cfg

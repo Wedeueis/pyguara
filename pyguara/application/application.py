@@ -6,7 +6,6 @@ The accumulator pattern decouples physics updates (fixed rate) from rendering
 regardless of frame rate variations.
 """
 
-import logging
 import pygame
 
 from pyguara.config.manager import ConfigManager
@@ -15,11 +14,11 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
+from pyguara.log.manager import LogManager
+from pyguara.log.types import LogCategory
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.manager import UIManager
-
-logger = logging.getLogger(__name__)
 
 # Event queue processing budget (milliseconds per frame)
 DEFAULT_EVENT_QUEUE_TIME_BUDGET_MS = 5.0
@@ -51,6 +50,9 @@ class Application:
         self._event_queue_time_budget_ms = event_queue_time_budget_ms
 
         # Resolve Core Dependencies
+
+        self._log_manager = self._container.get(LogManager)
+        self.logger = self._log_manager.get_logger("Application", LogCategory.SYSTEM)
         self._window = container.get(Window)
         self._event_dispatcher = container.get(EventDispatcher)
         self._input_manager = container.get(InputManager)
@@ -69,6 +71,8 @@ class Application:
         # Fixed timestep accumulator
         self._accumulator = 0.0
 
+        self.logger.info("Application instance created.")
+
     def run(self, starting_scene: Scene) -> None:
         """Execute the main game loop with fixed timestep physics.
 
@@ -80,7 +84,7 @@ class Application:
 
         This ensures deterministic physics regardless of display framerate.
         """
-        logger.info("Starting with scene: %s", starting_scene.name)
+        self.logger.info(f"Starting with scene: {starting_scene.name}")
 
         self._scene_manager.register(starting_scene)
         self._scene_manager.switch_to(starting_scene.name)
@@ -91,11 +95,8 @@ class Application:
         fixed_dt = physics_config.fixed_dt
         max_frame_time = physics_config.max_frame_time
 
-        logger.debug(
-            "Game loop: target_fps=%d, physics_hz=%d, fixed_dt=%.4f",
-            target_fps,
-            physics_config.fixed_timestep_hz,
-            fixed_dt,
+        self.logger.debug(
+            f"Game loop: target_fps={target_fps}, physics_hz={physics_config.fixed_timestep_hz}, fixed_dt={fixed_dt}"
         )
 
         # Force an initial event pump to show the window immediately
@@ -192,5 +193,5 @@ class Application:
 
     def shutdown(self) -> None:
         """Close Application."""
-        logger.info("Shutting down application")
+        self.logger.info("Shutting down application")
         self._window.close()

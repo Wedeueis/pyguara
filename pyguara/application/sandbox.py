@@ -6,12 +6,12 @@ with the developer tool suite (Inspector, Debugger, Profiler, etc.).
 It is intended for use during development and testing phases.
 """
 
-import logging
 import pygame
 from typing import Optional
 
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
+from pyguara.log.types import LogCategory
 from pyguara.tools.manager import ToolManager
 from pyguara.tools.performance import PerformanceMonitor
 from pyguara.tools.inspector import EntityInspector
@@ -19,8 +19,6 @@ from pyguara.tools.event_monitor import EventMonitor
 from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.shortcuts_panel import ShortcutsPanel
 from pyguara.editor.layer import EditorTool
-
-logger = logging.getLogger(__name__)
 
 
 class SandboxApplication(Application):
@@ -39,11 +37,14 @@ class SandboxApplication(Application):
         """
         super().__init__(container)
         self._tool_manager: Optional[ToolManager] = None
+
+        self.tools_logger = self._log_manager.get_logger("Sandbox", LogCategory.EDITOR)
+        self.tools_logger.info("Sandbox Tools Initializing...")
         self._initialize_tools()
 
     def _initialize_tools(self) -> None:
         """Configure the tool manager and register all available tools."""
-        logger.info("Initializing Developer Tools")
+        self.logger.info("Initializing Developer Tools")
 
         self._tool_manager = ToolManager(self._container)
 
@@ -74,7 +75,7 @@ class SandboxApplication(Application):
         # Enable global visibility by default in Sandbox mode
         self._tool_manager.toggle_global_visibility()
 
-        logger.info("Tools loaded. Press F8 for help")
+        self.logger.info("Tools loaded. Press F8 for help")
 
     def _process_input(self) -> None:
         """Process input events, prioritizing developer tools."""
