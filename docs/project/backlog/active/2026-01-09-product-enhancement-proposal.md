@@ -2,7 +2,7 @@
 
 ## PyGuara Game Engine - Roadmap to Beta
 
-**Document Version:** 1.3
+**Document Version:** 1.4
 **Date:** January 18, 2026
 **Author:** Comprehensive Engine Review Committee
 **Status:** ACTIVE - Phase 3 (Weeks 12-17) In Progress
@@ -60,19 +60,20 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 | System | Architecture | Completeness | Testing | Documentation | Priority |
 |--------|--------------|--------------|---------|---------------|----------|
-| ECS Core | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 |
+| ECS Core | ⭐⭐⭐⭐⭐ | 98% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 |
 | DI Container | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | Event System | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 |
-| Graphics/Rendering | ⭐⭐⭐⭐ | 70% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P0 |
-| Physics | ⭐⭐⭐⭐ | 60% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
+| Graphics/Rendering | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
+| Physics | ⭐⭐⭐⭐ | 75% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
 | Input | ⭐⭐⭐⭐½ | 85% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
-| Audio | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
+| Audio | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | UI | ⭐⭐⭐⭐ | 65% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | AI | ⭐⭐⭐ | 30% | ⭐⭐ | ⭐⭐ | P2 |
-| Scene Mgmt | ⭐⭐⭐⭐ | 75% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
-| Resources | ⭐⭐⭐⭐⭐ | 85% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
+| Scene Mgmt | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐ | ⭐⭐⭐ | P1 |
+| Resources | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | Persistence | ⭐⭐⭐ | 50% | ⭐⭐ | ⭐⭐ | P2 |
-| Config | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P2 |
+| Config | ⭐⭐⭐⭐ | 85% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P2 |
+| CLI/Tooling | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P1 |
 | Editor | ⭐⭐⭐ | 25% | ⭐ | ⭐ | P3 |
 
 **Priority Levels:**
@@ -270,13 +271,18 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 #### Weeks 14-15: Developer Experience
 
 - [x] Error message quality pass (exc_info added, improved messages)
+- [x] `pyguara build` CLI tool (PyInstaller wrapper for standalone executables)
+- [x] `pyguara atlas` CLI tool (Click-based sprite atlas generator)
+- [x] Asset `.meta` sidecar system for import settings
 - [ ] Type stub improvements
 - [ ] VSCode extension (snippets, templates)
-- [ ] Project scaffolding CLI tool
 - [ ] Asset pipeline documentation
 
 #### Weeks 16-17: Performance & Stability
 
+- [x] Fixed timestep game loop (accumulator pattern)
+- [x] ECS `__slots__` optimization (BaseComponent, StrictComponent)
+- [x] Fast-path tuple queries (`get_components()` bypasses Entity wrapper)
 - [ ] Performance profiling and optimization
 - [ ] Memory leak auditing
 - [ ] Fuzz testing
@@ -285,10 +291,10 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 **Phase 3 Exit Criteria:**
 
-- ✅ All documentation complete
-- ✅ 3+ example games published
-- ✅ Beta release tagged
-- ✅ Community feedback incorporated
+- ⬜ All documentation complete
+- ⬜ 3+ example games published
+- ⬜ Beta release tagged
+- ⬜ Community feedback incorporated
 
 ---
 
@@ -1115,6 +1121,134 @@ Code reviews indicate `inspect.signature` usage during runtime and potential ser
 
 ---
 
+### 8.10 P3-001: CLI Build Tool - ✅ COMPLETED
+
+**Files:** `pyguara/cli/__init__.py`, `pyguara/cli/build.py`
+
+#### Context
+
+Users need a way to distribute their PyGuara games as standalone executables without requiring end users to have Python installed. This is essential for game distribution on platforms like itch.io or Steam.
+
+#### Acceptance Criteria
+
+- [x] `pyguara build` command wraps PyInstaller
+- [x] Auto-detects assets folder (assets/, Assets/, resources/, data/)
+- [x] Bundles all PyGuara dependencies as hidden imports
+- [x] Supports `--onefile` (single executable) and `--onedir` (directory) modes
+- [x] Supports `--windowed` (no console) and `--console` modes
+- [x] `--dry-run` flag previews the PyInstaller command
+- [x] Multiple asset directories via `-a/--assets` flag
+- [x] Custom executable name via `-n/--name` flag
+- [x] Icon support via `--icon` flag
+- [x] PyInstaller is an optional dependency (`pip install pyguara[build]`)
+- [x] CLI entry point registered in pyproject.toml
+
+#### Implementation Summary
+
+Created unified Click-based CLI with `pyguara build` command that wraps PyInstaller. The command auto-detects project structure, bundles assets, and includes all engine dependencies. Added `pyguara atlas` as a Click command alongside the existing argparse implementation for backward compatibility.
+
+---
+
+### 8.11 P3-002: Asset Meta System - ✅ COMPLETED
+
+**Files:** `pyguara/resources/meta.py`, `pyguara/resources/loader.py`, `pyguara/resources/manager.py`
+
+#### Context
+
+Assets are loaded "raw" without per-asset configuration. Game developers need to specify import settings like texture filtering (nearest vs linear), audio load mode (streaming vs preload), and other asset-specific options.
+
+#### Acceptance Criteria
+
+- [x] `.meta` sidecar files (JSON format) store per-asset settings
+- [x] `TextureMeta` dataclass with filter, mipmaps, premultiply_alpha settings
+- [x] `AudioMeta` dataclass with load_mode, volume_db settings
+- [x] `SpritesheetMeta` dataclass with grid dimensions, padding, naming pattern
+- [x] `MetaLoader` class reads and parses `.meta` files
+- [x] `IMetaAwareLoader` protocol for loaders that support meta settings
+- [x] `ResourceManager` automatically applies meta settings when loading
+- [x] `PygameImageLoader` updated to implement `IMetaAwareLoader`
+- [x] Graceful fallback when `.meta` file doesn't exist
+
+#### Implementation Summary
+
+Implemented a comprehensive asset meta system with typed dataclasses for different asset types. The `MetaLoader` reads JSON sidecar files and returns strongly-typed meta objects. `ResourceManager` checks for `IMetaAwareLoader` support and passes meta settings to loaders.
+
+---
+
+### 8.12 P3-003: Fixed Timestep Game Loop - ✅ COMPLETED
+
+**Files:** `pyguara/application/application.py`, `pyguara/config/types.py`, `pyguara/scene/base.py`, `pyguara/scene/manager.py`
+
+#### Context
+
+Variable timestep (`dt = clock.tick() / 1000.0`) couples simulation quality to frame rate. Lag causes physics tunneling and non-deterministic behavior. A fixed timestep ensures consistent physics regardless of rendering performance.
+
+#### Acceptance Criteria
+
+- [x] `PhysicsConfig` dataclass with `fixed_timestep_hz` and `max_frame_time`
+- [x] Accumulator pattern in `Application.run()` loop
+- [x] `_fixed_update(dt)` method for physics/logic at fixed rate
+- [x] `_update(dt)` continues to run at variable rate for rendering interpolation
+- [x] `max_frame_time` cap prevents "spiral of death" on lag spikes
+- [x] `Scene.fixed_update(dt)` method for scene-level fixed updates
+- [x] `SceneManager.fixed_update(dt)` propagates to active scenes
+
+#### Implementation Summary
+
+Implemented the classic accumulator pattern. Physics runs at a fixed 60Hz (configurable) while rendering runs at display refresh rate. Frame time is capped at 0.25s to prevent death spirals. Added `fixed_update()` to Scene and SceneManager for deterministic game logic.
+
+---
+
+### 8.13 P3-004: ECS Memory & Query Optimization - ✅ COMPLETED
+
+**Files:** `pyguara/ecs/component.py`, `pyguara/ecs/manager.py`
+
+#### Context
+
+Python object overhead and wrapper bottlenecks slow down hot loops. Components lacking `__slots__` consume excessive RAM, and `get_entities_with()` forces slow `__getattr__` lookups through the Entity wrapper.
+
+#### Acceptance Criteria
+
+- [x] `BaseComponent` uses `__slots__ = ("entity",)` for memory compaction
+- [x] `StrictComponent` uses `__slots__ = ()` (no additional slots)
+- [x] `EntityManager.get_components(*component_types)` fast-path API
+- [x] Fast-path returns `Iterator[Tuple[Component, ...]]` directly
+- [x] Bypasses Entity wrapper object creation in hot loops
+- [x] Type-safe overloaded signatures for 1-4 component queries
+- [x] Maintains backward compatibility with existing `get_entities_with()`
+
+#### Implementation Summary
+
+Added `__slots__` to `BaseComponent` and `StrictComponent` for memory efficiency. Implemented `get_components()` method that yields component tuples directly by accessing `entity._components` dict, avoiding Entity wrapper overhead. Added overloaded type signatures for proper IDE support.
+
+---
+
+### 8.14 P3-005: Audio System Refactor - ✅ COMPLETED
+
+**Files:** `pyguara/audio/types.py`, `pyguara/audio/audio_system.py`, `pyguara/audio/backends/pygame/pygame_audio.py`
+
+#### Context
+
+The audio system was a basic wrapper around Pygame with hardcoded volumes and no spatial capabilities. Games require spatial audio for immersion, audio buses for grouped volume control, and priority-based channel management.
+
+#### Acceptance Criteria
+
+- [x] `AudioPriority` enum (LOW, NORMAL, HIGH, CRITICAL)
+- [x] `AudioBusType` enum (MASTER, SFX, MUSIC, VOICE)
+- [x] `AudioBusManager` class with bus hierarchy (Master → SFX/Music/Voice)
+- [x] `SpatialAudioConfig` dataclass (max_distance, reference_distance, rolloff_factor, pan_strength)
+- [x] `play_sfx_at_position()` with distance attenuation and stereo panning
+- [x] Inverse distance attenuation model for realistic falloff
+- [x] Stereo panning based on listener position
+- [x] Priority-based channel stealing when channels are full
+- [x] `IAudioSystem` protocol updated with spatial audio methods
+
+#### Implementation Summary
+
+Complete audio system refactor with spatial audio support. Implemented inverse distance attenuation with configurable rolloff. Stereo panning calculated from relative position to listener. Priority system steals lowest-priority channels when all channels are occupied. Audio buses allow grouped volume control (e.g., mute all SFX).
+
+---
+
 ## 9. Quality Gates & Acceptance Criteria
 
 ### 9.1 Definition of Done (DoD)
@@ -1265,6 +1399,7 @@ For each release, verify:
 | 1.1 | 2026-01-10 | Review Committee | Phase 1 completion update |
 | 1.2 | 2026-01-11 | Review Committee | Phase 2 Weeks 4-5 completion (Rendering & Animation) |
 | 1.3 | 2026-01-18 | Review Committee | Phase 2 complete, Phase 3 started (Logging, Error messages) |
+| 1.4 | 2026-01-18 | Review Committee | Phase 3 progress: CLI tools, asset meta system, fixed timestep, ECS optimizations, audio refactor |
 
 ---
 
