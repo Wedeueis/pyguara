@@ -62,23 +62,32 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 | System | Architecture | Completeness | Testing | Documentation | Priority | Notes |
 |--------|--------------|--------------|---------|---------------|----------|-------|
+| **Core Infrastructure** |
 | ECS Core | ⭐⭐⭐⭐⭐ | 98% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 | Query caching, fast-path tuples, __slots__ |
 | DI Container | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Thread-safe, 3 lifetimes, auto-wiring |
 | Event System | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Priority dispatch, queue budgets |
+| Common/Types | ⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P1 | Vector2, Color, Rect, base components |
+| Error Handling | ⭐⭐⭐⭐ | 85% | ⭐⭐⭐ | ⭐⭐⭐ | P2 | Exception types, error strategies |
+| Logging | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Structured, categories, context stacking |
+| Application | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Fixed timestep, bootstrap, sandbox |
+| **Game Systems** |
 | Graphics/Rendering | ⭐⭐⭐⭐⭐ | 85% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | ModernGL+Pygame backends; shape rendering incomplete |
 | Physics | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Pymunk backend, joints, triggers, raycasts |
 | Input | ⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Keyboard, mouse, gamepad with hot-plug |
 | Audio | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐ | ⭐⭐⭐ | P1 | Spatial audio, buses, priority; no 3D/effects |
-| UI | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Constraint layout, themes, nine-patch |
-| AI | ⭐⭐⭐⭐ | 85% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | P2 | FSM, behavior trees, A*, navmesh, steering |
 | Animation | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | P1 | Tweens, FSM, 30+ easings, keyframes |
-| Scene Mgmt | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Stack, transitions, lifecycle hooks |
+| AI | ⭐⭐⭐⭐ | 85% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | P2 | FSM, behavior trees, A*, navmesh, steering |
+| UI | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Constraint layout, themes, nine-patch |
+| Scene Management | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Stack, transitions, lifecycle hooks |
+| Scripting/Coroutines | ⭐⭐⭐⭐ | 85% | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Coroutine system, delays, waits |
+| System Manager | ⭐⭐⭐⭐ | 75% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P2 | Automated system execution, lifecycle |
+| **Data & Resources** |
 | Resources | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Loaders, caching, .meta system |
 | Persistence | ⭐⭐⭐ | 50% | ⭐⭐ | ⭐⭐ | P2 | Basic save/load; migration placeholder |
 | Config | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐ | ⭐⭐⭐ | P2 | JSON config, env overrides, events |
+| **Developer Tools** |
 | CLI/Tooling | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P1 | pyguara build/atlas commands |
-| Logging | ⭐⭐⭐⭐⭐ | 90% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Structured, categories, context stacking |
-| Application | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Fixed timestep, bootstrap, sandbox |
+| Debug Tools | ⭐⭐⭐⭐ | 70% | ⭐⭐⭐ | ⭐⭐⭐ | P2 | Gizmos, event monitor, debugger |
 | Editor | ⭐⭐⭐ | 40% | ⭐ | ⭐⭐ | P3 | Basic inspector; no undo/redo |
 
 **Overall Metrics:**
