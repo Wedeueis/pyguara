@@ -83,7 +83,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 | System Manager | ⭐⭐⭐⭐ | 75% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P2 | Automated system execution, lifecycle |
 | **Data & Resources** |
 | Resources | ⭐⭐⭐⭐⭐ | 95% | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | P1 | Loaders, caching, .meta system |
-| Persistence | ⭐⭐⭐ | 50% | ⭐⭐ | ⭐⭐ | P2 | Basic save/load; migration placeholder |
+| Persistence | ⭐⭐⭐⭐ | 70% | ⭐⭐⭐ | ⭐⭐⭐ | P2 | Atomic writes, checksums; migration missing |
 | Config | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐ | ⭐⭐⭐ | P2 | JSON config, env overrides, events |
 | **Developer Tools** |
 | CLI/Tooling | ⭐⭐⭐⭐ | 80% | ⭐⭐⭐⭐ | ⭐⭐⭐ | P1 | pyguara build/atlas commands |
@@ -112,8 +112,25 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 | Issue | Location | Impact | Effort |
 |-------|----------|--------|--------|
 | Shape rendering incomplete | graphics/backends/moderngl/renderer.py | Circle/rect/polygon not in ModernGL | Medium |
-| Persistence tests limited | tests/test_persistence.py | Low coverage for save/load | Medium |
-| Migration system placeholder | persistence/manager.py | No actual migration execution | Medium |
+| Migration system missing | persistence/manager.py | Cannot upgrade save formats between versions | Medium |
+| MessagePack not implemented | persistence/serializer.py | Declared but raises error | Low |
+| Component registry hardcoded | scene/serializer.py | Only 5 components supported | Medium |
+
+**Persistence System Details (70% Complete):**
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| FileStorageBackend | ✅ 100% | Atomic writes, fsync, path sanitization |
+| JSON Serialization | ✅ 95% | Engine types work, dataclass roundtrip partial |
+| Binary (pickle) | ✅ 80% | Works, minimal testing |
+| MD5 Checksums | ✅ 100% | Integrity verification works |
+| Atomic File I/O | ✅ 100% | Production-quality temp-file-rename pattern |
+| DI Integration | ✅ 100% | Properly wired in bootstrap |
+| Migration System | ❌ 0% | Complete placeholder (save_version field exists) |
+| MessagePack | ❌ 0% | Enum declared, implementation missing |
+| Compression | ❌ 0% | Parameter exists, not used |
+| Dynamic Component Registry | ❌ 0% | Hardcoded to 5 types |
+| Async Save/Load | ❌ 0% | Blocking I/O only |
 
 #### LOW PRIORITY (Post-Beta)
 
