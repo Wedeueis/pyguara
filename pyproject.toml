@@ -69,6 +69,13 @@ benchmark = [
     "py-spy>=0.3.0"
 ]
 
+build = [
+    "pyinstaller>=6.0.0"
+]
+
+[project.scripts]
+pyguara = "pyguara.cli:main"
+
 [tool.hatch.build]
 include = [
     "pyguara/**/*.py",
@@ -234,6 +241,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "numpy.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "PyInstaller.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

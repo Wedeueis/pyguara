@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""
-Sprite Atlas Generator CLI Tool.
+"""Sprite Atlas Generator CLI Tool.
 
-Packs multiple sprite images into a single texture atlas using a shelf-packing
-algorithm. Generates both the packed image and JSON metadata for runtime loading.
+Pack multiple sprite images into a single texture atlas using a shelf-packing
+algorithm. Generate both the packed image and JSON metadata for runtime loading.
 
 Usage:
-    python -m pyguara.cli.atlas_generator \
-        --input assets/sprites/ \
-        --output assets/atlas/characters.png \
-        --metadata assets/atlas/characters.json \
-        --size 2048 \
-        --padding 2
+    pyguara atlas -i assets/sprites/ -o atlas.png -m atlas.json
+    python -m pyguara.cli.atlas_generator --input assets/sprites/ --output atlas.png
 """
 
 from __future__ import annotations
+
 import argparse
 import json
 import sys
 from pathlib import Path
-from typing import List, Tuple, Dict, Optional, Any
+from typing import Any, Dict, List, Optional, Tuple
+
+import click
 
 try:
     from PIL import Image
@@ -303,8 +301,85 @@ class AtlasGenerator:
         print(f"Atlas generation complete: {metadata['sprite_count']} sprites packed")
 
 
+@click.command()
+@click.option(
+    "-i",
+    "--input",
+    "input_dir",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    required=True,
+    help="Input directory containing sprite images",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Output path for atlas image (PNG)",
+)
+@click.option(
+    "-m",
+    "--metadata",
+    type=click.Path(file_okay=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Output path for JSON metadata (optional)",
+)
+@click.option(
+    "-s",
+    "--size",
+    type=int,
+    default=2048,
+    help="Atlas size (width and height, default: 2048)",
+)
+@click.option(
+    "-p",
+    "--padding",
+    type=int,
+    default=2,
+    help="Padding between sprites (default: 2)",
+)
+def atlas(
+    input_dir: Path,
+    output: Path,
+    metadata: Optional[Path],
+    size: int,
+    padding: int,
+) -> None:
+    r"""Generate a sprite atlas from multiple images.
+
+    Pack sprites from INPUT directory into a single texture atlas using
+    shelf-packing algorithm.
+
+    Examples:
+        \b
+        # Basic usage
+        pyguara atlas -i assets/sprites/ -o atlas.png
+
+        \b
+        # With metadata
+        pyguara atlas -i assets/sprites/ -o atlas.png -m atlas.json
+
+        \b
+        # Custom size and padding
+        pyguara atlas -i assets/sprites/ -o atlas.png -s 4096 -p 4
+    """
+    try:
+        generator = AtlasGenerator(
+            atlas_size=size,
+            padding=padding,
+        )
+        generator.generate(
+            input_path=input_dir,
+            output_path=output,
+            metadata_path=metadata,
+        )
+    except Exception as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        raise SystemExit(1)
+
+
 def main() -> None:
-    """CLI entry point."""
+    """Legacy CLI entry point using argparse."""
     parser = argparse.ArgumentParser(
         description="Generate sprite atlas from multiple images",
         formatter_class=argparse.RawDescriptionHelpFormatter,
