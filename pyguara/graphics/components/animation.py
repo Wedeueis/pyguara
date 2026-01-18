@@ -1,11 +1,14 @@
 """Animation Logic Component."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Callable
 from enum import Enum, auto
 from pyguara.resources.types import Texture
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.ecs.component import BaseComponent
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,7 +62,7 @@ class Animator(BaseComponent):
             force_reset (bool): If True, restarts animation even if already playing it.
         """
         if name not in self._clips:
-            print(f"[Animator] Warning: Clip '{name}' not found.")
+            logger.warning("Animation clip '%s' not found", name)
             return
 
         # Optimization: Don't restart if we are already playing this clip
@@ -245,7 +248,7 @@ class AnimationStateMachine(BaseComponent):
             bool: True if transition succeeded, False otherwise.
         """
         if state_name not in self._states:
-            print(f"[AnimationStateMachine] Warning: State '{state_name}' not found")
+            logger.warning("Animation state '%s' not found", state_name)
             return False
 
         target_state = self._states[state_name]

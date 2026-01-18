@@ -1,11 +1,14 @@
 """Tool management system for coordinating developer tools."""
 
+import logging
 import pygame
 from typing import Dict, List, Optional, Any
 
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.tools.base import Tool
+
+logger = logging.getLogger(__name__)
 
 
 class ToolManager:
@@ -45,7 +48,7 @@ class ToolManager:
         # or the specific tool is toggled.
         tool.hide()
 
-        print(f"[ToolManager] Registered {tool.name} (Key: {shortcut_key})")
+        logger.debug("Registered tool '%s' (Key: %s)", tool.name, shortcut_key)
 
     def get_tool(self, name: str) -> Optional[Tool]:
         """Retrieve a registered tool by name.
@@ -107,7 +110,7 @@ class ToolManager:
                 tool_name = self._shortcuts[event.key]
                 if tool := self._tools.get(tool_name):
                     tool.toggle()
-                    print(f"[ToolManager] Toggled {tool_name}: {tool.is_visible}")
+                    logger.debug("Toggled tool '%s': %s", tool_name, tool.is_visible)
                     return True
 
         if not self._is_globally_visible:
@@ -129,4 +132,4 @@ class ToolManager:
         # When turning on, ensure at least one tool is visible?
         # For now, we respect individual tool state.
         state = "Enabled" if self._is_globally_visible else "Disabled"
-        print(f"[ToolManager] Global Overlay {state}")
+        logger.debug("Global overlay %s", state)

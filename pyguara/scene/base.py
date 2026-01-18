@@ -88,9 +88,40 @@ class Scene(ABC):
         """
         pass
 
+    def fixed_update(self, fixed_dt: float) -> None:
+        """Fixed-rate update for physics and deterministic game logic.
+
+        Called at a fixed rate (default 60 Hz) regardless of display framerate.
+        Override this method to implement physics, collision detection, and
+        game logic that must behave consistently regardless of frame rate.
+
+        Args:
+            fixed_dt: Fixed delta time in seconds (e.g., 1/60 for 60 Hz physics).
+
+        Example:
+            def fixed_update(self, fixed_dt: float) -> None:
+                # Physics updates at consistent rate
+                self.physics_system.update(fixed_dt)
+                # AI decisions at fixed rate for determinism
+                self.ai_system.update(fixed_dt)
+        """
+        pass  # Default: no fixed update logic
+
     @abstractmethod
     def update(self, dt: float) -> None:
-        """Frame update logic."""
+        """Variable-rate update for animations and visual effects.
+
+        Called once per frame at display framerate. Use this for:
+        - Smooth animations and tweens
+        - Camera smoothing
+        - Particle effects
+        - Audio updates
+
+        For physics and game logic, use fixed_update() instead.
+
+        Args:
+            dt: Variable delta time in seconds (frame time).
+        """
         ...
 
     @abstractmethod

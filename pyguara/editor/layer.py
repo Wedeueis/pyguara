@@ -1,5 +1,6 @@
 """The Editor Tool manages the ImGui context and tool overlays."""
 
+import logging
 from typing import Optional, Any
 
 try:
@@ -22,6 +23,8 @@ from pyguara.editor.panels.inspector import InspectorPanel
 from pyguara.editor.panels.assets import AssetsPanel
 from pyguara.tools.base import Tool
 from pyguara.graphics.protocols import UIRenderer
+
+logger = logging.getLogger(__name__)
 
 
 class EditorTool(Tool):
@@ -56,7 +59,7 @@ class EditorTool(Tool):
     def initialize(self) -> None:
         """Configure ImGui context."""
         if not HAS_IMGUI:
-            print("[Editor] ImGui not found. Editor disabled.")
+            logger.warning("ImGui not found. Editor disabled.")
             return
 
         imgui.create_context()
@@ -68,7 +71,7 @@ class EditorTool(Tool):
         style.colors[imgui.COLOR_TITLE_BACKGROUND_ACTIVE] = (0.2, 0.3, 0.4, 1.0)
 
         self._initialized = True
-        print("[Editor] ImGui Initialized.")
+        logger.debug("ImGui editor initialized")
 
     def process_event(self, event: Any) -> bool:
         """Process inputs for the editor."""
@@ -119,9 +122,10 @@ class EditorTool(Tool):
                         success = serializer.save_scene(
                             scene_manager.current_scene, "current_scene"
                         )
-                        print(
-                            f"[Editor] Save Triggered: {'Success' if success else 'Failed'}"
-                        )
+                        if success:
+                            logger.info("Scene saved successfully")
+                        else:
+                            logger.error("Failed to save scene")
 
                 if imgui.menu_item("Load Scene", "Ctrl+L")[0]:
                     scene_manager = self._container.get(SceneManager)
@@ -130,9 +134,10 @@ class EditorTool(Tool):
                         success = serializer.load_scene(
                             scene_manager.current_scene, "current_scene"
                         )
-                        print(
-                            f"[Editor] Load Triggered: {'Success' if success else 'Failed'}"
-                        )
+                        if success:
+                            logger.info("Scene loaded successfully")
+                        else:
+                            logger.error("Failed to load scene")
 
                 imgui.end_menu()
 

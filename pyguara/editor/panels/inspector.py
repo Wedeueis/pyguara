@@ -1,5 +1,6 @@
 """Inspector Panel module."""
 
+import logging
 from typing import Any, Optional, cast
 import dataclasses
 
@@ -13,6 +14,8 @@ from pyguara.common.components import ResourceLink
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.data import DataResource
 from pyguara.editor.drawers import InspectorDrawer
+
+logger = logging.getLogger(__name__)
 
 
 class InspectorPanel:
@@ -76,6 +79,6 @@ class InspectorPanel:
 
             resource._data.update(new_data)
             resource.save()
-            print(f"[Editor] Updated source asset: {path}")
+            logger.info("Updated source asset: %s", path)
         except Exception as e:
-            print(f"[Editor] Failed to save to source: {e}")
+            logger.error("Failed to save to source: %s", e, exc_info=True)

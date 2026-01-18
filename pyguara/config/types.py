@@ -55,12 +55,35 @@ class InputConfig:
 
 
 @dataclass
+class PhysicsConfig:
+    """Physics simulation configuration."""
+
+    # Fixed timestep for physics updates (Hz)
+    # 60 Hz is standard for most games, 120 Hz for precision
+    fixed_timestep_hz: int = 60
+
+    # Maximum frame time to prevent spiral of death
+    # If a frame takes longer than this, we clamp the accumulator
+    max_frame_time: float = 0.25
+
+    # Gravity for platformers (pixels/second^2). Use (0,0) for top-down.
+    gravity_x: float = 0.0
+    gravity_y: float = 0.0
+
+    @property
+    def fixed_dt(self) -> float:
+        """Get the fixed delta time in seconds."""
+        return 1.0 / self.fixed_timestep_hz
+
+
+@dataclass
 class GameConfig:
     """Master configuration container."""
 
     display: WindowConfig = field(default_factory=WindowConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
     input: InputConfig = field(default_factory=InputConfig)
+    physics: PhysicsConfig = field(default_factory=PhysicsConfig)
 
     # Metadata
     version: str = "1.0"
@@ -96,6 +119,13 @@ class GameConfig:
             i = data["input"]
             cfg.input = InputConfig(
                 **{k: v for k, v in i.items() if k in InputConfig.__annotations__}
+            )
+
+        # Physics
+        if "physics" in data:
+            p = data["physics"]
+            cfg.physics = PhysicsConfig(
+                **{k: v for k, v in p.items() if k in PhysicsConfig.__annotations__}
             )
 
         return cfg

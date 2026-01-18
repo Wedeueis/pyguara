@@ -2,10 +2,10 @@
 
 ## PyGuara Game Engine - Roadmap to Beta
 
-**Document Version:** 1.2
-**Date:** January 11, 2026
+**Document Version:** 1.3
+**Date:** January 18, 2026
 **Author:** Comprehensive Engine Review Committee
-**Status:** ACTIVE - Phase 2 (Weeks 4-5) Complete
+**Status:** ACTIVE - Phase 3 (Weeks 12-17) In Progress
 
 ---
 
@@ -254,7 +254,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 ---
 
-### Phase 3: Polish & Documentation (Weeks 12-17)
+### Phase 3: Polish & Documentation (Weeks 12-17) - 🚀 IN PROGRESS
 
 **Goal:** Production-ready release with excellent DX
 
@@ -269,7 +269,7 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 
 #### Weeks 14-15: Developer Experience
 
-- [ ] Error message quality pass
+- [x] Error message quality pass (exc_info added, improved messages)
 - [ ] Type stub improvements
 - [ ] VSCode extension (snippets, templates)
 - [ ] Project scaffolding CLI tool
@@ -1264,6 +1264,7 @@ For each release, verify:
 | 1.0 | 2026-01-09 | Review Committee | Initial draft |
 | 1.1 | 2026-01-10 | Review Committee | Phase 1 completion update |
 | 1.2 | 2026-01-11 | Review Committee | Phase 2 Weeks 4-5 completion (Rendering & Animation) |
+| 1.3 | 2026-01-18 | Review Committee | Phase 2 complete, Phase 3 started (Logging, Error messages) |
 
 ---
 

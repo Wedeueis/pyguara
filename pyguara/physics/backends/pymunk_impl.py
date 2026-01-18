@@ -224,7 +224,9 @@ class PymunkEngine(IPhysicsEngine):
     ) -> IPhysicsBody:
         """Create and register a new physics body."""
         if not self.space:
-            raise RuntimeError("Physics engine not initialized")
+            raise RuntimeError(
+                "Physics engine not initialized. Call initialize(gravity) first."
+            )
 
         pm_type = pymunk.Body.DYNAMIC
         if body_type == BodyType.STATIC:
@@ -264,7 +266,10 @@ class PymunkEngine(IPhysicsEngine):
             return None
 
         if not isinstance(body_handle, PymunkBodyAdapter):
-            raise TypeError("Invalid body handle for Pymunk backend")
+            raise TypeError(
+                f"Invalid body handle for Pymunk backend: expected PymunkBodyAdapter, "
+                f"got {type(body_handle).__name__}"
+            )
 
         body = body_handle._body
         shape: Optional[pymunk.Shape] = None
@@ -355,7 +360,10 @@ class PymunkEngine(IPhysicsEngine):
         if not isinstance(body_a, PymunkBodyAdapter) or not isinstance(
             body_b, PymunkBodyAdapter
         ):
-            raise TypeError("Invalid body handles for Pymunk backend")
+            raise TypeError(
+                f"Invalid body handles for Pymunk backend: expected PymunkBodyAdapter, "
+                f"got {type(body_a).__name__} and {type(body_b).__name__}"
+            )
 
         pm_body_a = body_a._body
         pm_body_b = body_b._body

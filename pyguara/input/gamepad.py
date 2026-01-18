@@ -105,7 +105,9 @@ class GamepadManager:
 
                     logger.info("Connected: %s (ID: %d)", state.name, i)
                 except Exception as e:
-                    logger.error("Failed to initialize controller %d: %s", i, e)
+                    logger.error(
+                        "Failed to initialize controller %d: %s", i, e, exc_info=True
+                    )
 
         # Detect disconnected controllers
         disconnected = []

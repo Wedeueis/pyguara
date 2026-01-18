@@ -150,10 +150,17 @@ class BaseComponent:
         if logic methods are detected. For strict enforcement, use
         StrictComponent instead.
 
+    Memory Optimization:
+        This class uses __slots__ to reduce memory overhead. Subclasses that
+        use @dataclass should use @dataclass(slots=True) for optimal memory.
+        For non-dataclass subclasses, define your own __slots__.
+
     Attributes:
         _allow_methods: Class attribute to suppress method warnings.
             Set to True on legacy components that need methods.
     """
+
+    __slots__ = ("entity",)
 
     _allow_methods: bool = False
 
@@ -198,14 +205,18 @@ class StrictComponent(BaseComponent):
     definition time if logic methods are detected. Use this for new components
     to ensure they follow proper ECS principles.
 
+    Memory Optimization:
+        This class inherits __slots__ from BaseComponent. For best memory
+        efficiency, subclasses using @dataclass should use @dataclass(slots=True).
+
     Example:
-        @dataclass
+        @dataclass(slots=True)
         class Position(StrictComponent):
             x: float = 0.0
             y: float = 0.0
             # No methods allowed!
 
-        @dataclass
+        @dataclass(slots=True)
         class Velocity(StrictComponent):
             dx: float = 0.0
             dy: float = 0.0
@@ -213,6 +224,8 @@ class StrictComponent(BaseComponent):
             def update(self):  # This will raise TypeError!
                 pass
     """
+
+    __slots__ = ()  # No additional slots, inherits 'entity' from BaseComponent
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Validate subclasses and error on logic methods."""

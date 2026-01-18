@@ -93,12 +93,19 @@ class SandboxApplication(Application):
             # 3. Game Input Manager (Normal Priority)
             self._input_manager.process_event(event)
 
+    def _fixed_update(self, fixed_dt: float) -> None:
+        """Fixed-rate update for physics and game logic."""
+        # 1. Standard Fixed Update (Physics, Game Logic)
+        super()._fixed_update(fixed_dt)
+
+        # Tools don't typically need fixed updates, but could be extended
+
     def _update(self, dt: float) -> None:
-        """Update game logic and tools."""
-        # 1. Standard Game Update (Scenes, Systems)
+        """Variable-rate update for UI and tools."""
+        # 1. Standard Game Update (Scenes, Animations)
         super()._update(dt)
 
-        # 2. Update Tools
+        # 2. Update Tools (variable rate for smooth UI)
         if self._tool_manager:
             self._tool_manager.update(dt)
 

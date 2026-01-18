@@ -1,4 +1,10 @@
-"""Main application runtime."""
+"""Main application runtime.
+
+Implements a fixed timestep game loop for deterministic physics simulation.
+The accumulator pattern decouples physics updates (fixed rate) from rendering
+(display framerate), preventing tunneling and ensuring consistent behavior
+regardless of frame rate variations.
+"""
 
 import logging
 import pygame
@@ -20,7 +26,13 @@ DEFAULT_EVENT_QUEUE_TIME_BUDGET_MS = 5.0
 
 
 class Application:
-    """The main runtime loop coordinator."""
+    """The main runtime loop coordinator.
+
+    Uses a fixed timestep game loop for deterministic physics:
+    - Physics/logic updates run at a fixed rate (default 60 Hz)
+    - Rendering runs at display framerate (vsync or target FPS)
+    - Accumulator pattern prevents physics tunneling on lag spikes
+    """
 
     def __init__(
         self,
@@ -54,8 +66,20 @@ class Application:
 
         self._clock = pygame.time.Clock()
 
+        # Fixed timestep accumulator
+        self._accumulator = 0.0
+
     def run(self, starting_scene: Scene) -> None:
-        """Execute the main game loop."""
+        """Execute the main game loop with fixed timestep physics.
+
+        The loop uses the accumulator pattern:
+        1. Measure frame time (variable)
+        2. Accumulate time for physics
+        3. Run physics updates at fixed rate (e.g., 60 Hz)
+        4. Render at display framerate
+
+        This ensures deterministic physics regardless of display framerate.
+        """
         logger.info("Starting with scene: %s", starting_scene.name)
 
         self._scene_manager.register(starting_scene)
@@ -63,21 +87,47 @@ class Application:
 
         self._is_running = True
         target_fps = self._config_manager.config.display.fps_target
+        physics_config = self._config_manager.config.physics
+        fixed_dt = physics_config.fixed_dt
+        max_frame_time = physics_config.max_frame_time
+
+        logger.debug(
+            "Game loop: target_fps=%d, physics_hz=%d, fixed_dt=%.4f",
+            target_fps,
+            physics_config.fixed_timestep_hz,
+            fixed_dt,
+        )
 
         # Force an initial event pump to show the window immediately
         pygame.event.pump()
 
         while self._is_running and self._window.is_open:
-            # 1. Time
-            dt = self._clock.tick(target_fps) / 1000.0
+            # 1. Measure frame time
+            frame_time = self._clock.tick(target_fps) / 1000.0
 
-            # 2. Input
+            # Clamp frame time to prevent spiral of death
+            # (when updates take longer than real time, causing ever-growing backlog)
+            if frame_time > max_frame_time:
+                frame_time = max_frame_time
+
+            # 2. Input (once per frame, before physics)
             self._process_input()
 
-            # 3. Update
-            self._update(dt)
+            # 3. Accumulate time and run fixed updates
+            self._accumulator += frame_time
 
-            # 4. Render
+            while self._accumulator >= fixed_dt:
+                # Fixed-rate update (physics, game logic)
+                self._fixed_update(fixed_dt)
+                self._accumulator -= fixed_dt
+
+            # 4. Variable-rate update (UI, animations that should be smooth)
+            self._update(frame_time)
+
+            # 5. Render (at display framerate)
+            # The alpha value represents how far we are between physics steps
+            # This can be used for interpolation in the future
+            # alpha = self._accumulator / fixed_dt
             self._render()
 
         self.shutdown()
@@ -92,18 +142,44 @@ class Application:
             # Dispatch to input manager
             self._input_manager.process_event(event)
 
-    def _update(self, dt: float) -> None:
-        """Update game logic."""
+    def _fixed_update(self, fixed_dt: float) -> None:
+        """Fixed-rate update for physics and deterministic game logic.
+
+        This method runs at a fixed rate (default 60 Hz) regardless of display
+        framerate. Use this for:
+        - Physics simulation
+        - Game logic that must be deterministic
+        - AI decision making
+        - Collision detection
+
+        Args:
+            fixed_dt: Fixed delta time in seconds (e.g., 1/60 for 60 Hz).
+        """
         # 1. Process background thread events with time budget (P1-009)
         # Enforce time budget to prevent event death spirals
         self._event_dispatcher.process_queue(
             max_time_ms=self._event_queue_time_budget_ms
         )
 
-        # 2. Update UI
+        # 2. Update Scene (Physics, Logic) at fixed rate
+        self._scene_manager.fixed_update(fixed_dt)
+
+    def _update(self, dt: float) -> None:
+        """Variable-rate update for UI and smooth animations.
+
+        This method runs once per frame at display framerate. Use this for:
+        - UI updates
+        - Smooth visual animations (tweens, particles)
+        - Camera smoothing
+        - Audio updates
+
+        Args:
+            dt: Variable delta time in seconds (frame time).
+        """
+        # Update UI at display framerate for smooth interactions
         self._ui_manager.update(dt)
 
-        # 3. Update Scene (Physics, Logic)
+        # Variable-rate scene update (animations, camera, etc.)
         self._scene_manager.update(dt)
 
     def _render(self) -> None:

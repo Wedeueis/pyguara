@@ -6,6 +6,7 @@ of truth for all game assets. It handles:
 1. Caching (Flyweight pattern) to prevent duplicate loading.
 2. Loader delegation based on file extensions (Strategy pattern).
 3. Type safety validation using Generics.
+4. Asset metadata via `.meta` sidecar files for import settings.
 """
 
 import logging
@@ -15,7 +16,8 @@ from pathlib import Path
 from typing import Dict, Type, TypeVar
 
 from .exceptions import InvalidMetadataError, ResourceLoadError
-from .loader import IResourceLoader
+from .loader import IResourceLoader, IMetaAwareLoader
+from .meta import MetaLoader, get_meta_loader
 from .types import Resource, Texture
 from pyguara.common.types import Rect
 from pyguara.graphics.atlas import Atlas, AtlasRegion
@@ -27,14 +29,35 @@ T = TypeVar("T", bound=Resource)
 
 
 class ResourceManager:
-    """Orchestrate the loading, caching, and lifecycle of game resources."""
+    """Orchestrate the loading, caching, and lifecycle of game resources.
 
-    def __init__(self) -> None:
-        """Initialize the manager with empty cache and index."""
+    The ResourceManager supports asset metadata via `.meta` sidecar files.
+    When loading a resource, it checks for a corresponding `.meta` file
+    (e.g., `hero.png.meta` for `hero.png`) and applies import settings
+    if the loader supports metadata.
+
+    Example:
+        Create `hero.png.meta`:
+        ```json
+        {
+            "type": "texture",
+            "filter": "nearest",
+            "premultiply_alpha": true
+        }
+        ```
+    """
+
+    def __init__(self, meta_loader: MetaLoader | None = None) -> None:
+        """Initialize the manager with empty cache and index.
+
+        Args:
+            meta_loader: Optional custom meta loader. If None, uses the global instance.
+        """
         self._cache: Dict[str, Resource] = {}
         self._extension_map: Dict[str, IResourceLoader] = {}
         self._path_index: Dict[str, str] = {}
         self._reference_counts: Dict[str, int] = {}
+        self._meta_loader = meta_loader or get_meta_loader()
 
     def register_loader(self, loader: IResourceLoader) -> None:
         """
@@ -127,9 +150,17 @@ class ResourceManager:
         if not loader:
             raise ValueError(f"No loader registered for extension: {extension}")
 
-        # 4. Load & Verify
+        # 4. Load with metadata if supported
         logger.debug("Loading resource: %s", actual_path)
-        resource = loader.load(actual_path)
+
+        # Check for meta-aware loader and load metadata
+        if isinstance(loader, IMetaAwareLoader):
+            meta = self._meta_loader.load_meta(actual_path)
+            if meta:
+                logger.debug("Applying meta settings for '%s'", actual_path)
+            resource = loader.load_with_meta(actual_path, meta)
+        else:
+            resource = loader.load(actual_path)
 
         if not isinstance(resource, resource_type):
             raise TypeError(

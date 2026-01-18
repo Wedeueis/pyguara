@@ -1,9 +1,12 @@
 """Core Window management module."""
 
+import logging
 from typing import Any, Optional, Iterable
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.protocols import IWindowBackend
 from pyguara.common.types import Color
+
+logger = logging.getLogger(__name__)
 
 
 class Window:
@@ -25,9 +28,9 @@ class Window:
             return
 
         if self._backend.open(self._config):
-            print("Sucessefully openned window!")
+            logger.info("Window opened successfully")
         else:
-            raise Exception("Cannot load pygame window!")
+            raise RuntimeError("Failed to initialize window backend")
 
         self._native_handle = self._backend.get_screen()
 

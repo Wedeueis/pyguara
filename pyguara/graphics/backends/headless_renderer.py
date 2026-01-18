@@ -4,10 +4,13 @@ Headless rendering backend.
 Used for server-side logic, unit tests, or CI/CD pipelines where no display exists.
 """
 
+import logging
 from pyguara.graphics.protocols import IRenderer
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 from pyguara.common.types import Vector2, Color, Rect
+
+logger = logging.getLogger(__name__)
 
 
 class HeadlessBackend(IRenderer):
@@ -17,7 +20,7 @@ class HeadlessBackend(IRenderer):
         """Initialize the dummy backend."""
         self._width = width
         self._height = height
-        print(f"[HeadlessBackend] Initialized virtual display {width}x{height}")
+        logger.debug("Initialized virtual display %dx%d", width, height)
 
     @property
     def width(self) -> int:

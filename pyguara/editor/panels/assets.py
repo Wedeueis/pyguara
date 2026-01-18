@@ -1,5 +1,6 @@
 """Assets Panel for the Editor."""
 
+import logging
 import os
 import dataclasses
 from typing import Optional, Dict, Any, Callable, Type, cast
@@ -13,6 +14,8 @@ from pyguara.resources.manager import ResourceManager
 from pyguara.resources.data import DataResource
 from pyguara.ecs.manager import EntityManager
 from pyguara.common.components import Tag, Transform, ResourceLink
+
+logger = logging.getLogger(__name__)
 
 
 class AssetsPanel:
@@ -76,7 +79,7 @@ class AssetsPanel:
         if isinstance(resource, DataResource):
             if imgui.button("Save to Disk"):
                 resource.save()
-                print(f"[Editor] Saved {path}")
+                logger.info("Saved resource: %s", path)
 
             imgui.same_line()
 
@@ -133,7 +136,7 @@ class AssetsPanel:
                         t.scale = comp_data["scale"]
                     entity.add_component(t)
 
-        print(f"[Editor] Spawned entity from {resource.path}")
+        logger.debug("Spawned entity from resource: %s", resource.path)
 
     def _draw_dict_editor(self, data: Dict[str, Any]) -> None:
         """Draw using simple recursive dictionary editor based on ImGui primitives."""

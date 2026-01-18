@@ -181,40 +181,69 @@ class SceneManager:
         """
         return self._transition_manager.is_transitioning()
 
-    def update(self, dt: float) -> None:
-        """Update current scene and transitions.
+    def fixed_update(self, fixed_dt: float) -> None:
+        """Fixed-rate update for physics and deterministic game logic.
+
+        Called at a fixed rate (e.g., 60 Hz) regardless of display framerate.
 
         Args:
-            dt: Delta time in seconds
+            fixed_dt: Fixed delta time in seconds.
+        """
+        if self.is_transitioning():
+            return
+
+        # Find which scenes should update based on pause_below flags
+        scenes_to_update = self._get_active_scenes()
+
+        # Fixed update all active scenes (in order, bottom to top)
+        for scene in reversed(scenes_to_update):
+            scene.fixed_update(fixed_dt)
+
+    def update(self, dt: float) -> None:
+        """Variable-rate update for UI and smooth animations.
+
+        Called once per frame at display framerate.
+
+        Args:
+            dt: Delta time in seconds (variable).
         """
         # Update transition
         self._transition_manager.update(dt)
 
-        # Update scenes based on pause flags
-        if not self.is_transitioning():
-            # Find which scenes should update based on pause_below flags
-            scenes_to_update = []
-            if self._current_scene:
-                scenes_to_update.append(self._current_scene)
+        if self.is_transitioning():
+            return
 
-            # Work backwards through stack to see which scenes should update
-            for i in range(len(self._scene_stack) - 1, -1, -1):
-                # Check if the scene above this one pauses below
-                if i == len(self._scene_stack) - 1:
-                    # This is the scene just below current
-                    # Check if current scene (or the transition) pauses below
-                    if self._pause_below_flags and self._pause_below_flags[-1]:
-                        break  # Stop updating scenes below
-                else:
-                    # Check if scene above this one pauses below
-                    if self._pause_below_flags[i + 1]:
-                        break
+        # Update all active scenes (in order, bottom to top)
+        scenes_to_update = self._get_active_scenes()
+        for scene in reversed(scenes_to_update):
+            scene.update(dt)
 
-                scenes_to_update.append(self._scene_stack[i])
+    def _get_active_scenes(self) -> list[Scene]:
+        """Get list of scenes that should receive updates.
 
-            # Update all active scenes (in order)
-            for scene in reversed(scenes_to_update):
-                scene.update(dt)
+        Returns:
+            List of active scenes based on pause_below flags.
+        """
+        scenes_to_update: list[Scene] = []
+        if self._current_scene:
+            scenes_to_update.append(self._current_scene)
+
+        # Work backwards through stack to see which scenes should update
+        for i in range(len(self._scene_stack) - 1, -1, -1):
+            # Check if the scene above this one pauses below
+            if i == len(self._scene_stack) - 1:
+                # This is the scene just below current
+                # Check if current scene (or the transition) pauses below
+                if self._pause_below_flags and self._pause_below_flags[-1]:
+                    break  # Stop updating scenes below
+            else:
+                # Check if scene above this one pauses below
+                if self._pause_below_flags[i + 1]:
+                    break
+
+            scenes_to_update.append(self._scene_stack[i])
+
+        return scenes_to_update
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Render current scene and transition effects.

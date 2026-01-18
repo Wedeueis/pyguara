@@ -119,7 +119,7 @@ class FileStorageBackend(StorageBackend):
             logger.debug("Saved '%s' (%d bytes)", key, len(data))
             return True
         except OSError as e:
-            logger.error("Save failed for '%s': %s", key, e)
+            logger.error("Save failed for '%s': %s", key, e, exc_info=True)
             return False
 
     def load(self, key: str) -> Optional[tuple[bytes, Dict[str, Any]]]:
@@ -156,10 +156,10 @@ class FileStorageBackend(StorageBackend):
             logger.debug("Loaded '%s' (%d bytes)", key, len(data))
             return data, meta
         except OSError as e:
-            logger.error("Load failed for '%s': %s", key, e)
+            logger.error("Load failed for '%s': %s", key, e, exc_info=True)
             return None
         except json.JSONDecodeError as e:
-            logger.error("Metadata corrupted for '%s': %s", key, e)
+            logger.error("Metadata corrupted for '%s': %s", key, e, exc_info=True)
             return None
 
     def delete(self, key: str) -> bool:

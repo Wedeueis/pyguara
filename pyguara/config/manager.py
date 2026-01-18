@@ -69,7 +69,7 @@ class ConfigManager:
 
         except Exception as e:
             if self._logger:
-                self._logger.error(f"Failed to load config: {e}")
+                self._logger.error(f"Failed to load config from {target_path}: {e}")
             return False
 
     def save(self, file_path: Optional[Union[str, Path]] = None) -> bool:
@@ -90,7 +90,7 @@ class ConfigManager:
 
         except Exception as e:
             if self._logger:
-                self._logger.error(f"Failed to save config: {e}")
+                self._logger.error(f"Failed to save config to {target_path}: {e}")
             return False
 
     def update_setting(self, section: str, setting: str, value: Any) -> bool:

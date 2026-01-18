@@ -65,7 +65,10 @@ Identify critical silent failure points and add logs.
 | **TRACE** | (Not used in stdlib, map to DEBUG 5) Per-frame data (Physics step). |
 
 ## 4. Acceptance Criteria
-- [ ] No `print()` calls in the library code (`pyguara/`).
-- [ ] Running `make play` shows clean INFO logs (Scene switch, Controller detect).
-- [ ] Running `make play --debug` shows resource loading details.
-- [ ] Errors (missing files) include tracebacks in the log.
+- [x] No `print()` calls in the library code (`pyguara/`).
+  - Remaining print statements are only in:
+    - CLI tools (atlas_generator.py) - appropriate for user-facing output
+    - Docstring examples - documentation only
+- [x] Running `make play` shows clean INFO logs (Scene switch, Controller detect).
+- [x] Running `make play --debug` shows resource loading details.
+- [x] Errors (missing files) include tracebacks in the log.

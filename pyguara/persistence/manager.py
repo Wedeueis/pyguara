@@ -86,7 +86,7 @@ class PersistenceManager:
             return True
 
         except Exception as e:
-            logger.error(f"Failed to save data '{key}': {e}")
+            logger.error(f"Failed to save data '{key}': {e}", exc_info=True)
             return False
 
     def load_data(self, key: str, verify_integrity: bool = True) -> Optional[Any]:
@@ -132,5 +132,5 @@ class PersistenceManager:
             return data
 
         except Exception as e:
-            logger.error(f"Failed to load data '{key}': {e}")
+            logger.error(f"Failed to load data '{key}': {e}", exc_info=True)
             return None
