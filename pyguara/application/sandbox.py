@@ -115,5 +115,8 @@ class SandboxApplication(Application):
         if self._tool_manager:
             self._tool_manager.render(self._ui_renderer)
 
-        # 4. Swap Buffers
+        # 4. Finalize UI (composites for GL backends)
+        self._ui_renderer.present()
+
+        # 5. Swap Buffers
         self._window.present()

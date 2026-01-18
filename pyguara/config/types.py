@@ -1,8 +1,23 @@
 """Configuration data structures."""
 
 from dataclasses import dataclass, field, asdict
+from enum import Enum
 from typing import Dict, Any
 from pyguara.common.types import Color
+
+
+class RenderingBackend(Enum):
+    """Available rendering backend options.
+
+    PYGAME: Software rendering using Pygame's SDL2 backend.
+            Compatible with all systems, lower performance.
+
+    MODERNGL: GPU-accelerated rendering using ModernGL.
+              Requires OpenGL 3.3+, higher performance with hardware instancing.
+    """
+
+    PYGAME = "pygame"
+    MODERNGL = "moderngl"
 
 
 @dataclass
@@ -17,6 +32,7 @@ class WindowConfig:
     ui_scale: float = 1.0
     default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
     title: str = "Pyguara Engine"
+    backend: RenderingBackend = RenderingBackend.PYGAME
 
 
 @dataclass
@@ -60,7 +76,10 @@ class GameConfig:
 
         # Display
         if "display" in data:
-            d = data["display"]
+            d = data["display"].copy()
+            # Handle backend enum conversion from string
+            if "backend" in d and isinstance(d["backend"], str):
+                d["backend"] = RenderingBackend(d["backend"])
             cfg.display = WindowConfig(
                 **{k: v for k, v in d.items() if k in WindowConfig.__annotations__}
             )

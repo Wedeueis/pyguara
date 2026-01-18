@@ -316,3 +316,38 @@ class UIRenderer(Protocol):
 
     def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
         """Calculate dimensions of text."""
+        ...
+
+    def present(self) -> None:
+        """Finalize and present UI rendering.
+
+        Called at the end of each frame after all UI drawing is complete.
+        For immediate-mode renderers (pygame), this is a no-op.
+        For deferred renderers (OpenGL), this composites the UI onto the framebuffer.
+        """
+        ...
+
+
+class TextureFactory(Protocol):
+    """Factory for creating textures from raw image data.
+
+    This protocol abstracts texture creation, allowing backend-agnostic
+    code (like SpriteSheet) to create textures without knowing whether
+    the underlying system uses Pygame surfaces or OpenGL textures.
+    """
+
+    def create_from_bytes(
+        self, path: str, data: bytes, width: int, height: int
+    ) -> Texture:
+        """Create a texture from raw RGBA pixel data.
+
+        Args:
+            path: Identifier/name for the texture (used for caching/debugging).
+            data: Raw RGBA pixel data (4 bytes per pixel, row-major order).
+            width: Width of the image in pixels.
+            height: Height of the image in pixels.
+
+        Returns:
+            A Texture instance appropriate for the current rendering backend.
+        """
+        ...

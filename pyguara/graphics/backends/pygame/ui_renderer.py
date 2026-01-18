@@ -113,3 +113,10 @@ class PygameUIRenderer(UIRenderer):
     def set_target(self, surface: pygame.Surface) -> None:
         """Switch render targets."""
         self._surface = surface
+
+    def present(self) -> None:
+        """Finalize UI rendering.
+
+        No-op for pygame since it draws directly to the surface.
+        """
+        pass

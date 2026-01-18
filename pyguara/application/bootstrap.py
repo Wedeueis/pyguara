@@ -2,12 +2,13 @@
 
 from pyguara.application.application import Application
 from pyguara.config.manager import ConfigManager
+from pyguara.config.types import RenderingBackend
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
 from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
-from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.graphics.protocols import UIRenderer, IRenderer, TextureFactory
 from pyguara.graphics.window import Window, WindowConfig
 from pyguara.input.manager import InputManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
@@ -78,22 +79,67 @@ def _setup_container() -> DIContainer:
         screen_height=disp_cfg.screen_height,
         fullscreen=disp_cfg.fullscreen,
         vsync=disp_cfg.vsync,
+        backend=disp_cfg.backend,
     )
 
-    # We use the existing Window composition pattern
-    pygame_backend = PygameWindow()
-    window = Window(win_config, pygame_backend)
-    window.create()
-    container.register_instance(Window, window)
+    # Select backend based on configuration
+    gl_texture_loader = None
+    if disp_cfg.backend == RenderingBackend.MODERNGL:
+        # ModernGL backend with hardware instancing
+        from pyguara.graphics.backends.moderngl import (
+            PygameGLWindow,
+            ModernGLRenderer,
+            GLTextureLoader,
+            GLTextureFactory,
+            GLUIRenderer,
+        )
 
-    # 4. Rendering
-    # World Renderer
-    world_renderer = PygameBackend(window.native_handle)
-    container.register_instance(IRenderer, world_renderer)  # type: ignore[type-abstract]
+        gl_window_backend = PygameGLWindow()
+        window = Window(win_config, gl_window_backend)
+        window.create()
+        container.register_instance(Window, window)
 
-    # UI Renderer
-    ui_renderer = PygameUIRenderer(window.native_handle)
-    container.register_instance(UIRenderer, ui_renderer)  # type: ignore[type-abstract]
+        # Get the ModernGL context from the window
+        ctx = gl_window_backend.get_screen()
+
+        # World Renderer (GPU-accelerated)
+        gl_renderer = ModernGLRenderer(
+            ctx, disp_cfg.screen_width, disp_cfg.screen_height
+        )
+        container.register_instance(IRenderer, gl_renderer)  # type: ignore[type-abstract]
+
+        # UI Renderer (hybrid: pygame surface composited via OpenGL)
+        gl_ui_renderer = GLUIRenderer(
+            ctx, disp_cfg.screen_width, disp_cfg.screen_height
+        )
+        container.register_instance(UIRenderer, gl_ui_renderer)  # type: ignore[type-abstract]
+
+        # Texture Factory (for SpriteSheet and other texture creation)
+        gl_texture_factory = GLTextureFactory(ctx)
+        container.register_instance(TextureFactory, gl_texture_factory)  # type: ignore[type-abstract]
+
+        # Store texture loader for later registration
+        gl_texture_loader = GLTextureLoader(ctx)
+    else:
+        # Default Pygame backend
+        from pyguara.graphics.backends.pygame.types import PygameTextureFactory
+
+        pygame_window_backend = PygameWindow()
+        window = Window(win_config, pygame_window_backend)
+        window.create()
+        container.register_instance(Window, window)
+
+        # World Renderer
+        pygame_renderer = PygameBackend(window.native_handle)
+        container.register_instance(IRenderer, pygame_renderer)  # type: ignore[type-abstract]
+
+        # UI Renderer
+        pygame_ui_renderer = PygameUIRenderer(window.native_handle)
+        container.register_instance(UIRenderer, pygame_ui_renderer)  # type: ignore[type-abstract]
+
+        # Texture Factory (for SpriteSheet and other texture creation)
+        pygame_texture_factory = PygameTextureFactory()
+        container.register_instance(TextureFactory, pygame_texture_factory)  # type: ignore[type-abstract]
 
     # 5. Core Subsystems
     container.register_singleton(InputManager, InputManager)
@@ -110,6 +156,15 @@ def _setup_container() -> DIContainer:
     res_manager = ResourceManager()
     res_manager.register_loader(JsonLoader())
     res_manager.register_loader(PygameSoundLoader())  # Register audio loader
+
+    # Register appropriate texture loader based on backend
+    if gl_texture_loader is not None:
+        res_manager.register_loader(gl_texture_loader)
+    else:
+        from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
+
+        res_manager.register_loader(PygameImageLoader())
+
     container.register_instance(ResourceManager, res_manager)
 
     # Physics Engine

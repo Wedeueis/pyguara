@@ -111,6 +111,7 @@ class Application:
         self._window.clear()
         self._scene_manager.render(self._world_renderer, self._ui_renderer)
         self._ui_manager.render(self._ui_renderer)
+        self._ui_renderer.present()  # Finalize UI (composites for GL backends)
         self._window.present()
 
     def shutdown(self) -> None:

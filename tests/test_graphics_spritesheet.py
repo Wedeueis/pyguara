@@ -1,29 +1,47 @@
-import pygame
 import pytest
+from PIL import Image
+
 from pyguara.graphics.spritesheet import SpriteSheet
-from pyguara.graphics.backends.pygame.types import PygameTexture
+from pyguara.graphics.backends.pygame.types import PygameTextureFactory
 
 
 @pytest.fixture
-def sample_texture():
-    """Creates a 64x64 texture with 4 distinct 32x32 colored quadrants."""
-    surf = pygame.Surface((64, 64), flags=pygame.SRCALPHA)
+def texture_factory():
+    """Create a PygameTextureFactory for testing."""
+    return PygameTextureFactory()
+
+
+@pytest.fixture
+def sample_image():
+    """Creates a 64x64 PIL Image with 4 distinct 32x32 colored quadrants."""
+    img = Image.new("RGBA", (64, 64))
 
     # Q1: Top-Left (Red)
-    pygame.draw.rect(surf, (255, 0, 0), (0, 0, 32, 32))
+    for y in range(32):
+        for x in range(32):
+            img.putpixel((x, y), (255, 0, 0, 255))
+
     # Q2: Top-Right (Green)
-    pygame.draw.rect(surf, (0, 255, 0), (32, 0, 32, 32))
+    for y in range(32):
+        for x in range(32, 64):
+            img.putpixel((x, y), (0, 255, 0, 255))
+
     # Q3: Bottom-Left (Blue)
-    pygame.draw.rect(surf, (0, 0, 255), (0, 32, 32, 32))
+    for y in range(32, 64):
+        for x in range(32):
+            img.putpixel((x, y), (0, 0, 255, 255))
+
     # Q4: Bottom-Right (White)
-    pygame.draw.rect(surf, (255, 255, 255), (32, 32, 32, 32))
+    for y in range(32, 64):
+        for x in range(32, 64):
+            img.putpixel((x, y), (255, 255, 255, 255))
 
-    return PygameTexture("test_sheet.png", surf)
+    return img
 
 
-def test_spritesheet_slice_grid_full(sample_texture):
+def test_spritesheet_slice_grid_full(sample_image, texture_factory):
     """Test slicing the entire sheet."""
-    sheet = SpriteSheet(sample_texture)
+    sheet = SpriteSheet.from_image(sample_image, texture_factory, "test_sheet.png")
 
     frames = sheet.slice_grid(32, 32)
 
@@ -35,7 +53,7 @@ def test_spritesheet_slice_grid_full(sample_texture):
         assert f.width == 32
         assert f.height == 32
 
-    # Verify content of each frame
+    # Verify content of each frame by checking pixel colors
     # Frame 0: Red
     assert frames[0].native_handle.get_at((10, 10)) == (255, 0, 0, 255)
     # Frame 1: Green
@@ -46,9 +64,9 @@ def test_spritesheet_slice_grid_full(sample_texture):
     assert frames[3].native_handle.get_at((10, 10)) == (255, 255, 255, 255)
 
 
-def test_spritesheet_slice_limited_count(sample_texture):
+def test_spritesheet_slice_limited_count(sample_image, texture_factory):
     """Test limiting the number of frames."""
-    sheet = SpriteSheet(sample_texture)
+    sheet = SpriteSheet.from_image(sample_image, texture_factory, "test_sheet.png")
     frames = sheet.slice_grid(32, 32, count=2)
 
     assert len(frames) == 2
@@ -57,11 +75,10 @@ def test_spritesheet_slice_limited_count(sample_texture):
     assert frames[1].native_handle.get_at((0, 0)) == (0, 255, 0, 255)
 
 
-def test_spritesheet_uneven_dimensions():
+def test_spritesheet_uneven_dimensions(texture_factory):
     """Test slicing where sheet size isn't a perfect multiple (should truncate)."""
-    surf = pygame.Surface((70, 70))
-    tex = PygameTexture("uneven", surf)
-    sheet = SpriteSheet(tex)
+    img = Image.new("RGBA", (70, 70), (128, 128, 128, 255))
+    sheet = SpriteSheet.from_image(img, texture_factory, "uneven")
 
     # 32x32 frames.
     # Cols: 70 // 32 = 2
@@ -69,3 +86,42 @@ def test_spritesheet_uneven_dimensions():
     # Total: 4
     frames = sheet.slice_grid(32, 32)
     assert len(frames) == 4
+
+
+def test_spritesheet_properties(sample_image, texture_factory):
+    """Test sprite sheet width and height properties."""
+    sheet = SpriteSheet.from_image(sample_image, texture_factory, "test_sheet.png")
+
+    assert sheet.width == 64
+    assert sheet.height == 64
+
+
+def test_spritesheet_frames_property(sample_image, texture_factory):
+    """Test that frames property returns sliced frames."""
+    sheet = SpriteSheet.from_image(sample_image, texture_factory, "test_sheet.png")
+
+    # Before slicing, frames should be empty
+    assert sheet.frames == []
+
+    # After slicing, frames should be populated
+    sheet.slice_grid(32, 32)
+    assert len(sheet.frames) == 4
+
+
+def test_spritesheet_slice_regions(sample_image, texture_factory):
+    """Test slicing specific regions from the sprite sheet."""
+    sheet = SpriteSheet.from_image(sample_image, texture_factory, "test_sheet.png")
+
+    # Define custom regions (x, y, width, height)
+    regions = [
+        (0, 0, 32, 32),  # Top-left (Red)
+        (32, 32, 32, 32),  # Bottom-right (White)
+    ]
+
+    frames = sheet.slice_regions(regions)
+
+    assert len(frames) == 2
+    # First region is Red
+    assert frames[0].native_handle.get_at((10, 10)) == (255, 0, 0, 255)
+    # Second region is White
+    assert frames[1].native_handle.get_at((10, 10)) == (255, 255, 255, 255)
