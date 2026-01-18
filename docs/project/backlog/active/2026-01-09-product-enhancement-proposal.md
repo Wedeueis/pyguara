@@ -215,8 +215,8 @@ Transform PyGuara from a pre-alpha engine with excellent architecture into a **p
 - [x] Trigger volumes
 - [x] Platformer controller helper
 - [x] **P1-008**: Cached Component Queries (Physics/ECS Optimization)
-- [ ] **P1-010**: ModernGL Rendering Backend (High-Performance GPU Path) - DEFERRED
-- [ ] **P1-011**: Advanced Graphics Pipeline (Materials, Lighting, VFX) - DEFERRED
+- [x] **P1-010**: ModernGL Rendering Backend (High-Performance GPU Path)
+- [x] **P1-011**: Advanced Graphics Pipeline (Materials, Lighting, VFX)
 
 #### Weeks 8-9: UI & Scene Management - ✅ COMPLETE
 
