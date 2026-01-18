@@ -1,6 +1,10 @@
+import warnings
 from dataclasses import dataclass
+
+import pytest
+
 from pyguara.ecs.manager import EntityManager
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import BaseComponent, StrictComponent
 from pyguara.ecs.entity import Entity
 
 
@@ -272,3 +276,159 @@ def test_query_after_removal_returns_correct_components() -> None:
     combo_entities = list(manager.get_entities_with(Position, Health))
     assert len(combo_entities) == 1
     assert combo_entities[0] == e2
+
+
+# ==================== Strict Component Typing Tests (P2-006) ====================
+
+
+def test_data_only_component_no_warning() -> None:
+    """Data-only components should not raise warnings."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+
+        @dataclass
+        class DataOnlyComponent(BaseComponent):
+            value: int = 0
+            name: str = ""
+
+        # No warnings should be issued for data-only components
+        component_warnings = [
+            warning for warning in w if "DataOnlyComponent" in str(warning.message)
+        ]
+        assert len(component_warnings) == 0
+
+
+def test_base_component_warns_on_logic_methods() -> None:
+    """BaseComponent should warn when logic methods are detected."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+
+        class ComponentWithLogic(BaseComponent):
+            def __init__(self) -> None:
+                super().__init__()
+                self.value = 0
+
+            def update(self) -> None:
+                """This method contains logic - should trigger warning."""
+                self.value += 1
+
+        # Should have exactly one warning about the logic method
+        component_warnings = [
+            warning for warning in w if "ComponentWithLogic" in str(warning.message)
+        ]
+        assert len(component_warnings) == 1
+        assert "update" in str(component_warnings[0].message)
+
+
+def test_base_component_allows_methods_with_flag() -> None:
+    """BaseComponent with _allow_methods=True should not warn."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+
+        class LegacyComponent(BaseComponent):
+            _allow_methods = True
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.value = 0
+
+            def update(self) -> None:
+                """This method should NOT trigger warning due to _allow_methods."""
+                self.value += 1
+
+            def process(self) -> None:
+                """Another logic method."""
+                pass
+
+        # No warnings should be issued when _allow_methods is True
+        component_warnings = [
+            warning for warning in w if "LegacyComponent" in str(warning.message)
+        ]
+        assert len(component_warnings) == 0
+
+
+def test_base_component_allows_properties() -> None:
+    """Properties should be allowed in components without warnings."""
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+
+        class ComponentWithProperty(BaseComponent):
+            def __init__(self) -> None:
+                super().__init__()
+                self._value = 0
+
+            @property
+            def value(self) -> int:
+                """Read-only property - should be allowed."""
+                return self._value
+
+            @value.setter
+            def value(self, v: int) -> None:
+                """Property setter - should be allowed."""
+                self._value = v
+
+        # No warnings should be issued for properties
+        component_warnings = [
+            warning for warning in w if "ComponentWithProperty" in str(warning.message)
+        ]
+        assert len(component_warnings) == 0
+
+
+def test_strict_component_data_only_passes() -> None:
+    """StrictComponent should allow data-only components."""
+
+    # This should not raise any exception
+    @dataclass
+    class StrictDataComponent(StrictComponent):
+        x: float = 0.0
+        y: float = 0.0
+        name: str = ""
+
+    # Verify it can be instantiated
+    component = StrictDataComponent(x=1.0, y=2.0, name="test")
+    assert component.x == 1.0
+    assert component.y == 2.0
+
+
+def test_strict_component_raises_on_logic_methods() -> None:
+    """StrictComponent should raise TypeError when logic methods are detected."""
+    with pytest.raises(TypeError, match="has logic methods"):
+
+        class StrictComponentWithLogic(StrictComponent):
+            def __init__(self) -> None:
+                super().__init__()
+                self.value = 0
+
+            def update(self) -> None:
+                """This should cause TypeError."""
+                self.value += 1
+
+
+def test_strict_component_raises_with_method_names() -> None:
+    """StrictComponent error should list the offending method names."""
+    with pytest.raises(TypeError, match="calculate"):
+
+        class ComponentWithCalculate(StrictComponent):
+            def __init__(self) -> None:
+                super().__init__()
+
+            def calculate(self) -> int:
+                return 42
+
+
+def test_strict_component_allows_properties() -> None:
+    """StrictComponent should allow properties."""
+
+    # This should not raise
+    class StrictWithProperty(StrictComponent):
+        def __init__(self) -> None:
+            super().__init__()
+            self._cached = None
+
+        @property
+        def cached(self) -> object:
+            """Property accessor - should be allowed."""
+            return self._cached
+
+    component = StrictWithProperty()
+    assert component.cached is None

@@ -31,7 +31,14 @@ class ResourceLink(BaseComponent):
 
 
 class Transform(BaseComponent):
-    """Component representing position, rotation, and scale in 2D space."""
+    """Component representing position, rotation, and scale in 2D space.
+
+    Note:
+        This is a legacy component with methods for convenience. Ideally,
+        transform manipulation logic would be in a TransformSystem.
+    """
+
+    _allow_methods = True  # Legacy component with helper methods
 
     def __init__(
         self,

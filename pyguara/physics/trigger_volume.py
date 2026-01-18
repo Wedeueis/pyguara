@@ -39,6 +39,10 @@ class TriggerVolume(BaseComponent):
     The component state is automatically updated by TriggerSystem (if registered).
     Otherwise, you need to manually subscribe to OnTriggerEnter/Exit events.
 
+    Note:
+        This is a legacy component with state query methods. Ideally, these
+        would be simple set operations in game code.
+
     Attributes:
         shape_type: Geometric shape of the trigger zone.
         dimensions: Size parameters [radius] for circle, [width, height] for box.
@@ -47,6 +51,8 @@ class TriggerVolume(BaseComponent):
         active: Whether the trigger is active (inactive triggers don't fire events).
         one_shot: If True, trigger deactivates after first entity enters.
     """
+
+    _allow_methods: bool = field(default=True, repr=False, init=False)
 
     # Shape configuration (creates sensor Collider)
     shape_type: ShapeType = ShapeType.BOX
@@ -137,9 +143,15 @@ class EntityTags(BaseComponent):
     Tags are used by TriggerVolumes for filtering which entities can
     activate them. They can also be used for general entity categorization.
 
+    Note:
+        This is a legacy component with tag manipulation methods. Ideally,
+        these would be simple set operations in game code.
+
     Attributes:
         tags: Set of string tags for this entity.
     """
+
+    _allow_methods: bool = field(default=True, repr=False, init=False)
 
     tags: Set[str] = field(default_factory=set)
 

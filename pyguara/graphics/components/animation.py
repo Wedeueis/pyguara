@@ -19,12 +19,17 @@ class AnimationClip:
 
 
 class Animator(BaseComponent):
-    """
-    Component that manages playback of AnimationClips.
+    """Component that manages playback of AnimationClips.
 
     It 'drives' a Sprite component. Every frame, it calculates which texture
     frame should be visible and assigns it to the Sprite.
+
+    Note:
+        This is a legacy component with playback logic. Ideally, animation
+        logic would be in an AnimationSystem.
     """
+
+    _allow_methods = True  # Legacy component with animation playback logic
 
     def __init__(self, sprite: Sprite) -> None:
         """Initialize the animator with a target sprite.
@@ -174,12 +179,17 @@ class AnimationState:
 
 
 class AnimationStateMachine(BaseComponent):
-    """
-    Hierarchical Finite State Machine for animation control.
+    """Hierarchical Finite State Machine for animation control.
 
     Manages states, transitions, and callbacks for complex animation behavior.
     Built on top of the Animator component.
+
+    Note:
+        This is a legacy component with state machine logic. Ideally, FSM
+        logic would be in an AnimationStateMachineSystem.
     """
+
+    _allow_methods = True  # Legacy component with FSM logic
 
     def __init__(self, sprite: Sprite, animator: Animator):
         """

@@ -51,14 +51,19 @@ class SteeringAgent(BaseComponent):
 
 @dataclass
 class Navigator(BaseComponent):
-    """
-    Component that handles pathfollowing.
+    """Component that handles pathfollowing.
 
     Attributes:
         path: Current list of waypoints.
         current_index: Which waypoint we are moving toward.
         reach_threshold: How close to get before switching to next waypoint.
+
+    Note:
+        This is a legacy component with path management methods. Ideally,
+        path logic would be in a NavigationSystem.
     """
+
+    _allow_methods: bool = field(default=True, repr=False, init=False)
 
     path: List[Vector2] = field(default_factory=list)
     current_index: int = 0

@@ -53,6 +53,10 @@ class PlatformerController(BaseComponent):
     The controller requires a RigidBody component to apply movement forces
     and velocities. Ground detection is performed via raycasting.
 
+    Note:
+        This is a legacy component with movement logic. Ideally, this logic
+        would be in a PlatformerMovementSystem.
+
     Attributes:
         move_speed: Horizontal movement speed in pixels/second.
         jump_force: Upward force applied when jumping.
@@ -81,6 +85,8 @@ class PlatformerController(BaseComponent):
         facing_right: Direction character is facing (internal).
         move_input: Current horizontal movement input -1/0/1 (internal).
     """
+
+    _allow_methods: bool = field(default=True, repr=False, init=False)
 
     # Movement parameters
     move_speed: float = 200.0
