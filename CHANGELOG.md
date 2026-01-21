@@ -5,6 +5,41 @@ All notable changes to PyGuara will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-01-20
+
+### Added
+
+#### UIRenderer Protocol Enhancements
+- Added `width` parameter to `draw_circle()` for outline support
+- Added `draw_polygon()` method for shape rendering
+- Both `PygameUIRenderer` and `GLUIRenderer` updated with new methods
+
+#### Test Coverage Improvements
+- Added 57 comprehensive MetaLoader tests covering:
+  - TextureMeta, AudioMeta, SpritesheetMeta dataclasses
+  - Type inference from file extensions
+  - Caching behavior and roundtrip integrity
+  - Error handling (invalid JSON, missing files, unknown types)
+
+### Changed
+
+#### Backend-Agnostic Debug Tools
+- Refactored `PhysicsDebugger` to use UIRenderer protocol instead of direct pygame access
+- Refactored `TransformGizmo` to use UIRenderer protocol methods
+- Debug tools now work with any renderer backend (Pygame, ModernGL)
+
+### Documentation
+- Updated v0.3.0 assessment document with all issues resolved
+- Marked all beta blockers as complete
+- Updated test coverage gaps status
+
+### Tests
+- All 887 tests passing (up from 742 in v0.3.0)
+- New test files: `test_meta.py` (57 tests)
+- Previous additions: `test_tools.py`, `test_scene_serializer.py`, `test_spatial_audio.py`
+
+---
+
 ## [0.3.0] - 2026-01-18
 
 ### Added - ModernGL Rendering Backend & P3 Polish 🚀
@@ -162,6 +197,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.3.1]: https://github.com/wedeueis/pyguara/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wedeueis/pyguara/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wedeueis/pyguara/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/wedeueis/pyguara/releases/tag/v0.1.0
