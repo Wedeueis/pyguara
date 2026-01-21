@@ -286,14 +286,35 @@ class UIRenderer(Protocol):
         """Draw a filled or outlined rectangle."""
         ...
 
-    def draw_circle(self, center: Vector2, radius: float, color: Color) -> None:
-        """Draw a circle (e.g. for Radio buttons or Slider knobs)."""
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """Draw a circle (e.g. for Radio buttons or Slider knobs).
+
+        Args:
+            center: Center position.
+            radius: Radius in pixels.
+            color: Circle color.
+            width: Border thickness. 0 fills the circle (default).
+        """
         ...
 
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
         """Draw a line."""
+        ...
+
+    def draw_polygon(
+        self, points: list[tuple[int, int]], color: Color, width: int = 0
+    ) -> None:
+        """Draw a polygon.
+
+        Args:
+            points: List of (x, y) coordinates defining the polygon vertices.
+            color: Polygon color.
+            width: Border thickness. 0 fills the polygon (default).
+        """
         ...
 
     def draw_text(

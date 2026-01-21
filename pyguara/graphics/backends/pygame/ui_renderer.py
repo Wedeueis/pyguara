@@ -46,11 +46,13 @@ class PygameUIRenderer(UIRenderer):
             self._surface, rgba, pygame_rect, width, border_radius=border_radius
         )
 
-    def draw_circle(self, center: Vector2, radius: float, color: Color) -> None:
-        """Draw a circle."""
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """Draw a filled or outlined circle."""
         rgba = self._to_pygame_color(color)
         pygame.draw.circle(
-            self._surface, rgba, (int(center.x), int(center.y)), int(radius)
+            self._surface, rgba, (int(center.x), int(center.y)), int(radius), width
         )
 
     def draw_line(
@@ -65,6 +67,13 @@ class PygameUIRenderer(UIRenderer):
             (int(end.x), int(end.y)),
             width,
         )
+
+    def draw_polygon(
+        self, points: list[tuple[int, int]], color: Color, width: int = 0
+    ) -> None:
+        """Draw a filled or outlined polygon."""
+        rgba = self._to_pygame_color(color)
+        pygame.draw.polygon(self._surface, rgba, points, width)
 
     def draw_text(
         self, text: str, position: Vector2, color: Color, size: int = 16
