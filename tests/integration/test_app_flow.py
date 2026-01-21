@@ -11,6 +11,8 @@ from pyguara.config.types import GameConfig
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
 from pyguara.ui.manager import UIManager
+from pyguara.systems.manager import SystemManager
+from pyguara.scripting.coroutines import CoroutineManager
 from pyguara.graphics.window import Window
 from pyguara.graphics.protocols import UIRenderer, IRenderer
 
@@ -52,6 +54,10 @@ def app_container() -> DIContainer:
     c.register_instance(InputManager, MagicMock())
     c.register_instance(UIManager, MagicMock())
     c.register_singleton(SceneManager, SceneManager)
+
+    # SystemManager and CoroutineManager (required by Application)
+    c.register_instance(SystemManager, SystemManager())
+    c.register_instance(CoroutineManager, CoroutineManager())
 
     # Graphics Mocks
     mock_window = MagicMock()

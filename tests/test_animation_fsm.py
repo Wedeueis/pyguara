@@ -11,7 +11,6 @@ from pyguara.graphics.components.animation import (
 )
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.animation_system import AnimationSystem
-from pyguara.ecs.entity import Entity
 from pyguara.resources.types import Texture
 
 
@@ -376,6 +375,8 @@ def test_state_machine_transition_priority():
 
 def test_animation_system_updates_animator():
     """AnimationSystem should update standalone Animator components."""
+    from pyguara.ecs.manager import EntityManager
+
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
 
@@ -387,11 +388,12 @@ def test_animation_system_updates_animator():
 
     assert animator._current_frame_index == 0
 
-    entity = Entity()
+    entity_manager = EntityManager()
+    entity = entity_manager.create_entity()
     entity.add_component(animator)
 
-    system = AnimationSystem()
-    system.update([entity], 0.1)
+    system = AnimationSystem(entity_manager)
+    system.update(0.1)
 
     # Animator should have advanced to the next frame
     assert animator._current_frame_index == 1
@@ -399,6 +401,8 @@ def test_animation_system_updates_animator():
 
 def test_animation_system_updates_state_machine():
     """AnimationSystem should update AnimationStateMachine components."""
+    from pyguara.ecs.manager import EntityManager
+
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     fsm = AnimationStateMachine(sprite, animator)
@@ -412,11 +416,12 @@ def test_animation_system_updates_state_machine():
 
     assert animator._current_frame_index == 0
 
-    entity = Entity()
+    entity_manager = EntityManager()
+    entity = entity_manager.create_entity()
     entity.add_component(fsm)
 
-    system = AnimationSystem()
-    system.update([entity], 0.1)
+    system = AnimationSystem(entity_manager)
+    system.update(0.1)
 
     # State machine should have been updated (which updates the animator)
     assert animator._current_frame_index == 1
@@ -424,6 +429,8 @@ def test_animation_system_updates_state_machine():
 
 def test_animation_system_prioritizes_state_machine():
     """AnimationSystem should prioritize FSM over standalone Animator."""
+    from pyguara.ecs.manager import EntityManager
+
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     fsm = AnimationStateMachine(sprite, animator)
@@ -437,15 +444,16 @@ def test_animation_system_prioritizes_state_machine():
 
     assert animator._current_frame_index == 0
 
-    entity = Entity()
+    entity_manager = EntityManager()
+    entity = entity_manager.create_entity()
     entity.add_component(animator)
     entity.add_component(fsm)
 
-    system = AnimationSystem()
+    system = AnimationSystem(entity_manager)
 
     # Should only update FSM (which updates animator internally)
     # This prevents double-updating the animator
-    system.update([entity], 0.1)
+    system.update(0.1)
 
     # Verify it was updated once (should be on frame 1)
     assert animator._current_frame_index == 1

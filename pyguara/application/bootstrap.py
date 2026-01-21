@@ -27,6 +27,11 @@ from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.manager import AudioManager
 from pyguara.graphics.animation_system import AnimationSystem
+from pyguara.ecs.manager import EntityManager
+from pyguara.systems.manager import SystemManager
+from pyguara.ai.ai_system import AISystem
+from pyguara.ai.steering_system import SteeringSystem
+from pyguara.scripting.coroutines import CoroutineManager
 from .sandbox import SandboxApplication
 
 
@@ -166,7 +171,34 @@ def _setup_container() -> DIContainer:
     container.register_singleton(InputManager, InputManager)
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)
-    container.register_singleton(AnimationSystem, AnimationSystem)
+
+    # 5.1 ECS Core
+    entity_manager = EntityManager()
+    container.register_instance(EntityManager, entity_manager)
+
+    # 5.2 System Manager for orchestrating game systems
+    system_manager = SystemManager()
+    container.register_instance(SystemManager, system_manager)
+
+    # Register systems with priorities (lower priority = runs first)
+    # SteeringSystem priority 150: runs after physics, before AI
+    steering_system = SteeringSystem(entity_manager)
+    system_manager.register(steering_system, priority=150, system_type=SteeringSystem)
+    container.register_instance(SteeringSystem, steering_system)
+
+    # AISystem priority 200: runs after steering
+    ai_system = AISystem(entity_manager)
+    system_manager.register(ai_system, priority=200, system_type=AISystem)
+    container.register_instance(AISystem, ai_system)
+
+    # AnimationSystem priority 300: runs after AI updates
+    animation_system = AnimationSystem(entity_manager)
+    system_manager.register(animation_system, priority=300, system_type=AnimationSystem)
+    container.register_instance(AnimationSystem, animation_system)
+
+    # 5.3 Coroutine Manager for scripted sequences
+    coroutine_manager = CoroutineManager()
+    container.register_instance(CoroutineManager, coroutine_manager)
 
     # 6. Audio System
     audio_system = PygameAudioSystem()

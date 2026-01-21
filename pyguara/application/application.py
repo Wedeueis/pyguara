@@ -18,6 +18,8 @@ from pyguara.log.manager import LogManager
 from pyguara.log.types import LogCategory
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
+from pyguara.scripting.coroutines import CoroutineManager
+from pyguara.systems.manager import SystemManager
 from pyguara.ui.manager import UIManager
 
 # Event queue processing budget (milliseconds per frame)
@@ -59,12 +61,17 @@ class Application:
         self._scene_manager = container.get(SceneManager)
         self._config_manager = container.get(ConfigManager)
         self._ui_manager = container.get(UIManager)
+        self._system_manager = container.get(SystemManager)
+        self._coroutine_manager = container.get(CoroutineManager)
 
         # Retrieve Renderer
         self._world_renderer = container.get(IRenderer)  # type: ignore[type-abstract]
         self._ui_renderer = container.get(UIRenderer)  # type: ignore[type-abstract]
 
         self._scene_manager.set_container(container)
+
+        # Initialize all registered systems
+        self._system_manager.initialize()
 
         self._clock = pygame.time.Clock()
 
@@ -162,7 +169,10 @@ class Application:
             max_time_ms=self._event_queue_time_budget_ms
         )
 
-        # 2. Update Scene (Physics, Logic) at fixed rate
+        # 2. Update all registered systems (AI, Animation, etc.)
+        self._system_manager.update(fixed_dt)
+
+        # 3. Update Scene (Physics, Logic) at fixed rate
         self._scene_manager.fixed_update(fixed_dt)
 
     def _update(self, dt: float) -> None:
@@ -173,12 +183,16 @@ class Application:
         - Smooth visual animations (tweens, particles)
         - Camera smoothing
         - Audio updates
+        - Coroutine-based scripting
 
         Args:
             dt: Variable delta time in seconds (frame time).
         """
         # Update UI at display framerate for smooth interactions
         self._ui_manager.update(dt)
+
+        # Update coroutines (scripted sequences)
+        self._coroutine_manager.update(dt)
 
         # Variable-rate scene update (animations, camera, etc.)
         self._scene_manager.update(dt)
