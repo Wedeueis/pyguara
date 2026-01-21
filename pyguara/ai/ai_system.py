@@ -24,6 +24,6 @@ class AISystem:
             if ai.fsm:
                 ai.fsm.update(dt)
 
-            # (Future) Update Behavior Tree if present
-            # if ai.behavior_tree:
-            #     ai.behavior_tree.tick(dt)
+            # Update Behavior Tree if present
+            if ai.behavior_tree:
+                ai.behavior_tree.tick(entity)

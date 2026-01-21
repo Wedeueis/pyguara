@@ -22,8 +22,10 @@ from pyguara.ai.behavior_tree import (
     WaitNode,
 )
 from pyguara.ai.blackboard import Blackboard
-from pyguara.ai.components import AIComponent
+from pyguara.ai.components import AIComponent, SteeringAgent, Navigator
 from pyguara.ai.fsm import State, StateMachine
+from pyguara.ai.steering import SteeringBehavior
+from pyguara.ai.steering_system import SteeringSystem
 from pyguara.ai.navmesh import (
     NavMesh,
     NavMeshEdge,
@@ -66,6 +68,11 @@ __all__ = [
     "StateMachine",
     # Components
     "AIComponent",
+    "SteeringAgent",
+    "Navigator",
+    # Steering
+    "SteeringBehavior",
+    "SteeringSystem",
     # Blackboard
     "Blackboard",
     # Pathfinding
