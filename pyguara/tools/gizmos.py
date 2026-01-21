@@ -8,10 +8,10 @@ import math
 from enum import Enum, auto
 from typing import Any, Optional
 
-import pygame
+import pygame  # Only for event handling key constants
 
 from pyguara.common.components import Transform
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
@@ -36,6 +36,7 @@ class GizmoColors:
     SCALE = Color(255, 200, 80)  # Orange
     SELECTION = Color(255, 255, 0)  # Yellow
     HOVER = Color(255, 255, 255)  # White
+    CENTER = Color(255, 255, 255)  # White
 
 
 class TransformGizmo(Tool):
@@ -135,13 +136,8 @@ class TransformGizmo(Tool):
         """Render the gizmo overlays.
 
         Args:
-            renderer: UI Renderer for drawing primitives.
+            renderer: UI Renderer for drawing primitives (backend-agnostic).
         """
-        if not hasattr(renderer, "_surface"):
-            return
-
-        surface = renderer._surface
-
         if self._selected_entity is None:
             return
 
@@ -152,22 +148,20 @@ class TransformGizmo(Tool):
             return
 
         pos = transform.position
-        center = (int(pos.x), int(pos.y))
+        center = Vector2(pos.x, pos.y)
 
         # Draw selection highlight
-        self._draw_selection_box(surface, transform)
+        self._draw_selection_box(renderer, transform)
 
         # Draw mode-specific gizmo
         if self._mode == GizmoMode.TRANSLATE:
-            self._draw_translate_gizmo(surface, center)
+            self._draw_translate_gizmo(renderer, center)
         elif self._mode == GizmoMode.ROTATE:
-            self._draw_rotate_gizmo(surface, center, transform.rotation)
+            self._draw_rotate_gizmo(renderer, center, transform.rotation)
         elif self._mode == GizmoMode.SCALE:
-            self._draw_scale_gizmo(surface, center, transform.scale)
+            self._draw_scale_gizmo(renderer, center, transform.scale)
 
-    def _draw_selection_box(
-        self, surface: pygame.Surface, transform: Transform
-    ) -> None:
+    def _draw_selection_box(self, renderer: UIRenderer, transform: Transform) -> None:
         """Draw a selection bounding box around the entity."""
         pos = transform.position
         scale = transform.scale
@@ -176,47 +170,42 @@ class TransformGizmo(Tool):
         half_w = 16 * scale.x + self._selection_padding
         half_h = 16 * scale.y + self._selection_padding
 
-        rect = pygame.Rect(
+        rect = Rect(
             int(pos.x - half_w),
             int(pos.y - half_h),
             int(half_w * 2),
             int(half_h * 2),
         )
 
-        color = (
-            GizmoColors.SELECTION.r,
-            GizmoColors.SELECTION.g,
-            GizmoColors.SELECTION.b,
-        )
-        pygame.draw.rect(surface, color, rect, 1)
+        renderer.draw_rect(rect, GizmoColors.SELECTION, width=1)
 
-    def _draw_translate_gizmo(
-        self, surface: pygame.Surface, center: tuple[int, int]
-    ) -> None:
+    def _draw_translate_gizmo(self, renderer: UIRenderer, center: Vector2) -> None:
         """Draw position manipulation arrows."""
-        x, y = center
+        x, y = int(center.x), int(center.y)
 
         # X axis arrow (right)
-        x_color = (GizmoColors.X_AXIS.r, GizmoColors.X_AXIS.g, GizmoColors.X_AXIS.b)
-        end_x = (x + self._arrow_length, y)
-        pygame.draw.line(surface, x_color, center, end_x, self._line_width)
-        self._draw_arrow_head(surface, end_x, 0, x_color)
+        end_x = Vector2(x + self._arrow_length, y)
+        renderer.draw_line(center, end_x, GizmoColors.X_AXIS, self._line_width)
+        self._draw_arrow_head(
+            renderer, (int(end_x.x), int(end_x.y)), 0, GizmoColors.X_AXIS
+        )
 
         # Y axis arrow (down, since Y increases downward in screen space)
-        y_color = (GizmoColors.Y_AXIS.r, GizmoColors.Y_AXIS.g, GizmoColors.Y_AXIS.b)
-        end_y = (x, y + self._arrow_length)
-        pygame.draw.line(surface, y_color, center, end_y, self._line_width)
-        self._draw_arrow_head(surface, end_y, 90, y_color)
+        end_y = Vector2(x, y + self._arrow_length)
+        renderer.draw_line(center, end_y, GizmoColors.Y_AXIS, self._line_width)
+        self._draw_arrow_head(
+            renderer, (int(end_y.x), int(end_y.y)), 90, GizmoColors.Y_AXIS
+        )
 
         # Center dot
-        pygame.draw.circle(surface, (255, 255, 255), center, 4)
+        renderer.draw_circle(center, 4, GizmoColors.CENTER)
 
     def _draw_arrow_head(
         self,
-        surface: pygame.Surface,
+        renderer: UIRenderer,
         tip: tuple[int, int],
         angle_deg: float,
-        color: tuple[int, int, int],
+        color: Color,
     ) -> None:
         """Draw an arrowhead at the given position."""
         angle = math.radians(angle_deg)
@@ -234,42 +223,34 @@ class TransformGizmo(Tool):
             int(tip[1] + size * math.sin(angle - back_angle)),
         )
 
-        pygame.draw.polygon(surface, color, [p1, p2, p3])
+        renderer.draw_polygon([p1, p2, p3], color)
 
     def _draw_rotate_gizmo(
-        self, surface: pygame.Surface, center: tuple[int, int], rotation: float
+        self, renderer: UIRenderer, center: Vector2, rotation: float
     ) -> None:
         """Draw rotation manipulation circle."""
-        color = (
-            GizmoColors.ROTATION.r,
-            GizmoColors.ROTATION.g,
-            GizmoColors.ROTATION.b,
-        )
-
         # Draw rotation circle
-        pygame.draw.circle(
-            surface, color, center, self._rotation_radius, self._line_width
+        renderer.draw_circle(
+            center, self._rotation_radius, GizmoColors.ROTATION, self._line_width
         )
 
         # Draw current rotation indicator
         angle_rad = math.radians(rotation)
-        indicator_x = int(center[0] + self._rotation_radius * math.cos(angle_rad))
-        indicator_y = int(center[1] + self._rotation_radius * math.sin(angle_rad))
+        indicator_x = int(center.x + self._rotation_radius * math.cos(angle_rad))
+        indicator_y = int(center.y + self._rotation_radius * math.sin(angle_rad))
+        indicator = Vector2(indicator_x, indicator_y)
 
-        pygame.draw.line(
-            surface, color, center, (indicator_x, indicator_y), self._line_width
-        )
-        pygame.draw.circle(surface, (255, 255, 255), (indicator_x, indicator_y), 5)
+        renderer.draw_line(center, indicator, GizmoColors.ROTATION, self._line_width)
+        renderer.draw_circle(indicator, 5, GizmoColors.CENTER)
 
         # Center dot
-        pygame.draw.circle(surface, (255, 255, 255), center, 4)
+        renderer.draw_circle(center, 4, GizmoColors.CENTER)
 
     def _draw_scale_gizmo(
-        self, surface: pygame.Surface, center: tuple[int, int], scale: Vector2
+        self, renderer: UIRenderer, center: Vector2, scale: Vector2
     ) -> None:
         """Draw scale manipulation handles."""
-        x, y = center
-        color = (GizmoColors.SCALE.r, GizmoColors.SCALE.g, GizmoColors.SCALE.b)
+        x, y = int(center.x), int(center.y)
 
         # Calculate corner positions based on current scale
         half_w = int(40 * scale.x)
@@ -284,25 +265,29 @@ class TransformGizmo(Tool):
 
         # Draw connecting lines
         for i in range(4):
-            pygame.draw.line(surface, color, corners[i], corners[(i + 1) % 4], 1)
+            start = Vector2(corners[i][0], corners[i][1])
+            end = Vector2(corners[(i + 1) % 4][0], corners[(i + 1) % 4][1])
+            renderer.draw_line(start, end, GizmoColors.SCALE, 1)
 
         # Draw diagonal lines to center
         for corner in corners:
-            pygame.draw.line(surface, color, center, corner, 1)
+            renderer.draw_line(
+                center, Vector2(corner[0], corner[1]), GizmoColors.SCALE, 1
+            )
 
         # Draw handle squares at corners
         handle_size = self._scale_handle_size
         for corner in corners:
-            rect = pygame.Rect(
+            rect = Rect(
                 corner[0] - handle_size // 2,
                 corner[1] - handle_size // 2,
                 handle_size,
                 handle_size,
             )
-            pygame.draw.rect(surface, color, rect)
+            renderer.draw_rect(rect, GizmoColors.SCALE)
 
         # Center dot
-        pygame.draw.circle(surface, (255, 255, 255), center, 4)
+        renderer.draw_circle(center, 4, GizmoColors.CENTER)
 
     def process_event(self, event: Any) -> bool:
         """Process input events for gizmo interaction.
