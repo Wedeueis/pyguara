@@ -115,29 +115,10 @@ class EditorTool(Tool):
         if imgui.begin_main_menu_bar():
             if imgui.begin_menu("File", True):
                 if imgui.menu_item("Save Scene", "Ctrl+S")[0]:
-                    # Implement Save Logic
-                    scene_manager = self._container.get(SceneManager)
-                    if scene_manager.current_scene:
-                        serializer = self._container.get(SceneSerializer)
-                        success = serializer.save_scene(
-                            scene_manager.current_scene, "current_scene"
-                        )
-                        if success:
-                            logger.info("Scene saved successfully")
-                        else:
-                            logger.error("Failed to save scene")
+                    self._save_current_scene()
 
                 if imgui.menu_item("Load Scene", "Ctrl+L")[0]:
-                    scene_manager = self._container.get(SceneManager)
-                    if scene_manager.current_scene:
-                        serializer = self._container.get(SceneSerializer)
-                        success = serializer.load_scene(
-                            scene_manager.current_scene, "current_scene"
-                        )
-                        if success:
-                            logger.info("Scene loaded successfully")
-                        else:
-                            logger.error("Failed to load scene")
+                    self._load_current_scene()
 
                 imgui.end_menu()
 
@@ -168,3 +149,55 @@ class EditorTool(Tool):
         imgui.render()
         if self._renderer:
             self._renderer.render(imgui.get_draw_data())
+
+    def _save_current_scene(self) -> None:
+        """Save the current scene to disk."""
+        scene_manager = self._container.get(SceneManager)
+        if not scene_manager.current_scene:
+            logger.warning("No scene to save")
+            return
+
+        scene = scene_manager.current_scene
+        serializer = self._container.get(SceneSerializer)
+
+        # Use scene name as filename
+        filename = f"scene_{scene.name}"
+
+        try:
+            success = serializer.save_scene(scene, filename)
+            if success:
+                logger.info(
+                    "Scene '%s' saved successfully to '%s'", scene.name, filename
+                )
+            else:
+                logger.error("Failed to save scene '%s'", scene.name)
+        except Exception as e:
+            logger.error("Error saving scene '%s': %s", scene.name, e, exc_info=True)
+
+    def _load_current_scene(self) -> None:
+        """Load and refresh the current scene from disk."""
+        scene_manager = self._container.get(SceneManager)
+        if not scene_manager.current_scene:
+            logger.warning("No scene to load into")
+            return
+
+        scene = scene_manager.current_scene
+        serializer = self._container.get(SceneSerializer)
+
+        # Use scene name as filename
+        filename = f"scene_{scene.name}"
+
+        try:
+            # Clear existing entities before loading
+            scene.entity_manager._entities.clear()
+            scene.entity_manager._component_index.clear()
+
+            success = serializer.load_scene(scene, filename)
+            if success:
+                logger.info(
+                    "Scene '%s' loaded successfully from '%s'", scene.name, filename
+                )
+            else:
+                logger.error("Failed to load scene '%s'", scene.name)
+        except Exception as e:
+            logger.error("Error loading scene '%s': %s", scene.name, e, exc_info=True)

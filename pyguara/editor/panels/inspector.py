@@ -51,8 +51,7 @@ class InspectorPanel:
         imgui.separator()
 
         # Iterate through components
-        # We assume entity.components is Dict[Type, Component]
-        for comp_type, component in entity.components.items():
+        for comp_type, component in entity._components.items():
             if imgui.collapsing_header(
                 comp_type.__name__, imgui.TREE_NODE_DEFAULT_OPEN
             ):
@@ -66,16 +65,15 @@ class InspectorPanel:
             resource = self._resource_manager.load(path, DataResource)
 
             # Map components to dict
-            new_data = {}
-            for comp_type, comp in entity.components.items():
+            new_data: dict[str, Any] = {}
+            for comp_type, comp in entity._components.items():
                 if comp_type == ResourceLink:
                     continue
 
-                if dataclasses.is_dataclass(comp):
+                # Serialize dataclass components
+                if dataclasses.is_dataclass(type(comp)):
                     comp_dict = dataclasses.asdict(cast(Any, comp))
                     new_data[comp_type.__name__] = comp_dict
-                else:
-                    pass
 
             resource._data.update(new_data)
             resource.save()
