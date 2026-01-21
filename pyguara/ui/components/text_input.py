@@ -67,11 +67,29 @@ class TextInput(Widget):
             if contains:
                 return True
 
-        # Keyboard logic (KEY_DOWN would need to be added to UIEventType enum)
-        # For now, we only handle mouse events
-        # if self.active and event_type == UIEventType.KEY_DOWN:
-        #     if key_code == 8:  # Backspace
-        #         self.text = self.text[:-1]
-        #     return True
+        # Focus events from UIManager
+        if event_type == UIEventType.FOCUS_GAINED:
+            self.active = True
+            return True
+
+        if event_type == UIEventType.FOCUS_LOST:
+            self.active = False
+            return True
+
+        # Keyboard input handling
+        if self.active and event_type == UIEventType.KEY_DOWN:
+            if key_code == 8:  # Backspace
+                if self.text:
+                    self.text = self.text[:-1]
+                return True
+            elif key_code == 127:  # Delete
+                # Delete behaves same as backspace for simple single-cursor input
+                if self.text:
+                    self.text = self.text[:-1]
+                return True
+            elif 32 <= key_code <= 126:  # Printable ASCII range
+                if len(self.text) < self.max_length:
+                    self.text += chr(key_code)
+                return True
 
         return False

@@ -84,6 +84,15 @@ class UIEventType(Enum):
     FOCUS_LOST = "focus_lost"
     """Element lost input focus."""
 
+    KEY_DOWN = "key_down"
+    """Keyboard key was pressed."""
+
+    KEY_UP = "key_up"
+    """Keyboard key was released."""
+
+    TEXT_INPUT = "text_input"
+    """Unicode text input (for printable characters)."""
+
 
 # --- Theme Structures ---
 
