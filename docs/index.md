@@ -13,6 +13,13 @@ PyGuara is built on four core pillars:
 
 ## 📚 Documentation Sections
 
+### [Guides & Standards](guides/ONBOARDING.md)
+Start here to understand how we work:
+*   **[Onboarding](guides/ONBOARDING.md)**: Your first stop. Learn the core patterns (DI, ECS, Events).
+*   **[Architecture & Style](guides/Archictecture & Style Guide.md)**: Coding standards, file organization, and SOLID principles.
+*   **[Project Structure](guides/PROJECT_STRUCTURE.md)**: How to organize your game files and assets.
+*   **[Brand Identity](guides/Brand Identity & Style Guide.md)**: The "Maned Wolf & Falcon" aesthetic.
+
 ### [Core Architecture](core/architecture.md)
 Understand the foundational systems:
 *   **ECS**: High-performance entity management with inverted indexing.
@@ -52,7 +59,7 @@ Essential engine features:
 
 ## 🚀 Quick Start
 
-If you haven't already, check the [README](https://github.com/yourusername/pyguara) for installation instructions. To run the default example, simply execute:
+If you haven't already, check the [README](https://github.com/wedeueis/pyguara) for installation instructions. To run the default example, simply execute:
 
 ```bash
 python main.py

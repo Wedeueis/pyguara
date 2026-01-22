@@ -666,5 +666,3 @@ For each release, verify:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-09 | Wedeueis Braz | Initial draft |
-
----

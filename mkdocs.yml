@@ -11,15 +11,24 @@ theme:
 
 nav:
   - Home: index.md
+  - Guides:
+      - Onboarding: guides/ONBOARDING.md
+      - Architecture & Style: guides/Archictecture & Style Guide.md
+      - Project Structure: guides/PROJECT_STRUCTURE.md
+      - Brand Identity: guides/Brand Identity & Style Guide.md
   - Core:
       - Architecture: core/architecture.md
       - Application & Lifecycle: core/application.md
+      - Logging: core/logging.md
   - Graphics:
-      - Rendering & UI: graphics/rendering.md
-  - Simulation:
-      - Physics & AI: physics/simulation.md
+      - Rendering: graphics/rendering.md
+  - Physics:
+      - Simulation: physics/simulation.md
+  - AI:
+      - Intelligence: ai/intelligence.md
   - Systems:
-      - Resources & Persistence: systems/resources.md
-  - Dev Backlog:
-      - Architectural Review: dev/backlog/2026-01-05-architectural-review.md
-      - TODO List: dev/backlog/TODO.md
+      - Animation: systems/animation.md
+      - Editor Tools: systems/editor.md
+      - Input: systems/input.md
+      - Resources: systems/resources.md
+      - Scripting: systems/scripting.md
