@@ -15,7 +15,6 @@ nav:
       - Onboarding: guides/ONBOARDING.md
       - Architecture & Style: guides/Archictecture & Style Guide.md
       - Project Structure: guides/PROJECT_STRUCTURE.md
-      - Brand Identity: guides/Brand Identity & Style Guide.md
   - Core:
       - Architecture: core/architecture.md
       - Application & Lifecycle: core/application.md
