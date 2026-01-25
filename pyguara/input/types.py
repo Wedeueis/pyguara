@@ -112,3 +112,30 @@ class GamepadState:
     axis_values: Dict[GamepadAxis, float] = field(
         default_factory=lambda: {axis: 0.0 for axis in GamepadAxis}
     )
+
+
+class ConflictResolution(Enum):
+    """Strategy for handling binding conflicts."""
+
+    ERROR = auto()  # Raise error if conflict exists
+    SWAP = auto()  # Swap bindings between actions
+    UNBIND = auto()  # Unbind the conflicting action first
+    ALLOW = auto()  # Allow multiple actions on same key
+
+
+class RebindResult(Enum):
+    """Result of a rebind operation."""
+
+    SUCCESS = auto()  # Binding was successful
+    CONFLICT = auto()  # Conflict detected (only with ERROR strategy)
+    SWAPPED = auto()  # Bindings were swapped
+    UNBOUND = auto()  # Previous binding was removed
+
+
+@dataclass
+class BindingConflict:
+    """Information about a binding conflict."""
+
+    key: tuple  # (InputDevice, int) - the conflicting key
+    existing_actions: list  # Actions already bound to this key
+    context: InputContext  # Context where conflict occurs
