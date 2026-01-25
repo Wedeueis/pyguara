@@ -1,12 +1,17 @@
 """Core Persistence Manager."""
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from datetime import datetime
-from typing import Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from pyguara.persistence.types import SaveMetadata, SerializationFormat, StorageBackend
 from pyguara.persistence.serializer import Serializer
+
+if TYPE_CHECKING:
+    from pyguara.persistence.migration import MigrationManager
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -22,18 +27,23 @@ class PersistenceManager:
     Attributes:
         storage: The backend storage implementation (e.g., FileSystem, SQLite).
         serializer: The serialization handler.
+        migration_manager: Optional manager for schema migrations.
     """
 
-    def __init__(self, storage_backend: StorageBackend):
+    def __init__(
+        self,
+        storage_backend: StorageBackend,
+        migration_manager: Optional[MigrationManager] = None,
+    ):
         """Initialize the persistence manager.
 
         Args:
             storage_backend: The concrete implementation of where data is stored.
+            migration_manager: Optional manager for handling schema migrations.
         """
         self.storage = storage_backend
         self.serializer = Serializer(default_format=SerializationFormat.JSON)
-        # Placeholder for MigrationManager integration
-        self.migration_manager = None
+        self.migration_manager = migration_manager
 
     def save_data(
         self, key: str, data: Any, save_version: int = 1, compress: bool = False
@@ -124,10 +134,15 @@ class PersistenceManager:
 
             data = self.serializer.deserialize(raw_bytes, format_type=fmt)
 
-            # 4. Migration Hook (Placeholder)
-            # if self.migration_manager:
-            #     current_version = meta_dict.get("save_version", 1)
-            #     data = self.migration_manager.migrate(data, current_version)
+            # 4. Apply Migrations if needed
+            if self.migration_manager and isinstance(data, dict):
+                save_version = meta_dict.get("save_version", 1)
+                if self.migration_manager.needs_migration(save_version):
+                    logger.info(
+                        f"Migrating save data '{key}' from v{save_version} "
+                        f"to v{self.migration_manager.current_version}"
+                    )
+                    data = self.migration_manager.migrate(data, save_version)
 
             return data
 
