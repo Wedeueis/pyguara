@@ -20,12 +20,17 @@ from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
 from pyguara.scene.serializer import SceneSerializer
 from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.migration import MigrationManager, get_global_registry
 from pyguara.persistence.storage import FileStorageBackend
+from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
+from pyguara.prefabs.factory import PrefabFactory
+from pyguara.prefabs.loader import PrefabLoader, PrefabCache
 from pyguara.ui.manager import UIManager
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.manager import AudioManager
+from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.graphics.animation_system import AnimationSystem
 from pyguara.ecs.manager import EntityManager
 from pyguara.systems.manager import SystemManager
@@ -176,6 +181,21 @@ def _setup_container() -> DIContainer:
     entity_manager = EntityManager()
     container.register_instance(EntityManager, entity_manager)
 
+    # 5.1.1 Prefab System
+    component_registry = get_component_registry()
+    _register_core_components(component_registry)
+    container.register_instance(ComponentRegistry, component_registry)
+
+    prefab_cache = PrefabCache()
+    container.register_instance(PrefabCache, prefab_cache)
+
+    prefab_factory = PrefabFactory(
+        entity_manager,
+        component_registry,
+        prefab_resolver=prefab_cache.load,
+    )
+    container.register_instance(PrefabFactory, prefab_factory)
+
     # 5.2 System Manager for orchestrating game systems
     system_manager = SystemManager()
     container.register_instance(SystemManager, system_manager)
@@ -220,6 +240,13 @@ def _setup_container() -> DIContainer:
 
     container.register_instance(ResourceManager, res_manager)
 
+    # AudioSourceSystem priority 250: runs after AI, before animation
+    audio_source_system = AudioSourceSystem(entity_manager, audio_system, res_manager)
+    system_manager.register(
+        audio_source_system, priority=250, system_type=AudioSourceSystem
+    )
+    container.register_instance(AudioSourceSystem, audio_source_system)
+
     # Physics Engine
     physics_engine = PymunkEngine()
     container.register_instance(IPhysicsEngine, physics_engine)  # type: ignore[type-abstract]
@@ -233,10 +260,75 @@ def _setup_container() -> DIContainer:
 
     # 8. Persistence
     storage = FileStorageBackend(base_path="saves")
-    persistence = PersistenceManager(storage)
+
+    # Migration Manager for schema versioning
+    migration_manager = MigrationManager(current_version=1)
+    # Register any globally defined migrations
+    get_global_registry().register_all(migration_manager)
+    container.register_instance(MigrationManager, migration_manager)
+
+    component_registry = ComponentRegistry()
+    container.register_instance(ComponentRegistry, component_registry)
+
+    persistence = PersistenceManager(storage, migration_manager)
     container.register_instance(PersistenceManager, persistence)
     container.register_singleton(SceneSerializer, SceneSerializer)
+
+    # Register prefab loader with resource manager
+    res_manager.register_loader(PrefabLoader())
 
     logger.info("Engine bootstrap complete. Handing over to Application.")
 
     return container
+
+
+def _register_core_components(registry: ComponentRegistry) -> None:
+    """Register core engine components with the component registry.
+
+    Args:
+        registry: ComponentRegistry to register components with.
+    """
+    # Common components
+    from pyguara.common.components import Tag, Transform, ResourceLink
+
+    registry.register(Tag)
+    registry.register(Transform)
+    registry.register(ResourceLink)
+
+    # Physics components
+    from pyguara.physics.components import RigidBody, Collider
+    from pyguara.physics.joints import Joint
+    from pyguara.physics.trigger_volume import TriggerVolume, EntityTags
+    from pyguara.physics.platformer_controller import PlatformerController
+
+    registry.register(RigidBody)
+    registry.register(Collider)
+    registry.register(Joint)
+    registry.register(TriggerVolume)
+    registry.register(EntityTags)
+    registry.register(PlatformerController)
+
+    # AI components
+    from pyguara.ai.components import AIComponent, SteeringAgent, Navigator
+
+    registry.register(AIComponent)
+    registry.register(SteeringAgent)
+    registry.register(Navigator)
+
+    # Animation components
+    from pyguara.graphics.components.animation import Animator, AnimationStateMachine
+
+    registry.register(Animator)
+    registry.register(AnimationStateMachine)
+
+    # Prefab metadata
+    from pyguara.prefabs.types import PrefabInstance
+
+    registry.register(PrefabInstance)
+
+    # Audio components
+    from pyguara.audio.components import AudioSource, AudioListener, AudioEmitter
+
+    registry.register(AudioSource)
+    registry.register(AudioListener)
+    registry.register(AudioEmitter)
