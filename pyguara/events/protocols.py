@@ -15,15 +15,8 @@ class Event(Protocol):
     Using a Protocol allows events to be simple dataclasses or complex objects.
     """
 
-    @property
-    def timestamp(self) -> float:
-        """Get the time the event occurred."""
-        ...
-
-    @property
-    def source(self) -> Any:
-        """Get the object that triggered the event."""
-        ...
+    timestamp: float
+    source: Any
 
 
 @runtime_checkable
