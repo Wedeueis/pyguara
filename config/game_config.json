@@ -1,0 +1,39 @@
+{
+    "display": {
+        "screen_width": 1280,
+        "screen_height": 720,
+        "fps_target": 60,
+        "fullscreen": false,
+        "vsync": true,
+        "backend": "pygame",
+        "title": "PyGuara Game"
+    },
+    "audio": {
+        "master_volume": 1.0,
+        "sfx_volume": 0.8,
+        "music_volume": 0.6,
+        "muted": false
+    },
+    "input": {
+        "mouse_sensitivity": 1.0,
+        "gamepad_enabled": true,
+        "gamepad_deadzone": 0.2
+    },
+    "physics": {
+        "fixed_timestep_hz": 60,
+        "max_frame_time": 0.25,
+        "gravity_x": 0.0,
+        "gravity_y": 0.0
+    },
+    "debug": {
+        "log_level": "INFO",
+        "log_to_file": true,
+        "log_file_path": "logs/game.log",
+        "console_logging": true,
+        "enable_profiler": false,
+        "enable_inspector": false,
+        "show_colliders": false,
+        "show_fps": true
+    },
+    "version": "1.0"
+}

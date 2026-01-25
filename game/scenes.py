@@ -1,6 +1,5 @@
 """Concrete scene implementations for the demo game."""
 
-import logging
 from typing import Optional
 
 from pyguara.common.components import Transform, Tag
@@ -11,6 +10,8 @@ from pyguara.input.manager import InputManager
 from pyguara.input.types import InputDevice, ActionType
 from pyguara.input.keys import SPACE
 from pyguara.input.events import OnActionEvent
+from pyguara.log.manager import LogManager
+from pyguara.log.logger import EngineLogger
 from pyguara.physics.components import RigidBody, Collider
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.protocols import IPhysicsEngine
@@ -18,8 +19,6 @@ from pyguara.physics.types import BodyType, ShapeType
 from pyguara.scene.base import Scene
 from pyguara.ui.components import Button, Label, Panel
 from pyguara.ui.manager import UIManager
-
-logger = logging.getLogger(__name__)
 
 
 class GameplayScene(Scene):
@@ -34,16 +33,21 @@ class GameplayScene(Scene):
         super().__init__(name, event_dispatcher)
         self.ui_manager = UIManager(event_dispatcher)
         self.fps_label = Label("FPS: 0")
+        self.logger: Optional[EngineLogger] = None
 
         # Placeholders
         self.physics_system: Optional[PhysicsSystem] = None
 
     def on_enter(self) -> None:
         """Call when the scene becomes active."""
-        logger.info("[%s] Entering Scene...", self.name)
         # 1. RESOLVE DEPENDENCIES
         # We grab the global engine from the container we inherited
         if self.container:
+            # Setup Logger
+            log_manager = self.container.get(LogManager)
+            self.logger = log_manager.get_logger("GameplayScene")
+            self.logger.info(f"[{self.name}] Entering Scene...")
+
             physics_engine = self.container.get(IPhysicsEngine)  # type: ignore[type-abstract]
             self.physics_system = PhysicsSystem(
                 physics_engine, self.entity_manager, self.event_dispatcher
@@ -56,14 +60,21 @@ class GameplayScene(Scene):
 
     def on_exit(self) -> None:
         """Call when leaving the scene."""
-        logger.info("[%s] Exiting Scene...", self.name)
+        if self.logger:
+            self.logger.info(f"[{self.name}] Exiting Scene...")
+
+        if self.physics_system:
+            self.physics_system.cleanup()
+            self.physics_system = None
+
+    def fixed_update(self, fixed_dt: float) -> None:
+        """Fixed-rate update for physics."""
+        # 1. Update Physics - P2-013: Pull pattern
+        if self.physics_system:
+            self.physics_system.update(fixed_dt)
 
     def update(self, dt: float) -> None:
         """Scene Logic Loop."""
-        # 1. Update Physics - P2-013: Pull pattern
-        if self.physics_system:
-            self.physics_system.update(dt)
-
         # 2. Update UI
         self.ui_manager.update(dt)
 
@@ -156,7 +167,8 @@ class GameplayScene(Scene):
 
     def _reset_physics(self) -> None:
         """Call the callback to teleport entities back to start."""
-        logger.info("Resetting Physics...")
+        if self.logger:
+            self.logger.info("Resetting Physics...")
 
         player = self.entity_manager.get_entity("player")
         if player:
@@ -176,15 +188,22 @@ class GameplayScene(Scene):
 class TestScene(Scene):
     """Basic test scene for window functionality."""
 
+    def __init__(self, name: str, event_dispatcher: EventDispatcher) -> None:
+        """Initialize test scene with event dispatcher."""
+        super().__init__(name, event_dispatcher)
+        self.logger: Optional[EngineLogger] = None
+
     def on_enter(self) -> None:
         """Call when the scene becomes active."""
-        logger.info(
-            "[TestScene] Entered. If you see this, the Scene Manager is working."
-        )
-        logger.info("[TestScene] The window should be BLUE with a RED box.")
-
-        # Register Input Test
         if self.container:
+            log_manager = self.container.get(LogManager)
+            self.logger = log_manager.get_logger("TestScene")
+            self.logger.info(
+                "[TestScene] Entered. If you see this, the Scene Manager is working."
+            )
+            self.logger.info("[TestScene] The window should be BLUE with a RED box.")
+
+            # Register Input Test
             input_mgr = self.container.get(InputManager)
             # Register "Jump" action if not exists
             if "Jump" not in input_mgr._registered_actions:
@@ -196,12 +215,13 @@ class TestScene(Scene):
 
     def on_exit(self) -> None:
         """Call when leaving the scene."""
-        logger.info("[TestScene] Exited.")
+        if self.logger:
+            self.logger.info("[TestScene] Exited.")
         self.event_dispatcher.unsubscribe(OnActionEvent, self._on_input)
 
     def _on_input(self, event: OnActionEvent) -> None:
-        if event.action_name == "Jump":
-            logger.info("[TestScene] Space Pressed! Value: %s", event.value)
+        if event.action_name == "Jump" and self.logger:
+            self.logger.info(f"[TestScene] Space Pressed! Value: {event.value}")
 
     def update(self, dt: float) -> None:
         """Scene Logic Loop."""
