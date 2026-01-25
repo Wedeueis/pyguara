@@ -120,3 +120,8 @@ class PhysicsSystem:
                 col.layer,
                 col.is_sensor,
             )
+
+    def cleanup(self) -> None:
+        """Cleanup physics resources to prevent CFFI errors at exit."""
+        if hasattr(self._engine, "cleanup"):
+            self._engine.cleanup()

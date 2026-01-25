@@ -62,6 +62,10 @@ class IPhysicsEngine(Protocol):
         """Initialize the physics world."""
         ...
 
+    def cleanup(self) -> None:  # <--- Add this
+        """Destroy the physics world and free resources."""
+        ...
+
     def update(self, delta_time: float) -> None:
         """Step the simulation forward."""
         ...

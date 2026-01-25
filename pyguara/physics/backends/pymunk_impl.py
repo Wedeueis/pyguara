@@ -85,6 +85,37 @@ class PymunkEngine(IPhysicsEngine):
         if self._collision_system:
             self._setup_collision_handlers()
 
+    def cleanup(self) -> None:
+        """Destroy the pymunk Space to prevent dangling callbacks."""
+        if self.space:
+            try:
+                # Remove collision handlers to prevent callbacks during destruction
+                # Trying to use internal default handler mechanism
+                # on_collision sets the default handler
+                self.space.on_collision(
+                    begin=None, pre_solve=None, post_solve=None, separate=None
+                )
+            except Exception:
+                # Ignore errors during handler reset (e.g. if space is already closing)
+                pass
+
+            try:
+                # Explicitly remove everything to ensure internal iterators don't run
+                # during garbage collection
+                if self.space.constraints:
+                    self.space.remove(*self.space.constraints)
+                if self.space.shapes:
+                    self.space.remove(*self.space.shapes)
+                if self.space.bodies:
+                    self.space.remove(*self.space.bodies)
+            except Exception:
+                # Ignore errors during object removal
+                pass
+
+            self.space = None
+            self._bodies.clear()
+            self._collision_system = None
+
     def set_collision_system(self, collision_system: Any) -> None:
         """Register the CollisionSystem for event routing.
 
