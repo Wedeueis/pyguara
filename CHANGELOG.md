@@ -5,6 +5,90 @@ All notable changes to PyGuara will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-01-25
+
+### Added
+
+#### Prefab System
+- New `pyguara.prefabs` module for data-driven entity creation
+- `PrefabData`: template definition with components and metadata
+- `PrefabFactory`: creates entities from templates with override support
+- `PrefabLoader`: loads prefabs from JSON files
+- `PrefabCache`: caches loaded prefabs for performance
+- `ComponentRegistry`: maps component names to classes for serialization
+- Inheritance support via 'extends' field for prefab composition
+- Deep merge for partial component overrides
+
+#### Replay System
+- New `pyguara.replay` module for deterministic input recording/playback
+- `ReplayRecorder`: records input events with frame-accurate timestamps
+- `ReplayPlayer`: plays back recorded input deterministically
+- `ReplaySerializer`: saves/loads replays with optional compression
+- Seed support for deterministic random state reproduction
+- Event handlers for custom playback integration
+- Pause/resume and seek functionality
+
+#### Development Tools
+- New `pyguara.dev` module for faster development iteration
+- `FileWatcher`: monitors files for changes via polling
+- `HotReloadManager`: coordinates Python module reloading
+- `StatefulSystem` protocol for systems that preserve state across reloads
+- `reload_system_class()`: reloads a system while preserving its state
+
+#### Audio Components
+- `AudioSource` component: persistent audio with play/stop/loop control
+- `AudioListener` component: marks listener position for spatial audio
+- `AudioEmitter` component: one-shot fire-and-forget audio events
+- `AudioSourceSystem`: processes audio components each frame
+- Spatial audio support with distance-based attenuation
+- Automatic clip caching for performance
+
+#### Input Rebinding
+- Runtime rebinding support in `KeyBindingManager`
+- `ConflictResolution` strategies: ERROR, SWAP, UNBIND, ALLOW
+- Reverse mapping for fast action → bindings lookup
+- Serialization/deserialization for persisting user preferences
+- New types: `ConflictResolution`, `RebindResult`, `BindingConflict`
+
+#### ECS Improvements
+- `Archetype` class for cache-friendly component storage
+- `ArchetypeGraph` for tracking component transitions
+- Parallel arrays for improved iteration performance
+- Swap-and-pop removal for O(1) entity deletion
+
+#### Lifecycle Improvements
+- `cleanup()` method added to `IPhysicsEngine` protocol
+- `cleanup()` method added to `SceneManager`
+- `cleanup()` method added to `PhysicsSystem`
+
+### Changed
+
+#### Application Lifecycle
+- Game loop now wrapped in try/except/finally for robust cleanup
+- `KeyboardInterrupt` handled gracefully
+- Critical errors logged with stack traces before shutdown
+- Cleanup guaranteed even with `sys.exit()`
+
+#### Scene Serializer
+- Refactored to use `ComponentRegistry` instead of hardcoded component map
+- Supports custom components via registry
+- Fallback to legacy deserialization for complex types
+
+#### Event Protocol
+- `Event` protocol now uses class attributes instead of properties
+- Simpler implementation for dataclass-based events
+
+### Tests
+- All 1018 tests passing (up from 887 in v0.3.1)
+- New test files:
+  - `test_input_rebinding.py` (23 tests)
+  - `test_audio_components.py` (29 tests)
+  - `test_prefab.py` (18 tests)
+  - `test_replay.py` (25 tests)
+  - `test_hot_reload.py` (36 tests)
+
+---
+
 ## [0.3.1] - 2026-01-20
 
 ### Added
@@ -197,6 +281,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.3.2]: https://github.com/wedeueis/pyguara/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/wedeueis/pyguara/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wedeueis/pyguara/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/wedeueis/pyguara/compare/v0.1.0...v0.2.0
