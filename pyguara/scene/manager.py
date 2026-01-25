@@ -263,3 +263,12 @@ class SceneManager:
             # Render current scene on top
             if self._current_scene:
                 self._current_scene.render(world_renderer, ui_renderer)
+
+    def cleanup(self) -> None:
+        """Cleanup resources and exit current scene."""
+        if self._current_scene:
+            self._current_scene.on_exit()
+            self._current_scene = None
+
+        self._scene_stack.clear()
+        self._pause_below_flags.clear()
