@@ -109,36 +109,45 @@ class Application:
         # Force an initial event pump to show the window immediately
         pygame.event.pump()
 
-        while self._is_running and self._window.is_open:
-            # 1. Measure frame time
-            frame_time = self._clock.tick(target_fps) / 1000.0
+        try:
+            while self._is_running and self._window.is_open:
+                # 1. Measure frame time
+                frame_time = self._clock.tick(target_fps) / 1000.0
 
-            # Clamp frame time to prevent spiral of death
-            # (when updates take longer than real time, causing ever-growing backlog)
-            if frame_time > max_frame_time:
-                frame_time = max_frame_time
+                # Clamp frame time to prevent spiral of death
+                # (when updates take longer than real time, causing ever-growing backlog)
+                if frame_time > max_frame_time:
+                    frame_time = max_frame_time
 
-            # 2. Input (once per frame, before physics)
-            self._process_input()
+                # 2. Input (once per frame, before physics)
+                self._process_input()
 
-            # 3. Accumulate time and run fixed updates
-            self._accumulator += frame_time
+                # 3. Accumulate time and run fixed updates
+                self._accumulator += frame_time
 
-            while self._accumulator >= fixed_dt:
-                # Fixed-rate update (physics, game logic)
-                self._fixed_update(fixed_dt)
-                self._accumulator -= fixed_dt
+                while self._accumulator >= fixed_dt:
+                    # Fixed-rate update (physics, game logic)
+                    self._fixed_update(fixed_dt)
+                    self._accumulator -= fixed_dt
 
-            # 4. Variable-rate update (UI, animations that should be smooth)
-            self._update(frame_time)
+                # 4. Variable-rate update (UI, animations that should be smooth)
+                self._update(frame_time)
 
-            # 5. Render (at display framerate)
-            # The alpha value represents how far we are between physics steps
-            # This can be used for interpolation in the future
-            # alpha = self._accumulator / fixed_dt
-            self._render()
-
-        self.shutdown()
+                # 5. Render (at display framerate)
+                # The alpha value represents how far we are between physics steps
+                # This can be used for interpolation in the future
+                # alpha = self._accumulator / fixed_dt
+                self._render()
+        except KeyboardInterrupt:
+            # Handle Ctrl+C gracefully
+            self.logger.info("KeyboardInterrupt received. Stopping.")
+        except Exception as e:
+            # Log unexpected crashes before shutting down
+            self.logger.critical(f"Uncaught exception in game loop: {e}", exc_info=True)
+            raise e  # Re-raise to show traceback
+        finally:
+            # CRITICAL: This ensures cleanup happens even if sys.exit() is called
+            self.shutdown()
 
     def _process_input(self) -> None:
         """Poll system events."""
@@ -208,4 +217,6 @@ class Application:
     def shutdown(self) -> None:
         """Close Application."""
         self.logger.info("Shutting down application")
+        self._scene_manager.cleanup()
+        self._system_manager.cleanup()
         self._window.close()
