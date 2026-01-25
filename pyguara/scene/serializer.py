@@ -1,30 +1,43 @@
 """Scene serialization logic."""
 
+from __future__ import annotations
+
 import dataclasses
-from typing import Dict, Any
-from pyguara.scene.base import Scene
-from pyguara.persistence.manager import PersistenceManager
-from pyguara.common.components import Tag, Transform, ResourceLink
+from typing import Any, Dict, Optional
+
+from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
-from pyguara.physics.components import RigidBody, Collider
-from pyguara.physics.types import BodyType, ShapeType
 from pyguara.ecs.entity import Entity
+from pyguara.persistence.manager import PersistenceManager
+from pyguara.physics.types import BodyType, ShapeType
+from pyguara.prefabs.registry import ComponentRegistry
+from pyguara.scene.base import Scene
 
 
 class SceneSerializer:
     """Handles saving and loading full scenes."""
 
-    def __init__(self, persistence: PersistenceManager) -> None:
-        """Initialize the serializer."""
+    def __init__(
+        self,
+        persistence: PersistenceManager,
+        component_registry: Optional[ComponentRegistry] = None,
+    ) -> None:
+        """Initialize the serializer.
+
+        Args:
+            persistence: PersistenceManager for storage operations.
+            component_registry: Optional ComponentRegistry for component
+                instantiation. If not provided, uses global registry.
+        """
         self.persistence = persistence
-        # Component Registry for loading
-        self._comp_map = {
-            "Tag": Tag,
-            "Transform": Transform,
-            "RigidBody": RigidBody,
-            "Collider": Collider,
-            "ResourceLink": ResourceLink,
-        }
+
+        # Use provided registry or get global
+        if component_registry is not None:
+            self._registry = component_registry
+        else:
+            from pyguara.prefabs.registry import get_component_registry
+
+            self._registry = get_component_registry()
 
     def save_scene(self, scene: Scene, filename: str) -> bool:
         """
@@ -34,12 +47,11 @@ class SceneSerializer:
             scene: The scene instance to save.
             filename: The identifier for the save file.
         """
-        scene_data = {"name": scene.name, "entities": []}
-
-        # Iterate all entities
+        entities_data: list[Dict[str, Any]] = []
         for entity in scene.entity_manager.get_all_entities():
-            entity_data = self._serialize_entity(entity)
-            scene_data["entities"].append(entity_data)  # type: ignore
+            entities_data.append(self._serialize_entity(entity))
+
+        scene_data: Dict[str, Any] = {"name": scene.name, "entities": entities_data}
 
         return self.persistence.save_data(filename, scene_data)
 
@@ -61,11 +73,17 @@ class SceneSerializer:
             entity = scene.entity_manager.create_entity(eid)
 
             for comp_name, comp_raw_data in ent_data.get("components", {}).items():
-                if comp_name in self._comp_map:
-                    cls = self._comp_map[comp_name]
-                    instance = self._deserialize_component(cls, comp_raw_data)
-                    if instance:
+                if self._registry.has(comp_name):
+                    try:
+                        instance = self._registry.create(comp_name, comp_raw_data)
                         entity.add_component(instance)
+                    except Exception:
+                        # Fallback to legacy deserialization for complex types
+                        cls = self._registry.get(comp_name)
+                        if cls:
+                            instance = self._deserialize_component(cls, comp_raw_data)
+                            if instance:
+                                entity.add_component(instance)
 
         return True
 
@@ -140,7 +158,7 @@ class SceneSerializer:
             }
 
         if dataclasses.is_dataclass(component) and not isinstance(component, type):
-            result = {}
+            result: Dict[str, Any] = {}
             for field in dataclasses.fields(component):
                 value = getattr(component, field.name)
                 # Skip private/internal fields

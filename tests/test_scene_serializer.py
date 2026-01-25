@@ -65,9 +65,25 @@ def persistence_manager(storage_backend: MockStorageBackend) -> PersistenceManag
 
 
 @pytest.fixture
-def serializer(persistence_manager: PersistenceManager) -> SceneSerializer:
+def component_registry():
+    """Create and populate a component registry for testing."""
+    from pyguara.prefabs.registry import ComponentRegistry
+
+    registry = ComponentRegistry()
+    registry.register(Tag)
+    registry.register(Transform)
+    registry.register(RigidBody)
+    registry.register(Collider)
+    registry.register(ResourceLink)
+    return registry
+
+
+@pytest.fixture
+def serializer(
+    persistence_manager: PersistenceManager, component_registry
+) -> SceneSerializer:
     """Create a scene serializer."""
-    return SceneSerializer(persistence_manager)
+    return SceneSerializer(persistence_manager, component_registry)
 
 
 @pytest.fixture
@@ -80,20 +96,22 @@ def scene() -> MockScene:
 class TestSceneSerializerBasics:
     """Test basic serializer functionality."""
 
-    def test_serializer_creation(self, persistence_manager: PersistenceManager) -> None:
+    def test_serializer_creation(
+        self, persistence_manager: PersistenceManager, component_registry
+    ) -> None:
         """SceneSerializer can be instantiated."""
-        serializer = SceneSerializer(persistence_manager)
+        serializer = SceneSerializer(persistence_manager, component_registry)
         assert serializer.persistence is persistence_manager
-        assert "Tag" in serializer._comp_map
-        assert "Transform" in serializer._comp_map
+        assert serializer._registry.has("Tag")
+        assert serializer._registry.has("Transform")
 
     def test_supported_components(self, serializer: SceneSerializer) -> None:
         """Serializer supports expected component types."""
-        assert serializer._comp_map["Tag"] is Tag
-        assert serializer._comp_map["Transform"] is Transform
-        assert serializer._comp_map["RigidBody"] is RigidBody
-        assert serializer._comp_map["Collider"] is Collider
-        assert serializer._comp_map["ResourceLink"] is ResourceLink
+        assert serializer._registry.get("Tag") is Tag
+        assert serializer._registry.get("Transform") is Transform
+        assert serializer._registry.get("RigidBody") is RigidBody
+        assert serializer._registry.get("Collider") is Collider
+        assert serializer._registry.get("ResourceLink") is ResourceLink
 
 
 class TestSaveScene:
