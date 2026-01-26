@@ -11,9 +11,95 @@ DOWN = 1073741905
 RIGHT = 1073741903
 LEFT = 1073741904
 
-# Letters
-W = 119
+# Letters (KEY_ prefix for I and O to avoid ambiguity with numbers)
 A = 97
-S = 115
+B = 98
+C = 99
 D = 100
+E = 101
 F = 102
+G = 103
+H = 104
+KEY_I = 105
+J = 106
+K = 107
+L = 108
+M = 109
+N = 110
+KEY_O = 111
+P = 112
+Q = 113
+R = 114
+S = 115
+T = 116
+U = 117
+V = 118
+W = 119
+X = 120
+Y = 121
+Z = 122
+
+# --- Common Control Keys ---
+TAB = 9
+BACKSPACE = 8
+DELETE = 127
+KP_ENTER = 1073741912  # Keypad Enter is different from Return
+
+# --- Modifiers (Left/Right distinction) ---
+L_SHIFT = 1073742049
+R_SHIFT = 1073742053
+L_CTRL = 1073742048
+R_CTRL = 1073742052
+L_ALT = 1073742050
+R_ALT = 1073742054
+
+# --- Top Row Numbers (0-9) ---
+NUM_0 = 48
+NUM_1 = 49
+NUM_2 = 50
+NUM_3 = 51
+NUM_4 = 52
+NUM_5 = 53
+NUM_6 = 54
+NUM_7 = 55
+NUM_8 = 56
+NUM_9 = 57
+
+# --- Numpad (Keypad) ---
+KP_0 = 1073741922
+KP_1 = 1073741913
+KP_2 = 1073741914
+KP_3 = 1073741915
+KP_4 = 1073741916
+KP_5 = 1073741917
+KP_6 = 1073741918
+KP_7 = 1073741919
+KP_8 = 1073741920
+KP_9 = 1073741921
+
+# --- Function Keys ---
+F1 = 1073741882
+F2 = 1073741883
+F3 = 1073741884
+F4 = 1073741885
+F5 = 1073741886
+F6 = 1073741887
+F7 = 1073741888
+F8 = 1073741889
+F9 = 1073741890
+F10 = 1073741891
+F11 = 1073741892
+F12 = 1073741893
+
+# --- Punctuation / Misc ---
+MINUS = 45
+EQUALS = 61
+L_BRACKET = 91
+R_BRACKET = 93
+BACKSLASH = 92
+SEMICOLON = 59
+QUOTE = 39
+COMMA = 44
+PERIOD = 46
+SLASH = 47
+TILDE = 96
