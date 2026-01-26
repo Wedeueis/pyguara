@@ -165,11 +165,11 @@ class PymunkEngine(IPhysicsEngine):
             return True
 
         # Extract collision details
-        contact_points = arbiter.contact_point_set.points
-        if contact_points:
-            contact = contact_points[0]
+        contact_point_set = arbiter.contact_point_set
+        if contact_point_set.points:
+            contact = contact_point_set.points[0]
             point = Vector2(contact.point_a.x, contact.point_a.y)
-            normal = Vector2(contact.normal.x, contact.normal.y)  # type: ignore[attr-defined]
+            normal = Vector2(contact_point_set.normal.x, contact_point_set.normal.y)
         else:
             point = Vector2.zero()
             normal = Vector2(0, 1)
@@ -205,11 +205,11 @@ class PymunkEngine(IPhysicsEngine):
             return True
 
         # Extract collision details
-        contact_points = arbiter.contact_point_set.points
-        if contact_points:
-            contact = contact_points[0]
+        contact_point_set = arbiter.contact_point_set
+        if contact_point_set.points:
+            contact = contact_point_set.points[0]
             point = Vector2(contact.point_a.x, contact.point_a.y)
-            normal = Vector2(contact.normal.x, contact.normal.y)  # type: ignore[attr-defined]
+            normal = Vector2(contact_point_set.normal.x, contact_point_set.normal.y)
         else:
             point = Vector2.zero()
             normal = Vector2(0, 1)
