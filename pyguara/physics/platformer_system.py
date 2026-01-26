@@ -190,21 +190,28 @@ class PlatformerSystem:
         if controller.current_state != PlatformerState.GROUNDED:
             target_velocity_x *= controller.air_control
 
-        # Smoothly interpolate to target velocity
-        new_velocity_x = (
-            current_velocity.x
-            + (target_velocity_x - current_velocity.x) * controller.acceleration
-        )
+        # Use faster deceleration when no input (prevents sliding/diagonal jumps)
+        if controller.move_input == 0:
+            # Quick stop when no input - use higher deceleration factor
+            decel_factor = min(controller.acceleration * 3, 1.0)
+            new_velocity_x = current_velocity.x * (1.0 - decel_factor)
+        else:
+            # Smoothly interpolate to target velocity
+            new_velocity_x = (
+                current_velocity.x
+                + (target_velocity_x - current_velocity.x) * controller.acceleration
+            )
 
-        # Apply wall slide friction
+        # Apply wall slide friction or normal fall speed clamping
+        # In screen coords: positive Y is down, so falling = positive velocity.y
         if controller.current_state == PlatformerState.WALL_SLIDE:
             # Limit falling speed when wall sliding
             new_velocity_y = min(current_velocity.y, controller.wall_slide_speed)
-            rigidbody.handle.velocity = Vector2(new_velocity_x, new_velocity_y)
         else:
-            # Clamp falling speed to max
-            new_velocity_y = max(current_velocity.y, -controller.max_fall_speed)
-            rigidbody.handle.velocity = Vector2(new_velocity_x, new_velocity_y)
+            # Clamp falling speed to max (don't exceed terminal velocity)
+            new_velocity_y = min(current_velocity.y, controller.max_fall_speed)
+
+        rigidbody.handle.velocity = Vector2(new_velocity_x, new_velocity_y)
 
     def _handle_jump(
         self, controller: PlatformerController, rigidbody: RigidBody

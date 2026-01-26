@@ -330,6 +330,28 @@ class GameScene(Scene):
 
     def fixed_update(self, fixed_dt: float) -> None:
         """Run fixed timestep update for physics."""
+        if self._is_dead or self._level_complete:
+            return
+
+        # Calculate move input from held keys (same as in update)
+        move_input = 0.0
+        if self._move_left_held:
+            move_input = -1.0
+        elif self._move_right_held:
+            move_input = 1.0
+
+        # Update player controller with current input state
+        if self._player_control:
+            self._player_control.update(fixed_dt, move_input, self._jump_pressed)
+
+        # Reset jump flag after it's been consumed
+        self._jump_pressed = False
+
+        # Platformer system must run at fixed rate with physics
+        if self._platformer_system:
+            self._platformer_system.update(fixed_dt)
+
+        # Physics simulation step
         if self._physics_system:
             self._physics_system.update(fixed_dt)
 
@@ -340,22 +362,8 @@ class GameScene(Scene):
                 self._coroutine_manager.update(dt)
             return
 
-        # Calculate move input from held keys
-        move_input = 0.0
-        if self._move_left_held:
-            move_input = -1.0
-        elif self._move_right_held:
-            move_input = 1.0
-
-        # Update systems
-        if self._player_control:
-            self._player_control.update(dt, move_input, self._jump_pressed)
-
-        # Reset jump flag after it's been consumed
-        self._jump_pressed = False
-
-        if self._platformer_system:
-            self._platformer_system.update(dt)
+        # Note: PlayerControlSystem and PlatformerSystem now run in fixed_update
+        # for proper physics synchronization
 
         if self._animation_fsm:
             self._animation_fsm.update(dt)

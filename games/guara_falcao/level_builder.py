@@ -174,7 +174,7 @@ class LevelBuilder:
         entity.add_component(
             Collider(dimensions=[TILE_SIZE, TILE_SIZE], is_sensor=True)
         )
-        entity.add_component(Hazard(damage=1, knockback_force=200.0))
+        entity.add_component(Hazard(damage=999, knockback_force=0.0))  # Instant kill
         entity.add_component(
             PlatformSprite(color=Color(200, 50, 50), size=Vector2(TILE_SIZE, TILE_SIZE))
         )
