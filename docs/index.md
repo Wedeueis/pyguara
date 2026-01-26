@@ -7,7 +7,7 @@
 PyGuara is built on four core pillars:
 
 1.  **Decoupled Logic**: Using a robust **Entity-Component-System (ECS)** and **Dependency Injection** to keep your game code clean and testable.
-2.  **Flexible Rendering**: A multi-stage pipeline that supports batching and sorting, abstracted from the underlying hardware.
+2.  **Flexible Rendering**: A multi-pass render graph with material system, dynamic 2D lighting, and post-processing effects (bloom, vignette).
 3.  **Physical Simulation**: Native integration with Pymunk for 2D physics.
 4.  **Extensible Systems**: Comprehensive suites for AI, UI, Audio, and Resource Management.
 
@@ -35,7 +35,10 @@ How the engine starts and runs:
 
 ### [Graphics & UI](graphics/rendering.md)
 Bringing your game to life:
-*   **Render Pipeline**: Sorting, Batching, and Drawing.
+*   **Render Graph**: Multi-pass pipeline (World → Light → Composite → Post-Process → UI).
+*   **Material System**: Shader + Texture + Uniforms with automatic batching.
+*   **2D Lighting**: Dynamic lights with color, radius, intensity, and falloff.
+*   **Post-Processing**: Bloom, vignette, and chainable screen-space effects.
 *   **Camera & Viewports**: Managing coordinates and screen regions.
 *   **UI System**: Flexible, themeable widget system.
 
