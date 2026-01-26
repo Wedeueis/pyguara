@@ -163,17 +163,15 @@ class GameScene(Scene):
         # Setup input
         self._setup_input()
 
-        # Initialize physics
+        # Initialize physics with gravity for side-scroller
         physics_engine = self.container.get(IPhysicsEngine)
 
         self._physics_system = PhysicsSystem(
             engine=physics_engine,
             entity_manager=self.entity_manager,
             event_dispatcher=self.event_dispatcher,
+            gravity=Vector2(0, 800),
         )
-
-        # Set gravity AFTER PhysicsSystem init (which resets gravity to 0,0)
-        physics_engine.gravity = Vector2(0, 800)
 
         self._platformer_system = PlatformerSystem(
             entity_manager=self.entity_manager,

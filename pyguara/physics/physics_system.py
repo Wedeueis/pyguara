@@ -27,6 +27,7 @@ class PhysicsSystem:
         engine: IPhysicsEngine,
         entity_manager: EntityManager,
         event_dispatcher: EventDispatcher,
+        gravity: Vector2 | None = None,
     ) -> None:
         """
         Initialize the physics system.
@@ -35,13 +36,16 @@ class PhysicsSystem:
             engine: The physics engine backend.
             entity_manager: The entity manager for querying physics entities.
             event_dispatcher: The global event dispatcher.
+            gravity: World gravity vector. Defaults to (0, 0) for top-down games.
+                     Use (0, 800) or similar for side-scrollers.
         """
         self._engine = engine
         self._entity_manager = entity_manager
         self._dispatcher = event_dispatcher
 
-        # We use (0,0) for top-down games. Use (0, 980) for side-scrollers.
-        self._engine.initialize(gravity=Vector2(0, 0))
+        if gravity is None:
+            gravity = Vector2(0, 0)
+        self._engine.initialize(gravity=gravity)
 
     def update(self, dt: float) -> None:
         """
