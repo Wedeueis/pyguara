@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.binding import KeyBindingManager
-from pyguara.input.events import OnActionEvent
+from pyguara.input.events import OnActionEvent, OnMouseEvent, OnRawKeyEvent
 from pyguara.input.protocols import IInputBackend, IJoystick
 from pyguara.input.types import (
     ActionType,
@@ -134,17 +134,49 @@ class InputManager:
         """Ingest raw Pygame events."""
         # --- Keyboard ---
         if event.type in (pygame.KEYDOWN, pygame.KEYUP):
-            self._handle_input(
-                InputDevice.KEYBOARD, event.key, is_down=(event.type == pygame.KEYDOWN)
+            is_down = event.type == pygame.KEYDOWN
+            self._handle_input(InputDevice.KEYBOARD, event.key, is_down=is_down)
+
+            # Dispatch raw key event for UI system
+            modifiers = set()
+            mods = pygame.key.get_mods()
+            if mods & pygame.KMOD_SHIFT:
+                modifiers.add(pygame.KMOD_SHIFT)
+            if mods & pygame.KMOD_CTRL:
+                modifiers.add(pygame.KMOD_CTRL)
+            if mods & pygame.KMOD_ALT:
+                modifiers.add(pygame.KMOD_ALT)
+
+            raw_key_event = OnRawKeyEvent(
+                key_code=event.key, is_down=is_down, modifiers=modifiers, source=self
             )
+            self._dispatcher.dispatch(raw_key_event)
 
         # --- Mouse Buttons ---
         elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
-            self._handle_input(
-                InputDevice.MOUSE,
-                event.button,
-                is_down=(event.type == pygame.MOUSEBUTTONDOWN),
+            is_down = event.type == pygame.MOUSEBUTTONDOWN
+            self._handle_input(InputDevice.MOUSE, event.button, is_down=is_down)
+
+            # Dispatch mouse event for UI system
+            mouse_event = OnMouseEvent(
+                position=event.pos,
+                button=event.button,
+                is_down=is_down,
+                is_motion=False,
+                source=self,
             )
+            self._dispatcher.dispatch(mouse_event)
+
+        # --- Mouse Motion ---
+        elif event.type == pygame.MOUSEMOTION:
+            mouse_event = OnMouseEvent(
+                position=event.pos,
+                button=0,
+                is_down=False,
+                is_motion=True,
+                source=self,
+            )
+            self._dispatcher.dispatch(mouse_event)
 
         # --- Gamepad Buttons ---
         elif event.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP):
