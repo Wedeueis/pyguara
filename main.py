@@ -2,7 +2,7 @@
 
 from pyguara.application import create_application
 from pyguara.events.dispatcher import EventDispatcher
-from game.scenes import GameplayScene
+from games.boot_process.scenes import BootScene
 
 
 def main() -> None:
@@ -17,7 +17,7 @@ def main() -> None:
     dispatcher = container.get(EventDispatcher)
 
     # 3. Create Scene
-    start_scene = GameplayScene("level_1", dispatcher)
+    start_scene = BootScene("level_1", dispatcher)
 
     # 4. Run
     app.run(start_scene)

@@ -105,6 +105,18 @@ class Renderable(Protocol):
         """
         ...
 
+    @property
+    def material(self) -> Any:
+        """
+        Optional material for custom rendering.
+
+        When None (the default), the renderer uses the default sprite material.
+
+        Returns:
+            Material or None for default sprite rendering.
+        """
+        ...
+
 
 class IRenderer(Protocol):
     """
@@ -370,5 +382,81 @@ class TextureFactory(Protocol):
 
         Returns:
             A Texture instance appropriate for the current rendering backend.
+        """
+        ...
+
+
+class IFramebuffer(Protocol):
+    """Interface for framebuffer objects (render targets).
+
+    Framebuffers allow rendering to off-screen textures, enabling
+    multi-pass rendering pipelines (lighting, post-processing, etc.).
+    """
+
+    @property
+    def name(self) -> str:
+        """Identifier for this framebuffer."""
+        ...
+
+    @property
+    def width(self) -> int:
+        """Width of the framebuffer in pixels."""
+        ...
+
+    @property
+    def height(self) -> int:
+        """Height of the framebuffer in pixels."""
+        ...
+
+    @property
+    def texture(self) -> Any:
+        """The underlying texture that can be sampled from."""
+        ...
+
+    def bind(self) -> None:
+        """Bind this framebuffer as the current render target."""
+        ...
+
+    def unbind(self) -> None:
+        """Unbind this framebuffer, returning to the default target."""
+        ...
+
+    def clear(self, color: Color) -> None:
+        """Clear the framebuffer with the specified color."""
+        ...
+
+    def resize(self, width: int, height: int) -> None:
+        """Resize the framebuffer to new dimensions."""
+        ...
+
+    def release(self) -> None:
+        """Release GPU resources associated with this framebuffer."""
+        ...
+
+
+class IRenderPass(Protocol):
+    """Interface for a single pass in the render pipeline.
+
+    Render passes represent discrete stages of rendering (world, lighting,
+    post-processing, UI). Each pass reads from input framebuffers and
+    writes to output framebuffers.
+    """
+
+    @property
+    def name(self) -> str:
+        """Unique identifier for this pass."""
+        ...
+
+    @property
+    def enabled(self) -> bool:
+        """Whether this pass should execute."""
+        ...
+
+    def execute(self, ctx: Any, graph: Any) -> None:
+        """Execute this render pass.
+
+        Args:
+            ctx: The rendering context (e.g., moderngl.Context).
+            graph: The RenderGraph orchestrating this pass (provides FBO access).
         """
         ...

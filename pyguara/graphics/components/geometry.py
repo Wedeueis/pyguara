@@ -13,7 +13,7 @@ Architecture Note:
 """
 
 from __future__ import annotations
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 import pygame
 
 from pyguara.common.types import Vector2, Color
@@ -22,6 +22,9 @@ from pyguara.graphics.types import Layer
 from pyguara.graphics.backends.pygame.types import (
     PygameTexture,
 )  # Concrete implementation
+
+if TYPE_CHECKING:
+    pass
 
 
 class Geometry:
@@ -36,6 +39,8 @@ class Geometry:
         self.rotation: float = 0.0
         self.scale: Vector2 = Vector2(1, 1)
         self._dirty = True  # Flag to regenerate texture if properties change
+        # Optional material for custom shaders/effects (None = default shader)
+        self.material: Any = None  # Type: Optional["Material"]
 
     @property
     def position(self) -> Vector2:

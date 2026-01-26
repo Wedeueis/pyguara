@@ -6,6 +6,10 @@ The accumulator pattern decouples physics updates (fixed rate) from rendering
 regardless of frame rate variations.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
 import pygame
 
 from pyguara.config.manager import ConfigManager
@@ -21,6 +25,9 @@ from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager
 from pyguara.systems.manager import SystemManager
 from pyguara.ui.manager import UIManager
+
+if TYPE_CHECKING:
+    from pyguara.graphics.pipeline.graph import RenderGraph
 
 # Event queue processing budget (milliseconds per frame)
 DEFAULT_EVENT_QUEUE_TIME_BUDGET_MS = 5.0
@@ -67,6 +74,16 @@ class Application:
         # Retrieve Renderer
         self._world_renderer = container.get(IRenderer)  # type: ignore[type-abstract]
         self._ui_renderer = container.get(UIRenderer)  # type: ignore[type-abstract]
+
+        # Optional render graph for multi-pass rendering (ModernGL only)
+        self._render_graph: Optional["RenderGraph"] = None
+        try:
+            from pyguara.graphics.pipeline.graph import RenderGraph
+            from pyguara.di.exceptions import ServiceNotFoundException
+
+            self._render_graph = container.get(RenderGraph)
+        except (ImportError, KeyError, ServiceNotFoundException):
+            pass  # Render graph not available (Pygame backend or tests)
 
         self._scene_manager.set_container(container)
 
@@ -207,11 +224,55 @@ class Application:
         self._scene_manager.update(dt)
 
     def _render(self) -> None:
-        """Render frame."""
+        """Render frame.
+
+        Uses the render graph pipeline if available (ModernGL), otherwise
+        falls back to direct rendering (Pygame).
+        """
+        if self._render_graph is not None:
+            self._render_with_graph()
+        else:
+            self._render_direct()
+
+    def _render_direct(self) -> None:
+        """Direct rendering path (Pygame backend)."""
         self._window.clear()
         self._scene_manager.render(self._world_renderer, self._ui_renderer)
         self._ui_manager.render(self._ui_renderer)
-        self._ui_renderer.present()  # Finalize UI (composites for GL backends)
+        self._ui_renderer.present()
+        self._window.present()
+
+    def _render_with_graph(self) -> None:
+        """Multi-pass rendering path using RenderGraph (ModernGL backend).
+
+        Pipeline:
+        1. Render world to FBO (scene content)
+        2. Final pass blits to screen
+        3. UI overlay
+        """
+        if self._render_graph is None:
+            return
+
+        from pyguara.common.types import Color
+
+        # Get the world FBO and bind it for scene rendering
+        world_fbo = self._render_graph.fbo_manager.get_or_create("world")
+        world_fbo.bind()
+        world_fbo.clear(Color(0, 0, 0, 255))  # Black background
+
+        # Render scenes to the world FBO
+        self._scene_manager.render(self._world_renderer, self._ui_renderer)
+
+        # Execute final pass to blit world FBO to screen
+        final_pass = self._render_graph.get_pass("final")
+        if final_pass is not None:
+            final_pass.execute(self._render_graph.ctx, self._render_graph)
+
+        # Render UI on top (directly to screen)
+        self._ui_manager.render(self._ui_renderer)
+        self._ui_renderer.present()
+
+        # Present to display
         self._window.present()
 
     def shutdown(self) -> None:
@@ -219,4 +280,9 @@ class Application:
         self.logger.info("Shutting down application")
         self._scene_manager.cleanup()
         self._system_manager.cleanup()
+
+        # Release render graph resources (ModernGL only)
+        if self._render_graph is not None:
+            self._render_graph.release()
+
         self._window.close()

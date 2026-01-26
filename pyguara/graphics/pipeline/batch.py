@@ -1,10 +1,16 @@
 """Logic for grouping render calls to minimize CPU/GPU overhead."""
 
-from typing import List, Tuple, Dict
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List, Tuple, Dict, Optional
+
 from pyguara.common.types import Vector2
 from pyguara.graphics.types import RenderCommand, RenderBatch
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
+
+if TYPE_CHECKING:
+    from pyguara.graphics.materials.material import Material
 
 
 class Batcher:
@@ -12,9 +18,10 @@ class Batcher:
     Iterates over sorted commands and groups them.
 
     Strategy:
-    Groups consecutive commands that use the same Texture into a single Batch.
-    Supports both simple sprites (fast path) and transformed sprites (rotation/scale).
-    Includes static batch caching for pre-computed, reusable batches.
+    Groups consecutive commands that use the same Texture and Material
+    into a single Batch. Supports both simple sprites (fast path) and
+    transformed sprites (rotation/scale). Includes static batch caching
+    for pre-computed, reusable batches.
     """
 
     def __init__(self) -> None:
@@ -31,6 +38,8 @@ class Batcher:
         Creates batches with transform data when rotation/scale are non-default.
         Enables backends to use fast path for simple sprites and transform path
         for rotated/scaled sprites.
+
+        Commands are batched by (texture, material_id) combination.
         """
         if not sorted_commands:
             return list(self._static_batches.values())
@@ -39,6 +48,8 @@ class Batcher:
 
         # Initialize first batch state
         current_tex = sorted_commands[0].texture
+        current_material: Optional["Material"] = sorted_commands[0].material
+        current_material_id = sorted_commands[0].material_id
         current_dests: List[Tuple[float, float]] = []
         current_rotations: List[float] = []
         current_scales: List[Tuple[float, float]] = []
@@ -53,7 +64,8 @@ class Batcher:
 
         for cmd in sorted_commands:
             # CHECK: Can we continue the current batch?
-            if cmd.texture is not current_tex:
+            # Break batch on texture OR material change
+            if cmd.texture is not current_tex or cmd.material_id != current_material_id:
                 # 1. Close current batch
                 if current_dests:
                     batch = RenderBatch(
@@ -62,11 +74,14 @@ class Batcher:
                         rotations=current_rotations if has_transforms else [],
                         scales=current_scales if has_transforms else [],
                         transforms_enabled=has_transforms,
+                        material=current_material,
                     )
                     batches.append(batch)
 
                 # 2. Start new batch
                 current_tex = cmd.texture
+                current_material = cmd.material
+                current_material_id = cmd.material_id
                 current_dests = []
                 current_rotations = []
                 current_scales = []
@@ -92,6 +107,7 @@ class Batcher:
                 rotations=current_rotations if has_transforms else [],
                 scales=current_scales if has_transforms else [],
                 transforms_enabled=has_transforms,
+                material=current_material,
             )
             batches.append(batch)
 

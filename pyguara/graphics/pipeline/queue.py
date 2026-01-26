@@ -22,10 +22,11 @@ class RenderQueue:
 
         Sorting Order:
         1. Layer (Background -> UI)
-        2. Z-Index (Top-Down Y-Sort logic)
+        2. Material ID (groups by shader/texture for batching efficiency)
+        3. Z-Index (Top-Down Y-Sort logic)
         """
         # Python's Timsort is stable and efficient for this
-        self._commands.sort(key=lambda cmd: (cmd.layer, cmd.z_index))
+        self._commands.sort(key=lambda cmd: (cmd.layer, cmd.material_id, cmd.z_index))
 
     def clear(self) -> None:
         """Reset the queue for the next frame."""

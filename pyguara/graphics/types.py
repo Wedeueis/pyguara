@@ -1,10 +1,15 @@
 """Graphics-specific types and enumerations."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import List
+from typing import TYPE_CHECKING, List, Optional
 from enum import IntEnum
 from pyguara.common.types import Vector2
 from pyguara.resources.types import Texture
+
+if TYPE_CHECKING:
+    from pyguara.graphics.materials.material import Material
 
 
 class Layer(IntEnum):
@@ -42,12 +47,18 @@ class RenderCommand:
     z_index: float
     rotation: float = 0.0
     scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
+    material: Optional["Material"] = None
+
+    @property
+    def material_id(self) -> int:
+        """Get the material ID for sorting (0 if no material)."""
+        return self.material.id if self.material is not None else 0
 
 
 @dataclass
 class RenderBatch:
     """
-    A collection of draw calls that share a common state (Texture).
+    A collection of draw calls that share a common state (Texture + Material).
 
     This allows backends to use optimized bulk-drawing methods.
 
@@ -64,3 +75,6 @@ class RenderBatch:
     rotations: List[float] = field(default_factory=list)
     scales: List[tuple[float, float]] = field(default_factory=list)
     transforms_enabled: bool = False
+
+    # Optional material for custom shaders/uniforms
+    material: Optional["Material"] = None

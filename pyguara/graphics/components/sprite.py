@@ -1,8 +1,15 @@
 """Sprite component module."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
 from pyguara.resources.types import Texture
 from pyguara.common.types import Vector2
+
+if TYPE_CHECKING:
+    pass
 
 
 @dataclass
@@ -30,3 +37,6 @@ class Sprite:
     position: Vector2 = field(default_factory=Vector2.zero)  # Position or offset
     rotation: float = 0.0  # Rotation in degrees
     scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
+
+    # Optional material for custom shaders/effects (None = default sprite shader)
+    material: Any = None  # Type: Optional["Material"]

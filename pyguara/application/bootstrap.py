@@ -8,6 +8,8 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
 from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+from pyguara.graphics.pipeline.framebuffer import FramebufferManager
+from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import UIRenderer, IRenderer, TextureFactory
 from pyguara.graphics.window import Window, WindowConfig
 from pyguara.input.manager import InputManager
@@ -148,6 +150,26 @@ def _setup_container() -> DIContainer:
         # Texture Factory (for SpriteSheet and other texture creation)
         gl_texture_factory = GLTextureFactory(ctx)
         container.register_instance(TextureFactory, gl_texture_factory)  # type: ignore[type-abstract]
+
+        # Render Pipeline (FBO management and render graph)
+        from pyguara.graphics.pipeline.passes import WorldPass, FinalPass
+
+        fbo_manager = FramebufferManager(
+            ctx, disp_cfg.screen_width, disp_cfg.screen_height
+        )
+        container.register_instance(FramebufferManager, fbo_manager)
+
+        render_graph = RenderGraph(ctx, disp_cfg.screen_width, disp_cfg.screen_height)
+
+        # Setup default render passes
+        world_pass = WorldPass(gl_renderer)
+        final_pass = FinalPass(ctx, input_fbo_name="world")
+
+        render_graph.add_pass(world_pass)
+        render_graph.add_pass(final_pass)
+
+        container.register_instance(RenderGraph, render_graph)
+        container.register_instance(WorldPass, world_pass)
 
         # Store texture loader for later registration
         gl_texture_loader = GLTextureLoader(ctx)

@@ -12,7 +12,7 @@ ensuring smooth frame rates even when emitting hundreds of particles per second.
 from __future__ import annotations
 from dataclasses import dataclass, field
 import random
-from typing import Dict, List, Tuple, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Optional
 
 from pyguara.common.types import Vector2
 from pyguara.resources.types import Texture
@@ -20,6 +20,9 @@ from pyguara.graphics.protocols import IRenderer
 from pyguara.graphics.types import RenderBatch
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
+
+if TYPE_CHECKING:
+    pass
 
 
 @dataclass
@@ -74,6 +77,9 @@ class Particle:
     color_start: Optional[tuple[int, int, int, int]] = None
     color_end: Optional[tuple[int, int, int, int]] = None
     life_total: float = 1.0
+
+    # Optional material for custom shaders/effects (None = default shader)
+    material: Any = None  # Type: Optional["Material"]
 
 
 class ParticleSystem:
