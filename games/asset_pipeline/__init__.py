@@ -1,0 +1,1 @@
+"""Asset pipeline tutorial module."""
