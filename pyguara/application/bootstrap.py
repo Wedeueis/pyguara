@@ -176,6 +176,7 @@ def _setup_container() -> DIContainer:
     else:
         # Default Pygame backend
         from pyguara.graphics.backends.pygame.types import PygameTextureFactory
+        from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
 
         pygame_window_backend = PygameWindow()
         window = Window(win_config, pygame_window_backend)
@@ -193,6 +194,13 @@ def _setup_container() -> DIContainer:
         # Texture Factory (for SpriteSheet and other texture creation)
         pygame_texture_factory = PygameTextureFactory()
         container.register_instance(TextureFactory, pygame_texture_factory)  # type: ignore[type-abstract]
+
+        # Stub implementations for advanced features (graceful degradation)
+        # These allow game code using lighting/post-processing to run on Pygame
+        pygame_render_graph = PygameRenderGraph(
+            disp_cfg.screen_width, disp_cfg.screen_height
+        )
+        container.register_instance(RenderGraph, pygame_render_graph)
 
     # 5. Core Subsystems
     container.register_singleton(InputManager, InputManager)
