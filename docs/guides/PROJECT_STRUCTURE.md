@@ -16,8 +16,8 @@ my_game_project/
 │   ├── fonts/               # .ttf, .otf
 │   └── data/                # .json, .yaml (Game balance data, dialogue)
 ├── config/                  # Configuration files
-│   ├── game.toml            # Main config (Resolution, Inputs, Debug flags)
-│   └── logging.toml         # Logger configuration
+│   ├── game.json            # Main config (Resolution, Inputs, Debug flags)
+│   └── logging.json         # Logger configuration
 ├── src/                     # Source code root
 │   └── my_game/             # Your game package (Rename this to your game name)
 │       ├── __init__.py
