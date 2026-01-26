@@ -1,0 +1,2940 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../ONBOARDING/">
+      
+      
+        <link rel="next" href="../PROJECT_STRUCTURE/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Architecture & Style - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#architecture-style-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Architecture & Style
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Design Principles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Design Principles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-solid-compliance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1. SOLID Compliance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-pyguara-specific-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2. PyGuara-Specific Patterns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-code-style-standards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Code Style Standards
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Code Style Standards">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-formatting-enforced-by-ruff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1. Formatting (Enforced by Ruff)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-naming-conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2. Naming Conventions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-type-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3. Type Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-docstring-format-google-style" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4. Docstring Format (Google Style)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-architectural-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Architectural Patterns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Architectural Patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-component-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1. Component Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-system-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2. System Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-service-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3. Service Registration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-event-definition-and-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4. Event Definition and Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-file-organization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. File Organization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-error-handling-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Error Handling Strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-repository-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Repository Policies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Repository Policies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-branch-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 Branch Strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-commit-message-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 Commit Message Format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-pull-request-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 Pull Request Process
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.3 Pull Request Process">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#631-pr-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3.1 PR Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#632-review-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3.2 Review Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64-issue-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 Issue Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.4 Issue Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#641-issue-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4.1 Issue Labels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#642-issue-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4.2 Issue Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-testing-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 Testing Requirements
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.5 Testing Requirements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#651-test-coverage-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5.1 Test Coverage Targets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#652-test-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5.2 Test Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#653-cicd-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5.3 CI/CD Pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#66-documentation-standards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6 Documentation Standards
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.6 Documentation Standards">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#661-required-documentation-for-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6.1 Required Documentation for Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#662-adr-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6.2 ADR Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-quality-gates-acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Quality Gates &amp; Acceptance Criteria
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Quality Gates &amp; Acceptance Criteria">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-definition-of-done-dod" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 Definition of Done (DoD)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7.1 Definition of Done (DoD)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#code-quality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code Quality
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Review
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-release-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Release Criteria
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7.2 Release Criteria">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#alpha-release-current" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alpha Release (Current)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#beta-release-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beta Release (Target)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-release-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.0 Release (Future)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-performance-benchmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 Performance Benchmarks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-security-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 Security Checklist
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-glossary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Glossary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#document-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Document History
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-design-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Design Principles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Design Principles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-solid-compliance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1. SOLID Compliance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#12-pyguara-specific-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.2. PyGuara-Specific Patterns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-code-style-standards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Code Style Standards
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Code Style Standards">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#21-formatting-enforced-by-ruff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.1. Formatting (Enforced by Ruff)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#22-naming-conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.2. Naming Conventions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#23-type-annotations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.3. Type Annotations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#24-docstring-format-google-style" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2.4. Docstring Format (Google Style)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-architectural-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Architectural Patterns
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Architectural Patterns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#31-component-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.1. Component Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#32-system-definition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.2. System Definition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#33-service-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.3. Service Registration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#34-event-definition-and-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3.4. Event Definition and Usage
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-file-organization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. File Organization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-error-handling-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Error Handling Strategy
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-repository-policies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Repository Policies
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6. Repository Policies">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-branch-strategy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.1 Branch Strategy
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#62-commit-message-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.2 Commit Message Format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#63-pull-request-process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3 Pull Request Process
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.3 Pull Request Process">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#631-pr-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3.1 PR Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#632-review-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.3.2 Review Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#64-issue-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4 Issue Management
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.4 Issue Management">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#641-issue-labels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4.1 Issue Labels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#642-issue-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.4.2 Issue Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#65-testing-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5 Testing Requirements
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.5 Testing Requirements">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#651-test-coverage-targets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5.1 Test Coverage Targets
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#652-test-structure" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5.2 Test Structure
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#653-cicd-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.5.3 CI/CD Pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#66-documentation-standards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6 Documentation Standards
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="6.6 Documentation Standards">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#661-required-documentation-for-features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6.1 Required Documentation for Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#662-adr-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6.6.2 ADR Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-quality-gates-acceptance-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Quality Gates &amp; Acceptance Criteria
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7. Quality Gates &amp; Acceptance Criteria">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#71-definition-of-done-dod" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.1 Definition of Done (DoD)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7.1 Definition of Done (DoD)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#code-quality" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code Quality
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Testing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documentation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Review
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#72-release-criteria" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.2 Release Criteria
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="7.2 Release Criteria">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#alpha-release-current" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alpha Release (Current)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#beta-release-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Beta Release (Target)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#10-release-future" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.0 Release (Future)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#73-performance-benchmarks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.3 Performance Benchmarks
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#74-security-checklist" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7.4 Security Checklist
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-a-glossary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix A: Glossary
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#appendix-b-references" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appendix B: References
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#document-history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Document History
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="architecture-style-guide">Architecture &amp; Style Guide</h1>
+<h2 id="1-design-principles">1. Design Principles</h2>
+<h3 id="11-solid-compliance">1.1. SOLID Compliance</h3>
+<ul>
+<li><strong>S - Single Responsibility</strong>: Each class has ONE reason to change</li>
+<li><strong>O - Open/Closed</strong>: Extend via protocols, not modification</li>
+<li><strong>L - Liskov Substitution</strong>: Subtypes must be substitutable</li>
+<li><strong>I - Interface Segregation</strong>: Prefer small, focused protocols</li>
+<li><strong>D - Dependency Inversion</strong>: Depend on abstractions (protocols)</li>
+</ul>
+<h3 id="12-pyguara-specific-patterns">1.2. PyGuara-Specific Patterns</h3>
+<p><strong>DO:</strong></p>
+<ul>
+<li>✅ Use <code>Protocol</code> for all interfaces</li>
+<li>✅ Use <code>dataclass</code> for DTOs and components</li>
+<li>✅ Use type hints for ALL public APIs</li>
+<li>✅ Use DI container for cross-cutting concerns</li>
+<li>✅ Use events for decoupled communication</li>
+<li>✅ Use generators for large result sets</li>
+<li>✅ Use context managers for resource management</li>
+</ul>
+<p><strong>DON'T:</strong></p>
+<ul>
+<li>❌ Don't use inheritance for behavior sharing (use composition)</li>
+<li>❌ Don't put logic in components (data only)</li>
+<li>❌ Don't import pygame outside <code>backends/</code> directory</li>
+<li>❌ Don't use singletons (use DI instead)</li>
+<li>❌ Don't use global state (except unavoidable like pygame)</li>
+<li>❌ Don't use <code>print()</code> (use <code>logging</code>)</li>
+<li>❌ Don't use string-based event types (use enums or classes)</li>
+</ul>
+<h2 id="2-code-style-standards">2. Code Style Standards</h2>
+<h3 id="21-formatting-enforced-by-ruff">2.1. Formatting (Enforced by Ruff)</h3>
+<pre><code class="language-markdown"># Line length: 88 characters (Black style)
+# Quotes: Double quotes for strings
+# Indentation: 4 spaces (no tabs)
+# Imports: Sorted (isort), grouped (stdlib, third-party, local)
+# Trailing commas: Yes (in multiline collections)
+</code></pre>
+<h3 id="22-naming-conventions">2.2. Naming Conventions</h3>
+<pre><code class="language-python"># Classes: PascalCase
+class EntityManager: ...
+
+# Functions/Methods: snake_case
+def get_entities_with(...): ...
+
+# Constants: UPPER_SNAKE_CASE
+MAX_ENTITIES = 10000
+
+# Private members: Leading underscore
+self._internal_cache = {}
+
+# Type variables: Single capital letter or PascalCase with T suffix
+T = TypeVar(&quot;T&quot;)
+ComponentT = TypeVar(&quot;ComponentT&quot;, bound=Component)
+
+# Protocols: I prefix for interfaces (optional but recommended)
+class IRenderer(Protocol): ...
+</code></pre>
+<h3 id="23-type-annotations">2.3. Type Annotations</h3>
+<pre><code class="language-python"># Always annotate function signatures
+def create_entity(self, entity_id: Optional[str] = None) -&gt; Entity:
+    ...
+
+# Always annotate class attributes
+class Component:
+    entity: Optional[Entity]
+
+# Use NewType for domain-specific types
+EntityID = NewType(&quot;EntityID&quot;, str)
+
+# Use Protocol for structural typing
+class Renderable(Protocol):
+    @property
+    def position(self) -&gt; Vector2: ...
+</code></pre>
+<h3 id="24-docstring-format-google-style">2.4. Docstring Format (Google Style)</h3>
+<pre><code class="language-python">def complex_function(param1: int, param2: str) -&gt; dict[str, Any]:
+    &quot;&quot;&quot;Brief one-line summary.
+
+    Longer description if needed. Explain the &quot;why&quot; not the &quot;what&quot;.
+    The &quot;what&quot; should be obvious from the code.
+
+    Args:
+        param1: Description of param1.
+        param2: Description of param2.
+
+    Returns:
+        A dictionary containing the results. Structure described here.
+
+    Raises:
+        ValueError: When param1 is negative.
+        KeyError: When param2 not in valid set.
+
+    Example:
+        &gt;&gt;&gt; result = complex_function(42, &quot;test&quot;)
+        &gt;&gt;&gt; assert &quot;key&quot; in result
+    &quot;&quot;&quot;
+</code></pre>
+<h2 id="3-architectural-patterns">3. Architectural Patterns</h2>
+<h3 id="31-component-definition">3.1. Component Definition</h3>
+<pre><code class="language-python">from dataclasses import dataclass
+from pyguara.ecs.component import BaseComponent
+from pyguara.common.types import Vector2
+
+@dataclass
+class Transform(BaseComponent):
+    &quot;&quot;&quot;World space position and orientation.
+
+    This component should be present on all visible entities.
+    &quot;&quot;&quot;
+    position: Vector2 = Vector2(0, 0)
+    rotation: float = 0.0  # degrees
+    scale: Vector2 = Vector2(1, 1)
+
+    # NO METHODS (data only)
+    # Logic goes in Systems, not Components
+</code></pre>
+<h3 id="32-system-definition">3.2. System Definition</h3>
+<pre><code class="language-python">from pyguara.ecs.manager import EntityManager
+from pyguara.common.components import Transform
+from pyguara.physics.components import RigidBody
+
+class PhysicsSystem:
+    &quot;&quot;&quot;Synchronizes physics engine with ECS transform components.
+
+    Runs during the physics update phase, before rendering.
+    &quot;&quot;&quot;
+
+    def __init__(self, entity_manager: EntityManager, physics_engine: IPhysicsEngine):
+        self._entities = entity_manager
+        self._physics = physics_engine
+
+    def update(self, dt: float) -&gt; None:
+        &quot;&quot;&quot;Update all physics-enabled entities.&quot;&quot;&quot;
+        for entity in self._entities.get_entities_with(Transform, RigidBody):
+            transform = entity.get_component(Transform)
+            rigidbody = entity.get_component(RigidBody)
+
+            # Sync physics -&gt; ECS (for dynamic bodies)
+            if rigidbody.body_type == BodyType.DYNAMIC:
+                physics_body = self._physics.get_body(entity.id)
+                transform.position = physics_body.position
+                transform.rotation = physics_body.rotation
+            # Sync ECS -&gt; physics (for kinematic bodies)
+            else:
+                physics_body = self._physics.get_body(entity.id)
+                physics_body.position = transform.position
+                physics_body.rotation = transform.rotation
+</code></pre>
+<h3 id="33-service-registration">3.3. Service Registration</h3>
+<pre><code class="language-python"># In bootstrap.py or scene setup
+def _setup_container() -&gt; DIContainer:
+    container = DIContainer()
+
+    # Singletons: Shared app-wide state
+    container.register_singleton(EventDispatcher, EventDispatcher)
+    container.register_singleton(ResourceManager, ResourceManager)
+
+    # Transient: New instance every request
+    container.register_transient(ParticleEmitter, ParticleEmitter)
+
+    # Scoped: Shared within a scene/scope
+    container.register_scoped(PhysicsSystem, PhysicsSystem)
+
+    return container
+</code></pre>
+<h3 id="34-event-definition-and-usage">3.4. Event Definition and Usage</h3>
+<pre><code class="language-python">from dataclasses import dataclass, field
+from time import time
+from typing import Any
+
+@dataclass
+class EntityDiedEvent:
+    &quot;&quot;&quot;Fired when an entity's health reaches zero.
+
+    Subscribers can use this to trigger death animations,
+    drop loot, update score, etc.
+    &quot;&quot;&quot;
+    entity_id: str
+    damage_source: Optional[str] = None
+    timestamp: float = field(default_factory=time)
+    source: Any = None  # The system that created the event
+
+# Usage
+dispatcher.subscribe(EntityDiedEvent, self._on_entity_died)
+
+def _on_entity_died(self, event: EntityDiedEvent) -&gt; None:
+    print(f&quot;Entity {event.entity_id} died from {event.damage_source}&quot;)
+</code></pre>
+<h2 id="4-file-organization">4. File Organization</h2>
+<pre><code class="language-markdown">pyguara/
+├── subsystem_name/
+│   ├── __init__.py          # Public API exports
+│   ├── protocols.py         # Interfaces (I* classes)
+│   ├── types.py             # DTOs, Enums, TypeAliases
+│   ├── exceptions.py        # Custom exceptions
+│   ├── manager.py           # Main coordinator class
+│   ├── components/          # If ECS-related
+│   │   ├── foo.py
+│   │   └── bar.py
+│   └── backends/            # If hardware-abstracted
+│       ├── pygame_impl.py
+│       └── headless_impl.py
+└── tests/
+    └── test_subsystem_name.py
+</code></pre>
+<h2 id="5-error-handling-strategy">5. Error Handling Strategy</h2>
+<pre><code class="language-python"># Use specific exceptions
+from pyguara.subsystem.exceptions import SubsystemException
+
+class EntityNotFoundException(SubsystemException):
+    &quot;&quot;&quot;Raised when entity lookup fails.&quot;&quot;&quot;
+    pass
+
+# Always provide context
+raise EntityNotFoundException(
+    f&quot;Entity '{entity_id}' not found in manager. &quot;
+    f&quot;Available entities: {list(self._entities.keys())[:5]}...&quot;
+)
+
+# Log before raising (for async/event contexts)
+logger.error(f&quot;Failed to process event: {event}&quot;, exc_info=True)
+raise
+
+# Use early returns
+def process(self, entity: Entity) -&gt; None:
+    if not entity.has_component(Transform):
+        logger.warning(f&quot;Entity {entity.id} missing Transform, skipping&quot;)
+        return
+
+    # Main logic here
+</code></pre>
+<h2 id="6-repository-policies">6. Repository Policies</h2>
+<h3 id="61-branch-strategy">6.1 Branch Strategy</h3>
+<pre><code class="language-markdown">main (protected)
+  ├── develop (integration branch)
+  │   ├── feature/P0-001-component-removal-tracking
+  │   ├── feature/audio-system-implementation
+  │   ├── bugfix/resource-memory-leak
+  │   └── docs/api-reference-sphinx
+  └── release/v0.2.0-beta
+</code></pre>
+<p><strong>Branch Naming:</strong></p>
+<ul>
+<li><code>feature/</code> - New features</li>
+<li><code>bugfix/</code> - Bug fixes</li>
+<li><code>hotfix/</code> - Critical production fixes</li>
+<li><code>docs/</code> - Documentation only</li>
+<li><code>refactor/</code> - Code refactoring</li>
+<li><code>test/</code> - Test additions/improvements</li>
+</ul>
+<h3 id="62-commit-message-format">6.2 Commit Message Format</h3>
+<pre><code class="language-markdown">&lt;type&gt;(&lt;scope&gt;): &lt;subject&gt;
+
+&lt;body&gt;
+
+&lt;footer&gt;
+</code></pre>
+<p><strong>Types:</strong></p>
+<ul>
+<li><code>feat</code>: New feature</li>
+<li><code>fix</code>: Bug fix</li>
+<li><code>docs</code>: Documentation changes</li>
+<li><code>style</code>: Formatting, no code change</li>
+<li><code>refactor</code>: Code restructuring</li>
+<li><code>perf</code>: Performance improvement</li>
+<li><code>test</code>: Adding tests</li>
+<li><code>chore</code>: Build process, tooling</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-markdown">feat(input): add gamepad support with SDL2 backend
+
+Implements Xbox and PlayStation controller support using
+pygame's joystick API wrapped in our input abstraction.
+
+- Added GamepadButton and GamepadAxis enums
+- Created JoystickBackend protocol
+- Implemented SDL2JoystickBackend
+- Added input action mapping for buttons
+
+Closes #42
+Relates to P0-006
+</code></pre>
+<h3 id="63-pull-request-process">6.3 Pull Request Process</h3>
+<h4 id="631-pr-template">6.3.1 PR Template</h4>
+<pre><code class="language-markdown">## Description
+Brief summary of changes
+
+## Type of Change
+- [ ] Bug fix (non-breaking change which fixes an issue)
+- [ ] New feature (non-breaking change which adds functionality)
+- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
+- [ ] Documentation update
+
+## Related Issues
+Closes #XXX
+Relates to #YYY
+
+## Testing
+- [ ] Unit tests added/updated
+- [ ] Integration tests added/updated
+- [ ] Manual testing performed
+- [ ] Performance impact assessed
+
+## Checklist
+- [ ] Code follows style guidelines (ruff check passes)
+- [ ] Type hints complete (mypy passes)
+- [ ] Docstrings added for public APIs
+- [ ] Tests pass locally
+- [ ] No breaking changes OR migration guide provided
+- [ ] Documentation updated
+</code></pre>
+<h4 id="632-review-requirements">6.3.2 Review Requirements</h4>
+<ul>
+<li><strong>Minimum Reviewers:</strong> 1 (for large changes: 2)</li>
+<li><strong>Required Checks:</strong></li>
+<li>✅ CI tests pass</li>
+<li>✅ Code coverage doesn't decrease</li>
+<li>✅ Ruff and mypy checks pass</li>
+<li>✅ No merge conflicts</li>
+<li><strong>Approval Required:</strong> Yes (from code owner or maintainer)</li>
+</ul>
+<h3 id="64-issue-management">6.4 Issue Management</h3>
+<h4 id="641-issue-labels">6.4.1 Issue Labels</h4>
+<pre><code class="language-markdown">Priority:
+- P0-critical: Blocking release
+- P1-high: Important but not blocking
+- P2-medium: Nice to have
+- P3-low: Future consideration
+
+Type:
+- bug: Something isn't working
+- enhancement: New feature request
+- documentation: Docs improvement
+- performance: Performance issue
+- technical-debt: Refactoring needed
+
+Status:
+- needs-triage: Awaiting review
+- accepted: Approved for implementation
+- in-progress: Being worked on
+- blocked: Waiting on dependency
+- wontfix: Closed without action
+</code></pre>
+<h4 id="642-issue-template">6.4.2 Issue Template</h4>
+<pre><code class="language-markdown">**Describe the Issue**
+Clear description of the problem or request
+
+**Expected Behavior**
+What should happen
+
+**Actual Behavior**
+What actually happens
+
+**Steps to Reproduce**
+1. Step 1
+2. Step 2
+3. ...
+
+**Environment**
+- PyGuara Version: X.Y.Z
+- Python Version: 3.12.X
+- OS: Linux/Windows/Mac
+- pygame-ce Version: X.Y.Z
+
+**Additional Context**
+Screenshots, code snippets, error traces
+</code></pre>
+<h3 id="65-testing-requirements">6.5 Testing Requirements</h3>
+<h4 id="651-test-coverage-targets">6.5.1 Test Coverage Targets</h4>
+<ul>
+<li><strong>Overall:</strong> ≥ 80%</li>
+<li><strong>Core Systems (ECS, DI, Events):</strong> ≥ 90%</li>
+<li><strong>New Features:</strong> ≥ 85%</li>
+<li><strong>Bug Fixes:</strong> 100% (must include regression test)</li>
+</ul>
+<h4 id="652-test-structure">6.5.2 Test Structure</h4>
+<pre><code class="language-python"># tests/test_subsystem.py
+import pytest
+from pyguara.subsystem import Thing
+
+class TestThing:
+    &quot;&quot;&quot;Test suite for Thing class.&quot;&quot;&quot;
+
+    def test_creation(self):
+        &quot;&quot;&quot;Verify Thing can be created with defaults.&quot;&quot;&quot;
+        thing = Thing()
+        assert thing is not None
+
+    def test_method_with_valid_input(self):
+        &quot;&quot;&quot;Test method behavior with valid input.&quot;&quot;&quot;
+        thing = Thing()
+        result = thing.method(valid_input)
+        assert result == expected
+
+    def test_method_raises_on_invalid_input(self):
+        &quot;&quot;&quot;Test method raises appropriate exception.&quot;&quot;&quot;
+        thing = Thing()
+        with pytest.raises(ValueError, match=&quot;expected pattern&quot;):
+            thing.method(invalid_input)
+
+    @pytest.mark.performance
+    def test_performance_at_scale(self):
+        &quot;&quot;&quot;Verify performance with large dataset.&quot;&quot;&quot;
+        thing = Thing()
+        # Benchmark code
+</code></pre>
+<h4 id="653-cicd-pipeline">6.5.3 CI/CD Pipeline</h4>
+<pre><code class="language-yaml"># .github/workflows/ci.yml structure
+Jobs:
+  - lint: Run ruff check
+  - typecheck: Run mypy
+  - test-unit: Run pytest (unit tests)
+  - test-integration: Run pytest (integration tests)
+  - test-performance: Run pytest (benchmark tests)
+  - coverage: Generate and upload coverage report
+  - build: Verify package builds
+</code></pre>
+<h3 id="66-documentation-standards">6.6 Documentation Standards</h3>
+<h4 id="661-required-documentation-for-features">6.6.1 Required Documentation for Features</h4>
+<ol>
+<li><strong>API Reference</strong>: Auto-generated from docstrings</li>
+<li><strong>Tutorial</strong>: Step-by-step guide for common use case</li>
+<li><strong>Example</strong>: Working code snippet in examples/</li>
+<li><strong>Architecture Decision Record</strong>: For significant design choices</li>
+</ol>
+<h4 id="662-adr-template">6.6.2 ADR Template</h4>
+<pre><code class="language-markdown"># ADR-XXX: Title
+
+## Status
+Proposed | Accepted | Deprecated | Superseded by ADR-YYY
+
+## Context
+What is the issue we're facing?
+
+## Decision
+What did we decide?
+
+## Consequences
+What are the trade-offs?
+
+### Positive
+- Benefit 1
+- Benefit 2
+
+### Negative
+- Cost 1
+- Cost 2
+
+## Alternatives Considered
+- Alternative 1: Why rejected
+- Alternative 2: Why rejected
+</code></pre>
+<h2 id="7-quality-gates-acceptance-criteria">7. Quality Gates &amp; Acceptance Criteria</h2>
+<h3 id="71-definition-of-done-dod">7.1 Definition of Done (DoD)</h3>
+<p>A feature/fix is considered "Done" when ALL of the following are true:</p>
+<h4 id="code-quality">Code Quality</h4>
+<ul>
+<li>[ ] Code follows style guide (ruff check passes)</li>
+<li>[ ] Type hints complete (mypy passes with no errors)</li>
+<li>[ ] No TODO/FIXME comments (unless tracked in issues)</li>
+<li>[ ] No commented-out code</li>
+<li>[ ] No print() statements (use logging)</li>
+<li>[ ] Docstrings added for all public APIs (Google style)</li>
+</ul>
+<h4 id="testing">Testing</h4>
+<ul>
+<li>[ ] Unit tests written (coverage ≥ 85% for new code)</li>
+<li>[ ] Integration tests added (if applicable)</li>
+<li>[ ] All tests pass locally</li>
+<li>[ ] CI pipeline green</li>
+<li>[ ] Performance impact assessed (benchmarks run)</li>
+<li>[ ] Manual testing completed (test plan documented)</li>
+</ul>
+<h4 id="documentation">Documentation</h4>
+<ul>
+<li>[ ] API reference updated (docstrings)</li>
+<li>[ ] Tutorial/guide written (for features)</li>
+<li>[ ] Example code added (if applicable)</li>
+<li>[ ] CHANGELOG.md updated</li>
+<li>[ ] Architecture decision recorded (for significant changes)</li>
+</ul>
+<h4 id="review">Review</h4>
+<ul>
+<li>[ ] Code reviewed and approved</li>
+<li>[ ] No unresolved review comments</li>
+<li>[ ] Breaking changes flagged and documented</li>
+<li>[ ] Migration guide provided (if breaking change)</li>
+</ul>
+<h4 id="integration">Integration</h4>
+<ul>
+<li>[ ] Merged to develop branch</li>
+<li>[ ] No merge conflicts</li>
+<li>[ ] Build succeeds</li>
+<li>[ ] Integration tests pass</li>
+</ul>
+<h3 id="72-release-criteria">7.2 Release Criteria</h3>
+<h4 id="alpha-release-current">Alpha Release (Current)</h4>
+<ul>
+<li>✅ Core systems functional</li>
+<li>✅ Basic example works</li>
+<li>⚠️ Known bugs acceptable</li>
+<li>⚠️ Documentation minimal</li>
+</ul>
+<h4 id="beta-release-target">Beta Release (Target)</h4>
+<ul>
+<li>[ ] All P0 issues resolved</li>
+<li>[ ] All P1 issues resolved</li>
+<li>[ ] Test coverage ≥ 80%</li>
+<li>[ ] API stable (no breaking changes planned)</li>
+<li>[ ] 3+ complete example games</li>
+<li>[ ] Full API documentation</li>
+<li>[ ] Tutorial series complete</li>
+<li>[ ] Performance benchmarks published</li>
+<li>[ ] Community beta testing (2+ weeks)</li>
+<li>[ ] Critical bugs &lt; 5</li>
+<li>[ ] Known issues documented</li>
+</ul>
+<h4 id="10-release-future">1.0 Release (Future)</h4>
+<ul>
+<li>[ ] All P0-P2 issues resolved</li>
+<li>[ ] Test coverage ≥ 90%</li>
+<li>[ ] Production games shipped</li>
+<li>[ ] Stability tested (1000+ hours gameplay)</li>
+<li>[ ] Plugin system mature</li>
+<li>[ ] Community contributions accepted</li>
+<li>[ ] Professional documentation</li>
+<li>[ ] Video tutorials available</li>
+<li>[ ] No critical or high-priority bugs</li>
+</ul>
+<h3 id="73-performance-benchmarks">7.3 Performance Benchmarks</h3>
+<p>All releases must meet these minimum performance targets on reference hardware (mid-range laptop):</p>
+<table>
+<thead>
+<tr>
+<th>Benchmark</th>
+<th>Target</th>
+<th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Entity Creation</td>
+<td>10,000/sec</td>
+<td><code>benchmark_entity_creation()</code></td>
+</tr>
+<tr>
+<td>Component Query</td>
+<td>100,000/sec</td>
+<td><code>benchmark_component_query()</code></td>
+</tr>
+<tr>
+<td>Event Dispatch</td>
+<td>50,000/sec</td>
+<td><code>benchmark_event_dispatch()</code></td>
+</tr>
+<tr>
+<td>Sprite Rendering</td>
+<td>60 FPS @ 5000 sprites</td>
+<td><code>benchmark_sprite_rendering()</code></td>
+</tr>
+<tr>
+<td>Physics Simulation</td>
+<td>60 FPS @ 1000 bodies</td>
+<td><code>benchmark_physics()</code></td>
+</tr>
+<tr>
+<td>Scene Load Time</td>
+<td>&lt; 1 second</td>
+<td><code>benchmark_scene_load()</code></td>
+</tr>
+<tr>
+<td>Memory Usage</td>
+<td>&lt; 500 MB @ 10k entities</td>
+<td><code>benchmark_memory()</code></td>
+</tr>
+<tr>
+<td>Asset Load</td>
+<td>&lt; 100ms per 1MB</td>
+<td><code>benchmark_asset_loading()</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Reference Hardware:</strong></p>
+<ul>
+<li>CPU: Intel i5-8250U or equivalent</li>
+<li>RAM: 8GB DDR4</li>
+<li>GPU: Integrated graphics</li>
+<li>OS: Ubuntu 22.04 LTS</li>
+</ul>
+<h3 id="74-security-checklist">7.4 Security Checklist</h3>
+<p>For each release, verify:</p>
+<ul>
+<li>[ ] No secrets in codebase (API keys, passwords)</li>
+<li>[ ] User input sanitized (file paths, save data)</li>
+<li>[ ] No code execution from data files (unless sandboxed)</li>
+<li>[ ] Dependencies scanned for vulnerabilities</li>
+<li>[ ] Save files validated before loading</li>
+<li>[ ] Network code (future) uses encryption</li>
+<li>[ ] Error messages don't leak sensitive info</li>
+</ul>
+<hr />
+<h2 id="appendix-a-glossary">Appendix A: Glossary</h2>
+<p><strong>ECS</strong>: Entity-Component-System architecture pattern
+<strong>DI</strong>: Dependency Injection (IoC container)
+<strong>DoD</strong>: Definition of Done
+<strong>ADR</strong>: Architecture Decision Record
+<strong>HAL</strong>: Hardware Abstraction Layer
+<strong>P0/P1/P2/P3</strong>: Priority levels (0 = Critical, 3 = Low)
+<strong>SFX</strong>: Sound Effects
+<strong>UI</strong>: User Interface
+<strong>DX</strong>: Developer Experience</p>
+<hr />
+<h2 id="appendix-b-references">Appendix B: References</h2>
+<ul>
+<li><a href="https://github.com/yourusername/pyguara">PyGuara Repository</a></li>
+<li><a href="https://peps.python.org/pep-0484/">Python Type Hints (PEP 484)</a></li>
+<li><a href="https://www.pygame.org/docs/">Pygame Documentation</a></li>
+<li><a href="http://www.pymunk.org/">Pymunk Documentation</a></li>
+<li><a href="https://github.com/SanderMertens/ecs-faq">ECS FAQ</a></li>
+<li><a href="https://gameprogrammingpatterns.com/">Game Programming Patterns</a></li>
+</ul>
+<hr />
+<h2 id="document-history">Document History</h2>
+<table>
+<thead>
+<tr>
+<th>Version</th>
+<th>Date</th>
+<th>Author</th>
+<th>Changes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0</td>
+<td>2026-01-09</td>
+<td>Wedeueis Braz</td>
+<td>Initial draft</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,1474 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../Archictecture%20%26%20Style%20Guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Onboarding - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pyguara-engine-developer-onboarding-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Onboarding
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-core-architecture-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Core Architecture Principles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Core Architecture Principles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-dependency-injection-di" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1. Dependency Injection (DI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-core-architecture-principles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Core Architecture Principles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Core Architecture Principles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#11-dependency-injection-di" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.1. Dependency Injection (DI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="pyguara-engine-developer-onboarding-guide">PyGuara Engine: Developer Onboarding Guide</h1>
+<p>Welcome to the PyGuara Engine! This guide provides an in-depth overview of the engine's architecture, systems, and design patterns. Its purpose is to help new developers understand how to use the engine effectively and consistently, embracing the core philosophies that make it powerful and maintainable.</p>
+<hr />
+<h2 id="1-core-architecture-principles">1. Core Architecture Principles</h2>
+<p>Before diving into individual systems, it's crucial to understand the three core principles that govern the entire engine. You will see these patterns everywhere.</p>
+<h3 id="11-dependency-injection-di">1.1. Dependency Injection (DI)</h3>
+<ul>
+<li><strong>Architecture:</strong> The engine is built around a central DI Container (<code>pyguara/di/container.py</code>). At startup (<code>main.py</code>), systems and managers are "registered" with this container. When a class is created, the container automatically provides (injects) the dependencies it asks for in its <code>__init__</code> method.</li>
+<li><strong>Design Pattern (Inversion of Control):</strong> Instead of a class creating its own dependencies (e.g., <code>self.resource_manager = ResourceManager()</code>), it declares them in its constructor (<code>def __init__(self, resource_manager: ResourceManager):</code>). This decouples the class from its dependencies, making the system modular, testable, and easier to manage.</li>
+<li>
+<p><strong>How to Use:</strong> When creating a new <code>System</code> or <code>Manager</code>, simply add other registered systems you need as arguments to <code>__init__</code>. The DI container will handle the rest.</p>
+<p>```python</p>
+<h1 id="before-di-tightly-coupled">Before DI: Tightly Coupled</h1>
+<p>class MySystem:
+    def <strong>init</strong>(self):
+        # Bad: This system is permanently tied to a specific resource manager
+        self.resource_manager = ResourceManager()</p>
+<h1 id="after-di-decoupled-and-testable">After DI: Decoupled and Testable</h1>
+<p>class MySystem:
+    def <strong>init</strong>(self, resource_manager: ResourceManager):
+        # Good: Receives any object that acts like a ResourceManager.
+        self.resource_manager = resource_manager
+```</p>
+</li>
+</ul>
+<h3 id="12-backend-abstraction-hardware-abstraction-layer-hal">1.2. Backend Abstraction (Hardware Abstraction Layer - HAL)</h3>
+<ul>
+<li><strong>Architecture:</strong> Systems that interact with low-level hardware or external libraries (Graphics, Physics, Audio, Input) are split into two parts:<ol>
+<li>A high-level <code>Manager</code> or <code>System</code> that game code interacts with.</li>
+<li>A <code>protocol.py</code> file defining an interface (e.g., <code>IRenderer</code>, <code>IPhysicsEngine</code>).</li>
+<li>A <code>backends/</code> directory containing concrete implementations of that interface (e.g., <code>PygameRenderer</code>, <code>PymunkEngine</code>).</li>
+</ol>
+</li>
+<li><strong>Design Pattern (Strategy/Bridge):</strong> This decouples the engine's logic from any specific library. The <code>PhysicsSystem</code> doesn't know about "Pymunk"; it only knows about the <code>IPhysicsEngine</code> interface. This allows backends to be swapped (e.g., from Pygame to a future OpenGL renderer) without rewriting any game logic.</li>
+<li><strong>How to Use:</strong> Always code against the high-level <code>Manager</code> or <code>System</code> (e.g., <code>AudioManager</code>, <code>RenderSystem</code>). Never interact directly with a backend implementation.</li>
+</ul>
+<h3 id="13-event-driven-communication">1.3. Event-Driven Communication</h3>
+<ul>
+<li><strong>Architecture:</strong> The engine uses a global <code>EventDispatcher</code> (<code>pyguara/events/dispatcher.py</code>) to allow systems to communicate without direct references to each other.</li>
+<li><strong>Design Pattern (Observer/Pub-Sub):</strong> One system "dispatches" an event, and other systems can "subscribe" to that type of event.</li>
+<li>
+<p><strong>How to Use:</strong> When a significant event occurs, dispatch an event instead of calling another system directly. For example, the <code>CollisionSystem</code> dispatches an <code>OnCollisionBegin</code> event; it does not know what a "Player" or "ScoreSystem" is. The <code>ScoreSystem</code> can then subscribe to <code>OnCollisionBegin</code> and update the score if needed.</p>
+<p>```python</p>
+<h1 id="in-your-systemscene-that-needs-to-react-to-events">In your system/scene that needs to react to events</h1>
+<p>def <strong>init</strong>(self, event_dispatcher: EventDispatcher):
+    self.event_dispatcher = event_dispatcher
+    self.event_dispatcher.subscribe(OnCollisionBegin, self.on_collision)</p>
+<p>def on_collision(self, event: OnCollisionBegin):
+    print(f"Collision between {event.entity_a} and {event.entity_b}!")
+```</p>
+</li>
+</ul>
+<hr />
+<h2 id="2-the-entity-component-system-ecs-framework">2. The Entity-Component-System (ECS) Framework</h2>
+<ul>
+<li><strong>Location:</strong> <code>pyguara/ecs/</code></li>
+<li><strong>Architecture:</strong> PyGuara uses a high-performance ECS architecture.<ul>
+<li><strong>Entity:</strong> A simple ID. It is not an object; it is just a number that "owns" a collection of components.</li>
+<li><strong>Component:</strong> Pure data. A component is a <code>dataclass</code> that holds data, but no logic (e.g., <code>Transform</code>, <code>RigidBody</code>).</li>
+<li><strong>System:</strong> Pure logic. A system contains all the logic that operates on entities possessing a certain set of components (e.g., <code>PhysicsSystem</code> operates on entities with <code>Transform</code> and <code>RigidBody</code>).</li>
+</ul>
+</li>
+<li><strong>Design Pattern (Composition over Inheritance):</strong> Instead of creating a <code>Player</code> class that inherits from <code>GameObject</code>, you create an entity and compose it by adding components: <code>Transform</code>, <code>Sprite</code>, <code>PlayerInput</code>, <code>Health</code>.</li>
+</ul>
+<h3 id="how-to-use">How to Use</h3>
+<ol>
+<li>
+<p><strong>Define Components:</strong> Create new <code>dataclass</code>es in a <code>components.py</code> file for your feature.</p>
+<p>```python
+from dataclasses import dataclass
+from pyguara.common.types import Vector2</p>
+<p>@dataclass
+class Transform:
+    position: Vector2 = field(default_factory=Vector2.zero)</p>
+<p>@dataclass
+class PlayerInput:
+    move_speed: float = 100.0
+```</p>
+</li>
+<li>
+<p><strong>Create Systems:</strong> Create a class that operates on entities with those components.</p>
+<p>```python
+class PlayerMovementSystem:
+    def <strong>init</strong>(self, entity_manager: EntityManager):
+        self.entity_manager = entity_manager</p>
+<pre><code>def update(self, dt: float):
+    # Query for all entities that have BOTH Transform and PlayerInput
+    for entity in self.entity_manager.get_entities_with(Transform, PlayerInput):
+        transform = entity.get_component(Transform)
+        player_input = entity.get_component(PlayerInput)
+
+        # ... apply movement logic ...
+</code></pre>
+<p>```</p>
+</li>
+<li>
+<p><strong>Create Entities:</strong> In your scene, get the <code>EntityManager</code> and create entities.</p>
+<p>```python</p>
+<h1 id="in-your-gameplayscenes-on_enter-method">In your GameplayScene's on_enter method</h1>
+<p>player_entity = self.entity_manager.create_entity()
+self.entity_manager.add_component(player_entity, Transform(position=Vector2(100, 100)))
+self.entity_manager.add_component(player_entity, PlayerInput())
+self.entity_manager.add_component(player_entity, Sprite(texture=...))
+```</p>
+</li>
+</ol>
+<hr />
+<h2 id="3-graphics-system">3. Graphics System</h2>
+<ul>
+<li><strong>Location:</strong> <code>pyguara/graphics/</code></li>
+<li><strong>Architecture:</strong> A backend-agnostic, pipeline-based rendering system.<ul>
+<li><strong>Protocols (<code>IRenderer</code>)</strong>: Define the abstract drawing commands.</li>
+<li><strong>Backend (<code>PygameRenderer</code>)</strong>: Implements the drawing commands using Pygame.</li>
+<li><strong>RenderSystem (<code>pipeline/render_system.py</code>)</strong>: The main system that orchestrates the rendering process. It collects all <code>Renderable</code> objects, sorts them for 2D layering, batches them for performance, and sends them to the backend.</li>
+</ul>
+</li>
+<li><strong>Features:</strong><ul>
+<li>Sprite rendering with position, rotation, and scale.</li>
+<li>Layering and Z-sorting for correct 2D depth.</li>
+<li>High-performance sprite batching (<code>pygame.Surface.blits</code>).</li>
+<li>Camera and viewport support.</li>
+<li>Basic primitive drawing (rects, circles, lines) for debugging.</li>
+</ul>
+</li>
+<li>
+<p><strong>How to Use:</strong></p>
+<ol>
+<li>Create an entity with a <code>Transform</code> component and a <code>Sprite</code> component. The <code>Sprite</code> component holds the texture, layer, and other render-specific data.</li>
+<li>The <code>RenderSystem</code> (which is managed by the <code>SystemManager</code>) will automatically find and draw this entity each frame. You do not need to call a <code>draw</code> method yourself.</li>
+</ol>
+<p>```python
+from pyguara.common.components import Transform
+from pyguara.graphics.components import Sprite</p>
+<h1 id="in-a-scenes-on_enter-method">In a scene's on_enter method</h1>
+<p>texture = self.resource_manager.load("sprites/my_sprite.png", Texture)
+my_entity = self.entity_manager.create_entity()
+self.entity_manager.add_component(my_entity, Transform(position=Vector2(50, 50)))
+self.entity_manager.add_component(my_entity, Sprite(texture=texture, layer=10))
+```</p>
+</li>
+</ul>
+<hr />
+<h2 id="4-physics-system">4. Physics System</h2>
+<ul>
+<li><strong>Location:</strong> <code>pyguara/physics/</code></li>
+<li><strong>Architecture:</strong> A backend-agnostic, three-part system.<ul>
+<li><strong>Backend (<code>PymunkEngine</code>)</strong>: Implements the <code>IPhysicsEngine</code> protocol using the Pymunk library. It does the heavy lifting.</li>
+<li><strong>PhysicsSystem</strong>: The ECS system that synchronizes data between the game world (<code>Transform</code> components) and the physics world (<code>Pymunk.Body</code>).</li>
+<li><strong>CollisionSystem</strong>: Receives callbacks from the backend and dispatches high-level <code>OnCollisionBegin</code>, <code>OnTriggerEnter</code>, etc., events.</li>
+</ul>
+</li>
+<li><strong>Features:</strong><ul>
+<li>Static, Kinematic, and Dynamic rigid bodies.</li>
+<li>Circle and Box colliders.</li>
+<li>Physics materials (friction, restitution).</li>
+<li>Triggers (non-solid colliders).</li>
+<li>A rich set of joints (Pin, Spring, Slider).</li>
+<li>Raycasting.</li>
+</ul>
+</li>
+<li>
+<p><strong>How to Use:</strong></p>
+<ol>
+<li>Add a <code>RigidBody</code> component to an entity to give it physics properties.</li>
+<li>Add a <code>Collider</code> component to give it a physical shape.</li>
+<li>The <code>PhysicsSystem</code> will automatically create the body in the Pymunk world.</li>
+<li>For dynamic bodies, the <code>PhysicsSystem</code> will update the entity's <code>Transform</code> component each frame based on the simulation.</li>
+</ol>
+<p>```python
+from pyguara.physics.components import RigidBody, Collider
+from pyguara.physics.types import BodyType, ShapeType</p>
+<h1 id="create-a-dynamic-falling-box">Create a dynamic, falling box</h1>
+<p>box = self.entity_manager.create_entity()
+self.entity_manager.add_component(box, Transform())
+self.entity_manager.add_component(box, RigidBody(body_type=BodyType.DYNAMIC))
+self.entity_manager.add_component(box, Collider(shape_type=ShapeType.BOX, dimensions=[32, 32]))
+```</p>
+</li>
+</ul>
+<hr />
+<h2 id="5-ui-system">5. UI System</h2>
+<ul>
+<li><strong>Location:</strong> <code>pyguara/ui/</code></li>
+<li><strong>Architecture:</strong> A powerful, retained-mode, constraint-based UI framework.<ul>
+<li><strong>UIManager:</strong> Manages the UI tree, processes input, and orchestrates rendering.</li>
+<li><strong>UIElement:</strong> The base class for all UI components. Provides a state machine (normal, hover, pressed), event handling, and layout hooks.</li>
+<li><strong>Components:</strong> A rich library of widgets (<code>Button</code>, <code>Panel</code>, <code>Slider</code>, etc.).</li>
+<li><strong>Layout &amp; Constraints:</strong> A declarative system for positioning and sizing elements using anchors, margins, and percentages. This is the heart of the UI system's power.</li>
+<li><strong>Theming:</strong> A centralized theme file (<code>theme.py</code>) defines colors, fonts, and styles, allowing for easy reskinning.</li>
+</ul>
+</li>
+<li><strong>Features:</strong><ul>
+<li>Full suite of standard UI widgets.</li>
+<li>Stateful components with automatic state changes on interaction.</li>
+<li>Declarative, responsive layout system that avoids manual pixel positioning.</li>
+<li>Centralized styling and theming.</li>
+</ul>
+</li>
+<li>
+<p><strong>How to Use:</strong></p>
+<ol>
+<li>Get the <code>UIManager</code> from the DI container.</li>
+<li>Instantiate UI components, setting their text, size, etc.</li>
+<li>Define layout rules using <code>LayoutConstraints</code>.</li>
+<li>Assign callbacks to interaction events like <code>on_click</code>.</li>
+<li>Add the element to the <code>UIManager</code>.</li>
+</ol>
+<p>```python
+from pyguara.ui.components import Button
+from pyguara.ui.constraints import create_centered_constraints</p>
+<p>def on_my_button_click(button: Button):
+    print("Button clicked!")</p>
+<h1 id="in-a-scenes-on_enter-method_1">In a scene's on_enter method</h1>
+<p>ui_manager = self.container.get(UIManager)</p>
+<p>my_button = Button(text="Click Me", position=Vector2(0,0)) # Position is controlled by layout
+my_button.constraints = create_centered_constraints(width_percent=0.2, height_percent=0.1)
+my_button.on_click = on_my_button_click</p>
+<p>ui_manager.add_element(my_button)
+```</p>
+</li>
+</ul>
+<hr />
+<h2 id="6-ai-system">6. AI System</h2>
+<ul>
+<li><strong>Location:</strong> <code>pyguara/ai/</code></li>
+<li><strong>Architecture:</strong> A suite of high-level AI tools integrated into the ECS.<ul>
+<li><strong>AISystem:</strong> The main ECS system that ticks the AI components.</li>
+<li><strong>AIComponent:</strong> A component that holds the AI logic for an entity (e.g., an FSM or a Behavior Tree instance).</li>
+</ul>
+</li>
+<li><strong>Features:</strong><ul>
+<li><strong>Finite State Machines (FSMs):</strong> For simple, state-based AI.</li>
+<li><strong>Behavior Trees (BTs):</strong> A professional-grade BT implementation for complex, hierarchical AI logic. Includes all standard node types (Sequence, Selector, Parallel, Decorators).</li>
+<li><strong>Steering Behaviors:</strong> For dynamic movement (seek, flee, arrive).</li>
+<li><strong>Pathfinding:</strong> A* pathfinding on a navigation mesh.</li>
+</ul>
+</li>
+<li>
+<p><strong>How to Use (Behavior Tree):</strong></p>
+<ol>
+<li>Define simple functions that will act as your leaf nodes.</li>
+<li>Compose these functions into a tree using <code>SequenceNode</code>, <code>SelectorNode</code>, etc.</li>
+<li>Create a <code>BehaviorTree</code> instance with your root node.</li>
+<li>Add an <code>AIComponent</code> to your entity and assign the tree to it.</li>
+</ol>
+<p>```python
+from pyguara.ai.behavior_tree import BehaviorTree, ActionNode, SequenceNode, SelectorNode, NodeStatus</p>
+<p>def find_player(context) -&gt; NodeStatus:
+    # ... logic to find player ...
+    if found:
+        context.blackboard['player_pos'] = player_position
+        return NodeStatus.SUCCESS
+    return NodeStatus.FAILURE</p>
+<p>def move_towards_player(context) -&gt; NodeStatus:
+    # ... logic to move towards context.blackboard['player_pos'] ...
+    if close_enough:
+        return NodeStatus.SUCCESS
+    return NodeStatus.RUNNING # Still moving</p>
+<h1 id="in-your-scene">In your scene</h1>
+<p>attack_sequence = SequenceNode([find_player, move_towards_player])
+patrol_action = ActionNode(...)
+root_node = SelectorNode([attack_sequence, patrol_action])</p>
+<p>tree = BehaviorTree(root=root_node)
+ai_comp = AIComponent()
+ai_comp.behavior_tree = tree # The AISystem will tick this</p>
+<p>my_enemy = self.entity_manager.create_entity()
+self.entity_manager.add_component(my_enemy, ai_comp)
+```</p>
+</li>
+</ul>
+<hr />
+<h2 id="7-support-systems-quick-reference">7. Support Systems Quick Reference</h2>
+<p>The following systems provide critical infrastructure for the rest of the engine. They follow the same high-quality design patterns.</p>
+<ul>
+<li><strong>Animation (<code>pyguara/animation</code>):</strong> A powerful tweening engine for animating any numeric property over time with easing functions. Use <code>TweenManager</code> to create and manage <code>Tween</code> objects for UI effects, camera movement, etc.</li>
+<li><strong>Input (<code>pyguara/input</code>):</strong> A robust action-based input mapping system. Use the <code>InputManager</code> to <code>register_action</code> (e.g., "jump") and <code>bind_input</code> (e.g., spacebar to "jump"). Game code should listen for <code>OnActionEvent</code> and check the <code>action_name</code>, not for raw key presses.</li>
+<li><strong>Persistence (<code>pyguara/persistence</code>):</strong> A complete save/load system. Use the <code>PersistenceManager</code>'s <code>save_data</code> and <code>load_data</code> methods. It automatically handles serialization, data integrity checksums, and versioning.</li>
+<li><strong>Resources (<code>pyguara/resources</code>):</strong> A professional-grade asset management pipeline. Use the <code>ResourceManager</code> to <code>load</code> assets. It handles caching, type-safe loading, and automatic memory management via reference counting. The <code>index_directory</code> feature allows loading by simple name (e.g., <code>"player_idle"</code>).</li>
+<li><strong>Scripting (<code>pyguara/scripting</code>):</strong> A coroutine system for writing sequential, time-based logic without complex state machines. Write a generator function and use <code>yield</code> with helpers like <code>wait_for_seconds()</code> and <code>wait_until()</code>. Start it with <code>CoroutineManager.start_coroutine()</code>.</li>
+<li><strong>Editor (<code>pyguara/editor</code>):</strong> A powerful, live, in-game editor built with Dear ImGui. Press F12 to toggle. Provides a scene hierarchy, a component inspector that automatically reflects <code>dataclass</code> components, and scene saving/loading.</li>
+<li><strong>Config (<code>pyguara/config</code>):</strong> A centralized manager for <code>game_config.json</code>. It provides type-safe access to settings via the <code>GameConfig</code> dataclass, validates data on load, and fires events on changes.</li>
+<li><strong>Error (<code>pyguara/error</code>):</strong> A structured exception hierarchy. All engine errors inherit from <code>EngineException</code> and carry a rich <code>ErrorContext</code> object for easier debugging.</li>
+<li><strong>Log (<code>pyguara/log</code>):</strong> A clean configuration wrapper around Python's standard <code>logging</code> module. Use <code>setup_logging</code> once at startup, then get a logger in any module with <code>get_logger(__name__)</code>.</li>
+<li><strong>Systems (<code>pyguara/systems</code>):</strong> The <code>SystemManager</code> orchestrates the execution order of all ECS systems based on a priority number. Systems are registered with the manager, which then calls their <code>update</code> method in the correct order each frame.</li>
+<li><strong>Tools (<code>pyguara/tools</code>):</strong> The infrastructure for managing developer tools like the Editor. The <code>ToolManager</code> handles visibility, input routing, and shortcuts for all registered tools.</li>
+</ul>
+<p>This guide should provide a solid foundation for getting started with the PyGuara Engine. By understanding and using these core patterns, you can build complex, maintainable, and high-performance games.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

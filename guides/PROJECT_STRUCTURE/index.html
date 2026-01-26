@@ -1,0 +1,1536 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../Archictecture%20%26%20Style%20Guide/">
+      
+      
+        <link rel="next" href="../../core/architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Project Structure - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pyguara-project-structure-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Project Structure
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-directory-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Directory Layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-core-modules-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Core Modules Breakdown
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Core Modules Breakdown">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-the-bootstrap-srcmy_gamebootstrappy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. The Bootstrap (src/my_game/bootstrap.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-components-srcmy_gamecomponents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Components (src/my_game/components/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-systems-srcmy_gamesystems" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Systems (src/my_game/systems/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#d-prefabs-srcmy_gameprefabs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D. Prefabs (src/my_game/prefabs/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#e-scenes-srcmy_gamescenes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E. Scenes (src/my_game/scenes/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-workflow-example-adding-a-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Workflow Example: Adding a Feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Best Practices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-testing-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Testing Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-directory-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Directory Layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-core-modules-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Core Modules Breakdown
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Core Modules Breakdown">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-the-bootstrap-srcmy_gamebootstrappy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A. The Bootstrap (src/my_game/bootstrap.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#b-components-srcmy_gamecomponents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        B. Components (src/my_game/components/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#c-systems-srcmy_gamesystems" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        C. Systems (src/my_game/systems/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#d-prefabs-srcmy_gameprefabs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        D. Prefabs (src/my_game/prefabs/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#e-scenes-srcmy_gamescenes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        E. Scenes (src/my_game/scenes/)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-workflow-example-adding-a-feature" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Workflow Example: Adding a Feature
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-best-practices" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Best Practices
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-testing-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Testing Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="pyguara-project-structure-guide">PyGuara Project Structure Guide</h1>
+<p>PyGuara is not a typical scripting framework; it is an <strong>ECS (Entity Component System)</strong> engine built around <strong>Dependency Injection (DI)</strong>. This architecture requires a strict separation of concerns: <strong>Data</strong> (Components), <strong>Logic</strong> (Systems), and <strong>Composition</strong> (Scenes/Prefabs).</p>
+<p>To maintain scalability and performance, developers should adhere to the following project structure.</p>
+<h2 id="1-directory-layout">1. Directory Layout</h2>
+<p>The root directory acts as a workspace. Your actual game code resides strictly within <code>src/</code>.</p>
+<pre><code class="language-text">my_game_project/
+├── assets/                  # Runtime resources (Must be strictly organized)
+│   ├── textures/            # .png, .jpg
+│   ├── audio/               # .wav, .ogg
+│   ├── fonts/               # .ttf, .otf
+│   └── data/                # .json, .yaml (Game balance data, dialogue)
+├── config/                  # Configuration files
+│   ├── game.json            # Main config (Resolution, Inputs, Debug flags)
+│   └── logging.json         # Logger configuration
+├── src/                     # Source code root
+│   └── my_game/             # Your game package (Rename this to your game name)
+│       ├── __init__.py
+│       ├── main.py          # Application Entry Point
+│       ├── bootstrap.py     # DI Container &amp; System Registration (CRITICAL)
+│       ├── components/      # Pure Data (Dataclasses only)
+│       ├── systems/         # Game Logic &amp; Behavior
+│       ├── prefabs/         # Entity Factories (Blueprints)
+│       ├── scenes/          # Scene Definitions (Composition Roots)
+│       └── ui/              # UI Widgets and Layouts
+├── tests/                   # Unit and Integration tests
+├── pyproject.toml           # Dependencies (uv/poetry/pip)
+└── README.md
+
+</code></pre>
+<hr />
+<h2 id="2-core-modules-breakdown">2. Core Modules Breakdown</h2>
+<h3 id="a-the-bootstrap-srcmy_gamebootstrappy">A. The Bootstrap (<code>src/my_game/bootstrap.py</code>)</h3>
+<p>Unlike simpler frameworks where you write logic in a global loop, PyGuara requires systems to be registered in a <strong>Dependency Injection Container</strong>.</p>
+<ul>
+<li><strong>Role:</strong> configure the <code>DIContainer</code> with your game-specific systems.</li>
+<li><strong>Best Practice:</strong> Never register systems inside <code>main.py</code>. Keep the entry point clean.</li>
+</ul>
+<pre><code class="language-python"># bootstrap.py
+from pyguara.application.bootstrap import create_application_container
+from my_game.systems.combat import CombatSystem
+from my_game.systems.ai import AiSystem
+
+def configure_game_container():
+    # 1. Initialize Core Engine
+    container = create_application_container()
+
+    # 2. Register Game Systems (Singletons persist effectively)
+    container.register_singleton(CombatSystem, CombatSystem)
+    container.register_singleton(AiSystem, AiSystem)
+
+    return container
+
+</code></pre>
+<h3 id="b-components-srcmy_gamecomponents">B. Components (<code>src/my_game/components/</code>)</h3>
+<p>This directory contains <strong>pure data</strong>.</p>
+<ul>
+<li><strong>Rule:</strong> Components must be Python <code>@dataclass</code>.</li>
+<li><strong>Rule:</strong> Components <strong>must not</strong> contain game logic (methods like <code>update()</code> or <code>shoot()</code>).</li>
+<li><strong>Rule:</strong> Serializable fields only (ints, floats, strings, bools, Vector2).</li>
+</ul>
+<pre><code class="language-python"># components/gameplay.py
+from dataclasses import dataclass
+
+@dataclass
+class Health:
+    current: float
+    max: float
+
+</code></pre>
+<h3 id="c-systems-srcmy_gamesystems">C. Systems (<code>src/my_game/systems/</code>)</h3>
+<p>This is the "Brain" of the game. Systems retrieve data, process it, and write it back.</p>
+<ul>
+<li><strong>Rule:</strong> Systems are injected with <code>EntityManager</code> or <code>EventDispatcher</code>.</li>
+<li><strong>Rule:</strong> Logic goes here. If an entity takes damage, the <code>CombatSystem</code> calculates it, not the Entity class.</li>
+</ul>
+<pre><code class="language-python"># systems/combat.py
+class CombatSystem:
+    def __init__(self, entity_manager: EntityManager):
+        self._em = entity_manager
+
+    def update(self, dt: float):
+        # Query entities that have Health
+        for entity in self._em.get_entities_with(Health):
+            pass # Logic here
+
+</code></pre>
+<h3 id="d-prefabs-srcmy_gameprefabs">D. Prefabs (<code>src/my_game/prefabs/</code>)</h3>
+<p>Since PyGuara creates entities via code, "Prefabs" are factory functions that assemble an entity from multiple components.</p>
+<ul>
+<li><strong>Role:</strong> Centralize entity creation. Don't manually <code>add_component</code> inside your scenes; call a prefab instead.</li>
+</ul>
+<pre><code class="language-python"># prefabs/player.py
+def create_player(manager: EntityManager, pos: Vector2):
+    e = manager.create_entity(&quot;hero&quot;)
+    e.add_component(Transform(position=pos))
+    e.add_component(Health(100, 100))
+    e.add_component(Sprite(texture=&quot;hero.png&quot;))
+    return e
+
+</code></pre>
+<h3 id="e-scenes-srcmy_gamescenes">E. Scenes (<code>src/my_game/scenes/</code>)</h3>
+<p>Scenes are the <strong>Composition Roots</strong>. They do not contain heavy logic. Their job is to:</p>
+<ol>
+<li>Resolve Systems from the Container.</li>
+<li>Instantiate the initial World (using Prefabs).</li>
+<li>Orchestrate the update loop order.</li>
+</ol>
+<hr />
+<h2 id="3-workflow-example-adding-a-feature">3. Workflow Example: Adding a Feature</h2>
+<p>To add a new feature (e.g., "Stamina") to your game, follow this strict flow:</p>
+<ol>
+<li><strong>Define Data:</strong> Create <code>src/my_game/components/stamina.py</code> (Dataclass: <code>val</code>, <code>regen_rate</code>).</li>
+<li><strong>Define Logic:</strong> Create <code>src/my_game/systems/stamina_system.py</code>.<ul>
+<li>Logic: Decrease on action, increase over time.</li>
+</ul>
+</li>
+<li><strong>Register Logic:</strong> Add <code>StaminaSystem</code> to <code>bootstrap.py</code>.</li>
+<li><strong>Update Prefab:</strong> Add the <code>Stamina</code> component to <code>src/my_game/prefabs/player.py</code>.</li>
+<li><strong>Execute:</strong> Inject <code>StaminaSystem</code> into your <code>GameplayScene</code> and call <code>stamina_system.update(dt)</code> in the loop.</li>
+</ol>
+<h2 id="4-best-practices">4. Best Practices</h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Do</th>
+<th>Don't</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Dependencies</strong></td>
+<td>Use <code>container.get()</code> in Scenes.</td>
+<td>Import global variables or singletons manually.</td>
+</tr>
+<tr>
+<td><strong>State</strong></td>
+<td>Store state in <code>Components</code>.</td>
+<td>Store state in <code>System</code> classes (Systems should be stateless logic processors).</td>
+</tr>
+<tr>
+<td><strong>Testing</strong></td>
+<td>Write tests in <code>tests/</code> mocking the DI Container.</td>
+<td>Test logic by running the game manually.</td>
+</tr>
+<tr>
+<td><strong>Assets</strong></td>
+<td>Load assets via <code>ResourceManager</code>.</td>
+<td>Hardcode file paths (e.g., <code>"C:/Users/..."</code>).</td>
+</tr>
+<tr>
+<td><strong>Physics</strong></td>
+<td>Use <code>PhysicsSystem</code> for movement.</td>
+<td>Manually update <code>transform.position</code> for physics objects.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-testing-architecture">5. Testing Architecture</h2>
+<p>Because PyGuara uses Dependency Injection, your game logic is highly testable. You can test a system without opening a window.</p>
+<p><strong>Example Test Structure (<code>tests/test_combat.py</code>):</strong></p>
+<pre><code class="language-python">def test_player_takes_damage():
+    # Setup
+    em = EntityManager()
+    system = CombatSystem(em)
+    player = create_player(em, Vector2(0,0))
+
+    # Act
+    system.apply_damage(player, 10)
+
+    # Assert
+    assert player.get_component(Health).current == 90
+
+</code></pre>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
