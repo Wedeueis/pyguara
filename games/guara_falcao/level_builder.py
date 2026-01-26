@@ -257,6 +257,8 @@ class LevelBuilder:
         player.add_component(Collider(dimensions=[24, 40]))
 
         # Platformer controller with game-feel tuning
+        # Note: ground_check_distance must be > half player height (20) to detect ground
+        # from the player's center position
         player.add_component(
             PlatformerController(
                 move_speed=180.0,
@@ -269,8 +271,8 @@ class LevelBuilder:
                 wall_slide_enabled=True,
                 wall_slide_speed=60.0,
                 wall_jump_enabled=True,
-                ground_check_distance=5.0,
-                wall_check_distance=8.0,
+                ground_check_distance=25.0,  # Must exceed half player height (20) + margin
+                wall_check_distance=16.0,  # Must exceed half player width (12) + margin
             )
         )
 
