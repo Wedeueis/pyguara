@@ -22,6 +22,7 @@ from pyguara.input.keys import UP, LEFT, RIGHT, SPACE, ESCAPE, R
 from pyguara.input.events import OnActionEvent
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.physics.protocols import IPhysicsEngine
+from pyguara.physics.components import RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.platformer_system import PlatformerSystem
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
@@ -292,8 +293,16 @@ class GameScene(Scene):
             if player:
                 transform = player.get_component(Transform)
                 health = player.get_component(Health)
+                rigidbody = player.get_component(RigidBody)
+
                 if transform:
                     transform.position = spawn
+
+                # Also update physics body position and reset velocity
+                if rigidbody and rigidbody.handle:
+                    rigidbody.handle.position = spawn
+                    rigidbody.handle.velocity = Vector2.zero()
+
                 if health:
                     health.current = health.max_health
                     health.invincible_time = 1.0

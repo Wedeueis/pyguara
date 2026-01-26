@@ -268,9 +268,9 @@ class LevelBuilder:
                 air_control=0.8,
                 coyote_time=0.15,
                 jump_buffer=0.1,
-                wall_slide_enabled=True,
+                wall_slide_enabled=False,  # Disabled for now to debug gravity issues
                 wall_slide_speed=60.0,
-                wall_jump_enabled=True,
+                wall_jump_enabled=False,
                 ground_check_distance=25.0,  # Must exceed half player height (20) + margin
                 wall_check_distance=16.0,  # Must exceed half player width (12) + margin
             )

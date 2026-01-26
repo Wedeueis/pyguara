@@ -255,8 +255,14 @@ class PlatformerSystem:
             return
 
         # Set upward velocity
-        current_velocity = rigidbody.handle.velocity
-        rigidbody.handle.velocity = Vector2(current_velocity.x, -controller.jump_force)
+        # If no horizontal input, don't preserve horizontal velocity (prevents diagonal jumps)
+        if controller.move_input == 0:
+            rigidbody.handle.velocity = Vector2(0, -controller.jump_force)
+        else:
+            current_velocity = rigidbody.handle.velocity
+            rigidbody.handle.velocity = Vector2(
+                current_velocity.x, -controller.jump_force
+            )
 
         # Consume jump
         controller._jump_requested = False
