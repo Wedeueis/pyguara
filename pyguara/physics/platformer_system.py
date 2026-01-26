@@ -48,9 +48,9 @@ class PlatformerSystem:
             rigidbody = entity.get_component(RigidBody)
             transform = entity.get_component(Transform)
 
-            # Perform ground and wall detection
-            self._update_ground_detection(controller, transform)
-            self._update_wall_detection(controller, transform)
+            # Perform ground and wall detection (pass entity ID to filter self-hits)
+            self._update_ground_detection(controller, transform, entity.id)
+            self._update_wall_detection(controller, transform, entity.id)
 
             # Update timers
             self._update_timers(controller, delta_time)
@@ -68,19 +68,24 @@ class PlatformerSystem:
             controller.move_input = 0.0
 
     def _update_ground_detection(
-        self, controller: PlatformerController, transform: Transform
+        self, controller: PlatformerController, transform: Transform, entity_id: str
     ) -> None:
         """Detect if character is on ground using raycast.
 
         Args:
             controller: PlatformerController component.
             transform: Transform component.
+            entity_id: ID of the entity to exclude from raycast results.
         """
         # Cast ray downward from character center
         start = transform.position
         end = start + Vector2(0, controller.ground_check_distance)
 
         hit = self._physics_engine.raycast(start, end)
+
+        # Filter out hits on the entity's own collider
+        if hit is not None and hit.entity_id == entity_id:
+            hit = None
 
         was_grounded = controller.is_grounded
         controller.is_grounded = hit is not None
@@ -95,13 +100,14 @@ class PlatformerSystem:
             controller.coyote_timer = controller.coyote_time
 
     def _update_wall_detection(
-        self, controller: PlatformerController, transform: Transform
+        self, controller: PlatformerController, transform: Transform, entity_id: str
     ) -> None:
         """Detect if character is touching walls using raycasts.
 
         Args:
             controller: PlatformerController component.
             transform: Transform component.
+            entity_id: ID of the entity to exclude from raycast results.
         """
         if not controller.wall_slide_enabled:
             controller.on_wall_left = False
@@ -115,6 +121,12 @@ class PlatformerSystem:
 
         left_hit = self._physics_engine.raycast(start, left_end)
         right_hit = self._physics_engine.raycast(start, right_end)
+
+        # Filter out hits on the entity's own collider
+        if left_hit is not None and left_hit.entity_id == entity_id:
+            left_hit = None
+        if right_hit is not None and right_hit.entity_id == entity_id:
+            right_hit = None
 
         controller.on_wall_left = left_hit is not None
         controller.on_wall_right = right_hit is not None
