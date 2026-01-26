@@ -21,6 +21,7 @@ from games.guara_falcao.components import (
     Collectible,
     ZoneTrigger,
     Score,
+    Hazard,
 )
 from games.guara_falcao.events import (
     PlayerLandedEvent,
@@ -354,3 +355,57 @@ class HealthSystem:
 
         if not alive:
             self._dispatcher.dispatch(PlayerDeathEvent())
+
+
+class HazardSystem:
+    """Handles hazard collision detection and damage."""
+
+    HAZARD_DISTANCE = 20.0  # Distance to trigger hazard damage
+
+    def __init__(
+        self, entity_manager: EntityManager, event_dispatcher: EventDispatcher
+    ):
+        """Initialize the system."""
+        self._em = entity_manager
+        self._dispatcher = event_dispatcher
+        self._player: Optional[Entity] = None
+
+    def set_player(self, player: Entity) -> None:
+        """Set the player entity."""
+        self._player = player
+
+    def update(self, dt: float) -> None:
+        """Check for hazard collisions."""
+        if not self._player:
+            return
+
+        player_transform = self._player.get_component(Transform)
+        player_health = self._player.get_component(Health)
+
+        if not player_transform or not player_health:
+            return
+
+        # Skip if player is invincible
+        if player_health.invincible_time > 0:
+            return
+
+        # Check all hazards
+        for entity in self._em.get_entities_with(Hazard, Transform):
+            hazard = entity.get_component(Hazard)
+            transform = entity.get_component(Transform)
+
+            distance = player_transform.position.distance_to(transform.position)
+
+            if distance < self.HAZARD_DISTANCE:
+                # Apply damage
+                alive = player_health.take_damage(hazard.damage)
+
+                self._dispatcher.dispatch(
+                    PlayerDamagedEvent(
+                        damage=hazard.damage, remaining_health=player_health.current
+                    )
+                )
+
+                if not alive:
+                    self._dispatcher.dispatch(PlayerDeathEvent())
+                break  # Only one hazard can damage per frame

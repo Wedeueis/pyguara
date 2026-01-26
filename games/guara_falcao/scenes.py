@@ -42,6 +42,7 @@ from games.guara_falcao.systems import (
     CollectibleSystem,
     CheckpointSystem,
     HealthSystem,
+    HazardSystem,
 )
 from games.guara_falcao.events import (
     PlayerDeathEvent,
@@ -132,6 +133,7 @@ class GameScene(Scene):
         self._collectible_system: Optional[CollectibleSystem] = None
         self._checkpoint_system: Optional[CheckpointSystem] = None
         self._health_system: Optional[HealthSystem] = None
+        self._hazard_system: Optional[HazardSystem] = None
 
         # Game state
         self._camera: Optional[Camera2D] = None
@@ -191,6 +193,7 @@ class GameScene(Scene):
             self.entity_manager, self.event_dispatcher
         )
         self._health_system = HealthSystem(self.entity_manager, self.event_dispatcher)
+        self._hazard_system = HazardSystem(self.entity_manager, self.event_dispatcher)
 
         # Setup camera
         self._camera = Camera2D(800, 600)
@@ -212,6 +215,7 @@ class GameScene(Scene):
             self._camera_follow.set_target(player)
             self._collectible_system.set_player(player)
             self._checkpoint_system.set_player(player)
+            self._hazard_system.set_player(player)
 
         # Register events
         self.event_dispatcher.subscribe(PlayerDeathEvent, self._on_player_death)
@@ -368,6 +372,9 @@ class GameScene(Scene):
         if self._health_system:
             self._health_system.update(dt)
 
+        if self._hazard_system:
+            self._hazard_system.update(dt)
+
         if self._coroutine_manager:
             self._coroutine_manager.update(dt)
 
@@ -394,6 +401,7 @@ class GameScene(Scene):
                 self._camera_follow.set_target(player)
                 self._collectible_system.set_player(player)
                 self._checkpoint_system.set_player(player)
+                self._hazard_system.set_player(player)
 
         self._setup_hud()
 

@@ -7,7 +7,7 @@ handling ground detection, movement, jumping, and wall mechanics.
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.components import RigidBody
+from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.platformer_controller import PlatformerController, PlatformerState
 from pyguara.physics.protocols import IPhysicsEngine
 
@@ -47,10 +47,15 @@ class PlatformerSystem:
             controller = entity.get_component(PlatformerController)
             rigidbody = entity.get_component(RigidBody)
             transform = entity.get_component(Transform)
+            collider = entity.get_component(Collider)
 
-            # Perform ground and wall detection (pass entity ID to filter self-hits)
-            self._update_ground_detection(controller, transform, entity.id)
-            self._update_wall_detection(controller, transform, entity.id)
+            # Get collider half-dimensions for raycast offsets
+            half_height = collider.dimensions[1] / 2 if collider else 20.0
+            half_width = collider.dimensions[0] / 2 if collider else 12.0
+
+            # Perform ground and wall detection
+            self._update_ground_detection(controller, transform, half_height)
+            self._update_wall_detection(controller, transform, half_width)
 
             # Update timers
             self._update_timers(controller, delta_time)
@@ -68,24 +73,21 @@ class PlatformerSystem:
             controller.move_input = 0.0
 
     def _update_ground_detection(
-        self, controller: PlatformerController, transform: Transform, entity_id: str
+        self, controller: PlatformerController, transform: Transform, half_height: float
     ) -> None:
         """Detect if character is on ground using raycast.
 
         Args:
             controller: PlatformerController component.
             transform: Transform component.
-            entity_id: ID of the entity to exclude from raycast results.
+            half_height: Half the collider height (to start ray from feet).
         """
-        # Cast ray downward from character center
-        start = transform.position
+        # Cast ray downward from just below character's feet
+        # Start slightly below the collider to avoid self-intersection
+        start = transform.position + Vector2(0, half_height + 1)
         end = start + Vector2(0, controller.ground_check_distance)
 
         hit = self._physics_engine.raycast(start, end)
-
-        # Filter out hits on the entity's own collider
-        if hit is not None and hit.entity_id == entity_id:
-            hit = None
 
         was_grounded = controller.is_grounded
         controller.is_grounded = hit is not None
@@ -100,33 +102,30 @@ class PlatformerSystem:
             controller.coyote_timer = controller.coyote_time
 
     def _update_wall_detection(
-        self, controller: PlatformerController, transform: Transform, entity_id: str
+        self, controller: PlatformerController, transform: Transform, half_width: float
     ) -> None:
         """Detect if character is touching walls using raycasts.
 
         Args:
             controller: PlatformerController component.
             transform: Transform component.
-            entity_id: ID of the entity to exclude from raycast results.
+            half_width: Half the collider width (to start ray from sides).
         """
         if not controller.wall_slide_enabled:
             controller.on_wall_left = False
             controller.on_wall_right = False
             return
 
-        # Cast rays to left and right
-        start = transform.position
-        left_end = start + Vector2(-controller.wall_check_distance, 0)
-        right_end = start + Vector2(controller.wall_check_distance, 0)
+        # Cast rays from just outside character's sides
+        # Start slightly outside the collider to avoid self-intersection
+        left_start = transform.position + Vector2(-half_width - 1, 0)
+        right_start = transform.position + Vector2(half_width + 1, 0)
 
-        left_hit = self._physics_engine.raycast(start, left_end)
-        right_hit = self._physics_engine.raycast(start, right_end)
+        left_end = left_start + Vector2(-controller.wall_check_distance, 0)
+        right_end = right_start + Vector2(controller.wall_check_distance, 0)
 
-        # Filter out hits on the entity's own collider
-        if left_hit is not None and left_hit.entity_id == entity_id:
-            left_hit = None
-        if right_hit is not None and right_hit.entity_id == entity_id:
-            right_hit = None
+        left_hit = self._physics_engine.raycast(left_start, left_end)
+        right_hit = self._physics_engine.raycast(right_start, right_end)
 
         controller.on_wall_left = left_hit is not None
         controller.on_wall_right = right_hit is not None
