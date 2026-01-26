@@ -89,8 +89,12 @@ class MenuScene(Scene):
         sys.exit(0)
 
     def on_exit(self) -> None:
-        """Cleanup."""
+        """Clean up scene resources."""
         pass
+
+    def on_resume(self) -> None:
+        """Recreate UI when returning from GameScene."""
+        self.on_enter()
 
     def update(self, dt: float) -> None:
         """Update logic."""
@@ -177,14 +181,20 @@ class GameScene(Scene):
 
     def _on_action(self, event: OnActionEvent) -> None:
         """Handle input action events."""
-        if self._show_complete_ui or not self._input_system:
-            return
-
         # Only react to press events (value > 0)
         if event.value <= 0:
             return
 
         action = event.action_name
+
+        # Back action always works (even during level complete)
+        if action == "back":
+            self.container.get(SceneManager).pop_scene()
+            return
+
+        # Block gameplay input during level complete or if systems not ready
+        if self._show_complete_ui or not self._input_system:
+            return
 
         if action == "move_up":
             self._input_system.handle_move((0, -1))
@@ -198,8 +208,6 @@ class GameScene(Scene):
             self._input_system.handle_undo()
         elif action == "restart":
             self.event_dispatcher.dispatch(RestartLevelEvent())
-        elif action == "back":
-            self.container.get(SceneManager).pop_scene()
 
     def _setup_hud(self) -> None:
         """Create HUD elements."""

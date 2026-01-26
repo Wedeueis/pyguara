@@ -100,8 +100,12 @@ class TitleScene(Scene):
         sys.exit(0)
 
     def on_exit(self) -> None:
-        """Cleanup."""
+        """Clean up scene resources."""
         pass
+
+    def on_resume(self) -> None:
+        """Recreate UI when returning from GameScene."""
+        self.on_enter()
 
     def update(self, dt: float) -> None:
         """Update logic."""
