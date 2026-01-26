@@ -251,7 +251,11 @@ class PymunkEngine(IPhysicsEngine):
             self.space.step(delta_time)
 
     def create_body(
-        self, entity_id: Union[int, str], body_type: BodyType, position: Vector2
+        self,
+        entity_id: Union[int, str],
+        body_type: BodyType,
+        position: Vector2,
+        mass: float = 1.0,
     ) -> IPhysicsBody:
         """Create and register a new physics body."""
         if not self.space:
@@ -265,7 +269,15 @@ class PymunkEngine(IPhysicsEngine):
         elif body_type == BodyType.KINEMATIC:
             pm_type = pymunk.Body.KINEMATIC
 
-        body = pymunk.Body(body_type=pm_type)
+        # For dynamic bodies, set mass and moment (moment will be recalculated when shape is added)
+        # Use a default moment based on mass; actual moment is set when shape is attached
+        if pm_type == pymunk.Body.DYNAMIC:
+            # Use a placeholder moment; it will be overwritten by add_shape
+            moment = pymunk.moment_for_box(mass, (32, 32))
+            body = pymunk.Body(mass=mass, moment=moment, body_type=pm_type)
+        else:
+            body = pymunk.Body(body_type=pm_type)
+
         body.position = (position.x, position.y)
 
         # Store entity ID on body for collisions

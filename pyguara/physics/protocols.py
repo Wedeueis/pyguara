@@ -71,7 +71,11 @@ class IPhysicsEngine(Protocol):
         ...
 
     def create_body(
-        self, entity_id: Union[int, str], body_type: BodyType, position: Vector2
+        self,
+        entity_id: Union[int, str],
+        body_type: BodyType,
+        position: Vector2,
+        mass: float = 1.0,
     ) -> IPhysicsBody:
         """Create and register a new physics body."""
         ...
