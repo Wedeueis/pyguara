@@ -165,13 +165,15 @@ class GameScene(Scene):
 
         # Initialize physics
         physics_engine = self.container.get(IPhysicsEngine)
-        physics_engine.gravity = Vector2(0, 800)
 
         self._physics_system = PhysicsSystem(
             engine=physics_engine,
             entity_manager=self.entity_manager,
             event_dispatcher=self.event_dispatcher,
         )
+
+        # Set gravity AFTER PhysicsSystem init (which resets gravity to 0,0)
+        physics_engine.gravity = Vector2(0, 800)
 
         self._platformer_system = PlatformerSystem(
             entity_manager=self.entity_manager,
