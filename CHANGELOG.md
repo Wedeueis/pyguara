@@ -5,6 +5,76 @@ All notable changes to PyGuara will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-01-26
+
+### Added - Advanced Graphics Pipeline (P1-011)
+
+#### Multi-Pass Render Graph
+- New `RenderGraph` orchestrator for multi-pass rendering
+- `FramebufferManager` for FBO lifecycle management (create/resize/release)
+- `BaseRenderPass` abstract class for render pass implementations
+- New protocols: `IFramebuffer`, `IRenderPass` in `graphics/protocols.py`
+
+#### Render Passes
+- `WorldPass`: Renders sprites/geometry to world framebuffer
+- `LightPass`: Renders dynamic lights with additive blending to light map
+- `CompositePass`: Multiplies world texture by light map for final lit scene
+- `PostProcessPass`: Executes post-processing effect stack
+- `FinalPass`: Blits composed result to screen via fullscreen quad
+
+#### Material System
+- `Material` dataclass combining shader, texture, and uniforms
+- `Shader` wrapper with uniform caching
+- `ShaderCache` for avoiding redundant shader compilation
+- `DefaultMaterialManager` with inline default shaders
+- Material-based batching: sort by `(layer, material_id, z_index)`
+- Backward compatible: sprites without materials use default
+
+#### 2D Dynamic Lighting
+- `LightSource` component with color, radius, intensity, and falloff
+- `AmbientLight` component for global scene illumination
+- `LightingSystem` queries and manages light entities
+- Radial gradient lights with configurable quadratic falloff
+- Light map compositing with ambient color base
+
+#### Post-Processing Effects
+- `PostProcessStack` with ping-pong FBO management
+- `PostProcessEffect` base class for screen-space effects
+- `BloomEffect`: threshold extraction, Gaussian blur, additive composite
+- `VignetteEffect`: edge darkening with configurable radius/softness
+- Chainable effects with enable/disable per effect
+
+#### GLSL Shaders
+- `fullscreen_quad.vert`: Generates fullscreen quad via gl_VertexID
+- `blit.frag`: Simple texture copy
+- `light.vert` / `light.frag`: Radial gradient light rendering
+- `composite.frag`: World * lightmap multiplication
+- `bloom_threshold.frag`: Bright pixel extraction
+- `blur.frag`: Separable 9-tap Gaussian blur
+- `bloom_composite.frag`: Additive bloom compositing
+- `vignette.frag`: Edge darkening effect
+
+#### Pygame Backend Graceful Degradation
+- `PygameLightingSystem`: No-op stub (renders fully lit)
+- `PygamePostProcessStack`: Pass-through stub
+- `PygameFramebufferManager`: Returns None for all FBOs
+- `PygameRenderGraph`: No-op execution
+- Game code using advanced features runs unchanged on Pygame
+
+### Changed
+
+#### Application Render Loop
+- `Application` now uses `RenderGraph` when available
+- Falls back to direct renderer calls when RenderGraph not registered
+- UI rendering happens after render graph execution
+
+#### Render Pipeline
+- `RenderCommand` and `RenderBatch` now include optional `material` field
+- Batching sorts by material ID in addition to layer and z_index
+- `Sprite`, `Geometry`, and `Particle` classes have `material` attribute
+
+---
+
 ## [0.3.2] - 2026-01-25
 
 ### Added
@@ -281,6 +351,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.4.0]: https://github.com/wedeueis/pyguara/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/wedeueis/pyguara/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/wedeueis/pyguara/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wedeueis/pyguara/compare/v0.2.0...v0.3.0
