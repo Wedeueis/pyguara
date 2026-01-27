@@ -123,6 +123,9 @@ class PlatformerController(BaseComponent):
     # Jump state
     _jump_requested: bool = field(default=False, init=False, repr=False)
     _can_double_jump: bool = field(default=False, init=False, repr=False)
+    _jump_used: bool = field(
+        default=False, init=False, repr=False
+    )  # Prevents air jumps
 
     def __post_init__(self) -> None:
         """Initialize base component state."""
@@ -164,8 +167,11 @@ class PlatformerController(BaseComponent):
         """Check if character can currently jump.
 
         Returns:
-            True if jump is possible (grounded or in coyote time).
+            True if jump is possible (grounded or in coyote time, and haven't jumped yet).
         """
+        # Can't jump if we've already used our jump (prevents air jumps)
+        if self._jump_used:
+            return False
         return self.is_grounded or self.coyote_timer > 0
 
     def can_wall_jump(self) -> bool:
@@ -193,3 +199,4 @@ class PlatformerController(BaseComponent):
         self.jump_buffer_timer = 0.0
         self.coyote_timer = 0.0
         self._can_double_jump = False
+        self._jump_used = False
