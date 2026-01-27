@@ -25,6 +25,7 @@ from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.components import RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.platformer_system import PlatformerSystem
+from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
 
 from games.guara_falcao.components import (
@@ -216,6 +217,7 @@ class GameScene(Scene):
             self._camera_follow.set_target(player)
             self._collectible_system.set_player(player)
             self._checkpoint_system.set_player(player)
+            self._checkpoint_system.set_initial_spawn(spawn_point)
             self._hazard_system.set_player(player)
 
         # Register events
@@ -294,6 +296,7 @@ class GameScene(Scene):
                 transform = player.get_component(Transform)
                 health = player.get_component(Health)
                 rigidbody = player.get_component(RigidBody)
+                controller = player.get_component(PlatformerController)
 
                 if transform:
                     transform.position = spawn
@@ -306,6 +309,11 @@ class GameScene(Scene):
                 if health:
                     health.current = health.max_health
                     health.invincible_time = 1.0
+
+                # Reset platformer controller state
+                if controller:
+                    controller.reset_jump_state()
+                    controller.is_grounded = False
 
         self._is_dead = False
 
@@ -418,6 +426,7 @@ class GameScene(Scene):
                 self._camera_follow.set_target(player)
                 self._collectible_system.set_player(player)
                 self._checkpoint_system.set_player(player)
+                self._checkpoint_system.set_initial_spawn(spawn_point)
                 self._hazard_system.set_player(player)
 
         self._setup_hud()
