@@ -292,6 +292,10 @@ class CheckpointSystem:
         """Set the player entity."""
         self._player = player
 
+    def set_initial_spawn(self, spawn_point: Vector2) -> None:
+        """Set the initial spawn point."""
+        self._current_spawn = spawn_point
+
     def get_spawn_point(self) -> Vector2:
         """Get the current spawn point."""
         return self._current_spawn
