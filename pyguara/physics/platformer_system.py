@@ -111,15 +111,16 @@ class PlatformerSystem:
             transform: Transform component.
             half_width: Half the collider width (to start ray from sides).
         """
-        if not controller.wall_slide_enabled:
-            controller.on_wall_left = False
-            controller.on_wall_right = False
-            return
+        # Always detect walls (needed to prevent pushing into them)
+        # Wall sliding/jumping is a separate feature that uses this data
 
-        # Cast rays from just outside character's sides
-        # Start slightly outside the collider to avoid self-intersection
-        left_start = transform.position + Vector2(-half_width - 1, 0)
-        right_start = transform.position + Vector2(half_width + 1, 0)
+        # Cast rays from just outside character's sides at upper body height
+        # to avoid detecting ground tiles. Use a point above the feet.
+        ray_y_offset = -10  # Cast from upper body, not center
+
+        # Start further outside the collider to avoid self-intersection
+        left_start = transform.position + Vector2(-half_width - 2, ray_y_offset)
+        right_start = transform.position + Vector2(half_width + 2, ray_y_offset)
 
         left_end = left_start + Vector2(-controller.wall_check_distance, 0)
         right_end = right_start + Vector2(controller.wall_check_distance, 0)
@@ -190,17 +191,29 @@ class PlatformerSystem:
         if controller.current_state != PlatformerState.GROUNDED:
             target_velocity_x *= controller.air_control
 
-        # Use faster deceleration when no input (prevents sliding/diagonal jumps)
+        # Instant stop when no input (prevents sliding and diagonal jumps)
         if controller.move_input == 0:
-            # Quick stop when no input - use higher deceleration factor
-            decel_factor = min(controller.acceleration * 3, 1.0)
-            new_velocity_x = current_velocity.x * (1.0 - decel_factor)
+            new_velocity_x = 0.0
         else:
-            # Smoothly interpolate to target velocity
-            new_velocity_x = (
-                current_velocity.x
-                + (target_velocity_x - current_velocity.x) * controller.acceleration
-            )
+            # Don't push into walls when airborne - this prevents fighting the physics engine
+            # On ground, physics collision handles this naturally
+            if not controller.is_grounded:
+                if controller.on_wall_left and controller.move_input < 0:
+                    new_velocity_x = 0.0
+                elif controller.on_wall_right and controller.move_input > 0:
+                    new_velocity_x = 0.0
+                else:
+                    new_velocity_x = (
+                        current_velocity.x
+                        + (target_velocity_x - current_velocity.x)
+                        * controller.acceleration
+                    )
+            else:
+                # On ground, smoothly interpolate to target velocity
+                new_velocity_x = (
+                    current_velocity.x
+                    + (target_velocity_x - current_velocity.x) * controller.acceleration
+                )
 
         # Apply wall slide friction or normal fall speed clamping
         # In screen coords: positive Y is down, so falling = positive velocity.y
@@ -264,10 +277,11 @@ class PlatformerSystem:
                 current_velocity.x, -controller.jump_force
             )
 
-        # Consume jump
+        # Consume jump - mark as used to prevent air jumps
         controller._jump_requested = False
+        controller._jump_used = True  # Can't jump again until landing
         controller.jump_buffer_timer = 0.0
-        controller.coyote_timer = 0.0  # Can't jump again until grounded
+        controller.coyote_timer = 0.0
 
     def _perform_wall_jump(
         self, controller: PlatformerController, rigidbody: RigidBody
