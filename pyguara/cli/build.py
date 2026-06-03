@@ -244,6 +244,12 @@ def build(
         # Include multiple asset directories
         pyguara build main.py -a assets/ -a levels/
     """
+    # Resolve paths to absolute paths to prevent PyInstaller --specpath resolution issues
+    entry_point = entry_point.resolve().absolute()
+    output = output.resolve().absolute()
+    if icon:
+        icon = icon.resolve().absolute()
+
     # Auto-detect assets folder if none specified
     assets_list = list(assets_dirs)
     if not assets_list:
@@ -253,6 +259,9 @@ def build(
                 f"Auto-detected assets folder: {click.style(str(detected_assets), fg='cyan')}"
             )
             assets_list.append(detected_assets)
+
+    # Convert all asset paths to absolute paths
+    assets_list = [a.resolve().absolute() for a in assets_list]
 
     # Build command arguments
     args = _build_pyinstaller_args(
