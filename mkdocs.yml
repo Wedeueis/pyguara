@@ -13,6 +13,7 @@ nav:
   - Home: index.md
   - Guides:
       - Onboarding: guides/ONBOARDING.md
+      - Zero to Hero Tutorial: guides/zero_to_hero.md
       - Architecture & Style: guides/Archictecture & Style Guide.md
       - Project Structure: guides/PROJECT_STRUCTURE.md
   - Core:

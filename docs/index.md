@@ -16,9 +16,9 @@ PyGuara is built on four core pillars:
 ### [Guides & Standards](guides/ONBOARDING.md)
 Start here to understand how we work:
 *   **[Onboarding](guides/ONBOARDING.md)**: Your first stop. Learn the core patterns (DI, ECS, Events).
+*   **[Zero to Hero Tutorial](guides/zero_to_hero.md)**: Build and compile your first game step-by-step.
 *   **[Architecture & Style](guides/Archictecture & Style Guide.md)**: Coding standards, file organization, and SOLID principles.
 *   **[Project Structure](guides/PROJECT_STRUCTURE.md)**: How to organize your game files and assets.
-*   **[Brand Identity](guides/Brand Identity & Style Guide.md)**: The "Maned Wolf & Falcon" aesthetic.
 
 ### [Core Architecture](core/architecture.md)
 Understand the foundational systems:
