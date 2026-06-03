@@ -47,7 +47,11 @@ class PlatformerSystem:
             controller = entity.get_component(PlatformerController)
             rigidbody = entity.get_component(RigidBody)
             transform = entity.get_component(Transform)
-            collider = entity.get_component(Collider)
+            collider = (
+                entity.get_component(Collider)
+                if entity.has_component(Collider)
+                else None
+            )
 
             # Get collider half-dimensions for raycast offsets
             half_height = collider.dimensions[1] / 2 if collider else 20.0

@@ -139,13 +139,16 @@ class InputManager:
 
             # Dispatch raw key event for UI system
             modifiers = set()
-            mods = pygame.key.get_mods()
-            if mods & pygame.KMOD_SHIFT:
-                modifiers.add(pygame.KMOD_SHIFT)
-            if mods & pygame.KMOD_CTRL:
-                modifiers.add(pygame.KMOD_CTRL)
-            if mods & pygame.KMOD_ALT:
-                modifiers.add(pygame.KMOD_ALT)
+            try:
+                mods = pygame.key.get_mods()
+                if mods & pygame.KMOD_SHIFT:
+                    modifiers.add(pygame.KMOD_SHIFT)
+                if mods & pygame.KMOD_CTRL:
+                    modifiers.add(pygame.KMOD_CTRL)
+                if mods & pygame.KMOD_ALT:
+                    modifiers.add(pygame.KMOD_ALT)
+            except pygame.error:
+                pass
 
             raw_key_event = OnRawKeyEvent(
                 key_code=event.key, is_down=is_down, modifiers=modifiers, source=self
