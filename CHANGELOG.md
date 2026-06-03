@@ -5,7 +5,21 @@ All notable changes to PyGuara will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - 2026-01-26
+## [0.4.0] - 2026-06-03
+
+### Added
+- **Click-Based build CLI Command**: Added `pyguara build` using PyInstaller to package games into standalone executable directories/binaries, including automatic asset mapping.
+- **Headless Validation Suite**: Added `games/validate_demos.py` to automatically run and test all demo games for 30 ticks under headless SDL drivers (`dummy` driver setup).
+- **Zero to Hero Tutorial Guide**: Created the comprehensive walkthrough guide `docs/guides/zero_to_hero.md` explaining booting, ECS, inputs, physics, UI, and compilation.
+- **Compiler CLI Unit Tests**: Created unit tests in `tests/test_build_tool.py` for Click CLI and PyInstaller argument builders.
+
+### Fixed
+- **Platformer System Crash**: Fixed crash in `PlatformerSystem` when handling entities lacking a `Collider` component.
+- **Headless Test Key Modifiers Crash**: Wrapped `pygame.key.get_mods()` in `pyguara/input/manager.py` with try-except block to support headless/non-windowed testing environments.
+- **Broken Documentation References**: Removed non-existent brand guide links in `index.md`.
+
+### Removed
+- **Obsolete Scene Files**: Removed `pyguara/app_scene.py` (legacy scene class) and duplicate `pyguara/scene/__init__py` (incorrect extension file).
 
 ### Added - Advanced Graphics Pipeline (P1-011)
 
