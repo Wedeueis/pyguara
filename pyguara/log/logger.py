@@ -12,6 +12,39 @@ from pyguara.log.events import OnExceptionEvent
 from pyguara.log.handlers import ContextualFilter, EventIntegratedHandler
 from pyguara.log.types import LogCategory, LogLevel
 
+# Names `logging.Logger.makeRecord` refuses in `extra` because a real LogRecord
+# already owns them (stdlib attributes plus "message"/"asctime", added later by
+# getMessage()/the formatter). Passing any of these as `extra` raises KeyError.
+_RESERVED_LOG_RECORD_ATTRS = frozenset(
+    {
+        "name",
+        "msg",
+        "args",
+        "levelname",
+        "levelno",
+        "pathname",
+        "filename",
+        "module",
+        "exc_info",
+        "exc_text",
+        "stack_info",
+        "lineno",
+        "funcName",
+        "created",
+        "msecs",
+        "relativeCreated",
+        "thread",
+        "threadName",
+        "processName",
+        "process",
+        "message",
+        "asctime",
+    }
+)
+
+# Names that are real keyword arguments of `Logger.log()` rather than `extra` data.
+_LOG_CALL_KWARGS = frozenset({"exc_info", "stack_info", "stacklevel"})
+
 
 class EngineLogger:
     """Enhanced logger with context management and event integration.
@@ -101,10 +134,21 @@ class EngineLogger:
         self, level: LogLevel, message: str, category: LogCategory, **kwargs: Any
     ) -> None:
         """Perform internal logging operations with context merging."""
+        log_kwargs = {key: kwargs.pop(key) for key in _LOG_CALL_KWARGS if key in kwargs}
+
         extra = {"category": category}
         extra.update(self._get_merged_context())
         extra.update(kwargs)
-        self._logger.log(level.value, message, extra=extra)
+
+        # A caller-supplied key that shadows a real LogRecord attribute would
+        # otherwise raise KeyError inside logging's makeRecord(); rename it
+        # instead of dropping the data.
+        safe_extra = {
+            (f"{key}_" if key in _RESERVED_LOG_RECORD_ATTRS else key): value
+            for key, value in extra.items()
+        }
+
+        self._logger.log(level.value, message, extra=safe_extra, **log_kwargs)
 
     # --- Public API ---
 
