@@ -1,8 +1,10 @@
 """Entity class implementation with performance optimizations."""
 
+import copy
+import dataclasses
 import re
 import uuid
-from typing import Dict, Optional, Type, TypeVar, Any, Callable, Set
+from typing import Dict, Optional, Type, TypeVar, Any, Callable, Set, cast
 
 from pyguara.ecs.component import Component
 
@@ -121,13 +123,88 @@ class Entity:
 
         Performance Note: This is only hit if the attribute is NOT in _property_cache.
         Since add_component populates the cache, this is rarely called for valid components.
+
+        Reads `_property_cache` via `__dict__` rather than `self._property_cache`: on a
+        blank instance built by `cls.__new__(cls)` (e.g. during copy/pickle reconstruction,
+        before `__init__` has run), `_property_cache` doesn't exist yet, and attribute
+        access would re-enter `__getattr__` for that name too, recursing infinitely.
+        A `__dict__` lookup never triggers `__getattr__`, so this is safe either way.
         """
-        if name in self._property_cache:
-            return self._property_cache[name]
+        cache = self.__dict__.get("_property_cache")
+        if cache is not None and name in cache:
+            return cache[name]
 
         raise AttributeError(
             f"'{type(self).__name__}' object has no attribute or component '{name}'"
         )
+
+    def __deepcopy__(self, memo: Dict[int, Any]) -> "Entity":
+        """Reject copy.deepcopy(): use clone() for a detached, re-registerable copy."""
+        raise TypeError(
+            "Entity does not support copy.deepcopy() — it would alias the live "
+            "EntityManager callbacks and physics/audio handles of the original. "
+            "Use Entity.clone() instead."
+        )
+
+    def __copy__(self) -> "Entity":
+        """Reject copy.copy(): use clone() for a detached, re-registerable copy."""
+        raise TypeError(
+            "Entity does not support copy.copy() — use Entity.clone() instead."
+        )
+
+    def __reduce__(self) -> Any:
+        """Reject pickling: use SceneSerializer for save/load."""
+        raise TypeError(
+            "Entity does not support pickling — use SceneSerializer for save/load."
+        )
+
+    def clone(self, new_id: Optional[str] = None) -> "Entity":
+        """Create a detached copy of this entity's data.
+
+        Each component is deep-copied, except fields whose name starts with `_`
+        (system-injected handles, e.g. `RigidBody._body_handle`) which are reset to
+        their dataclass default — a clone hasn't been registered with any manager or
+        physics/audio backend yet, so it can't inherit a live handle from the original.
+
+        The clone is not registered with any EntityManager or EventDispatcher: its
+        component-change hooks start unset, and the caller must call
+        `entity_manager.add_entity(clone)` to bring it into a world.
+
+        Args:
+            new_id: Optional id for the clone. Defaults to a fresh generated id.
+
+        Returns:
+            The new, unregistered Entity.
+        """
+        clone = Entity(new_id)
+        clone.tags = set(self.tags)
+
+        # BaseComponent.on_attach() gives each component a live `.entity` back-
+        # reference to `self`. Seeding the memo maps that reference to a placeholder
+        # instead of letting deepcopy walk into it (which would hit __deepcopy__
+        # above and raise); add_component() below overwrites it with `clone` anyway.
+        memo: Dict[int, Any] = {id(self): None}
+
+        for component_type, component in self._components.items():
+            cloned_component = copy.deepcopy(component, memo)
+            try:
+                component_fields = dataclasses.fields(cast(Any, cloned_component))
+            except TypeError:
+                component_fields = ()  # Not a dataclass; nothing to reset.
+
+            for f in component_fields:
+                if not f.name.startswith("_"):
+                    continue
+                if f.default is not dataclasses.MISSING:
+                    default = f.default
+                elif f.default_factory is not dataclasses.MISSING:
+                    default = f.default_factory()
+                else:
+                    default = None
+                setattr(cloned_component, f.name, default)
+            clone.add_component(cloned_component)
+
+        return clone
 
     @classmethod
     def _get_snake_name(cls, component_type: Type[Component]) -> str:

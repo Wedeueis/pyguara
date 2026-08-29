@@ -1,3 +1,5 @@
+import copy
+import pickle
 import warnings
 from dataclasses import dataclass
 
@@ -432,3 +434,72 @@ def test_strict_component_allows_properties() -> None:
 
     component = StrictWithProperty()
     assert component.cached is None
+
+
+# ==================== Entity Copy/Clone Tests (ECS-5) ====================
+
+
+@dataclass
+class HandleHolder(BaseComponent):
+    """Mimics RigidBody: a data field plus a system-injected handle."""
+
+    value: int = 0
+    _handle: object = None
+
+
+def test_deepcopy_raises_instead_of_recursing() -> None:
+    """copy.deepcopy() must fail loudly, not RecursionError (ECS-5)."""
+    entity = Entity()
+    with pytest.raises(TypeError, match="clone"):
+        copy.deepcopy(entity)
+
+
+def test_copy_raises_type_error() -> None:
+    entity = Entity()
+    with pytest.raises(TypeError, match="clone"):
+        copy.copy(entity)
+
+
+def test_pickle_raises_type_error() -> None:
+    entity = Entity()
+    with pytest.raises(TypeError, match="SceneSerializer"):
+        pickle.dumps(entity)
+
+
+def test_clone_produces_independent_entity() -> None:
+    manager = EntityManager()
+    original = manager.create_entity()
+    original.add_component(Position(1, 2))
+
+    clone = original.clone()
+
+    assert clone.id != original.id
+    assert clone.position == Position(1, 2)
+    assert clone.position is not original.position
+
+    # Mutating the clone's component must not affect the original.
+    clone.position.x = 99
+    assert original.position.x == 1
+
+
+def test_clone_resets_system_injected_fields() -> None:
+    entity = Entity()
+    entity.add_component(HandleHolder(value=5, _handle="live-handle"))
+
+    clone = entity.clone()
+
+    assert clone.handle_holder.value == 5
+    assert clone.handle_holder._handle is None
+
+
+def test_clone_is_unregistered_until_added() -> None:
+    manager = EntityManager()
+    original = manager.create_entity()
+    original.add_component(Position())
+
+    clone = original.clone()
+
+    assert manager.get_entity(clone.id) is None
+    manager.add_entity(clone)
+    assert manager.get_entity(clone.id) is clone
+    assert len(list(manager.get_entities_with(Position))) == 2
