@@ -85,6 +85,20 @@ tickets inherit rather than revisit them):
   under concurrency; `LogManager.configure()` gets fixed to rebuild handlers, now
   load-bearing since most loggers will be created eagerly at import time. Lands as one
   execution ticket — see [Execute the logging migration](issues/16-execute-logging-migration.md).
+- [Dead-code disposition](issues/09-dead-code-disposition.md) — of the seven islands:
+  `ai/pathfinding/` gets finished and adopted (clean break, delete the concrete
+  `pathfinding.py` it's shadowed by) rather than deleted, since its public API is already
+  live, just backed by the wrong file; `replay/` and `backends/headless_renderer.py` get
+  wired now (player-facing feature and test-infra speedup respectively); `dev/` hot reload
+  gets deferred (fog — no player-facing need, a product-scope question); `ecs/archetype.py`
+  and `error/` get deleted outright (zero references, and archetype storage's cache-locality
+  claim doesn't transfer to plain Python objects anyway — fogged as a NumPy-columnar idea
+  instead); `games/XXX_scenes/` gets deleted, no fog. Four execution tickets spawned: [Adopt
+  the generic ai/pathfinding package](issues/17-adopt-generic-pathfinding-package.md), [Wire
+  replay into InputManager and Application](issues/18-wire-replay-recording-playback.md),
+  [Wire HeadlessBackend as the integration-suite test
+  backend](issues/19-wire-headless-test-backend.md), [Delete confirmed dead
+  code](issues/20-delete-confirmed-dead-code.md).
 - [Native Color and Rect value types](issues/05-native-color-and-rect.md) — `Color`/`Rect`
   become `@dataclass(slots=True)`, no longer `pygame.Color`/`pygame.Rect` subclasses;
   conversion to pygame types happens via explicit `_pg_rect()`/`_pg_color()` helpers inside
@@ -136,6 +150,24 @@ into one or more tickets as the frontier reaches it.
 - **Public API surface.** `pyguara/__init__.py` is empty; every import is a deep path. What a
   0.5 user is meant to import is undecided, and depends on which subsystems survive
   Dead-code disposition.
+- **Unify `NavMeshPathfinder` under the generic pathfinding `Graph` abstraction.** Once *Adopt
+  the generic ai/pathfinding package* lands, `ai/navmesh.py`'s separate polygon-adjacency A* +
+  string-pulling funnel algorithm (`Vector2` paths, not discrete `Node`s) is the only
+  pathfinding code left outside the `Graph[Node]`/`AStarPathfinder` design. Doesn't map onto
+  it without a real refactor (funnel algorithm, polygon containment) — deliberately kept out
+  of that ticket's scope. Worth a dedicated look once that ticket's shape is visible.
+- **Hot-reload integration.** `dev/` (`HotReloadManager`, `PollingFileWatcher`) is fully built
+  and tested but has no integration point in `Application`/`SystemManager`, and no
+  player-facing need calls for it. Whether a pre-alpha engine carries live code reload — and
+  where it would hook in if so — is a product-scope question, not a dead-code cleanup call.
+- **NumPy-backed columnar component storage.** `ecs/archetype.py` (deleted per Dead-code
+  disposition) claimed cache-friendly contiguous arrays but stored plain Python object
+  references — the cache-locality payoff doesn't transfer to CPython objects the way it does
+  in Unity DOTS/Bevy/EnTT. NumPy is already a core dependency (currently only used for
+  ModernGL vertex-buffer prep). A real version of this idea would back hot, purely-numeric
+  components (e.g. `Transform`) with parallel NumPy arrays, opt-in per system, rather than a
+  wholesale ECS storage rewrite — revisit once `slots=True` lands on the Component contract
+  and only if profiling still shows a gap the sparse-set/inverted-index model doesn't cover.
 
 ## Out of scope
 
