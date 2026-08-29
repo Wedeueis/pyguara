@@ -226,3 +226,11 @@ Based on the backlog (docs/dev/backlog/TODO.md):
 ### Python Version Requirements
 - Minimum: Python 3.12
 - Uses modern Python features (match/case, type hints, Protocol, dataclasses)
+
+## Wayfinder Map
+
+Active engine-remediation effort tracked via the `/wayfinder` skill (local-markdown tracker):
+- Map: `.scratch/engine-remediation/map.md`
+- Tickets: `.scratch/engine-remediation/issues/`
+
+To resume, load the map and pick an open, unblocked, unclaimed ticket (the frontier).
