@@ -75,6 +75,16 @@ tickets inherit rather than revisit them):
   systems; `SteeringSystem` gets a real `cleanup()`, called via `SystemManager.cleanup()` on
   scene exit; `SystemManager` becomes mandatory (demos migrate off hand-rolled fields); pause
   uses both the existing `pause_below` skip and an explicit `set_enabled()` toggle.
+- [Logging migration](issues/08-logging-migration.md) — hybrid leaf access: a shared
+  module-level default `LogManager` singleton backs both a new `get_logger(name)` accessor
+  (for genuinely non-DI leaves) and constructor injection (same instance, not a second one);
+  `EventDispatcher._logger` becomes `Optional[EngineLogger]` defaulting via the accessor,
+  sidestepping bootstrap's construction-order bug; `LogCategory` goes per-call-only (the
+  per-logger key-suffix was decorative and disconnected from what `EventIntegratedHandler`
+  actually reads); `EngineLogger.context()`/`ContextualFilter` dropped as unused and broken
+  under concurrency; `LogManager.configure()` gets fixed to rebuild handlers, now
+  load-bearing since most loggers will be created eagerly at import time. Lands as one
+  execution ticket — see [Execute the logging migration](issues/16-execute-logging-migration.md).
 - [Native Color and Rect value types](issues/05-native-color-and-rect.md) — `Color`/`Rect`
   become `@dataclass(slots=True)`, no longer `pygame.Color`/`pygame.Rect` subclasses;
   conversion to pygame types happens via explicit `_pg_rect()`/`_pg_color()` helpers inside
