@@ -75,13 +75,19 @@ class Application:
         self._world_renderer = container.get(IRenderer)  # type: ignore[type-abstract]
         self._ui_renderer = container.get(UIRenderer)  # type: ignore[type-abstract]
 
-        # Optional render graph for multi-pass rendering (ModernGL only)
+        # Optional render graph for multi-pass rendering (ModernGL only).
+        # Pygame backends register a `PygameRenderGraph` stub under this same
+        # key so game code using lighting/post-processing degrades gracefully;
+        # that stub is resolvable but is not a real RenderGraph, so branch on
+        # backend identity (isinstance) rather than mere resolvability.
         self._render_graph: Optional["RenderGraph"] = None
         try:
             from pyguara.graphics.pipeline.graph import RenderGraph
             from pyguara.di.exceptions import ServiceNotFoundException
 
-            self._render_graph = container.get(RenderGraph)
+            candidate = container.get(RenderGraph)
+            if isinstance(candidate, RenderGraph):
+                self._render_graph = candidate
         except (ImportError, KeyError, ServiceNotFoundException):
             pass  # Render graph not available (Pygame backend or tests)
 
@@ -286,3 +292,4 @@ class Application:
             self._render_graph.release()
 
         self._window.close()
+        self._log_manager.shutdown()

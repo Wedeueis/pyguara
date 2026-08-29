@@ -17,7 +17,7 @@ def main() -> None:
     dispatcher = container.get(EventDispatcher)
 
     # 3. Create Scene
-    start_scene = BootScene("level_1", dispatcher)
+    start_scene = BootScene(dispatcher)
 
     # 4. Run
     app.run(start_scene)

@@ -297,9 +297,6 @@ def _setup_container() -> DIContainer:
     get_global_registry().register_all(migration_manager)
     container.register_instance(MigrationManager, migration_manager)
 
-    component_registry = ComponentRegistry()
-    container.register_instance(ComponentRegistry, component_registry)
-
     persistence = PersistenceManager(storage, migration_manager)
     container.register_instance(PersistenceManager, persistence)
     container.register_singleton(SceneSerializer, SceneSerializer)
