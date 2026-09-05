@@ -260,6 +260,22 @@ tickets inherit rather than revisit them):
 - [Delete confirmed dead code](issues/20-delete-confirmed-dead-code.md) — deleted
   `pyguara/ecs/archetype.py`, `pyguara/error/`, and `games/XXX_scenes/`, all confirmed
   zero-reference. No surprises; executed exactly as specified.
+- [Execute the input wiring and legacy retirement](issues/21-execute-input-wiring.md) —
+  `GamepadManager` becomes the sole gamepad backend: `InputManager` subscribes to its
+  already-dispatched `GamepadButtonEvent`/`GamepadAxisEvent` and translates them through
+  the existing `_handle_input()`/`_handle_axis()` logic unchanged; `Application.run()` now
+  calls `input_manager.update()` once per frame; `process_event()`'s `JOY*` branches,
+  `_joysticks`, and `_detect_controllers()` deleted outright. `_cooldowns`/
+  `InputAction.cooldown` removed (protocolo_bandeira/true_coral's own ability cooldowns
+  untouched) — deleting the field fixed a real latent bug as a side effect: `InputAction`'s
+  old field order silently stored `register_action()`'s `deadzone` argument into the
+  `cooldown` field instead, so every action's real deadzone was always the `0.1` default.
+  `IInputBackend` now mandatory; `bootstrap.py` and, empirically necessarily, all 9
+  `games/*/bootstrap.py` register `PygameInputBackend` (confirmed each one raises
+  `ServiceNotFoundException` otherwise — not otherwise touched, still **Bootstrap
+  collapse**'s to replace). `tests/test_input.py` rewritten onto `IJoystick`/
+  `IInputBackend` stubs — it patched `pygame.joystick` directly, not the protocol ticket
+  10's answer assumed it already used.
 
 ## Not yet specified
 

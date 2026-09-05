@@ -1,7 +1,8 @@
 # Execute the input wiring and legacy retirement
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: INPUT-1 (high), follows from Input wiring and legacy retirement, ticket 10
 
@@ -70,3 +71,46 @@ Nothing to decide — execute the decisions recorded in
   still resolves automatically.
 - `protocolo_bandeira` and `true_coral`'s own cooldown fields/logic are untouched.
 - Full suite green, `ruff check .` and `mypy pyguara` clean.
+
+## Resolution
+
+Executed as specified, chose the event-subscription wiring option. Commit `ecffc7e`.
+
+**Wiring**: `InputManager` subscribes to `GamepadManager`'s own `GamepadButtonEvent`/
+`GamepadAxisEvent` (already dispatched on state change — just never listened to by
+anything) and translates them into `_handle_input()`/`_handle_axis()` calls, reusing the
+existing press/release/hold and deadzone-then-analog-only logic unchanged, with no new
+diffing machinery and nothing duplicated in `GamepadManager`. `Application.run()` calls
+`input_manager.update()` once per frame, before `_process_input()`. `process_event()`'s
+`JOY*` branches, `_joysticks`, and `_detect_controllers()` are deleted outright; the OS
+event pump keeps running unchanged for keyboard/mouse/quit.
+
+**`_cooldowns`/`InputAction.cooldown`**: removed, not implemented, per the decision.
+Deleting the field as a side effect fixed a real latent bug: `InputAction`'s field order
+was `(name, action_type, cooldown, deadzone)`, so `register_action()`'s positional
+`InputAction(name, action_type, deadzone)` call was silently storing the `deadzone`
+argument into the `cooldown` field instead — every action's real deadzone was always the
+field default (`0.1`), regardless of what `register_action(deadzone=...)` was actually
+called with. New regression test `test_register_action_deadzone_is_stored_correctly`
+covers it. `protocolo_bandeira`/`true_coral`'s own ability-cooldown fields are untouched.
+
+**`IInputBackend` mandatory**: `bootstrap.py` registers `PygameInputBackend` as the DI
+singleton. Also had to patch all 9 `games/*/bootstrap.py` files the same way — confirmed
+empirically that without it, every one of those hand-rolled containers raises
+`ServiceNotFoundException` the instant `InputManager` is resolved, since none of them
+register `IInputBackend` themselves. Not otherwise touched (no dedupe, no shared factory)
+— that's the same ~650 LOC of copy-paste the map's **Bootstrap collapse** fog already
+tracks for replacement; this was the minimum mechanical fix to avoid shipping a confirmed
+breakage no test in the suite would have caught (nothing exercises those 9 files).
+
+**Tests**: `tests/test_input.py` turned out to patch `pygame.joystick.get_count`/`Joystick`
+directly rather than already using the `IInputBackend` protocol, as ticket 10's answer
+assumed ("the mock-backend gamepad tests already model the target shape") — another
+premise that didn't quite match the code. Rewrote the whole file onto `_StubJoystick`/
+`_StubInputBackend` implementing `IJoystick`/`IInputBackend`, so every gamepad test now
+proves the protocol path itself works, hardware- and pygame-joystick-subsystem-free. Added
+`test_bound_gamepad_action_fires_from_polled_state`, driving a bound `GAMEPAD` action
+end-to-end through polled stub state plus `InputManager.update()` — no pygame event of any
+kind — proving the new path, not just that `GamepadManager` itself updates.
+
+Full suite green (1054 passed), `ruff check .` and `mypy pyguara` clean.
