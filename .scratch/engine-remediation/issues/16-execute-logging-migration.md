@@ -1,7 +1,8 @@
 # Execute the logging migration
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: coherence (follows from Logging migration, ticket 08)
 
@@ -72,3 +73,60 @@ replace with `from pyguara.log import get_logger` / `logger = get_logger(__name_
   stdlib `logging.getLogger` inside `EngineLogger.__init__`).
 - `Application`'s and `Sandbox`'s `get_logger()` calls no longer pass a `LogCategory`.
 - Full suite green, `ruff check .` and `mypy pyguara` clean.
+
+## Resolution
+
+Executed as specified. Commit `b6d9027`.
+
+**Core surgery** landed as designed: `pyguara/log/manager.py` gains a module-level
+`default_log_manager = LogManager()` singleton plus `get_logger(name)` accessor, both
+re-exported from `pyguara/log/__init__.py`. `LogManager.configure()` now calls a new
+`EngineLogger.reconfigure()` on every already-constructed logger (extracted from
+`__init__`, which now just calls it once), closing old handlers before rebuilding —
+covered by a new regression test that calls `configure(log_file=...)` after a logger
+already exists and asserts a `FileHandler` shows up on it. `get_logger()` dropped its
+`category` param and key-suffixing entirely (regression test: same name → same instance).
+`EngineLogger.context()`/`_context_stack`/`_get_merged_context()` and `ContextualFilter`
+are deleted outright, not merely unused.
+
+**`EventDispatcher`**: `_logger` is now `Optional[EngineLogger]`, defaulting to
+`logger or get_logger(__name__)`. A regression test constructs a dispatcher with no
+logger, forces a queue-overflow warning (`queue_warning_threshold=0`), and asserts a
+record was emitted via `caplog` — confirming both `ErrorHandlingStrategy.LOG` and the
+overflow warning now actually log.
+
+**Bootstrap**: `_setup_container()` now points at `default_log_manager` instead of
+constructing a second, unrelated `LogManager()`; `Application`/`Sandbox`'s `get_logger()`
+calls dropped their `LogCategory` arg (and the now-unused `LogCategory` import).
+
+**Leaf-module sweep**: all 30 `logging.getLogger(__name__)` module-level call sites plus
+`error/handlers.py`'s inline one now use `from pyguara.log import get_logger`. Confirmed
+by `grep -rn "logging.getLogger" pyguara` returning only `pyguara/log/logger.py`'s own
+legitimate wrap inside `EngineLogger.__init__`.
+
+**Two things found and fixed mid-execution, not called out in the decision ticket:**
+
+1. **Import cycle.** `pyguara/log/{logger,handlers,manager}.py` imported `EventDispatcher`
+   at runtime for type hints only (never `isinstance`-checked — just a constructor param
+   and a dispatch() call on whatever's passed). Making `EventDispatcher` default to
+   `get_logger()` needs `pyguara.events.dispatcher` to import `pyguara.log` at module
+   level, which would cycle back. Fixed by moving all three `EventDispatcher` imports
+   behind `TYPE_CHECKING` with quoted annotations — purely a typing-time reference now,
+   zero runtime behavior change.
+2. **printf-style call sites.** A meaningful fraction of the 30 modules log
+   stdlib-style, e.g. `logger.error("Failed '%s': %s", path, e, exc_info=True)`. Since
+   `EngineLogger.error/warning/etc.` had `category` as the second *positional* parameter,
+   any of these would have bound the first extra arg to `category` and then raised
+   `TypeError` on a third — a straight crash the moment those lines execute, not caught
+   by mypy or the type-check-excluded test suite. Fixed at the root rather than rewriting
+   every call site: `category` became keyword-only and `debug/info/warning/error/critical`
+   gained `*args` passthrough to `self._logger.log(level, msg, *args, ...)`, preserving
+   stdlib's lazy `%`-formatting exactly. Regression test added
+   (`test_printf_style_args_are_forwarded_like_stdlib_logging`). No caller outside
+   `pyguara/log/` passed `category` positionally, so this is purely additive — nothing to
+   invalidate elsewhere on the map.
+
+Full suite green (1053 passed, up from 1048 — 5 new regression tests), `ruff check .` and
+`mypy pyguara` clean. `games/*/bootstrap.py`'s own `LogManager(event_dispatcher)`
+constructions were deliberately left untouched — that's *Bootstrap collapse* fog, not this
+ticket.

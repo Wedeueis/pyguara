@@ -202,6 +202,20 @@ tickets inherit rather than revisit them):
   a narrow subscriber): [Execute the ECS lifecycle
   contract](issues/26-execute-ecs-lifecycle-contract.md), then [Execute the physics teardown
   bridge](issues/27-execute-physics-teardown-bridge.md) (blocked by it).
+- [Execute the logging migration](issues/16-execute-logging-migration.md) — landed the
+  `get_logger(name)` accessor backed by a shared `default_log_manager` singleton (also
+  now what `bootstrap.py` configures/registers, instead of a second unrelated
+  `LogManager()`); `LogManager.configure()` rebuilds already-constructed loggers'
+  handlers via a new `EngineLogger.reconfigure()`; `category` dropped from `get_logger()`;
+  `context()`/`_context_stack`/`_get_merged_context()`/`ContextualFilter` deleted;
+  `EventDispatcher._logger` defaults to `get_logger(__name__)`, fixing both
+  `ErrorHandlingStrategy.LOG` and the queue-overflow warning; all 31 leaf modules swept
+  onto the accessor. Two things found and fixed mid-execution: the `pyguara.log` ↔
+  `pyguara.events.dispatcher` import cycle this default creates (broken via
+  `TYPE_CHECKING`-only imports, `EventDispatcher` was never more than a type hint there),
+  and several leaf modules' printf-style logging calls, which would have crashed against
+  `EngineLogger`'s positional `category` param — fixed by making `category` keyword-only
+  and adding `*args` passthrough rather than rewriting every call site.
 
 ## Not yet specified
 
