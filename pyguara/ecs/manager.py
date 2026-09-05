@@ -1,6 +1,17 @@
 """Entity Manager implementation for ECS with Spatial Indexing."""
 
-from typing import Dict, Optional, Type, Iterator, Set, Tuple, TypeVar, overload
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Type,
+    Iterator,
+    Set,
+    Tuple,
+    TypeVar,
+    overload,
+)
 from collections import defaultdict
 
 from pyguara.ecs.component import Component
@@ -32,6 +43,19 @@ class EntityManager:
         # Query cache for hot-path optimizations (P1-008)
         self._query_cache: QueryCache = QueryCache(self)
 
+        # Entities removed this frame: their id is already gone from
+        # _entities (soft-dead), but their component-index entries linger
+        # until flush_pending_removals() runs at the frame boundary. This is
+        # what makes single-type queries safe to alias the live index set
+        # directly -- the set is never mutated mid-frame.
+        self._pending_index_cleanup: List[Tuple[Type[Component], str]] = []
+
+        # Optional hook fired synchronously in remove_entity(), at the moment
+        # of soft-death, with the (still component-intact) removed Entity.
+        # EntityManager stays decoupled from the event system: Scene.
+        # resolve_dependencies() wires this to dispatch EntityDestroyed.
+        self._on_entity_removed: Optional[Callable[[Entity], None]] = None
+
     def create_entity(self, entity_id: Optional[str] = None) -> Entity:
         """Create and register a new entity."""
         entity = Entity(entity_id)
@@ -53,17 +77,55 @@ class EntityManager:
             self._component_index[comp_type].add(entity.id)
 
     def remove_entity(self, entity_id: str) -> None:
-        """Destroy an entity and clean up indexes."""
-        if entity_id in self._entities:
-            entity = self._entities[entity_id]
+        """Soft-destroy an entity: immediate, terminal, not reusable.
 
-            # Remove from all indexes
-            # This is O(C) where C is number of components on the entity
-            for comp_type in entity._components:
-                if comp_type in self._component_index:
-                    self._component_index[comp_type].discard(entity_id)
+        The entity is gone from `_entities` and its manager callbacks
+        detached before this method returns -- nothing can see or resurrect
+        it from that instant on, and further `add_component()`/
+        `remove_component()` calls on it raise. Physical component-index
+        cleanup is deferred to `flush_pending_removals()` at the next frame
+        boundary, which is what makes every query path safe to iterate
+        regardless of how many component types are queried.
 
-            del self._entities[entity_id]
+        If an `_on_entity_removed` hook is set, it fires synchronously here,
+        after soft-death but before the deferred index cleanup -- the
+        entity's components are still intact, so handlers can still read
+        them.
+        """
+        entity = self._entities.get(entity_id)
+        if entity is None:
+            return
+
+        # 1. Soft-dead immediately: detach callbacks and mark terminal before
+        # anything else (including the removal hook below) runs, so no
+        # reentrant mutation can resurrect this id.
+        entity._on_component_added = None
+        entity._on_component_removed = None
+        entity._is_removed = True
+        del self._entities[entity_id]
+
+        # 2. Notify (components still intact).
+        if self._on_entity_removed is not None:
+            self._on_entity_removed(entity)
+
+        # 3. Defer physical index cleanup to the frame boundary.
+        for comp_type in entity._components:
+            self._pending_index_cleanup.append((comp_type, entity_id))
+
+    def flush_pending_removals(self) -> None:
+        """Physically clean up index entries for entities soft-removed since the last flush.
+
+        Call once per frame, at the frame boundary (e.g. the end of a fixed
+        update), not mid-frame -- that's what keeps the index set stable
+        for the whole frame's queries.
+        """
+        for comp_type, entity_id in self._pending_index_cleanup:
+            index = self._component_index.get(comp_type)
+            if index is not None:
+                index.discard(entity_id)
+            self._query_cache.on_component_removed(entity_id, comp_type)
+
+        self._pending_index_cleanup.clear()
 
     def get_entity(self, entity_id: str) -> Optional[Entity]:
         """Retrieve an entity by ID."""
@@ -99,9 +161,15 @@ class EntityManager:
         for i in range(1, len(sets)):
             result_ids = result_ids & sets[i]  # Intersection
 
-        # 4. Yield actual entities
+        # 4. Yield actual entities. Guard against ids soft-removed but not
+        # yet physically cleaned up (self._entities.get(...) is not None) --
+        # for a single component type, result_ids IS the live index set
+        # (aliased, not copied), so this is what makes iterating it safe
+        # while remove_entity() runs elsewhere this same frame.
         for eid in result_ids:
-            yield self._entities[eid]
+            entity = self._entities.get(eid)
+            if entity is not None:
+                yield entity
 
     def register_cached_query(self, *component_types: Type[Component]) -> None:
         """
@@ -154,13 +222,15 @@ class EntityManager:
         """
         cached_ids = self._query_cache.get_cached(*component_types)
 
-        if cached_ids:
-            # Use cached results
+        if cached_ids is not None:
+            # Registered (possibly empty right now) -- use the cache as-is,
+            # never fall back just because nothing currently matches.
             for eid in cached_ids:
-                if eid in self._entities:  # Safety check
-                    yield self._entities[eid]
+                entity = self._entities.get(eid)  # Safety check
+                if entity is not None:
+                    yield entity
         else:
-            # Fallback to standard query if not cached
+            # Not registered at all: fall back to standard query.
             yield from self.get_entities_with(*component_types)
 
     def _on_entity_component_added(
@@ -274,9 +344,12 @@ class EntityManager:
         for i in range(1, len(sets)):
             result_ids = result_ids & sets[i]
 
-        # Yield component tuples directly (bypasses Entity wrapper)
+        # Yield component tuples directly (bypasses Entity wrapper). Guard
+        # against ids soft-removed but not yet physically cleaned up.
         for eid in result_ids:
-            entity = self._entities[eid]
+            entity = self._entities.get(eid)
+            if entity is None:
+                continue
             # Build tuple of components in requested order
             components = tuple(entity._components[c_type] for c_type in component_types)
             yield components
@@ -318,7 +391,10 @@ class EntityManager:
         for i in range(1, len(sets)):
             result_ids = result_ids & sets[i]
 
+        # Guard against ids soft-removed but not yet physically cleaned up.
         for eid in result_ids:
-            entity = self._entities[eid]
+            entity = self._entities.get(eid)
+            if entity is None:
+                continue
             components = tuple(entity._components[c_type] for c_type in component_types)
             yield entity, components

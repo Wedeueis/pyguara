@@ -45,6 +45,11 @@ class Entity:
             None
         )
 
+        # Set by EntityManager.remove_entity() at the moment of soft-death.
+        # Removal is terminal, not reusable: further mutation raises rather
+        # than silently no-opping or resurrecting the entity.
+        self._is_removed: bool = False
+
     def add_component(self, component: C) -> C:
         """Add a component instance to the entity.
 
@@ -56,7 +61,17 @@ class Entity:
 
         Returns:
             The added component.
+
+        Raises:
+            RuntimeError: If this entity has been removed (soft-dead).
         """
+        if self._is_removed:
+            raise RuntimeError(
+                f"Entity {self.id} has been removed; cannot add_component() to a "
+                f"dead entity. Removal is terminal -- use Entity.clone() to make a "
+                f"fresh, re-addable entity instead."
+            )
+
         component_type = type(component)
         if component_type in self._components:
             raise ValueError(
@@ -103,7 +118,16 @@ class Entity:
 
         Args:
             component_type: The type of component to remove.
+
+        Raises:
+            RuntimeError: If this entity has been removed (soft-dead).
         """
+        if self._is_removed:
+            raise RuntimeError(
+                f"Entity {self.id} has been removed; cannot remove_component() "
+                f"from a dead entity."
+            )
+
         if component_type in self._components:
             comp = self._components.pop(component_type)
             comp.on_detach()

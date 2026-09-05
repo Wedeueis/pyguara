@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
 from pyguara.ecs.component import BaseComponent, StrictComponent
 from pyguara.ecs.entity import Entity
@@ -503,3 +504,231 @@ def test_clone_is_unregistered_until_added() -> None:
     manager.add_entity(clone)
     assert manager.get_entity(clone.id) is clone
     assert len(list(manager.get_entities_with(Position))) == 2
+
+
+# ========== ECS lifecycle contract (wayfinder ticket 26) ==========
+
+
+def test_remove_entity_detaches_callbacks_and_marks_terminal_immediately() -> None:
+    """Soft-death is immediate: gone from the manager, callbacks detached,
+    and marked terminal in the same call -- not deferred to a flush."""
+    manager = EntityManager()
+    entity = manager.create_entity()
+    entity.add_component(Position())
+
+    manager.remove_entity(entity.id)
+
+    assert manager.get_entity(entity.id) is None
+    assert entity._is_removed is True
+    assert entity._on_component_added is None
+    assert entity._on_component_removed is None
+
+
+def test_remove_entity_on_unknown_id_is_a_noop() -> None:
+    manager = EntityManager()
+    manager.remove_entity("does-not-exist")  # must not raise
+
+
+def test_add_component_raises_on_removed_entity() -> None:
+    """ECS-2: removal is terminal, not reusable. Previously this silently
+    re-inserted the dead id into the index, and a later query on it raised
+    KeyError instead -- now the misuse itself raises, loudly, at the source."""
+    manager = EntityManager()
+    entity = manager.create_entity()
+    manager.remove_entity(entity.id)
+
+    with pytest.raises(RuntimeError):
+        entity.add_component(Position())
+
+    # And the original KeyError-on-query symptom is gone too.
+    assert list(manager.get_entities_with(Position)) == []
+
+
+def test_remove_component_raises_on_removed_entity() -> None:
+    manager = EntityManager()
+    entity = manager.create_entity()
+    entity.add_component(Position())
+    manager.remove_entity(entity.id)
+
+    with pytest.raises(RuntimeError):
+        entity.remove_component(Position)
+
+
+def test_get_entities_with_single_type_safe_during_mid_iteration_removal() -> None:
+    """ECS-4: a single-component-type query used to alias the live index set
+    directly, raising 'Set changed size during iteration' if remove_entity()
+    ran mid-loop. It no longer does, regardless of arity."""
+    manager = EntityManager()
+    entities = [manager.create_entity() for _ in range(3)]
+    for e in entities:
+        e.add_component(Position())
+
+    removed_id = entities[0].id
+    seen_ids = []
+    for entity in manager.get_entities_with(Position):
+        seen_ids.append(entity.id)
+        if entity.id != removed_id:
+            manager.remove_entity(removed_id)  # must not raise mid-iteration
+
+    # Whether or not the removed entity was already yielded before removal
+    # (set iteration order is unspecified), it's gone from a fresh query.
+    assert removed_id not in {e.id for e in manager.get_entities_with(Position)}
+
+
+def test_multi_type_query_also_safe_during_mid_iteration_removal() -> None:
+    """The two-or-more-type case already copied via set intersection before
+    this ticket; confirm it still holds post-refactor."""
+    manager = EntityManager()
+    entities = [manager.create_entity() for _ in range(3)]
+    for e in entities:
+        e.add_component(Position())
+        e.add_component(Health())
+
+    removed_id = entities[0].id
+    for entity in manager.get_entities_with(Position, Health):
+        if entity.id != removed_id:
+            manager.remove_entity(removed_id)  # must not raise mid-iteration
+
+
+def test_query_paths_exclude_soft_removed_entity_before_flush() -> None:
+    """get_entities_with()/get_components()/get_components_with_entity() all
+    exclude a soft-removed entity immediately, even before
+    flush_pending_removals() physically cleans up the index -- the stale id
+    lingers in the index but every query path guards its yield."""
+    manager = EntityManager()
+    entity = manager.create_entity()
+    entity.add_component(Position())
+    entity.add_component(Health())
+
+    manager.remove_entity(entity.id)
+
+    # Index still holds the stale id (deferred cleanup) ...
+    assert entity.id in manager._component_index[Position]
+    # ... but every query path excludes it anyway.
+    assert list(manager.get_entities_with(Position)) == []
+    assert list(manager.get_components(Position, Health)) == []
+    assert list(manager.get_components_with_entity(Position, Health)) == []
+
+
+def test_flush_pending_removals_cleans_up_the_index() -> None:
+    manager = EntityManager()
+    entity = manager.create_entity()
+    entity.add_component(Position())
+
+    manager.remove_entity(entity.id)
+    assert entity.id in manager._component_index[Position]
+
+    manager.flush_pending_removals()
+
+    assert entity.id not in manager._component_index[Position]
+    assert manager._pending_index_cleanup == []
+
+
+def test_entity_destroyed_dispatched_synchronously_with_components_readable() -> None:
+    """The removal hook fires inside remove_entity(), before the deferred
+    index flush, with the entity's components still intact."""
+    manager = EntityManager()
+    entity = manager.create_entity()
+    entity.add_component(Position(3, 4))
+
+    received = []
+    manager._on_entity_removed = lambda e: received.append(
+        (e, e.has_component(Position), e.get_component(Position))
+    )
+
+    manager.remove_entity(entity.id)
+
+    assert len(received) == 1
+    received_entity, had_position, position = received[0]
+    assert received_entity is entity
+    assert had_position is True
+    assert position == Position(3, 4)
+
+
+def test_entity_destroyed_event_dispatches_through_a_real_dispatcher() -> None:
+    """End-to-end: EntityManager's removal hook wired to a real
+    EventDispatcher.dispatch(EntityDestroyed(...)), matching how
+    Scene.resolve_dependencies() wires it."""
+    from pyguara.events.dispatcher import EventDispatcher
+
+    dispatcher = EventDispatcher()
+    manager = EntityManager()
+    manager._on_entity_removed = lambda e: dispatcher.dispatch(
+        EntityDestroyed(entity=e)
+    )
+
+    received: list[EntityDestroyed] = []
+    dispatcher.subscribe(EntityDestroyed, received.append)
+
+    entity = manager.create_entity()
+    entity.add_component(Position())
+    manager.remove_entity(entity.id)
+
+    assert len(received) == 1
+    assert received[0].entity is entity
+
+
+# -- QueryCache (wayfinder ticket 26) --
+
+
+def test_query_cache_values_are_frozensets() -> None:
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+    entity = manager.create_entity()
+    entity.add_component(Position())
+
+    cache = manager._query_cache._cache[frozenset({Position})]
+    assert isinstance(cache, frozenset)
+
+
+def test_query_cache_distinguishes_registered_empty_from_unregistered() -> None:
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    # Registered, but nothing matches yet: empty frozenset, not None.
+    assert manager._query_cache.get_cached(Position) == frozenset()
+
+    # Never registered at all: None.
+    assert manager._query_cache.get_cached(Health) is None
+
+
+def test_get_entities_with_cached_does_not_fall_back_when_registered_but_empty() -> (
+    None
+):
+    """A registered-but-currently-empty cached query must yield nothing --
+    not silently fall back to a full uncached scan (the old `if cached_ids:`
+    truthiness check couldn't tell "registered, nothing matches" from "never
+    registered", so it fell back every time the cache was legitimately
+    empty). Proven by making the fallback path raise if it's ever taken."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    def _must_not_be_called(*_types):
+        raise AssertionError(
+            "fell back to get_entities_with() despite being registered"
+        )
+
+    manager.get_entities_with = _must_not_be_called  # type: ignore[method-assign]
+
+    assert list(manager.get_entities_with_cached(Position)) == []
+
+
+def test_query_cache_reports_correct_count_after_entity_removal() -> None:
+    """ECS-3: previously QueryCache had no removal hook at all -- create 5,
+    remove 5, cache still reported 5. Now removal (via flush_pending_
+    removals(), deferred to the frame boundary) updates it correctly."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    entities = [manager.create_entity() for _ in range(5)]
+    for e in entities:
+        e.add_component(Position())
+
+    assert len(manager._query_cache.get_cached(Position)) == 5
+
+    for e in entities:
+        manager.remove_entity(e.id)
+    manager.flush_pending_removals()
+
+    assert manager._query_cache.get_cached(Position) == frozenset()
+    assert len(list(manager.get_entities_with_cached(Position))) == 0

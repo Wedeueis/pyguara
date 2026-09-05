@@ -188,7 +188,10 @@ class SceneManager:
         Ticks each active scene's own SystemManager (the four engine systems:
         Steering, AI, AudioSource, Animation) before the scene's own
         fixed_update() -- there's no global SystemManager anymore, each scene
-        owns and ticks its own.
+        owns and ticks its own. Flushes each scene's own EntityManager at the
+        end of its fixed-update work (the frame boundary the ECS lifecycle
+        contract defers physical index cleanup to) -- there's no global
+        EntityManager either, so this can't happen in Application anymore.
 
         Args:
             fixed_dt: Fixed delta time in seconds.
@@ -203,6 +206,7 @@ class SceneManager:
         for scene in reversed(scenes_to_update):
             scene.system_manager.update(fixed_dt)
             scene.fixed_update(fixed_dt)
+            scene.entity_manager.flush_pending_removals()
 
     def update(self, dt: float) -> None:
         """Variable-rate update for UI and smooth animations.

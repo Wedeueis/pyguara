@@ -13,7 +13,7 @@ Performance Impact:
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Dict, Set, Type, FrozenSet
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Optional, Set, Type
 
 if TYPE_CHECKING:
     from pyguara.ecs.manager import EntityManager
@@ -25,7 +25,12 @@ class QueryCache:
     Maintains cached entity ID sets for frequently-used component queries.
 
     The QueryCache automatically updates when components are added or removed,
-    ensuring cached results stay synchronized with the ECS state.
+    ensuring cached results stay synchronized with the ECS state. Entity
+    removal is wired through the same `on_component_removed()` path: when
+    `EntityManager.flush_pending_removals()` physically cleans up a removed
+    entity's component-index entries at the frame boundary, it calls
+    `on_component_removed()` for each of that entity's component types,
+    which is exactly what's needed to drop it from every cache it was in.
 
     Design Decision: This uses a hybrid approach - caching the final intersection
     results rather than implementing full archetypes. PyGuara's inverted index is
@@ -42,7 +47,7 @@ class QueryCache:
 
     Attributes:
         _manager: Reference to EntityManager for entity lookups
-        _cache: Cached entity ID sets keyed by component type combinations
+        _cache: Cached entity ID frozensets keyed by component type combinations
         _registered_queries: Set of component type combinations to cache
     """
 
@@ -54,8 +59,8 @@ class QueryCache:
             manager: EntityManager instance to cache queries for
         """
         self._manager = manager
-        # Key: frozenset of component types, Value: Set of entity IDs
-        self._cache: Dict[FrozenSet[Type[Component]], Set[str]] = {}
+        # Key: frozenset of component types, Value: frozenset of entity IDs
+        self._cache: Dict[FrozenSet[Type[Component]], FrozenSet[str]] = {}
         # Track which queries are registered for caching
         self._registered_queries: Set[FrozenSet[Type[Component]]] = set()
 
@@ -80,22 +85,25 @@ class QueryCache:
             # Build initial cache from current ECS state
             self._rebuild_cache(query_key)
 
-    def get_cached(self, *component_types: Type[Component]) -> Set[str]:
+    def get_cached(self, *component_types: Type[Component]) -> Optional[FrozenSet[str]]:
         """
         Get cached entity IDs for a query.
-
-        Returns empty set if query is not registered or no entities match.
 
         Args:
             *component_types: Component types to query for
 
         Returns:
-            Set of entity IDs that have all specified components
+            The cached frozenset of entity IDs (possibly empty, if the query
+            is registered but nothing currently matches), or `None` if this
+            exact query was never registered via `register_query()` --
+            callers use `None` specifically to distinguish "registered but
+            empty" from "not cached at all" (only the latter should fall
+            back to a full scan).
         """
         query_key = frozenset(component_types)
-        return self._cache.get(
-            query_key, set()
-        ).copy()  # Return copy to prevent external modification
+        if query_key not in self._registered_queries:
+            return None
+        return self._cache.get(query_key, frozenset())
 
     def on_component_added(
         self, entity_id: str, component_type: Type[Component]
@@ -117,9 +125,8 @@ class QueryCache:
                 entity = self._manager.get_entity(entity_id)
                 if entity and all(entity.has_component(ct) for ct in query_key):
                     # Add entity to cache
-                    if query_key not in self._cache:
-                        self._cache[query_key] = set()
-                    self._cache[query_key].add(entity_id)
+                    current = self._cache.get(query_key, frozenset())
+                    self._cache[query_key] = current | {entity_id}
 
     def on_component_removed(
         self, entity_id: str, component_type: Type[Component]
@@ -127,19 +134,24 @@ class QueryCache:
         """
         Update relevant caches when a component is removed from an entity.
 
-        This is called automatically by EntityManager when components are removed.
+        Also called once per component type an entity carried when the
+        entity itself is fully removed (see
+        `EntityManager.flush_pending_removals()`), deferred to the frame
+        boundary rather than at the moment of removal.
 
         Args:
-            entity_id: ID of entity that lost the component
-            component_type: Type of component that was removed
+            entity_id: ID of entity that lost the component (or was removed)
+            component_type: Type of component that was removed (or one the
+                removed entity carried)
         """
         # Check all registered queries
         for query_key in self._registered_queries:
             # If this component type is part of the query
             if component_type in query_key:
                 # Entity no longer matches query, remove from cache
-                if query_key in self._cache:
-                    self._cache[query_key].discard(entity_id)
+                current = self._cache.get(query_key)
+                if current is not None:
+                    self._cache[query_key] = current - {entity_id}
 
     def _rebuild_cache(self, query_key: FrozenSet[Type[Component]]) -> None:
         """
@@ -152,14 +164,11 @@ class QueryCache:
         """
         # Use existing get_entities_with for initial build
         component_types = tuple(query_key)
-        result_ids = set()
-
-        # Get all entities matching this query
-        for entity in self._manager.get_entities_with(*component_types):
-            result_ids.add(entity.id)
 
         # Store in cache
-        self._cache[query_key] = result_ids
+        self._cache[query_key] = frozenset(
+            entity.id for entity in self._manager.get_entities_with(*component_types)
+        )
 
     def clear_cache(self) -> None:
         """
@@ -190,7 +199,7 @@ class QueryCache:
         for query_key in self._registered_queries:
             query_stats = {
                 "component_types": [ct.__name__ for ct in query_key],
-                "cached_entities": len(self._cache.get(query_key, set())),
+                "cached_entities": len(self._cache.get(query_key, frozenset())),
             }
             stats["queries"].append(query_stats)  # type: ignore[attr-defined]
 

@@ -8,6 +8,8 @@ from pyguara.ai.steering_system import SteeringSystem
 from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.di.container import DIContainer  # Import Container
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.animation_system import AnimationSystem
@@ -72,6 +74,10 @@ class Scene(ABC):
         """
         self.container = container
 
+        # EntityManager stays decoupled from the event system; wire its
+        # removal hook to dispatch EntityDestroyed here instead.
+        self.entity_manager._on_entity_removed = self._on_entity_removed
+
         self.system_manager.register(
             SteeringSystem(self.entity_manager),
             priority=150,
@@ -105,6 +111,15 @@ class Scene(ABC):
             container.get(ComponentRegistry),
             prefab_resolver=container.get(PrefabCache).load,
         )
+
+    def _on_entity_removed(self, entity: Entity) -> None:
+        """Dispatch EntityDestroyed for an entity this scene just soft-removed.
+
+        Wired onto `self.entity_manager._on_entity_removed` in
+        `resolve_dependencies()`; fires synchronously from
+        `EntityManager.remove_entity()`, components still intact.
+        """
+        self.event_dispatcher.dispatch(EntityDestroyed(entity=entity, source=self))
 
     def update_animations(self, dt: float) -> None:
         """
