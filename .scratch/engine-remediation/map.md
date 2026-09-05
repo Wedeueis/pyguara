@@ -191,6 +191,17 @@ tickets inherit rather than revisit them):
   Z-interleaving between shapes and textures within a frame, judged acceptable since no
   current demo actually mixes the two in a way that needs interleaving. Lands as one execution
   ticket — see [Execute the ModernGL shape shader](issues/25-execute-moderngl-shape-shader.md).
+- [Physics teardown bridge](issues/15-physics-teardown-bridge.md) — gap found first:
+  `EntityDestroyed` doesn't exist anywhere in the codebase; *ECS lifecycle contract*'s (ticket
+  06) decision was never executed. `PhysicsSystem` subscribes to `EntityDestroyed` in
+  `__init__` using its already-injected `event_dispatcher`; `destroy_body()` uses pymunk's own
+  `body.shapes` directly, no new tracking; teardown is deferred to a pending-queue drained in
+  `update()` before `space.step()`, since pymunk forbids space mutation mid-step (relevant once
+  a collision-triggered-death pattern exists); an unset `_body_handle` is a silent no-op. Two
+  sequenced execution tickets (not combined, since the ECS change is engine-wide and physics is
+  a narrow subscriber): [Execute the ECS lifecycle
+  contract](issues/26-execute-ecs-lifecycle-contract.md), then [Execute the physics teardown
+  bridge](issues/27-execute-physics-teardown-bridge.md) (blocked by it).
 
 ## Not yet specified
 

@@ -136,3 +136,8 @@ Not implemented in this session (items 1-5): this ticket is a decision, not a `t
 (ECS-5) is the one exception, implemented at the dev's explicit request. Graduates the
 **Physics teardown bridge** fog item into [ticket 15](15-physics-teardown-bridge.md), now that
 its hook (`EntityDestroyed`) exists.
+
+**Gap found during [Physics teardown bridge](15-physics-teardown-bridge.md):** items 1-5 sat
+unexecuted with no task ticket at all — `EntityDestroyed` doesn't exist anywhere in the
+codebase, and physics teardown's own execution depends on it. See [Execute the ECS lifecycle
+contract](26-execute-ecs-lifecycle-contract.md).
