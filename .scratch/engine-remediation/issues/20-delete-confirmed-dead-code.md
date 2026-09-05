@@ -1,7 +1,8 @@
 # Delete confirmed dead code
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: follows from Dead-code disposition, ticket 09
 
@@ -31,3 +32,12 @@ references anywhere in `pyguara/`, `games/`, or `tests/`.
 - `grep -rln "from pyguara.error\|pyguara\.error\b"` returns nothing.
 - `games/XXX_scenes/` no longer exists.
 - Full suite green, `ruff check .` and `mypy pyguara` clean.
+
+## Resolution
+
+Executed exactly as specified, no surprises. Commit `e26dbf4`. Re-confirmed zero external
+references before deleting (only hit: the pre-existing unrelated comment mentioning
+"archetypes" in `ecs/query_cache.py`'s docstring, same one the ticket already called out).
+All three done-when greps return clean; `mypy pyguara` checked 215 source files (was 220 —
+matches the 5 deleted `.py` files: `archetype.py` + 4 in `error/`). Full suite green (1052
+passed, unchanged — nothing exercised any of this code).

@@ -257,6 +257,9 @@ tickets inherit rather than revisit them):
   exact gap; left `games/validate_demos.py` untouched since it boots through the four
   separate `games/*/bootstrap.py` files **Bootstrap collapse** (fog, below) already tracks
   for replacement, not through `_setup_container()` at all.
+- [Delete confirmed dead code](issues/20-delete-confirmed-dead-code.md) — deleted
+  `pyguara/ecs/archetype.py`, `pyguara/error/`, and `games/XXX_scenes/`, all confirmed
+  zero-reference. No surprises; executed exactly as specified.
 
 ## Not yet specified
 
