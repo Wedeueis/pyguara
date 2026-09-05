@@ -350,6 +350,18 @@ tickets inherit rather than revisit them):
   (ticket 05) was never executed — `Color`/`Rect` still subclass `pygame.Color`/
   `pygame.Rect` today — despite not actually blocking this ticket. [Execute Native Color
   and Rect value types](issues/31-execute-native-color-and-rect.md).
+- [Execute the scene lifecycle repair](issues/29-execute-scene-lifecycle-repair.md) —
+  `TransitionManager.start_transition()` takes `on_from_hidden`/`on_to_shown` callbacks,
+  firing together at the two-phase midpoint or immediately at single-phase start (removes
+  the hardcoded `on_exit`/`on_enter` calls that caused SCENE-1); `SceneManager` maps each
+  operation's callbacks per the decision, substituting the existing
+  `_exit_scene`/`_resume_scene` wrappers (not bare hook calls) so ticket 24's
+  system-manager-cleanup guarantee survives the new callback path. `_stack: List[StackEntry]`
+  replaces the parallel `_scene_stack`/`_pause_below_flags` arrays, fixing SCENE-2's
+  off-by-one via a direct pause_below-per-entry mapping instead of index arithmetic.
+  `cleanup()` unwinds LIFO; `Application.__init__` now calls `set_screen_size()` with the
+  real window dimensions. Following the decision's callback wiring fixed pop_scene's
+  synchronous-exit-before-transition bug as a direct consequence, not a separate fix.
 
 ## Not yet specified
 
