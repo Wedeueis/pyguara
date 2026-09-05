@@ -1,6 +1,6 @@
 """Inspector Panel module."""
 
-import logging
+from pyguara.log import get_logger
 from typing import Any, Optional, cast
 import dataclasses
 
@@ -15,7 +15,7 @@ from pyguara.resources.manager import ResourceManager
 from pyguara.resources.data import DataResource
 from pyguara.editor.drawers import InspectorDrawer
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class InspectorPanel:

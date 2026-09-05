@@ -1,6 +1,6 @@
 """High-level Audio Manager for game audio management."""
 
-import logging
+from pyguara.log import get_logger
 from typing import Optional, Dict
 
 from pyguara.audio.audio_system import IAudioSystem
@@ -8,7 +8,7 @@ from pyguara.resources.types import AudioClip
 from pyguara.resources.manager import ResourceManager
 from pyguara.events.dispatcher import EventDispatcher
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AudioManager:

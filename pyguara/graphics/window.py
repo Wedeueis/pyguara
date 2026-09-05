@@ -1,12 +1,12 @@
 """Core Window management module."""
 
-import logging
+from pyguara.log import get_logger
 from typing import Any, Optional, Iterable
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.protocols import IWindowBackend
 from pyguara.common.types import Color
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class Window:

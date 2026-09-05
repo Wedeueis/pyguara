@@ -1,6 +1,5 @@
 """Concrete implementation of the Event Dispatcher."""
 
-import logging
 import queue
 import time
 from collections import defaultdict
@@ -9,6 +8,7 @@ from typing import Any, Callable, DefaultDict, List, Optional, Type, TypeVar
 
 from pyguara.events.protocols import Event, IEventDispatcher
 from pyguara.events.types import EventHandler, ErrorHandlingStrategy
+from pyguara.log import EngineLogger, get_logger
 
 E = TypeVar("E", bound=Event)
 
@@ -30,14 +30,16 @@ class EventDispatcher(IEventDispatcher):
 
     def __init__(
         self,
-        logger: Optional[logging.Logger] = None,
+        logger: Optional[EngineLogger] = None,
         error_strategy: ErrorHandlingStrategy = ErrorHandlingStrategy.RAISE,
         queue_warning_threshold: int = DEFAULT_QUEUE_WARNING_THRESHOLD,
     ) -> None:
         """Initialize the Event Dispatcher.
 
         Args:
-            logger: Optional logger for error reporting.
+            logger: Optional logger for error reporting. Defaults to the shared
+                logging accessor so the dispatcher always logs somewhere, even
+                when constructed before bootstrap wires anything explicitly.
             error_strategy: How to handle errors in event handlers. Defaults to RAISE
                 for fail-fast behavior in development. Use LOG for production
                 graceful degradation.
@@ -54,7 +56,7 @@ class EventDispatcher(IEventDispatcher):
 
         self._event_history: List[Event] = []
         self._max_history_size: int = 1000
-        self._logger = logger
+        self._logger = logger or get_logger(__name__)
         self._error_strategy = error_strategy
         self._queue_warning_threshold = queue_warning_threshold
 

@@ -6,7 +6,7 @@ Reloads Python modules at runtime when source files change.
 from __future__ import annotations
 
 import importlib
-import logging
+from pyguara.log import get_logger
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Type
 
 from pyguara.dev.file_watcher import PollingFileWatcher
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class StatefulSystem(Protocol):

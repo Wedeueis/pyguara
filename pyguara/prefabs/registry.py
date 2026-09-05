@@ -7,13 +7,13 @@ enabling dynamic component instantiation from serialized data.
 from __future__ import annotations
 
 import dataclasses
-import logging
+from pyguara.log import get_logger
 from typing import Any, Callable, Dict, Optional, Type, get_type_hints
 
 from pyguara.ecs.component import Component
 from pyguara.common.types import Vector2
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ComponentRegistry:

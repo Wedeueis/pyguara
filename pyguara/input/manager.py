@@ -1,6 +1,6 @@
 """Core input processing system."""
 
-import logging
+from pyguara.log import get_logger
 import pygame
 from typing import Any, Dict, Optional
 
@@ -17,7 +17,7 @@ from pyguara.input.types import (
 )
 from pyguara.input.gamepad import GamepadManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class InputManager:

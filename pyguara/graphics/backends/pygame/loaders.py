@@ -1,6 +1,6 @@
 """Concrete loaders for Pygame assets."""
 
-import logging
+from pyguara.log import get_logger
 from typing import List, Optional
 import pygame
 from pyguara.resources.loader import IMetaAwareLoader
@@ -8,7 +8,7 @@ from pyguara.resources.types import Resource
 from pyguara.resources.meta import AssetMeta, TextureMeta
 from .types import PygameTexture
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PygameImageLoader(IMetaAwareLoader):

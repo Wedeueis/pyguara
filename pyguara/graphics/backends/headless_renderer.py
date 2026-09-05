@@ -4,13 +4,13 @@ Headless rendering backend.
 Used for server-side logic, unit tests, or CI/CD pipelines where no display exists.
 """
 
-import logging
+from pyguara.log import get_logger
 from pyguara.graphics.protocols import IRenderer
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 from pyguara.common.types import Vector2, Color, Rect
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class HeadlessBackend(IRenderer):

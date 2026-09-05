@@ -1,14 +1,14 @@
 """Concrete storage backend implementations."""
 
 import json
-import logging
+from pyguara.log import get_logger
 import os
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
 from pyguara.persistence.types import StorageBackend
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _atomic_write_bytes(path: str, data: bytes) -> None:

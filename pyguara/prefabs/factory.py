@@ -7,7 +7,7 @@ resolution and component hydration.
 from __future__ import annotations
 
 import copy
-import logging
+from pyguara.log import get_logger
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from pyguara.common.types import Vector2
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pyguara.ecs.manager import EntityManager
     from pyguara.prefabs.registry import ComponentRegistry
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PrefabFactory:

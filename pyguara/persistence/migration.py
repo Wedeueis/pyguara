@@ -6,11 +6,11 @@ compatibility as game schemas evolve.
 
 from __future__ import annotations
 
-import logging
+from pyguara.log import get_logger
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

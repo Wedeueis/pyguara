@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import List, Optional
 
 import click
-import logging
+from pyguara.log import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _check_pyinstaller() -> bool:

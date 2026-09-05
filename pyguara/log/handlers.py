@@ -1,32 +1,19 @@
-"""Custom logging handlers and filters."""
+"""Custom logging handlers."""
 
 import logging
-from typing import Any, Dict
+from typing import TYPE_CHECKING
 
-from pyguara.events.dispatcher import EventDispatcher
 from pyguara.log.events import OnLogEvent
 from pyguara.log.types import LogCategory, LogLevel
 
-
-class ContextualFilter(logging.Filter):
-    """Filter that adds contextual information to log records."""
-
-    def __init__(self, context: Dict[str, Any]) -> None:
-        """Initialize with context data."""
-        super().__init__()
-        self.context = context
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Inject context data into the record attributes."""
-        for key, value in self.context.items():
-            setattr(record, key, value)
-        return True
+if TYPE_CHECKING:
+    from pyguara.events.dispatcher import EventDispatcher
 
 
 class EventIntegratedHandler(logging.Handler):
     """Log handler that dispatches log records as engine events."""
 
-    def __init__(self, event_dispatcher: EventDispatcher) -> None:
+    def __init__(self, event_dispatcher: "EventDispatcher") -> None:
         """Initialize with a target dispatcher."""
         super().__init__()
         self._dispatcher = event_dispatcher

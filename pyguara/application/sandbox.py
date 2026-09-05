@@ -11,7 +11,6 @@ from typing import Optional
 
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
-from pyguara.log.types import LogCategory
 from pyguara.tools.manager import ToolManager
 from pyguara.tools.performance import PerformanceMonitor
 from pyguara.tools.inspector import EntityInspector
@@ -38,7 +37,7 @@ class SandboxApplication(Application):
         super().__init__(container)
         self._tool_manager: Optional[ToolManager] = None
 
-        self.tools_logger = self._log_manager.get_logger("Sandbox", LogCategory.EDITOR)
+        self.tools_logger = self._log_manager.get_logger("Sandbox")
         self.tools_logger.info("Sandbox Tools Initializing...")
         self._initialize_tools()
 

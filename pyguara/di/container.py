@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-import logging
+from pyguara.log import get_logger
 import threading
 import types
 from typing import (
@@ -28,7 +28,7 @@ from pyguara.di.exceptions import (
 )
 from pyguara.di.types import ServiceLifetime, ServiceRegistration, ErrorHandlingStrategy
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 T = TypeVar("T")
 TInterface = TypeVar("TInterface")

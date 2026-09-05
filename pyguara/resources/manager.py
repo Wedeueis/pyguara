@@ -9,7 +9,7 @@ of truth for all game assets. It handles:
 4. Asset metadata via `.meta` sidecar files for import settings.
 """
 
-import logging
+from pyguara.log import get_logger
 import os
 import json
 from pathlib import Path
@@ -22,7 +22,7 @@ from .types import Resource, Texture
 from pyguara.common.types import Rect
 from pyguara.graphics.atlas import Atlas, AtlasRegion
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # T must be a subclass of Resource (e.g., Texture)
 T = TypeVar("T", bound=Resource)

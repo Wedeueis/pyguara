@@ -12,14 +12,14 @@ The allowed methods in components are:
 - Properties (via @property decorator)
 """
 
-import logging
+from pyguara.log import get_logger
 import warnings
 from typing import Any, Optional, Protocol, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pyguara.ecs.entity import Entity
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Methods allowed in data-only components
 ALLOWED_METHODS: Set[str] = {

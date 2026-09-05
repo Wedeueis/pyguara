@@ -1,6 +1,6 @@
 """The Editor Tool manages the ImGui context and tool overlays."""
 
-import logging
+from pyguara.log import get_logger
 from typing import Optional, Any
 
 try:
@@ -24,7 +24,7 @@ from pyguara.editor.panels.assets import AssetsPanel
 from pyguara.tools.base import Tool
 from pyguara.graphics.protocols import UIRenderer
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class EditorTool(Tool):

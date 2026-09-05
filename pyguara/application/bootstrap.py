@@ -13,7 +13,7 @@ from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import UIRenderer, IRenderer, TextureFactory
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
-from pyguara.log.manager import LogManager
+from pyguara.log import LogManager, default_log_manager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.protocols import IPhysicsEngine
@@ -81,7 +81,7 @@ def _setup_container() -> DIContainer:
 
     # 3. Logging System
     debug_cfg = config_manager.config.debug
-    log_manager = LogManager(event_dispatcher=event_dispatcher)
+    log_manager = default_log_manager
     log_manager.configure(
         level=debug_cfg.log_level,
         console=debug_cfg.console_logging,

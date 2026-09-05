@@ -2,15 +2,15 @@
 
 import logging
 import sys
-import threading
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast, Iterator  # FIX: Added Iterator
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from pyguara.events.dispatcher import EventDispatcher
 from pyguara.log.events import OnExceptionEvent
-from pyguara.log.handlers import ContextualFilter, EventIntegratedHandler
+from pyguara.log.handlers import EventIntegratedHandler
 from pyguara.log.types import LogCategory, LogLevel
+
+if TYPE_CHECKING:
+    from pyguara.events.dispatcher import EventDispatcher
 
 # Names `logging.Logger.makeRecord` refuses in `extra` because a real LogRecord
 # already owns them (stdlib attributes plus "message"/"asctime", added later by
@@ -47,31 +47,48 @@ _LOG_CALL_KWARGS = frozenset({"exc_info", "stack_info", "stacklevel"})
 
 
 class EngineLogger:
-    """Enhanced logger with context management and event integration.
+    """Enhanced logger with event system integration.
 
-    Wraps the standard python logging.Logger to provide structured logging,
-    thread-safe context stacks, and seamless event system integration.
+    Wraps the standard python logging.Logger to provide structured logging
+    and seamless event system integration.
     """
 
     def __init__(
         self,
         name: str,
         level: LogLevel,
-        event_dispatcher: Optional[EventDispatcher],
+        event_dispatcher: Optional["EventDispatcher"],
         log_file: Optional[Path],
         console_output: bool,
     ) -> None:
         """Initialize the logger wrapper."""
         self.name = name
+        self._logger = logging.getLogger(name)
+        self.reconfigure(
+            level=level,
+            event_dispatcher=event_dispatcher,
+            log_file=log_file,
+            console_output=console_output,
+        )
+
+    def reconfigure(
+        self,
+        level: LogLevel,
+        event_dispatcher: Optional["EventDispatcher"],
+        log_file: Optional[Path],
+        console_output: bool,
+    ) -> None:
+        """Rebuild this logger's handler set for new settings.
+
+        Closes and replaces every existing handler so repeated calls (e.g. from
+        `LogManager.configure()`) don't leak file descriptors or double-log.
+        """
         self._event_dispatcher = event_dispatcher
 
-        # Thread-local storage ensures contexts don't leak between threads
-        self._thread_local = threading.local()
-
-        # Setup internal Python logger
-        self._logger = logging.getLogger(name)
-        self._logger.setLevel(level.value)
+        for h in self._logger.handlers:
+            h.close()
         self._logger.handlers.clear()
+        self._logger.setLevel(level.value)
 
         # 1. Console Handler
         if console_output:
@@ -96,48 +113,18 @@ class EngineLogger:
         if event_dispatcher:
             self._logger.addHandler(EventIntegratedHandler(event_dispatcher))
 
-    @property
-    def _context_stack(self) -> List[Dict[str, Any]]:
-        """Safe access to thread-local context stack."""
-        if not hasattr(self._thread_local, "stack"):
-            self._thread_local.stack = []
-        return cast(List[Dict[str, Any]], self._thread_local.stack)
-
-    @contextmanager
-    # FIX: Added return annotation -> Iterator[None]
-    def context(self, **context_data: Any) -> Iterator[None]:
-        """Add contextual information to all logs within this block."""
-        # 1. Push context
-        self._context_stack.append(context_data)
-
-        # 2. Apply filter
-        ctx_filter = ContextualFilter(context_data)
-        for h in self._logger.handlers:
-            h.addFilter(ctx_filter)
-
-        try:
-            yield
-        finally:
-            # 3. Cleanup
-            for h in self._logger.handlers:
-                h.removeFilter(ctx_filter)
-            self._context_stack.pop()
-
-    def _get_merged_context(self) -> Dict[str, Any]:
-        """Merge all contexts in the stack."""
-        final_ctx = {}
-        for ctx in self._context_stack:
-            final_ctx.update(ctx)
-        return final_ctx
-
     def _log(
-        self, level: LogLevel, message: str, category: LogCategory, **kwargs: Any
+        self,
+        level: LogLevel,
+        message: str,
+        category: LogCategory,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
-        """Perform internal logging operations with context merging."""
+        """Perform internal logging operations."""
         log_kwargs = {key: kwargs.pop(key) for key in _LOG_CALL_KWARGS if key in kwargs}
 
-        extra = {"category": category}
-        extra.update(self._get_merged_context())
+        extra: Dict[str, Any] = {"category": category}
         extra.update(kwargs)
 
         # A caller-supplied key that shadows a real LogRecord attribute would
@@ -148,39 +135,59 @@ class EngineLogger:
             for key, value in extra.items()
         }
 
-        self._logger.log(level.value, message, extra=safe_extra, **log_kwargs)
+        self._logger.log(level.value, message, *args, extra=safe_extra, **log_kwargs)
 
     # --- Public API ---
 
     def debug(
-        self, msg: str, category: LogCategory = LogCategory.DEBUG, **kwargs: Any
+        self,
+        msg: str,
+        *args: Any,
+        category: LogCategory = LogCategory.DEBUG,
+        **kwargs: Any,
     ) -> None:
         """Log a debug message."""
-        self._log(LogLevel.DEBUG, msg, category, **kwargs)
+        self._log(LogLevel.DEBUG, msg, category, *args, **kwargs)
 
     def info(
-        self, msg: str, category: LogCategory = LogCategory.SYSTEM, **kwargs: Any
+        self,
+        msg: str,
+        *args: Any,
+        category: LogCategory = LogCategory.SYSTEM,
+        **kwargs: Any,
     ) -> None:
         """Log an info message."""
-        self._log(LogLevel.INFO, msg, category, **kwargs)
+        self._log(LogLevel.INFO, msg, category, *args, **kwargs)
 
     def warning(
-        self, msg: str, category: LogCategory = LogCategory.SYSTEM, **kwargs: Any
+        self,
+        msg: str,
+        *args: Any,
+        category: LogCategory = LogCategory.SYSTEM,
+        **kwargs: Any,
     ) -> None:
         """Log a warning message."""
-        self._log(LogLevel.WARNING, msg, category, **kwargs)
+        self._log(LogLevel.WARNING, msg, category, *args, **kwargs)
 
     def error(
-        self, msg: str, category: LogCategory = LogCategory.SYSTEM, **kwargs: Any
+        self,
+        msg: str,
+        *args: Any,
+        category: LogCategory = LogCategory.SYSTEM,
+        **kwargs: Any,
     ) -> None:
         """Log an error message."""
-        self._log(LogLevel.ERROR, msg, category, **kwargs)
+        self._log(LogLevel.ERROR, msg, category, *args, **kwargs)
 
     def critical(
-        self, msg: str, category: LogCategory = LogCategory.SYSTEM, **kwargs: Any
+        self,
+        msg: str,
+        *args: Any,
+        category: LogCategory = LogCategory.SYSTEM,
+        **kwargs: Any,
     ) -> None:
         """Log a critical message."""
-        self._log(LogLevel.CRITICAL, msg, category, **kwargs)
+        self._log(LogLevel.CRITICAL, msg, category, *args, **kwargs)
 
     def exception(
         self, ex: Exception, msg: Optional[str] = None, **kwargs: Any

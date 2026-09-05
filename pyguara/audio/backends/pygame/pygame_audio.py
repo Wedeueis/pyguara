@@ -1,6 +1,6 @@
 """Pygame implementation of the Audio System with spatial audio and bus support."""
 
-import logging
+from pyguara.log import get_logger
 import math
 import pygame
 from typing import Optional, Dict, List
@@ -16,7 +16,7 @@ from pyguara.audio.types import (
 from pyguara.common.types import Vector2
 from pyguara.resources.types import AudioClip
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PygameAudioSystem(IAudioSystem):

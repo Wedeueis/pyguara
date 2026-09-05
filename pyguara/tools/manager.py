@@ -1,6 +1,6 @@
 """Tool management system for coordinating developer tools."""
 
-import logging
+from pyguara.log import get_logger
 import pygame
 from typing import Dict, List, Optional, Any
 
@@ -8,7 +8,7 @@ from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.tools.base import Tool
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ToolManager:

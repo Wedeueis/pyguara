@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+from pyguara.log import get_logger
 from typing import Any, Dict, List, Optional, Tuple
 
 from pyguara.input.types import (
@@ -13,7 +13,7 @@ from pyguara.input.types import (
     RebindResult,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Binding Key: (DeviceType, KeyCode/AxisIndex)
 BindingKey = Tuple[InputDevice, int]

@@ -6,7 +6,7 @@ Provides loading of prefab files in JSON and YAML formats.
 from __future__ import annotations
 
 import json
-import logging
+from pyguara.log import get_logger
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -14,7 +14,7 @@ from pyguara.prefabs.types import PrefabChild, PrefabData
 from pyguara.resources.loader import IResourceLoader
 from pyguara.resources.types import Resource
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Try to import YAML support

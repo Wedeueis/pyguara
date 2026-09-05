@@ -5,7 +5,7 @@ Updates spatial audio positions and handles audio lifecycle.
 
 from __future__ import annotations
 
-import logging
+from pyguara.log import get_logger
 from typing import TYPE_CHECKING, Optional
 
 from pyguara.audio.audio_system import IAudioSystem
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pyguara.resources.manager import ResourceManager
     from pyguara.resources.types import AudioClip
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AudioSourceSystem:

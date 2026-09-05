@@ -19,7 +19,6 @@ from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
-from pyguara.log.types import LogCategory
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager
@@ -61,7 +60,7 @@ class Application:
         # Resolve Core Dependencies
 
         self._log_manager = self._container.get(LogManager)
-        self.logger = self._log_manager.get_logger("Application", LogCategory.SYSTEM)
+        self.logger = self._log_manager.get_logger("Application")
         self._window = container.get(Window)
         self._event_dispatcher = container.get(EventDispatcher)
         self._input_manager = container.get(InputManager)

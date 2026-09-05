@@ -5,7 +5,7 @@ Records input events frame-by-frame for later playback.
 
 from __future__ import annotations
 
-import logging
+from pyguara.log import get_logger
 import random
 import time
 from datetime import datetime
@@ -20,7 +20,7 @@ from pyguara.replay.types import (
     ReplayState,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ReplayRecorder:

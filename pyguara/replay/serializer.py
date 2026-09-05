@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import gzip
 import json
-import logging
+from pyguara.log import get_logger
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from pyguara.replay.types import ReplayData
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ReplaySerializer:

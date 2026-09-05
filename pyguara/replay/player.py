@@ -5,7 +5,7 @@ Plays back recorded input events for deterministic replay.
 
 from __future__ import annotations
 
-import logging
+from pyguara.log import get_logger
 from typing import Callable, List, Optional
 
 from pyguara.replay.types import (
@@ -15,7 +15,7 @@ from pyguara.replay.types import (
     ReplayState,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Type alias for event callback
 EventCallback = Callable[[RecordedInputEvent], None]

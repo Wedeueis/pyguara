@@ -1,6 +1,6 @@
 """Gamepad/Controller management system."""
 
-import logging
+from pyguara.log import get_logger
 import time
 from typing import TYPE_CHECKING, Dict, List, Optional
 
@@ -16,7 +16,7 @@ from pyguara.input.types import (
 if TYPE_CHECKING:
     from pyguara.input.protocols import IInputBackend, IJoystick
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class GamepadManager:

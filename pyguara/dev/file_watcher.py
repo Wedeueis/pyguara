@@ -5,7 +5,7 @@ Monitors files for changes to trigger hot-reload.
 
 from __future__ import annotations
 
-import logging
+from pyguara.log import get_logger
 import os
 import threading
 import time
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Type alias for change callback
 ChangeCallback = Callable[[str], None]

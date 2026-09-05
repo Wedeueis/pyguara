@@ -167,6 +167,20 @@ def test_error_handling_strategy_ignore():
     assert execution_order == ["failing", "success"]
 
 
+def test_default_logger_emits_queue_overflow_warning_without_explicit_logger(caplog):
+    """No logger passed in still logs (logging migration, ticket 16)."""
+    import logging
+    from pyguara.events.dispatcher import EventDispatcher
+
+    dispatcher = EventDispatcher(queue_warning_threshold=0)
+    dispatcher.queue_event(CustomEvent(data="overflow"))
+
+    with caplog.at_level(logging.WARNING, logger="pyguara.events.dispatcher"):
+        dispatcher.process_queue()
+
+    assert any("exceeds threshold" in record.getMessage() for record in caplog.records)
+
+
 def test_error_message_includes_context():
     """Test that error messages include handler and event type information."""
     import pytest

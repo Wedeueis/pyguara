@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-import logging
+from pyguara.log import get_logger
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
@@ -13,7 +13,7 @@ from pyguara.persistence.serializer import Serializer
 if TYPE_CHECKING:
     from pyguara.persistence.migration import MigrationManager
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 T = TypeVar("T")
 
 

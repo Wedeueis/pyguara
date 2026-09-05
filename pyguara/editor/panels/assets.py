@@ -1,6 +1,6 @@
 """Assets Panel for the Editor."""
 
-import logging
+from pyguara.log import get_logger
 import os
 import dataclasses
 from typing import Optional, Dict, Any, Callable, Type, cast
@@ -15,7 +15,7 @@ from pyguara.resources.data import DataResource
 from pyguara.ecs.manager import EntityManager
 from pyguara.common.components import Tag, Transform, ResourceLink
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AssetsPanel:

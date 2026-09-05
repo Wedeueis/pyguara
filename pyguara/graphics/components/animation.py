@@ -1,6 +1,6 @@
 """Animation Logic Component."""
 
-import logging
+from pyguara.log import get_logger
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Callable
 from enum import Enum, auto
@@ -8,7 +8,7 @@ from pyguara.resources.types import Texture
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.ecs.component import BaseComponent
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

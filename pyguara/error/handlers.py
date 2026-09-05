@@ -5,6 +5,8 @@ import time
 import logging
 from typing import Any, Callable, Dict, Optional, TypeVar
 
+from pyguara.log import get_logger
+
 
 T = TypeVar("T")
 
@@ -33,7 +35,7 @@ def safe_execute(
                 return func(*args, **kwargs)
             except Exception as e:
                 # 1. Setup Logger
-                log = logger or logging.getLogger("pyguara.error")
+                log = logger or get_logger("pyguara.error")
 
                 # 2. Build Context
                 debug_ctx = {"function": func.__name__, "args": args, "kwargs": kwargs}

@@ -26,14 +26,14 @@ Example:
 """
 
 import json
-import logging
+from pyguara.log import get_logger
 from abc import ABC
 from dataclasses import dataclass, asdict
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Dict, Any, Type, TypeVar
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TextureFilter(Enum):
