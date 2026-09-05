@@ -29,8 +29,18 @@ class GridGraph:
         """Check if node is not a wall."""
         return node not in self.walls
 
+    def _is_walkable(self, node: GridNode) -> bool:
+        """Check if a node is both in bounds and not a wall."""
+        return self.in_bounds(node) and self.is_passable(node)
+
     def get_neighbors(self, node: GridNode) -> Iterator[GridNode]:
-        """Yield valid neighbors."""
+        """Yield valid neighbors.
+
+        Diagonal moves refuse to cut a solid corner: both orthogonal cells
+        flanking the diagonal must be walkable (in bounds and not a wall),
+        matching the deleted `GridMap`'s behavior -- an out-of-bounds
+        flanking cell blocks the diagonal too, not just an actual wall.
+        """
         x, y = node
         # Standard 4 directions
         dirs = [(1, 0), (0, 1), (-1, 0), (0, -1)]
@@ -41,8 +51,16 @@ class GridGraph:
 
         for dx, dy in dirs:
             next_node = (x + dx, y + dy)
-            if self.in_bounds(next_node) and self.is_passable(next_node):
-                yield next_node
+            if not (self.in_bounds(next_node) and self.is_passable(next_node)):
+                continue
+
+            if abs(dx) == 1 and abs(dy) == 1:
+                if not self._is_walkable((x + dx, y)) or not self._is_walkable(
+                    (x, y + dy)
+                ):
+                    continue
+
+            yield next_node
 
     def cost(self, from_node: GridNode, to_node: GridNode) -> float:
         """Calculate movement cost, 1.0 orthogonal, 1.414 diagonal."""

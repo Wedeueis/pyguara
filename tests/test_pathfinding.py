@@ -132,6 +132,59 @@ class TestGridGraph:
         assert (2, 1) not in neighbors
         assert (3, 2) not in neighbors
 
+    def test_diagonal_corner_cutting_prevention(self):
+        """A diagonal move must be refused when either flanking orthogonal
+        cell is a wall, even though the diagonal destination itself is
+        open -- the standard "no cutting through a solid corner" rule
+        (wayfinder ticket 28/32), matching the pre-generic GridMap's
+        behavior."""
+        grid = GridGraph(width=5, height=5, allow_diagonal=True)
+        # Wall directly north of (2, 2); the NE diagonal (3, 1) is open,
+        # but the flanking cell (2, 1) is a wall, so NE must be blocked.
+        grid.walls.add((2, 1))
+
+        neighbors = list(grid.get_neighbors((2, 2)))
+
+        assert (3, 1) not in neighbors  # NE blocked -- cuts the (2, 1) wall
+        assert (3, 2) in neighbors  # E still open
+        assert (2, 3) in neighbors  # S still open
+        assert (3, 3) in neighbors  # SE still open -- no wall flanks it
+
+    def test_diagonal_corner_cutting_blocked_by_either_flank(self):
+        """Either flanking wall alone is enough to block the diagonal, not
+        just both simultaneously."""
+        grid = GridGraph(width=5, height=5, allow_diagonal=True)
+        grid.walls.add((3, 2))  # East flank of the NE diagonal only
+
+        neighbors = list(grid.get_neighbors((2, 2)))
+
+        assert (3, 1) not in neighbors  # NE blocked by the east flank alone
+        assert (2, 1) in neighbors  # N still open (not diagonal)
+
+    def test_diagonal_corner_cutting_at_grid_edge(self):
+        """An out-of-bounds flanking cell blocks the diagonal too, matching
+        the deleted GridMap's is_walkable() semantics exactly (bounds and
+        wall-checking were one combined predicate there)."""
+        grid = GridGraph(width=5, height=5, allow_diagonal=True)
+
+        # At the top edge (y=0), the north flank of any diagonal is out of
+        # grid bounds.
+        neighbors = list(grid.get_neighbors((2, 0)))
+
+        assert (3, -1) not in neighbors  # NE: flank (2, -1) out of bounds
+        assert (1, -1) not in neighbors  # NW: flank (2, -1) out of bounds
+        assert (3, 1) in neighbors  # SE still open -- both flanks in bounds
+        assert (1, 1) in neighbors  # SW still open -- both flanks in bounds
+
+    def test_diagonal_open_corner_still_allowed(self):
+        """No regression on the common case: a diagonal move through a
+        fully open corner (no walls, in bounds) stays allowed."""
+        grid = GridGraph(width=5, height=5, allow_diagonal=True)
+
+        neighbors = list(grid.get_neighbors((2, 2)))
+
+        assert len(neighbors) == 8
+
     def test_cost_orthogonal_vs_diagonal(self):
         """Diagonal movement should cost more than orthogonal."""
         grid = GridGraph(width=5, height=5)
