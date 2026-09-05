@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import logging
 import threading
+import types
 from typing import (
     Any,
     Callable,
@@ -168,7 +169,11 @@ class DIContainer:
                 raise DIException(
                     f"Scoped service {service_type.__name__} requires an active scope"
                 )
-            return scope._get_scoped_service(service_type, registration)
+            self._resolution_stack.append(service_type)
+            try:
+                return scope._get_scoped_service(service_type, registration)
+            finally:
+                self._resolution_stack.pop()
 
         else:  # TRANSIENT
             self._resolution_stack.append(service_type)
@@ -266,7 +271,8 @@ class DIContainer:
 
                 if param_name in hints:
                     param_type = hints[param_name]
-                    if get_origin(param_type) is Union:
+                    origin = get_origin(param_type)
+                    if origin is Union or origin is types.UnionType:
                         args = get_args(param_type)
                         valid_args = [arg for arg in args if arg is not type(None)]
                         if valid_args:

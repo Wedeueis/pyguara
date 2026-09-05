@@ -273,6 +273,27 @@ class PygameAudioSystem(IAudioSystem):
 
         channel.set_volume(left, right)
 
+    def set_channel_mix(self, channel: int, attenuation: float, pan: float) -> None:
+        """Update volume attenuation and stereo pan for an already-playing channel."""
+        info = self._playing_sounds.get(channel)
+        if info is None:
+            return
+
+        try:
+            pg_channel = pygame.mixer.Channel(channel)
+            sound = pg_channel.get_sound()
+            if sound is None or not pg_channel.get_busy():
+                return
+
+            bus_name = self._bus_manager.get_bus_for_type(info.bus)
+            bus_volume = self._bus_manager.get_effective_volume(bus_name)
+            effective_volume = info.base_volume * attenuation * bus_volume
+
+            sound.set_volume(effective_volume)
+            self._apply_pan(pg_channel, pan)
+        except pygame.error:
+            pass
+
     # ========== Basic SFX Control ==========
 
     def stop_sfx(self, channel: int) -> None:

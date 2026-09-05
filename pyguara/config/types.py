@@ -30,7 +30,6 @@ class WindowConfig:
     fps_target: int = 60
     fullscreen: bool = False
     vsync: bool = True
-    ui_scale: float = 1.0
     default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
     title: str = "Pyguara Engine"
     backend: RenderingBackend = RenderingBackend.PYGAME

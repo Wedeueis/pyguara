@@ -226,15 +226,16 @@ class AudioSourceSystem:
             source: The AudioSource component.
             position: Current world position.
         """
+        channel_id = source._channel_id
+        if channel_id is None:
+            return
+
         # Calculate attenuation and panning
         distance = position.distance_to(self._listener_position)
-        _attenuation = self._spatial_config.calculate_attenuation(distance)
-        _pan = self._spatial_config.calculate_pan(position, self._listener_position)
+        attenuation = self._spatial_config.calculate_attenuation(distance)
+        pan = self._spatial_config.calculate_pan(position, self._listener_position)
 
-        # Apply to channel
-        # Note: This requires the audio backend to support dynamic channel updates
-        # For now, we just update on next play
-        # TODO: Add channel volume/pan update to IAudioSystem using _attenuation/_pan
+        self._audio_system.set_channel_mix(channel_id, attenuation, pan)
 
     def _get_clip(self, path: str) -> Optional[AudioClip]:
         """Get or load an audio clip.

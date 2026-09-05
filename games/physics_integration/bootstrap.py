@@ -37,6 +37,9 @@ def configure_game_container() -> DIContainer:
 
     config_manager = ConfigManager(event_dispatcher)
     config_manager.load()
+    # Gravity for this demo — set here rather than in the shared config file, since
+    # config/game_config.json is shared across every demo's default load path.
+    config_manager.config.physics.gravity_y = 900.0
     container.register_instance(ConfigManager, config_manager)
 
     log_manager = LogManager(event_dispatcher)

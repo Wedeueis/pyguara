@@ -11,7 +11,7 @@ from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import UIRenderer, IRenderer, TextureFactory
-from pyguara.graphics.window import Window, WindowConfig
+from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
@@ -106,14 +106,7 @@ def _setup_container() -> DIContainer:
     # Extract settings from loaded config
     disp_cfg = config_manager.config.display
 
-    win_config = WindowConfig(
-        title="Pyguara Game",  # Could add title to GameConfig if missing
-        screen_width=disp_cfg.screen_width,
-        screen_height=disp_cfg.screen_height,
-        fullscreen=disp_cfg.fullscreen,
-        vsync=disp_cfg.vsync,
-        backend=disp_cfg.backend,
-    )
+    win_config = disp_cfg
 
     # Select backend based on configuration
     gl_texture_loader = None

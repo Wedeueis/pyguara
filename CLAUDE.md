@@ -180,7 +180,8 @@ entity.add_component(Sprite(texture_path="assets/sprite.png"))
 **Physics Integration**
 - Physics engine (IPhysicsEngine) is registered as singleton in DI
 - Entities with physics have a `RigidBody` component
-- Physics updates happen in `Application._update()` before scene update
+- Physics updates happen in `Application._fixed_update()`, which runs at a fixed rate
+  (default 60 Hz) independent of the variable-rate `_update()`
 - Collision callbacks use the event system
 
 ## Important Implementation Notes
@@ -214,14 +215,6 @@ entity.add_component(Sprite(texture_path="assets/sprite.png"))
 4. **Protocol vs ABC**: This codebase prefers `Protocol` (structural subtyping) over `ABC` (nominal subtyping) for interfaces to avoid tight coupling.
 
 5. **Renderer Decoupling**: Game code should never import pygame directly. Use protocols and DI to access rendering services.
-
-### Current Development Focus
-
-Based on the backlog (docs/dev/backlog/TODO.md):
-- Removing pygame imports from game scenes in favor of abstracted services
-- Implementing a `SystemManager` to automate Physics/AI/Animation execution
-- Optimizing component iteration patterns
-- Improving batching and multi-camera support
 
 ### Python Version Requirements
 - Minimum: Python 3.12

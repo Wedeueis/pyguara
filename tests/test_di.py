@@ -186,6 +186,41 @@ def test_error_handling_strategy_ignore_on_dependency_extraction():
     assert ProblematicService in container._services
 
 
+def test_pep604_union_dependency_resolves(container) -> None:
+    """A required `X | None` parameter (PEP 604 union) must unwrap to X, not fall through."""
+    container.register_singleton(IService, ServiceImpl)
+
+    class ServiceWithPipeUnionDep:
+        def __init__(self, service: IService | None):
+            self.service = service
+
+    container.register_transient(ServiceWithPipeUnionDep, ServiceWithPipeUnionDep)
+
+    dependent = container.get(ServiceWithPipeUnionDep)
+    assert isinstance(dependent.service, ServiceImpl)
+
+
+class ScopedCircularA:
+    def __init__(self, b: "ScopedCircularB"):
+        pass
+
+
+class ScopedCircularB:
+    def __init__(self, a: "ScopedCircularA"):
+        pass
+
+
+def test_circular_dependency_detected_for_scoped_services(container) -> None:
+    """A circular SCOPED dependency must raise CircularDependencyException,
+    not overflow the Python call stack with a RecursionError."""
+    container.register_scoped(ScopedCircularA, ScopedCircularA)
+    container.register_scoped(ScopedCircularB, ScopedCircularB)
+
+    with container.create_scope() as scope:
+        with pytest.raises(CircularDependencyException):
+            container._resolve_service(ScopedCircularA, scope)
+
+
 def test_default_error_strategy_is_raise():
     """Test that the default error strategy is RAISE for fail-fast behavior."""
     from pyguara.di.container import DIContainer

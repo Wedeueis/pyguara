@@ -206,6 +206,20 @@ class IAudioSystem(Protocol):
         """
         ...
 
+    def set_channel_mix(self, channel: int, attenuation: float, pan: float) -> None:
+        """
+        Update volume attenuation and stereo pan for an already-playing channel.
+
+        Used to keep spatial audio in sync as a sound source or the listener moves
+        during playback, without restarting the sound.
+
+        Args:
+            channel: The channel ID returned by play_sfx/play_sfx_at_position.
+            attenuation: Distance-based volume multiplier (0.0 to 1.0).
+            pan: Stereo pan (-1.0 = left, 0.0 = center, 1.0 = right).
+        """
+        ...
+
     # ========== Listener Management ==========
 
     def set_listener_position(self, position: Vector2) -> None:

@@ -183,6 +183,57 @@ def test_pause_resume_sfx(
     mock_pygame_mixer.unpause.assert_called_once()
 
 
+# ========== Spatial Channel Mix Tests ==========
+
+
+def test_set_channel_mix_updates_volume_and_pan(
+    audio_system: PygameAudioSystem,
+    mock_pygame_mixer: Any,
+    mock_audio_clip: AudioClip,
+) -> None:
+    """Test that set_channel_mix pushes attenuation and pan to a playing channel."""
+    mock_pygame_mixer.Channel.return_value.get_busy.return_value = True
+    mock_pygame_mixer.Channel.return_value.get_sound.return_value = (
+        mock_audio_clip.native_handle
+    )
+
+    channel_id = audio_system.play_sfx(mock_audio_clip, volume=1.0)
+    assert channel_id is not None
+
+    audio_system.set_channel_mix(channel_id, attenuation=0.4, pan=0.0)
+
+    # base_volume(1.0) * attenuation(0.4) * bus_volume(1.0) = 0.4
+    mock_audio_clip.native_handle.set_volume.assert_called_with(0.4)
+    # pan=0.0 is centered: full volume on both stereo channels.
+    mock_pygame_mixer.Channel.return_value.set_volume.assert_called_with(1.0, 1.0)
+
+
+def test_set_channel_mix_ignores_finished_channel(
+    audio_system: PygameAudioSystem,
+    mock_pygame_mixer: Any,
+    mock_audio_clip: AudioClip,
+) -> None:
+    """A channel that finished playing must not receive a stale mix update."""
+    mock_pygame_mixer.Channel.return_value.get_busy.return_value = True
+    channel_id = audio_system.play_sfx(mock_audio_clip, volume=1.0)
+    assert channel_id is not None
+    mock_audio_clip.native_handle.set_volume.reset_mock()
+
+    mock_pygame_mixer.Channel.return_value.get_busy.return_value = False
+    audio_system.set_channel_mix(channel_id, attenuation=0.4, pan=0.0)
+
+    mock_audio_clip.native_handle.set_volume.assert_not_called()
+
+
+def test_set_channel_mix_ignores_unknown_channel(
+    audio_system: PygameAudioSystem, mock_pygame_mixer: Any
+) -> None:
+    """A channel id this system never played must be a silent no-op."""
+    audio_system.set_channel_mix(99, attenuation=0.5, pan=0.5)
+
+    mock_pygame_mixer.Channel.assert_not_called()
+
+
 # ========== Music Playback Tests ==========
 
 

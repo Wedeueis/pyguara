@@ -4,6 +4,7 @@ Demonstrates physics simulation with Pymunk backend.
 """
 
 from pyguara.scene.base import Scene
+from pyguara.config.manager import ConfigManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.common.types import Vector2, Color, Rect
@@ -29,14 +30,14 @@ class PhysicsScene(Scene):
 
         # 1. Initialize Physics System
         physics_engine = self.container.get(IPhysicsEngine)
+        physics_config = self.container.get(ConfigManager).config.physics
         self.physics_system = PhysicsSystem(
             engine=physics_engine,
             entity_manager=self.entity_manager,
             event_dispatcher=self.event_dispatcher,
+            # Positive Y is down.
+            gravity=Vector2(physics_config.gravity_x, physics_config.gravity_y),
         )
-
-        # Configure gravity (Positive Y is down)
-        physics_engine.gravity = Vector2(0, 900)
 
         # 2. Create Ground (Static)
         ground = self.entity_manager.create_entity("ground")

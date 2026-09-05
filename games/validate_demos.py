@@ -62,7 +62,7 @@ def validate_game(name: str, configure_container_fn, scene_class) -> bool:
         # 3. Create active gameplay scene
         event_dispatcher = (
             container.get(EventDispatcher)
-            if "EventDispatcher" in container._services
+            if EventDispatcher in container._services
             else app._event_dispatcher
         )
         scene = scene_class(event_dispatcher)

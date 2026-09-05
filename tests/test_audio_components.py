@@ -301,6 +301,43 @@ class TestAudioSourceSystem:
 
         audio_system.play_sfx_at_position.assert_called()
 
+    def test_spatial_source_updates_channel_mix_each_frame(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """A playing spatial source pushes attenuation/pan updates via
+        set_channel_mix as it (or the listener) moves, using its real channel."""
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(50, 100)))
+        source = AudioSource(clip_path="sounds/sfx.wav", spatial=True)
+        entity.add_component(source)
+
+        source.play()
+        system.update(0.016)  # Starts playback, channel_id becomes 2.
+        system.update(0.016)  # Source still playing: pushes a mix update.
+
+        assert source._channel_id == 2
+        audio_system.set_channel_mix.assert_called()
+        channel, attenuation, pan = audio_system.set_channel_mix.call_args[0]
+        assert channel == 2
+        assert 0.0 <= attenuation <= 1.0
+        assert -1.0 <= pan <= 1.0
+
+    def test_non_spatial_source_never_updates_channel_mix(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """A non-spatial source has no position to mix against, so it must
+        never call set_channel_mix."""
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0, 0)))
+        source = AudioSource(clip_path="sounds/sfx.wav", spatial=False)
+        entity.add_component(source)
+
+        source.play()
+        system.update(0.016)
+        system.update(0.016)
+
+        audio_system.set_channel_mix.assert_not_called()
+
     def test_looping_source(
         self, entity_manager, audio_system, resource_manager, system
     ):

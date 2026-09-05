@@ -8,6 +8,7 @@ from typing import Optional
 
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
+from pyguara.config.manager import ConfigManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.common.types import Vector2, Color, Rect
@@ -169,12 +170,13 @@ class GameScene(Scene):
 
         # Initialize physics with gravity for side-scroller
         physics_engine = self.container.get(IPhysicsEngine)
+        physics_config = self.container.get(ConfigManager).config.physics
 
         self._physics_system = PhysicsSystem(
             engine=physics_engine,
             entity_manager=self.entity_manager,
             event_dispatcher=self.event_dispatcher,
-            gravity=Vector2(0, 800),
+            gravity=Vector2(physics_config.gravity_x, physics_config.gravity_y),
         )
 
         self._platformer_system = PlatformerSystem(
