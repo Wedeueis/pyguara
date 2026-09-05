@@ -296,6 +296,24 @@ tickets inherit rather than revisit them):
   `register_instance()`/`register_singleton()`'s generics don't enforce the relationship —
   [Decide whether to harden DIContainer's generic
   signatures](issues/30-di-container-generic-safety-decision.md).
+- [Execute Scene-owned world, SystemManager, and RenderSystem
+  wiring](issues/24-execute-scene-owned-systems-and-rendersystem.md) — no global
+  `EntityManager`/`SystemManager` in DI; each `Scene` builds and owns both, with
+  `resolve_dependencies()` populating the four engine systems (100-399 priority band),
+  `camera`, `render_system`, and `prefab_factory` before `on_enter()`; `Scene.render()` is
+  concrete (submits visible `Sprite`s, flushes); `SceneManager` ticks each active scene's
+  own `system_manager` and centrally enforces cleanup/pause/resume rather than trusting
+  scene overrides to call `super()`. Deviated from "Done when" by proving the default
+  `render()` path with a purpose-built test scene rather than migrating a real demo (out of
+  scope) — investigating why turned up that the engine's own `Sprite` component didn't
+  actually conform to `Component` (no `entity`/`on_attach`/`on_detach`; fixed by inheriting
+  `BaseComponent`) and was never addable to a real entity, and that three sandbox tools
+  (`EntityInspector`/`PhysicsDebugger`/`TransformGizmo`) resolved the now-removed global
+  `EntityManager` at construction (fixed with a `Tool`-base `_entity_manager` property
+  reaching through the current scene, matching `editor/layer.py`'s existing pattern). Also
+  had to patch all 9 `games/*/bootstrap.py` (register `IAudioSystem`/`ComponentRegistry`/
+  `PrefabCache`) — confirmed empirically each would break registering its first scene
+  otherwise — same **Bootstrap collapse** territory, not otherwise touched.
 
 ## Not yet specified
 
