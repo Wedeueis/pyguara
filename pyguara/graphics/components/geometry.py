@@ -19,6 +19,7 @@ import pygame
 from pyguara.common.types import Vector2, Color
 from pyguara.resources.types import Texture
 from pyguara.graphics.types import Layer
+from pyguara.graphics.backends.pygame.conversions import to_pygame_color
 from pyguara.graphics.backends.pygame.types import (
     PygameTexture,
 )  # Concrete implementation
@@ -112,7 +113,7 @@ class Box(Geometry):
 
         # Fill with color
         # Note: Using standard pygame fill is faster than drawing a rect
-        surface.fill(self._color)
+        surface.fill(to_pygame_color(self._color))
 
         # Wrap in our engine's Texture type
         # We use a dummy path identifier for generated content
@@ -150,6 +151,6 @@ class Circle(Geometry):
 
         # Draw the circle on the transparent surface
         center = (self._radius, self._radius)
-        pygame.draw.circle(surface, self._color, center, self._radius)
+        pygame.draw.circle(surface, to_pygame_color(self._color), center, self._radius)
 
         self._texture = PygameTexture(f"gen_circle_{id(self)}", surface)

@@ -4,6 +4,7 @@ import pygame
 from typing import Any, Iterable, Optional, cast
 from pyguara.config.types import WindowConfig
 from pyguara.common.types import Color
+from pyguara.graphics.backends.pygame.conversions import to_pygame_color
 
 
 class PygameWindow:
@@ -53,7 +54,7 @@ class PygameWindow:
         """Clear the window context screen with default clear color."""
         if self._is_open and self._screen:
             fill_color = color if color is not None else self._default_color
-            self._screen.fill(fill_color)
+            self._screen.fill(to_pygame_color(fill_color))
 
     def poll_events(self) -> Iterable[Any]:
         """Fetch pygame events and handle internal window state."""

@@ -5,6 +5,11 @@ All notable changes to PyGuara will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **BREAKING: `Color` and `Rect` are no longer `pygame.Color`/`pygame.Rect` subclasses.** They're now plain, backend-agnostic `@dataclass(slots=True)` value types in `pyguara.common.types`, so ModernGL never has to touch pygame to represent color or geometry. Only the pygame backend converts to real pygame types, via new `graphics/backends/pygame/conversions.py` helpers. Existing `Color(r, g, b, a=255)`/`Rect(x, y, width, height)` construction, equality, mutation (`rect.x = 5`), and float-to-int truncation on construction all behave the same as before. `Color` gains HSV round-tripping (`to_hsv()`/`from_hsv()`) and named constants (`Color.WHITE`, `.BLACK`, etc.); `Rect` gains `colliderect()`, `contains()`, and `inflate()`. No deprecation shim -- this is Pre-Alpha, and APIs are still subject to change.
+
 ## [0.4.0] - 2026-06-03
 
 ### Added

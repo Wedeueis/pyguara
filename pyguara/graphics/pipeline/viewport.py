@@ -21,8 +21,9 @@ class Viewport(Rect):
     """
     Represents the drawing area on the screen.
 
-    Inherits from `pyguara.common.types.Rect` (and thus `pygame.Rect`), so it
-    can be passed directly to `pygame.draw` functions or used for clipping.
+    Inherits from `pyguara.common.types.Rect`, a plain backend-agnostic value
+    type -- convert via a backend's own conversion helper (e.g.
+    `graphics/backends/pygame/conversions.py`) before passing to pygame.
 
     Attributes:
         x (int): The left X coordinate on the window.
@@ -95,7 +96,7 @@ class Viewport(Rect):
         Returns:
             bool: True if the mouse is inside this viewport.
         """
-        return bool(self.collidepoint(global_mouse_pos.x, global_mouse_pos.y))
+        return self.contains_point(global_mouse_pos)
 
     @staticmethod
     def create_fullscreen(window_width: int, window_height: int) -> Viewport:

@@ -257,7 +257,7 @@ class Camera2D:
         left = self.position.x - (view_width / 2)
         top = self.position.y - (view_height / 2)
 
-        return Rect(left, top, view_width, view_height)
+        return Rect(int(left), int(top), int(view_width), int(view_height))
 
     # ===== Camera Effects API =====
 

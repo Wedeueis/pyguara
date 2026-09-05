@@ -2,6 +2,10 @@
 
 import pygame
 from pyguara.common.types import Vector2, Color, Rect
+from pyguara.graphics.backends.pygame.conversions import (
+    to_pygame_color,
+    to_pygame_rect,
+)
 from pyguara.resources.types import Texture
 from pyguara.graphics.types import RenderBatch
 
@@ -33,11 +37,11 @@ class PygameBackend:
 
     def clear(self, color: Color) -> None:
         """Clear the entire screen with a color."""
-        self._screen.fill(color)
+        self._screen.fill(to_pygame_color(color))
 
     def set_viewport(self, viewport: Rect) -> None:
         """Set the clipping region."""
-        self._screen.set_clip(viewport)
+        self._screen.set_clip(to_pygame_rect(viewport))
 
     def reset_viewport(self) -> None:
         """Reset the clip to None, allowing drawing on the entire window surface again."""
@@ -91,21 +95,33 @@ class PygameBackend:
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
         """Draw a rectangle primitive."""
-        pygame.draw.rect(self._screen, color, rect, width)
+        pygame.draw.rect(
+            self._screen, to_pygame_color(color), to_pygame_rect(rect), width
+        )
 
     def draw_circle(
         self, center: Vector2, radius: float, color: Color, width: int = 0
     ) -> None:
         """Draw a circle primitive."""
         pygame.draw.circle(
-            self._screen, color, (int(center.x), int(center.y)), int(radius), width
+            self._screen,
+            to_pygame_color(color),
+            (int(center.x), int(center.y)),
+            int(radius),
+            width,
         )
 
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
         """Draw a line primitive."""
-        pygame.draw.line(self._screen, color, (start.x, start.y), (end.x, end.y), width)
+        pygame.draw.line(
+            self._screen,
+            to_pygame_color(color),
+            (start.x, start.y),
+            (end.x, end.y),
+            width,
+        )
 
     def present(self) -> None:
         """Swap display buffers."""

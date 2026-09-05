@@ -322,10 +322,10 @@ class ModernGLRenderer:
         """
         self._current_viewport = viewport
         # OpenGL viewport has origin at bottom-left, so we need to flip Y
-        x = int(viewport[0])
-        y = self._height - int(viewport[1]) - int(viewport[3])  # Flip Y
-        w = int(viewport[2])
-        h = int(viewport[3])
+        x = viewport.x
+        y = self._height - viewport.y - viewport.height  # Flip Y
+        w = viewport.width
+        h = viewport.height
         self._ctx.viewport = (x, y, w, h)
 
     def reset_viewport(self) -> None:
