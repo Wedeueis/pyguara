@@ -1,7 +1,8 @@
 """ModernGL implementation of the Rendering Protocol with hardware instancing."""
 
+import math
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 import moderngl
 import numpy as np
@@ -36,6 +37,16 @@ class ModernGLRenderer:
     # Initial instance buffer capacity (grows as needed)
     INITIAL_CAPACITY = 1024
 
+    # Shape instance layout: pos(2) + size(2) + rot(1) + color(4) + width(1)
+    # + shape_type(1) = 11 floats = 44 bytes.
+    SHAPE_INSTANCE_FLOATS = 11
+    SHAPE_INSTANCE_STRIDE = SHAPE_INSTANCE_FLOATS * 4
+
+    # Shape-type discriminants, matching shape.frag's branch.
+    SHAPE_TYPE_RECT = 0.0
+    SHAPE_TYPE_CIRCLE = 1.0
+    SHAPE_TYPE_LINE = 2.0
+
     def __init__(self, ctx: moderngl.Context, width: int, height: int) -> None:
         """Initialize the renderer.
 
@@ -62,6 +73,28 @@ class ModernGLRenderer:
 
         # Create VAO linking both buffers
         self._vao = self._create_vao()
+
+        # Compile the shape shader and set up one instance bucket per shape
+        # type (rect/circle/line), each independently grown like the sprite
+        # instance buffer above.
+        self._shape_program = self._create_shape_shader_program()
+        self._shape_quad_vbo = self._create_shape_quad_vbo()
+        self._shape_capacities: Dict[float, int] = {}
+        self._shape_vbos: Dict[float, moderngl.Buffer] = {}
+        self._shape_vaos: Dict[float, moderngl.VertexArray] = {}
+        self._shape_pending: Dict[float, List[List[float]]] = {}
+        for shape_type in (
+            self.SHAPE_TYPE_RECT,
+            self.SHAPE_TYPE_CIRCLE,
+            self.SHAPE_TYPE_LINE,
+        ):
+            self._shape_capacities[shape_type] = self.INITIAL_CAPACITY
+            vbo = self._ctx.buffer(
+                reserve=self.INITIAL_CAPACITY * self.SHAPE_INSTANCE_STRIDE
+            )
+            self._shape_vbos[shape_type] = vbo
+            self._shape_vaos[shape_type] = self._create_shape_vao(vbo)
+            self._shape_pending[shape_type] = []
 
         # Set up orthographic projection (Y-inverted for Pygame coordinates)
         self._update_projection()
@@ -142,6 +175,53 @@ class ModernGLRenderer:
             ],
         )
 
+    def _create_shape_shader_program(self) -> moderngl.Program:
+        """Load and compile the unified rect/circle/line SDF shaders."""
+        vert_path = _SHADER_DIR / "shape.vert"
+        frag_path = _SHADER_DIR / "shape.frag"
+
+        with open(vert_path, "r") as f:
+            vert_source = f.read()
+
+        with open(frag_path, "r") as f:
+            frag_source = f.read()
+
+        return self._ctx.program(
+            vertex_shader=vert_source,
+            fragment_shader=frag_source,
+        )
+
+    def _create_shape_quad_vbo(self) -> moderngl.Buffer:
+        """Create the static unit quad geometry for shape instances.
+
+        No UVs are needed here, unlike the sprite quad -- the shape shader
+        only needs the quad's local position to evaluate its SDF.
+        """
+        vertices = np.array(
+            [-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5],
+            dtype="f4",
+        )
+        return self._ctx.buffer(vertices.tobytes())
+
+    def _create_shape_vao(self, instance_vbo: moderngl.Buffer) -> moderngl.VertexArray:
+        """Create a VAO binding the shape quad and one shape-type's instances."""
+        return self._ctx.vertex_array(
+            self._shape_program,
+            [
+                (self._shape_quad_vbo, "2f", "in_vert"),
+                (
+                    instance_vbo,
+                    "2f 2f 1f 4f 1f 1f/i",
+                    "in_pos",
+                    "in_size",
+                    "in_rotation",
+                    "in_color",
+                    "in_width",
+                    "in_shape_type",
+                ),
+            ],
+        )
+
     def _update_projection(self) -> None:
         """Set up orthographic projection matrix.
 
@@ -185,6 +265,10 @@ class ModernGLRenderer:
         if hasattr(uniform, "write"):
             uniform.write(projection.tobytes())
 
+        shape_uniform = self._shape_program["u_projection"]
+        if hasattr(shape_uniform, "write"):
+            shape_uniform.write(projection.tobytes())
+
     @property
     def width(self) -> int:
         """Get the width of the rendering context in pixels."""
@@ -200,8 +284,26 @@ class ModernGLRenderer:
         pass
 
     def end_frame(self) -> None:
-        """Finalize the frame rendering."""
-        pass
+        """Flush accumulated shape primitives.
+
+        One instanced draw call per non-empty shape-type bucket
+        (rect/circle/line), issued after all of a frame's draw_rect/
+        draw_circle/draw_line calls -- see the ModernGL shape shader ticket.
+        """
+        for shape_type, pending in self._shape_pending.items():
+            count = len(pending)
+            if count == 0:
+                continue
+
+            if count > self._shape_capacities[shape_type]:
+                self._grow_shape_buffer(shape_type, count)
+
+            instance_data = np.array(pending, dtype="f4")
+            self._shape_vbos[shape_type].write(instance_data.tobytes())
+            self._shape_vaos[shape_type].render(
+                moderngl.TRIANGLE_STRIP, instances=count
+            )
+            pending.clear()
 
     def clear(self, color: Color) -> None:
         """Clear the screen with the specified color."""
@@ -243,8 +345,6 @@ class ModernGLRenderer:
         For single sprite draws. For better performance with many sprites,
         use render_batch() instead.
         """
-        import math
-
         # Convert rotation from degrees to radians
         rot_rad = math.radians(rotation)
 
@@ -282,8 +382,6 @@ class ModernGLRenderer:
         Args:
             batch: Collection of sprite positions and transforms sharing one texture.
         """
-        import math
-
         count = len(batch.destinations)
         if count == 0:
             return
@@ -364,34 +462,120 @@ class ModernGLRenderer:
         self._vao.release()
         self._vao = self._create_vao()
 
-    def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
-        """Draw a rectangle primitive.
+    def _grow_shape_buffer(self, shape_type: float, required_capacity: int) -> None:
+        """Grow one shape-type bucket's instance buffer to fit more instances.
 
-        Note: This is a stub implementation. A full implementation would
-        require a separate shader for shape primitives.
+        Doubles the buffer size until it can hold the required capacity,
+        mirroring `_grow_instance_buffer()` for the sprite path.
         """
-        # TODO: Implement with dedicated shape shader
-        pass
+        new_capacity = self._shape_capacities[shape_type]
+        while new_capacity < required_capacity:
+            new_capacity *= 2
+
+        self._shape_vbos[shape_type].release()
+        vbo = self._ctx.buffer(reserve=new_capacity * self.SHAPE_INSTANCE_STRIDE)
+        self._shape_vbos[shape_type] = vbo
+        self._shape_capacities[shape_type] = new_capacity
+
+        self._shape_vaos[shape_type].release()
+        self._shape_vaos[shape_type] = self._create_shape_vao(vbo)
+
+    def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
+        """Queue a rectangle primitive, flushed at end_frame().
+
+        Args:
+            rect: The rectangle bounds.
+            color: The color to draw.
+            width: Border thickness in pixels. 0 fills the rect.
+        """
+        half_w = rect.width / 2.0
+        half_h = rect.height / 2.0
+        pad = width / 2.0 if width > 0 else 0.0
+        r, g, b, a = color.normalized
+
+        self._shape_pending[self.SHAPE_TYPE_RECT].append(
+            [
+                rect.x + half_w,
+                rect.y + half_h,
+                half_w + pad,
+                half_h + pad,
+                0.0,
+                r,
+                g,
+                b,
+                a,
+                float(width),
+                self.SHAPE_TYPE_RECT,
+            ]
+        )
 
     def draw_circle(
         self, center: Vector2, radius: float, color: Color, width: int = 0
     ) -> None:
-        """Draw a circle primitive.
+        """Queue a circle primitive, flushed at end_frame().
 
-        Note: This is a stub implementation.
+        Args:
+            center: Center position.
+            radius: Radius in pixels.
+            color: Color to draw.
+            width: Border thickness in pixels. 0 fills the circle.
         """
-        # TODO: Implement with dedicated shape shader
-        pass
+        pad = width / 2.0 if width > 0 else 0.0
+        r, g, b, a = color.normalized
+
+        self._shape_pending[self.SHAPE_TYPE_CIRCLE].append(
+            [
+                center.x,
+                center.y,
+                radius + pad,
+                radius + pad,
+                0.0,
+                r,
+                g,
+                b,
+                a,
+                float(width),
+                self.SHAPE_TYPE_CIRCLE,
+            ]
+        )
 
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
-        """Draw a line between two points.
+        """Queue a line primitive, flushed at end_frame().
 
-        Note: This is a stub implementation.
+        Lines are always drawn as filled capsules -- `width` sets the
+        capsule's thickness rather than a stroke around some other shape.
+
+        Args:
+            start: Start point.
+            end: End point.
+            color: Line color.
+            width: Line thickness in pixels.
         """
-        # TODO: Implement with dedicated shape shader
-        pass
+        dx = end.x - start.x
+        dy = end.y - start.y
+        length = math.hypot(dx, dy)
+        half_length = length / 2.0
+        half_width = max(width, 1) / 2.0
+        angle = math.atan2(dy, dx)
+        r, g, b, a = color.normalized
+
+        self._shape_pending[self.SHAPE_TYPE_LINE].append(
+            [
+                (start.x + end.x) / 2.0,
+                (start.y + end.y) / 2.0,
+                half_length + half_width,
+                half_width,
+                angle,
+                r,
+                g,
+                b,
+                a,
+                0.0,
+                self.SHAPE_TYPE_LINE,
+            ]
+        )
 
     def present(self) -> None:
         """Swap display buffers.
@@ -415,3 +599,12 @@ class ModernGLRenderer:
             self._instance_vbo.release()
         if self._program:
             self._program.release()
+
+        for vao in self._shape_vaos.values():
+            vao.release()
+        for vbo in self._shape_vbos.values():
+            vbo.release()
+        if self._shape_quad_vbo:
+            self._shape_quad_vbo.release()
+        if self._shape_program:
+            self._shape_program.release()
