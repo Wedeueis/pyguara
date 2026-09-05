@@ -1,7 +1,8 @@
 # Execute the event dispatcher hot-path fixes
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: coherence, follows from Event dispatcher hot path, ticket 11
 
@@ -56,3 +57,25 @@ concrete-leaf, and should keep passing unchanged; run to confirm.
 - Handler call order across mixed base/leaf subscriptions follows priority alone, proven by a
   regression test.
 - Full suite green, `ruff check .` and `mypy pyguara` clean.
+
+## Resolution
+
+Executed exactly as specified, no surprises or scope adjustments. Commit `1b4c796`.
+
+`enable_history: bool = False` added, backed by `deque(maxlen=1000)` regardless of the
+flag; confirmed zero current callers of `get_history()` before touching it. `_global_listeners`
+and the Phase B dispatch block deleted outright. `dispatch()` rewritten to walk
+`type(event).__mro__`, merge listeners from every ancestor class into one priority-sorted
+list, and process it in a single pass — base-class subscription now actually receives
+dispatched subclass instances, and priority governs order/short-circuit across mixed
+base/leaf subscribers regardless of which level they subscribed at.
+
+Five new regression tests added to `tests/test_events.py`: history off by default and on
+when requested (with `get_history()` covering both no-filter and type-filtered calls);
+a `CollisionEvent` subscriber firing on an `OnCollisionBegin` dispatch; priority ordering
+across a base-class and two leaf-type subscribers; and a base-class handler's `False`
+return short-circuiting a lower-priority leaf-type handler in the same merged pass.
+`tests/test_collision_events.py` needed no changes — ran it to confirm, all its
+subscriptions were already concrete-leaf.
+
+Full suite green (1059 passed), `ruff check .` and `mypy pyguara` clean.

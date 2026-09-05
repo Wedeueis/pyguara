@@ -276,6 +276,12 @@ tickets inherit rather than revisit them):
   collapse**'s to replace). `tests/test_input.py` rewritten onto `IJoystick`/
   `IInputBackend` stubs — it patched `pygame.joystick` directly, not the protocol ticket
   10's answer assumed it already used.
+- [Execute the event dispatcher hot-path fixes](issues/22-execute-event-dispatcher-hot-path.md)
+  — `enable_history: bool = False` added, `deque(maxlen=1000)` regardless of the flag;
+  `_global_listeners` and the Phase B dispatch block deleted outright; `dispatch()`
+  rewritten to walk `type(event).__mro__` and process one merged, priority-sorted pass, so
+  base-class subscription (`CollisionEvent`/`TriggerEvent`) now actually receives dispatched
+  subclasses. No surprises; executed exactly as specified.
 
 ## Not yet specified
 
