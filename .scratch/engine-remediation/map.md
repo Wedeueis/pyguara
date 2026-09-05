@@ -119,6 +119,18 @@ tickets inherit rather than revisit them):
   ticket's decision-only default. Graduates [Physics teardown
   bridge](issues/15-physics-teardown-bridge.md) off the fog now that its `EntityDestroyed`
   hook exists.
+- [Input wiring and legacy retirement](issues/10-input-wiring-and-legacy-retirement.md) — the
+  two non-integrated gamepad paths (raw pygame `JOY*` events driving bound Actions vs. the
+  inert `GamepadManager`) converge on `GamepadManager` as the sole model: `InputManager.
+  update()` calls it once per frame before `poll_events()`, bound gamepad Actions fire off its
+  polled/deadzone-filtered state, `process_event()`'s `JOY*` branches and the legacy
+  `_joysticks`/`_detect_controllers` bookkeeping are deleted (the OS event pump keeps running
+  unchanged for keyboard/mouse/quit — this only changes how gamepad state is read, not whether
+  it's read). `_cooldowns`/`InputAction.cooldown` are removed as a different concept from the
+  games' own ability cooldowns, which stay untouched. `IInputBackend` becomes a required
+  constructor param on `InputManager`/`GamepadManager`, with `PygameInputBackend` registered in
+  DI. Lands as one execution ticket — see [Execute the input wiring and legacy
+  retirement](issues/21-execute-input-wiring.md).
 - [Scene lifecycle repair](issues/07-scene-lifecycle-repair.md) — `TransitionManager` stops
   hardcoding `on_exit`/`on_enter`; takes `on_from_hidden`/`on_to_shown` callbacks supplied per
   operation instead (fixing push-with-transition destroying the paused scene underneath, and
@@ -128,6 +140,34 @@ tickets inherit rather than revisit them):
   `cleanup()` unwinds the whole stack LIFO instead of leaking everything still on it.
   `Application` calls `scene_manager.set_screen_size()` once at init (live window-resize
   support doesn't exist anywhere yet — separate feature, out of scope).
+- [Event dispatcher hot path](issues/11-event-dispatcher-hot-path.md) — history becomes opt-in
+  (`enable_history=False` default) backed by a `deque(maxlen=...)`, confirmed dead in every
+  current caller; `_global_listeners` deleted outright, no `subscribe_global()` added, since
+  nothing consumes it and `EventMonitor` already gets its subset another way; base-class
+  subscription (`CollisionEvent`/`TriggerEvent`) now works via a per-dispatch MRO walk merged
+  into one priority-sorted pass, no subscribe-time cache; default `ErrorHandlingStrategy` stays
+  `RAISE` as the correct engine-library fail-fast default, with the "`LOG` logs nowhere" half of
+  the concern already fixed by Logging migration's accessor-backed default logger. Also widened
+  scope on inspection: the audit's "nominal Protocol inheritance" pattern isn't 4 sites, it's 14
+  — decided here to drop the explicit `(IFoo)` base at all of them, relying on structural typing
+  so a missing method surfaces as a real mypy/AttributeError instead of silently no-opping. Two
+  execution tickets: [Execute the event dispatcher hot-path
+  fixes](issues/22-execute-event-dispatcher-hot-path.md), [Drop nominal Protocol inheritance
+  across the 14 sites](issues/23-drop-nominal-protocol-inheritance.md).
+- [DI gaps and small findings sweep](issues/12-di-gaps-and-small-findings.md) — execution
+  ticket, all items fixed: DI now unwraps PEP 604 `X | None` unions (not just
+  `typing.Optional`); scoped-service circular dependencies now raise
+  `CircularDependencyException` instead of `RecursionError`; `validate_demos.py`'s dead
+  string-vs-type check fixed; duplicate conflicting `pillow` floor removed from `pyproject.toml`;
+  `bootstrap.py`'s `WindowConfig` rebuild (which dropped `title`/`fps_target`/`ui_scale`/
+  `default_color`) replaced with using `config_manager.config.display` directly;
+  `physics.gravity_x`/`gravity_y` wired into `PhysicsSystem` construction in `guara_falcao` and
+  `physics_integration` (each demo overrides its own gravity on the loaded config in-process,
+  since the shared `config/game_config.json` file would otherwise leak one demo's gravity into
+  every other); `display.ui_scale` deleted (zero consumers, real UI-scaling is a standalone
+  feature); CLAUDE.md's stale physics-loop claim and dead backlog pointer fixed; `AudioSourceSystem`'s
+  discarded spatial attenuation/pan wired end-to-end via a new `IAudioSystem.set_channel_mix()`.
+  Full suite green, `ruff`/`mypy` clean.
 
 ## Not yet specified
 
