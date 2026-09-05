@@ -14,7 +14,6 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
-from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.tools.base import Tool
 
@@ -59,7 +58,6 @@ class TransformGizmo(Tool):
             container: DI Container for resolving dependencies.
         """
         super().__init__("transform_gizmo", container)
-        self._entity_manager: EntityManager = container.get(EntityManager)
 
         self._selected_entity: Optional[Entity] = None
         self._mode = GizmoMode.TRANSLATE

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from pyguara.ecs.component import BaseComponent
 from pyguara.resources.types import Texture
 from pyguara.common.types import Vector2
 
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Sprite:
+class Sprite(BaseComponent):
     """A visual component representing a 2D image in the world.
 
     Implements the Renderable protocol, allowing it to be submitted directly
@@ -40,3 +41,7 @@ class Sprite:
 
     # Optional material for custom shaders/effects (None = default sprite shader)
     material: Any = None  # Type: Optional["Material"]
+
+    def __post_init__(self) -> None:
+        """Initialize the BaseComponent portion (entity backref)."""
+        super().__init__()

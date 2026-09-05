@@ -26,7 +26,6 @@ from pyguara.replay.types import ReplayData
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.systems.manager import SystemManager
 from pyguara.ui.manager import UIManager
 
 if TYPE_CHECKING:
@@ -71,7 +70,6 @@ class Application:
         self._scene_manager = container.get(SceneManager)
         self._config_manager = container.get(ConfigManager)
         self._ui_manager = container.get(UIManager)
-        self._system_manager = container.get(SystemManager)
         self._coroutine_manager = container.get(CoroutineManager)
 
         # Retrieve Renderer
@@ -95,9 +93,6 @@ class Application:
             pass  # Render graph not available (Pygame backend or tests)
 
         self._scene_manager.set_container(container)
-
-        # Initialize all registered systems
-        self._system_manager.initialize()
 
         self._clock = pygame.time.Clock()
 
@@ -332,10 +327,9 @@ class Application:
             max_time_ms=self._event_queue_time_budget_ms
         )
 
-        # 2. Update all registered systems (AI, Animation, etc.)
-        self._system_manager.update(fixed_dt)
-
-        # 3. Update Scene (Physics, Logic) at fixed rate
+        # 2. Update each active scene's own SystemManager (Steering, AI,
+        # AudioSource, Animation) and scene logic at fixed rate. There's no
+        # global SystemManager: each scene owns and ticks its own.
         self._scene_manager.fixed_update(fixed_dt)
 
     def _update(self, dt: float) -> None:
@@ -416,7 +410,6 @@ class Application:
         """Close Application."""
         self.logger.info("Shutting down application")
         self._scene_manager.cleanup()
-        self._system_manager.cleanup()
 
         # Release render graph resources (ModernGL only)
         if self._render_graph is not None:

@@ -5,7 +5,6 @@ from typing import Optional, Any
 
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
-from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.common.types import Color, Vector2, Rect
 from pyguara.tools.base import Tool
@@ -25,7 +24,6 @@ class EntityInspector(Tool):
             container: The global DI container.
         """
         super().__init__("entity_inspector", container)
-        self._entity_manager: EntityManager = container.get(EntityManager)
         self._selected_index: int = 0
         self._selected_entity: Optional[Entity] = None
 

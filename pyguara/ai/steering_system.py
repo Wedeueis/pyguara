@@ -165,10 +165,10 @@ class SteeringSystem:
             # Move to next waypoint
             navigator.current_index += 1
 
-    def cleanup_entity(self, entity_id: str) -> None:
-        """Clean up stored state for a removed entity.
+    def cleanup(self) -> None:
+        """Clear all stored wander-target state.
 
-        Args:
-            entity_id: ID of the removed entity.
+        Called by SystemManager.cleanup() on scene exit -- the system dies
+        with the scene, so per-entity tracking becomes moot.
         """
-        self._wander_targets.pop(entity_id, None)
+        self._wander_targets.clear()

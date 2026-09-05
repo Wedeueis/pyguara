@@ -80,7 +80,7 @@ class SceneManager:
         else:
             # Immediate switch
             if self._current_scene:
-                self._current_scene.on_exit()
+                self._exit_scene(self._current_scene)
 
             self._current_scene = target_scene
             self._current_scene.on_enter()
@@ -112,7 +112,7 @@ class SceneManager:
 
         # Pause current scene if it exists
         if self._current_scene:
-            self._current_scene.on_pause()
+            self._pause_scene(self._current_scene)
             self._scene_stack.append(self._current_scene)
             self._pause_below_flags.append(pause_below)
 
@@ -149,7 +149,7 @@ class SceneManager:
 
         # Exit current scene
         if self._current_scene:
-            self._current_scene.on_exit()
+            self._exit_scene(self._current_scene)
 
         # Get previous scene
         previous_scene = self._scene_stack.pop()
@@ -160,7 +160,7 @@ class SceneManager:
             def on_complete() -> None:
                 self._current_scene = previous_scene
                 if self._current_scene:
-                    self._current_scene.on_resume()
+                    self._resume_scene(self._current_scene)
 
             self._transition_manager.start_transition(
                 transition, self._current_scene, previous_scene, on_complete
@@ -169,7 +169,7 @@ class SceneManager:
             # Immediate pop
             self._current_scene = previous_scene
             if self._current_scene:
-                self._current_scene.on_resume()
+                self._resume_scene(self._current_scene)
 
         return popped_scene
 
@@ -185,6 +185,10 @@ class SceneManager:
         """Fixed-rate update for physics and deterministic game logic.
 
         Called at a fixed rate (e.g., 60 Hz) regardless of display framerate.
+        Ticks each active scene's own SystemManager (the four engine systems:
+        Steering, AI, AudioSource, Animation) before the scene's own
+        fixed_update() -- there's no global SystemManager anymore, each scene
+        owns and ticks its own.
 
         Args:
             fixed_dt: Fixed delta time in seconds.
@@ -197,6 +201,7 @@ class SceneManager:
 
         # Fixed update all active scenes (in order, bottom to top)
         for scene in reversed(scenes_to_update):
+            scene.system_manager.update(fixed_dt)
             scene.fixed_update(fixed_dt)
 
     def update(self, dt: float) -> None:
@@ -267,8 +272,37 @@ class SceneManager:
     def cleanup(self) -> None:
         """Cleanup resources and exit current scene."""
         if self._current_scene:
-            self._current_scene.on_exit()
+            self._exit_scene(self._current_scene)
             self._current_scene = None
 
         self._scene_stack.clear()
         self._pause_below_flags.clear()
+
+    def _exit_scene(self, scene: Scene) -> None:
+        """Run a scene's exit hook and guarantee its SystemManager is cleaned up.
+
+        Calls `scene.system_manager.cleanup()` directly rather than relying on
+        `scene.on_exit()` to do it: existing scenes already override
+        `on_exit()` without calling `super()`, so a base-class default there
+        wouldn't reliably fire.
+        """
+        scene.on_exit()
+        scene.system_manager.cleanup()
+
+    def _pause_scene(self, scene: Scene) -> None:
+        """Run a scene's pause hook and guarantee its SystemManager is disabled.
+
+        Same reasoning as `_exit_scene()`: calls `set_enabled(False)` directly
+        rather than trusting every `on_pause()` override to call `super()`.
+        """
+        scene.on_pause()
+        scene.system_manager.set_enabled(False)
+
+    def _resume_scene(self, scene: Scene) -> None:
+        """Run a scene's resume hook and guarantee its SystemManager is re-enabled.
+
+        Same reasoning as `_exit_scene()`: calls `set_enabled(True)` directly
+        rather than trusting every `on_resume()` override to call `super()`.
+        """
+        scene.on_resume()
+        scene.system_manager.set_enabled(True)

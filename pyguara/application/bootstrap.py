@@ -27,19 +27,12 @@ from pyguara.persistence.manager import PersistenceManager
 from pyguara.persistence.migration import MigrationManager, get_global_registry
 from pyguara.persistence.storage import FileStorageBackend
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
-from pyguara.prefabs.factory import PrefabFactory
 from pyguara.prefabs.loader import PrefabLoader, PrefabCache
 from pyguara.ui.manager import UIManager
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.manager import AudioManager
-from pyguara.audio.audio_source_system import AudioSourceSystem
-from pyguara.graphics.animation_system import AnimationSystem
-from pyguara.ecs.manager import EntityManager
-from pyguara.systems.manager import SystemManager
-from pyguara.ai.ai_system import AISystem
-from pyguara.ai.steering_system import SteeringSystem
 from pyguara.scripting.coroutines import CoroutineManager
 from .sandbox import SandboxApplication
 
@@ -267,11 +260,11 @@ def _setup_container(headless: bool = False) -> DIContainer:
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)
 
-    # 5.1 ECS Core
-    entity_manager = EntityManager()
-    container.register_instance(EntityManager, entity_manager)
-
-    # 5.1.1 Prefab System
+    # 5.1 Prefab System (ComponentRegistry/PrefabCache are shared, static
+    # metadata; PrefabFactory itself is per-scene -- built in
+    # Scene.resolve_dependencies() against that scene's own EntityManager.
+    # There's no global EntityManager/SystemManager to bind one to here: each
+    # scene owns its own world (see Scene-owned world and SystemManager).
     component_registry = get_component_registry()
     _register_core_components(component_registry)
     container.register_instance(ComponentRegistry, component_registry)
@@ -279,34 +272,7 @@ def _setup_container(headless: bool = False) -> DIContainer:
     prefab_cache = PrefabCache()
     container.register_instance(PrefabCache, prefab_cache)
 
-    prefab_factory = PrefabFactory(
-        entity_manager,
-        component_registry,
-        prefab_resolver=prefab_cache.load,
-    )
-    container.register_instance(PrefabFactory, prefab_factory)
-
-    # 5.2 System Manager for orchestrating game systems
-    system_manager = SystemManager()
-    container.register_instance(SystemManager, system_manager)
-
-    # Register systems with priorities (lower priority = runs first)
-    # SteeringSystem priority 150: runs after physics, before AI
-    steering_system = SteeringSystem(entity_manager)
-    system_manager.register(steering_system, priority=150, system_type=SteeringSystem)
-    container.register_instance(SteeringSystem, steering_system)
-
-    # AISystem priority 200: runs after steering
-    ai_system = AISystem(entity_manager)
-    system_manager.register(ai_system, priority=200, system_type=AISystem)
-    container.register_instance(AISystem, ai_system)
-
-    # AnimationSystem priority 300: runs after AI updates
-    animation_system = AnimationSystem(entity_manager)
-    system_manager.register(animation_system, priority=300, system_type=AnimationSystem)
-    container.register_instance(AnimationSystem, animation_system)
-
-    # 5.3 Coroutine Manager for scripted sequences
+    # 5.2 Coroutine Manager for scripted sequences
     coroutine_manager = CoroutineManager()
     container.register_instance(CoroutineManager, coroutine_manager)
 
@@ -332,13 +298,6 @@ def _setup_container(headless: bool = False) -> DIContainer:
         res_manager.register_loader(PygameImageLoader())
 
     container.register_instance(ResourceManager, res_manager)
-
-    # AudioSourceSystem priority 250: runs after AI, before animation
-    audio_source_system = AudioSourceSystem(entity_manager, audio_system, res_manager)
-    system_manager.register(
-        audio_source_system, priority=250, system_type=AudioSourceSystem
-    )
-    container.register_instance(AudioSourceSystem, audio_source_system)
 
     # Physics Engine
     physics_engine = PymunkEngine()

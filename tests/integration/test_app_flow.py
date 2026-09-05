@@ -15,6 +15,10 @@ from pyguara.systems.manager import SystemManager
 from pyguara.scripting.coroutines import CoroutineManager
 from pyguara.graphics.window import Window
 from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.audio.audio_system import IAudioSystem
+from pyguara.resources.manager import ResourceManager
+from pyguara.prefabs.registry import ComponentRegistry
+from pyguara.prefabs.loader import PrefabCache
 
 
 # --- Mocks ---
@@ -69,6 +73,13 @@ def app_container() -> DIContainer:
     c.register_instance(Window, mock_window)
     c.register_instance(UIRenderer, MagicMock())  # type: ignore[type-abstract]
     c.register_instance(IRenderer, MagicMock())  # type: ignore[type-abstract]
+
+    # Scene.resolve_dependencies() needs these to build the four per-scene
+    # engine systems (Scene-owned world and SystemManager) and prefab factory.
+    c.register_instance(IAudioSystem, MagicMock())  # type: ignore[type-abstract]
+    c.register_instance(ResourceManager, MagicMock())
+    c.register_instance(ComponentRegistry, MagicMock())
+    c.register_instance(PrefabCache, MagicMock())
 
     return c
 

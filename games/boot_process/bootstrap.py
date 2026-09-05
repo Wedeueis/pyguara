@@ -18,6 +18,10 @@ from pyguara.input.backends.pygame_backend import PygameInputBackend
 from pyguara.input.protocols import IInputBackend
 from pyguara.scene.manager import SceneManager
 from pyguara.resources.manager import ResourceManager
+from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.prefabs.loader import PrefabCache
+from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.ui.manager import UIManager
 from pyguara.systems.manager import SystemManager
 from pyguara.scripting.coroutines import CoroutineManager
@@ -73,6 +77,9 @@ def configure_game_container() -> DIContainer:
     # 5. Core Systems
     container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
+    container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]
+    container.register_instance(ComponentRegistry, get_component_registry())
+    container.register_instance(PrefabCache, PrefabCache())
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(ResourceManager, ResourceManager)
     container.register_singleton(UIManager, UIManager)

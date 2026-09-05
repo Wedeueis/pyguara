@@ -3,11 +3,31 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from pyguara.ai.ai_system import AISystem
+from pyguara.ai.steering_system import SteeringSystem
+from pyguara.audio.audio_source_system import AudioSourceSystem
+from pyguara.audio.audio_system import IAudioSystem
 from pyguara.di.container import DIContainer  # Import Container
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.graphics.animation_system import AnimationSystem
 from pyguara.graphics.components.animation import Animator, AnimationStateMachine
+from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.components.sprite import Sprite
+from pyguara.graphics.pipeline.render_system import RenderSystem
+from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.prefabs.factory import PrefabFactory
+from pyguara.prefabs.loader import PrefabCache
+from pyguara.prefabs.registry import ComponentRegistry
+from pyguara.resources.manager import ResourceManager
+from pyguara.systems.manager import SystemManager
+
+# Priority band reserved for engine-registered systems on a scene's
+# SystemManager (SteeringSystem=150, AISystem=200, AudioSourceSystem=250,
+# AnimationSystem=300). Game/scene systems should register at >=500.
+ENGINE_SYSTEM_PRIORITY_MIN = 100
+ENGINE_SYSTEM_PRIORITY_MAX = 399
+GAME_SYSTEM_PRIORITY_MIN = 500
 
 
 class Scene(ABC):
@@ -15,6 +35,13 @@ class Scene(ABC):
     Abstract base class for all game scenes.
 
     Manages the lifecycle of a specific game state (Menu, Gameplay, etc).
+
+    Owns its own world: `entity_manager` and `system_manager` are private to
+    this scene, so a scene pushed over another (e.g. a pause menu) never sees
+    or affects the entities/systems underneath it. `resolve_dependencies()`
+    populates `system_manager` with the four engine systems (Steering, AI,
+    AudioSource, Animation -- priority band 100-399) plus `camera` and
+    `render_system`, all live before `on_enter()` ever runs.
     """
 
     def __init__(self, name: str, event_dispatcher: EventDispatcher) -> None:
@@ -22,6 +49,13 @@ class Scene(ABC):
         self.name = name
         self.event_dispatcher = event_dispatcher
         self.entity_manager = EntityManager()
+        self.system_manager = SystemManager()
+
+        # Built in resolve_dependencies(), which needs the DI container for
+        # AudioSourceSystem's dependencies and the active IRenderer backend.
+        self.camera: Optional[Camera2D] = None
+        self.render_system: Optional[RenderSystem] = None
+        self.prefab_factory: Optional[PrefabFactory] = None
 
         # New: Application will set this before on_enter
         self.container: Optional[DIContainer] = None
@@ -30,10 +64,47 @@ class Scene(ABC):
         """
         Call by the Application/SceneManager to inject the container.
 
-        Override this if you want to grab specific services immediately,
-        or just use self.container.get() in on_enter().
+        Builds this scene's engine systems, camera, render system, and
+        prefab factory -- all live by the time this returns, before
+        `on_enter()` runs. Override this if you want to grab additional
+        services immediately; call `super().resolve_dependencies(container)`
+        first so the engine defaults are in place.
         """
         self.container = container
+
+        self.system_manager.register(
+            SteeringSystem(self.entity_manager),
+            priority=150,
+            system_type=SteeringSystem,
+        )
+        self.system_manager.register(
+            AISystem(self.entity_manager), priority=200, system_type=AISystem
+        )
+        self.system_manager.register(
+            AudioSourceSystem(
+                self.entity_manager,
+                container.get(IAudioSystem),  # type: ignore[type-abstract]
+                container.get(ResourceManager),
+            ),
+            priority=250,
+            system_type=AudioSourceSystem,
+        )
+        self.system_manager.register(
+            AnimationSystem(self.entity_manager),
+            priority=300,
+            system_type=AnimationSystem,
+        )
+        self.system_manager.initialize()
+
+        backend = container.get(IRenderer)  # type: ignore[type-abstract]
+        self.camera = Camera2D(backend.width, backend.height)
+        self.render_system = RenderSystem(backend)
+
+        self.prefab_factory = PrefabFactory(
+            self.entity_manager,
+            container.get(ComponentRegistry),
+            prefab_resolver=container.get(PrefabCache).load,
+        )
 
     def update_animations(self, dt: float) -> None:
         """
@@ -76,17 +147,19 @@ class Scene(ABC):
         """Lifecycle hook: Called when scene is covered by another scene.
 
         Override this to pause game logic, music, etc. when the scene is no longer
-        the top of the stack. By default, does nothing.
+        the top of the stack. By default, disables this scene's own system_manager
+        (a second, independent gate alongside SceneManager's pause_below skip).
         """
-        pass
+        self.system_manager.set_enabled(False)
 
     def on_resume(self) -> None:
         """Lifecycle hook: Called when scene becomes top of stack again.
 
         Override this to resume game logic, music, etc. when returning to this scene
-        after a scene above it is popped. By default, does nothing.
+        after a scene above it is popped. By default, re-enables this scene's own
+        system_manager.
         """
-        pass
+        self.system_manager.set_enabled(True)
 
     def fixed_update(self, fixed_dt: float) -> None:
         """Fixed-rate update for physics and deterministic game logic.
@@ -124,7 +197,23 @@ class Scene(ABC):
         """
         ...
 
-    @abstractmethod
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Frame render logic."""
-        ...
+        """Frame render logic.
+
+        Default implementation: submits every entity carrying a visible
+        `Sprite` component to `self.render_system`, then flushes. Override
+        only to add extra manual draws (debug overlays, UI-adjacent world
+        drawing), calling `super().render(world_renderer, ui_renderer)`
+        first so the default submission still happens.
+        """
+        assert self.render_system is not None and self.camera is not None, (
+            "Scene.render() called before resolve_dependencies() built "
+            "render_system/camera"
+        )
+
+        for entity in self.entity_manager.get_entities_with(Sprite):
+            sprite = entity.get_component(Sprite)
+            if sprite.visible:
+                self.render_system.submit(sprite)
+
+        self.render_system.flush(self.camera)

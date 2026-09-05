@@ -1,7 +1,6 @@
 """Physics and spatial debugger tool."""
 
 from pyguara.di.container import DIContainer
-from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.common.components import Transform
 from pyguara.physics.components import Collider
@@ -19,7 +18,6 @@ class PhysicsDebugger(Tool):
             container: DI Container.
         """
         super().__init__("physics_debugger", container)
-        self._entity_manager: EntityManager = container.get(EntityManager)
         self._collider_color = Color(0, 255, 0)
         self._trigger_color = Color(255, 255, 0)
         self._center_color = Color(255, 0, 0)
