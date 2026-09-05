@@ -242,6 +242,21 @@ tickets inherit rather than revisit them):
   here: [Scene lifecycle repair](07-scene-lifecycle-repair.md) was, like tickets 04 and 06,
   never actually executed — [Execute the scene lifecycle
   repair](issues/29-execute-scene-lifecycle-repair.md).
+- [Wire HeadlessBackend as the integration-suite test
+  backend](issues/19-wire-headless-test-backend.md) — `HeadlessBackend` was out of date
+  with `IRenderer` (missing `begin_frame`/`end_frame`/`draw_circle`, plus a `width`/`height`
+  bug hardcoding 800/600), fixed alongside registering it; rounded out the full
+  composition-root quartet with new `HeadlessWindowBackend`/`HeadlessUIRenderer`/
+  `HeadlessTextureFactory` (none ever touch SDL video); `_setup_container(headless=True)`
+  wires all four and zeroes `fps_target` so `Clock.tick(0)` skips its real-time sleep —
+  ~50x faster in practice. Also fixed `Application.run()`'s unconditional
+  `pygame.event.pump()`, which raised under a backend with no SDL video subsystem at all.
+  Two scope adjustments: added `tests/integration/test_headless_backend.py` alongside
+  (not replacing) `test_bootstrap_smoke.py`, since that test's job is exercising the real
+  pygame/ModernGL branch BOOT-1/2/3 broke — swapping it to headless would've reopened that
+  exact gap; left `games/validate_demos.py` untouched since it boots through the four
+  separate `games/*/bootstrap.py` files **Bootstrap collapse** (fog, below) already tracks
+  for replacement, not through `_setup_container()` at all.
 
 ## Not yet specified
 
@@ -260,7 +275,12 @@ into one or more tickets as the frontier reaches it.
   *Scene-owned world and SystemManager* — SystemManager is mandatory going forward.
 - **Bootstrap collapse.** Replacing ~650 LOC of copy-paste game bootstraps with a
   parameterised factory, and promoting `validate_demos.py` into `tests/integration/`.
-  Depends on demo migration.
+  Depends on demo migration. Should pick up headless-backend wiring when it lands —
+  `validate_demos.py` currently boots each demo through its own
+  `games/*/bootstrap.py`'s hand-rolled `configure_game_container()`, none of which go
+  through `_setup_container()`, so [Wire HeadlessBackend as the integration-suite test
+  backend](issues/19-wire-headless-test-backend.md) left it on the real Pygame backend
+  rather than wiring headless into four separate soon-to-be-deleted files.
 - **Public API surface.** `pyguara/__init__.py` is empty; every import is a deep path. What a
   0.5 user is meant to import is undecided, and depends on which subsystems survive
   Dead-code disposition.
