@@ -314,6 +314,20 @@ tickets inherit rather than revisit them):
   had to patch all 9 `games/*/bootstrap.py` (register `IAudioSystem`/`ComponentRegistry`/
   `PrefabCache`) — confirmed empirically each would break registering its first scene
   otherwise — same **Bootstrap collapse** territory, not otherwise touched.
+- [Execute the ECS lifecycle contract](issues/26-execute-ecs-lifecycle-contract.md) —
+  `remove_entity()` soft-dead immediately (detached callbacks, `_is_removed` set), physical
+  `_component_index` cleanup deferred to a new `flush_pending_removals()`; every query path
+  guards its yield against soft-removed-but-unswept ids, making single-type queries safe to
+  iterate while `remove_entity()` runs mid-loop; `add_component()`/`remove_component()` now
+  raise on a removed entity; new `EntityDestroyed` event dispatches synchronously at
+  soft-death via an `_on_entity_removed` hook `Scene.resolve_dependencies()` wires up;
+  `QueryCache` gets frozenset values and a `None`-vs-empty registered/unregistered
+  distinction, reusing its existing `on_component_removed()` for entity-removal cleanup
+  rather than a new API. Adapted "flush from `Application._fixed_update()`" to
+  `SceneManager.fixed_update()` flushing each active scene's own `EntityManager`, since
+  ticket 24 (executed earlier this session) already removed the global one this ticket's
+  text assumed. Deliberately left `QueryCache.clear_cache()`'s rebuild-not-clear behavior
+  alone — the audit flagged it, but ticket 06's Answer never actually decided to change it.
 
 ## Not yet specified
 

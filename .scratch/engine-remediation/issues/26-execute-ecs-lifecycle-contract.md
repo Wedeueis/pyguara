@@ -1,7 +1,8 @@
 # Execute the ECS lifecycle contract
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: ECS-2, ECS-3, ECS-4 (all high), follows from ECS lifecycle contract, ticket 06
 
@@ -60,3 +61,41 @@ landed). This is a foundational, engine-wide change to entity removal semantics 
 **Out of scope here:** the physics teardown bridge itself (subscribing to `EntityDestroyed`
 and implementing `destroy_body()`) — that's [Execute the physics teardown
 bridge](27-execute-physics-teardown-bridge.md), blocked by this ticket.
+
+## Resolution
+
+Executed as specified, with one necessary adaptation to a later decision this ticket
+predates. Commit `44caa5b`.
+
+**Landed as specified.** `remove_entity()` is soft-dead immediately (deleted from
+`_entities`, callbacks detached, `entity._is_removed` set) with physical
+`_component_index` cleanup deferred to a new `flush_pending_removals()`.
+`add_component()`/`remove_component()` raise `RuntimeError` on a removed entity.
+`EntityDestroyed(entity, timestamp, source)` (new `pyguara/ecs/events.py`) dispatches
+synchronously inside `remove_entity()`, components still intact; `EntityManager` stays
+decoupled via an `_on_entity_removed` hook, wired by `Scene.resolve_dependencies()`.
+Every query path (`get_entities_with`, `get_components`, `get_components_with_entity`, the
+cached path) guards its yield against soft-removed-but-not-yet-swept ids. `QueryCache`'s
+three fixes all landed: frozenset cache values; `get_cached()` returning `None`
+(unregistered) vs. an empty frozenset (registered, nothing matches); and the removal path
+wired through the *existing* `on_component_removed()` (called once per removed entity's
+component types from `flush_pending_removals()`) rather than a new API — it already did
+exactly what was needed.
+
+**Adapted, not re-decided:** "call the frame-boundary flush from `Application.
+_fixed_update()`'s end" assumed a global `EntityManager`, which [Execute Scene-owned
+world, SystemManager, and RenderSystem wiring](24-execute-scene-owned-systems-and-rendersystem.md)
+(executed earlier this session, after this ticket's decision was written) removed — each
+scene now owns its own `EntityManager`. `SceneManager.fixed_update()` calls
+`scene.entity_manager.flush_pending_removals()` once per active scene instead, alongside
+the `system_manager` tick already added there.
+
+**Left alone, deliberately:** `QueryCache.clear_cache()` still rebuilds rather than clears,
+despite its name and docstring. The original audit flagged this as a defect, but ticket 06's
+actual Answer never decided to change it — only the three fixes above were decided — so
+changing its behavior now would be re-deciding something this task ticket has no authority
+to decide. Left as a known, pre-existing inconsistency rather than silently "fixed."
+
+14 new regression tests added to `tests/test_ecs.py`, covering ECS-2/3/4's exact
+reproductions plus `EntityDestroyed` (directly and through a real `EventDispatcher`). Full
+suite green (1078 passed), `ruff check .` and `mypy pyguara` clean.
