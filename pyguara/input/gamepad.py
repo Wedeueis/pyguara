@@ -2,19 +2,17 @@
 
 from pyguara.log import get_logger
 import time
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.events import GamepadButtonEvent, GamepadAxisEvent
+from pyguara.input.protocols import IInputBackend, IJoystick
 from pyguara.input.types import (
     GamepadAxis,
     GamepadButton,
     GamepadConfig,
     GamepadState,
 )
-
-if TYPE_CHECKING:
-    from pyguara.input.protocols import IInputBackend, IJoystick
 
 logger = get_logger(__name__)
 
@@ -31,7 +29,7 @@ class GamepadManager:
     - Thread-safe state access
 
     Example:
-        >>> gamepad_mgr = GamepadManager(event_dispatcher, config)
+        >>> gamepad_mgr = GamepadManager(event_dispatcher, input_backend, config)
         >>> gamepad_mgr.update()
         >>> if gamepad_mgr.get_button(0, GamepadButton.A):
         >>>     print("Player 1 pressed A!")
@@ -40,56 +38,37 @@ class GamepadManager:
     def __init__(
         self,
         event_dispatcher: EventDispatcher,
+        input_backend: IInputBackend,
         config: Optional[GamepadConfig] = None,
-        input_backend: Optional["IInputBackend"] = None,
     ) -> None:
         """Initialize the gamepad manager.
 
         Args:
             event_dispatcher: Event dispatcher for firing gamepad events.
+            input_backend: Backend for joystick subsystem access and enumeration.
             config: Optional configuration for deadzone, vibration, etc.
-            input_backend: Optional input backend for joystick access.
-                If None, uses PygameInputBackend by default.
         """
         self._event_dispatcher = event_dispatcher
         self._config = config or GamepadConfig()
         self._input_backend = input_backend
         self._controllers: Dict[int, GamepadState] = {}
-        self._joysticks: Dict[int, "IJoystick"] = {}
+        self._joysticks: Dict[int, IJoystick] = {}
 
-        # Initialize joystick subsystem via backend or direct pygame
-        if self._input_backend is not None:
-            if not self._input_backend.is_initialized():
-                self._input_backend.init_joysticks()
-        else:
-            # Lazy import to avoid circular dependency
-            import pygame
-
-            if not pygame.joystick.get_init():
-                pygame.joystick.init()
+        if not self._input_backend.is_initialized():
+            self._input_backend.init_joysticks()
 
         # Initial device scan
         self._scan_devices()
 
     def _scan_devices(self) -> None:
         """Scan for connected gamepad devices and initialize them."""
-        if self._input_backend is not None:
-            joystick_count = self._input_backend.get_joystick_count()
-        else:
-            import pygame
-
-            joystick_count = pygame.joystick.get_count()
+        joystick_count = self._input_backend.get_joystick_count()
 
         # Detect new controllers
         for i in range(joystick_count):
             if i not in self._joysticks:
                 try:
-                    if self._input_backend is not None:
-                        joystick = self._input_backend.get_joystick(i)
-                    else:
-                        from pyguara.input.backends.pygame_backend import PygameJoystick
-
-                        joystick = PygameJoystick(i)
+                    joystick = self._input_backend.get_joystick(i)
                     joystick.init()
 
                     # Create state tracking for this controller
@@ -163,7 +142,7 @@ class GamepadManager:
     def _update_buttons(
         self,
         controller_id: int,
-        joystick: "IJoystick",
+        joystick: IJoystick,
         state: GamepadState,
     ) -> None:
         """Update button states and fire events for changes.
@@ -202,7 +181,7 @@ class GamepadManager:
     def _update_axes(
         self,
         controller_id: int,
-        joystick: "IJoystick",
+        joystick: IJoystick,
         state: GamepadState,
     ) -> None:
         """Update axis states with deadzone application and fire events for changes.
@@ -379,13 +358,7 @@ class GamepadManager:
         for controller_id in list(self._joysticks.keys()):
             self._disconnect_controller(controller_id)
 
-        if self._input_backend is not None:
-            if self._input_backend.is_initialized():
-                self._input_backend.quit_joysticks()
-        else:
-            import pygame
-
-            if pygame.joystick.get_init():
-                pygame.joystick.quit()
+        if self._input_backend.is_initialized():
+            self._input_backend.quit_joysticks()
 
         logger.info("Shutdown complete")

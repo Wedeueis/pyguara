@@ -16,6 +16,8 @@ from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.manager import InputManager
+from pyguara.input.backends.pygame_backend import PygameInputBackend
+from pyguara.input.protocols import IInputBackend
 from pyguara.scene.manager import SceneManager
 from pyguara.resources.manager import ResourceManager
 from pyguara.ui.manager import UIManager
@@ -64,6 +66,7 @@ def configure_game_container() -> DIContainer:
 
     container.register_instance(ResourceManager, res_manager)
 
+    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)

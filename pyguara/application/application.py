@@ -160,6 +160,10 @@ class Application:
                     frame_time = max_frame_time
 
                 # 2. Input (once per frame, before physics)
+                # Gamepad state must be fresh before poll_events() drains this
+                # frame's SDL events, since that pump is what keeps pygame's
+                # internal joystick device list current.
+                self._input_manager.update()
                 self._process_input(frame_time)
 
                 # 3. Accumulate time and run fixed updates

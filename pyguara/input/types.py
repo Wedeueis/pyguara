@@ -84,7 +84,6 @@ class InputAction:
 
     name: str
     action_type: ActionType = ActionType.PRESS
-    cooldown: float = 0.0
     deadzone: float = 0.1  # New: Ignore small stick drifts
 
 

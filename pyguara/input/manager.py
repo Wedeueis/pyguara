@@ -6,8 +6,14 @@ from typing import Any, Dict, Optional
 
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.binding import KeyBindingManager
-from pyguara.input.events import OnActionEvent, OnMouseEvent, OnRawKeyEvent
-from pyguara.input.protocols import IInputBackend, IJoystick
+from pyguara.input.events import (
+    GamepadAxisEvent,
+    GamepadButtonEvent,
+    OnActionEvent,
+    OnMouseEvent,
+    OnRawKeyEvent,
+)
+from pyguara.input.protocols import IInputBackend
 from pyguara.input.types import (
     ActionType,
     InputAction,
@@ -28,16 +34,16 @@ class InputManager:
     def __init__(
         self,
         dispatcher: EventDispatcher,
+        input_backend: IInputBackend,
         gamepad_config: Optional[GamepadConfig] = None,
-        input_backend: Optional[IInputBackend] = None,
     ) -> None:
-        """Initialize input manager, bindings, and detect controllers.
+        """Initialize input manager and bindings.
 
         Args:
             dispatcher: Event dispatcher for firing input events.
+            input_backend: Backend for joystick subsystem access, shared with
+                the owned `GamepadManager`.
             gamepad_config: Optional gamepad configuration (deadzone, vibration, etc.).
-            input_backend: Optional input backend for joystick access.
-                If None, uses PygameInputBackend by default.
         """
         self._dispatcher = dispatcher
         self._bindings = KeyBindingManager()
@@ -45,21 +51,16 @@ class InputManager:
 
         self._context = InputContext.GAMEPLAY
         self._registered_actions: Dict[str, InputAction] = {}
-        self._cooldowns: Dict[str, float] = {}
         self._recorder: Optional[ReplayRecorder] = None
 
-        # Initialize GamepadManager for comprehensive gamepad support
+        # GamepadManager owns hot-plug, per-button/axis state, and deadzone
+        # filtering; bound gamepad Actions are driven off the
+        # GamepadButtonEvent/GamepadAxisEvent it fires on state changes.
         self._gamepad_manager = GamepadManager(
-            dispatcher, gamepad_config, input_backend
+            dispatcher, input_backend, gamepad_config
         )
-
-        # Legacy gamepad support (kept for backwards compatibility with process_event)
-        if self._input_backend is not None:
-            self._input_backend.init_joysticks()
-        else:
-            pygame.joystick.init()
-        self._joysticks: Dict[int, IJoystick] = {}
-        self._detect_controllers()
+        self._dispatcher.subscribe(GamepadButtonEvent, self._on_gamepad_button)
+        self._dispatcher.subscribe(GamepadAxisEvent, self._on_gamepad_axis)
 
     @property
     def gamepad(self) -> GamepadManager:
@@ -126,26 +127,15 @@ class InputManager:
         """
         self._gamepad_manager.update()
 
-    def _detect_controllers(self) -> None:
-        """Find and init plugged-in controllers (legacy support)."""
-        if self._input_backend is not None:
-            count = self._input_backend.get_joystick_count()
-            if count > 0:
-                for i in range(count):
-                    joy = self._input_backend.get_joystick(i)
-                    joy.init()
-                    self._joysticks[i] = joy
-                    logger.info("Controller detected: %s", joy.get_name())
-        else:
-            # Fallback to direct pygame calls for backwards compatibility
-            if pygame.joystick.get_count() > 0:
-                for i in range(pygame.joystick.get_count()):
-                    from pyguara.input.backends.pygame_backend import PygameJoystick
+    def _on_gamepad_button(self, event: GamepadButtonEvent) -> None:
+        """Translate a GamepadManager button-state change into bound Actions."""
+        self._handle_input(
+            InputDevice.GAMEPAD, event.button.value, is_down=event.is_pressed
+        )
 
-                    joy = PygameJoystick(i)
-                    joy.init()
-                    self._joysticks[i] = joy
-                    logger.info("Controller detected: %s", joy.get_name())
+    def _on_gamepad_axis(self, event: GamepadAxisEvent) -> None:
+        """Translate a GamepadManager axis-state change into bound Actions."""
+        self._handle_axis(event.axis.value, event.value)
 
     def register_action(
         self, name: str, action_type: ActionType, deadzone: float = 0.1
@@ -244,25 +234,11 @@ class InputManager:
             )
             self._dispatcher.dispatch(mouse_event)
 
-        # --- Gamepad Buttons ---
-        elif event.type in (pygame.JOYBUTTONDOWN, pygame.JOYBUTTONUP):
-            self._handle_input(
-                InputDevice.GAMEPAD,
-                event.button,
-                is_down=(event.type == pygame.JOYBUTTONDOWN),
-            )
-
-        # --- Gamepad Axis (Sticks/Triggers) ---
-        elif event.type == pygame.JOYAXISMOTION:
-            self._handle_axis(event.axis, event.value)
-
-        # --- Hotplugging ---
-        elif event.type == pygame.JOYDEVICEADDED:
-            self._detect_controllers()
-        elif event.type == pygame.JOYDEVICEREMOVED:
-            # In a real engine, handle removal gracefully (pause game)
-            if event.instance_id in self._joysticks:
-                del self._joysticks[event.instance_id]
+        # Gamepad input isn't read from pygame events at all: GamepadManager
+        # polls device/button/axis state directly (see update(), called once
+        # per frame from Application.run() before poll_events()), and its
+        # GamepadButtonEvent/GamepadAxisEvent drive bound Actions via
+        # _on_gamepad_button()/_on_gamepad_axis() above.
 
     def _handle_input(self, device: InputDevice, code: int, is_down: bool) -> None:
         """Handle binary inputs (Buttons/Keys)."""

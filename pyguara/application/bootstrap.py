@@ -12,7 +12,9 @@ from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import UIRenderer, IRenderer, TextureFactory
 from pyguara.graphics.window import Window
+from pyguara.input.backends.pygame_backend import PygameInputBackend
 from pyguara.input.manager import InputManager
+from pyguara.input.protocols import IInputBackend
 from pyguara.log import LogManager, default_log_manager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
@@ -260,6 +262,7 @@ def _setup_container(headless: bool = False) -> DIContainer:
         container.register_instance(RenderGraph, pygame_render_graph)
 
     # 5. Core Subsystems
+    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)
