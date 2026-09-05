@@ -140,8 +140,14 @@ class Application:
             f"Game loop: target_fps={target_fps}, physics_hz={physics_config.fixed_timestep_hz}, fixed_dt={fixed_dt}"
         )
 
-        # Force an initial event pump to show the window immediately
-        pygame.event.pump()
+        # Force an initial event pump to show the window immediately. No-op
+        # (raises pygame.error) under a backend that never initializes SDL's
+        # video subsystem at all, e.g. the headless test backend -- which has
+        # no window to show in the first place.
+        try:
+            pygame.event.pump()
+        except pygame.error:
+            pass
 
         try:
             while self._is_running and self._window.is_open:

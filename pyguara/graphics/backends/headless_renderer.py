@@ -1,11 +1,21 @@
 """
-Headless rendering backend.
+Headless graphics backend.
 
-Used for server-side logic, unit tests, or CI/CD pipelines where no display exists.
+Used for server-side logic, unit tests, or CI/CD pipelines where no display
+exists. Unlike the Pygame backend under `SDL_VIDEODRIVER=dummy`, none of these
+classes ever touch `pygame.display` (or any other SDL video call), so they
+carry no SDL video dependency at all. Hosts the full composition-root trio a
+real backend needs -- `HeadlessWindowBackend` (`IWindowBackend`),
+`HeadlessBackend` (`IRenderer`), `HeadlessUIRenderer` (`UIRenderer`), and
+`HeadlessTextureFactory` (`TextureFactory`) -- in one module since each is a
+handful of no-op lines.
 """
 
+from typing import Any, Iterable, List, Optional, Tuple
+
+from pyguara.config.types import WindowConfig
 from pyguara.log import get_logger
-from pyguara.graphics.protocols import IRenderer
+from pyguara.graphics.protocols import IRenderer, IWindowBackend, UIRenderer
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 from pyguara.common.types import Vector2, Color, Rect
@@ -13,8 +23,42 @@ from pyguara.common.types import Vector2, Color, Rect
 logger = get_logger(__name__)
 
 
+class HeadlessWindowBackend(IWindowBackend):
+    """A window backend that never opens a real OS window."""
+
+    def __init__(self) -> None:
+        """Initialize the dummy window backend."""
+        self._is_open = False
+
+    def open(self, config: WindowConfig) -> bool:
+        """Pretend to open a window; no real display is ever created."""
+        self._is_open = True
+        return True
+
+    def close(self) -> None:
+        """Mark the window closed."""
+        self._is_open = False
+
+    def clear(self, color: Optional[Color] = None) -> None:
+        """No-op: nothing to clear."""
+
+    def set_caption(self, title: str) -> None:
+        """No-op: no window chrome to caption."""
+
+    def present(self) -> None:
+        """No-op: nothing to flip."""
+
+    def poll_events(self) -> Iterable[Any]:
+        """Return no events; nothing generates them without a real window."""
+        return []
+
+    def get_screen(self) -> Any:
+        """Return `None`: there is no native surface/handle."""
+        return None
+
+
 class HeadlessBackend(IRenderer):
-    """A backend that discards all draw calls."""
+    """A world renderer backend that discards all draw calls."""
 
     def __init__(self, width: int, height: int):
         """Initialize the dummy backend."""
@@ -25,12 +69,12 @@ class HeadlessBackend(IRenderer):
     @property
     def width(self) -> int:
         """Get the width of the rendering context in pixels."""
-        return 800
+        return self._width
 
     @property
     def height(self) -> int:
         """Get the height of the rendering context in pixels."""
-        return 600
+        return self._height
 
     def clear(self, color: Color) -> None:
         """
@@ -51,6 +95,14 @@ class HeadlessBackend(IRenderer):
         Args:
             viewport (Rect): The clipping rectangle in screen coordinates.
         """
+        ...
+
+    def begin_frame(self) -> None:
+        """No-op: nothing to prepare for a new frame."""
+        ...
+
+    def end_frame(self) -> None:
+        """No-op: nothing to finalize."""
         ...
 
     def reset_viewport(self) -> None:
@@ -91,6 +143,20 @@ class HeadlessBackend(IRenderer):
         """
         ...
 
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """
+        Draw a circle primitive.
+
+        Args:
+            center (Vector2): Center position.
+            radius (float): Radius in pixels.
+            color (Color): Color to draw.
+            width (int): Border thickness. 0 fills the circle.
+        """
+        ...
+
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
@@ -116,3 +182,98 @@ class HeadlessBackend(IRenderer):
     def render_batch(self, batch: "RenderBatch") -> None:
         """Optimized method to draw many instances of the same texture."""
         ...
+
+
+class HeadlessUIRenderer(UIRenderer):
+    """A UI renderer that discards all draw calls."""
+
+    def draw_rect(
+        self, rect: Rect, color: Color, width: int = 0, border_radius: int = 0
+    ) -> None:
+        """No-op: discard the draw call."""
+        ...
+
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """No-op: discard the draw call."""
+        ...
+
+    def draw_line(
+        self, start: Vector2, end: Vector2, color: Color, width: int = 1
+    ) -> None:
+        """No-op: discard the draw call."""
+        ...
+
+    def draw_polygon(
+        self, points: List[Tuple[int, int]], color: Color, width: int = 0
+    ) -> None:
+        """No-op: discard the draw call."""
+        ...
+
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        """No-op: discard the draw call."""
+        ...
+
+    def draw_texture(
+        self, texture: Any, rect: Rect, color: Optional[Color] = None
+    ) -> None:
+        """No-op: discard the draw call."""
+        ...
+
+    def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
+        """Return a zero size: no text is ever actually measured/rendered."""
+        return (0, 0)
+
+    def present(self) -> None:
+        """No-op: nothing to present."""
+        ...
+
+
+class HeadlessTexture(Texture):
+    """A texture that stores only its dimensions, no pixel data."""
+
+    def __init__(self, path: str, width: int, height: int) -> None:
+        """Initialize the dummy texture."""
+        super().__init__(path)
+        self._width = width
+        self._height = height
+
+    @property
+    def native_handle(self) -> Any:
+        """Return `None`: there is no backend-specific object."""
+        return None
+
+    @property
+    def width(self) -> int:
+        """Get the width of the texture in pixels."""
+        return self._width
+
+    @property
+    def height(self) -> int:
+        """Get the height of the texture in pixels."""
+        return self._height
+
+
+class HeadlessTextureFactory:
+    """Factory that creates `HeadlessTexture` instances, discarding pixel data."""
+
+    def create_from_bytes(
+        self, path: str, data: bytes, width: int, height: int
+    ) -> Texture:
+        """Create a `HeadlessTexture` from raw RGBA pixel data.
+
+        The pixel data itself is discarded; only the dimensions are kept.
+
+        Args:
+            path: Identifier/name for the texture.
+            data: Raw RGBA pixel data (unused).
+            width: Width of the image in pixels.
+            height: Height of the image in pixels.
+
+        Returns:
+            A `HeadlessTexture` with no backing pixel data.
+        """
+        return HeadlessTexture(path, width, height)

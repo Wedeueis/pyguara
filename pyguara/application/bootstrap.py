@@ -70,8 +70,41 @@ def create_sandbox_application() -> SandboxApplication:
     return SandboxApplication(container)
 
 
-def _setup_container() -> DIContainer:
-    """Configure common dependencies internally."""
+def create_headless_application() -> Application:
+    """Construct an Application wired onto the headless graphics backend.
+
+    Test-only entry point: swaps the window/renderer/UI-renderer/texture-
+    factory quartet for their no-op `pyguara.graphics.backends.
+    headless_renderer` equivalents, which never touch `pygame.display` (or
+    any other SDL video call). Everything else -- ECS, physics, audio,
+    persistence -- wires up exactly as `create_application()` does.
+
+    Not a third shipped rendering backend (the engine still ships pygame and
+    ModernGL only) -- this exists so the integration suite can boot a real
+    `Application` without an SDL video driver, dummy or otherwise.
+    """
+    container = _setup_container(headless=True)
+    return Application(container)
+
+
+def create_headless_sandbox_application() -> SandboxApplication:
+    """Construct a SandboxApplication wired onto the headless graphics backend.
+
+    Test-only entry point; see `create_headless_application()`.
+    """
+    container = _setup_container(headless=True)
+    return SandboxApplication(container)
+
+
+def _setup_container(headless: bool = False) -> DIContainer:
+    """Configure common dependencies internally.
+
+    Args:
+        headless: Test-only override. When True, wires the no-op headless
+            window/renderer/UI-renderer/texture-factory quartet instead of
+            whatever `config.display.backend` says, regardless of its value.
+            See `create_headless_application()`.
+    """
     # 1. Event System (Core)
     event_dispatcher = EventDispatcher()
 
@@ -110,7 +143,38 @@ def _setup_container() -> DIContainer:
 
     # Select backend based on configuration
     gl_texture_loader = None
-    if disp_cfg.backend == RenderingBackend.MODERNGL:
+    if headless:
+        from pyguara.graphics.backends.headless_renderer import (
+            HeadlessBackend,
+            HeadlessTextureFactory,
+            HeadlessUIRenderer,
+            HeadlessWindowBackend,
+        )
+
+        # Nothing renders, so real-time frame pacing only slows the test down:
+        # Clock.tick(0) (see Application.run()) skips its sleep entirely.
+        disp_cfg.fps_target = 0
+
+        headless_window_backend = HeadlessWindowBackend()
+        window = Window(win_config, headless_window_backend)
+        window.create()
+        container.register_instance(Window, window)
+
+        headless_renderer = HeadlessBackend(
+            disp_cfg.screen_width, disp_cfg.screen_height
+        )
+        container.register_instance(IRenderer, headless_renderer)  # type: ignore[type-abstract]
+
+        headless_ui_renderer = HeadlessUIRenderer()
+        container.register_instance(UIRenderer, headless_ui_renderer)  # type: ignore[type-abstract]
+
+        headless_texture_factory = HeadlessTextureFactory()
+        container.register_instance(TextureFactory, headless_texture_factory)  # type: ignore[type-abstract]
+
+        # No RenderGraph registered: Application's lookup gracefully falls
+        # back to `_render_direct()` when the container has none at all,
+        # which is exactly the single-pass path a headless test wants.
+    elif disp_cfg.backend == RenderingBackend.MODERNGL:
         # ModernGL backend with hardware instancing
         from pyguara.graphics.backends.moderngl import (
             PygameGLWindow,
@@ -253,10 +317,13 @@ def _setup_container() -> DIContainer:
     res_manager.register_loader(JsonLoader())
     res_manager.register_loader(PygameSoundLoader())  # Register audio loader
 
-    # Register appropriate texture loader based on backend
+    # Register appropriate texture loader based on backend. Headless registers
+    # none: nothing exercises image loading under it today, and the real
+    # PygameImageLoader documents needing pygame.display initialized for some
+    # formats -- exactly the SDL video coupling headless mode exists to avoid.
     if gl_texture_loader is not None:
         res_manager.register_loader(gl_texture_loader)
-    else:
+    elif not headless:
         from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
 
         res_manager.register_loader(PygameImageLoader())
