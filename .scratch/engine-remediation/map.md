@@ -362,6 +362,21 @@ tickets inherit rather than revisit them):
   `cleanup()` unwinds LIFO; `Application.__init__` now calls `set_screen_size()` with the
   real window dimensions. Following the decision's callback wiring fixed pop_scene's
   synchronous-exit-before-transition bug as a direct consequence, not a separate fix.
+- [Execute Native Color and Rect value types](issues/31-execute-native-color-and-rect.md)
+  — `Color`/`Rect` are now `@dataclass(slots=True)`, no pygame base class; only the
+  pygame backend converts, via new `graphics/backends/pygame/conversions.py`. Both types
+  keep their existing surface (mutability, `from_hex`/`normalized`/`lerp`,
+  `top`/`left`/`right`/`bottom`/`centerx`/`centery`/`contains_point`) and gain the
+  decided additions (Color HSV + named constants, Rect `colliderect`/`contains`/
+  `inflate`). `CHANGELOG.md` gets the `BREAKING` entry. Found and fixed beyond the
+  ticket's file list: `pygame_window.py`'s `clear()` had the same pygame-Color bug;
+  `ModernGLRenderer.set_viewport()` indexed `Rect` (fixed via attribute access, not by
+  adding `__getitem__`); `Viewport(Rect)` (the one real `Rect` subclass) called the now-gone
+  `collidepoint()`; `Color` gained `__getitem__`/`__len__` since three rendering/lighting
+  files do index `Color` instances. `PygameUIRenderer`, named in the ticket, needed no
+  changes — it already converted independently. First dedicated test file for
+  `common/types.py` (`tests/test_common_types.py`), plus real-pixel assertions added to
+  the pygame backend's integration tests.
 
 ## Not yet specified
 
