@@ -337,6 +337,19 @@ tickets inherit rather than revisit them):
   body and all its shapes from `self.space` and drops the `self._bodies` entry, guarded
   the same way `add_shape()` guards a missing `self.space`. Executed exactly as specified
   from ticket 15, no deviations.
+- [Execute the ModernGL shape shader](issues/25-execute-moderngl-shape-shader.md) —
+  `shape.vert`/`shape.frag` implement the unified box/circle/capsule SDF shader exactly as
+  decided; `ModernGLRenderer` gains three independent instance buckets (rect/circle/line),
+  each grown like the existing sprite instance buffer, flushed as one instanced draw call
+  per non-empty bucket at `end_frame()`. Filled in a detail the decision ticket left open:
+  a stroked shape's border needs its instance quad padded by `width/2` beyond the shape's
+  true half-extent (else the outer half of the border clips), recovered back out in the
+  fragment shader. `PygameBackend` untouched. Tested via instance-buffer assertions (no
+  pixel-readback harness exists), per the ticket's own escape hatch. Gap found and spun
+  out rather than fixed: [Native Color and Rect value types](05-native-color-and-rect.md)
+  (ticket 05) was never executed — `Color`/`Rect` still subclass `pygame.Color`/
+  `pygame.Rect` today — despite not actually blocking this ticket. [Execute Native Color
+  and Rect value types](issues/31-execute-native-color-and-rect.md).
 
 ## Not yet specified
 
