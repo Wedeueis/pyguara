@@ -385,6 +385,12 @@ tickets inherit rather than revisit them):
   actual git history rather than deciding fresh: an out-of-bounds flanking cell blocks
   the diagonal too. Lands as [Execute the diagonal corner-cutting
   fix](issues/32-execute-diagonal-corner-cutting-fix.md).
+- [Execute the diagonal corner-cutting
+  fix](issues/32-execute-diagonal-corner-cutting-fix.md) — `GridGraph.get_neighbors()`
+  gained a `_is_walkable()` helper and refuses a diagonal move when either flanking
+  orthogonal cell fails it (wall or out of bounds), unconditionally. Four new tests;
+  all 40 pre-existing pathfinding tests traced and confirmed unaffected. Executed
+  exactly as specified, no deviations.
 
 ## Not yet specified
 
