@@ -1,10 +1,22 @@
 from unittest.mock import MagicMock
+
 from pyguara.physics.physics_system import PhysicsSystem
+from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.components import RigidBody, Collider
-from pyguara.physics.types import BodyType, ShapeType
+from pyguara.physics.types import BodyType, CollisionLayer, PhysicsMaterial, ShapeType
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
+from pyguara.ecs.events import EntityDestroyed
+from pyguara.events.dispatcher import EventDispatcher
+
+
+def _wire_entity_destroyed(manager: EntityManager, dispatcher: EventDispatcher) -> None:
+    """Wire a manager's removal hook to dispatch EntityDestroyed, mirroring
+    Scene.resolve_dependencies()."""
+    manager._on_entity_removed = lambda e: dispatcher.dispatch(
+        EntityDestroyed(entity=e, source=None)
+    )
 
 
 def test_physics_initialization(event_dispatcher):
@@ -89,3 +101,133 @@ def test_simulation_sync_kinematic(event_dispatcher):
 
     # Physics body should have moved to match ECS
     assert mock_body.position == Vector2(100, 100)
+
+
+# -- Physics teardown bridge (wayfinder ticket 27) --
+
+
+def test_entity_destroyed_queues_body_and_drains_before_engine_step(event_dispatcher):
+    """destroy_body must be called for the removed entity's handle, and
+    before the engine steps this frame -- not synchronously at dispatch."""
+    mock_engine = MagicMock()
+    manager = EntityManager()
+    _wire_entity_destroyed(manager, event_dispatcher)
+    sys = PhysicsSystem(mock_engine, manager, event_dispatcher)
+
+    mock_body = MagicMock()
+    e = manager.create_entity()
+    e.add_component(Transform(position=Vector2(0, 0)))
+    rb = e.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+    rb._body_handle = mock_body
+
+    manager.remove_entity(e.id)
+
+    # Dispatch is synchronous, but teardown must not have happened yet --
+    # only queued.
+    mock_engine.destroy_body.assert_not_called()
+
+    calls: list[str] = []
+    mock_engine.destroy_body.side_effect = lambda *_: calls.append("destroy")
+    mock_engine.update.side_effect = lambda *_: calls.append("step")
+
+    sys.update(0.1)
+
+    mock_engine.destroy_body.assert_called_once_with(mock_body)
+    assert calls == ["destroy", "step"]
+
+    # Draining is one-shot -- a second update doesn't re-destroy anything.
+    sys.update(0.1)
+    mock_engine.destroy_body.assert_called_once_with(mock_body)
+
+
+def test_entity_destroyed_before_body_created_is_noop(event_dispatcher):
+    """An entity removed before PhysicsSystem.update() ever ran (so
+    `_body_handle` is still None) must not queue a phantom teardown."""
+    mock_engine = MagicMock()
+    manager = EntityManager()
+    _wire_entity_destroyed(manager, event_dispatcher)
+    sys = PhysicsSystem(mock_engine, manager, event_dispatcher)
+
+    e = manager.create_entity()
+    e.add_component(Transform(position=Vector2(0, 0)))
+    e.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+
+    manager.remove_entity(e.id)
+    sys.update(0.1)
+
+    mock_engine.destroy_body.assert_not_called()
+
+
+def test_entity_destroyed_without_rigidbody_is_noop(event_dispatcher):
+    """An entity with no RigidBody at all must not error out the handler."""
+    mock_engine = MagicMock()
+    manager = EntityManager()
+    _wire_entity_destroyed(manager, event_dispatcher)
+    sys = PhysicsSystem(mock_engine, manager, event_dispatcher)
+
+    e = manager.create_entity()
+    e.add_component(Transform(position=Vector2(0, 0)))
+
+    manager.remove_entity(e.id)
+    sys.update(0.1)
+
+    mock_engine.destroy_body.assert_not_called()
+
+
+def test_destroy_body_removes_body_and_shapes_from_pymunk_space():
+    """PymunkEngine.destroy_body() against the real backend, per ticket 15's
+    decision: body and shapes both leave `self.space`, and `self._bodies`
+    drops the entry."""
+    engine = PymunkEngine()
+    engine.initialize(gravity=Vector2(0, 0))
+
+    handle = engine.create_body("e1", BodyType.DYNAMIC, Vector2(0, 0), mass=1.0)
+    engine.add_shape(
+        handle,
+        ShapeType.CIRCLE,
+        [10],
+        Vector2(0, 0),
+        material=PhysicsMaterial(),
+        collision_layer=CollisionLayer(),
+        is_sensor=False,
+    )
+
+    assert "e1" in engine._bodies
+    assert len(engine.space.bodies) == 1
+    assert len(engine.space.shapes) == 1
+
+    engine.destroy_body(handle)
+
+    assert "e1" not in engine._bodies
+    assert len(engine.space.bodies) == 0
+    assert len(engine.space.shapes) == 0
+
+
+def test_destroyed_entity_body_stops_advancing_through_physics_system(event_dispatcher):
+    """End-to-end: PhysicsSystem + real PymunkEngine. After an entity is
+    removed, its body is torn down and no longer participates in
+    simulation -- stepping again produces no further movement."""
+    engine = PymunkEngine()
+    manager = EntityManager()
+    _wire_entity_destroyed(manager, event_dispatcher)
+    sys = PhysicsSystem(engine, manager, event_dispatcher, gravity=Vector2(0, 100))
+
+    e = manager.create_entity()
+    e.add_component(Transform(position=Vector2(0, 0)))
+    rb = e.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+
+    sys.update(0.1)
+    assert rb._body_handle is not None
+    handle = rb._body_handle
+    pymunk_body = handle._body
+
+    manager.remove_entity(e.id)
+    sys.update(0.1)
+
+    assert pymunk_body not in engine.space.bodies
+    assert engine._bodies == {}
+
+    # Stepping further must not raise (body is fully detached) and must not
+    # resurrect it into the space.
+    sys.update(0.1)
+    assert engine._bodies == {}

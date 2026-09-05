@@ -290,9 +290,25 @@ class PymunkEngine:
         return adapter
 
     def destroy_body(self, body_handle: IPhysicsBody) -> None:
-        """Remove a body from the simulation."""
-        # Implementation to remove body and shapes from space
-        pass
+        """Remove a body and its attached shapes from the simulation.
+
+        Pymunk's own `body.shapes` is authoritative for what's attached, so
+        no separate adapter-level shape tracking is needed.
+        """
+        if not self.space:
+            return
+
+        if not isinstance(body_handle, PymunkBodyAdapter):
+            raise TypeError(
+                f"Invalid body handle for Pymunk backend: expected PymunkBodyAdapter, "
+                f"got {type(body_handle).__name__}"
+            )
+
+        body = body_handle._body
+        for shape in list(body.shapes):
+            self.space.remove(shape)
+        self.space.remove(body)
+        self._bodies.pop(body.entity_id, None)
 
     def add_shape(
         self,
