@@ -279,20 +279,34 @@ class TestTransitionManager:
         assert not manager.is_transitioning()
 
     def test_manager_two_phase_transition(self):
-        """Manager should handle two-phase transitions."""
+        """Manager should handle two-phase transitions.
+
+        Per the scene lifecycle repair (wayfinder ticket 07): both
+        on_from_hidden/on_to_shown callbacks fire together at the
+        phase-flip midpoint, not at transition start -- firing on_exit at
+        start was SCENE-1's "push destroys the paused scene" bug.
+        """
         manager = TransitionManager()
         config = TransitionConfig(duration=1.0, two_phase=True)
         transition = FadeTransition(config)
         from_scene = Mock()
         to_scene = Mock()
 
-        manager.start_transition(transition, from_scene, to_scene)
+        manager.start_transition(
+            transition,
+            from_scene,
+            to_scene,
+            on_from_hidden=from_scene.on_exit,
+            on_to_shown=to_scene.on_enter,
+        )
 
-        # First phase: old scene exits
-        assert from_scene.on_exit.called
+        # Neither callback fires at start for a two-phase transition.
+        assert not from_scene.on_exit.called
+        assert not to_scene.on_enter.called
 
-        # Midpoint: new scene enters
+        # Midpoint: both fire together, and the new scene gets a settling update.
         manager.update(0.5)
+        assert from_scene.on_exit.called
         assert to_scene.on_enter.called
         assert to_scene.update.called
 
@@ -301,24 +315,34 @@ class TestTransitionManager:
         assert not manager.is_transitioning()
 
     def test_manager_single_phase_transition(self):
-        """Manager should handle single-phase transitions."""
+        """Manager should handle single-phase transitions.
+
+        Per the scene lifecycle repair: single-phase transitions show
+        to_scene from frame one, so both callbacks fire at transition
+        *start* -- lifecycle-equivalent to an immediate switch, just with a
+        cosmetic overlay on top -- rather than deferred to completion.
+        """
         manager = TransitionManager()
         config = TransitionConfig(duration=0.5, two_phase=False)
         transition = FadeTransition(config)
         from_scene = Mock()
         to_scene = Mock()
 
-        manager.start_transition(transition, from_scene, to_scene)
+        manager.start_transition(
+            transition,
+            from_scene,
+            to_scene,
+            on_from_hidden=from_scene.on_exit,
+            on_to_shown=to_scene.on_enter,
+        )
 
-        # Should not exit old scene yet
-        assert not from_scene.on_exit.called
+        # Both callbacks fire immediately, not deferred to completion.
+        assert from_scene.on_exit.called
+        assert to_scene.on_enter.called
 
         # Complete
         manager.update(0.5)
-
-        # Now should switch
-        assert from_scene.on_exit.called
-        assert to_scene.on_enter.called
+        assert not manager.is_transitioning()
 
 
 class TestTransitionIntegration:

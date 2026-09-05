@@ -1,11 +1,20 @@
 """Scene management system."""
 
-from typing import Dict, Optional, List
+from dataclasses import dataclass
+from typing import Callable, Dict, Optional, List
 
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.scene.base import Scene
 from pyguara.scene.transitions import TransitionManager, Transition
+
+
+@dataclass
+class StackEntry:
+    """A scene retained on the stack, plus the pause_below it was pushed with."""
+
+    scene: Scene
+    pause_below: bool
 
 
 class SceneManager:
@@ -19,9 +28,12 @@ class SceneManager:
         self._transition_manager = TransitionManager()
         self._pending_scene: Optional[str] = None
 
-        # Scene stack for overlays (pause menus, etc.)
-        self._scene_stack: List[Scene] = []
-        self._pause_below_flags: List[bool] = []
+        # Scene stack for overlays (pause menus, etc.). `_current_pause_below`
+        # tracks the pause_below the *current* scene was activated with
+        # (False for the base scene); each StackEntry carries the
+        # pause_below that applied when that scene was itself current.
+        self._stack: List[StackEntry] = []
+        self._current_pause_below: bool = False
 
     def set_container(self, container: DIContainer) -> None:
         """Receive the DI container from the Application."""
@@ -65,29 +77,41 @@ class SceneManager:
             raise ValueError(f"Scene '{scene_name}' not registered.")
 
         target_scene = self._scenes[scene_name]
+        from_scene = self._current_scene
 
         if transition:
             # Use transition
             self._pending_scene = scene_name
 
+            on_from_hidden: Optional[Callable[[], None]] = None
+            if from_scene is not None:
+                captured_from_scene = from_scene
+                on_from_hidden = lambda: self._exit_scene(captured_from_scene)  # noqa: E731
+
             def on_complete() -> None:
                 self._current_scene = target_scene
+                self._current_pause_below = False
                 self._pending_scene = None
 
             self._transition_manager.start_transition(
-                transition, self._current_scene, target_scene, on_complete
+                transition,
+                from_scene,
+                target_scene,
+                on_complete,
+                on_from_hidden=on_from_hidden,
+                on_to_shown=target_scene.on_enter,
             )
         else:
             # Immediate switch
-            if self._current_scene:
-                self._exit_scene(self._current_scene)
+            if from_scene is not None:
+                self._exit_scene(from_scene)
 
             self._current_scene = target_scene
+            self._current_pause_below = False
             self._current_scene.on_enter()
 
         # Clear scene stack when switching scenes
-        self._scene_stack.clear()
-        self._pause_below_flags.clear()
+        self._stack.clear()
 
     def push_scene(
         self,
@@ -110,11 +134,14 @@ class SceneManager:
 
         target_scene = self._scenes[scene_name]
 
-        # Pause current scene if it exists
-        if self._current_scene:
+        # Pause current scene if it exists -- happens synchronously
+        # regardless of transition, since the scene underneath stays alive
+        # either way; only the incoming scene's enter is transition-gated.
+        if self._current_scene is not None:
             self._pause_scene(self._current_scene)
-            self._scene_stack.append(self._current_scene)
-            self._pause_below_flags.append(pause_below)
+            self._stack.append(
+                StackEntry(self._current_scene, self._current_pause_below)
+            )
 
         if transition:
             # Use transition
@@ -122,14 +149,21 @@ class SceneManager:
 
             def on_complete() -> None:
                 self._current_scene = target_scene
+                self._current_pause_below = pause_below
                 self._pending_scene = None
 
             self._transition_manager.start_transition(
-                transition, self._current_scene, target_scene, on_complete
+                transition,
+                self._current_scene,
+                target_scene,
+                on_complete,
+                on_from_hidden=None,
+                on_to_shown=target_scene.on_enter,
             )
         else:
             # Immediate push
             self._current_scene = target_scene
+            self._current_pause_below = pause_below
             self._current_scene.on_enter()
 
     def pop_scene(self, transition: Optional[Transition] = None) -> Optional[Scene]:
@@ -141,35 +175,47 @@ class SceneManager:
         Args:
             transition: Optional transition effect
         """
-        if not self._scene_stack:
+        if not self._stack:
             # No scenes to pop back to
             return None
 
         popped_scene = self._current_scene
-
-        # Exit current scene
-        if self._current_scene:
-            self._exit_scene(self._current_scene)
-
-        # Get previous scene
-        previous_scene = self._scene_stack.pop()
-        self._pause_below_flags.pop()
+        entry = self._stack.pop()
+        previous_scene = entry.scene
+        previous_pause_below = entry.pause_below
 
         if transition:
-            # Use transition
+            # Use transition. The popped scene's exit -- and the previous
+            # scene's resume -- fire through the transition's callbacks
+            # rather than synchronously, so a fade-out still has the
+            # outgoing scene alive to render.
+            on_from_hidden: Optional[Callable[[], None]] = None
+            if popped_scene is not None:
+                captured_popped_scene = popped_scene
+                on_from_hidden = lambda: self._exit_scene(captured_popped_scene)  # noqa: E731
+
+            def on_to_shown() -> None:
+                self._resume_scene(previous_scene)
+
             def on_complete() -> None:
                 self._current_scene = previous_scene
-                if self._current_scene:
-                    self._resume_scene(self._current_scene)
+                self._current_pause_below = previous_pause_below
 
             self._transition_manager.start_transition(
-                transition, self._current_scene, previous_scene, on_complete
+                transition,
+                popped_scene,
+                previous_scene,
+                on_complete,
+                on_from_hidden=on_from_hidden,
+                on_to_shown=on_to_shown,
             )
         else:
             # Immediate pop
+            if popped_scene is not None:
+                self._exit_scene(popped_scene)
             self._current_scene = previous_scene
-            if self._current_scene:
-                self._resume_scene(self._current_scene)
+            self._current_pause_below = previous_pause_below
+            self._resume_scene(previous_scene)
 
         return popped_scene
 
@@ -230,27 +276,26 @@ class SceneManager:
     def _get_active_scenes(self) -> list[Scene]:
         """Get list of scenes that should receive updates.
 
+        Uniform walk, no index arithmetic: start at the current scene with
+        its own pause_below as the gate; walk the stack top-down, stopping
+        as soon as the gate is True, otherwise including that entry's scene
+        and updating the gate to *that entry's own* pause_below.
+
         Returns:
             List of active scenes based on pause_below flags.
         """
         scenes_to_update: list[Scene] = []
-        if self._current_scene:
-            scenes_to_update.append(self._current_scene)
+        if self._current_scene is None:
+            return scenes_to_update
 
-        # Work backwards through stack to see which scenes should update
-        for i in range(len(self._scene_stack) - 1, -1, -1):
-            # Check if the scene above this one pauses below
-            if i == len(self._scene_stack) - 1:
-                # This is the scene just below current
-                # Check if current scene (or the transition) pauses below
-                if self._pause_below_flags and self._pause_below_flags[-1]:
-                    break  # Stop updating scenes below
-            else:
-                # Check if scene above this one pauses below
-                if self._pause_below_flags[i + 1]:
-                    break
+        scenes_to_update.append(self._current_scene)
+        gate = self._current_pause_below
 
-            scenes_to_update.append(self._scene_stack[i])
+        for entry in reversed(self._stack):
+            if gate:
+                break
+            scenes_to_update.append(entry.scene)
+            gate = entry.pause_below
 
         return scenes_to_update
 
@@ -266,21 +311,29 @@ class SceneManager:
             self._transition_manager.render(world_renderer, ui_renderer)
         else:
             # Render all scenes in the stack (bottom to top)
-            for scene in self._scene_stack:
-                scene.render(world_renderer, ui_renderer)
+            for entry in self._stack:
+                entry.scene.render(world_renderer, ui_renderer)
 
             # Render current scene on top
             if self._current_scene:
                 self._current_scene.render(world_renderer, ui_renderer)
 
     def cleanup(self) -> None:
-        """Cleanup resources and exit current scene."""
-        if self._current_scene:
+        """Cleanup resources, unwinding every scene ever entered, LIFO.
+
+        `on_exit()` on the current scene first (entered last), then the
+        stack top-to-bottom -- every scene that was ever entered gets torn
+        down exactly once, rather than leaking whatever's still on the
+        stack past a bare `.clear()`.
+        """
+        if self._current_scene is not None:
             self._exit_scene(self._current_scene)
             self._current_scene = None
 
-        self._scene_stack.clear()
-        self._pause_below_flags.clear()
+        for entry in reversed(self._stack):
+            self._exit_scene(entry.scene)
+
+        self._stack.clear()
 
     def _exit_scene(self, scene: Scene) -> None:
         """Run a scene's exit hook and guarantee its SystemManager is cleaned up.

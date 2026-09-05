@@ -81,6 +81,23 @@ def test_documented_entry_point_boots_and_runs(app):
 
 
 @pytest.mark.integration
+def test_scene_manager_gets_real_window_dimensions_at_init(app):
+    """Scene lifecycle repair (wayfinder ticket 29): `Application.__init__`
+    must call `scene_manager.set_screen_size()` with the real window
+    dimensions, not leave `TransitionManager` on its hardcoded 800x600
+    default."""
+    transition_manager = app._scene_manager._transition_manager
+
+    assert transition_manager.screen_width == app._window.width
+    assert transition_manager.screen_height == app._window.height
+    # The default WindowConfig is 1200x800, not TransitionManager's
+    # hardcoded 800x600 default -- if these still matched by coincidence,
+    # this assertion would catch it.
+    assert transition_manager.screen_width != 800
+    assert transition_manager.screen_height != 600
+
+
+@pytest.mark.integration
 def test_main_py_starts_without_crashing():
     """BOOT-2: `python main.py` must not raise before a window opens.
 

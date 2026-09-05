@@ -352,6 +352,8 @@ class TransitionManager:
         self.from_scene: Optional[Scene] = None
         self.to_scene: Optional[Scene] = None
         self.on_complete_callback: Optional[Callable[[], None]] = None
+        self._on_from_hidden: Optional[Callable[[], None]] = None
+        self._on_to_shown: Optional[Callable[[], None]] = None
         self.screen_width = 800
         self.screen_height = 600
         self._phase_switched = False  # Track if we've switched to IN phase
@@ -372,6 +374,8 @@ class TransitionManager:
         from_scene: Optional[Scene],
         to_scene: Scene,
         on_complete: Optional[Callable[[], None]] = None,
+        on_from_hidden: Optional[Callable[[], None]] = None,
+        on_to_shown: Optional[Callable[[], None]] = None,
     ) -> None:
         """Start a scene transition.
 
@@ -380,18 +384,31 @@ class TransitionManager:
             from_scene: Current scene (can be None for first scene)
             to_scene: Scene to transition to
             on_complete: Optional callback when transition completes
+            on_from_hidden: Optional callback fired the moment render() stops
+                showing from_scene -- at the two-phase midpoint, or
+                immediately for a single-phase transition.
+            on_to_shown: Optional callback fired the moment render() starts
+                showing to_scene -- same timing as on_from_hidden.
         """
         self.current_transition = transition
         self.from_scene = from_scene
         self.to_scene = to_scene
         self.on_complete_callback = on_complete
+        self._on_from_hidden = on_from_hidden
+        self._on_to_shown = on_to_shown
         self._phase_switched = False  # Reset flag for new transition
 
         transition.start()
 
-        # If two-phase, call on_exit on old scene immediately
-        if transition.config.two_phase and from_scene:
-            from_scene.on_exit()
+        if not transition.config.two_phase:
+            # Single-phase: render() shows to_scene from frame one and never
+            # shows from_scene at all, so both callbacks fire now rather
+            # than at completion -- lifecycle-equivalent to an immediate
+            # switch, just with a cosmetic overlay on top.
+            if self._on_from_hidden:
+                self._on_from_hidden()
+            if self._on_to_shown:
+                self._on_to_shown()
 
     def is_transitioning(self) -> bool:
         """Check if a transition is currently active.
@@ -416,28 +433,24 @@ class TransitionManager:
 
         complete = self.current_transition.update(dt)
 
-        # Handle phase transitions (only call on_enter once)
+        # Two-phase: both callbacks fire together at the phase-flip
+        # midpoint -- exactly when render() swaps which scene it shows.
         if self.current_transition.config.two_phase:
             if (
                 self.current_transition.state == TransitionState.TRANSITIONING_IN
                 and not self._phase_switched
-                and self.to_scene
             ):
-                # Midpoint: switch scenes
                 self._phase_switched = True
-                self.to_scene.on_enter()
-                # Update once to ensure scene is ready
-                self.to_scene.update(0.0)
+                if self._on_from_hidden:
+                    self._on_from_hidden()
+                if self._on_to_shown:
+                    self._on_to_shown()
+                if self.to_scene:
+                    # Update once to ensure scene is ready
+                    self.to_scene.update(0.0)
 
         if complete:
-            # Transition finished
-            if not self.current_transition.config.two_phase:
-                # Single-phase: handle scene change now
-                if self.from_scene:
-                    self.from_scene.on_exit()
-                if self.to_scene:
-                    self.to_scene.on_enter()
-
+            # Single-phase already fired both callbacks in start_transition().
             if self.on_complete_callback:
                 self.on_complete_callback()
 
@@ -445,6 +458,8 @@ class TransitionManager:
             self.from_scene = None
             self.to_scene = None
             self.on_complete_callback = None
+            self._on_from_hidden = None
+            self._on_to_shown = None
             self._phase_switched = False
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:

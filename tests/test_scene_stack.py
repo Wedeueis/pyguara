@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 from pyguara.scene.manager import SceneManager
 from pyguara.scene.base import Scene
+from pyguara.scene.transitions import FadeTransition, TransitionConfig
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 
@@ -415,3 +416,138 @@ class TestSceneStackIntegration:
         # Close pause
         manager.pop_scene()
         assert game.resumed
+
+
+class TestSceneLifecycleRepair:
+    """Regression tests for the scene lifecycle repair (wayfinder ticket 29)."""
+
+    def test_push_with_two_phase_transition_does_not_exit_paused_scene(self):
+        """SCENE-1: pushing over a scene with a two-phase transition must not
+        call on_exit() on the scene being paused underneath, at start or at
+        the phase-flip midpoint."""
+        manager = SceneManager()
+
+        game = MockScene("game")
+        pause_menu = MockScene("pause_menu")
+        manager.register(game)
+        manager.register(pause_menu)
+
+        manager.switch_to("game")
+        game.reset_flags()
+
+        transition = FadeTransition(TransitionConfig(duration=1.0, two_phase=True))
+        manager.push_scene("pause_menu", transition=transition)
+        assert not game.exited
+
+        manager.update(0.5)  # phase-flip midpoint
+        assert not game.exited
+
+        manager.update(0.5)  # transition completes
+        assert not game.exited
+
+    def test_single_phase_transition_enters_to_scene_before_render_shows_it(self):
+        """SCENE-1: a single-phase transition must call on_enter() on the
+        incoming scene immediately at transition start -- before render()
+        ever shows it -- not deferred to transition completion."""
+        manager = SceneManager()
+
+        scene1 = MockScene("scene1")
+        scene2 = MockScene("scene2")
+        manager.register(scene1)
+        manager.register(scene2)
+
+        manager.switch_to("scene1")
+
+        transition = FadeTransition(TransitionConfig(duration=1.0, two_phase=False))
+        manager.switch_to("scene2", transition=transition)
+
+        # on_enter() already ran -- before update()/render() have run at all.
+        assert scene2.entered
+
+        world_renderer = Mock(spec=IRenderer)
+        ui_renderer = Mock(spec=UIRenderer)
+        manager.render(world_renderer, ui_renderer)
+        assert scene2.rendered
+
+    def test_three_deep_stack_excludes_base_scene_when_middle_pauses_below(self):
+        """SCENE-2: a three-deep stack (base -> paused middle -> active top)
+        with the middle scene's pause_below=True must exclude the base scene
+        from active updates, even though the top scene's own pause_below is
+        False -- the off-by-one regression case."""
+        manager = SceneManager()
+
+        base = MockScene("base")
+        middle = MockScene("middle")
+        top = MockScene("top")
+        manager.register(base)
+        manager.register(middle)
+        manager.register(top)
+
+        manager.switch_to("base")
+        manager.push_scene("middle", pause_below=True)
+        manager.push_scene("top", pause_below=False)
+
+        base.reset_flags()
+        middle.reset_flags()
+        top.reset_flags()
+
+        manager.update(0.016)
+
+        assert not base.updated
+        assert middle.updated
+        assert top.updated
+
+    def test_cleanup_exits_every_scene_ever_entered_exactly_once_lifo(self):
+        """cleanup() must unwind the whole stack LIFO, exiting every scene
+        that was ever entered exactly once -- current scene first, then the
+        stack top-to-bottom."""
+        manager = SceneManager()
+
+        base = MockScene("base")
+        middle = MockScene("middle")
+        top = MockScene("top")
+        manager.register(base)
+        manager.register(middle)
+        manager.register(top)
+
+        manager.switch_to("base")
+        manager.push_scene("middle")
+        manager.push_scene("top")
+
+        exit_order = []
+        base.on_exit = lambda: exit_order.append("base")
+        middle.on_exit = lambda: exit_order.append("middle")
+        top.on_exit = lambda: exit_order.append("top")
+
+        manager.cleanup()
+
+        assert exit_order == ["top", "middle", "base"]
+
+    def test_pop_with_transition_resumes_previous_scene_not_reenters(self):
+        """pop_scene() with a transition must resume the previous scene
+        (on_resume()), not re-enter it, and must not exit the popped scene
+        synchronously before the transition manager can render it."""
+        manager = SceneManager()
+
+        game = MockScene("game")
+        pause_menu = MockScene("pause_menu")
+        manager.register(game)
+        manager.register(pause_menu)
+
+        manager.switch_to("game")
+        manager.push_scene("pause_menu")
+
+        enter_calls = []
+        game.on_enter = lambda: enter_calls.append(True)
+
+        transition = FadeTransition(TransitionConfig(duration=1.0, two_phase=True))
+        popped = manager.pop_scene(transition=transition)
+        assert popped is pause_menu
+
+        # Not exited synchronously -- must stay alive for the transition to render.
+        assert not pause_menu.exited
+
+        manager.update(0.5)  # phase-flip midpoint
+        assert pause_menu.exited
+        assert game.resumed
+        assert enter_calls == []  # resumed, never re-entered

@@ -68,6 +68,7 @@ class Application:
         self._event_dispatcher = container.get(EventDispatcher)
         self._input_manager = container.get(InputManager)
         self._scene_manager = container.get(SceneManager)
+        self._scene_manager.set_screen_size(self._window.width, self._window.height)
         self._config_manager = container.get(ConfigManager)
         self._ui_manager = container.get(UIManager)
         self._coroutine_manager = container.get(CoroutineManager)
