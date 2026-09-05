@@ -96,3 +96,10 @@ Grilled live with the dev, one sub-question at a time. Decisions:
 
 Not implemented in this session — this ticket is a decision, not a `task`. Implementation is
 future work per the ticket-type rule (planning by default; only `task` tickets execute).
+
+**Gap found during [RenderSystem wiring](13-rendersystem-wiring.md):** items 1-4 and 6 above
+sat unexecuted with no task ticket at all (only item 5's demo-migration piece made it into the
+*Demo migration* fog patch). RenderSystem wiring's own construction pattern turned out to
+depend on this same per-scene-construction plumbing, so the two now execute together — see
+[Execute Scene-owned world, SystemManager, and RenderSystem
+wiring](24-execute-scene-owned-systems-and-rendersystem.md).

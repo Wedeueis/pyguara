@@ -168,6 +168,18 @@ tickets inherit rather than revisit them):
   feature); CLAUDE.md's stale physics-loop claim and dead backlog pointer fixed; `AudioSourceSystem`'s
   discarded spatial attenuation/pan wired end-to-end via a new `IAudioSystem.set_channel_mix()`.
   Full suite green, `ruff`/`mypy` clean.
+- [RenderSystem wiring](issues/13-rendersystem-wiring.md) — `Scene.render()` stops being
+  abstract; the base default submits every entity carrying a `Renderable`-compliant component
+  to `self.render_system` and flushes, with scenes overriding only for extra manual draws.
+  `Camera2D` becomes scene-owned (`self.camera`), matching the existing informal per-demo
+  pattern. `RenderSystem` becomes a per-scene instance built in `resolve_dependencies()`, same
+  as the four engine systems — the backend (`IRenderer`) itself stays a DI singleton. Backend
+  parity was already true by construction (`Batcher` is backend-agnostic; `render_batch()` is
+  the only per-backend seam), nothing to decide there. Mid-grill discovery: this ticket's
+  premise depended on *Scene-owned world and SystemManager*'s (ticket 04) decision, which was
+  never executed — no task ticket existed for it. The two now execute together in one ticket:
+  [Execute Scene-owned world, SystemManager, and RenderSystem
+  wiring](issues/24-execute-scene-owned-systems-and-rendersystem.md).
 
 ## Not yet specified
 
