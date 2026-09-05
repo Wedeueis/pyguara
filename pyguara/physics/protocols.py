@@ -1,6 +1,6 @@
 """Interfaces for physics engine adapters."""
 
-from typing import Any, List, Optional, Protocol, Union
+from typing import Any, List, Optional, Protocol, Union, runtime_checkable
 
 from pyguara.common.types import Vector2
 from pyguara.physics.types import (
@@ -13,6 +13,7 @@ from pyguara.physics.types import (
 )
 
 
+@runtime_checkable
 class IPhysicsBody(Protocol):
     """Interface for a physics body handle."""
 
@@ -55,6 +56,7 @@ class IPhysicsBody(Protocol):
         ...
 
 
+@runtime_checkable
 class IPhysicsEngine(Protocol):
     """Interface for the core physics simulation engine."""
 

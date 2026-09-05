@@ -118,6 +118,7 @@ class Renderable(Protocol):
         ...
 
 
+@runtime_checkable
 class IRenderer(Protocol):
     """
     The Hardware Abstraction Layer (HAL) for rendering.
@@ -246,6 +247,7 @@ class IRenderer(Protocol):
         ...
 
 
+@runtime_checkable
 class IWindowBackend(Protocol):
     """Interface for OS-specific window management systems.
 
@@ -289,6 +291,7 @@ class IWindowBackend(Protocol):
         ...
 
 
+@runtime_checkable
 class UIRenderer(Protocol):
     """Abstract interface for drawing UI elements."""
 
@@ -361,6 +364,7 @@ class UIRenderer(Protocol):
         ...
 
 
+@runtime_checkable
 class TextureFactory(Protocol):
     """Factory for creating textures from raw image data.
 

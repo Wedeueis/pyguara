@@ -1,5 +1,5 @@
 import pytest
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from pyguara.di.exceptions import (
     ServiceNotFoundException,
     CircularDependencyException,
@@ -57,6 +57,52 @@ def test_transient_registration(container) -> None:
 
     assert isinstance(s1, ServiceImpl)
     assert s1 is not s2  # Different instances
+
+
+@runtime_checkable
+class ICheckedService(Protocol):
+    """A @runtime_checkable protocol, distinct from IService, scoped to the
+    register_instance() runtime safety check tests (wayfinder ticket 33)."""
+
+    def do_work(self) -> str: ...
+
+
+class WrongImpl:
+    """Missing do_work() entirely -- does not structurally satisfy ICheckedService."""
+
+    def unrelated(self) -> None:
+        pass
+
+
+def test_register_instance_rejects_structurally_mismatched_protocol(container) -> None:
+    """register_instance() must reject an instance that doesn't structurally
+    satisfy a @runtime_checkable protocol interface."""
+    with pytest.raises(DIException):
+        container.register_instance(ICheckedService, WrongImpl())
+
+
+def test_register_instance_accepts_structurally_matching_protocol(container) -> None:
+    """No false positive: a real match still registers and resolves."""
+    container.register_instance(ICheckedService, ServiceImpl())
+
+    assert container.get(ICheckedService).do_work() == "work"
+
+
+def test_register_instance_does_not_check_non_protocol_interfaces(container) -> None:
+    """Concrete-class interfaces are never isinstance-checked -- at least one
+    real caller (BOOT-1's Pygame RenderGraph stub, application.py) deliberately
+    registers an instance that is *not* a real subclass of its interface,
+    branched on by identity elsewhere rather than treated as a genuine one."""
+
+    class Base:
+        pass
+
+    class Unrelated:
+        pass
+
+    container.register_instance(Base, Unrelated())  # must not raise
+
+    assert isinstance(container.get(Base), Unrelated)
 
 
 def test_dependency_resolution(container) -> None:
