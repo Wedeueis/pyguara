@@ -229,6 +229,19 @@ tickets inherit rather than revisit them):
   corner-cutting the way the deleted `GridMap` did — a gameplay-feel judgment call, not a
   crash risk, so it's spun into [Decide whether GridGraph should prevent diagonal
   corner-cutting](issues/28-diagonal-corner-cutting-decision.md) rather than decided here.
+- [Wire replay into InputManager and Application](issues/18-wire-replay-recording-playback.md)
+  — `InputManager` gained `attach_recorder()`/`detach_recorder()` (records key/mouse events
+  when active, skips the still-legacy `JOY*` branches on purpose) and
+  `process_replayed_event()` (feeds a recorded event through the same `_handle_input()`/
+  `_handle_axis()`/`_dispatch_action()` paths a live one takes); `Application` gained
+  `start_recording()`/`stop_recording()`/`save_recording()`/`load_replay()`, mutually
+  exclusive, with `_process_input()` framing recorder frames and driving playback (factored
+  into `_begin_replay_frame()`/`_end_replay_frame()` so `SandboxApplication` shares it).
+  Regression test seeds both a recording run and a playback run from one template `Entity`
+  via `.clone()` and asserts matching final state. Gap found and spun out rather than fixed
+  here: [Scene lifecycle repair](07-scene-lifecycle-repair.md) was, like tickets 04 and 06,
+  never actually executed — [Execute the scene lifecycle
+  repair](issues/29-execute-scene-lifecycle-repair.md).
 
 ## Not yet specified
 
