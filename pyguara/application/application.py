@@ -19,6 +19,10 @@ from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
+from pyguara.replay.player import ReplayPlayer
+from pyguara.replay.recorder import ReplayRecorder
+from pyguara.replay.serializer import ReplaySerializer
+from pyguara.replay.types import ReplayData
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager
@@ -100,6 +104,14 @@ class Application:
         # Fixed timestep accumulator
         self._accumulator = 0.0
 
+        # Replay recording/playback (mutually exclusive; see start_recording()/
+        # load_replay()). Idle by default: near-zero overhead when neither is active.
+        self._replay_serializer = ReplaySerializer()
+        self._replay_recorder: Optional[ReplayRecorder] = None
+        self._replay_player: Optional[ReplayPlayer] = None
+        self._replay_frame_id = 0
+        self._replay_clock = 0.0
+
         self.logger.info("Application instance created.")
 
     def run(self, starting_scene: Scene) -> None:
@@ -142,7 +154,7 @@ class Application:
                     frame_time = max_frame_time
 
                 # 2. Input (once per frame, before physics)
-                self._process_input()
+                self._process_input(frame_time)
 
                 # 3. Accumulate time and run fixed updates
                 self._accumulator += frame_time
@@ -171,15 +183,125 @@ class Application:
             # CRITICAL: This ensures cleanup happens even if sys.exit() is called
             self.shutdown()
 
-    def _process_input(self) -> None:
-        """Poll system events."""
+    def start_recording(self, seed: Optional[int] = None, description: str = "") -> int:
+        """Start recording input for a deterministic replay.
+
+        Args:
+            seed: Random seed to record alongside the session. Generates one if
+                not provided.
+            description: Optional human-readable description for the replay.
+
+        Returns:
+            The seed used for this recording.
+
+        Raises:
+            RuntimeError: If a replay is currently being played back.
+        """
+        if self._replay_player is not None:
+            raise RuntimeError("Cannot record while a replay is playing back")
+
+        current_scene = self._scene_manager.current_scene
+        scene_name = current_scene.name if current_scene is not None else ""
+
+        self._replay_recorder = ReplayRecorder()
+        seed_used = self._replay_recorder.start_recording(
+            seed=seed, scene_name=scene_name, description=description
+        )
+        self._input_manager.attach_recorder(self._replay_recorder)
+        self._replay_frame_id = 0
+        self._replay_clock = 0.0
+        return seed_used
+
+    def stop_recording(self) -> Optional[ReplayData]:
+        """Stop recording and return the captured replay data.
+
+        Returns:
+            The recorded replay data, or None if nothing was recording.
+        """
+        if self._replay_recorder is None:
+            return None
+
+        data = self._replay_recorder.stop_recording()
+        self._input_manager.detach_recorder()
+        self._replay_recorder = None
+        return data
+
+    def save_recording(
+        self, data: ReplayData, path: str, compress: bool = True
+    ) -> bool:
+        """Save replay data to disk via `ReplaySerializer`.
+
+        Args:
+            data: Replay data, e.g. from `stop_recording()`.
+            path: File path to save to.
+            compress: Whether to gzip-compress the file.
+
+        Returns:
+            True if the save succeeded.
+        """
+        return self._replay_serializer.save(data, path, compress=compress)
+
+    def load_replay(self, path: str) -> bool:
+        """Load a saved replay from disk and start driving input from it.
+
+        Args:
+            path: File path to load, as saved by `save_recording()`.
+
+        Returns:
+            True if the replay was loaded and playback started.
+
+        Raises:
+            RuntimeError: If currently recording.
+        """
+        if self._replay_recorder is not None:
+            raise RuntimeError("Cannot play back a replay while recording")
+
+        data = self._replay_serializer.load(path)
+        if data is None:
+            return False
+
+        self._replay_player = ReplayPlayer(data)
+        self._replay_player.start_playback()
+        self._replay_frame_id = 0
+        return True
+
+    def _begin_replay_frame(self, frame_time: float) -> None:
+        """Open a recorder frame, if one is active. Call before polling input."""
+        if self._replay_recorder is not None and self._replay_recorder.is_recording:
+            self._replay_recorder.begin_frame(
+                self._replay_frame_id, self._replay_clock, frame_time
+            )
+
+    def _end_replay_frame(self, frame_time: float) -> None:
+        """Close the recorder frame and drive playback. Call after polling input."""
+        if self._replay_recorder is not None and self._replay_recorder.is_recording:
+            self._replay_recorder.end_frame()
+            self._replay_clock += frame_time
+            self._replay_frame_id += 1
+
+        if self._replay_player is not None and self._replay_player.is_playing:
+            frame = self._replay_player.advance_frame()
+            if frame is not None:
+                for recorded_event in frame.events:
+                    self._input_manager.process_replayed_event(recorded_event)
+            if self._replay_player.is_finished():
+                self._replay_player = None
+
+    def _process_input(self, frame_time: float) -> None:
+        """Poll system events, or feed replayed ones when a replay is active."""
+        self._begin_replay_frame(frame_time)
+
         # This call is CRITICAL. It keeps the OS window responsive.
         for event in self._window.poll_events():
             if hasattr(event, "type") and event.type == pygame.QUIT:
                 self._is_running = False
 
-            # Dispatch to input manager
-            self._input_manager.process_event(event)
+            # While a replay drives the game, real input is swallowed rather
+            # than dispatched, so both runs see exactly the same events.
+            if self._replay_player is None:
+                self._input_manager.process_event(event)
+
+        self._end_replay_frame(frame_time)
 
     def _fixed_update(self, fixed_dt: float) -> None:
         """Fixed-rate update for physics and deterministic game logic.

@@ -16,6 +16,8 @@ from pyguara.input.types import (
     GamepadConfig,
 )
 from pyguara.input.gamepad import GamepadManager
+from pyguara.replay.recorder import ReplayRecorder
+from pyguara.replay.types import InputEventType, RecordedInputEvent
 
 logger = get_logger(__name__)
 
@@ -44,6 +46,7 @@ class InputManager:
         self._context = InputContext.GAMEPLAY
         self._registered_actions: Dict[str, InputAction] = {}
         self._cooldowns: Dict[str, float] = {}
+        self._recorder: Optional[ReplayRecorder] = None
 
         # Initialize GamepadManager for comprehensive gamepad support
         self._gamepad_manager = GamepadManager(
@@ -66,6 +69,51 @@ class InputManager:
             The GamepadManager instance.
         """
         return self._gamepad_manager
+
+    def attach_recorder(self, recorder: ReplayRecorder) -> None:
+        """Start feeding every processed input event to `recorder`.
+
+        Args:
+            recorder: An already-`start_recording()`-ed `ReplayRecorder`.
+        """
+        self._recorder = recorder
+
+    def detach_recorder(self) -> None:
+        """Stop feeding input events to any attached recorder."""
+        self._recorder = None
+
+    def process_replayed_event(self, event: RecordedInputEvent) -> None:
+        """Feed a recorded input event through the same handling as a live one.
+
+        Args:
+            event: A single event from a loaded `ReplayData` frame.
+        """
+        if event.event_type in (InputEventType.KEY_DOWN, InputEventType.KEY_UP):
+            self._handle_input(
+                InputDevice.KEYBOARD,
+                event.code,
+                is_down=event.event_type == InputEventType.KEY_DOWN,
+            )
+        elif event.event_type in (InputEventType.MOUSE_DOWN, InputEventType.MOUSE_UP):
+            self._handle_input(
+                InputDevice.MOUSE,
+                event.code,
+                is_down=event.event_type == InputEventType.MOUSE_DOWN,
+            )
+        elif event.event_type in (
+            InputEventType.GAMEPAD_BUTTON_DOWN,
+            InputEventType.GAMEPAD_BUTTON_UP,
+        ):
+            self._handle_input(
+                InputDevice.GAMEPAD,
+                event.code,
+                is_down=event.event_type == InputEventType.GAMEPAD_BUTTON_DOWN,
+            )
+        elif event.event_type == InputEventType.GAMEPAD_AXIS:
+            self._handle_axis(event.code, event.value)
+        elif event.event_type == InputEventType.ACTION and event.action is not None:
+            self._dispatch_action(event.action, event.value)
+        # MOUSE_MOVE has no bound-action equivalent today; nothing to replay.
 
     def update(self) -> None:
         """Update input state. Call this once per frame before processing events.
@@ -137,6 +185,12 @@ class InputManager:
             is_down = event.type == pygame.KEYDOWN
             self._handle_input(InputDevice.KEYBOARD, event.key, is_down=is_down)
 
+            if self._recorder is not None and self._recorder.is_recording:
+                if is_down:
+                    self._recorder.record_key_down(event.key)
+                else:
+                    self._recorder.record_key_up(event.key)
+
             # Dispatch raw key event for UI system
             modifiers = set()
             try:
@@ -160,6 +214,12 @@ class InputManager:
             is_down = event.type == pygame.MOUSEBUTTONDOWN
             self._handle_input(InputDevice.MOUSE, event.button, is_down=is_down)
 
+            if self._recorder is not None and self._recorder.is_recording:
+                if is_down:
+                    self._recorder.record_mouse_down(event.button, event.pos)
+                else:
+                    self._recorder.record_mouse_up(event.button, event.pos)
+
             # Dispatch mouse event for UI system
             mouse_event = OnMouseEvent(
                 position=event.pos,
@@ -172,6 +232,9 @@ class InputManager:
 
         # --- Mouse Motion ---
         elif event.type == pygame.MOUSEMOTION:
+            if self._recorder is not None and self._recorder.is_recording:
+                self._recorder.record_mouse_move(event.pos)
+
             mouse_event = OnMouseEvent(
                 position=event.pos,
                 button=0,

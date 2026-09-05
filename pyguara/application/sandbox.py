@@ -76,12 +76,11 @@ class SandboxApplication(Application):
 
         self.logger.info("Tools loaded. Press F8 for help")
 
-    def _process_input(self) -> None:
+    def _process_input(self, frame_time: float) -> None:
         """Process input events, prioritizing developer tools."""
-        # Poll events from the window backend
-        events = self._window.poll_events()
+        self._begin_replay_frame(frame_time)
 
-        for event in events:
+        for event in self._window.poll_events():
             # 1. Update Internal State (Quit, etc.)
             if hasattr(event, "type") and event.type == pygame.QUIT:
                 self._is_running = False
@@ -90,8 +89,13 @@ class SandboxApplication(Application):
             if self._tool_manager and self._tool_manager.process_event(event):
                 continue
 
-            # 3. Game Input Manager (Normal Priority)
-            self._input_manager.process_event(event)
+            # 3. Game Input Manager (Normal Priority). While a replay drives
+            # the game, real input is swallowed so both runs see the same
+            # events (mirrors the base Application's behavior).
+            if self._replay_player is None:
+                self._input_manager.process_event(event)
+
+        self._end_replay_frame(frame_time)
 
     def _fixed_update(self, fixed_dt: float) -> None:
         """Fixed-rate update for physics and game logic."""
