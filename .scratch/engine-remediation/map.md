@@ -180,6 +180,17 @@ tickets inherit rather than revisit them):
   never executed — no task ticket existed for it. The two now execute together in one ticket:
   [Execute Scene-owned world, SystemManager, and RenderSystem
   wiring](issues/24-execute-scene-owned-systems-and-rendersystem.md).
+- [ModernGL shape shader](issues/14-moderngl-shape-shader.md) — usage check first: `draw_rect`
+  on `IRenderer` is a primary per-entity draw call in several demos (placeholder colored
+  rects, not textures) plus every editor tool, so this is a real ModernGL rendering gap, not a
+  rare debug path. One unified SDF fragment shader handles all three primitives (box/circle/
+  segment SDF, selected per-instance), hardware-instanced and batched (not deferred to later,
+  given the usage data), fill vs. stroke handled by a per-instance `width` branch in the same
+  shader. Batching stays backend-internal to `ModernGLRenderer` — `IRenderer` signatures are
+  unchanged, no `RenderSystem`/`RenderQueue`/`Batcher`/`Renderable` changes — trading away
+  Z-interleaving between shapes and textures within a frame, judged acceptable since no
+  current demo actually mixes the two in a way that needs interleaving. Lands as one execution
+  ticket — see [Execute the ModernGL shape shader](issues/25-execute-moderngl-shape-shader.md).
 
 ## Not yet specified
 
