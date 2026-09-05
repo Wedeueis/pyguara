@@ -3,12 +3,11 @@
 import json
 from typing import List
 
-from pyguara.resources.loader import IResourceLoader
 from pyguara.resources.data import DataResource
 from pyguara.resources.types import Resource
 
 
-class JsonLoader(IResourceLoader):
+class JsonLoader:
     """
     Loader strategy for parsing JSON files into DataResources.
 

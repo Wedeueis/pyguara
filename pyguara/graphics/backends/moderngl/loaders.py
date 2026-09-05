@@ -5,12 +5,11 @@ from typing import List
 import moderngl
 import pygame
 
-from pyguara.resources.loader import IResourceLoader
 from pyguara.resources.types import Resource
 from pyguara.graphics.backends.moderngl.texture import GLTexture
 
 
-class GLTextureLoader(IResourceLoader):
+class GLTextureLoader:
     """Load image files into GPU textures for ModernGL rendering.
 
     Uses pygame.image to load the file, then uploads the pixel data

@@ -15,7 +15,6 @@ from typing import Any, Iterable, List, Optional, Tuple
 
 from pyguara.config.types import WindowConfig
 from pyguara.log import get_logger
-from pyguara.graphics.protocols import IRenderer, IWindowBackend, UIRenderer
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 from pyguara.common.types import Vector2, Color, Rect
@@ -23,7 +22,7 @@ from pyguara.common.types import Vector2, Color, Rect
 logger = get_logger(__name__)
 
 
-class HeadlessWindowBackend(IWindowBackend):
+class HeadlessWindowBackend:
     """A window backend that never opens a real OS window."""
 
     def __init__(self) -> None:
@@ -57,7 +56,7 @@ class HeadlessWindowBackend(IWindowBackend):
         return None
 
 
-class HeadlessBackend(IRenderer):
+class HeadlessBackend:
     """A world renderer backend that discards all draw calls."""
 
     def __init__(self, width: int, height: int):
@@ -184,7 +183,7 @@ class HeadlessBackend(IRenderer):
         ...
 
 
-class HeadlessUIRenderer(UIRenderer):
+class HeadlessUIRenderer:
     """A UI renderer that discards all draw calls."""
 
     def draw_rect(

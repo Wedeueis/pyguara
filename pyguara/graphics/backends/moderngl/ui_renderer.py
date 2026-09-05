@@ -13,7 +13,6 @@ import numpy as np
 import pygame
 
 from pyguara.common.types import Rect, Color, Vector2
-from pyguara.graphics.protocols import UIRenderer
 
 
 # Shader source for UI overlay
@@ -41,7 +40,7 @@ void main() {
 """
 
 
-class GLUIRenderer(UIRenderer):
+class GLUIRenderer:
     """OpenGL-compatible UI renderer using pygame for text/primitives.
 
     Renders UI elements to an offscreen pygame surface, then uploads it

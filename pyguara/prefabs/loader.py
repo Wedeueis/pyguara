@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pyguara.prefabs.types import PrefabChild, PrefabData
-from pyguara.resources.loader import IResourceLoader
 from pyguara.resources.types import Resource
 
 logger = get_logger(__name__)
@@ -51,7 +50,7 @@ class Prefab(Resource):
         return self.data
 
 
-class PrefabLoader(IResourceLoader):
+class PrefabLoader:
     """Loader for prefab files.
 
     Supports JSON (.prefab.json, .json) and YAML (.prefab.yaml, .yaml, .prefab.yml)

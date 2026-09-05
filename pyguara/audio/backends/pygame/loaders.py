@@ -2,12 +2,11 @@
 
 from typing import List
 import pygame
-from pyguara.resources.loader import IResourceLoader
 from pyguara.resources.types import Resource
 from .types import PygameAudioClip
 
 
-class PygameSoundLoader(IResourceLoader):
+class PygameSoundLoader:
     """
     Loads .wav and .ogg files into PygameAudioClip objects.
 

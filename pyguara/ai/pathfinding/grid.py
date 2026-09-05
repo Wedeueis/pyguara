@@ -3,14 +3,13 @@
 import math
 from typing import Iterator, List, Set, Tuple
 
-from pyguara.ai.pathfinding.core import Graph, Heuristic
 from pyguara.common.types import Vector2
 
 # GridNode is just an (x, y) tuple for efficiency
 GridNode = Tuple[int, int]
 
 
-class GridGraph(Graph[GridNode]):
+class GridGraph:
     """A 2D grid graph supporting 4 or 8 directional movement."""
 
     def __init__(self, width: int, height: int, allow_diagonal: bool = True):
@@ -57,7 +56,7 @@ class GridGraph(Graph[GridNode]):
         return base_cost * multiplier
 
 
-class ManhattanDistance(Heuristic[GridNode]):
+class ManhattanDistance:
     """Manhattan distance heuristic (better for 4-way movement)."""
 
     def estimate(self, current: GridNode, goal: GridNode) -> float:
@@ -65,7 +64,7 @@ class ManhattanDistance(Heuristic[GridNode]):
         return abs(current[0] - goal[0]) + abs(current[1] - goal[1])
 
 
-class EuclideanDistance(Heuristic[GridNode]):
+class EuclideanDistance:
     """Euclidean distance heuristic (better for 8-way/any angle)."""
 
     def estimate(self, current: GridNode, goal: GridNode) -> float:
@@ -73,7 +72,7 @@ class EuclideanDistance(Heuristic[GridNode]):
         return math.hypot(goal[0] - current[0], goal[1] - current[1])
 
 
-class DiagonalDistance(Heuristic[GridNode]):
+class DiagonalDistance:
     """Diagonal (Chebyshev) distance heuristic (for 8-way movement)."""
 
     def estimate(self, current: GridNode, goal: GridNode) -> float:
@@ -83,7 +82,7 @@ class DiagonalDistance(Heuristic[GridNode]):
         return max(dx, dy)
 
 
-class OctileDistance(Heuristic[GridNode]):
+class OctileDistance:
     """Octile distance heuristic (diagonal distance with sqrt(2) cost)."""
 
     def estimate(self, current: GridNode, goal: GridNode) -> float:

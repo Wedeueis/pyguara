@@ -5,11 +5,10 @@ import moderngl
 from typing import Any, Iterable, Optional, cast
 
 from pyguara.config.types import WindowConfig
-from pyguara.graphics.protocols import IWindowBackend
 from pyguara.common.types import Color
 
 
-class PygameGLWindow(IWindowBackend):
+class PygameGLWindow:
     """Window backend using Pygame with OpenGL context for ModernGL rendering.
 
     This implementation creates a Pygame window with OpenGL 3.3+ Core Profile

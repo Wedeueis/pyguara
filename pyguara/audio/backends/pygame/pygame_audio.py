@@ -5,7 +5,6 @@ import math
 import pygame
 from typing import Optional, Dict, List
 
-from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.types import (
     AudioPriority,
     AudioBusType,
@@ -19,7 +18,7 @@ from pyguara.resources.types import AudioClip
 logger = get_logger(__name__)
 
 
-class PygameAudioSystem(IAudioSystem):
+class PygameAudioSystem:
     """Pygame implementation for the PyGuara AudioSystem.
 
     Features:

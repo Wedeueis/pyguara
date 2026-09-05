@@ -3,7 +3,6 @@
 from pyguara.log import get_logger
 from typing import List, Optional
 import pygame
-from pyguara.resources.loader import IMetaAwareLoader
 from pyguara.resources.types import Resource
 from pyguara.resources.meta import AssetMeta, TextureMeta
 from .types import PygameTexture
@@ -11,7 +10,7 @@ from .types import PygameTexture
 logger = get_logger(__name__)
 
 
-class PygameImageLoader(IMetaAwareLoader):
+class PygameImageLoader:
     """Load image files into PygameTexture objects with meta support.
 
     Supports the following meta settings:

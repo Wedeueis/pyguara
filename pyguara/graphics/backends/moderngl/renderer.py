@@ -6,7 +6,6 @@ from typing import Optional
 import moderngl
 import numpy as np
 
-from pyguara.graphics.protocols import IRenderer
 from pyguara.common.types import Vector2, Color, Rect
 from pyguara.resources.types import Texture
 from pyguara.graphics.types import RenderBatch
@@ -16,7 +15,7 @@ from pyguara.graphics.types import RenderBatch
 _SHADER_DIR = Path(__file__).parent / "shaders"
 
 
-class ModernGLRenderer(IRenderer):
+class ModernGLRenderer:
     """GPU-accelerated renderer using ModernGL with hardware instancing.
 
     This renderer provides high-performance batch rendering for 10,000+ sprites

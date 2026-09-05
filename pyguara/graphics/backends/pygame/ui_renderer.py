@@ -4,10 +4,9 @@ from typing import Tuple, Dict, Optional, Any
 import pygame
 
 from pyguara.common.types import Rect, Color, Vector2
-from pyguara.graphics.protocols import UIRenderer
 
 
-class PygameUIRenderer(UIRenderer):
+class PygameUIRenderer:
     """Concrete implementation of UIRenderer using Pygame.
 
     Handles primitive drawing, text rendering, and texture blitting.

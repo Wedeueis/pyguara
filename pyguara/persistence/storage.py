@@ -6,7 +6,6 @@ import os
 import tempfile
 from typing import Any, Dict, List, Optional, Tuple
 
-from pyguara.persistence.types import StorageBackend
 
 logger = get_logger(__name__)
 
@@ -59,7 +58,7 @@ def _atomic_write_text(path: str, text: str, encoding: str = "utf-8") -> None:
     _atomic_write_bytes(path, text.encode(encoding))
 
 
-class FileStorageBackend(StorageBackend):
+class FileStorageBackend:
     """
     Storage backend that saves data to the local filesystem.
 

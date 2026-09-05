@@ -3,11 +3,10 @@
 import pygame
 from typing import Any, Iterable, Optional, cast
 from pyguara.config.types import WindowConfig
-from pyguara.graphics.protocols import IWindowBackend
 from pyguara.common.types import Color
 
 
-class PygameWindow(IWindowBackend):
+class PygameWindow:
     """Handles window lifecycle using Pygame."""
 
     def __init__(self) -> None:

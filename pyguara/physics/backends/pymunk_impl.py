@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Union
 import pymunk
 
 from pyguara.common.types import Vector2
-from pyguara.physics.protocols import IPhysicsBody, IPhysicsEngine
+from pyguara.physics.protocols import IPhysicsBody
 from pyguara.physics.types import (
     BodyType,
     CollisionLayer,
@@ -17,7 +17,7 @@ from pyguara.physics.types import (
 )
 
 
-class PymunkBodyAdapter(IPhysicsBody):
+class PymunkBodyAdapter:
     """Wrapper around pymunk.Body to conform to IPhysicsBody."""
 
     def __init__(self, body: pymunk.Body) -> None:
@@ -65,7 +65,7 @@ class PymunkBodyAdapter(IPhysicsBody):
         self._body.apply_impulse_at_local_point((impulse.x, impulse.y), p)
 
 
-class PymunkEngine(IPhysicsEngine):
+class PymunkEngine:
     """Pymunk backend implementation."""
 
     def __init__(self) -> None:

@@ -1,13 +1,12 @@
 """Pygame implementation of the Rendering Protocol."""
 
 import pygame
-from pyguara.graphics.protocols import IRenderer
 from pyguara.common.types import Vector2, Color, Rect
 from pyguara.resources.types import Texture
 from pyguara.graphics.types import RenderBatch
 
 
-class PygameBackend(IRenderer):
+class PygameBackend:
     """Renderer backend that uses the Pygame library."""
 
     def __init__(self, window_surface: pygame.Surface):

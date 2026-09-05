@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, Callable, Deque, DefaultDict, List, Optional, Type, TypeVar
 
-from pyguara.events.protocols import Event, IEventDispatcher
+from pyguara.events.protocols import Event
 from pyguara.events.types import EventHandler, ErrorHandlingStrategy
 from pyguara.log import EngineLogger, get_logger
 
@@ -25,7 +25,7 @@ class HandlerRecord:
     filter_func: Optional[Callable[[Any], bool]]
 
 
-class EventDispatcher(IEventDispatcher):
+class EventDispatcher:
     """Advanced event dispatcher with filtering, priority, and thread-safety support."""
 
     def __init__(
