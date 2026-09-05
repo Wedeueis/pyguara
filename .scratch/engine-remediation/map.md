@@ -405,6 +405,15 @@ tickets inherit rather than revisit them):
   Verified this scope covers 100% of current risk: no protocol is ever registered via
   the class-based methods today. Lands as [Execute the DIContainer runtime safety
   check](issues/33-execute-di-container-runtime-safety-check.md).
+- [Execute the DIContainer runtime safety
+  check](issues/33-execute-di-container-runtime-safety-check.md) — all 10 protocols
+  marked `@runtime_checkable`; `register_instance()` gained an `isinstance()` assert,
+  scoped to Protocol interfaces only (`_is_protocol`) after the full suite caught a real
+  gap the grilling session missed: `RenderGraph` is a concrete class that BOOT-1
+  deliberately registers a non-subclass stub against, so an unconditional check broke
+  it. Also found and fixed three test fixtures passing bare `MagicMock()` (no `spec=`)
+  against protocol interfaces, which turns out to fail `isinstance()` against a
+  `@runtime_checkable` protocol despite `hasattr()` succeeding per-method.
 
 ## Not yet specified
 
