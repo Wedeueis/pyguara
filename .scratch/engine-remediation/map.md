@@ -328,6 +328,15 @@ tickets inherit rather than revisit them):
   ticket 24 (executed earlier this session) already removed the global one this ticket's
   text assumed. Deliberately left `QueryCache.clear_cache()`'s rebuild-not-clear behavior
   alone — the audit flagged it, but ticket 06's Answer never actually decided to change it.
+- [Execute the physics teardown bridge](issues/27-execute-physics-teardown-bridge.md) —
+  `PhysicsSystem` subscribes to `EntityDestroyed` in `__init__`; `_on_entity_destroyed`
+  reads `RigidBody` off the event's still-intact entity and queues its `_body_handle` (if
+  any) into `self._pending_teardown`; `update(dt)` drains the queue via
+  `self._engine.destroy_body(handle)` before the ECS→physics sync pass and before
+  `self._engine.update(dt)` steps the space. `PymunkEngine.destroy_body()` removes the
+  body and all its shapes from `self.space` and drops the `self._bodies` entry, guarded
+  the same way `add_shape()` guards a missing `self.space`. Executed exactly as specified
+  from ticket 15, no deviations.
 
 ## Not yet specified
 
