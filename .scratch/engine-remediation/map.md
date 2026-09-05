@@ -282,6 +282,20 @@ tickets inherit rather than revisit them):
   rewritten to walk `type(event).__mro__` and process one merged, priority-sorted pass, so
   base-class subscription (`CollisionEvent`/`TriggerEvent`) now actually receives dispatched
   subclasses. No surprises; executed exactly as specified.
+- [Drop nominal Protocol inheritance across the 14
+  sites](issues/23-drop-nominal-protocol-inheritance.md) — site count grew to 24 on
+  re-running the grep (the original `I`-prefix pattern missed `UIRenderer`/
+  `TextureFactory`/`StorageBackend`/`Graph`/`Heuristic`; tickets 17/18/19 also added new
+  sites of their own); dropped the explicit Protocol base at all 24, across 17 files, per
+  the "one mechanical policy" framing. Deliberately left the ~20 `Event(Protocol)` dataclass
+  sites alone — `Event` has no methods, so the stub-swallowing hazard doesn't apply there;
+  that's field-inheritance, a different use of the same syntax. Verified with a real
+  spot-check (deleted `PygameBackend.draw_rect`, confirmed `mypy` errors, restored it).
+  Found and spun out rather than fixed: the ticket's DI-registration mypy-catch claim
+  doesn't actually hold for 10 of the 13 protocols (the non-`@runtime_checkable` ones) —
+  `register_instance()`/`register_singleton()`'s generics don't enforce the relationship —
+  [Decide whether to harden DIContainer's generic
+  signatures](issues/30-di-container-generic-safety-decision.md).
 
 ## Not yet specified
 

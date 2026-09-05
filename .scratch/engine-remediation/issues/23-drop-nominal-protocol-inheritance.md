@@ -1,7 +1,8 @@
 # Drop nominal Protocol inheritance across the 14 sites
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: coherence, follows from Event dispatcher hot path, ticket 11
 
@@ -57,3 +58,50 @@ the nominal base doesn't just hide the problem again:
   missing method now surfaces as a mypy error at a usage site (not silently swallowed).
 - Any `isinstance`/`issubclass` checks against these protocols still pass unchanged.
 - `ruff check .` clean, full test suite green.
+
+## Resolution
+
+Commit `9ad1e89`.
+
+**Site count grew from 14 to 24** on re-running the grep, as the ticket anticipated. Two
+reasons: the original `class.*(I[A-Z]...)` pattern only matches `I`-prefixed protocol names,
+missing `UIRenderer`/`TextureFactory`/`StorageBackend`/`Graph`/`Heuristic` entirely (none of
+which start with `I`); and tickets 17/18/19 (all executed earlier this session, after ticket
+11 was written) added new nominally-inheriting classes of their own —
+`HeadlessWindowBackend(IWindowBackend)`, `HeadlessUIRenderer(UIRenderer)` (ticket 19), and
+`GridGraph`/`ManhattanDistance`/`EuclideanDistance`/`DiagonalDistance`/`OctileDistance`
+inheriting `Graph[GridNode]`/`Heuristic[GridNode]` (ticket 17). Applied the same mechanical
+fix to all 24 across 17 files, per the decision's own framing ("one mechanical policy
+applied uniformly") — including `PygameUIRenderer`/`GLUIRenderer` and `FileStorageBackend`,
+which the original list also missed for the same `I`-prefix reason.
+
+**Explicitly did not touch** the ~20 `Event(Protocol)` dataclass sites
+(`OnActionEvent`, `CollisionEvent`, etc.). `Event` has zero methods — only field
+declarations (`timestamp`, `source`) — so the stub-swallowing hazard this ticket exists to
+fix doesn't apply; those inherit `Event` nominally to get real dataclass field inheritance,
+a legitimate and different use of the same Protocol-inheritance syntax. Confirmed this
+reading by checking `Event`'s definition directly before excluding it.
+
+**Safety net verified with a real spot-check**, not just a clean test run: temporarily
+deleted `PygameBackend.draw_rect`, ran `mypy pyguara`, confirmed the removal has teeth, then
+restored it. Grepped every `isinstance()`/`issubclass()` call against these protocols: the
+one real hit (`resources/manager.py`'s `isinstance(loader, IMetaAwareLoader)`) still holds,
+since `IMetaAwareLoader` is `@runtime_checkable`.
+
+**Found while spot-checking, not fixed here — spun into [Decide whether to harden
+DIContainer's generic signatures](30-di-container-generic-safety-decision.md):** the
+ticket's premise that a missing method "surfaces as a mypy structural-mismatch error… at the
+DI registration site" doesn't actually hold for most of these 24. `register_instance()`'s
+`Type[TInterface], TInterface` and `register_singleton()`'s `Type[TInterface],
+Type[TImplementation]` (independent TypeVars, not even the same one) both let mypy infer
+jointly rather than enforce the second argument structurally matches the first — confirmed
+with an isolated repro outside the codebase reproducing the exact pattern, where
+`register(IFoo, Impl())` type-checked cleanly under `mypy --strict` even with `Impl` missing
+a required method, and even when passed a wholly unrelated type. Affects the 10 (of 13)
+protocols here that aren't `@runtime_checkable`. The fallback the decision also named — a
+missing method now raises `AttributeError` at the real call site instead of silently
+returning `None` — is still real and independently confirmed; only the earlier,
+registration-time mypy catch doesn't materialize. Worth its own decision on whether hardening
+the container's generics is worth the engineering cost, not this ticket's to solve.
+
+Full suite green (1059 passed), `ruff check .` and `mypy pyguara` clean.
