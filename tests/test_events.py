@@ -421,3 +421,88 @@ def test_unprocessed_events_remain_in_queue():
 
     # All events processed in order
     assert received == [f"event_{i}" for i in range(20)]
+
+
+# ========== Base-class dispatch (wayfinder ticket 22) ==========
+
+
+def test_base_class_subscriber_fires_on_leaf_dispatch(event_dispatcher):
+    """A handler subscribed to a base class fires when a subclass is
+    dispatched (walks type(event).__mro__, not just the exact type)."""
+    from pyguara.physics.events import CollisionEvent, OnCollisionBegin
+    from pyguara.common.types import Vector2
+
+    received = []
+    event_dispatcher.subscribe(CollisionEvent, lambda e: received.append(e))
+
+    event = OnCollisionBegin(
+        entity_a="a", entity_b="b", point=Vector2(0, 0), normal=Vector2(0, 1)
+    )
+    event_dispatcher.dispatch(event)
+
+    assert received == [event]
+
+
+def test_priority_governs_order_across_base_and_leaf_subscribers(event_dispatcher):
+    """Call order follows priority alone across mixed base/leaf subscriptions,
+    not which level (base class vs. exact type) each handler subscribed to."""
+
+    order = []
+    event_dispatcher.subscribe(
+        CustomEvent, lambda e: order.append("leaf-low"), priority=1
+    )
+    event_dispatcher.subscribe(Event, lambda e: order.append("base-high"), priority=10)
+    event_dispatcher.subscribe(
+        CustomEvent, lambda e: order.append("leaf-mid"), priority=5
+    )
+
+    event_dispatcher.dispatch(CustomEvent(data=""))
+
+    assert order == ["base-high", "leaf-mid", "leaf-low"]
+
+
+def test_base_class_false_return_short_circuits_lower_priority_leaf_handler(
+    event_dispatcher,
+):
+    """A higher-priority base-class handler returning False stops the whole
+    merged pass -- including a lower-priority handler subscribed to the exact
+    leaf type -- proving one short-circuiting pass, not per-type-level ones."""
+
+    order = []
+
+    def base_handler(e):
+        order.append("base")
+        return False
+
+    event_dispatcher.subscribe(Event, base_handler, priority=10)
+    event_dispatcher.subscribe(CustomEvent, lambda e: order.append("leaf"), priority=1)
+
+    event_dispatcher.dispatch(CustomEvent(data=""))
+
+    assert order == ["base"]
+
+
+def test_history_disabled_by_default():
+    """History is opt-in: a default-constructed dispatcher records nothing."""
+    from pyguara.events.dispatcher import EventDispatcher
+
+    dispatcher = EventDispatcher()
+    dispatcher.dispatch(CustomEvent(data="a"))
+    dispatcher.dispatch(CustomEvent(data="b"))
+
+    assert dispatcher.get_history() == []
+
+
+def test_history_enabled_records_bounded_deque():
+    """enable_history=True records dispatched events, bounded (not unbounded
+    list.pop(0) eviction) regardless."""
+    from pyguara.events.dispatcher import EventDispatcher
+
+    dispatcher = EventDispatcher(enable_history=True)
+
+    events = [CustomEvent(data=str(i)) for i in range(5)]
+    for event in events:
+        dispatcher.dispatch(event)
+
+    assert dispatcher.get_history() == events
+    assert dispatcher.get_history(CustomEvent) == events

@@ -2,9 +2,9 @@
 
 import queue
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Any, Callable, DefaultDict, List, Optional, Type, TypeVar
+from typing import Any, Callable, Deque, DefaultDict, List, Optional, Type, TypeVar
 
 from pyguara.events.protocols import Event, IEventDispatcher
 from pyguara.events.types import EventHandler, ErrorHandlingStrategy
@@ -33,6 +33,7 @@ class EventDispatcher(IEventDispatcher):
         logger: Optional[EngineLogger] = None,
         error_strategy: ErrorHandlingStrategy = ErrorHandlingStrategy.RAISE,
         queue_warning_threshold: int = DEFAULT_QUEUE_WARNING_THRESHOLD,
+        enable_history: bool = False,
     ) -> None:
         """Initialize the Event Dispatcher.
 
@@ -45,17 +46,21 @@ class EventDispatcher(IEventDispatcher):
                 graceful degradation.
             queue_warning_threshold: Queue size threshold for warning logs.
                 Defaults to 10000 events.
+            enable_history: Whether to record dispatched events for `get_history()`.
+                A debug/devtool/test feature, not a production one -- defaults off
+                so the hot path never pays for it. Backed by a bounded deque
+                regardless, so turning it on doesn't reintroduce O(n) eviction.
         """
         self._listeners: DefaultDict[Type[Event], List[HandlerRecord]] = defaultdict(
             list
         )
-        self._global_listeners: List[HandlerRecord] = []
 
         # Thread-safe queue
         self._event_queue: queue.Queue[Event] = queue.Queue()
 
-        self._event_history: List[Event] = []
+        self._enable_history = enable_history
         self._max_history_size: int = 1000
+        self._event_history: Deque[Event] = deque(maxlen=self._max_history_size)
         self._logger = logger or get_logger(__name__)
         self._error_strategy = error_strategy
         self._queue_warning_threshold = queue_warning_threshold
@@ -79,20 +84,23 @@ class EventDispatcher(IEventDispatcher):
         """
         Dispatch an event immediately to all subscribers (Synchronous).
 
+        Handlers subscribed to any class in `type(event).__mro__` all fire --
+        not just exact-type subscribers -- merged into one priority-sorted
+        pass, so priority governs call order (and short-circuit-on-False)
+        regardless of whether a handler subscribed to the exact type or a
+        base class.
+
         WARNING: This runs on the calling thread. For background threads,
         use queue_event() instead.
         """
         self._record_history(event)
 
-        # Phase A: Specific Listeners
-        event_type = type(event)
-        specific_handlers = self._listeners.get(event_type, [])
+        handlers: List[HandlerRecord] = []
+        for cls in type(event).__mro__:
+            handlers.extend(self._listeners.get(cls, []))
+        handlers.sort(key=lambda r: r.priority, reverse=True)
 
-        if not self._process_handlers(specific_handlers, event):
-            return
-
-        # Phase B: Global Listeners
-        self._process_handlers(self._global_listeners, event)
+        self._process_handlers(handlers, event)
 
     def queue_event(self, event: Event) -> None:
         """Queue event for next frame (Thread-Safe)."""
@@ -196,13 +204,11 @@ class EventDispatcher(IEventDispatcher):
                 del self._listeners[event_type]
         else:
             self._listeners.clear()
-            self._global_listeners.clear()
 
     def _record_history(self, event: Event) -> None:
-        """Register an event in history."""
-        self._event_history.append(event)
-        if len(self._event_history) > self._max_history_size:
-            self._event_history.pop(0)
+        """Register an event in history, if `enable_history` is set."""
+        if self._enable_history:
+            self._event_history.append(event)
 
     def get_history(self, event_type: Optional[Type[Event]] = None) -> List[Event]:
         """Return all history records or all history records of an event type."""
