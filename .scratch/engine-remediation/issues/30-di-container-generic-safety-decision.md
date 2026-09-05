@@ -1,7 +1,8 @@
 # Decide whether to harden DIContainer's generic signatures
 
 Type: grilling
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: found while executing Drop nominal Protocol inheritance across the 14 sites
 (ticket 23)
@@ -57,5 +58,51 @@ happening.
 
 ## Answer
 
-Not yet resolved — HITL grilling ticket, needs the dev's judgment on engineering cost vs.
-benefit for a pre-alpha engine.
+Grilled live with the dev, one sub-question at a time. Researched the mypy mechanics
+directly rather than asking, since it's a factual question about the type system, not a
+judgment call:
+
+- **Sub-question 1, answered by isolated repro:** the current API shape genuinely cannot
+  be hardened at mypy-time. `register_instance(IFoo, MissingMethod())` and
+  `register_instance(IFoo, Unrelated())` both type-check clean under `mypy --strict` —
+  confirmed the ticket's claim exactly. Root cause: when one unbound TypeVar appears in
+  two independent argument positions, mypy solves it by computing the *join* of both
+  constraints, which is `object` for two unrelated types, and `object` trivially
+  satisfies an unbounded TypeVar. Confirmed by adding `bound=IFoo` to the TypeVar in
+  isolation — this *does* produce an error (`object` now violates the bound) — but a
+  bound must be a fixed protocol, not "whatever the first argument happened to be," so
+  it can't generalize across many protocols in one method. Also tried `@overload` (one
+  variant per protocol): this *does* correctly catch the mismatch, but requires
+  `di/container.py` to enumerate every protocol in the engine by hand, coupling the
+  generic container to every subsystem it currently knows nothing about — rejected on
+  that basis alone, not attempted further.
+- **Sub-question 2:** not a separate bug — the independent-TypeVar-pair issue in
+  `register_singleton`/`transient`/`scoped` is the same root cause as sub-question 1,
+  just phrased for the two-argument case. No separate finding needed; whatever's decided
+  here applies uniformly.
+- **Sub-question 3, the actual decision: do it.** `@runtime_checkable` on the 10
+  protocols plus an `isinstance()` assert inside `register_instance()`. Registration
+  happens once at bootstrap, not a hot path, so the usual `runtime_checkable` perf
+  objection doesn't apply. Turns a possibly-deep, confusing `AttributeError` (wherever
+  the missing method first gets called) into a clear failure at the exact bootstrap line
+  that registered the wrong thing.
+- **Sub-question 4, scoped narrower than the ticket's framing:** the `isinstance()`
+  assert lands **only** in `register_instance()`, not `register_singleton`/`transient`/
+  `scoped`. Those only have the class (not yet an instance) at registration time, so
+  they'd need `issubclass()` instead — which raises `TypeError` for any protocol with
+  non-method members (confirmed: 3 of the 10 -- `IRenderer`, `TextureFactory`,
+  `IPhysicsBody` -- have `@property` members). A `try/except TypeError` fallback was
+  considered and rejected: it would silently no-op exactly on the protocols most likely
+  to need it (width/height-style properties are the common shape for renderer/backend
+  protocols), creating false confidence rather than real protection. Verified this scope
+  covers 100% of current risk anyway: grepped every `register_instance()` call site
+  across `bootstrap.py` and all 9 `games/*/bootstrap.py` -- every interface passed is
+  either a concrete class (`isinstance()` always works, decorator or not) or already
+  `@runtime_checkable` (`IInputBackend`), and none of the 10 protocols are ever
+  registered via the class-based methods anywhere in the codebase today.
+
+On mismatch, `register_instance()` raises the existing `DIException` (already used
+elsewhere in `container.py`), naming the interface and the instance's actual type.
+
+Lands as one execution ticket — see [Execute the DIContainer runtime safety
+check](33-execute-di-container-runtime-safety-check.md).

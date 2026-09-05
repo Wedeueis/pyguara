@@ -391,6 +391,20 @@ tickets inherit rather than revisit them):
   orthogonal cell fails it (wall or out of bounds), unconditionally. Four new tests;
   all 40 pre-existing pathfinding tests traced and confirmed unaffected. Executed
   exactly as specified, no deviations.
+- [Decide whether to harden DIContainer's generic
+  signatures](issues/30-di-container-generic-safety-decision.md) — the current API
+  shape can't be hardened at mypy-time at all (confirmed via isolated repro: mypy solves
+  a shared unbound TypeVar across two argument positions by joining to `object`, which
+  trivially satisfies it; `@overload` per protocol would work but couples the generic
+  container to every subsystem's protocols, rejected). Decided: mark the 10
+  non-`@runtime_checkable` protocols `@runtime_checkable` and add an `isinstance()`
+  assert inside `register_instance()` only — not `register_singleton`/`transient`/
+  `scoped`, since those only have the class (needing `issubclass()`, which crashes on
+  the 3 of these 10 protocols that have `@property` members) at registration time, and a
+  `try/except` fallback there would silently no-op exactly where it matters most.
+  Verified this scope covers 100% of current risk: no protocol is ever registered via
+  the class-based methods today. Lands as [Execute the DIContainer runtime safety
+  check](issues/33-execute-di-container-runtime-safety-check.md).
 
 ## Not yet specified
 
