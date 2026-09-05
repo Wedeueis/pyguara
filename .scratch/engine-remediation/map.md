@@ -377,6 +377,14 @@ tickets inherit rather than revisit them):
   changes — it already converted independently. First dedicated test file for
   `common/types.py` (`tests/test_common_types.py`), plus real-pixel assertions added to
   the pygame backend's integration tests.
+- [Decide whether GridGraph should prevent diagonal
+  corner-cutting](issues/28-diagonal-corner-cutting-decision.md) — yes, unconditionally:
+  `GridGraph.get_neighbors()` refuses a diagonal move when either flanking orthogonal
+  cell is a wall, matching the deleted `GridMap`, with no opt-in flag since no consumer
+  needs the permissive behavior. Edge case resolved by checking the deleted `GridMap`'s
+  actual git history rather than deciding fresh: an out-of-bounds flanking cell blocks
+  the diagonal too. Lands as [Execute the diagonal corner-cutting
+  fix](issues/32-execute-diagonal-corner-cutting-fix.md).
 
 ## Not yet specified
 
