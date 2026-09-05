@@ -216,6 +216,19 @@ tickets inherit rather than revisit them):
   and several leaf modules' printf-style logging calls, which would have crashed against
   `EngineLogger`'s positional `category` param — fixed by making `category` keyword-only
   and adding `*args` passthrough rather than rewriting every call site.
+- [Adopt the generic ai/pathfinding package](issues/17-adopt-generic-pathfinding-package.md)
+  — `ai/pathfinding/__init__.py` added, exporting the full `Graph`/`Heuristic`/`Node`/
+  `AStarPathfinder`/`GridGraph`/heuristics/smoothing/conversion surface; `grid.py` gained
+  `DiagonalDistance`/`OctileDistance` plus `smooth_path`/`path_to_world_coords`/
+  `world_to_grid_coords` (ported from the deleted concrete module); `ai/pathfinding.py`
+  deleted, `ai/__init__.py` and `tests/test_pathfinding.py` rewritten onto the new names, no
+  compatibility aliases. Four old tests dropped (blocked-start/goal short-circuiting and
+  iteration/path-length stats — mechanics the generic `AStarPathfinder` doesn't implement,
+  and adding them would've meant modifying `astar.py`, outside this ticket's scope). One gap
+  found and deliberately not fixed: `GridGraph.get_neighbors()` doesn't prevent diagonal
+  corner-cutting the way the deleted `GridMap` did — a gameplay-feel judgment call, not a
+  crash risk, so it's spun into [Decide whether GridGraph should prevent diagonal
+  corner-cutting](issues/28-diagonal-corner-cutting-decision.md) rather than decided here.
 
 ## Not yet specified
 
