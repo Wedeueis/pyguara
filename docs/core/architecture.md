@@ -1,46 +1,33 @@
+# Core Architecture
+
+PyGuara's core is three cooperating pieces: an ECS that stores game state, a
+DI container that wires services, and an event system that decouples them.
+
+---
+
 # Entity Component System (ECS)
 
-PyGuara uses a performance-optimized ECS implementation designed to handle thousands of entities with minimal overhead.
-
-## Architecture
-
-The ECS is built around three main concepts:
-
-1.  **Entity**: A unique ID acting as a container.
-2.  **Component**: Pure data classes attached to entities.
-3.  **EntityManager**: The database managing queries and lifecycles.
-
-### EntityManager
-
-The `EntityManager` (`pyguara.ecs.manager`) is the heart of the system. It employs an **Inverted Index** strategy for $O(1)$ component lookups, avoiding the common performance pitfall of iterating through all entities.
-
-**Key Features:**
-- **Inverted Indexing**: Maps `ComponentType -> Set[EntityID]`.
-- **Set Intersection Queries**: Queries like "Get all entities with `Transform` AND `RigidBody`" are solved via fast set intersection.
+Entities are ids, components are data, systems are logic. The `EntityManager`
+holds an inverted index (`ComponentType -> {EntityID}`) so a query costs work
+proportional to the number of *matching* entities, not to the size of the
+world.
 
 ```python
-# O(K) complexity where K is the number of matching entities
 for entity in manager.get_entities_with(Transform, RigidBody):
     ...
 ```
 
-### Entity
+Three details are load-bearing and easy to get wrong:
 
-The `Entity` class (`pyguara.ecs.entity`) is a lightweight container.
+- **Data-only components.** `StrictComponent` rejects logic methods at class
+  definition; `BaseComponent` only warns.
+- **Terminal removal.** `remove_entity()` is immediate and irreversible;
+  index cleanup is deferred to `flush_pending_removals()` at the frame
+  boundary, which is what makes queries safe to iterate mid-destruction.
+- **Cached queries.** `register_cached_query()` materialises a hot-loop
+  query's result set; it is maintained incrementally, not recomputed.
 
-- **Dynamic Attribute Access**: Components are cached, allowing pythonic access (e.g., `entity.rigid_body`) via `__getattr__` optimization.
-- **Tagging**: Supports string-based tags for non-component filtering.
-
-### Component
-
-Components (`pyguara.ecs.component`) are defined as `dataclasses` or standard classes inheriting from `BaseComponent`.
-
-```python
-@dataclass
-class Health(BaseComponent):
-    current: float = 100.0
-    max: float = 100.0
-```
+See **[Entity Component System](ecs.md)** for the full reference.
 
 ---
 

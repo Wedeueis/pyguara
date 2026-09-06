@@ -18,6 +18,7 @@ nav:
       - Project Structure: guides/PROJECT_STRUCTURE.md
   - Core:
       - Architecture: core/architecture.md
+      - Entity Component System: core/ecs.md
       - Application & Lifecycle: core/application.md
       - Logging: core/logging.md
   - Graphics:
