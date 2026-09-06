@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/graphics` — **split across several iterations**; iterations 1 (window boundary), 2 (components) and 3 (backends) done; 3 in review.
+`pyguara/graphics` — **split across several iterations**; iterations 1-4 done; 4 (pipeline) in review. Slice 5 (assets & effects) remains.
 
 **Tier 2 is complete:** `config`, `application`, `scene`, `systems`.
 
@@ -40,7 +40,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
     - [x] 1. Window boundary — `window.py`, `IWindowBackend` *(active)*
     - [x] 2. Components — camera, particles, animation, geometry, sprite *(active)*
     - [x] 3. Backends — pygame, ModernGL, headless renderers *(active)*
-    - [ ] 4. Pipeline — graph, passes, framebuffer, viewport, batching
+    - [x] 4. Pipeline — graph, passes, framebuffer, viewport, batching *(active)*
     - [ ] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting
 - [ ] `pyguara/physics` — protocols, pymunk backend, joints, materials
 - [ ] `pyguara/input` — input manager, rebinding
@@ -853,3 +853,52 @@ changing it now would be speculative -- it belongs with slice 4, which is where
 those two protocols are actually implemented.
 
 **Deferred:** CC-3 through CC-8, CC-11 (issue #9).
+
+
+### `pyguara/graphics` iteration 4 — pipeline — awaiting approval (2026-09-06)
+
+**Verification:** 1485/1485 tests pass; ruff clean; mypy clean.
+
+**Correctness fixes:**
+- **`Viewport.create_best_fit()` fabricated a viewport for a zero-area
+  window.** The guard `window_ratio = w / h if h != 0 else 0` substituted a
+  ratio of zero, which is not greater than any positive target, so it fell
+  through to the letterbox branch:
+  `create_best_fit(800, 0, 16/9)` returned `Viewport(x=0, y=-225, width=800,
+  height=450)` -- a 450-pixel-tall viewport at a negative offset for a window
+  with no height. A minimised or mid-resize window is an ordinary transient
+  state, so it now yields a zero viewport. Negative dimensions do the same.
+  This is the third instance of the same shape in this audit, after the camera's
+  `safe_zoom = 0.001` and the DI container's swallowed errors: a zero guard
+  that returns a wrong answer instead of signalling.
+- **`create_best_fit()` divided by `target_aspect_ratio` with no check**, so
+  zero raised `ZeroDivisionError` from inside the letterbox branch and a
+  negative silently produced an inverted viewport. Unlike a minimised window
+  that is a caller error, so it raises `ValueError` naming the argument.
+- **`RenderGraph.passes` returned the live list.** `graph.passes.clear()`
+  emptied the pipeline without releasing a single pass. It is a snapshot now,
+  matching `SceneManager.children`.
+- **Duplicate pass names were silent.** Both passes execute -- the list is the
+  source of truth -- but `get_pass()` returns only the first and
+  `remove_pass()` removes only the first, so the second is unreachable by name.
+  Now logged, the same treatment `SystemManager` duplicate keys got.
+
+**Tests:** new `tests/test_graphics_pipeline.py`, 21 tests. Neither the
+viewport nor the graph had dedicated coverage. The viewport is pure arithmetic
+needing no GL context, so its edge cases are cheap to pin down; the graph's
+bookkeeping runs against a mocked context. Includes property-style checks that
+a fitted viewport keeps its target ratio and never exceeds the window, across
+four window shapes.
+
+**Surveyed:** `framebuffer.py`, `batch.py`, `queue.py`, `render_system.py` and
+the five passes need a live GL context to exercise meaningfully, so they are
+covered only by the existing ModernGL integration tests. No defects found by
+reading, but that is a weaker guarantee than the rest of this audit and worth
+saying plainly.
+
+**Related:** issue #16 records the `IFramebuffer`/`IRenderPass`
+`runtime_checkable` inconsistency found in slice 3. Not fixed here: it turns on
+whether `IRenderPass` or `BaseRenderPass(ABC)` is the real contract, which is a
+design decision rather than a defect.
+
+**Deferred:** CC-3 through CC-8, CC-11 (issue #9), issue #16.
