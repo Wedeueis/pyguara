@@ -109,8 +109,16 @@ class GameConfig:
     version: str = "1.0"
 
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize config to dictionary."""
-        return asdict(self)
+        """Serialize config to dictionary.
+
+        `asdict()` alone leaves `RenderingBackend` as a plain `Enum` instance
+        (unlike `LogLevel`, an `IntEnum` that's already JSON-safe), which
+        `json.dump()` then rejects -- converted to its string `.value` here
+        to match what `from_dict()` already expects on the way back in.
+        """
+        data = asdict(self)
+        data["display"]["backend"] = self.display.backend.value
+        return data
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "GameConfig":

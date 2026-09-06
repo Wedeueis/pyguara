@@ -14,6 +14,7 @@ from pyguara.di.container import DIContainer
 from pyguara.tools.manager import ToolManager
 from pyguara.tools.performance import PerformanceMonitor
 from pyguara.tools.inspector import EntityInspector
+from pyguara.tools.config_inspector import ConfigInspector
 from pyguara.tools.event_monitor import EventMonitor
 from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.shortcuts_panel import ShortcutsPanel
@@ -67,7 +68,11 @@ class SandboxApplication(Application):
         editor_tool = EditorTool(self._container)
         self._tool_manager.register_tool(editor_tool, pygame.K_F5)
 
-        # 6. Shortcuts Panel (F8) - Help Overlay
+        # 6. Config Inspector (F6) - Live GameConfig Editor
+        config_inspector = ConfigInspector(self._container)
+        self._tool_manager.register_tool(config_inspector, pygame.K_F6)
+
+        # 7. Shortcuts Panel (F8) - Help Overlay
         shortcuts = ShortcutsPanel(self._container)
         self._tool_manager.register_tool(shortcuts, pygame.K_F8)
 
