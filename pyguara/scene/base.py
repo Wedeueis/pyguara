@@ -7,6 +7,7 @@ from pyguara.ai.ai_system import AISystem
 from pyguara.ai.steering_system import SteeringSystem
 from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.common.components import Transform
 from pyguara.di.container import DIContainer  # Import Container
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.events import EntityDestroyed
@@ -216,10 +217,16 @@ class Scene(ABC):
         """Frame render logic.
 
         Default implementation: submits every entity carrying a visible
-        `Sprite` component to `self.render_system`, then flushes. Override
-        only to add extra manual draws (debug overlays, UI-adjacent world
-        drawing), calling `super().render(world_renderer, ui_renderer)`
-        first so the default submission still happens.
+        `Sprite` component to `self.render_system`, then flushes. When the
+        entity also carries a `Transform`, `Sprite.position` is treated as an
+        offset from it (`transform.position + sprite.position`), combined at
+        submission time without ever writing back to `sprite.position` --
+        preserving that offset instead of the sync silently destroying it
+        every frame. An entity with only a `Sprite` submits at its own
+        `position` unchanged (the standalone case). Override only to add
+        extra manual draws (debug overlays, UI-adjacent world drawing),
+        calling `super().render(world_renderer, ui_renderer)` first so the
+        default submission still happens.
         """
         assert self.render_system is not None and self.camera is not None, (
             "Scene.render() called before resolve_dependencies() built "
@@ -229,6 +236,12 @@ class Scene(ABC):
         for entity in self.entity_manager.get_entities_with(Sprite):
             sprite = entity.get_component(Sprite)
             if sprite.visible:
-                self.render_system.submit(sprite)
+                if entity.has_component(Transform):
+                    world_position = (
+                        entity.get_component(Transform).position + sprite.position
+                    )
+                else:
+                    world_position = sprite.position
+                self.render_system.submit(sprite, position=world_position)
 
         self.render_system.flush(self.camera)

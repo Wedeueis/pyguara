@@ -182,3 +182,99 @@ def test_default_render_submits_visible_sprites_and_flushes(factory) -> None:
     assert calls["render_batch"] == 1
 
     app.shutdown()
+
+
+def _spy_submitted_positions(scene: _TestScene) -> list:
+    """Capture each RenderCommand.world_position submitted this render(),
+    since RenderSystem.flush() consumes/clears the queue before render()
+    returns -- there's nothing left to inspect on the queue afterward."""
+    assert scene.render_system is not None
+    positions: list = []
+    original_push = scene.render_system._queue.push
+
+    def spy_push(cmd) -> None:
+        positions.append(cmd.world_position)
+        original_push(cmd)
+
+    scene.render_system._queue.push = spy_push  # type: ignore[method-assign]
+    return positions
+
+
+def test_default_render_combines_transform_and_sprite_offset() -> None:
+    """An entity with both Transform and Sprite submits at
+    transform.position + sprite.position (an offset, not an overwrite) --
+    and sprite.position itself is never mutated by rendering."""
+    app = create_headless_application()
+    scene = _boot(app)
+
+    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture = texture_factory.create_from_bytes(
+        "test", bytes(8 * 8 * 4), width=8, height=8
+    )
+
+    entity = scene.entity_manager.create_entity()
+    entity.add_component(Transform(position=Vector2(100, 100)))
+    sprite = Sprite(texture=texture, visible=True, position=Vector2(5, -5))
+    entity.add_component(sprite)
+
+    positions = _spy_submitted_positions(scene)
+
+    scene.render(app._world_renderer, app._ui_renderer)
+
+    assert positions == [Vector2(105, 95)]
+    # The stored offset survives rendering unmutated.
+    assert sprite.position == Vector2(5, -5)
+
+    app.shutdown()
+
+
+def test_default_render_uses_sprite_position_when_no_transform() -> None:
+    """A Sprite with no Transform submits at its own position, unchanged --
+    the standalone case."""
+    app = create_headless_application()
+    scene = _boot(app)
+
+    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture = texture_factory.create_from_bytes(
+        "test", bytes(8 * 8 * 4), width=8, height=8
+    )
+
+    entity = scene.entity_manager.create_entity()
+    entity.add_component(Sprite(texture=texture, visible=True, position=Vector2(42, 7)))
+
+    positions = _spy_submitted_positions(scene)
+
+    scene.render(app._world_renderer, app._ui_renderer)
+
+    assert positions == [Vector2(42, 7)]
+
+    app.shutdown()
+
+
+def test_default_render_reflects_live_transform_changes_between_frames() -> None:
+    """Moving Transform.position between two render() calls changes the
+    submitted world position on the next call -- proving the combination is
+    computed live at submission time, not cached from an earlier tick."""
+    app = create_headless_application()
+    scene = _boot(app)
+
+    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture = texture_factory.create_from_bytes(
+        "test", bytes(8 * 8 * 4), width=8, height=8
+    )
+
+    entity = scene.entity_manager.create_entity()
+    transform = Transform(position=Vector2(0, 0))
+    entity.add_component(transform)
+    entity.add_component(Sprite(texture=texture, visible=True))
+
+    positions = _spy_submitted_positions(scene)
+    scene.render(app._world_renderer, app._ui_renderer)
+    assert positions == [Vector2(0, 0)]
+
+    # Simulate a physics step moving the entity, with no system tick at all.
+    transform.position = Vector2(50, 25)
+    scene.render(app._world_renderer, app._ui_renderer)
+    assert positions == [Vector2(0, 0), Vector2(50, 25)]
+
+    app.shutdown()
