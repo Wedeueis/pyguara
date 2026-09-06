@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-*(between iterations — cross-cutting work landed; `pyguara/config` is next)*
+`pyguara/config` — **in review (awaiting approval)**
 
 ---
 
@@ -28,7 +28,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ### Tier 2 — Core runtime
 - [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(done)*
-- [ ] `pyguara/config` — configuration loading/merging
+- [x] `pyguara/config` — configuration loading/merging *(active)*
 - [ ] `pyguara/application` — Application loop, bootstrap, sandbox
 - [ ] `pyguara/scene` — Scene base, SceneManager, serializer
 - [ ] `pyguara/systems` — system manager / base systems
@@ -490,3 +490,62 @@ fictional APIs on its first run (see CC-10 above).
 **Not done:** the filename `docs/guides/Archictecture & Style Guide.md` is
 misspelled. Renaming it means touching the mkdocs nav and any inbound links, so
 it is left for whoever next edits that file.
+
+
+### `pyguara/config` — awaiting approval (2026-09-06)
+
+**Verification:** 1371/1371 tests pass (up from 1343); ruff clean; mypy clean.
+
+**Correctness fixes (all ten reproduced by probe before fixing):**
+- **`Color` did not survive a save/load round trip.** `asdict()` flattens it to
+  `{"r": ..., "g": ...}` and `from_dict` passed that straight back to
+  `WindowConfig`, so `display.default_color` came back as a `dict`. Both window
+  backends read it as `self._default_color` and pass it to `clear()`, so
+  `fill_color.r` raised AttributeError. Reachable on the *ordinary* path: run 1
+  finds no config file and writes defaults, run 2 reads them back and breaks.
+  `from_dict` is now field-driven and coerces by declared type, which also
+  removed five near-identical per-section blocks.
+- **`OnConfigurationLoaded` and `OnConfigurationSaved` were permanently stamped
+  `timestamp=0.0`.** Unlike the input/lifecycle events fixed in the `events`
+  pass, these had no `__post_init__` at all, and the manager never passed a
+  timestamp. Now `field(default_factory=time.time)`.
+- **`PhysicsConfig.fixed_dt` divided by zero** with nothing validating
+  `fixed_timestep_hz`. `Application.run()` reads it on every startup, so a zero
+  in a config file crashed the engine with a bare ZeroDivisionError naming
+  neither the setting nor the file. Now raises a named ValueError, and the
+  validator reports it as CRITICAL.
+- **`update_setting()` warned about a type mismatch and then assigned anyway**,
+  so `screen_width` could end up holding `"not a number"`. It now refuses, and
+  is stricter than `isinstance` where that matters: a `bool` is not an `int`
+  here, though `isinstance(True, int)` says otherwise.
+- **`update_setting()` bypassed validation entirely**, so it could put the
+  config into a state `load()` would have rejected (`master_volume = 99.0`). It
+  now reverts and refuses on an ERROR/CRITICAL issue; WARNING passes, since a
+  warning is advice.
+- **`from_dict` mutated the caller's dict** (the debug section was not copied).
+- **Unknown keys were dropped in silence** -- a typo'd setting simply never
+  took effect. Now ignored *and* logged, so a config from a newer engine still
+  loads but a typo is visible.
+- **Invalid env overrides failed silently** (`except ValueError: pass`), so a
+  typo in a launch script did nothing at all. Now reported, and the message
+  lists the valid values.
+- **Every validation issue was logged as a warning**, hiding ERROR and CRITICAL
+  among the merely suboptimal. Each is now logged at its own level.
+- **`ConfigManager._file_path` was hardcoded**; now a constructor argument,
+  which the tests needed anyway.
+
+**Validator coverage** went from 3 rules to 10: screen height, all three
+volumes rather than just master, gamepad deadzone, mouse sensitivity, fps
+target, fixed timestep and max frame time. `ValidationIssue` is now frozen and
+its `suggestion` field is actually populated.
+
+**Tests:** 5 -> 33. The existing five covered defaults, a mocked load, a mocked
+missing file and two `update_setting` cases -- all with mocks rather than real
+files, which is exactly why no round-trip bug could surface. The new ones use
+`tmp_path` and assert on real files, including a whole-config round trip that
+will catch the next field that fails to survive one.
+
+**Docs:** new `docs/core/configuration.md`, added to the nav;
+`application.md`'s config paragraph now links to it.
+
+**Deferred:** CC-3 through CC-8 (CC-1, CC-2, CC-9, CC-10 resolved).

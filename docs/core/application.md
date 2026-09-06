@@ -26,7 +26,8 @@ def create_application() -> Application:
 
 ## Configuration
 
-Configuration is managed by `ConfigManager` (`pyguara/config`), which handles:
+Configuration is managed by `ConfigManager` (`pyguara/config`) — see
+**[Configuration](configuration.md)** for the full reference. In brief:
 - **Loading/Saving**: JSON serialization.
 - **Validation**: Rules checking (e.g., "Screen width must be > 640").
 - **Events**: Dispatches `OnConfigurationChanged` when settings are modified.

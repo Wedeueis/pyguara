@@ -22,6 +22,7 @@ nav:
       - Core Types: core/common-types.md
       - Event System: core/events.md
       - Dependency Injection: core/dependency-injection.md
+      - Configuration: core/configuration.md
       - Application & Lifecycle: core/application.md
       - Logging: core/logging.md
   - Graphics:
