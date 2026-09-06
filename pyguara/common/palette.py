@@ -1,43 +1,39 @@
-"""
-Standard color definitions for Engine utilities and Debugging.
+"""Named colours for engine utilities and debug drawing.
 
-This module provides quick access to common colors.
-For game-specific artistic palettes, prefer loading them as Resources.
+`BasicColors` re-exports the constants defined on `Color` itself, so the two
+spellings can never drift apart. For game-specific artistic palettes, load a
+palette as a resource instead of extending these.
 """
 
 from pyguara.common.types import Color
 
 
 class BasicColors:
-    """Standard CSS/HTML colors for rapid prototyping."""
+    """Standard colours for rapid prototyping."""
 
-    WHITE = Color(255, 255, 255)
-    BLACK = Color(0, 0, 0)
-    TRANSPARENT = Color(0, 0, 0, 0)
+    WHITE = Color.WHITE
+    BLACK = Color.BLACK
+    TRANSPARENT = Color.TRANSPARENT
 
-    RED = Color(255, 0, 0)
-    GREEN = Color(0, 255, 0)
-    BLUE = Color(0, 0, 255)
-    YELLOW = Color(255, 255, 0)
-    CYAN = Color(0, 255, 255)
-    MAGENTA = Color(255, 0, 255)
+    RED = Color.RED
+    GREEN = Color.GREEN
+    BLUE = Color.BLUE
+    YELLOW = Color.YELLOW
+    CYAN = Color.CYAN
+    MAGENTA = Color.MAGENTA
 
 
 class DebugColors:
+    """Semantic colours for the engine's debug visualisation.
+
+    Most are semi-transparent so the game stays visible behind debug shapes.
     """
-    Semantic colors for the Engine's debug visualization system.
 
-    Using semi-transparency allows seeing the game behind the debug shapes.
-    """
+    COLLIDER_ACTIVE = Color(0, 255, 0, 150)
+    COLLIDER_SLEEPING = Color(128, 128, 128, 150)
+    COLLIDER_CONTACT = Color(255, 0, 0, 180)
 
-    # Physics
-    COLLIDER_ACTIVE = Color(0, 255, 0, 150)  # Green: Safe/Active
-    COLLIDER_SLEEPING = Color(128, 128, 128, 150)  # Gray: Sleeping body
-    COLLIDER_CONTACT = Color(255, 0, 0, 180)  # Red: Collision happening
+    RAYCAST = Color(255, 255, 0)
+    PATHFINDING = Color(0, 255, 255, 100)
 
-    # Logic
-    RAYCAST = Color(255, 255, 0)  # Yellow Line
-    PATHFINDING = Color(0, 255, 255, 100)  # Cyan Path
-
-    # UI Bounds
-    UI_BORDER = Color(255, 0, 255)  # Magenta Rect
+    UI_BORDER = Color(255, 0, 255)
