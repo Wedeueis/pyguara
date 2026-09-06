@@ -117,6 +117,52 @@ produced this tick.
 scene first, so `Transform.interpolate` entities are drawn between fixed steps
 rather than snapping at the physics rate.
 
+## Systems
+
+A scene's `SystemManager` holds its systems and updates them in **ascending**
+priority order — a lower number runs earlier.
+
+```python
+class Level(Scene):
+    def on_enter(self) -> None:
+        self.system_manager.register(CombatSystem(self.entity_manager), priority=500)
+```
+
+`resolve_dependencies()` registers the four engine systems in the 100–399 band
+and calls `initialize()`. Game systems should use **500 or above** to stay
+clear of it.
+
+Registering after `initialize()` is fine: a late system is initialised as it is
+registered. That matters because `resolve_dependencies()` runs *before*
+`on_enter()`, so anything a game registers in `on_enter()` is by definition
+late.
+
+!!! note "Priority runs the other way from events"
+    `SystemManager` runs **lower** priority first; `EventDispatcher` runs
+    **higher** priority first. Systems are a pipeline — input, then physics,
+    then rendering — where ascending reads as a sequence. Event handlers
+    compete for one event, where "most important first" is the natural
+    reading.
+
+### Retrieving systems
+
+```python
+combat = self.system_manager.get_system(CombatSystem)
+```
+
+Lookup is keyed by type. Several systems may share a key — they all update —
+but `get_system()` and `unregister()` then reach only the most recently
+registered, and that is logged. Pass a distinct `system_type=` to keep them
+individually addressable:
+
+```python
+self.system_manager.register(spawner_a, system_type=EnemySpawnerA)
+self.system_manager.register(spawner_b, system_type=EnemySpawnerB)
+```
+
+Systems are cleaned up when the scene exits, via `SceneManager`, so a system
+implementing `cleanup()` gets it called exactly once.
+
 ## Shutdown
 
 `cleanup()` exits every live scene exactly once, LIFO — including a scene a
