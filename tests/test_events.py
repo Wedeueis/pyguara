@@ -1,6 +1,11 @@
 from dataclasses import dataclass
 from typing import Any
+
+import pytest
+
+from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.protocols import Event
+from pyguara.events.types import ErrorHandlingStrategy
 
 
 @dataclass
@@ -506,3 +511,369 @@ def test_history_enabled_records_bounded_deque():
 
     assert dispatcher.get_history() == events
     assert dispatcher.get_history(CustomEvent) == events
+
+
+# -- Package import order (regression) --
+
+
+def test_events_package_imports_before_log() -> None:
+    """`pyguara.log` inherits the Event protocol at runtime, so log depends on
+    events. If events also imported log at module scope the two would deadlock
+    on first import -- which is exactly what happened the moment
+    events/__init__.py started re-exporting the dispatcher. Import each
+    package first in a clean interpreter to prove neither order breaks.
+    """
+    import subprocess
+    import sys
+
+    for first, second in (
+        ("pyguara.events", "pyguara.log"),
+        ("pyguara.log", "pyguara.events"),
+    ):
+        result = subprocess.run(
+            [sys.executable, "-c", f"import {first}; import {second}"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, f"{first} then {second} failed:\n{result.stderr}"
+
+
+def test_package_reexports_the_public_surface() -> None:
+    import pyguara.events as events
+
+    for name in ("EventDispatcher", "Event", "IEventDispatcher", "KeyDownEvent"):
+        assert hasattr(events, name), name
+
+
+# -- Event dataclasses --
+
+
+def test_event_timestamps_default_to_now() -> None:
+    import time as _time
+
+    from pyguara.events.input import KeyDownEvent, MouseMotionEvent
+    from pyguara.events.lifecycle import ApplicationStartEvent, QuitEvent
+    from pyguara.events.window import WindowResizeEvent
+
+    before = _time.time()
+    events = [
+        KeyDownEvent(key_code=32),
+        MouseMotionEvent(1, 2, 3, 4),
+        QuitEvent(),
+        ApplicationStartEvent(),
+        WindowResizeEvent(800, 600),
+    ]
+    after = _time.time()
+
+    for event in events:
+        assert before <= event.timestamp <= after, type(event).__name__
+
+
+def test_an_explicit_zero_timestamp_is_honoured() -> None:
+    """Every event class used `if self.timestamp == 0.0: self.timestamp =
+    time.time()`, which made 0.0 impossible to express -- a real value was
+    silently overwritten. field(default_factory=time.time) has no sentinel."""
+    from pyguara.events.input import KeyDownEvent
+    from pyguara.events.window import WindowResizeEvent
+
+    assert KeyDownEvent(key_code=32, timestamp=0.0).timestamp == 0.0
+    assert WindowResizeEvent(800, 600, timestamp=0.0).timestamp == 0.0
+
+
+def test_key_events_share_a_base_so_one_handler_catches_both(event_dispatcher) -> None:
+    from pyguara.events.input import KeyboardEvent, KeyDownEvent, KeyUpEvent
+
+    seen = []
+    event_dispatcher.subscribe(KeyboardEvent, lambda e: seen.append(type(e).__name__))
+
+    event_dispatcher.dispatch(KeyDownEvent(key_code=1))
+    event_dispatcher.dispatch(KeyUpEvent(key_code=1))
+
+    assert seen == ["KeyDownEvent", "KeyUpEvent"]
+
+
+# -- Filter errors follow the configured strategy --
+
+
+def test_filter_exception_is_raised_under_raise_strategy() -> None:
+    from unittest.mock import MagicMock
+
+    dispatcher = EventDispatcher(
+        logger=MagicMock(), error_strategy=ErrorHandlingStrategy.RAISE
+    )
+
+    def exploding_filter(_e):
+        raise ValueError("filter blew up")
+
+    dispatcher.subscribe(CustomEvent, lambda _e: None, filter_func=exploding_filter)
+
+    with pytest.raises(ValueError, match="filter blew up"):
+        dispatcher.dispatch(CustomEvent(data="x"))
+
+
+def test_filter_exception_is_swallowed_under_ignore_strategy() -> None:
+    """A filter is user code just like a handler, but its exceptions used to
+    escape the error strategy entirely -- IGNORE still propagated them."""
+    dispatcher = EventDispatcher(error_strategy=ErrorHandlingStrategy.IGNORE)
+
+    def exploding_filter(_e):
+        raise ValueError("filter blew up")
+
+    ran = []
+    dispatcher.subscribe(CustomEvent, lambda _e: None, filter_func=exploding_filter)
+    dispatcher.subscribe(CustomEvent, lambda _e: ran.append(1))
+
+    dispatcher.dispatch(CustomEvent(data="x"))
+
+    assert ran == [1], "a failing filter must not stop later handlers"
+
+
+def test_filter_exception_is_logged_and_skipped_under_log_strategy() -> None:
+    from unittest.mock import MagicMock
+
+    logger = MagicMock()
+    dispatcher = EventDispatcher(
+        logger=logger, error_strategy=ErrorHandlingStrategy.LOG
+    )
+
+    def exploding_filter(_e):
+        raise ValueError("filter blew up")
+
+    dispatcher.subscribe(CustomEvent, lambda _e: None, filter_func=exploding_filter)
+    dispatcher.dispatch(CustomEvent(data="x"))
+
+    logger.error.assert_called_once()
+    assert "filter blew up" in logger.error.call_args[0][0]
+
+
+# -- dispatch() reports consumption --
+
+
+def test_dispatch_returns_true_when_every_handler_runs(event_dispatcher) -> None:
+    event_dispatcher.subscribe(CustomEvent, lambda _e: None)
+    assert event_dispatcher.dispatch(CustomEvent(data="x")) is True
+
+
+def test_dispatch_returns_false_when_a_handler_consumes_the_event(
+    event_dispatcher,
+) -> None:
+    """Returning False already stopped lower-priority handlers, but dispatch()
+    returned None, so a caller could not tell a consumed event from a
+    delivered one -- the case UI-over-game input handling needs."""
+    event_dispatcher.subscribe(CustomEvent, lambda _e: False, priority=10)
+    event_dispatcher.subscribe(CustomEvent, lambda _e: None, priority=0)
+
+    assert event_dispatcher.dispatch(CustomEvent(data="x")) is False
+
+
+def test_dispatch_returns_true_with_no_subscribers(event_dispatcher) -> None:
+    assert event_dispatcher.dispatch(CustomEvent(data="x")) is True
+
+
+def test_a_filtered_out_handler_does_not_count_as_consuming(event_dispatcher) -> None:
+    event_dispatcher.subscribe(
+        CustomEvent, lambda _e: False, filter_func=lambda _e: False
+    )
+    assert event_dispatcher.dispatch(CustomEvent(data="x")) is True
+
+
+# -- Subscription bookkeeping --
+
+
+def test_handler_cache_reflects_a_subscription_added_later(event_dispatcher) -> None:
+    """dispatch() memoises the resolved handler list per event type; the cache
+    must be dropped whenever the subscription set changes."""
+    seen = []
+    event_dispatcher.dispatch(CustomEvent(data="first"))
+
+    event_dispatcher.subscribe(CustomEvent, lambda e: seen.append(e.data))
+    event_dispatcher.dispatch(CustomEvent(data="second"))
+
+    assert seen == ["second"]
+
+
+def test_handler_cache_reflects_an_unsubscription(event_dispatcher) -> None:
+    seen = []
+
+    def handler(e):
+        seen.append(e.data)
+
+    event_dispatcher.subscribe(CustomEvent, handler)
+    event_dispatcher.dispatch(CustomEvent(data="first"))
+
+    event_dispatcher.unsubscribe(CustomEvent, handler)
+    event_dispatcher.dispatch(CustomEvent(data="second"))
+
+    assert seen == ["first"]
+
+
+def test_handler_cache_reflects_a_base_class_subscription(event_dispatcher) -> None:
+    """A later subscription on a *base* class must invalidate the cache for
+    already-dispatched subclasses too."""
+    from pyguara.events.input import KeyboardEvent, KeyDownEvent
+
+    seen = []
+    event_dispatcher.dispatch(KeyDownEvent(key_code=1))
+
+    event_dispatcher.subscribe(KeyboardEvent, lambda _e: seen.append(1))
+    event_dispatcher.dispatch(KeyDownEvent(key_code=1))
+
+    assert seen == [1]
+
+
+def test_clear_subscribers_for_one_type_leaves_others(event_dispatcher) -> None:
+    from pyguara.events.lifecycle import QuitEvent
+
+    seen = []
+    event_dispatcher.subscribe(CustomEvent, lambda _e: seen.append("custom"))
+    event_dispatcher.subscribe(QuitEvent, lambda _e: seen.append("quit"))
+
+    event_dispatcher.clear_subscribers(CustomEvent)
+    event_dispatcher.dispatch(CustomEvent(data="x"))
+    event_dispatcher.dispatch(QuitEvent())
+
+    assert seen == ["quit"]
+
+
+def test_clear_subscribers_with_no_argument_clears_everything(event_dispatcher) -> None:
+    seen = []
+    event_dispatcher.subscribe(CustomEvent, lambda _e: seen.append(1))
+
+    event_dispatcher.clear_subscribers()
+    event_dispatcher.dispatch(CustomEvent(data="x"))
+
+    assert seen == []
+
+
+def test_unsubscribing_an_unknown_handler_is_a_noop(event_dispatcher) -> None:
+    event_dispatcher.unsubscribe(CustomEvent, lambda _e: None)
+
+
+def test_the_same_handler_subscribed_twice_runs_twice(event_dispatcher) -> None:
+    """Deliberate: a callable may be registered at two priorities or with two
+    filters, so subscriptions are distinct records, not deduplicated by
+    callback the way EntityManager's removal hook is."""
+    calls = []
+
+    def handler(_e):
+        calls.append(1)
+
+    event_dispatcher.subscribe(CustomEvent, handler, priority=10)
+    event_dispatcher.subscribe(CustomEvent, handler, priority=0)
+    event_dispatcher.dispatch(CustomEvent(data="x"))
+
+    assert len(calls) == 2
+
+
+def test_unsubscribe_removes_every_registration_of_a_handler(event_dispatcher) -> None:
+    calls = []
+
+    def handler(_e):
+        calls.append(1)
+
+    event_dispatcher.subscribe(CustomEvent, handler, priority=10)
+    event_dispatcher.subscribe(CustomEvent, handler, priority=0)
+    event_dispatcher.unsubscribe(CustomEvent, handler)
+    event_dispatcher.dispatch(CustomEvent(data="x"))
+
+    assert calls == []
+
+
+def test_the_handler_list_is_snapshotted_for_the_duration_of_a_dispatch(
+    event_dispatcher,
+) -> None:
+    """A handler that unsubscribes another still lets that one run for the
+    dispatch already in flight; the change takes effect on the next one."""
+    order = []
+
+    def second(_e):
+        order.append("second")
+
+    def first(_e):
+        order.append("first")
+        event_dispatcher.unsubscribe(CustomEvent, second)
+
+    event_dispatcher.subscribe(CustomEvent, first, priority=10)
+    event_dispatcher.subscribe(CustomEvent, second, priority=0)
+
+    event_dispatcher.dispatch(CustomEvent(data="x"))
+    event_dispatcher.dispatch(CustomEvent(data="y"))
+
+    assert order == ["first", "second", "first"]
+
+
+# -- Queue --
+
+
+def test_queue_event_is_safe_from_background_threads() -> None:
+    """queue_event() is the documented thread-safe entry point; prove it under
+    real contention rather than trusting queue.Queue by inspection."""
+    import threading
+
+    dispatcher = EventDispatcher()
+    received = []
+    dispatcher.subscribe(CustomEvent, lambda e: received.append(e.data))
+
+    def producer(worker: int) -> None:
+        for i in range(50):
+            dispatcher.queue_event(CustomEvent(data=f"{worker}-{i}"))
+
+    threads = [threading.Thread(target=producer, args=(w,)) for w in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert dispatcher.process_queue() == 200
+    assert len(set(received)) == 200
+
+
+def test_events_queued_by_a_handler_wait_for_the_next_drain() -> None:
+    dispatcher = EventDispatcher()
+    seen = []
+
+    def handler(e):
+        seen.append(e.data)
+        if e.data == "first":
+            dispatcher.queue_event(CustomEvent(data="second"))
+
+    dispatcher.subscribe(CustomEvent, handler)
+    dispatcher.queue_event(CustomEvent(data="first"))
+
+    assert dispatcher.process_queue() == 1
+    assert seen == ["first"]
+    assert dispatcher.process_queue() == 1
+    assert seen == ["first", "second"]
+
+
+# -- History --
+
+
+def test_history_can_be_filtered_by_type() -> None:
+    from pyguara.events.lifecycle import QuitEvent
+
+    dispatcher = EventDispatcher(enable_history=True)
+    dispatcher.dispatch(CustomEvent(data="x"))
+    dispatcher.dispatch(QuitEvent())
+
+    assert len(dispatcher.get_history()) == 2
+    assert len(dispatcher.get_history(QuitEvent)) == 1
+
+
+def test_history_size_is_configurable() -> None:
+    dispatcher = EventDispatcher(enable_history=True, max_history_size=3)
+    for i in range(10):
+        dispatcher.dispatch(CustomEvent(data=str(i)))
+
+    history = dispatcher.get_history()
+    assert len(history) == 3
+    assert [e.data for e in history] == ["7", "8", "9"]
+
+
+def test_get_history_returns_a_snapshot_not_the_live_deque() -> None:
+    dispatcher = EventDispatcher(enable_history=True)
+    dispatcher.dispatch(CustomEvent(data="x"))
+
+    dispatcher.get_history().clear()
+
+    assert len(dispatcher.get_history()) == 1
