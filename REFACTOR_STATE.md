@@ -12,7 +12,9 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/scene` — **in review (awaiting approval)**
+`pyguara/systems` — **in review (awaiting approval)**
+
+**Tier 2 completes with this iteration.**
 
 ---
 
@@ -30,8 +32,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(done)*
 - [x] `pyguara/config` — configuration loading/merging *(done)*
 - [x] `pyguara/application` — Application loop, bootstrap, sandbox *(done)*
-- [x] `pyguara/scene` — Scene base, SceneManager, serializer *(active)*
-- [ ] `pyguara/systems` — system manager / base systems
+- [x] `pyguara/scene` — Scene base, SceneManager, serializer *(done)*
+- [x] `pyguara/systems` — system manager / base systems *(active)*
 
 ### Tier 3 — Subsystems
 - [ ] `pyguara/graphics` — protocols, backends, window, batching
@@ -59,6 +61,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/scene` | 2026-09-06 | Fixed `switch_to()` abandoning every stacked scene, unguarded re-entrancy during transitions, and a `pop_scene()` that stranded the scene it returned to. PR #10. |
 | `pyguara/application` | 2026-09-06 | Fixed an event budget spent per fixed step (15x per lagged frame), a `shutdown()` that skipped everything after the first failure, and three lifecycle events with no publisher. PR #8. |
 | `pyguara/config` | 2026-09-06 | Fixed `Color` not surviving a save/load round trip (a second-launch crash), `fixed_dt` dividing by zero unvalidated, and `update_setting` accepting wrong types and out-of-range values. PR #7. |
 | `pyguara/log` | 2026-09-06 | Fixed source attribution (every record reported `logger.py:138`), a `shutdown()` that did not stop logging, handler clobbering on a process-global logger, and a docs page describing a nonexistent API. PR #5. |
@@ -615,7 +618,7 @@ registration, not defects.
 **Deferred:** CC-3 through CC-8, CC-11.
 
 
-### `pyguara/scene` — awaiting approval (2026-09-06)
+### `pyguara/scene` — CLOSED 2026-09-06 (PR #10, branch `refactor/scene-audit`)
 
 **Verification:** 1399/1399 tests pass (up from 1384); ruff clean; mypy clean.
 
@@ -663,3 +666,55 @@ dedicated page; `pause_below` semantics, the switch-versus-push lifetime
 difference and the one-transition-at-a-time rule were undocumented.
 
 **Deferred:** CC-3 through CC-8, CC-11 (now GitHub issue #9).
+
+
+### `pyguara/systems` — awaiting approval (2026-09-06)
+
+**Verification:** 1414/1414 tests pass (up from 1401); ruff clean; mypy clean.
+
+The smallest subsystem so far (165 lines of manager, 63 of protocols) with the
+best existing test ratio. Three real defects nonetheless.
+
+**Correctness fixes (all reproduced by probe before fixing):**
+- **A system registered after `initialize()` was never initialised.**
+  `initialize()` sets a flag and returns early on every later call, and
+  `Scene.resolve_dependencies()` calls it *before* `on_enter()` -- which is
+  precisely where a game is documented to register its own systems (priority
+  >=500). Every game system therefore started up uninitialised. A late
+  registration now initialises immediately.
+- **`unregister()` tested truthiness, not `None`.** A system defining
+  `__len__` or `__bool__` falsily was dropped from the lookup table but left
+  in the update list: still ticking every frame, never cleaned up, and
+  returned as though removed.
+- **Duplicate registration keys were silent.** Several systems can share a key
+  -- they all update -- but the lookup table holds one entry per key, so the
+  earlier ones become unreachable by `get_system()` and survive
+  `unregister()`. Now logged, with the fix (`system_type=`) named in the
+  message.
+
+**A design choice I reversed mid-iteration.** My first fix made duplicate
+registration *evict* the earlier system, on the reasoning that an unreachable
+system still consuming a frame budget is a leak. Three existing tests failed:
+they register several `MockSystem`/`OrderedSystem` instances under one class
+and expect all of them to update. That is a legitimate pattern -- multiple
+instances of one generic system -- and eviction destroyed it. The update list
+is the source of truth; the type map is a convenience index that simply cannot
+represent duplicates. So the fix became surfacing the ambiguity rather than
+resolving it by force.
+
+**Also:** `get_system()` was typed `-> Any | None` and now returns the
+requested type, so callers stop losing type information at every lookup.
+
+**Tests:** 21 -> 34. The existing suite was genuinely good on the happy paths
+and the pause/resume gate; the gaps were registration *after* initialize, key
+collisions, and `unregister` edge cases.
+
+**Docs:** `docs/core/scenes.md` gains a Systems section -- a scene's
+`SystemManager` is where these are encountered. It records the priority band
+convention, that late registration is safe, and that the priority direction is
+the opposite of `EventDispatcher`'s (ascending here, descending there), which
+was written down nowhere.
+
+**Deferred:** CC-3 through CC-8, CC-11 (GitHub issue #9).
+
+**Tier 2 complete:** `config`, `application`, `scene`, `systems`.

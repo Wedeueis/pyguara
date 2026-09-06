@@ -390,3 +390,207 @@ class TestSystemManagerIntegration:
         manager.set_enabled(True)
         manager.update(0.016)
         assert system.update_count == 2
+
+
+class TestLateRegistration:
+    """A system registered after initialize() was never initialised.
+
+    Scene.resolve_dependencies() calls initialize() on the scene's manager,
+    and that runs *before* on_enter() -- which is exactly where a game is
+    meant to register its own systems. Every one of them started up
+    uninitialised.
+    """
+
+    def test_a_system_registered_after_initialize_is_initialised(self):
+        manager = SystemManager()
+        manager.register(MockInitializableSystem())
+        manager.initialize()
+
+        late = MockInitializableSystem()
+        manager.register(late, system_type=type("LateKey", (), {}))
+
+        assert late.initialized
+
+    def test_a_late_system_is_not_initialised_twice(self):
+        class CountingInit:
+            def __init__(self):
+                self.init_count = 0
+
+            def initialize(self):
+                self.init_count += 1
+
+            def update(self, dt):
+                pass
+
+        manager = SystemManager()
+        manager.initialize()
+        system = CountingInit()
+        manager.register(system)
+        manager.initialize()
+
+        assert system.init_count == 1
+
+    def test_registering_before_initialize_still_defers(self):
+        manager = SystemManager()
+        system = MockInitializableSystem()
+        manager.register(system)
+
+        assert not system.initialized
+        manager.initialize()
+        assert system.initialized
+
+    def test_a_late_system_without_initialize_is_fine(self):
+        manager = SystemManager()
+        manager.initialize()
+        manager.register(MockSystem())
+
+        assert manager.system_count == 1
+
+
+class TestDuplicateRegistrationKeys:
+    """Several systems may share a key, but only one is addressable.
+
+    The lookup table holds one entry per key while the update list holds them
+    all, so the earlier systems keep updating with no way to reach them by
+    type. That is allowed -- the update list is the source of truth -- but it
+    is now said out loud instead of being silent.
+    """
+
+    def test_both_systems_still_update(self):
+        manager = SystemManager()
+        first, second = MockSystem(), MockSystem()
+        manager.register(first)
+        manager.register(second)
+
+        manager.update(0.016)
+
+        assert first.update_count == 1
+        assert second.update_count == 1
+
+    def test_the_ambiguity_is_logged(self, caplog):
+        import logging
+
+        manager = SystemManager()
+        manager.register(MockSystem())
+
+        with caplog.at_level(logging.WARNING):
+            manager.register(MockSystem())
+
+        assert "get_system() and unregister() will only see the newest" in caplog.text
+
+    def test_re_registering_the_same_object_is_not_flagged(self, caplog):
+        import logging
+
+        manager = SystemManager()
+        system = MockSystem()
+        manager.register(system)
+
+        with caplog.at_level(logging.WARNING):
+            manager.register(system)
+
+        assert caplog.text == ""
+
+    def test_distinct_keys_keep_both_addressable(self):
+        class KeyA:
+            pass
+
+        class KeyB:
+            pass
+
+        manager = SystemManager()
+        first, second = MockSystem(), MockSystem()
+        manager.register(first, system_type=KeyA)
+        manager.register(second, system_type=KeyB)
+
+        assert manager.get_system(KeyA) is first
+        assert manager.get_system(KeyB) is second
+
+
+class TestUnregisterEdgeCases:
+    def test_a_falsy_system_is_fully_removed(self):
+        """`if system:` dropped a falsy system from the lookup table but left
+        it in the update list -- still ticking every frame, never cleaned up,
+        and reported as removed."""
+
+        class FalsySystem:
+            def __init__(self):
+                self.cleaned = False
+                self.ticked = False
+
+            def __len__(self):
+                return 0
+
+            def update(self, dt):
+                self.ticked = True
+
+            def cleanup(self):
+                self.cleaned = True
+
+        manager = SystemManager()
+        system = FalsySystem()
+        manager.register(system)
+
+        returned = manager.unregister(FalsySystem)
+        manager.update(0.016)
+
+        assert returned is system
+        assert manager.system_count == 0
+        assert system.cleaned
+        assert not system.ticked
+
+    def test_unregistering_an_unknown_type_returns_none(self):
+        manager = SystemManager()
+
+        assert manager.unregister(MockSystem) is None
+
+    def test_unregister_removes_only_the_named_system(self):
+        class KeyA:
+            pass
+
+        class KeyB:
+            pass
+
+        manager = SystemManager()
+        keep = MockSystem()
+        manager.register(MockSystem(), system_type=KeyA)
+        manager.register(keep, system_type=KeyB)
+
+        manager.unregister(KeyA)
+        manager.update(0.016)
+
+        assert manager.system_count == 1
+        assert keep.update_count == 1
+
+
+class TestManagerReuse:
+    def test_a_manager_can_be_rebuilt_after_cleanup(self):
+        manager = SystemManager()
+        manager.register(MockInitializableSystem())
+        manager.initialize()
+        manager.cleanup()
+
+        rebuilt = MockInitializableSystem()
+        manager.register(rebuilt)
+        manager.initialize()
+
+        assert rebuilt.initialized
+        assert manager.system_count == 1
+
+    def test_priority_order_is_ascending(self):
+        """Ascending, unlike EventDispatcher where higher priority runs
+        first. Systems are a pipeline; event handlers compete."""
+        order: list[str] = []
+
+        class Ordered:
+            def __init__(self, name):
+                self.name = name
+
+            def update(self, dt):
+                order.append(self.name)
+
+        manager = SystemManager()
+        manager.register(Ordered("late"), priority=300, system_type=type("L", (), {}))
+        manager.register(Ordered("early"), priority=100, system_type=type("E", (), {}))
+        manager.update(0.016)
+
+        assert order == ["early", "late"]
