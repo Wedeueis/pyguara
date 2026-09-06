@@ -46,7 +46,12 @@ class Window:
             self._is_open = False
 
     def clear(self, color: Color | None = None) -> None:
-        """Clear the window with configured default Color."""
+        """Fill the window with a colour.
+
+        Args:
+            color: Colour to fill with. When None, the backend uses the
+                `default_color` it took from `WindowConfig` at open time.
+        """
         self._backend.clear(color)
 
     def present(self) -> None:
@@ -54,7 +59,13 @@ class Window:
         self._backend.present()
 
     def poll_events(self) -> Iterable[Any]:
-        """Fetch pygame events and handle internal window state."""
+        """Drain the OS event queue.
+
+        Returns:
+            Backend-native event objects. See `IWindowBackend.poll_events` and
+            issue #9: these are not yet engine events, which is why callers
+            still compare against pygame constants.
+        """
         return self._backend.poll_events()
 
     def set_title(self, title: str) -> None:
@@ -71,12 +82,29 @@ class Window:
 
     @property
     def width(self) -> int:
-        """Get the configured window width."""
+        """The drawable width in pixels.
+
+        Reported by the backend once the window exists, since the OS need not
+        grant the size that was asked for -- a fullscreen window is commonly
+        given the desktop resolution instead. Falls back to the configured
+        width before `create()`.
+
+        Returning the configured value unconditionally is what fed a wrong
+        screen size to `SceneManager.set_screen_size()`, and from there to
+        transitions and viewport calculations, whenever the two differed.
+        """
+        if self._is_open:
+            return self._backend.width
         return self._config.screen_width
 
     @property
     def height(self) -> int:
-        """Get the configured window height."""
+        """The drawable height in pixels.
+
+        Backend-reported once the window exists; see `width`.
+        """
+        if self._is_open:
+            return self._backend.height
         return self._config.screen_height
 
     @property
