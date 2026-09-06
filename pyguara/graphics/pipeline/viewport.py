@@ -122,15 +122,35 @@ class Viewport(Rect):
         This automatically calculates the size and position for "Letterboxing"
         (black bars top/bottom) or "Pillarboxing" (black bars left/right).
 
+        A window with no area -- minimised, or mid-resize -- yields a zero
+        viewport rather than a fabricated one. The previous guard substituted a
+        window ratio of 0, which then took the letterbox branch and returned a
+        viewport hundreds of pixels tall at a negative y for a window of height
+        zero.
+
         Args:
             window_width (int): Current window width.
             window_height (int): Current window height.
             target_aspect_ratio (float): Desired ratio (e.g., 16/9 or 1.77).
 
         Returns:
-            Viewport: A centered viewport fitting the target ratio.
+            Viewport: A centered viewport fitting the target ratio, or a zero
+            viewport when the window has no area.
+
+        Raises:
+            ValueError: If `target_aspect_ratio` is not positive. That is a
+                caller error rather than a transient window state, and the
+                letterbox branch would otherwise divide by it.
         """
-        window_ratio = window_width / window_height if window_height != 0 else 0
+        if target_aspect_ratio <= 0:
+            raise ValueError(
+                f"target_aspect_ratio must be positive, got {target_aspect_ratio}."
+            )
+
+        if window_width <= 0 or window_height <= 0:
+            return Viewport(0, 0, 0, 0)
+
+        window_ratio = window_width / window_height
 
         if window_ratio > target_aspect_ratio:
             # Window is too wide (Pillarbox): Fit by height

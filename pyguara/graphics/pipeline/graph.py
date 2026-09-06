@@ -11,9 +11,13 @@ from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
+from pyguara.log import get_logger
 
 if TYPE_CHECKING:
     import moderngl
+
+
+logger = get_logger(__name__)
 
 
 class RenderGraph:
@@ -61,25 +65,53 @@ class RenderGraph:
 
     @property
     def passes(self) -> list[BaseRenderPass]:
-        """The ordered list of render passes."""
-        return self._passes
+        """The render passes, in execution order.
+
+        A snapshot: mutate the pipeline through `add_pass()`,
+        `insert_pass()` and `remove_pass()`. This used to hand back the live
+        list, so `graph.passes.clear()` silently emptied the pipeline without
+        releasing a single pass.
+        """
+        return list(self._passes)
 
     def add_pass(self, render_pass: BaseRenderPass) -> None:
-        """Add a render pass to the end of the pipeline.
+        """Append a render pass to the pipeline.
 
         Args:
-            render_pass: The pass to add.
+            render_pass: The pass to add. Its name should be unique; passes
+                are looked up by name, so a duplicate is unreachable through
+                `get_pass()` and survives `remove_pass()`.
         """
+        self._warn_if_name_taken(render_pass)
         self._passes.append(render_pass)
 
     def insert_pass(self, index: int, render_pass: BaseRenderPass) -> None:
-        """Insert a render pass at a specific position.
+        """Insert a render pass at a position in the pipeline.
 
         Args:
             index: Position in the pass list.
-            render_pass: The pass to insert.
+            render_pass: The pass to insert. Its name should be unique; see
+                `add_pass()`.
         """
+        self._warn_if_name_taken(render_pass)
         self._passes.insert(index, render_pass)
+
+    def _warn_if_name_taken(self, render_pass: BaseRenderPass) -> None:
+        """Report that a pass name now refers to more than one pass.
+
+        Both execute -- the pass list is the source of truth -- but `get_pass()`
+        returns only the first and `remove_pass()` removes only the first, so
+        the second is unreachable by name.
+
+        Args:
+            render_pass: The pass about to be added.
+        """
+        if any(existing.name == render_pass.name for existing in self._passes):
+            logger.warning(
+                f"A second render pass named '{render_pass.name}' is being added. "
+                f"Both will execute, but get_pass() and remove_pass() only ever "
+                f"reach the first. Give each pass a distinct name."
+            )
 
     def remove_pass(self, name: str) -> BaseRenderPass | None:
         """Remove a render pass by name.
