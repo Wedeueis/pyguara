@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/ecs` — **in review (awaiting approval)** — see Iteration Log below
+`pyguara/common` — **in review (awaiting approval)**
 
 ---
 
@@ -21,13 +21,13 @@ rather than fixed in place.
 Ordered roughly by dependency depth: foundations first, leaves last.
 
 ### Tier 1 — Foundations (no intra-engine dependencies)
-- [ ] `pyguara/common` — Vector2, Color, Rect, shared components
+- [x] `pyguara/common` — Vector2, Color, Rect, shared components *(active)*
 - [ ] `pyguara/log` — logging facade
 - [ ] `pyguara/events` — EventDispatcher, Event protocol
 - [ ] `pyguara/di` — DIContainer, auto-wiring, lifetimes
 
 ### Tier 2 — Core runtime
-- [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(active)*
+- [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(done)*
 - [ ] `pyguara/config` — configuration loading/merging
 - [ ] `pyguara/application` — Application loop, bootstrap, sandbox
 - [ ] `pyguara/scene` — Scene base, SceneManager, serializer
@@ -57,7 +57,9 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ## Completed Subsystems
 
-*(none finalised yet)*
+| Subsystem | Closed | Summary |
+| --- | --- | --- |
+| `pyguara/ecs` | 2026-09-06 | Fixed two silent query bugs (`add_entity()` bypassing the query cache; dead-entity resurrection), replaced the private removal hook with a subscribe/unsubscribe API, and modernised the module. PR #1. |
 
 ---
 
@@ -125,7 +127,7 @@ consider making it the default.
 
 ## Iteration Log
 
-### `pyguara/ecs` — awaiting approval (2026-09-06)
+### `pyguara/ecs` — CLOSED 2026-09-06 (PR #1, branch `refactor/ecs-audit`)
 
 **Verification:** 1161/1161 tests pass (68 in the two ECS files, up from 55);
 `ruff check .` clean; `mypy pyguara` clean across 218 files.
