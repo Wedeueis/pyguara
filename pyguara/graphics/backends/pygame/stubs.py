@@ -1,9 +1,13 @@
-"""Stub implementations for advanced graphics features on Pygame backend.
+"""No-op stand-ins for the ModernGL-only graphics features, for pygame.
 
-The Pygame backend doesn't support advanced rendering features like
-FBOs, lighting, or post-processing. These stubs provide no-op
-implementations that allow game code to run unchanged while
-rendering a "fully lit" scene.
+The pygame backend has no framebuffers, no dynamic lighting and no
+post-processing. These stubs let game code that uses those features run
+unchanged on it, rendering a fully lit scene instead of failing.
+
+Their entire value is interface parity: a method the real class has and the
+stub does not is an `AttributeError` that appears only after switching
+backend. `tests/test_pygame_stubs.py` compares each stub's public surface
+against its counterpart, so drift is caught here rather than in a game.
 """
 
 from __future__ import annotations
@@ -11,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pyguara.common.types import Vector2
     from pyguara.ecs.manager import EntityManager
 
 
@@ -55,6 +60,24 @@ class PygameLightingSystem:
     def cleanup(self) -> None:
         """No-op cleanup."""
         pass
+
+    def collect_lights_screen_space(
+        self,
+        camera_position: Vector2,
+        camera_zoom: float,
+        viewport_offset: Vector2,
+    ) -> list[Any]:
+        """Return no lights: this backend renders everything fully lit.
+
+        Args:
+            camera_position: Camera world position (unused).
+            camera_zoom: Camera zoom factor (unused).
+            viewport_offset: Viewport offset in screen space (unused).
+
+        Returns:
+            An empty list.
+        """
+        return []
 
     def update(self, dt: float) -> None:
         """No-op update."""
@@ -242,6 +265,17 @@ class PygameRenderGraph:
     def fbo_manager(self) -> PygameFramebufferManager:
         """Get the stub framebuffer manager."""
         return self._fbo_manager
+
+    @property
+    def ctx(self) -> None:
+        """Return None: there is no GL context behind the pygame backend.
+
+        The real `RenderGraph` hands its `moderngl.Context` to each pass.
+        Nothing consumes this on pygame -- `Application` branches on
+        `isinstance(candidate, RenderGraph)` rather than on mere resolvability
+        -- but the attribute has to exist for the surfaces to match.
+        """
+        return None
 
     @property
     def passes(self) -> list[Any]:
