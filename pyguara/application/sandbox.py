@@ -119,8 +119,9 @@ class SandboxApplication(Application):
         self._window.clear()
 
         # 2. Render Game Scene
+        alpha = self._accumulator / self._fixed_dt if self._fixed_dt > 0 else 0.0
         if self._scene_manager:
-            self._scene_manager.render(self._world_renderer, self._ui_renderer)
+            self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
 
         # 3. Render Tools (On top of everything)
         if self._tool_manager:

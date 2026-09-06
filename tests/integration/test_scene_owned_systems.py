@@ -1,5 +1,6 @@
 """Regression tests for scene-owned world/SystemManager and RenderSystem
-wiring (wayfinder ticket 24).
+wiring (wayfinder ticket 24), the Transform-Sprite position combination
+(ticket 44), and fixed-timestep render interpolation (ticket 45).
 
 Uses the real `create_application()`/`create_headless_application()`
 bootstrap (not a hand-rolled container) so `Scene.resolve_dependencies()`
@@ -276,5 +277,113 @@ def test_default_render_reflects_live_transform_changes_between_frames() -> None
     transform.position = Vector2(50, 25)
     scene.render(app._world_renderer, app._ui_renderer)
     assert positions == [Vector2(0, 0), Vector2(50, 25)]
+
+    app.shutdown()
+
+
+def test_interpolated_transform_lerps_by_render_alpha() -> None:
+    """A Transform.interpolate=True entity submits at
+    lerp(previous_position, position, render_alpha), not the raw current
+    position."""
+    app = create_headless_application()
+    scene = _boot(app)
+
+    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture = texture_factory.create_from_bytes(
+        "test", bytes(8 * 8 * 4), width=8, height=8
+    )
+
+    entity = scene.entity_manager.create_entity()
+    transform = Transform(position=Vector2(100, 0), interpolate=True)
+    transform.previous_position = Vector2(0, 0)
+    entity.add_component(transform)
+    entity.add_component(Sprite(texture=texture, visible=True))
+
+    positions = _spy_submitted_positions(scene)
+
+    scene.render_alpha = 0.5
+    scene.render(app._world_renderer, app._ui_renderer)
+    assert positions == [Vector2(50, 0)]
+
+    scene.render_alpha = 1.0
+    scene.render(app._world_renderer, app._ui_renderer)
+    assert positions == [Vector2(50, 0), Vector2(100, 0)]
+
+    app.shutdown()
+
+
+def test_non_interpolated_transform_ignores_render_alpha() -> None:
+    """A Transform with interpolate=False (the default) always submits at its
+    raw current position, regardless of render_alpha."""
+    app = create_headless_application()
+    scene = _boot(app)
+
+    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture = texture_factory.create_from_bytes(
+        "test", bytes(8 * 8 * 4), width=8, height=8
+    )
+
+    entity = scene.entity_manager.create_entity()
+    transform = Transform(position=Vector2(100, 0))
+    transform.previous_position = Vector2(0, 0)  # would matter if interpolated
+    entity.add_component(transform)
+    entity.add_component(Sprite(texture=texture, visible=True))
+
+    positions = _spy_submitted_positions(scene)
+
+    scene.render_alpha = 0.5
+    scene.render(app._world_renderer, app._ui_renderer)
+
+    assert positions == [Vector2(100, 0)]
+
+    app.shutdown()
+
+
+def test_fixed_update_snapshots_previous_position_before_any_system_runs() -> None:
+    """SceneManager.fixed_update() snapshots previous_position once, before
+    any system (engine or scene-registered) moves the Transform this tick --
+    not after, which would make previous_position == position and defeat
+    interpolation entirely."""
+    app = create_headless_application()
+    scene = _boot(app)
+
+    entity = scene.entity_manager.create_entity()
+    transform = Transform(position=Vector2(0, 0), interpolate=True)
+    entity.add_component(transform)
+
+    class _MoveSystem:
+        def update(self, dt: float) -> None:
+            transform.position = transform.position + Vector2(10, 0)
+
+    scene.system_manager.register(_MoveSystem(), priority=999)
+
+    app._scene_manager.fixed_update(1 / 60)
+
+    assert transform.previous_position == Vector2(0, 0)
+    assert transform.position == Vector2(10, 0)
+
+    # A second tick: previous_position picks up where the first tick left off.
+    app._scene_manager.fixed_update(1 / 60)
+    assert transform.previous_position == Vector2(10, 0)
+    assert transform.position == Vector2(20, 0)
+
+    app.shutdown()
+
+
+def test_fixed_update_does_not_snapshot_non_interpolated_transforms() -> None:
+    """A Transform with interpolate=False never has previous_position
+    touched by SceneManager.fixed_update() -- no wasted work for entities
+    that don't opt in."""
+    app = create_headless_application()
+    scene = _boot(app)
+
+    entity = scene.entity_manager.create_entity()
+    transform = Transform(position=Vector2(5, 5))
+    transform.previous_position = Vector2(-1, -1)  # sentinel, must stay put
+    entity.add_component(transform)
+
+    app._scene_manager.fixed_update(1 / 60)
+
+    assert transform.previous_position == Vector2(-1, -1)
 
     app.shutdown()

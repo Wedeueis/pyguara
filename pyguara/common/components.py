@@ -45,6 +45,7 @@ class Transform(BaseComponent):
         position: Optional[Vector2] = None,
         rotation: float = 0.0,
         scale: Optional[Vector2] = None,
+        interpolate: bool = False,
     ) -> None:
         """Initialize the transform."""
         super().__init__()  # Initialize BaseComponent (sets self.entity = None)
@@ -62,6 +63,14 @@ class Transform(BaseComponent):
         self._world_rotation: float = self._local_rotation
         self._world_scale: Vector2 = self._local_scale
         self._is_dirty: bool = True
+
+        # Fixed-timestep render interpolation (opt-in): when True,
+        # SceneManager.fixed_update() snapshots previous_position once per
+        # tick before any system moves this Transform, and Scene.render()'s
+        # default combination lerps between it and the current position by
+        # render_alpha instead of using the current position directly.
+        self.interpolate = interpolate
+        self.previous_position: Vector2 = self._local_position
 
     # --- Properties ---
 

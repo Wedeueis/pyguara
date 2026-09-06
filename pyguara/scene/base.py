@@ -63,6 +63,11 @@ class Scene(ABC):
         # New: Application will set this before on_enter
         self.container: Optional[DIContainer] = None
 
+        # Set by SceneManager.render() immediately before this scene's own
+        # render() runs each frame. 1.0 = fully at the current fixed step --
+        # a sane default before the first real render() call.
+        self.render_alpha: float = 1.0
+
     def resolve_dependencies(self, container: DIContainer) -> None:
         """
         Call by the Application/SceneManager to inject the container.
@@ -219,14 +224,18 @@ class Scene(ABC):
         Default implementation: submits every entity carrying a visible
         `Sprite` component to `self.render_system`, then flushes. When the
         entity also carries a `Transform`, `Sprite.position` is treated as an
-        offset from it (`transform.position + sprite.position`), combined at
-        submission time without ever writing back to `sprite.position` --
-        preserving that offset instead of the sync silently destroying it
-        every frame. An entity with only a `Sprite` submits at its own
-        `position` unchanged (the standalone case). Override only to add
-        extra manual draws (debug overlays, UI-adjacent world drawing),
-        calling `super().render(world_renderer, ui_renderer)` first so the
-        default submission still happens.
+        offset from it, combined at submission time without ever writing back
+        to `sprite.position` -- preserving that offset instead of the sync
+        silently destroying it every frame. If that `Transform` has
+        `interpolate=True`, the position used is `lerp(previous_position,
+        position, self.render_alpha)` instead of `position` directly,
+        smoothing over the gap between fixed steps at display framerate; every
+        other `Transform` uses `position` directly, unaffected. An entity with
+        only a `Sprite` submits at its own `position` unchanged (the
+        standalone case). Override only to add extra manual draws (debug
+        overlays, UI-adjacent world drawing), calling
+        `super().render(world_renderer, ui_renderer)` first so the default
+        submission still happens.
         """
         assert self.render_system is not None and self.camera is not None, (
             "Scene.render() called before resolve_dependencies() built "
@@ -237,9 +246,14 @@ class Scene(ABC):
             sprite = entity.get_component(Sprite)
             if sprite.visible:
                 if entity.has_component(Transform):
-                    world_position = (
-                        entity.get_component(Transform).position + sprite.position
-                    )
+                    transform = entity.get_component(Transform)
+                    if transform.interpolate:
+                        base_position = transform.previous_position.lerp(
+                            transform.position, self.render_alpha
+                        )
+                    else:
+                        base_position = transform.position
+                    world_position = base_position + sprite.position
                 else:
                     world_position = sprite.position
                 self.render_system.submit(sprite, position=world_position)
