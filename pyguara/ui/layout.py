@@ -30,14 +30,23 @@ class BoxContainer(UIElement):
         for child in self.children:
             child.render(renderer)
 
-    def layout(self) -> None:
-        """Recalculate positions based on alignment and direction."""
+    def layout(self, renderer: UIRenderer) -> None:
+        """Recalculate positions based on alignment and direction.
+
+        Args:
+            renderer: Passed to each visible child's `measure()` before
+                reading its size, so renderer-dependent sizing (e.g. text)
+                is current for this pass's stacking math.
+        """
         if not self.children:
             return
 
         # 1. Calculate total used space
         total_size = 0
         visible_children = [c for c in self.children if c.visible]
+
+        for child in visible_children:
+            child.measure(renderer)
 
         for child in visible_children:
             if self.direction == LayoutDirection.VERTICAL:

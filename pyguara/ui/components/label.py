@@ -22,12 +22,15 @@ class Label(Widget):
         self.font_size = font_size
         self._custom_color = color
 
-    def render(self, renderer: UIRenderer) -> None:
-        """Render the label text."""
-        # Update size for layout engine
+    def measure(self, renderer: UIRenderer) -> None:
+        """Recompute size from the current text and font size."""
         w, h = renderer.get_text_size(self.text, self.font_size)
         self.rect.width = w
         self.rect.height = h
+
+    def render(self, renderer: UIRenderer) -> None:
+        """Render the label text."""
+        self.measure(renderer)
 
         color = self._custom_color or self.theme.colors.text
         renderer.draw_text(

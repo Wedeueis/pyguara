@@ -17,8 +17,15 @@ class Checkbox(Widget):
         self.box_size = 20
         self.label_spacing = 5
 
+    def measure(self, renderer: UIRenderer) -> None:
+        """Recompute total width (box + label) from the label's text size."""
+        text_w, _ = renderer.get_text_size(self.label, 16)
+        self.rect.width = self.box_size + self.label_spacing + text_w
+
     def render(self, renderer: UIRenderer) -> None:
         """Render the checkbox and label."""
+        self.measure(renderer)
+
         # 1. Draw Box
         box_rect = Rect(self.rect.x, self.rect.y, self.box_size, self.box_size)
         bg_color = self.theme.colors.background
@@ -43,10 +50,6 @@ class Checkbox(Widget):
             self.rect.x + self.box_size + self.label_spacing, self.rect.y
         )
         renderer.draw_text(self.label, text_pos, self.theme.colors.text)
-
-        # Update total bounds for hit testing (Box + Text)
-        text_w, _ = renderer.get_text_size(self.label, 16)
-        self.rect.width = self.box_size + self.label_spacing + text_w
 
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int

@@ -25,18 +25,18 @@ class Label(Widget):
         self._custom_color = color
         self._auto_size = True
 
-    def render(self, renderer: UIRenderer) -> None:
-        """Render the text."""
-        # 1. Update size to match text content
+    def measure(self, renderer: UIRenderer) -> None:
+        """Recompute size to match text content, if auto-sizing is enabled."""
         if self._auto_size:
             w, h = renderer.get_text_size(self.text, self.font_size)
             self.rect.width = w
             self.rect.height = h
 
-        # 2. Determine Color
-        final_color = self._custom_color or self.theme.colors.text
+    def render(self, renderer: UIRenderer) -> None:
+        """Render the text."""
+        self.measure(renderer)
 
-        # 3. Draw
+        final_color = self._custom_color or self.theme.colors.text
         renderer.draw_text(
             self.text, Vector2(self.rect.x, self.rect.y), final_color, self.font_size
         )
