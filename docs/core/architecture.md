@@ -58,22 +58,26 @@ app = container.get(Application)
 
 # Event System
 
-The Event System (`pyguara.events`) provides a decoupled communication channel between subsystems.
+The event system (`pyguara.events`) decouples subsystems: publishers do not
+know their subscribers, and subscription is by event type.
 
-## EventDispatcher
-
-- **Synchronous Dispatch**: `dispatch(event)` executes handlers immediately on the calling thread.
-- **Queued Dispatch**: `queue_event(event)` is thread-safe and processes events at the start of the next frame (useful for Network/Loader threads).
-- **Filtering & Priority**: Handlers can define priority levels and filter logic.
-
-## Protocol
-
-Events are defined using the `Event` protocol, typically implemented as Dataclasses.
+- **Structural events.** `Event` is a Protocol, so any dataclass with
+  `timestamp` and `source` qualifies — no base class required.
+- **Subclass matching.** Dispatch walks the event's MRO, so subscribing to
+  `KeyboardEvent` receives both `KeyDownEvent` and `KeyUpEvent`. Handlers
+  across the hierarchy merge into one priority-ordered pass.
+- **Consumption.** A handler returning `False` stops lower-priority handlers,
+  and `dispatch()` reports it — how a UI layer claims input before the game.
+- **Threading.** `queue_event()` is the only thread-safe entry point;
+  `process_queue()` drains on the main loop, under optional time and count
+  budgets.
 
 ```python
 @dataclass
-class PlayerDiedEvent:
+class PlayerDied:
     player_id: str
     timestamp: float = field(default_factory=time.time)
     source: Any = None
 ```
+
+See **[Event System](events.md)** for the full reference.

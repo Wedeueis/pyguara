@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/common` — **in review (awaiting approval)**
+`pyguara/events` — **in review (awaiting approval)**
 
 ---
 
@@ -21,9 +21,9 @@ rather than fixed in place.
 Ordered roughly by dependency depth: foundations first, leaves last.
 
 ### Tier 1 — Foundations (no intra-engine dependencies)
-- [x] `pyguara/common` — Vector2, Color, Rect, shared components *(active)*
+- [x] `pyguara/common` — Vector2, Color, Rect, shared components *(done)*
 - [ ] `pyguara/log` — logging facade
-- [ ] `pyguara/events` — EventDispatcher, Event protocol
+- [x] `pyguara/events` — EventDispatcher, Event protocol *(active)*
 - [ ] `pyguara/di` — DIContainer, auto-wiring, lifetimes
 
 ### Tier 2 — Core runtime
@@ -59,6 +59,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/common` | 2026-09-06 | Fixed `Transform.up` pointing down, an unguarded parent cycle and a falsy-`Vector2` default; renamed `Vector2.rotate` to `rotate_degrees`; wrote the first tests for `Vector2` and `Transform`. PR #2. |
 | `pyguara/ecs` | 2026-09-06 | Fixed two silent query bugs (`add_entity()` bypassing the query cache; dead-entity resurrection), replaced the private removal hook with a subscribe/unsubscribe API, and modernised the module. PR #1. |
 
 ---
@@ -127,6 +128,16 @@ are audited and the true extent is known, migrate the tree to `StrictComponent`
 and consider making it the default.
 *Discovered in:* `ecs`; offender identified in `common`. *Status:* parked.
 
+### CC-8 — Package `__init__.py` files export nothing
+Most subsystem packages have a docstring-only `__init__.py`, so callers reach
+into submodules (`from pyguara.events.dispatcher import ...`). Beyond the
+ergonomics, it actively hides import cycles: adding re-exports to
+`events/__init__.py` immediately exposed a latent `log` <-> `events` deadlock
+(fixed in that pass). Every package still lacking exports may be hiding the
+same thing. **Fix:** add a curated `__all__` per package as each is audited,
+and treat any cycle it reveals as a finding rather than a reason to revert.
+*Discovered in:* `events`. *Status:* open.
+
 ### CC-7 — `x or default` used with falsy value types
 `pymunk.Vec2d` defines `__bool__`, so `Vector2(0, 0)` is falsy. `Transform
 .__init__` used `scale or Vector2(1, 1)`, which silently rewrote an explicitly
@@ -189,7 +200,7 @@ test modules migrated; 7 further tests added (1168 total, from 1161).
 half of CC-5 (`Entity._components` reached into by `persistence`/`prefabs`).
 
 
-### `pyguara/common` — awaiting approval (2026-09-06)
+### `pyguara/common` — CLOSED 2026-09-06 (PR #2, branch `refactor/common-audit`)
 
 **Verification:** 1236/1236 tests pass (up from 1168); ruff clean; mypy clean
 across 217 files (one fewer: `constants.py` deleted).
@@ -242,3 +253,59 @@ fixture, so the most intricate logic in the package was exercised by accident.
 **Docs:** new `docs/core/common-types.md`, added to the mkdocs nav.
 
 **Deferred:** CC-1 through CC-4, CC-6, CC-7, and the remaining half of CC-5.
+
+
+### `pyguara/events` — awaiting approval (2026-09-06)
+
+**Verification:** 1262/1262 tests pass (up from 1236); ruff clean; mypy clean.
+
+**Correctness fixes (all reproduced by probe before fixing):**
+- Every event dataclass in `input.py`, `lifecycle.py` and `window.py` used
+  `timestamp: float = 0.0` plus a `__post_init__` overwriting zero with
+  `time.time()`. A genuine timestamp of 0.0 was therefore impossible to
+  express, and the idiom was duplicated five times. Replaced with
+  `field(default_factory=time.time)`, which `ecs/events.py` already used --
+  the engine had two idioms for the same thing and the more common one was
+  the broken one.
+- `filter_func` exceptions bypassed `error_strategy` entirely: a raising
+  filter propagated even under IGNORE, because only the handler call was
+  wrapped. A filter is user code too, and now follows the same policy.
+- **Latent `log` <-> `events` import cycle.** `pyguara.log.events` inherits the
+  `Event` protocol at runtime, so `log` depends on `events`; but
+  `events.dispatcher` imported `pyguara.log` at module scope. The cycle was
+  masked only by `events/__init__.py` being empty, and detonated the moment
+  re-exports were added. `events` is the more foundational package, so the
+  fix is on its side: `EngineLogger` is a type-only import and the default
+  logger resolves lazily inside `__init__`. Both import orders are now
+  covered by a subprocess regression test.
+
+**API changes:**
+- `dispatch()` returns `bool` instead of `None` -- True if every handler ran,
+  False if one consumed the event by returning False. The short-circuit
+  already worked but was invisible to callers, which is precisely what
+  UI-over-game input handling needs. No in-repo caller used the return value,
+  so this is additive. `IEventDispatcher` updated to match.
+- `max_history_size` is now a constructor parameter; it was hardcoded at 1000
+  while `enable_history` was configurable.
+- `IEventDispatcher.subscribe` gained the `filter_func` parameter the
+  implementation always had.
+- `events/__init__.py` re-exports the public surface with an `__all__`.
+
+**Performance:** `dispatch()` rebuilt and re-sorted the merged MRO handler
+list on every single call -- in the engine's hottest path. Now memoised per
+concrete event type and invalidated when the subscription set changes.
+Measured on 20 000 dispatches with 50 handlers: 5.7 us -> 3.1 us per dispatch.
+
+**Tests:** 23 -> 49. The dispatcher's existing tests were genuinely good; the
+gaps were the event dataclasses (untested, and where the timestamp bug lived),
+filter error handling, `clear_subscribers`, history filtering and sizing,
+cache invalidation, snapshot-during-dispatch semantics, and real multi-thread
+`queue_event` contention.
+
+**Note:** one existing test caught a regression I introduced -- dropping the
+exception text from the handler error message. Restored.
+
+**Docs:** new `docs/core/events.md`; `architecture.md`'s Event section
+condensed to a summary and link.
+
+**Deferred:** CC-1 through CC-4, CC-6, CC-7, CC-8, and the rest of CC-5.

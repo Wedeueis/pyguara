@@ -20,6 +20,7 @@ nav:
       - Architecture: core/architecture.md
       - Entity Component System: core/ecs.md
       - Core Types: core/common-types.md
+      - Event System: core/events.md
       - Application & Lifecycle: core/application.md
       - Logging: core/logging.md
   - Graphics:
