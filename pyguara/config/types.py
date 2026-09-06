@@ -1,11 +1,14 @@
 """Configuration data structures."""
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, get_type_hints
 
 from pyguara.common.types import Color
+from pyguara.log import get_logger
 from pyguara.log.types import LogLevel
+
+logger = get_logger(__name__)
 
 
 class RenderingBackend(Enum):
@@ -73,7 +76,22 @@ class PhysicsConfig:
 
     @property
     def fixed_dt(self) -> float:
-        """Get the fixed delta time in seconds."""
+        """The fixed timestep in seconds.
+
+        Returns:
+            Seconds per physics tick, `1 / fixed_timestep_hz`.
+
+        Raises:
+            ValueError: If `fixed_timestep_hz` is not positive. Application.run()
+                reads this on every startup, so a zero from a config file used
+                to surface as a bare ZeroDivisionError with no mention of
+                config.
+        """
+        if self.fixed_timestep_hz <= 0:
+            raise ValueError(
+                f"physics.fixed_timestep_hz must be positive, got "
+                f"{self.fixed_timestep_hz}."
+            )
         return 1.0 / self.fixed_timestep_hz
 
 
@@ -123,57 +141,126 @@ class GameConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GameConfig":
-        """Create config from dictionary (manual for safety/speed)."""
-        cfg = cls()
+        """Build a config from a decoded JSON document.
 
-        # Display
-        if "display" in data:
-            d = data["display"].copy()
-            # Handle backend enum conversion from string
-            if "backend" in d and isinstance(d["backend"], str):
-                d["backend"] = RenderingBackend(d["backend"])
-            cfg.display = WindowConfig(
-                **{k: v for k, v in d.items() if k in WindowConfig.__annotations__}
+        Unknown keys are ignored and logged rather than raising, so a config
+        written by a newer engine still loads. Nested values are coerced back
+        to their declared types -- `Color` from its dict form, enums from their
+        string or integer value -- which plain construction would not do.
+
+        The input is never mutated.
+
+        Args:
+            data: Decoded configuration document.
+
+        Returns:
+            The populated config. Sections absent from `data` keep their
+            defaults.
+        """
+        config = cls()
+        for section_name in ("display", "audio", "input", "physics", "debug"):
+            section_data = data.get(section_name)
+            if section_data is None:
+                continue
+            current = getattr(config, section_name)
+            setattr(
+                config,
+                section_name,
+                _build_section(type(current), section_data, section_name),
             )
 
-        # Audio
-        if "audio" in data:
-            a = data["audio"]
-            cfg.audio = AudioConfig(
-                **{k: v for k, v in a.items() if k in AudioConfig.__annotations__}
+        version = data.get("version")
+        if isinstance(version, str):
+            config.version = version
+
+        return config
+
+
+def _build_section(
+    section_type: type[Any], data: dict[str, Any], section_name: str
+) -> Any:
+    """Construct one config section, coercing each value to its declared type.
+
+    Args:
+        section_type: The dataclass to build.
+        data: That section's raw values.
+        section_name: Section name, for log messages.
+
+    Returns:
+        The constructed section.
+    """
+    hints = get_type_hints(section_type)
+    known = {f.name for f in fields(section_type)}
+
+    kwargs: dict[str, Any] = {}
+    for key, value in data.items():
+        if key not in known:
+            logger.warning(
+                f"Unknown config key '{section_name}.{key}' ignored. "
+                f"Check for a typo, or a setting from a different engine version."
             )
+            continue
+        kwargs[key] = _coerce(hints[key], value, f"{section_name}.{key}")
 
-        # Input
-        if "input" in data:
-            i = data["input"]
-            cfg.input = InputConfig(
-                **{k: v for k, v in i.items() if k in InputConfig.__annotations__}
-            )
+    return section_type(**kwargs)
 
-        # Physics
-        if "physics" in data:
-            p = data["physics"]
-            cfg.physics = PhysicsConfig(
-                **{k: v for k, v in p.items() if k in PhysicsConfig.__annotations__}
-            )
 
-        # Debug
-        if "debug" in data:
-            d = data["debug"]
-            # Handle Enum conversion manually if needed
-            if "log_level" in d and isinstance(d["log_level"], (str, int)):
-                # If string "DEBUG", convert to LogLevel.DEBUG
-                # If int 10, convert to LogLevel(10)
-                try:
-                    if isinstance(d["log_level"], str):
-                        d["log_level"] = LogLevel[d["log_level"].upper()]
-                    else:
-                        d["log_level"] = LogLevel(d["log_level"])
-                except (KeyError, ValueError):
-                    d["log_level"] = LogLevel.INFO
+def _coerce(target_type: Any, value: Any, label: str) -> Any:
+    """Convert a decoded JSON value to the type a config field declares.
 
-            cfg.debug = DebugConfig(
-                **{k: v for k, v in d.items() if k in DebugConfig.__annotations__}
-            )
+    JSON has no enums and no dataclasses, so a round trip through a file turns
+    `Color` into a dict and `RenderingBackend` into a string. Without this,
+    `default_color` came back as a plain dict and every reader of it broke on
+    attribute access.
 
-        return cfg
+    Args:
+        target_type: The field's declared type.
+        value: The decoded value.
+        label: Dotted field name, for log messages.
+
+    Returns:
+        The coerced value, or the original if no rule applies.
+    """
+    if isinstance(target_type, type):
+        if isinstance(value, target_type) and not isinstance(value, bool):
+            return value
+
+        if is_dataclass(target_type) and isinstance(value, dict):
+            nested = {f.name for f in fields(target_type)}
+            return target_type(**{k: v for k, v in value.items() if k in nested})
+
+        if issubclass(target_type, Enum):
+            return _coerce_enum(target_type, value, label)
+
+    return value
+
+
+def _coerce_enum(enum_type: type[Enum], value: Any, label: str) -> Any:
+    """Resolve an enum from its value, or from its member name.
+
+    Args:
+        enum_type: The enum to resolve into.
+        value: A member value, or a member name such as `"DEBUG"`.
+        label: Dotted field name, for log messages.
+
+    Returns:
+        The matching member, or the enum's engine default when nothing matches.
+    """
+    if isinstance(value, enum_type):
+        return value
+    try:
+        return enum_type(value)
+    except ValueError:
+        pass
+    if isinstance(value, str):
+        try:
+            return enum_type[value.upper()]
+        except KeyError:
+            pass
+
+    fallback = next(iter(enum_type))
+    logger.warning(
+        f"Config value {value!r} is not a valid {enum_type.__name__} for "
+        f"'{label}'; falling back to {fallback.name}."
+    )
+    return fallback
