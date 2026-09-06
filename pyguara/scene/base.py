@@ -80,9 +80,9 @@ class Scene(ABC):
         """
         self.container = container
 
-        # EntityManager stays decoupled from the event system; wire its
-        # removal hook to dispatch EntityDestroyed here instead.
-        self.entity_manager._on_entity_removed = self._on_entity_removed
+        # EntityManager stays decoupled from the event system; this scene
+        # subscribes to its removals and republishes them as EntityDestroyed.
+        self.entity_manager.subscribe_entity_removed(self._dispatch_entity_destroyed)
 
         self.system_manager.register(
             SteeringSystem(self.entity_manager),
@@ -118,12 +118,15 @@ class Scene(ABC):
             prefab_resolver=container.get(PrefabCache).load,
         )
 
-    def _on_entity_removed(self, entity: Entity) -> None:
-        """Dispatch EntityDestroyed for an entity this scene just soft-removed.
+    def _dispatch_entity_destroyed(self, entity: Entity) -> None:
+        """Republish a soft-removed entity as an `EntityDestroyed` event.
 
-        Wired onto `self.entity_manager._on_entity_removed` in
-        `resolve_dependencies()`; fires synchronously from
-        `EntityManager.remove_entity()`, components still intact.
+        Subscribed to `self.entity_manager` in `resolve_dependencies()`; fires
+        synchronously from `EntityManager.remove_entity()` with the entity's
+        components still intact.
+
+        Args:
+            entity: The entity that was just removed.
         """
         self.event_dispatcher.dispatch(EntityDestroyed(entity=entity, source=self))
 

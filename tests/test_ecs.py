@@ -632,8 +632,10 @@ def test_entity_destroyed_dispatched_synchronously_with_components_readable() ->
     entity.add_component(Position(3, 4))
 
     received = []
-    manager._on_entity_removed = lambda e: received.append(
-        (e, e.has_component(Position), e.get_component(Position))
+    manager.subscribe_entity_removed(
+        lambda e: received.append(
+            (e, e.has_component(Position), e.get_component(Position))
+        )
     )
 
     manager.remove_entity(entity.id)
@@ -653,8 +655,8 @@ def test_entity_destroyed_event_dispatches_through_a_real_dispatcher() -> None:
 
     dispatcher = EventDispatcher()
     manager = EntityManager()
-    manager._on_entity_removed = lambda e: dispatcher.dispatch(
-        EntityDestroyed(entity=e)
+    manager.subscribe_entity_removed(
+        lambda e: dispatcher.dispatch(EntityDestroyed(entity=e))
     )
 
     received: list[EntityDestroyed] = []
@@ -902,3 +904,124 @@ def test_strict_component_accepts_class_keyword_arguments() -> None:
         value: int = 0
 
     assert received["marker"] == "ok"
+
+
+# -- Entity-removal subscription API --
+
+
+def test_multiple_subscribers_are_all_notified() -> None:
+    """The single-slot `_on_entity_removed` attribute let whichever consumer
+    wired itself last silently displace every earlier one. Subscription must
+    fan out instead."""
+    manager = EntityManager()
+    entity = manager.create_entity("e")
+
+    seen: list[str] = []
+    manager.subscribe_entity_removed(lambda _e: seen.append("scene"))
+    manager.subscribe_entity_removed(lambda _e: seen.append("inspector"))
+
+    manager.remove_entity("e")
+
+    assert seen == ["scene", "inspector"]
+    assert entity._is_removed
+
+
+def test_subscribers_see_components_before_cleanup() -> None:
+    """Notification happens after soft-death but before index cleanup, so a
+    subscriber can still inspect what the entity was carrying."""
+    manager = EntityManager()
+    entity = manager.create_entity("e")
+    entity.add_component(Position(3, 4))
+
+    observed: list[tuple[bool, Position]] = []
+    manager.subscribe_entity_removed(
+        lambda e: observed.append(
+            (e.has_component(Position), e.get_component(Position))
+        )
+    )
+
+    manager.remove_entity("e")
+
+    assert observed == [(True, Position(3, 4))]
+
+
+def test_unsubscribe_stops_notifications() -> None:
+    manager = EntityManager()
+    seen: list[str] = []
+
+    def listener(entity: Entity) -> None:
+        seen.append(entity.id)
+
+    manager.subscribe_entity_removed(listener)
+    manager.remove_entity(manager.create_entity("first").id)
+
+    manager.unsubscribe_entity_removed(listener)
+    manager.remove_entity(manager.create_entity("second").id)
+
+    assert seen == ["first"]
+
+
+def test_unsubscribe_of_an_unknown_callback_is_a_noop() -> None:
+    manager = EntityManager()
+    manager.unsubscribe_entity_removed(lambda _e: None)
+
+
+def test_subscribing_a_bound_method_twice_notifies_once() -> None:
+    """Scene subscribes a bound method in resolve_dependencies(). Resolving
+    twice must not double-dispatch EntityDestroyed -- and bound methods are a
+    fresh object on every attribute access, so the dedupe has to compare by
+    equality, not identity."""
+
+    class Listener:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def handle(self, _entity: Entity) -> None:
+            self.calls += 1
+
+    manager = EntityManager()
+    listener = Listener()
+    manager.subscribe_entity_removed(listener.handle)
+    manager.subscribe_entity_removed(listener.handle)
+
+    manager.remove_entity(manager.create_entity("e").id)
+
+    assert listener.calls == 1
+
+
+def test_a_subscriber_may_unsubscribe_itself_during_notification() -> None:
+    """Notification iterates a copy, so a one-shot subscriber (or a teardown
+    that detaches observers) cannot corrupt the in-flight iteration."""
+    manager = EntityManager()
+    seen: list[str] = []
+
+    def once(entity: Entity) -> None:
+        seen.append(entity.id)
+        manager.unsubscribe_entity_removed(once)
+
+    manager.subscribe_entity_removed(once)
+    manager.subscribe_entity_removed(lambda e: seen.append(f"other:{e.id}"))
+
+    manager.remove_entity(manager.create_entity("first").id)
+    manager.remove_entity(manager.create_entity("second").id)
+
+    assert seen == ["first", "other:first", "other:second"]
+
+
+def test_subscriber_exceptions_propagate_after_the_entity_is_already_dead() -> None:
+    """A failing subscriber must not be swallowed, and must not leave the
+    world in a half-removed state: soft-death completes before notification."""
+    manager = EntityManager()
+    manager.create_entity("e").add_component(Position())
+    manager.subscribe_entity_removed(_raise_boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        manager.remove_entity("e")
+
+    assert manager.get_entity("e") is None
+    manager.flush_pending_removals()
+    assert list(manager.get_entities_with(Position)) == []
+
+
+def _raise_boom(_entity: Entity) -> None:
+    raise RuntimeError("boom")

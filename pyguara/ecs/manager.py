@@ -17,6 +17,9 @@ C4 = TypeVar("C4", bound=Component)
 
 _EMPTY_IDS: frozenset[str] = frozenset()
 
+EntityRemovedCallback = Callable[[Entity], None]
+"""Called synchronously with an entity at the moment it is soft-removed."""
+
 
 class EntityManager:
     """Central database for the entities in one world.
@@ -48,11 +51,14 @@ class EntityManager:
         # directly -- the set is never mutated mid-frame.
         self._pending_index_cleanup: list[tuple[type[Component], str]] = []
 
-        # Optional hook fired synchronously in remove_entity(), at the moment
+        # Subscribers notified synchronously in remove_entity(), at the moment
         # of soft-death, with the (still component-intact) removed Entity.
-        # EntityManager stays decoupled from the event system: Scene.
-        # resolve_dependencies() wires this to dispatch EntityDestroyed.
-        self._on_entity_removed: Callable[[Entity], None] | None = None
+        # A list rather than a single slot: EntityManager stays decoupled from
+        # the event system (Scene subscribes to dispatch EntityDestroyed), but
+        # tools such as the editor inspector need to observe removals too, and
+        # a single slot would let whichever registered last silently displace
+        # the others.
+        self._entity_removed_callbacks: list[EntityRemovedCallback] = []
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -111,9 +117,9 @@ class EntityManager:
         that instant on; further mutation of it raises. Physical index cleanup
         is deferred to `flush_pending_removals()`.
 
-        If `_on_entity_removed` is set it fires synchronously here, after
-        soft-death but before the deferred cleanup, so handlers can still read
-        the entity's components.
+        Subscribers registered via `subscribe_entity_removed()` are notified
+        synchronously here, after soft-death but before the deferred cleanup,
+        so they can still read the entity's components.
 
         Removing an unknown id is a no-op.
 
@@ -131,8 +137,10 @@ class EntityManager:
         entity._is_removed = True
         del self._entities[entity_id]
 
-        if self._on_entity_removed is not None:
-            self._on_entity_removed(entity)
+        # Iterate a copy: a subscriber may unsubscribe itself, or tear down a
+        # subsystem that unsubscribes, while it is being notified.
+        for callback in list(self._entity_removed_callbacks):
+            callback(entity)
 
         for component_type in entity._components:
             self._pending_index_cleanup.append((component_type, entity_id))
@@ -151,6 +159,35 @@ class EntityManager:
             self._query_cache.on_component_removed(entity_id, component_type)
 
         self._pending_index_cleanup.clear()
+
+    def subscribe_entity_removed(self, callback: EntityRemovedCallback) -> None:
+        """Register a callback to run when an entity is removed from this world.
+
+        The callback fires synchronously from `remove_entity()`, at the moment
+        of soft-death and before index cleanup, so it can still read the
+        removed entity's components. Exceptions propagate to the caller of
+        `remove_entity()`; a subscriber that may fail should handle its own
+        errors.
+
+        Subscribing a callback that is already subscribed is a no-op, so a
+        scene whose dependencies are resolved twice does not double-notify.
+
+        Args:
+            callback: Receives the entity being removed.
+        """
+        if callback not in self._entity_removed_callbacks:
+            self._entity_removed_callbacks.append(callback)
+
+    def unsubscribe_entity_removed(self, callback: EntityRemovedCallback) -> None:
+        """Stop notifying a callback registered via `subscribe_entity_removed()`.
+
+        Unsubscribing a callback that is not subscribed is a no-op.
+
+        Args:
+            callback: The callback to remove.
+        """
+        if callback in self._entity_removed_callbacks:
+            self._entity_removed_callbacks.remove(callback)
 
     # -------------------------------------------------------------------------
     # Lookup
