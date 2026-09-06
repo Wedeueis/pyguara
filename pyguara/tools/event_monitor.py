@@ -3,15 +3,15 @@
 import time
 from collections import deque
 
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
-from pyguara.graphics.protocols import UIRenderer
-from pyguara.common.types import Color, Vector2, Rect
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.tools.base import Tool
+from pyguara.events.lifecycle import QuitEvent
+from pyguara.graphics.protocols import UIRenderer
 
 # Events to monitor
-from pyguara.input.events import OnRawKeyEvent, OnActionEvent
-from pyguara.events.lifecycle import QuitEvent
+from pyguara.input.events import OnActionEvent, OnRawKeyEvent
+from pyguara.tools.base import Tool
 
 
 class EventMonitor(Tool):

@@ -6,8 +6,8 @@ Pure data containers for the platformer game.
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
+from pyguara.common.types import Color, Vector2
 from pyguara.ecs.component import BaseComponent
-from pyguara.common.types import Vector2, Color
 
 
 class PlayerAnimState(Enum):

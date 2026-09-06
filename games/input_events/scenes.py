@@ -3,15 +3,15 @@
 Demonstrates input binding and physics interaction.
 """
 
-from pyguara.scene.base import Scene
+from games.input_events.components import Sprite, Transform, Velocity
+from games.input_events.systems import InputBridgeSystem, PlayerSystem
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Vector2, Color, Rect
-from pyguara.input.manager import InputManager
-from pyguara.input.types import InputDevice, ActionType
 from pyguara.input.keys import SPACE
-from games.input_events.components import Transform, Velocity, Sprite
-from games.input_events.systems import InputBridgeSystem, PlayerSystem
+from pyguara.input.manager import InputManager
+from pyguara.input.types import ActionType, InputDevice
+from pyguara.scene.base import Scene
 
 
 class InputScene(Scene):

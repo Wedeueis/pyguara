@@ -2,17 +2,19 @@
 
 import inspect
 import os
+from unittest.mock import MagicMock, mock_open, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, mock_open
+
+from pyguara.common.types import Color, Rect, Vector2
+from pyguara.config.types import WindowConfig
+from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
+from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+from pyguara.graphics.backends.moderngl.texture import GLTexture
+from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
 
 # ... imports ...
 from pyguara.graphics.backends.moderngl.window import PygameGLWindow
-from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
-from pyguara.graphics.backends.moderngl.texture import GLTexture
-from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
-from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
-from pyguara.config.types import WindowConfig
-from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.types import RenderBatch
 
 # Ensure headless execution for pygame parts
@@ -38,13 +40,15 @@ def mock_ctx() -> MagicMock:
 @pytest.fixture
 def gl_window(mock_ctx: MagicMock) -> PygameGLWindow:
     """Create a PygameGLWindow with a mocked context."""
-    with patch("moderngl.create_context", return_value=mock_ctx):
-        with patch("pygame.display.set_mode"):
-            with patch("pygame.display.gl_set_attribute"):
-                window = PygameGLWindow()
-                config = WindowConfig(title="Test", screen_width=800, screen_height=600)
-                window.open(config)
-                return window
+    with (
+        patch("moderngl.create_context", return_value=mock_ctx),
+        patch("pygame.display.set_mode"),
+        patch("pygame.display.gl_set_attribute"),
+    ):
+        window = PygameGLWindow()
+        config = WindowConfig(title="Test", screen_width=800, screen_height=600)
+        window.open(config)
+        return window
 
 
 def test_window_initialization(gl_window: PygameGLWindow, mock_ctx: MagicMock) -> None:
@@ -121,13 +125,15 @@ def test_texture_loader(mock_ctx: MagicMock) -> None:
         mock_surf.convert_alpha.return_value = mock_surf
         mock_load.return_value = mock_surf
 
-        with patch("pygame.transform.flip", return_value=mock_surf):
-            with patch("pygame.image.tobytes", return_value=b"pixeldata"):
-                texture = loader.load("test.png")
+        with (
+            patch("pygame.transform.flip", return_value=mock_surf),
+            patch("pygame.image.tobytes", return_value=b"pixeldata"),
+        ):
+            texture = loader.load("test.png")
 
-                assert isinstance(texture, GLTexture)
-                assert texture.width == 100
-                mock_ctx.texture.assert_called_with((100, 100), 4, b"pixeldata")
+        assert isinstance(texture, GLTexture)
+        assert texture.width == 100
+        mock_ctx.texture.assert_called_with((100, 100), 4, b"pixeldata")
 
 
 # -- ModernGL shape shader (wayfinder ticket 25) --

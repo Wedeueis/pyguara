@@ -49,7 +49,7 @@ class BaseRenderPass(ABC):
         self._enabled = value
 
     @abstractmethod
-    def execute(self, ctx: "moderngl.Context", graph: "RenderGraph") -> None:
+    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
         """Execute this render pass.
 
         Args:

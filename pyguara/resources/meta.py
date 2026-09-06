@@ -26,12 +26,12 @@ Example:
 """
 
 import json
-from pyguara.log import get_logger
-from abc import ABC
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Dict, Any, Type, TypeVar
+from typing import Any, TypeVar
+
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,16 +51,19 @@ class AudioLoadMode(Enum):
 
 
 @dataclass
-class AssetMeta(ABC):
+class AssetMeta:
     """Base class for asset import metadata.
 
     All meta types inherit from this and add their specific settings.
+
+    Not an ABC: it declares no abstract members, so inheriting from ABC made it
+    look non-instantiable while leaving it perfectly instantiable.
     """
 
     # Meta file version for future compatibility
     version: int = 1
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return asdict(self)
 
@@ -109,8 +112,8 @@ class AudioMeta(AssetMeta):
 
     load_mode: str = "load"
     volume_db: float = 0.0
-    loop_start: Optional[float] = None
-    loop_end: Optional[float] = None
+    loop_start: float | None = None
+    loop_end: float | None = None
     normalize: bool = False
 
     def get_load_mode(self) -> AudioLoadMode:
@@ -143,14 +146,14 @@ class SpritesheetMeta(AssetMeta):
 
 
 # Registry of meta types by name
-META_TYPES: Dict[str, Type[AssetMeta]] = {
+META_TYPES: dict[str, type[AssetMeta]] = {
     "texture": TextureMeta,
     "audio": AudioMeta,
     "spritesheet": SpritesheetMeta,
 }
 
 # Default meta types by file extension
-EXTENSION_TO_META_TYPE: Dict[str, str] = {
+EXTENSION_TO_META_TYPE: dict[str, str] = {
     ".png": "texture",
     ".jpg": "texture",
     ".jpeg": "texture",
@@ -171,7 +174,7 @@ class MetaLoader:
 
     def __init__(self) -> None:
         """Initialize the meta loader."""
-        self._cache: Dict[str, AssetMeta] = {}
+        self._cache: dict[str, AssetMeta] = {}
 
     def get_meta_path(self, asset_path: str) -> Path:
         """Get the `.meta` file path for an asset.
@@ -196,8 +199,8 @@ class MetaLoader:
         return self.get_meta_path(asset_path).exists()
 
     def load_meta(
-        self, asset_path: str, expected_type: Optional[Type[M]] = None
-    ) -> Optional[AssetMeta]:
+        self, asset_path: str, expected_type: type[M] | None = None
+    ) -> AssetMeta | None:
         """Load metadata for an asset.
 
         If no `.meta` file exists, returns None (use defaults).
@@ -219,7 +222,7 @@ class MetaLoader:
             return None
 
         try:
-            with open(meta_path, "r", encoding="utf-8") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
             logger.warning("Invalid JSON in meta file '%s': %s", meta_path, e.msg)
@@ -272,7 +275,7 @@ class MetaLoader:
         logger.debug("Loaded meta for '%s': %s", asset_path, type_name)
         return meta
 
-    def get_or_default(self, asset_path: str, meta_type: Type[M]) -> M:
+    def get_or_default(self, asset_path: str, meta_type: type[M]) -> M:
         """Get metadata for an asset, returning defaults if no meta file.
 
         Args:
@@ -321,7 +324,7 @@ class MetaLoader:
 
 
 # Global meta loader instance
-_meta_loader: Optional[MetaLoader] = None
+_meta_loader: MetaLoader | None = None
 
 
 def get_meta_loader() -> MetaLoader:

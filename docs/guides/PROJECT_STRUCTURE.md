@@ -47,13 +47,13 @@ Unlike simpler frameworks where you write logic in a global loop, PyGuara requir
 
 ```python
 # bootstrap.py
-from pyguara.application.bootstrap import create_application_container
+from pyguara.application.bootstrap import create_application
 from my_game.systems.combat import CombatSystem
 from my_game.systems.ai import AiSystem
 
 def configure_game_container():
     # 1. Initialize Core Engine
-    container = create_application_container()
+    container = create_application()
 
     # 2. Register Game Systems (Singletons persist effectively)
     container.register_singleton(CombatSystem, CombatSystem)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
@@ -20,7 +20,7 @@ class SceneSerializer:
     def __init__(
         self,
         persistence: PersistenceManager,
-        component_registry: Optional[ComponentRegistry] = None,
+        component_registry: ComponentRegistry | None = None,
     ) -> None:
         """Initialize the serializer.
 
@@ -47,11 +47,11 @@ class SceneSerializer:
             scene: The scene instance to save.
             filename: The identifier for the save file.
         """
-        entities_data: list[Dict[str, Any]] = []
+        entities_data: list[dict[str, Any]] = []
         for entity in scene.entity_manager.get_all_entities():
             entities_data.append(self._serialize_entity(entity))
 
-        scene_data: Dict[str, Any] = {"name": scene.name, "entities": entities_data}
+        scene_data: dict[str, Any] = {"name": scene.name, "entities": entities_data}
 
         return self.persistence.save_data(filename, scene_data)
 
@@ -87,7 +87,7 @@ class SceneSerializer:
 
         return True
 
-    def _deserialize_component(self, cls: type, data: Dict[str, Any]) -> Any:
+    def _deserialize_component(self, cls: type, data: dict[str, Any]) -> Any:
         """Deserialize a component from a dictionary."""
         if cls == Transform:
             t = Transform()
@@ -140,7 +140,7 @@ class SceneSerializer:
 
         return value
 
-    def _serialize_entity(self, entity: Entity) -> Dict[str, Any]:
+    def _serialize_entity(self, entity: Entity) -> dict[str, Any]:
         """Convert an entity to a dictionary."""
         components_data = {}
         for comp_type, component in entity._components.items():
@@ -148,7 +148,7 @@ class SceneSerializer:
 
         return {"id": entity.id, "components": components_data}
 
-    def _serialize_component(self, component: Any) -> Dict[str, Any]:
+    def _serialize_component(self, component: Any) -> dict[str, Any]:
         """Convert a component to a JSON-serializable dictionary."""
         if isinstance(component, Transform):
             return {
@@ -158,7 +158,7 @@ class SceneSerializer:
             }
 
         if dataclasses.is_dataclass(component) and not isinstance(component, type):
-            result: Dict[str, Any] = {}
+            result: dict[str, Any] = {}
             for field in dataclasses.fields(component):
                 value = getattr(component, field.name)
                 # Skip private/internal fields

@@ -7,7 +7,7 @@ instantiated at runtime.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pyguara.ecs.component import BaseComponent
 
@@ -30,10 +30,10 @@ class PrefabData:
 
     name: str
     version: int = 1
-    components: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    children: List[PrefabChild] = field(default_factory=list)
-    extends: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
+    components: dict[str, dict[str, Any]] = field(default_factory=dict)
+    children: list[PrefabChild] = field(default_factory=list)
+    extends: str | None = None
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -48,9 +48,9 @@ class PrefabChild:
     """
 
     prefab: str
-    offset: Optional[Dict[str, float]] = None
-    name: Optional[str] = None
-    overrides: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    offset: dict[str, float] | None = None
+    name: str | None = None
+    overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
@@ -67,7 +67,7 @@ class PrefabReference:
 
     path: str
     loaded: bool = False
-    data: Optional[PrefabData] = None
+    data: PrefabData | None = None
 
     def is_loaded(self) -> bool:
         """Check if the prefab data has been loaded."""
@@ -86,4 +86,4 @@ class PrefabInstance(BaseComponent):
     """
 
     prefab_path: str = ""
-    instance_overrides: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    instance_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)

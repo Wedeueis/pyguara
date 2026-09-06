@@ -4,15 +4,16 @@ Menu and Gameplay scenes demonstrating the UI Scene Graph.
 """
 
 import sys
-from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
+
+from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Vector2, Color
-from pyguara.ui.manager import UIManager
-from pyguara.ui.layout import BoxContainer
+from pyguara.scene.base import Scene
+from pyguara.scene.manager import SceneManager
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.text import Label
+from pyguara.ui.layout import BoxContainer
+from pyguara.ui.manager import UIManager
 
 
 class GameScene(Scene):

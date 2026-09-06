@@ -5,9 +5,8 @@ that can be scaled independently while preserving corner details.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
-from pyguara.common.types import Vector2, Rect
+from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 
 
@@ -74,8 +73,8 @@ class NinePatchSprite:
 
     texture_path: str
     metrics: NinePatchMetrics
-    source_rect: Optional[Rect] = None
-    min_size: Optional[Vector2] = None
+    source_rect: Rect | None = None
+    min_size: Vector2 | None = None
 
     def get_min_size(self) -> Vector2:
         """Get the minimum size this nine-patch can be rendered at.

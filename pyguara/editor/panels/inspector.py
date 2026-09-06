@@ -1,19 +1,20 @@
 """Inspector Panel module."""
 
-from pyguara.log import get_logger
-from typing import Any, Optional, cast
 import dataclasses
+from typing import Any, cast
+
+from pyguara.log import get_logger
 
 try:
     import imgui
 except ImportError:
     imgui = None
 
-from pyguara.ecs.entity import Entity
 from pyguara.common.components import ResourceLink
-from pyguara.resources.manager import ResourceManager
-from pyguara.resources.data import DataResource
+from pyguara.ecs.entity import Entity
 from pyguara.editor.drawers import InspectorDrawer
+from pyguara.resources.data import DataResource
+from pyguara.resources.manager import ResourceManager
 
 logger = get_logger(__name__)
 
@@ -23,7 +24,7 @@ class InspectorPanel:
 
     def __init__(self, resource_manager: ResourceManager) -> None:
         """Initialize the inspector panel."""
-        self.selected_entity: Optional[Entity] = None
+        self.selected_entity: Entity | None = None
         self._resource_manager = resource_manager
 
     def render(self) -> None:

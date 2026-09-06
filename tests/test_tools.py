@@ -1,10 +1,10 @@
 """Tests for developer tools system."""
 
-import pytest
-from unittest.mock import MagicMock, create_autospec
 from typing import Any
+from unittest.mock import MagicMock, create_autospec
 
 import pygame
+import pytest
 
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer

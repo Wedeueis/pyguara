@@ -7,8 +7,8 @@ for rendering many different sprites at high framerates.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 from pyguara.common.types import Rect
 from pyguara.resources.types import Texture
@@ -42,7 +42,7 @@ class Atlas:
         regions (Dict[str, AtlasRegion]): Mapping of sprite names to their regions.
     """
 
-    def __init__(self, texture: Texture, regions: Dict[str, AtlasRegion]):
+    def __init__(self, texture: Texture, regions: dict[str, AtlasRegion]):
         """
         Initialize the atlas.
 
@@ -53,7 +53,7 @@ class Atlas:
         self.texture = texture
         self.regions = regions
 
-    def get_region(self, name: str) -> Optional[AtlasRegion]:
+    def get_region(self, name: str) -> AtlasRegion | None:
         """
         Get a sprite region by name.
 
@@ -65,7 +65,7 @@ class Atlas:
         """
         return self.regions.get(name)
 
-    def get_rect(self, name: str) -> Optional[Rect]:
+    def get_rect(self, name: str) -> Rect | None:
         """
         Get the rectangle for a sprite region.
 

@@ -1,12 +1,13 @@
 """Base UI Component classes."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from pyguara.common.types import Vector2, Rect
+from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.ui.types import UIAnchor, UIElementState, UIEventType
 from pyguara.ui.theme import get_theme
+from pyguara.ui.types import UIAnchor, UIElementState, UIEventType
 
 if TYPE_CHECKING:
     from pyguara.ui.constraints import LayoutConstraints, Padding
@@ -30,18 +31,18 @@ class UIElement(ABC):
         self.enabled = True
 
         self.state = UIElementState.NORMAL
-        self.parent: Optional["UIElement"] = None
-        self.children: List["UIElement"] = []
+        self.parent: UIElement | None = None
+        self.children: list[UIElement] = []
 
         # Layout
-        self.constraints: Optional["LayoutConstraints"] = None
-        self.padding: Optional["Padding"] = None
+        self.constraints: LayoutConstraints | None = None
+        self.padding: Padding | None = None
 
         # Theme Integration
         self.theme = get_theme()
 
         # Callbacks
-        self.on_click: Optional[Callable[["UIElement"], None]] = None
+        self.on_click: Callable[[UIElement], None] | None = None
 
     @abstractmethod
     def render(self, renderer: UIRenderer) -> None:

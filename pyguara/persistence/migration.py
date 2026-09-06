@@ -6,9 +6,11 @@ compatibility as game schemas evolve.
 
 from __future__ import annotations
 
-from pyguara.log import get_logger
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List
+from typing import Any
+
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,7 +28,7 @@ class Migration:
 
     from_version: int
     to_version: int
-    migrate_fn: Callable[[Dict[str, Any]], Dict[str, Any]]
+    migrate_fn: Callable[[dict[str, Any]], dict[str, Any]]
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -37,7 +39,7 @@ class Migration:
                 f"from_version ({self.from_version})"
             )
 
-    def apply(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def apply(self, data: dict[str, Any]) -> dict[str, Any]:
         """Apply this migration to the given data.
 
         Args:
@@ -70,7 +72,7 @@ class MigrationManager:
             current_version: The current schema version.
         """
         self.current_version = current_version
-        self._migrations: Dict[int, Migration] = {}  # from_version -> Migration
+        self._migrations: dict[int, Migration] = {}  # from_version -> Migration
 
     def register(self, migration: Migration) -> None:
         """Register a migration.
@@ -98,7 +100,7 @@ class MigrationManager:
             f"v{migration.to_version}: {migration.description}"
         )
 
-    def get_migration_path(self, from_version: int) -> List[Migration]:
+    def get_migration_path(self, from_version: int) -> list[Migration]:
         """Get the sequence of migrations needed to reach current version.
 
         Args:
@@ -113,7 +115,7 @@ class MigrationManager:
         if from_version >= self.current_version:
             return []
 
-        path: List[Migration] = []
+        path: list[Migration] = []
         version = from_version
 
         while version < self.current_version:
@@ -129,7 +131,7 @@ class MigrationManager:
 
         return path
 
-    def migrate(self, data: Dict[str, Any], from_version: int) -> Dict[str, Any]:
+    def migrate(self, data: dict[str, Any], from_version: int) -> dict[str, Any]:
         """Migrate data from a historical version to current.
 
         Applies all necessary migrations in sequence.
@@ -210,7 +212,7 @@ class MigrationError(Exception):
 
 def migration(
     from_version: int, to_version: int, description: str = ""
-) -> Callable[[Callable[[Dict[str, Any]], Dict[str, Any]]], Migration]:
+) -> Callable[[Callable[[dict[str, Any]], dict[str, Any]]], Migration]:
     """Create a migration from a function.
 
     Usage:
@@ -228,7 +230,7 @@ def migration(
         Decorator that creates a Migration object.
     """
 
-    def decorator(func: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Migration:
+    def decorator(func: Callable[[dict[str, Any]], dict[str, Any]]) -> Migration:
         return Migration(
             from_version=from_version,
             to_version=to_version,
@@ -246,7 +248,7 @@ class MigrationRegistry:
     Use this to collect migrations defined across multiple modules.
     """
 
-    _migrations: List[Migration] = field(default_factory=list)
+    _migrations: list[Migration] = field(default_factory=list)
 
     def add(self, migration: Migration) -> Migration:
         """Add a migration to the registry.
@@ -280,7 +282,7 @@ _global_registry = MigrationRegistry()
 
 def register_migration(
     from_version: int, to_version: int, description: str = ""
-) -> Callable[[Callable[[Dict[str, Any]], Dict[str, Any]]], Migration]:
+) -> Callable[[Callable[[dict[str, Any]], dict[str, Any]]], Migration]:
     """Create and register a migration globally.
 
     Usage:
@@ -298,7 +300,7 @@ def register_migration(
         Decorator that creates and registers a Migration.
     """
 
-    def decorator(func: Callable[[Dict[str, Any]], Dict[str, Any]]) -> Migration:
+    def decorator(func: Callable[[dict[str, Any]], dict[str, Any]]) -> Migration:
         mig = Migration(
             from_version=from_version,
             to_version=to_version,

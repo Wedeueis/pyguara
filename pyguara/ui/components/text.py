@@ -1,7 +1,6 @@
 """Text display components."""
 
-from typing import Optional
-from pyguara.common.types import Vector2, Color
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 from pyguara.ui.types import UIAnchor
@@ -15,7 +14,7 @@ class Label(Widget):
         text: str,
         position: Vector2 = Vector2(0, 0),
         font_size: int = 16,
-        color: Optional[Color] = None,
+        color: Color | None = None,
         anchor: UIAnchor = UIAnchor.TOP_LEFT,
     ) -> None:
         """Initialize the label."""

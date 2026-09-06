@@ -3,19 +3,18 @@
 Pre-allocates entities to avoid garbage collection during gameplay.
 """
 
-from typing import List, Optional, Callable
-
-from pyguara.ecs.manager import EntityManager
-from pyguara.ecs.entity import Entity
-from pyguara.common.types import Vector2, Color
-from pyguara.common.components import Transform
+from collections.abc import Callable
 
 from games.protocolo_bandeira.components import (
     Bullet,
+    EntityTeam,
     Poolable,
     ShooterSprite,
-    EntityTeam,
 )
+from pyguara.common.components import Transform
+from pyguara.common.types import Color, Vector2
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
 
 
 class ObjectPool:
@@ -41,8 +40,8 @@ class ObjectPool:
         self._factory = factory
 
         # Pool storage
-        self._available: List[Entity] = []
-        self._active: List[Entity] = []
+        self._available: list[Entity] = []
+        self._active: list[Entity] = []
 
         # Pre-allocate
         for i in range(initial_size):
@@ -53,7 +52,7 @@ class ObjectPool:
                 poolable.is_active = False
             self._available.append(entity)
 
-    def acquire(self) -> Optional[Entity]:
+    def acquire(self) -> Entity | None:
         """Get an entity from the pool.
 
         Returns:
@@ -81,7 +80,7 @@ class ObjectPool:
 
         self._available.append(entity)
 
-    def get_active(self) -> List[Entity]:
+    def get_active(self) -> list[Entity]:
         """Get all active entities."""
         return self._active.copy()
 
@@ -131,7 +130,7 @@ class BulletPool(ObjectPool):
         speed: float,
         team: EntityTeam,
         damage: int = 1,
-    ) -> Optional[Entity]:
+    ) -> Entity | None:
         """Fire a bullet from the pool."""
         entity = self.acquire()
         if not entity:
@@ -202,7 +201,7 @@ class EnemyPool(ObjectPool):
         position: Vector2,
         enemy_type: str = "chaser",
         health: int = 1,
-    ) -> Optional[Entity]:
+    ) -> Entity | None:
         """Spawn an enemy from the pool."""
         from games.protocolo_bandeira.components import EnemyAI, EnemyType, Health
 

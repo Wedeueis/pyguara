@@ -4,34 +4,32 @@ Logic processors for the shooter game.
 """
 
 import math
-from typing import Dict, Optional
 
-from pyguara.ecs.manager import EntityManager
-from pyguara.ecs.entity import Entity
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.common.types import Vector2
-from pyguara.common.components import Transform
-from pyguara.ai.behavior_tree import BehaviorTree
-
+from games.protocolo_bandeira.ai_behaviors import get_behavior_for_type
 from games.protocolo_bandeira.components import (
-    Weapon,
+    AIContext,
     Bullet,
     EnemyAI,
+    EntityTeam,
     Health,
     Movement,
     Poolable,
     Score,
-    EntityTeam,
-    AIContext,
+    Weapon,
 )
 from games.protocolo_bandeira.events import (
+    BulletFiredEvent,
     EnemyKilledEvent,
     PlayerDamagedEvent,
     PlayerDeathEvent,
-    BulletFiredEvent,
 )
 from games.protocolo_bandeira.pooling import BulletPool, EnemyPool
-from games.protocolo_bandeira.ai_behaviors import get_behavior_for_type
+from pyguara.ai.behavior_tree import BehaviorTree
+from pyguara.common.components import Transform
+from pyguara.common.types import Vector2
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
+from pyguara.events.dispatcher import EventDispatcher
 
 
 class PlayerControlSystem:
@@ -42,7 +40,7 @@ class PlayerControlSystem:
     def __init__(self, entity_manager: EntityManager):
         """Initialize the system."""
         self._em = entity_manager
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
 
     def set_player(self, player: Entity) -> None:
         """Set the player entity."""
@@ -90,7 +88,7 @@ class PlayerControlSystem:
         if weapon:
             weapon.cooldown = max(0, weapon.cooldown - dt)
 
-    def get_position(self) -> Optional[Vector2]:
+    def get_position(self) -> Vector2 | None:
         """Get player position."""
         if self._player:
             transform = self._player.get_component(Transform)
@@ -165,10 +163,10 @@ class EnemyAISystem:
         self._bullet_pool = bullet_pool
 
         # Behavior trees per enemy type (cached)
-        self._behavior_trees: Dict[str, BehaviorTree] = {}
+        self._behavior_trees: dict[str, BehaviorTree] = {}
 
         # Player reference
-        self._player_position: Optional[Vector2] = None
+        self._player_position: Vector2 | None = None
 
     def set_player_position(self, position: Vector2) -> None:
         """Update player position for AI."""
@@ -276,7 +274,7 @@ class CollisionSystem:
         self._dispatcher = event_dispatcher
         self._bullet_pool = bullet_pool
         self._enemy_pool = enemy_pool
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
         self._wave_manager = None  # Set externally
 
     def set_player(self, player: Entity) -> None:
@@ -447,7 +445,7 @@ class WeaponSystem:
         self._em = entity_manager
         self._dispatcher = event_dispatcher
         self._bullet_pool = bullet_pool
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
 
     def set_player(self, player: Entity) -> None:
         """Set the player entity."""
@@ -503,7 +501,7 @@ class ScoreSystem:
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
 
         # Register events
         self._dispatcher.subscribe(EnemyKilledEvent, self._on_enemy_killed)

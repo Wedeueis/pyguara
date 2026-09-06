@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/log` — **in review (awaiting approval)**
+*(between iterations — cross-cutting work landed; `pyguara/config` is next)*
 
 ---
 
@@ -22,7 +22,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ### Tier 1 — Foundations (no intra-engine dependencies)
 - [x] `pyguara/common` — Vector2, Color, Rect, shared components *(done)*
-- [x] `pyguara/log` — logging facade *(active)*
+- [x] `pyguara/log` — logging facade *(done)*
 - [x] `pyguara/events` — EventDispatcher, Event protocol *(done)*
 - [x] `pyguara/di` — DIContainer, auto-wiring, lifetimes *(done)*
 
@@ -59,6 +59,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/log` | 2026-09-06 | Fixed source attribution (every record reported `logger.py:138`), a `shutdown()` that did not stop logging, handler clobbering on a process-global logger, and a docs page describing a nonexistent API. PR #5. |
 | `pyguara/di` | 2026-09-06 | Fixed a missing lock in `DIScope.get()` that fabricated circular dependencies under concurrency (140/160 resolutions), plus captive lifetimes, dead-scope resolution, silent re-registration and varargs injection. PR #4. |
 | `pyguara/events` | 2026-09-06 | Broke a latent `log` <-> `events` import cycle, fixed a timestamp sentinel that made 0.0 inexpressible, brought filter errors under the error strategy, and memoised handler resolution (5.7us -> 3.1us per dispatch). PR #3. |
 | `pyguara/common` | 2026-09-06 | Fixed `Transform.up` pointing down, an unguarded parent cycle and a falsy-`Vector2` default; renamed `Vector2.rotate` to `rotate_degrees`; wrote the first tests for `Vector2` and `Transform`. PR #2. |
@@ -71,7 +72,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 Architectural issues that span subsystems. Do **not** fix these inside a
 single-subsystem iteration; schedule a dedicated pass.
 
-### CC-1 — Ruff `target-version` is `py39`, project requires `>=3.12`
+### CC-1 — RESOLVED 2026-09-06 — Ruff `target-version` was `py39`
 `pyproject.toml` pins `target-version = "py39"` while `requires-python` is
 3.12+. Ruff therefore refuses modernisation fixes engine-wide, which is the
 root cause of the legacy `typing.Dict`/`Optional[X]` style found in every
@@ -79,13 +80,21 @@ module audited so far. **Fix:** bump to `py312` and enable the `UP`
 (pyupgrade), `B` (bugbear) and `D` (pydocstyle, `convention = "google"`) rule
 sets in one deliberate formatting commit, so per-subsystem diffs stay
 reviewable.
-*Discovered in:* `ecs`. *Status:* parked.
+Bumped to `py312` and enabled `UP`, `B`, `I`, `SIM`. 1455 findings fixed
+mechanically, the rest by hand. Surfaced one real defect: a mutable `Color`
+shared as a default argument in `WorldPass`.
+*Discovered in:* `ecs`. *Status:* **resolved**.
 
-### CC-2 — Lint rule set is minimal (`E4, E7, E9, F`)
+### CC-2 — RESOLVED 2026-09-06 — Lint rule set was minimal
 No pydocstyle, no bugbear, no pyupgrade, no complexity ceiling. Google-style
 docstrings (mandated by this refactor) are therefore unenforced and will drift
-straight back. **Fix:** land with CC-1.
-*Discovered in:* `ecs`. *Status:* parked.
+straight back.
+Resolved with CC-1. Ruff's `D` rules stay off deliberately: pydocstyle runs as
+its own hook, and two tools disagreeing about docstring style is worse than one
+enforcing it. That hook was also found to be mis-scoped -- it used a `match:`
+key pre-commit does not recognise, so it had been linting the whole repository
+instead of `pyguara/`.
+*Discovered in:* `ecs`. *Status:* **resolved**.
 
 ### CC-3 — Internal ticket ids leak into public docstrings
 Strings like `P1-008` appear in user-facing API docstrings (`EntityManager
@@ -130,7 +139,7 @@ are audited and the true extent is known, migrate the tree to `StrictComponent`
 and consider making it the default.
 *Discovered in:* `ecs`; offender identified in `common`. *Status:* parked.
 
-### CC-10 — Documentation can describe APIs that do not exist
+### CC-10 — RESOLVED 2026-09-06 — Documentation described APIs that do not exist
 `docs/core/logging.md` documented `pyguara.log.config.setup_logging()` and
 `pyguara.log.config.get_logger()`. Neither the module nor the function exists
 anywhere in the tree; every code sample on the page raised
@@ -139,9 +148,15 @@ anywhere in the tree; every code sample on the page raised
 test that imports every symbol the docs reference. Until then, treat "verify
 the documented API actually exists" as an explicit Phase C step in every
 iteration.
-*Discovered in:* `log`. *Status:* open.
+`tests/test_docs_api.py` now extracts every `pyguara...` import and backticked
+dotted reference from the Markdown under `docs/` and asserts it resolves. It
+immediately found two more: `docs/core/application.md` documented an entire
+error hierarchy (`pyguara.error`, `EngineException`, `@safe_execute`, `@retry`)
+that has never existed, and `PROJECT_STRUCTURE.md` referenced
+`create_application_container` instead of `create_application`. Both fixed.
+*Discovered in:* `log`. *Status:* **resolved**.
 
-### CC-9 — `ErrorHandlingStrategy` is defined twice
+### CC-9 — RESOLVED 2026-09-06 — `ErrorHandlingStrategy` was defined twice
 `pyguara/di/types.py` and `pyguara/events/types.py` each declare their own enum
 of the same name with identical members (LOG / RAISE / IGNORE) and identical
 semantics. They are not interchangeable -- `di.RAISE != events.RAISE` -- so
@@ -149,7 +164,10 @@ passing one where the other is expected fails a comparison silently rather than
 loudly. **Fix:** hoist a single definition to a shared home once more
 subsystems are audited and the full set of consumers is known; `di` must not
 import `events` (see CC-8) so it cannot simply re-export.
-*Discovered in:* `di`. *Status:* open.
+Hoisted to a new top-level `pyguara/errors.py`, which imports nothing from the
+engine and so cannot cycle. `di/types.py` and `events/types.py` re-export it, so
+existing import paths keep working. `di.RAISE == events.RAISE` is now True.
+*Discovered in:* `di`. *Status:* **resolved**.
 
 ### CC-8 — Package `__init__.py` files export nothing
 Most subsystem packages have a docstring-only `__init__.py`, so callers reach
@@ -384,7 +402,7 @@ section condensed to a summary and link. That file's three original sections
 **Deferred:** CC-1 through CC-4, CC-6 through CC-9, and the rest of CC-5.
 
 
-### `pyguara/log` — awaiting approval (2026-09-06)
+### `pyguara/log` — CLOSED 2026-09-06 (PR #5, branch `refactor/log-audit`)
 
 **Verification:** 1303/1303 tests pass (up from 1286); ruff clean; mypy clean.
 
@@ -434,3 +452,41 @@ have never existed in this tree; every code sample on the page raised
 **Tier 1 is now complete:** `common`, `log`, `events`, `di`.
 
 **Deferred:** CC-1 through CC-4, CC-6 through CC-10, and the rest of CC-5.
+
+
+### Cross-cutting pass — 2026-09-06 (branch `chore/lint-modernization`)
+
+Taken between subsystem iterations, at the user's direction, to clear the two
+concerns that were compounding across every audit.
+
+**CC-1 / CC-2 — lint modernisation.** `target-version` bumped `py39` -> `py312`
+and `UP`, `B`, `I`, `SIM` enabled. 1455 findings fixed mechanically; the
+remainder by hand. 273 files changed.
+- One real defect found by `B`: `WorldPass(clear_color=Color(0,0,0,255))`
+  shared a single mutable `Color` across every instance.
+- Twelve B008 reports were false positives -- `Vector2` is a NamedTuple
+  subclass, hence immutable -- handled with
+  `flake8-bugbear.extend-immutable-calls` rather than scattered noqa comments.
+- `di/decorators.py` needed a rewrite: ruff's B010 fix removed `setattr()`
+  calls that existed to dodge mypy, so the errors came straight back. Now uses
+  a typed `_DIMarked` protocol, which also collapsed three identical decorator
+  bodies into one helper.
+- **The pydocstyle pre-commit hook was mis-scoped.** It used a `match:` key
+  pre-commit does not recognise -- warning "Unexpected key(s) present" on every
+  run for who knows how long -- so it linted the entire repository, not
+  `pyguara/`. Fixed to `files:`. This surfaced undocumented public methods in
+  `persistence/serializer.py` that the broken scoping had hidden.
+
+**CC-9 — shared `ErrorHandlingStrategy`.** Hoisted to a new top-level
+`pyguara/errors.py`. Both `di` and `events` re-export it, so no import path
+breaks, and the two enums are now genuinely the same class.
+
+**CC-10 — documentation smoke test.** `tests/test_docs_api.py` checks every
+`pyguara...` import and dotted reference in `docs/`. It found two more
+fictional APIs on its first run (see CC-10 above).
+
+**Verification:** 1343/1343 tests pass; ruff clean; mypy clean across 218 files.
+
+**Not done:** the filename `docs/guides/Archictecture & Style Guide.md` is
+misspelled. Renaming it means touching the mkdocs nav and any inbound links, so
+it is left for whoever next edits that file.

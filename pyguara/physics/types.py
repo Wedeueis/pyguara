@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional, Union
 
 from pyguara.common.types import Vector2
 
@@ -100,4 +99,4 @@ class RaycastHit:
     position: Vector2
     normal: Vector2
     distance: float
-    entity_id: Optional[Union[int, str]] = None
+    entity_id: int | str | None = None

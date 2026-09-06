@@ -7,7 +7,7 @@ don't specify a custom material.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.materials.material import Material
 from pyguara.graphics.materials.shader import Shader, ShaderCache
@@ -91,8 +91,8 @@ class DefaultMaterialManager:
             shader_cache: The shader cache for compiling shaders.
         """
         self._shader_cache = shader_cache
-        self._default_sprite_shader: Optional[Shader] = None
-        self._default_sprite_material: Optional[Material] = None
+        self._default_sprite_shader: Shader | None = None
+        self._default_sprite_material: Material | None = None
 
     @property
     def default_sprite_shader(self) -> Shader:
@@ -105,9 +105,7 @@ class DefaultMaterialManager:
             )
         return self._default_sprite_shader
 
-    def get_default_sprite_material(
-        self, texture: Optional["Texture"] = None
-    ) -> Material:
+    def get_default_sprite_material(self, texture: Texture | None = None) -> Material:
         """Get a default sprite material.
 
         Args:
@@ -135,7 +133,7 @@ class DefaultMaterialManager:
         return self._default_sprite_material
 
 
-def create_default_material_manager(ctx: "moderngl.Context") -> DefaultMaterialManager:
+def create_default_material_manager(ctx: moderngl.Context) -> DefaultMaterialManager:
     """Create a default material manager with a new shader cache.
 
     Args:

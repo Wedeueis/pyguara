@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from pyguara.common.types import Vector2
 from pyguara.ecs.component import BaseComponent
 from pyguara.resources.types import Texture
-from pyguara.common.types import Vector2
 
 if TYPE_CHECKING:
     pass

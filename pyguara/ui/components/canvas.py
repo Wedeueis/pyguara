@@ -1,7 +1,6 @@
 """Custom drawing surface."""
 
-from typing import Optional
-from pyguara.common.types import Vector2, Color
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 
@@ -13,7 +12,7 @@ class Canvas(Widget):
     """
 
     def __init__(
-        self, position: Vector2, size: Vector2, bg_color: Optional[Color] = None
+        self, position: Vector2, size: Vector2, bg_color: Color | None = None
     ) -> None:
         """Initialize the canvas."""
         super().__init__(position, size)

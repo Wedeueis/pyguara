@@ -7,17 +7,17 @@ A twin-stick arena shooter demonstrating:
 - Score tracking
 """
 
-import sys
 import logging
 import os
+import sys
 
 # Ensure we can import pyguara from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from pyguara.application.application import Application
-from pyguara.events.dispatcher import EventDispatcher
 from games.protocolo_bandeira.bootstrap import configure_game_container
 from games.protocolo_bandeira.scenes import MenuScene
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
 
 
 def main():

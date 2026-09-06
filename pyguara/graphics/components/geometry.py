@@ -13,16 +13,18 @@ Architecture Note:
 """
 
 from __future__ import annotations
-from typing import TYPE_CHECKING, Any, Optional
+
+from typing import TYPE_CHECKING, Any
+
 import pygame
 
-from pyguara.common.types import Vector2, Color
-from pyguara.resources.types import Texture
-from pyguara.graphics.types import Layer
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.backends.pygame.conversions import to_pygame_color
 from pyguara.graphics.backends.pygame.types import (
     PygameTexture,
 )  # Concrete implementation
+from pyguara.graphics.types import Layer
+from pyguara.resources.types import Texture
 
 if TYPE_CHECKING:
     pass
@@ -36,7 +38,7 @@ class Geometry:
         self._layer = layer
         self._z_index = z_index
         self._position = Vector2.zero()
-        self._texture: Optional[Texture] = None
+        self._texture: Texture | None = None
         self.rotation: float = 0.0
         self.scale: Vector2 = Vector2(1, 1)
         self._dirty = True  # Flag to regenerate texture if properties change

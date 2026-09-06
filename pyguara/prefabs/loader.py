@@ -6,10 +6,10 @@ Provides loading of prefab files in JSON and YAML formats.
 from __future__ import annotations
 
 import json
-from pyguara.log import get_logger
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
+from pyguara.log import get_logger
 from pyguara.prefabs.types import PrefabChild, PrefabData
 from pyguara.resources.types import Resource
 
@@ -107,25 +107,25 @@ class PrefabLoader:
         prefab_data = self._parse_prefab_data(raw_data, path)
         return Prefab(prefab_data, path)
 
-    def _load_json(self, path: Path) -> Dict[str, Any]:
+    def _load_json(self, path: Path) -> dict[str, Any]:
         """Load JSON file."""
-        with open(path, "r", encoding="utf-8") as f:
-            result: Dict[str, Any] = json.load(f)
+        with open(path, encoding="utf-8") as f:
+            result: dict[str, Any] = json.load(f)
             return result
 
-    def _load_yaml(self, path: Path) -> Dict[str, Any]:
+    def _load_yaml(self, path: Path) -> dict[str, Any]:
         """Load YAML file."""
-        with open(path, "r", encoding="utf-8") as f:
-            result: Dict[str, Any] = yaml.safe_load(f)
+        with open(path, encoding="utf-8") as f:
+            result: dict[str, Any] = yaml.safe_load(f)
             return result
 
-    def _load_auto(self, path: Path) -> Dict[str, Any]:
+    def _load_auto(self, path: Path) -> dict[str, Any]:
         """Auto-detect format and load."""
         content = path.read_text(encoding="utf-8").strip()
 
         # Try JSON first (starts with { or [)
         if content.startswith(("{", "[")):
-            result: Dict[str, Any] = json.loads(content)
+            result: dict[str, Any] = json.loads(content)
             return result
 
         # Try YAML
@@ -137,7 +137,7 @@ class PrefabLoader:
         result = json.loads(content)
         return result
 
-    def _parse_prefab_data(self, raw: Dict[str, Any], source_path: str) -> PrefabData:
+    def _parse_prefab_data(self, raw: dict[str, Any], source_path: str) -> PrefabData:
         """Parse raw dictionary into PrefabData.
 
         Args:
@@ -175,7 +175,7 @@ class PrefabLoader:
             tags=tags,
         )
 
-    def _parse_children(self, children_raw: List[Dict[str, Any]]) -> List[PrefabChild]:
+    def _parse_children(self, children_raw: list[dict[str, Any]]) -> list[PrefabChild]:
         """Parse child prefab references.
 
         Args:
@@ -210,16 +210,16 @@ class PrefabCache:
     with support for inheritance resolution.
     """
 
-    def __init__(self, loader: Optional[PrefabLoader] = None) -> None:
+    def __init__(self, loader: PrefabLoader | None = None) -> None:
         """Initialize the cache.
 
         Args:
             loader: Optional custom loader. Creates one if not provided.
         """
         self._loader = loader or PrefabLoader()
-        self._cache: Dict[str, PrefabData] = {}
+        self._cache: dict[str, PrefabData] = {}
 
-    def load(self, path: str) -> Optional[PrefabData]:
+    def load(self, path: str) -> PrefabData | None:
         """Load a prefab, using cache if available.
 
         Args:
@@ -240,7 +240,7 @@ class PrefabCache:
             logger.error(f"Failed to load prefab '{path}': {e}")
             return None
 
-    def get(self, path: str) -> Optional[PrefabData]:
+    def get(self, path: str) -> PrefabData | None:
         """Get a cached prefab without loading.
 
         Args:

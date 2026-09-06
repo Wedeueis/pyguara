@@ -5,10 +5,9 @@ Pure data containers for the shooter game.
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional
 
+from pyguara.common.types import Color, Vector2
 from pyguara.ecs.component import BaseComponent
-from pyguara.common.types import Vector2, Color
 
 
 class EntityTeam(Enum):
@@ -77,7 +76,7 @@ class EnemyAI(BaseComponent):
     current_cooldown: float = 0.0
 
     # State tracking
-    target_position: Optional[Vector2] = None
+    target_position: Vector2 | None = None
     is_alerted: bool = False
 
     def __post_init__(self) -> None:
@@ -167,7 +166,7 @@ class AIContext:
 
     entity_id: str
     position: Vector2
-    player_position: Optional[Vector2]
+    player_position: Vector2 | None
     distance_to_player: float
     dt: float
     is_alerted: bool = False

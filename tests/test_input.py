@@ -1,21 +1,21 @@
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Tuple
-
-from pyguara.input.manager import InputManager
-from pyguara.input.gamepad import GamepadManager
-from pyguara.input.types import (
-    InputDevice,
-    InputContext,
-    ActionType,
-    InputAction,
-    GamepadButton,
-    GamepadAxis,
-    GamepadConfig,
-)
-from pyguara.input.events import OnActionEvent, GamepadButtonEvent, GamepadAxisEvent
+from typing import Any
 
 # We need to mock pygame constants since we mocked the module
 import pygame
+
+from pyguara.input.events import GamepadAxisEvent, GamepadButtonEvent, OnActionEvent
+from pyguara.input.gamepad import GamepadManager
+from pyguara.input.manager import InputManager
+from pyguara.input.types import (
+    ActionType,
+    GamepadAxis,
+    GamepadButton,
+    GamepadConfig,
+    InputAction,
+    InputContext,
+    InputDevice,
+)
 
 pygame.KEYDOWN = 1
 pygame.KEYUP = 2
@@ -39,9 +39,9 @@ class _StubJoystick:
         self.name = name
         self.num_buttons = num_buttons
         self.num_axes = num_axes
-        self.button_states: Dict[int, bool] = {}
-        self.axis_values: Dict[int, float] = {}
-        self.rumble_calls: List[Tuple[float, float, int]] = []
+        self.button_states: dict[int, bool] = {}
+        self.axis_values: dict[int, float] = {}
+        self.rumble_calls: list[tuple[float, float, int]] = []
 
     def init(self) -> None:
         pass
@@ -78,8 +78,8 @@ class _StubInputBackend:
     """Minimal `IInputBackend` stub. `joysticks` is a mutable list tests can
     append/pop between `update()` calls to simulate hot-plug/unplug."""
 
-    def __init__(self, joysticks: Optional[List[_StubJoystick]] = None) -> None:
-        self.joysticks: List[_StubJoystick] = list(joysticks or [])
+    def __init__(self, joysticks: list[_StubJoystick] | None = None) -> None:
+        self.joysticks: list[_StubJoystick] = list(joysticks or [])
         self._initialized = False
 
     def init_joysticks(self) -> None:
@@ -234,7 +234,7 @@ def test_gamepad_button_press_event(event_dispatcher: Any) -> None:
     manager = GamepadManager(event_dispatcher, _StubInputBackend([joystick]))
 
     # Subscribe to button events
-    events: List[GamepadButtonEvent] = []
+    events: list[GamepadButtonEvent] = []
     event_dispatcher.subscribe(GamepadButtonEvent, lambda e: events.append(e))
 
     # Simulate button press (A button = index 0)
@@ -256,7 +256,7 @@ def test_gamepad_axis_with_deadzone(event_dispatcher: Any) -> None:
     manager = GamepadManager(event_dispatcher, _StubInputBackend([joystick]), config)
 
     # Subscribe to axis events
-    events: List[GamepadAxisEvent] = []
+    events: list[GamepadAxisEvent] = []
     event_dispatcher.subscribe(GamepadAxisEvent, lambda e: events.append(e))
 
     # Simulate small axis movement (within deadzone)

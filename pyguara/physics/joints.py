@@ -24,7 +24,7 @@ Usage:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from pyguara.common.types import Vector2
 from pyguara.ecs.component import BaseComponent
@@ -74,7 +74,7 @@ class Joint(BaseComponent):
     collide_connected: bool = False
 
     # Internal handle (injected by PhysicsSystem)
-    _joint_handle: Optional[Any] = field(default=None, repr=False)
+    _joint_handle: Any | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize base component state."""
@@ -86,8 +86,8 @@ class Joint(BaseComponent):
 
 def create_pin_joint(
     target_entity_id: str,
-    anchor_a: Optional[Vector2] = None,
-    anchor_b: Optional[Vector2] = None,
+    anchor_a: Vector2 | None = None,
+    anchor_b: Vector2 | None = None,
     max_force: float = 0.0,
     collide_connected: bool = False,
 ) -> Joint:
@@ -127,8 +127,8 @@ def create_pin_joint(
 def create_distance_joint(
     target_entity_id: str,
     distance: float,
-    anchor_a: Optional[Vector2] = None,
-    anchor_b: Optional[Vector2] = None,
+    anchor_a: Vector2 | None = None,
+    anchor_b: Vector2 | None = None,
     max_force: float = 0.0,
     collide_connected: bool = False,
 ) -> Joint:
@@ -172,8 +172,8 @@ def create_spring_joint(
     rest_length: float,
     stiffness: float = 100.0,
     damping: float = 10.0,
-    anchor_a: Optional[Vector2] = None,
-    anchor_b: Optional[Vector2] = None,
+    anchor_a: Vector2 | None = None,
+    anchor_b: Vector2 | None = None,
     max_force: float = 0.0,
     collide_connected: bool = False,
 ) -> Joint:
@@ -223,8 +223,8 @@ def create_slider_joint(
     target_entity_id: str,
     min_distance: float = 0.0,
     max_distance: float = 100.0,
-    anchor_a: Optional[Vector2] = None,
-    anchor_b: Optional[Vector2] = None,
+    anchor_a: Vector2 | None = None,
+    anchor_b: Vector2 | None = None,
     max_force: float = 0.0,
     collide_connected: bool = False,
 ) -> Joint:

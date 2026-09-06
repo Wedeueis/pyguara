@@ -3,9 +3,9 @@
 Reusing the MovementSystem logic.
 """
 
-from pyguara.ecs.manager import EntityManager
-from pyguara.common.types import Vector2
 from games.asset_pipeline.components import Transform
+from pyguara.common.types import Vector2
+from pyguara.ecs.manager import EntityManager
 
 
 class MovementSystem:

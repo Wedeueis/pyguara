@@ -1,13 +1,15 @@
 """Tests for P2-001: RenderSystem hot-loop optimization."""
 
 import dis
+
 import pytest
-from pyguara.graphics.components.sprite import Sprite
+
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.components.geometry import Box, Circle
 from pyguara.graphics.components.particles import Particle
+from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.render_system import RenderSystem
 from pyguara.graphics.protocols import Renderable
-from pyguara.common.types import Vector2, Color
 from pyguara.resources.types import Texture
 
 # Check if pytest-benchmark is available
@@ -155,8 +157,9 @@ def test_render_submission_performance(benchmark):
     This test verifies that P2-001 optimization (removing getattr) provides
     fast submission performance. Expected: < 1ms for 100 sprites.
     """
-    from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
     import pygame
+
+    from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
 
     pygame.init()
     screen = pygame.display.set_mode((800, 600))

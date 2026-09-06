@@ -1,11 +1,13 @@
 """Pygame-based OpenGL window implementation for ModernGL backend."""
 
-import pygame
-import moderngl
-from typing import Any, Iterable, Optional, cast
+from collections.abc import Iterable
+from typing import Any, cast
 
-from pyguara.config.types import WindowConfig
+import pygame
+
+import moderngl
 from pyguara.common.types import Color
+from pyguara.config.types import WindowConfig
 
 
 class PygameGLWindow:
@@ -23,7 +25,7 @@ class PygameGLWindow:
     def __init__(self) -> None:
         """Initialize the OpenGL window backend."""
         self._screen: Any = None
-        self._ctx: Optional[moderngl.Context] = None
+        self._ctx: moderngl.Context | None = None
         self._default_color = Color(0, 0, 0)
         self._is_open = False
         self._width = 0
@@ -99,7 +101,7 @@ class PygameGLWindow:
         """Swap display buffers to show the rendered frame."""
         pygame.display.flip()
 
-    def clear(self, color: Optional[Color] = None) -> None:
+    def clear(self, color: Color | None = None) -> None:
         """Clear the screen using OpenGL.
 
         Args:
@@ -151,7 +153,7 @@ class PygameGLWindow:
         return self._ctx
 
     @property
-    def context(self) -> Optional[moderngl.Context]:
+    def context(self) -> moderngl.Context | None:
         """Get the ModernGL context directly."""
         return self._ctx
 

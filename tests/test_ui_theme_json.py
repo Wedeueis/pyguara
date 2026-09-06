@@ -7,14 +7,14 @@ from pathlib import Path
 import pytest
 
 from pyguara.common.types import Color
-from pyguara.ui.theme import UITheme, ThemeValidationError, get_theme, set_theme
+from pyguara.ui.theme import ThemeValidationError, UITheme, get_theme, set_theme
 from pyguara.ui.theme_presets import Themes
 from pyguara.ui.types import (
-    ColorScheme,
-    SpacingScheme,
-    FontScheme,
     BorderScheme,
+    ColorScheme,
+    FontScheme,
     ShadowScheme,
+    SpacingScheme,
 )
 
 
@@ -279,7 +279,7 @@ class TestThemeFileIO:
             theme.save(path)
 
             assert path.exists()
-            with open(path, "r") as f:
+            with open(path) as f:
                 data = json.load(f)
                 assert data["name"] == "saved_theme"
 

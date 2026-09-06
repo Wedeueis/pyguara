@@ -1,12 +1,13 @@
 """Animation Logic Component."""
 
-from pyguara.log import get_logger
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Callable
 from enum import Enum, auto
-from pyguara.resources.types import Texture
-from pyguara.graphics.components.sprite import Sprite
+
 from pyguara.ecs.component import BaseComponent
+from pyguara.graphics.components.sprite import Sprite
+from pyguara.log import get_logger
+from pyguara.resources.types import Texture
 
 logger = get_logger(__name__)
 
@@ -16,7 +17,7 @@ class AnimationClip:
     """Data for a single animation state (e.g., 'walk_down')."""
 
     name: str
-    frames: List[Texture]
+    frames: list[Texture]
     frame_rate: float = 10.0  # Frames per second
     loop: bool = True
 
@@ -42,9 +43,9 @@ class Animator(BaseComponent):
         """
         super().__init__()
         self._sprite = sprite
-        self._clips: Dict[str, AnimationClip] = {}
+        self._clips: dict[str, AnimationClip] = {}
 
-        self._current_clip: Optional[AnimationClip] = None
+        self._current_clip: AnimationClip | None = None
         self._current_time: float = 0.0
         self._current_frame_index: int = 0
         self._playing: bool = False
@@ -119,7 +120,7 @@ class Animator(BaseComponent):
         return self._playing
 
     @property
-    def current_clip_name(self) -> Optional[str]:
+    def current_clip_name(self) -> str | None:
         """Get the name of the currently playing clip."""
         return self._current_clip.name if self._current_clip else None
 
@@ -175,10 +176,10 @@ class AnimationState:
 
     name: str
     clip: AnimationClip
-    transitions: List[AnimationTransition] = field(default_factory=list)
-    on_enter: Optional[Callable[[], None]] = None
-    on_exit: Optional[Callable[[], None]] = None
-    on_complete: Optional[Callable[[], None]] = None
+    transitions: list[AnimationTransition] = field(default_factory=list)
+    on_enter: Callable[[], None] | None = None
+    on_exit: Callable[[], None] | None = None
+    on_complete: Callable[[], None] | None = None
 
 
 class AnimationStateMachine(BaseComponent):
@@ -205,9 +206,9 @@ class AnimationStateMachine(BaseComponent):
         super().__init__()
         self._sprite = sprite
         self._animator = animator
-        self._states: Dict[str, AnimationState] = {}
-        self._current_state: Optional[AnimationState] = None
-        self._default_state: Optional[str] = None
+        self._states: dict[str, AnimationState] = {}
+        self._current_state: AnimationState | None = None
+        self._default_state: str | None = None
 
     def add_state(self, state: AnimationState) -> None:
         """
@@ -320,6 +321,6 @@ class AnimationStateMachine(BaseComponent):
                 break  # Only execute one transition per update
 
     @property
-    def current_state_name(self) -> Optional[str]:
+    def current_state_name(self) -> str | None:
         """Get the name of the current state."""
         return self._current_state.name if self._current_state else None

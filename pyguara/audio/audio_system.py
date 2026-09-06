@@ -1,9 +1,10 @@
 """Core interfaces for the Audio Subsystem."""
 
-from typing import Protocol, Optional, runtime_checkable
-from pyguara.resources.types import AudioClip
+from typing import Protocol, runtime_checkable
+
+from pyguara.audio.types import AudioBusType, AudioPriority
 from pyguara.common.types import Vector2
-from pyguara.audio.types import AudioPriority, AudioBusType
+from pyguara.resources.types import AudioClip
 
 
 @runtime_checkable
@@ -27,7 +28,7 @@ class IAudioSystem(Protocol):
         loops: int = 0,
         priority: AudioPriority = AudioPriority.NORMAL,
         bus: AudioBusType = AudioBusType.SFX,
-    ) -> Optional[int]:
+    ) -> int | None:
         """
         Play a sound effect.
 
@@ -52,7 +53,7 @@ class IAudioSystem(Protocol):
         loops: int = 0,
         priority: AudioPriority = AudioPriority.NORMAL,
         bus: AudioBusType = AudioBusType.SFX,
-    ) -> Optional[int]:
+    ) -> int | None:
         """
         Play a sound effect with spatial positioning.
 

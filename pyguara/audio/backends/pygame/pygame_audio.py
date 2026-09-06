@@ -1,18 +1,18 @@
 """Pygame implementation of the Audio System with spatial audio and bus support."""
 
-from pyguara.log import get_logger
 import math
+
 import pygame
-from typing import Optional, Dict, List
 
 from pyguara.audio.types import (
-    AudioPriority,
-    AudioBusType,
     AudioBusManager,
-    SpatialAudioConfig,
+    AudioBusType,
+    AudioPriority,
     PlayingSoundInfo,
+    SpatialAudioConfig,
 )
 from pyguara.common.types import Vector2
+from pyguara.log import get_logger
 from pyguara.resources.types import AudioClip
 
 logger = get_logger(__name__)
@@ -63,7 +63,7 @@ class PygameAudioSystem:
         self._listener_position = Vector2(0, 0)
 
         # Channel tracking for priority management
-        self._playing_sounds: Dict[int, PlayingSoundInfo] = {}
+        self._playing_sounds: dict[int, PlayingSoundInfo] = {}
 
         # Apply initial music volume
         pygame.mixer.music.set_volume(self._get_effective_music_volume())
@@ -77,7 +77,7 @@ class PygameAudioSystem:
         loops: int = 0,
         priority: AudioPriority = AudioPriority.NORMAL,
         bus: AudioBusType = AudioBusType.SFX,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Play a sound effect with priority and bus routing."""
         return self._play_sound(
             clip=clip,
@@ -97,7 +97,7 @@ class PygameAudioSystem:
         loops: int = 0,
         priority: AudioPriority = AudioPriority.NORMAL,
         bus: AudioBusType = AudioBusType.SFX,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Play a sound effect with spatial positioning."""
         # Calculate distance-based attenuation
         distance = math.sqrt(
@@ -134,9 +134,9 @@ class PygameAudioSystem:
         loops: int,
         priority: AudioPriority,
         bus: AudioBusType,
-        position: Optional[Vector2],
+        position: Vector2 | None,
         pan: float = 0.0,
-    ) -> Optional[int]:
+    ) -> int | None:
         """Play a sound with all available options."""
         try:
             native_sound = clip.native_handle
@@ -191,23 +191,23 @@ class PygameAudioSystem:
 
     def _get_available_channel(
         self, priority: AudioPriority
-    ) -> Optional[pygame.mixer.Channel]:
+    ) -> pygame.mixer.Channel | None:
         """Get an available channel, potentially stealing from lower priority sounds."""
         # First, try to find a free channel
         # Note: pygame.mixer.find_channel() can return None if no channels available
-        channel: Optional[pygame.mixer.Channel] = pygame.mixer.find_channel()
+        channel: pygame.mixer.Channel | None = pygame.mixer.find_channel()
         if channel is not None:
             return channel
 
         # No free channels - try priority-based stealing
         return self._steal_channel(priority)
 
-    def _steal_channel(self, priority: AudioPriority) -> Optional[pygame.mixer.Channel]:
+    def _steal_channel(self, priority: AudioPriority) -> pygame.mixer.Channel | None:
         """Steal a channel from a lower priority sound."""
         # Find the lowest priority sound that's lower than our priority
         lowest_priority = priority.value
-        lowest_channel_id: Optional[int] = None
-        finished_channels: List[int] = []
+        lowest_channel_id: int | None = None
+        finished_channels: list[int] = []
 
         for channel_id, info in self._playing_sounds.items():
             # Check if channel is still playing

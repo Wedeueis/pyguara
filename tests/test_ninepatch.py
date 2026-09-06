@@ -1,6 +1,6 @@
 """Tests for nine-patch sprite system."""
 
-from pyguara.common.types import Vector2, Rect
+from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.ninepatch import (
     NinePatchMetrics,
     NinePatchSprite,

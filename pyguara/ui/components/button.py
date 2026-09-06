@@ -22,9 +22,7 @@ class Button(Widget):
         # 1. Determine Background Color based on State
         bg_color = self.theme.colors.primary
 
-        if self.state == UIElementState.HOVERED:
-            bg_color = self.theme.colors.secondary
-        elif self.state == UIElementState.PRESSED:
+        if self.state == UIElementState.HOVERED or self.state == UIElementState.PRESSED:
             bg_color = self.theme.colors.secondary
         elif self.state == UIElementState.DISABLED:
             bg_color = self.theme.colors.background

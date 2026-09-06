@@ -8,7 +8,7 @@ rendering a "fully lit" scene.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pyguara.ecs.manager import EntityManager
@@ -21,7 +21,7 @@ class PygameLightingSystem:
     This stub allows game code to use lighting components without errors.
     """
 
-    def __init__(self, entity_manager: "EntityManager") -> None:
+    def __init__(self, entity_manager: EntityManager) -> None:
         """Initialize the stub lighting system.
 
         Args:
@@ -30,7 +30,7 @@ class PygameLightingSystem:
         self._entity_manager = entity_manager
 
     @property
-    def lights(self) -> List[Any]:
+    def lights(self) -> list[Any]:
         """Return empty light list."""
         return []
 
@@ -70,10 +70,10 @@ class PygamePostProcessStack:
 
     def __init__(self) -> None:
         """Initialize the stub post-process stack."""
-        self._effects: List[Any] = []
+        self._effects: list[Any] = []
 
     @property
-    def effects(self) -> List[Any]:
+    def effects(self) -> list[Any]:
         """Return empty effect list."""
         return self._effects
 
@@ -236,7 +236,7 @@ class PygameRenderGraph:
             height: Viewport height.
         """
         self._fbo_manager = PygameFramebufferManager(width, height)
-        self._passes: List[Any] = []
+        self._passes: list[Any] = []
 
     @property
     def fbo_manager(self) -> PygameFramebufferManager:
@@ -244,7 +244,7 @@ class PygameRenderGraph:
         return self._fbo_manager
 
     @property
-    def passes(self) -> List[Any]:
+    def passes(self) -> list[Any]:
         """Get the pass list (always empty)."""
         return self._passes
 

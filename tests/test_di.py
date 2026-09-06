@@ -1,9 +1,11 @@
-import pytest
 from typing import Protocol, runtime_checkable
+
+import pytest
+
 from pyguara.di.exceptions import (
-    ServiceNotFoundException,
     CircularDependencyException,
     DIException,
+    ServiceNotFoundException,
 )
 
 
@@ -191,10 +193,11 @@ def test_error_handling_strategy_raise_on_dependency_extraction():
 
 def test_error_handling_strategy_log_on_dependency_extraction():
     """Test that LOG strategy logs and continues with dependency extraction failures."""
+    from io import StringIO
+    from unittest.mock import patch
+
     from pyguara.di.container import DIContainer
     from pyguara.di.types import ErrorHandlingStrategy
-    from unittest.mock import patch
-    from io import StringIO
 
     container = DIContainer(error_strategy=ErrorHandlingStrategy.LOG)
 
@@ -262,9 +265,11 @@ def test_circular_dependency_detected_for_scoped_services(container) -> None:
     container.register_scoped(ScopedCircularA, ScopedCircularA)
     container.register_scoped(ScopedCircularB, ScopedCircularB)
 
-    with container.create_scope() as scope:
-        with pytest.raises(CircularDependencyException):
-            container._resolve_service(ScopedCircularA, scope)
+    with (
+        container.create_scope() as scope,
+        pytest.raises(CircularDependencyException),
+    ):
+        container._resolve_service(ScopedCircularA, scope)
 
 
 def test_default_error_strategy_is_raise():
@@ -301,18 +306,19 @@ def test_a_singleton_cannot_capture_a_scoped_dependency(container) -> None:
     container.register_scoped(ScopedResource, ScopedResource)
     container.register_singleton(SingletonNeedingScope, SingletonNeedingScope)
 
-    with container.create_scope() as scope:
-        with pytest.raises(DIException, match="requires an active scope"):
-            scope.get(SingletonNeedingScope)
+    with (
+        container.create_scope() as scope,
+        pytest.raises(DIException, match="requires an active scope"),
+    ):
+        scope.get(SingletonNeedingScope)
 
 
 def test_the_captive_dependency_error_explains_the_singleton_case(container) -> None:
     container.register_scoped(ScopedResource, ScopedResource)
     container.register_singleton(SingletonNeedingScope, SingletonNeedingScope)
 
-    with container.create_scope() as scope:
-        with pytest.raises(DIException) as excinfo:
-            scope.get(SingletonNeedingScope)
+    with container.create_scope() as scope, pytest.raises(DIException) as excinfo:
+        scope.get(SingletonNeedingScope)
 
     assert "singleton" in str(excinfo.value).lower()
 
@@ -412,9 +418,8 @@ def test_a_failing_dispose_is_logged(container, caplog) -> None:
             raise RuntimeError("cleanup failed")
 
     container.register_scoped(FailingDispose, FailingDispose)
-    with caplog.at_level(logging.ERROR):
-        with container.create_scope() as scope:
-            scope.get(FailingDispose)
+    with caplog.at_level(logging.ERROR), container.create_scope() as scope:
+        scope.get(FailingDispose)
 
     assert "Error disposing" in caplog.text
 

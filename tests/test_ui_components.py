@@ -1,11 +1,13 @@
-import pytest
 from typing import Any
 from unittest.mock import MagicMock
-from pyguara.common.types import Vector2, Color
-from pyguara.ui.components.text import Label
-from pyguara.ui.components.button import Button
-from pyguara.ui.types import UIElementState, UIEventType
+
+import pytest
+
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.ui.components.button import Button
+from pyguara.ui.components.text import Label
+from pyguara.ui.types import UIElementState, UIEventType
 
 
 @pytest.fixture  # type: ignore[misc]

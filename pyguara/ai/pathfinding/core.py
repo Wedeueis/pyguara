@@ -1,6 +1,7 @@
 """Core abstractions for pathfinding protocols."""
 
-from typing import Protocol, Iterator, TypeVar, Hashable, runtime_checkable
+from collections.abc import Hashable, Iterator
+from typing import Protocol, TypeVar, runtime_checkable
 
 # Generic type for a Node (invariant for Graphs as they produce and consume)
 Node = TypeVar("Node", bound=Hashable)

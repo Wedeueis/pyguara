@@ -11,12 +11,14 @@ By adhering to these protocols:
 """
 
 from __future__ import annotations
-from typing import Protocol, Any, Tuple, Optional, Iterable, runtime_checkable
 
-from pyguara.common.types import Vector2, Color, Rect
-from pyguara.resources.types import Texture
-from pyguara.graphics.types import RenderBatch
+from collections.abc import Iterable
+from typing import Any, Protocol, runtime_checkable
+
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.types import WindowConfig
+from pyguara.graphics.types import RenderBatch
+from pyguara.resources.types import Texture
 
 
 @runtime_checkable
@@ -242,7 +244,7 @@ class IRenderer(Protocol):
         """
         ...
 
-    def render_batch(self, batch: "RenderBatch") -> None:
+    def render_batch(self, batch: RenderBatch) -> None:
         """Optimized method to draw many instances of the same texture."""
         ...
 
@@ -262,7 +264,7 @@ class IWindowBackend(Protocol):
         """Close and destroys the window context."""
         ...
 
-    def clear(self, color: Optional[Color] = None) -> None:
+    def clear(self, color: Color | None = None) -> None:
         """Clear the window context screen with default clear color."""
         ...
 
@@ -339,7 +341,7 @@ class UIRenderer(Protocol):
         ...
 
     def draw_texture(
-        self, texture: Any, rect: Rect, color: Optional[Color] = None
+        self, texture: Any, rect: Rect, color: Color | None = None
     ) -> None:
         """Draw an image texture.
 
@@ -350,7 +352,7 @@ class UIRenderer(Protocol):
         """
         ...
 
-    def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
+    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
         """Calculate dimensions of text."""
         ...
 

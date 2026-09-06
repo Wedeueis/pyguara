@@ -2,9 +2,9 @@
 
 from pyguara.systems.manager import SystemManager
 from pyguara.systems.protocols import (
-    System,
-    InitializableSystem,
     CleanupSystem,
+    InitializableSystem,
+    System,
 )
 
 __all__ = [

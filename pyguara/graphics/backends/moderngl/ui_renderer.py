@@ -6,14 +6,13 @@ This maintains compatibility with existing UI code while using ModernGL for
 the main rendering pipeline.
 """
 
-from typing import Tuple, Dict, Optional, Any
+from typing import Any
 
-import moderngl
 import numpy as np
 import pygame
 
-from pyguara.common.types import Rect, Color, Vector2
-
+import moderngl
+from pyguara.common.types import Color, Rect, Vector2
 
 # Shader source for UI overlay
 _UI_VERT_SHADER = """
@@ -66,7 +65,7 @@ class GLUIRenderer:
 
         # Create offscreen surface for UI rendering (with alpha)
         self._surface = pygame.Surface((width, height), pygame.SRCALPHA)
-        self._font_cache: Dict[int, pygame.font.Font] = {}
+        self._font_cache: dict[int, pygame.font.Font] = {}
 
         # Create GL resources for overlay rendering
         self._program = self._ctx.program(
@@ -122,7 +121,7 @@ class GLUIRenderer:
             self._font_cache[size] = pygame.font.SysFont("arial", size)
         return self._font_cache[size]
 
-    def _to_pygame_color(self, color: Color) -> Tuple[int, int, int, int]:
+    def _to_pygame_color(self, color: Color) -> tuple[int, int, int, int]:
         """Convert engine Color to pygame RGBA tuple."""
         return (color.r, color.g, color.b, getattr(color, "a", 255))
 
@@ -185,7 +184,7 @@ class GLUIRenderer:
         self._dirty = True
 
     def draw_texture(
-        self, texture: Any, rect: Rect, color: Optional[Color] = None
+        self, texture: Any, rect: Rect, color: Color | None = None
     ) -> None:
         """Draw an image texture."""
         if not isinstance(texture, pygame.Surface):
@@ -210,7 +209,7 @@ class GLUIRenderer:
 
         self._dirty = True
 
-    def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
+    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
         """Calculate the width/height of a string."""
         font = self._get_font(size)
         txt_size = font.size(text)

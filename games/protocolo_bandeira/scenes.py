@@ -3,49 +3,47 @@
 Menu, Arena, and Game Over scenes for the shooter game.
 """
 
-import sys
 import math
-from typing import Optional
-
-from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Vector2, Color, Rect
-from pyguara.common.components import Transform
-from pyguara.ui.manager import UIManager
-from pyguara.ui.layout import BoxContainer
-from pyguara.ui.components.button import Button
-from pyguara.ui.components.text import Label
-from pyguara.input.manager import InputManager
-from pyguara.input.types import InputDevice, ActionType
-from pyguara.input.keys import W, A, S, D, UP, DOWN, LEFT, RIGHT, SPACE, ESCAPE
-from pyguara.input.events import OnActionEvent
-from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
+import sys
 
 from games.protocolo_bandeira.components import (
-    Weapon,
+    Bullet,
     Health,
     Movement,
+    Poolable,
     Score,
     ShooterSprite,
-    Poolable,
-    Bullet,
+    Weapon,
 )
-from games.protocolo_bandeira.systems import (
-    PlayerControlSystem,
-    BulletSystem,
-    EnemyAISystem,
-    CollisionSystem,
-    WeaponSystem,
-    ScoreSystem,
-)
-from games.protocolo_bandeira.pooling import BulletPool, EnemyPool
-from games.protocolo_bandeira.wave_manager import WaveManager
 from games.protocolo_bandeira.events import (
     PlayerDeathEvent,
     WaveCompleteEvent,
 )
+from games.protocolo_bandeira.pooling import BulletPool, EnemyPool
+from games.protocolo_bandeira.systems import (
+    BulletSystem,
+    CollisionSystem,
+    EnemyAISystem,
+    PlayerControlSystem,
+    ScoreSystem,
+    WeaponSystem,
+)
+from games.protocolo_bandeira.wave_manager import WaveManager
+from pyguara.common.components import Transform
+from pyguara.common.types import Color, Rect, Vector2
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.input.events import OnActionEvent
+from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, SPACE, UP, A, D, S, W
+from pyguara.input.manager import InputManager
+from pyguara.input.types import ActionType, InputDevice
+from pyguara.scene.base import Scene
+from pyguara.scene.manager import SceneManager
+from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
+from pyguara.ui.components.button import Button
+from pyguara.ui.components.text import Label
+from pyguara.ui.layout import BoxContainer
+from pyguara.ui.manager import UIManager
 
 
 class MenuScene(Scene):
@@ -121,24 +119,24 @@ class ArenaScene(Scene):
         super().__init__("ArenaScene", event_dispatcher)
 
         # Pools
-        self._bullet_pool: Optional[BulletPool] = None
-        self._enemy_pool: Optional[EnemyPool] = None
+        self._bullet_pool: BulletPool | None = None
+        self._enemy_pool: EnemyPool | None = None
 
         # Systems
-        self._player_control: Optional[PlayerControlSystem] = None
-        self._bullet_system: Optional[BulletSystem] = None
-        self._enemy_ai: Optional[EnemyAISystem] = None
-        self._collision_system: Optional[CollisionSystem] = None
-        self._weapon_system: Optional[WeaponSystem] = None
-        self._score_system: Optional[ScoreSystem] = None
+        self._player_control: PlayerControlSystem | None = None
+        self._bullet_system: BulletSystem | None = None
+        self._enemy_ai: EnemyAISystem | None = None
+        self._collision_system: CollisionSystem | None = None
+        self._weapon_system: WeaponSystem | None = None
+        self._score_system: ScoreSystem | None = None
 
         # Wave manager
-        self._wave_manager: Optional[WaveManager] = None
+        self._wave_manager: WaveManager | None = None
 
         # Game state
-        self._player_id: Optional[str] = None
-        self._input_manager: Optional[InputManager] = None
-        self._coroutine_manager: Optional[CoroutineManager] = None
+        self._player_id: str | None = None
+        self._input_manager: InputManager | None = None
+        self._coroutine_manager: CoroutineManager | None = None
         self._is_game_over = False
         self._wave_transition = False
 
@@ -472,7 +470,7 @@ class ArenaScene(Scene):
         renderer: IRenderer,
         pos: Vector2,
         sprite: ShooterSprite,
-        color: Optional[Color] = None,
+        color: Color | None = None,
     ) -> None:
         """Draw a shape at position."""
         c = color or sprite.color

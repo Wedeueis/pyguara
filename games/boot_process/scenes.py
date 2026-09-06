@@ -3,14 +3,15 @@
 A minimal scene to satisfy the Application requirements.
 """
 
-from pyguara.scene.base import Scene
+from pyguara.common.types import Color
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Color
+from pyguara.scene.base import Scene
+
 
 class BootScene(Scene):
     """A simple scene that does nothing but clear the screen."""
-    
+
     def __init__(self, event_dispatcher: EventDispatcher):
         super().__init__("BootScene", event_dispatcher)
         self.frame_count = 0

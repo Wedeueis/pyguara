@@ -1,7 +1,6 @@
 """Loader strategies for data files."""
 
 import json
-from typing import List
 
 from pyguara.resources.data import DataResource
 from pyguara.resources.types import Resource
@@ -15,7 +14,7 @@ class JsonLoader:
     """
 
     @property
-    def supported_extensions(self) -> List[str]:
+    def supported_extensions(self) -> list[str]:
         """Return supported extensions."""
         return [".json", ".manifest", ".config"]
 
@@ -33,7 +32,7 @@ class JsonLoader:
             FileNotFoundError: If the file does not exist.
             json.JSONDecodeError: If the file contains invalid JSON.
         """
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
         return DataResource(path, data)

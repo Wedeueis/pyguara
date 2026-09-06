@@ -5,9 +5,9 @@ Plays back recorded input events for deterministic replay.
 
 from __future__ import annotations
 
-from pyguara.log import get_logger
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
+from pyguara.log import get_logger
 from pyguara.replay.types import (
     InputFrame,
     RecordedInputEvent,
@@ -38,16 +38,16 @@ class ReplayPlayer:
             process_event(event)
     """
 
-    def __init__(self, replay_data: Optional[ReplayData] = None) -> None:
+    def __init__(self, replay_data: ReplayData | None = None) -> None:
         """Initialize the player.
 
         Args:
             replay_data: Optional replay data to load immediately.
         """
-        self._data: Optional[ReplayData] = replay_data
+        self._data: ReplayData | None = replay_data
         self._state = ReplayState.IDLE
         self._current_frame_index: int = 0
-        self._event_handlers: List[EventCallback] = []
+        self._event_handlers: list[EventCallback] = []
         self._playback_speed: float = 1.0
         self._elapsed_time: float = 0.0
 
@@ -188,7 +188,7 @@ class ReplayPlayer:
 
         return False
 
-    def get_frame_events(self, frame_id: int) -> List[RecordedInputEvent]:
+    def get_frame_events(self, frame_id: int) -> list[RecordedInputEvent]:
         """Get events for a specific frame by ID.
 
         Args:
@@ -210,7 +210,7 @@ class ReplayPlayer:
 
         return []
 
-    def advance_frame(self) -> Optional[InputFrame]:
+    def advance_frame(self) -> InputFrame | None:
         """Advance to the next frame and return its data.
 
         Returns:
@@ -243,7 +243,7 @@ class ReplayPlayer:
 
         return frame
 
-    def update(self, delta_time: float) -> List[InputFrame]:
+    def update(self, delta_time: float) -> list[InputFrame]:
         """Update playback based on elapsed time.
 
         This method should be called each game frame. It returns all frames
@@ -262,7 +262,7 @@ class ReplayPlayer:
         adjusted_dt = delta_time * self._playback_speed
         self._elapsed_time += adjusted_dt
 
-        frames_to_process: List[InputFrame] = []
+        frames_to_process: list[InputFrame] = []
 
         # Process all frames up to current time
         while self._current_frame_index < len(self._data.frames):
@@ -289,7 +289,7 @@ class ReplayPlayer:
 
         return frames_to_process
 
-    def get_current_frame_data(self) -> Optional[InputFrame]:
+    def get_current_frame_data(self) -> InputFrame | None:
         """Get the current frame data without advancing.
 
         Returns:

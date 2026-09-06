@@ -1,7 +1,7 @@
 """Type definitions for the Logging System."""
 
-from enum import Enum, IntEnum
 import logging
+from enum import Enum, IntEnum
 
 
 class LogLevel(IntEnum):

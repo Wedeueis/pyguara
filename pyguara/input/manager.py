@@ -1,8 +1,8 @@
 """Core input processing system."""
 
-from pyguara.log import get_logger
+from typing import Any
+
 import pygame
-from typing import Any, Dict, Optional
 
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.binding import KeyBindingManager
@@ -13,15 +13,16 @@ from pyguara.input.events import (
     OnMouseEvent,
     OnRawKeyEvent,
 )
+from pyguara.input.gamepad import GamepadManager
 from pyguara.input.protocols import IInputBackend
 from pyguara.input.types import (
     ActionType,
+    GamepadConfig,
     InputAction,
     InputContext,
     InputDevice,
-    GamepadConfig,
 )
-from pyguara.input.gamepad import GamepadManager
+from pyguara.log import get_logger
 from pyguara.replay.recorder import ReplayRecorder
 from pyguara.replay.types import InputEventType, RecordedInputEvent
 
@@ -35,7 +36,7 @@ class InputManager:
         self,
         dispatcher: EventDispatcher,
         input_backend: IInputBackend,
-        gamepad_config: Optional[GamepadConfig] = None,
+        gamepad_config: GamepadConfig | None = None,
     ) -> None:
         """Initialize input manager and bindings.
 
@@ -50,8 +51,8 @@ class InputManager:
         self._input_backend = input_backend
 
         self._context = InputContext.GAMEPLAY
-        self._registered_actions: Dict[str, InputAction] = {}
-        self._recorder: Optional[ReplayRecorder] = None
+        self._registered_actions: dict[str, InputAction] = {}
+        self._recorder: ReplayRecorder | None = None
 
         # GamepadManager owns hot-plug, per-button/axis state, and deadzone
         # filtering; bound gamepad Actions are driven off the
@@ -255,9 +256,12 @@ class InputManager:
             # Logic: Dispatch based on Action Type
             should_dispatch = False
 
-            if action_def.action_type == ActionType.PRESS and is_down:
-                should_dispatch = True
-            elif action_def.action_type == ActionType.RELEASE and not is_down:
+            if (
+                action_def.action_type == ActionType.PRESS
+                and is_down
+                or action_def.action_type == ActionType.RELEASE
+                and not is_down
+            ):
                 should_dispatch = True
             elif action_def.action_type == ActionType.HOLD:
                 # Holds are usually handled in update(), but state change matters here

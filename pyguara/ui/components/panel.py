@@ -1,7 +1,6 @@
 """Container background component."""
 
-from typing import Optional
-from pyguara.common.types import Vector2, Color
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 
@@ -13,7 +12,7 @@ class Panel(Widget):
         self,
         position: Vector2,
         size: Vector2,
-        color: Optional[Color] = None,
+        color: Color | None = None,
         border_width: int = 1,
     ) -> None:
         """Initialize the panel."""

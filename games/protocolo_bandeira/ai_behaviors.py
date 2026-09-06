@@ -6,18 +6,16 @@ Behavior tree implementations for enemy AI.
 import math
 import random
 
+from games.protocolo_bandeira.components import AIContext, EnemyType
 from pyguara.ai.behavior_tree import (
-    BehaviorTree,
-    NodeStatus,
     ActionNode,
+    BehaviorTree,
     ConditionNode,
-    SequenceNode,
+    NodeStatus,
     SelectorNode,
+    SequenceNode,
 )
 from pyguara.common.types import Vector2
-
-from games.protocolo_bandeira.components import AIContext, EnemyType
-
 
 # ============ Condition Functions ============
 
@@ -68,10 +66,11 @@ def attack_player(context: AIContext) -> NodeStatus:
 def patrol_wander(context: AIContext) -> NodeStatus:
     """Wander randomly."""
     # Random direction change occasionally
-    if random.random() < 0.02:  # 2% chance per frame
-        angle = random.uniform(0, math.pi * 2)
-        context.move_direction = Vector2(math.cos(angle), math.sin(angle))
-    elif not hasattr(context, "move_direction") or context.move_direction is None:
+    if (
+        random.random() < 0.02
+        or not hasattr(context, "move_direction")
+        or context.move_direction is None
+    ):  # 2% chance per frame
         angle = random.uniform(0, math.pi * 2)
         context.move_direction = Vector2(math.cos(angle), math.sin(angle))
 

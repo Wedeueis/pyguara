@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from pyguara.log import get_logger
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from pyguara.persistence.types import SaveMetadata, SerializationFormat, StorageBackend
+from pyguara.log import get_logger
 from pyguara.persistence.serializer import Serializer
+from pyguara.persistence.types import SaveMetadata, SerializationFormat, StorageBackend
 
 if TYPE_CHECKING:
     from pyguara.persistence.migration import MigrationManager
@@ -33,7 +33,7 @@ class PersistenceManager:
     def __init__(
         self,
         storage_backend: StorageBackend,
-        migration_manager: Optional[MigrationManager] = None,
+        migration_manager: MigrationManager | None = None,
     ):
         """Initialize the persistence manager.
 
@@ -99,7 +99,7 @@ class PersistenceManager:
             logger.error(f"Failed to save data '{key}': {e}", exc_info=True)
             return False
 
-    def load_data(self, key: str, verify_integrity: bool = True) -> Optional[Any]:
+    def load_data(self, key: str, verify_integrity: bool = True) -> Any | None:
         """Load an object from storage.
 
         Args:

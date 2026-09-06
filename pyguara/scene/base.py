@@ -1,7 +1,6 @@
 """Base scene abstraction."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from pyguara.ai.ai_system import AISystem
 from pyguara.ai.steering_system import SteeringSystem
@@ -14,11 +13,11 @@ from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.animation_system import AnimationSystem
-from pyguara.graphics.components.animation import Animator, AnimationStateMachine
+from pyguara.graphics.components.animation import AnimationStateMachine, Animator
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.render_system import RenderSystem
-from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.prefabs.factory import PrefabFactory
 from pyguara.prefabs.loader import PrefabCache
 from pyguara.prefabs.registry import ComponentRegistry
@@ -56,12 +55,12 @@ class Scene(ABC):
 
         # Built in resolve_dependencies(), which needs the DI container for
         # AudioSourceSystem's dependencies and the active IRenderer backend.
-        self.camera: Optional[Camera2D] = None
-        self.render_system: Optional[RenderSystem] = None
-        self.prefab_factory: Optional[PrefabFactory] = None
+        self.camera: Camera2D | None = None
+        self.render_system: RenderSystem | None = None
+        self.prefab_factory: PrefabFactory | None = None
 
         # New: Application will set this before on_enter
-        self.container: Optional[DIContainer] = None
+        self.container: DIContainer | None = None
 
         # Set by SceneManager.render() immediately before this scene's own
         # render() runs each frame. 1.0 = fully at the current fixed step --

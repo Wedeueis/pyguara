@@ -15,9 +15,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 import click
+
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -33,7 +33,7 @@ def _check_pyinstaller() -> bool:
         return False
 
 
-def _find_assets_folder(project_path: Path) -> Optional[Path]:
+def _find_assets_folder(project_path: Path) -> Path | None:
     """Find the assets folder relative to the project."""
     candidates = ["assets", "Assets", "resources", "Resources", "data", "Data"]
     project_dir = project_path.parent if project_path.is_file() else project_path
@@ -49,16 +49,16 @@ def _find_assets_folder(project_path: Path) -> Optional[Path]:
 def _build_pyinstaller_args(
     entry_point: Path,
     output_dir: Path,
-    name: Optional[str],
+    name: str | None,
     onefile: bool,
     windowed: bool,
-    icon: Optional[Path],
-    assets_dirs: List[Path],
-    extra_data: List[str],
-    hidden_imports: List[str],
+    icon: Path | None,
+    assets_dirs: list[Path],
+    extra_data: list[str],
+    hidden_imports: list[str],
     clean: bool,
     debug: bool,
-) -> List[str]:
+) -> list[str]:
     """Build the PyInstaller command arguments."""
     args = ["pyinstaller"]
 
@@ -212,10 +212,10 @@ def _path_separator() -> str:
 def build(
     entry_point: Path,
     output: Path,
-    name: Optional[str],
+    name: str | None,
     onefile: bool,
     windowed: bool,
-    icon: Optional[Path],
+    icon: Path | None,
     assets_dirs: tuple[Path, ...],
     extra_data: tuple[str, ...],
     hidden_imports: tuple[str, ...],
@@ -339,11 +339,11 @@ def build(
             + f" (exit code: {e.returncode})",
             err=True,
         )
-        raise SystemExit(e.returncode)
-    except FileNotFoundError:
+        raise SystemExit(e.returncode) from e
+    except FileNotFoundError as e:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
             + "PyInstaller executable not found in PATH",
             err=True,
         )
-        raise SystemExit(1)
+        raise SystemExit(1) from e

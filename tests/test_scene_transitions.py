@@ -4,13 +4,13 @@ from unittest.mock import Mock
 
 from pyguara.common.types import Color
 from pyguara.scene.transitions import (
-    TransitionConfig,
-    TransitionState,
     EasingFunction,
     FadeTransition,
     SlideTransition,
-    WipeTransition,
+    TransitionConfig,
     TransitionManager,
+    TransitionState,
+    WipeTransition,
     apply_easing,
 )
 

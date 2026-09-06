@@ -2,9 +2,8 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
 
-from pyguara.config.types import GameConfig, WindowConfig, AudioConfig
+from pyguara.config.types import AudioConfig, GameConfig, WindowConfig
 
 
 class ValidationSeverity(Enum):
@@ -24,20 +23,20 @@ class ValidationIssue:
     section: str
     setting: str
     message: str
-    suggestion: Optional[str] = None
+    suggestion: str | None = None
 
 
 class ConfigValidator:
     """Validates GameConfig state against defined rules."""
 
-    def validate(self, config: GameConfig) -> List[ValidationIssue]:
+    def validate(self, config: GameConfig) -> list[ValidationIssue]:
         """Run all validation rules."""
         issues = []
         issues.extend(self._validate_display(config.display))
         issues.extend(self._validate_audio(config.audio))
         return issues
 
-    def _validate_display(self, display: WindowConfig) -> List[ValidationIssue]:
+    def _validate_display(self, display: WindowConfig) -> list[ValidationIssue]:
         """Validate display settings."""
         issues = []
         if display.screen_width < 640:
@@ -61,7 +60,7 @@ class ConfigValidator:
             )
         return issues
 
-    def _validate_audio(self, audio: AudioConfig) -> List[ValidationIssue]:
+    def _validate_audio(self, audio: AudioConfig) -> list[ValidationIssue]:
         """Validate audio settings."""
         issues = []
         if not (0.0 <= audio.master_volume <= 1.0):

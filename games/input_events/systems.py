@@ -3,12 +3,12 @@
 Input handling and Physics logic.
 """
 
+from games.input_events.components import Transform, Velocity
+from games.input_events.events import JumpEvent
+from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.events import OnActionEvent
-from pyguara.common.types import Vector2
-from games.input_events.events import JumpEvent
-from games.input_events.components import Transform, Velocity
 
 
 class InputBridgeSystem:

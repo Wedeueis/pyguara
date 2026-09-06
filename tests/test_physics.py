@@ -1,14 +1,14 @@
 from unittest.mock import MagicMock
 
-from pyguara.physics.physics_system import PhysicsSystem
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
-from pyguara.physics.components import RigidBody, Collider
-from pyguara.physics.types import BodyType, CollisionLayer, PhysicsMaterial, ShapeType
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
-from pyguara.ecs.manager import EntityManager
 from pyguara.ecs.events import EntityDestroyed
+from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.physics_system import PhysicsSystem
+from pyguara.physics.types import BodyType, CollisionLayer, PhysicsMaterial, ShapeType
 
 
 def _wire_entity_destroyed(manager: EntityManager, dispatcher: EventDispatcher) -> None:

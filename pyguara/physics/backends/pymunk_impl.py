@@ -1,7 +1,8 @@
 """Pymunk implementation of the physics engine adapter."""
 
+import contextlib
 import math
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import pymunk
 
@@ -54,12 +55,12 @@ class PymunkBodyAdapter:
         """Set the linear velocity."""
         self._body.velocity = value.x, value.y
 
-    def apply_force(self, force: Vector2, point: Optional[Vector2] = None) -> None:
+    def apply_force(self, force: Vector2, point: Vector2 | None = None) -> None:
         """Apply a continuous force to the body."""
         p = (point.x, point.y) if point else (0, 0)
         self._body.apply_force_at_local_point((force.x, force.y), p)
 
-    def apply_impulse(self, impulse: Vector2, point: Optional[Vector2] = None) -> None:
+    def apply_impulse(self, impulse: Vector2, point: Vector2 | None = None) -> None:
         """Apply an instant impulse to the body."""
         p = (point.x, point.y) if point else (0, 0)
         self._body.apply_impulse_at_local_point((impulse.x, impulse.y), p)
@@ -70,11 +71,11 @@ class PymunkEngine:
 
     def __init__(self) -> None:
         """Initialize the Pymunk engine wrapper."""
-        self.space: Optional[pymunk.Space] = None
+        self.space: pymunk.Space | None = None
         # Map entity_id -> PymunkBodyAdapter
-        self._bodies: Dict[Union[int, str], PymunkBodyAdapter] = {}
+        self._bodies: dict[int | str, PymunkBodyAdapter] = {}
         # Collision system for event routing (injected after construction)
-        self._collision_system: Optional[Any] = None
+        self._collision_system: Any | None = None
 
     def initialize(self, gravity: Vector2) -> None:
         """Initialize the physics space with gravity."""
@@ -88,16 +89,13 @@ class PymunkEngine:
     def cleanup(self) -> None:
         """Destroy the pymunk Space to prevent dangling callbacks."""
         if self.space:
-            try:
-                # Remove collision handlers to prevent callbacks during destruction
-                # Trying to use internal default handler mechanism
-                # on_collision sets the default handler
+            # Clear the default collision handler so callbacks cannot fire
+            # while the space is being torn down. Tolerated if it fails: the
+            # space may already be closing.
+            with contextlib.suppress(Exception):
                 self.space.on_collision(
                     begin=None, pre_solve=None, post_solve=None, separate=None
                 )
-            except Exception:
-                # Ignore errors during handler reset (e.g. if space is already closing)
-                pass
 
             try:
                 # Explicitly remove everything to ensure internal iterators don't run
@@ -252,7 +250,7 @@ class PymunkEngine:
 
     def create_body(
         self,
-        entity_id: Union[int, str],
+        entity_id: int | str,
         body_type: BodyType,
         position: Vector2,
         mass: float = 1.0,
@@ -314,7 +312,7 @@ class PymunkEngine:
         self,
         body_handle: IPhysicsBody,
         shape_type: ShapeType,
-        dimensions: List[float],
+        dimensions: list[float],
         offset: Vector2,
         material: PhysicsMaterial,
         collision_layer: CollisionLayer,
@@ -331,7 +329,7 @@ class PymunkEngine:
             )
 
         body = body_handle._body
-        shape: Optional[pymunk.Shape] = None
+        shape: pymunk.Shape | None = None
 
         if shape_type == ShapeType.CIRCLE:
             radius = dimensions[0]
@@ -360,7 +358,7 @@ class PymunkEngine:
 
     def raycast(
         self, start: Vector2, end: Vector2, mask: int = 0xFFFFFFFF
-    ) -> Optional[RaycastHit]:
+    ) -> RaycastHit | None:
         """Perform a raycast query."""
         if not self.space:
             return None
@@ -427,7 +425,7 @@ class PymunkEngine:
         pm_body_a = body_a._body
         pm_body_b = body_b._body
 
-        constraint: Optional[pymunk.Constraint] = None
+        constraint: pymunk.Constraint | None = None
 
         if joint_type == JointType.PIN:
             # Pin joint (revolute) - allows rotation around shared point
@@ -510,8 +508,6 @@ class PymunkEngine:
             joint_handle: Pymunk constraint object to remove.
         """
         if self.space and joint_handle:
-            try:
+            # The joint may already have been removed with its bodies.
+            with contextlib.suppress(Exception):
                 self.space.remove(joint_handle)
-            except Exception:
-                # Joint may have already been removed
-                pass

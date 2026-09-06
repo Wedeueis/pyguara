@@ -1,9 +1,12 @@
 """Pygame implementation of the Window Backend."""
 
+from collections.abc import Iterable
+from typing import Any, cast
+
 import pygame
-from typing import Any, Iterable, Optional, cast
-from pyguara.config.types import WindowConfig
+
 from pyguara.common.types import Color
+from pyguara.config.types import WindowConfig
 from pyguara.graphics.backends.pygame.conversions import to_pygame_color
 
 
@@ -50,7 +53,7 @@ class PygameWindow:
         # The window manages the flip, not the renderer
         pygame.display.flip()
 
-    def clear(self, color: Optional[Color] = None) -> None:
+    def clear(self, color: Color | None = None) -> None:
         """Clear the window context screen with default clear color."""
         if self._is_open and self._screen:
             fill_color = color if color is not None else self._default_color

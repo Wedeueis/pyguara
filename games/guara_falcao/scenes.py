@@ -4,55 +4,53 @@ Title and gameplay scenes for the platformer game.
 """
 
 import sys
-from typing import Optional
-
-from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
-from pyguara.config.manager import ConfigManager
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Vector2, Color, Rect
-from pyguara.common.components import Transform
-from pyguara.ui.manager import UIManager
-from pyguara.ui.layout import BoxContainer
-from pyguara.ui.components.button import Button
-from pyguara.ui.components.text import Label
-from pyguara.input.manager import InputManager
-from pyguara.input.types import InputDevice, ActionType
-from pyguara.input.keys import UP, LEFT, RIGHT, SPACE, ESCAPE, R
-from pyguara.input.events import OnActionEvent
-from pyguara.graphics.components.camera import Camera2D
-from pyguara.physics.protocols import IPhysicsEngine
-from pyguara.physics.components import RigidBody
-from pyguara.physics.physics_system import PhysicsSystem
-from pyguara.physics.platformer_system import PlatformerSystem
-from pyguara.physics.platformer_controller import PlatformerController
-from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
 
 from games.guara_falcao.components import (
-    PlayerState,
-    Health,
-    Score,
-    PlatformSprite,
     CharacterSprite,
     Collectible,
+    Health,
+    PlatformSprite,
+    PlayerState,
+    Score,
     ZoneTrigger,
 )
-from games.guara_falcao.systems import (
-    PlayerControlSystem,
-    AnimationFSMSystem,
-    CameraFollowSystem,
-    CollectibleSystem,
-    CheckpointSystem,
-    HealthSystem,
-    HazardSystem,
-)
 from games.guara_falcao.events import (
-    PlayerDeathEvent,
     CheckpointReachedEvent,
     CollectiblePickedEvent,
+    PlayerDeathEvent,
 )
 from games.guara_falcao.level_builder import LevelBuilder
+from games.guara_falcao.systems import (
+    AnimationFSMSystem,
+    CameraFollowSystem,
+    CheckpointSystem,
+    CollectibleSystem,
+    HazardSystem,
+    HealthSystem,
+    PlayerControlSystem,
+)
+from pyguara.common.components import Transform
+from pyguara.common.types import Color, Rect, Vector2
+from pyguara.config.manager import ConfigManager
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.input.events import OnActionEvent
+from pyguara.input.keys import ESCAPE, LEFT, RIGHT, SPACE, UP, R
+from pyguara.input.manager import InputManager
+from pyguara.input.types import ActionType, InputDevice
+from pyguara.physics.components import RigidBody
+from pyguara.physics.physics_system import PhysicsSystem
+from pyguara.physics.platformer_controller import PlatformerController
+from pyguara.physics.platformer_system import PlatformerSystem
+from pyguara.physics.protocols import IPhysicsEngine
+from pyguara.scene.base import Scene
+from pyguara.scene.manager import SceneManager
+from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
+from pyguara.ui.components.button import Button
+from pyguara.ui.components.text import Label
+from pyguara.ui.layout import BoxContainer
+from pyguara.ui.manager import UIManager
 
 
 class TitleScene(Scene):
@@ -128,22 +126,22 @@ class GameScene(Scene):
         super().__init__("GameScene", event_dispatcher)
 
         # Systems
-        self._physics_system: Optional[PhysicsSystem] = None
-        self._platformer_system: Optional[PlatformerSystem] = None
-        self._player_control: Optional[PlayerControlSystem] = None
-        self._animation_fsm: Optional[AnimationFSMSystem] = None
-        self._camera_follow: Optional[CameraFollowSystem] = None
-        self._collectible_system: Optional[CollectibleSystem] = None
-        self._checkpoint_system: Optional[CheckpointSystem] = None
-        self._health_system: Optional[HealthSystem] = None
-        self._hazard_system: Optional[HazardSystem] = None
+        self._physics_system: PhysicsSystem | None = None
+        self._platformer_system: PlatformerSystem | None = None
+        self._player_control: PlayerControlSystem | None = None
+        self._animation_fsm: AnimationFSMSystem | None = None
+        self._camera_follow: CameraFollowSystem | None = None
+        self._collectible_system: CollectibleSystem | None = None
+        self._checkpoint_system: CheckpointSystem | None = None
+        self._health_system: HealthSystem | None = None
+        self._hazard_system: HazardSystem | None = None
 
         # Game state
-        self._camera: Optional[Camera2D] = None
-        self._player_id: Optional[str] = None
-        self._level_builder: Optional[LevelBuilder] = None
-        self._input_manager: Optional[InputManager] = None
-        self._coroutine_manager: Optional[CoroutineManager] = None
+        self._camera: Camera2D | None = None
+        self._player_id: str | None = None
+        self._level_builder: LevelBuilder | None = None
+        self._input_manager: InputManager | None = None
+        self._coroutine_manager: CoroutineManager | None = None
 
         # Game flags
         self._is_dead = False

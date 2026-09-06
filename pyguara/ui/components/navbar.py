@@ -2,9 +2,9 @@
 
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.ui.layout import BoxContainer
-from pyguara.ui.types import LayoutDirection, LayoutAlignment
 from pyguara.ui.components.panel import Panel
+from pyguara.ui.layout import BoxContainer
+from pyguara.ui.types import LayoutAlignment, LayoutDirection
 
 
 class NavBar(BoxContainer):

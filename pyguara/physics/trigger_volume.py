@@ -22,7 +22,6 @@ Usage:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, Set
 
 from pyguara.ecs.component import BaseComponent
 from pyguara.physics.types import ShapeType
@@ -61,10 +60,10 @@ class TriggerVolume(BaseComponent):
     dimensions: list = field(default_factory=lambda: [100.0, 100.0])
 
     # Filtering
-    tags: Set[str] = field(default_factory=set)
+    tags: set[str] = field(default_factory=set)
 
     # State (managed by TriggerSystem or manual event handlers)
-    entities_inside: Set[str] = field(default_factory=set, repr=False)
+    entities_inside: set[str] = field(default_factory=set, repr=False)
 
     # Behavior
     active: bool = True
@@ -109,7 +108,7 @@ class TriggerVolume(BaseComponent):
         """
         return len(self.entities_inside) > 0
 
-    def matches_tags(self, entity_tags: Optional[Set[str]]) -> bool:
+    def matches_tags(self, entity_tags: set[str] | None) -> bool:
         """Check if entity's tags match this trigger's filter.
 
         Args:
@@ -148,7 +147,7 @@ class EntityTags(BaseComponent):
 
     _allow_methods: bool = field(default=True, repr=False, init=False)
 
-    tags: Set[str] = field(default_factory=set)
+    tags: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         """Initialize base component state."""

@@ -1,16 +1,17 @@
 """Tests for the prefab system."""
 
 import json
-import pytest
 import tempfile
 from pathlib import Path
 
-from pyguara.common.components import Transform, Tag
+import pytest
+
+from pyguara.common.components import Tag, Transform
 from pyguara.ecs.manager import EntityManager
 from pyguara.prefabs.factory import PrefabFactory
-from pyguara.prefabs.loader import PrefabLoader, PrefabCache, Prefab
+from pyguara.prefabs.loader import Prefab, PrefabCache, PrefabLoader
 from pyguara.prefabs.registry import ComponentRegistry
-from pyguara.prefabs.types import PrefabData, PrefabChild
+from pyguara.prefabs.types import PrefabChild, PrefabData
 
 
 @pytest.fixture

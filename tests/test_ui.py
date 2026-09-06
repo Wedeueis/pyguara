@@ -1,12 +1,11 @@
+from typing import Any
 from unittest.mock import MagicMock
+
+from pyguara.common.types import Vector2
+from pyguara.input.events import OnMouseEvent
 from pyguara.ui.base import UIElement, UIElementState
 from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UIEventType
-from pyguara.common.types import Vector2
-from pyguara.input.events import OnMouseEvent
-
-
-from typing import Any
 
 
 class MockWidget(UIElement):

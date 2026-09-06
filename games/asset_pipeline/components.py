@@ -4,8 +4,9 @@ Updated Sprite component to use a Texture resource.
 """
 
 from dataclasses import dataclass
-from pyguara.ecs.component import Component
+
 from pyguara.common.types import Vector2
+from pyguara.ecs.component import Component
 from pyguara.resources.types import Texture
 
 

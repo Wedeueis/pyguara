@@ -1,10 +1,11 @@
 """Concrete loaders for Pygame assets."""
 
-from pyguara.log import get_logger
-from typing import List, Optional
 import pygame
-from pyguara.resources.types import Resource
+
+from pyguara.log import get_logger
 from pyguara.resources.meta import AssetMeta, TextureMeta
+from pyguara.resources.types import Resource
+
 from .types import PygameTexture
 
 logger = get_logger(__name__)
@@ -20,7 +21,7 @@ class PygameImageLoader:
     """
 
     @property
-    def supported_extensions(self) -> List[str]:
+    def supported_extensions(self) -> list[str]:
         """Returns a list of supported extensions."""
         return [".png", ".jpg", ".jpeg", ".bmp", ".tga"]
 
@@ -33,7 +34,7 @@ class PygameImageLoader:
         """
         return self.load_with_meta(path, None)
 
-    def load_with_meta(self, path: str, meta: Optional[AssetMeta]) -> Resource:
+    def load_with_meta(self, path: str, meta: AssetMeta | None) -> Resource:
         """Load a Texture with optional metadata settings.
 
         Args:

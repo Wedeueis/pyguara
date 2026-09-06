@@ -1,7 +1,6 @@
 """Finite State Machine (FSM) implementation."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
 
 from pyguara.ai.blackboard import Blackboard
 from pyguara.ecs.entity import Entity
@@ -26,7 +25,7 @@ class State(ABC):
         pass
 
     @abstractmethod
-    def update(self, dt: float) -> Optional[str]:
+    def update(self, dt: float) -> str | None:
         """
         Update the state logic.
 
@@ -43,8 +42,8 @@ class StateMachine:
         """Initialize the State Machine of an entity and a Blackboard."""
         self.entity = entity
         self.blackboard = blackboard
-        self._states: Dict[str, State] = {}
-        self._current_state: Optional[State] = None
+        self._states: dict[str, State] = {}
+        self._current_state: State | None = None
         self._current_state_name: str = ""
 
     def add_state(self, name: str, state: State) -> None:

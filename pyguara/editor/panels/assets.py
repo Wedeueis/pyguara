@@ -1,19 +1,21 @@
 """Assets Panel for the Editor."""
 
-from pyguara.log import get_logger
-import os
 import dataclasses
-from typing import Optional, Dict, Any, Callable, Type, cast
+import os
+from collections.abc import Callable
+from typing import Any, cast
+
+from pyguara.log import get_logger
 
 try:
     import imgui
 except ImportError:
     imgui = None
 
-from pyguara.resources.manager import ResourceManager
-from pyguara.resources.data import DataResource
+from pyguara.common.components import ResourceLink, Tag, Transform
 from pyguara.ecs.manager import EntityManager
-from pyguara.common.components import Tag, Transform, ResourceLink
+from pyguara.resources.data import DataResource
+from pyguara.resources.manager import ResourceManager
 
 logger = get_logger(__name__)
 
@@ -24,12 +26,12 @@ class AssetsPanel:
     def __init__(
         self,
         resource_manager: ResourceManager,
-        manager_provider: Callable[[], Optional[EntityManager]],
+        manager_provider: Callable[[], EntityManager | None],
     ) -> None:
         """Initialize the Asset Paanel."""
         self._resource_manager = resource_manager
         self._manager_provider = manager_provider
-        self.selected_resource_path: Optional[str] = None
+        self.selected_resource_path: str | None = None
 
     def render(self) -> None:
         """Draw the panel."""
@@ -106,9 +108,9 @@ class AssetsPanel:
         entity = manager.create_entity()
         entity.add_component(ResourceLink(resource.path))
 
-        from pyguara.physics.components import RigidBody, Collider
+        from pyguara.physics.components import Collider, RigidBody
 
-        comp_map: Dict[str, Type] = {
+        comp_map: dict[str, type] = {
             "Tag": Tag,
             "Transform": Transform,
             "RigidBody": RigidBody,
@@ -138,7 +140,7 @@ class AssetsPanel:
 
         logger.debug("Spawned entity from resource: %s", resource.path)
 
-    def _draw_dict_editor(self, data: Dict[str, Any]) -> None:
+    def _draw_dict_editor(self, data: dict[str, Any]) -> None:
         """Draw using simple recursive dictionary editor based on ImGui primitives."""
         for key, value in data.items():
             if isinstance(value, dict):

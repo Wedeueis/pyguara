@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class InputEventType(Enum):
@@ -42,12 +42,12 @@ class RecordedInputEvent:
     device: str
     code: int
     value: float = 1.0
-    action: Optional[str] = None
-    position: Optional[tuple[float, float]] = None
+    action: str | None = None
+    position: tuple[float, float] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dictionary."""
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "event_type": self.event_type.name,
             "device": self.device,
             "code": self.code,
@@ -60,7 +60,7 @@ class RecordedInputEvent:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> RecordedInputEvent:
+    def from_dict(cls, data: dict[str, Any]) -> RecordedInputEvent:
         """Create from dictionary."""
         position = None
         if "position" in data:
@@ -89,9 +89,9 @@ class InputFrame:
     frame_id: int
     timestamp: float
     delta_time: float = 0.0
-    events: List[RecordedInputEvent] = field(default_factory=list)
+    events: list[RecordedInputEvent] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dictionary."""
         return {
             "frame_id": self.frame_id,
@@ -101,7 +101,7 @@ class InputFrame:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> InputFrame:
+    def from_dict(cls, data: dict[str, Any]) -> InputFrame:
         """Create from dictionary."""
         return cls(
             frame_id=data["frame_id"],
@@ -135,7 +135,7 @@ class ReplayMetadata:
     frame_count: int = 0
     description: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dictionary."""
         return {
             "version": self.version,
@@ -149,7 +149,7 @@ class ReplayMetadata:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ReplayMetadata:
+    def from_dict(cls, data: dict[str, Any]) -> ReplayMetadata:
         """Create from dictionary."""
         return cls(
             version=data.get("version", 1),
@@ -173,9 +173,9 @@ class ReplayData:
     """
 
     metadata: ReplayMetadata = field(default_factory=ReplayMetadata)
-    frames: List[InputFrame] = field(default_factory=list)
+    frames: list[InputFrame] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dictionary."""
         return {
             "metadata": self.metadata.to_dict(),
@@ -183,7 +183,7 @@ class ReplayData:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> ReplayData:
+    def from_dict(cls, data: dict[str, Any]) -> ReplayData:
         """Create from dictionary."""
         return cls(
             metadata=ReplayMetadata.from_dict(data.get("metadata", {})),

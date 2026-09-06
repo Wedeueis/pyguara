@@ -3,17 +3,18 @@
 This file demonstrates the minimal code required to start the PyGuara engine.
 """
 
-import sys
 import logging
 import os
+import sys
 
 # Ensure we can import pyguara from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from pyguara.application.application import Application
-from pyguara.events.dispatcher import EventDispatcher
 from games.boot_process.bootstrap import configure_game_container
 from games.boot_process.scenes import BootScene
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
+
 
 def main():
     """Application Entry Point."""
@@ -42,6 +43,7 @@ def main():
     except Exception as e:
         logger.critical(f"Game crashed: {e}", exc_info=True)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

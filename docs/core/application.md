@@ -35,8 +35,19 @@ Configuration is managed by `ConfigManager` (`pyguara/config`), which handles:
 
 # Error Handling
 
-The engine provides a centralized exception hierarchy in `pyguara.error`.
+Subsystems that run user-supplied callbacks share one policy for what happens
+when that code raises, defined in `pyguara.errors`:
 
-- **EngineException**: Base class for all engine errors.
-- **Categories**: Errors are categorized (Graphics, Assets, Physics) for easier debugging.
-- **Safe Execution**: Decorators like `@safe_execute` and `@retry` help manage instability in IO operations.
+```python
+from pyguara.errors import ErrorHandlingStrategy
+
+EventDispatcher(error_strategy=ErrorHandlingStrategy.LOG)
+DIContainer(error_strategy=ErrorHandlingStrategy.LOG)
+```
+
+- **`RAISE`** (default): log, then re-raise. Fail fast during development.
+- **`LOG`**: log and carry on. Graceful degradation in production.
+- **`IGNORE`**: swallow silently. Tests and narrow edge cases only.
+
+`EventDispatcher` applies this to both handlers and their filters;
+`DIContainer` applies it to constructor introspection failures.

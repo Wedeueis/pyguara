@@ -1,12 +1,13 @@
 """Tests for the audio system."""
 
-from unittest.mock import Mock, patch
 from typing import Any
+from unittest.mock import Mock, patch
+
 import pytest
+
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.manager import AudioManager
 from pyguara.resources.types import AudioClip
-
 
 # ========== Fixtures ==========
 

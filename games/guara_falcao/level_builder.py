@@ -4,27 +4,25 @@ Creates level entities from tilemap data.
 """
 
 from pathlib import Path
-from typing import Dict, Any, Optional
-
-from pyguara.ecs.manager import EntityManager
-from pyguara.common.types import Vector2, Color
-from pyguara.common.components import Transform
-from pyguara.physics.components import RigidBody, Collider
-from pyguara.physics.types import BodyType
-from pyguara.physics.platformer_controller import PlatformerController
+from typing import Any
 
 from games.guara_falcao.components import (
-    PlayerState,
-    Health,
-    Score,
     CameraTarget,
-    PlatformSprite,
     CharacterSprite,
     Collectible,
-    ZoneTrigger,
     Hazard,
+    Health,
+    PlatformSprite,
+    PlayerState,
+    Score,
+    ZoneTrigger,
 )
-
+from pyguara.common.components import Transform
+from pyguara.common.types import Color, Vector2
+from pyguara.ecs.manager import EntityManager
+from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.platformer_controller import PlatformerController
+from pyguara.physics.types import BodyType
 
 # Tile size in pixels
 TILE_SIZE = 32
@@ -43,14 +41,14 @@ TILE_GOAL = 7
 class LevelBuilder:
     """Builds level entities from tilemap data."""
 
-    def __init__(self, levels_dir: Optional[Path] = None):
+    def __init__(self, levels_dir: Path | None = None):
         """Initialize the level builder."""
         if levels_dir is None:
             levels_dir = Path(__file__).parent / "assets" / "levels"
         self._levels_dir = levels_dir
         self._spawn_point = Vector2(100, 300)
 
-    def create_default_level(self) -> Dict[str, Any]:
+    def create_default_level(self) -> dict[str, Any]:
         """Create a default level layout."""
         # Simple platformer level
         level = {
@@ -105,7 +103,7 @@ class LevelBuilder:
         return level
 
     def load_level(
-        self, entity_manager: EntityManager, level_data: Optional[Dict] = None
+        self, entity_manager: EntityManager, level_data: dict | None = None
     ) -> Vector2:
         """Load a level into the entity manager.
 
@@ -233,7 +231,7 @@ class LevelBuilder:
         )
 
     def create_player(
-        self, entity_manager: EntityManager, spawn_pos: Optional[Vector2] = None
+        self, entity_manager: EntityManager, spawn_pos: Vector2 | None = None
     ) -> str:
         """Create the player entity.
 

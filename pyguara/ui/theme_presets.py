@@ -21,11 +21,11 @@ from dataclasses import dataclass
 from pyguara.common.types import Color
 from pyguara.ui.theme import UITheme
 from pyguara.ui.types import (
-    ColorScheme,
-    SpacingScheme,
-    FontScheme,
     BorderScheme,
+    ColorScheme,
+    FontScheme,
     ShadowScheme,
+    SpacingScheme,
 )
 
 

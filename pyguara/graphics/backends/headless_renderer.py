@@ -11,13 +11,14 @@ real backend needs -- `HeadlessWindowBackend` (`IWindowBackend`),
 handful of no-op lines.
 """
 
-from typing import Any, Iterable, List, Optional, Tuple
+from collections.abc import Iterable
+from typing import Any
 
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.types import WindowConfig
-from pyguara.log import get_logger
 from pyguara.graphics.types import RenderBatch
+from pyguara.log import get_logger
 from pyguara.resources.types import Texture
-from pyguara.common.types import Vector2, Color, Rect
 
 logger = get_logger(__name__)
 
@@ -38,7 +39,7 @@ class HeadlessWindowBackend:
         """Mark the window closed."""
         self._is_open = False
 
-    def clear(self, color: Optional[Color] = None) -> None:
+    def clear(self, color: Color | None = None) -> None:
         """No-op: nothing to clear."""
 
     def set_caption(self, title: str) -> None:
@@ -205,7 +206,7 @@ class HeadlessUIRenderer:
         ...
 
     def draw_polygon(
-        self, points: List[Tuple[int, int]], color: Color, width: int = 0
+        self, points: list[tuple[int, int]], color: Color, width: int = 0
     ) -> None:
         """No-op: discard the draw call."""
         ...
@@ -217,12 +218,12 @@ class HeadlessUIRenderer:
         ...
 
     def draw_texture(
-        self, texture: Any, rect: Rect, color: Optional[Color] = None
+        self, texture: Any, rect: Rect, color: Color | None = None
     ) -> None:
         """No-op: discard the draw call."""
         ...
 
-    def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
+    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
         """Return a zero size: no text is ever actually measured/rendered."""
         return (0, 0)
 

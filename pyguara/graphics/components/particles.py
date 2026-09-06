@@ -10,16 +10,17 @@ ensuring smooth frame rates even when emitting hundreds of particles per second.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
+
 import random
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Optional
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from pyguara.common.types import Vector2
-from pyguara.resources.types import Texture
-from pyguara.graphics.protocols import IRenderer
-from pyguara.graphics.types import RenderBatch
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
+from pyguara.graphics.protocols import IRenderer
+from pyguara.graphics.types import RenderBatch
+from pyguara.resources.types import Texture
 
 if TYPE_CHECKING:
     pass
@@ -74,8 +75,8 @@ class Particle:
     scale_velocity: Vector2 = field(default_factory=Vector2.zero)
 
     # Color animation (optional, None = no color animation)
-    color_start: Optional[tuple[int, int, int, int]] = None
-    color_end: Optional[tuple[int, int, int, int]] = None
+    color_start: tuple[int, int, int, int] | None = None
+    color_end: tuple[int, int, int, int] | None = None
     life_total: float = 1.0
 
     # Optional material for custom shaders/effects (None = default shader)
@@ -119,8 +120,8 @@ class ParticleSystem:
         angular_velocity: float = 0.0,
         scale: Vector2 = Vector2.one(),
         scale_velocity: Vector2 = Vector2.zero(),
-        color_start: Optional[tuple[int, int, int, int]] = None,
-        color_end: Optional[tuple[int, int, int, int]] = None,
+        color_start: tuple[int, int, int, int] | None = None,
+        color_end: tuple[int, int, int, int] | None = None,
     ) -> None:
         """
         Spawn new particles with optional physics and visual effects.
@@ -272,13 +273,13 @@ class ParticleSystem:
                     )
 
     def render(
-        self, backend: IRenderer, camera: Camera2D, viewport: Optional[Viewport] = None
+        self, backend: IRenderer, camera: Camera2D, viewport: Viewport | None = None
     ) -> None:
         """Draw all active particles to the backend."""
         if viewport is None:
             viewport = Viewport(0, 0, backend.width, backend.height)
 
-        batches: Dict[Texture, List[Tuple[float, float]]] = {}
+        batches: dict[Texture, list[tuple[float, float]]] = {}
         zoom = camera.zoom
 
         offset_vec = viewport.center_vec - (camera.position * zoom)
@@ -319,12 +320,12 @@ class ParticleEmitterConfig:
     angular_velocity: float = 0.0
     scale: Vector2 = field(default_factory=Vector2.one)
     scale_velocity: Vector2 = field(default_factory=Vector2.zero)
-    color_start: Optional[tuple[int, int, int, int]] = None
-    color_end: Optional[tuple[int, int, int, int]] = None
+    color_start: tuple[int, int, int, int] | None = None
+    color_end: tuple[int, int, int, int] | None = None
 
 
 # Pre-configured particle presets
-PARTICLE_PRESETS: Dict[str, ParticleEmitterConfig] = {
+PARTICLE_PRESETS: dict[str, ParticleEmitterConfig] = {
     "fire": ParticleEmitterConfig(
         count=20,
         speed=50.0,

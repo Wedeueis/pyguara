@@ -6,7 +6,7 @@ Provides components for entities that emit or play audio.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.audio.types import AudioPriority
 from pyguara.ecs.component import BaseComponent
@@ -47,7 +47,7 @@ class AudioSource(BaseComponent):
     play_on_awake: bool = False  # Alias for auto_play
 
     # Runtime state (not serialized)
-    _channel_id: Optional[int] = field(default=None, repr=False, compare=False)
+    _channel_id: int | None = field(default=None, repr=False, compare=False)
     _is_playing: bool = field(default=False, repr=False, compare=False)
     _stop_requested: bool = field(default=False, repr=False, compare=False)
 
@@ -64,7 +64,7 @@ class AudioSource(BaseComponent):
         return self._is_playing
 
     @property
-    def channel_id(self) -> Optional[int]:
+    def channel_id(self) -> int | None:
         """Get the current channel ID if playing."""
         return self._channel_id
 

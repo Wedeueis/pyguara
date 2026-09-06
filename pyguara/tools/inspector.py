@@ -1,13 +1,14 @@
 """Entity Inspector tool for ECS debugging."""
 
-import pygame
-from typing import List, Optional, Any, Tuple
+from typing import Any
 
+import pygame
+
+from pyguara.common.components import Tag
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.common.components import Tag
-from pyguara.common.types import Color, Vector2, Rect
 from pyguara.tools.base import Tool
 from pyguara.tools.tweakable import (
     TweakableLeaf,
@@ -34,7 +35,7 @@ class EntityInspector(Tool):
         """
         super().__init__("entity_inspector", container)
         self._selected_index: int = 0
-        self._selected_entity: Optional[Entity] = None
+        self._selected_entity: Entity | None = None
 
         # UI Layout
         self._panel_rect = Rect(10, 80, 300, 500)
@@ -44,7 +45,7 @@ class EntityInspector(Tool):
 
         # This frame's clickable field rows, recomputed every render() and
         # hit-tested against in process_event().
-        self._tweakable_rows: List[Tuple[Rect, TweakableLeaf]] = []
+        self._tweakable_rows: list[tuple[Rect, TweakableLeaf]] = []
 
     def update(self, dt: float) -> None:
         """Update the entity list snapshot.

@@ -7,10 +7,11 @@ resolution and component hydration.
 from __future__ import annotations
 
 import copy
-from pyguara.log import get_logger
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from pyguara.common.types import Vector2
+from pyguara.log import get_logger
 from pyguara.prefabs.types import PrefabChild, PrefabData, PrefabInstance
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ class PrefabFactory:
         self,
         entity_manager: EntityManager,
         component_registry: ComponentRegistry,
-        prefab_resolver: Optional[Callable[[str], Optional[PrefabData]]] = None,
+        prefab_resolver: Callable[[str], PrefabData | None] | None = None,
     ) -> None:
         """Initialize the factory.
 
@@ -61,9 +62,7 @@ class PrefabFactory:
         self._registry = component_registry
         self._prefab_resolver = prefab_resolver
 
-    def set_prefab_resolver(
-        self, resolver: Callable[[str], Optional[PrefabData]]
-    ) -> None:
+    def set_prefab_resolver(self, resolver: Callable[[str], PrefabData | None]) -> None:
         """Set the prefab resolver callback.
 
         Args:
@@ -74,9 +73,9 @@ class PrefabFactory:
     def create(
         self,
         prefab: PrefabData,
-        entity_id: Optional[str] = None,
-        overrides: Optional[Dict[str, Dict[str, Any]]] = None,
-        parent_position: Optional[Vector2] = None,
+        entity_id: str | None = None,
+        overrides: dict[str, dict[str, Any]] | None = None,
+        parent_position: Vector2 | None = None,
     ) -> Entity:
         """Create an entity from a prefab.
 
@@ -130,7 +129,7 @@ class PrefabFactory:
 
         # Create children
         children = self._create_children(prefab.children, entity)
-        for child in children:
+        for _child in children:
             # Optionally link children to parent here
             pass
 
@@ -140,9 +139,9 @@ class PrefabFactory:
     def create_from_path(
         self,
         prefab_path: str,
-        entity_id: Optional[str] = None,
-        overrides: Optional[Dict[str, Dict[str, Any]]] = None,
-    ) -> Optional[Entity]:
+        entity_id: str | None = None,
+        overrides: dict[str, dict[str, Any]] | None = None,
+    ) -> Entity | None:
         """Create an entity from a prefab path.
 
         Args:
@@ -164,7 +163,7 @@ class PrefabFactory:
 
         return self.create(prefab, entity_id, overrides)
 
-    def _resolve_inheritance(self, prefab: PrefabData) -> Dict[str, Dict[str, Any]]:
+    def _resolve_inheritance(self, prefab: PrefabData) -> dict[str, dict[str, Any]]:
         """Resolve prefab inheritance chain.
 
         Merges component data from parent prefabs, with child overriding parent.
@@ -193,9 +192,9 @@ class PrefabFactory:
 
     def _apply_overrides(
         self,
-        components: Dict[str, Dict[str, Any]],
-        overrides: Dict[str, Dict[str, Any]],
-    ) -> Dict[str, Dict[str, Any]]:
+        components: dict[str, dict[str, Any]],
+        overrides: dict[str, dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
         """Apply runtime overrides to component data.
 
         Args:
@@ -209,9 +208,9 @@ class PrefabFactory:
 
     def _deep_merge(
         self,
-        base: Dict[str, Any],
-        override: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        base: dict[str, Any],
+        override: dict[str, Any],
+    ) -> dict[str, Any]:
         """Deep merge two dictionaries.
 
         Override values replace base values. Nested dicts are merged recursively.
@@ -239,9 +238,9 @@ class PrefabFactory:
 
     def _create_children(
         self,
-        children: List[PrefabChild],
+        children: list[PrefabChild],
         parent_entity: Entity,
-    ) -> List[Entity]:
+    ) -> list[Entity]:
         """Create child entities from prefab children.
 
         Args:
@@ -254,7 +253,7 @@ class PrefabFactory:
         if not self._prefab_resolver:
             return []
 
-        created: List[Entity] = []
+        created: list[Entity] = []
 
         for child in children:
             child_prefab = self._prefab_resolver(child.prefab)

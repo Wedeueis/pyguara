@@ -8,7 +8,7 @@ composited with the world in the composite pass.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -47,8 +47,8 @@ class LightPass(BaseRenderPass):
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
-        lighting_system: "LightingSystem",
+        ctx: moderngl.Context,
+        lighting_system: LightingSystem,
         *,
         enabled: bool = True,
     ) -> None:
@@ -64,14 +64,14 @@ class LightPass(BaseRenderPass):
         self._lighting_system = lighting_system
 
         # Current frame's camera (set before execute)
-        self._camera: Optional[Camera2D] = None
-        self._viewport: Optional[Viewport] = None
+        self._camera: Camera2D | None = None
+        self._viewport: Viewport | None = None
 
         # GPU resources
-        self._program: Optional["moderngl.Program"] = None
-        self._quad_vbo: Optional["moderngl.Buffer"] = None
-        self._instance_vbo: Optional["moderngl.Buffer"] = None
-        self._vao: Optional["moderngl.VertexArray"] = None
+        self._program: moderngl.Program | None = None
+        self._quad_vbo: moderngl.Buffer | None = None
+        self._instance_vbo: moderngl.Buffer | None = None
+        self._vao: moderngl.VertexArray | None = None
         self._instance_capacity = self.INITIAL_CAPACITY
 
         self._create_resources()
@@ -82,9 +82,9 @@ class LightPass(BaseRenderPass):
         vert_path = _SHADER_DIR / "light.vert"
         frag_path = _SHADER_DIR / "light.frag"
 
-        with open(vert_path, "r") as f:
+        with open(vert_path) as f:
             vert_source = f.read()
-        with open(frag_path, "r") as f:
+        with open(frag_path) as f:
             frag_source = f.read()
 
         self._program = self._ctx.program(
@@ -138,7 +138,7 @@ class LightPass(BaseRenderPass):
             ],
         )
 
-    def set_camera(self, camera: Camera2D, viewport: Optional[Viewport] = None) -> None:
+    def set_camera(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
         """Set the camera and viewport for this frame.
 
         Args:
@@ -148,7 +148,7 @@ class LightPass(BaseRenderPass):
         self._camera = camera
         self._viewport = viewport
 
-    def execute(self, ctx: "moderngl.Context", graph: "RenderGraph") -> None:
+    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
         """Execute the light pass.
 
         Args:

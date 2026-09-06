@@ -1,13 +1,14 @@
 """Pygame implementation of the Rendering Protocol."""
 
 import pygame
-from pyguara.common.types import Vector2, Color, Rect
+
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.pygame.conversions import (
     to_pygame_color,
     to_pygame_rect,
 )
-from pyguara.resources.types import Texture
 from pyguara.graphics.types import RenderBatch
+from pyguara.resources.types import Texture
 
 
 class PygameBackend:

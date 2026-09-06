@@ -6,7 +6,7 @@ for coordinating FBO lifecycle (creation, resize, cleanup).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.common.types import Color
 
@@ -23,7 +23,7 @@ class Framebuffer:
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
+        ctx: moderngl.Context,
         name: str,
         width: int,
         height: int,
@@ -49,8 +49,8 @@ class Framebuffer:
         self._dtype = dtype
 
         # Create backing texture and FBO
-        self._texture: Optional["moderngl.Texture"] = None
-        self._fbo: Optional["moderngl.Framebuffer"] = None
+        self._texture: moderngl.Texture | None = None
+        self._fbo: moderngl.Framebuffer | None = None
         self._create_resources()
 
     def _create_resources(self) -> None:
@@ -86,14 +86,14 @@ class Framebuffer:
         return self._height
 
     @property
-    def texture(self) -> "moderngl.Texture":
+    def texture(self) -> moderngl.Texture:
         """The backing texture that can be sampled from."""
         if self._texture is None:
             raise RuntimeError(f"Framebuffer '{self._name}' texture not initialized")
         return self._texture
 
     @property
-    def fbo(self) -> "moderngl.Framebuffer":
+    def fbo(self) -> moderngl.Framebuffer:
         """The underlying ModernGL framebuffer object."""
         if self._fbo is None:
             raise RuntimeError(f"Framebuffer '{self._name}' FBO not initialized")
@@ -161,7 +161,7 @@ class FramebufferManager:
     dimensions change and cleanup on shutdown.
     """
 
-    def __init__(self, ctx: "moderngl.Context", width: int, height: int) -> None:
+    def __init__(self, ctx: moderngl.Context, width: int, height: int) -> None:
         """Initialize the framebuffer manager.
 
         Args:
@@ -187,8 +187,8 @@ class FramebufferManager:
     def get_or_create(
         self,
         name: str,
-        width: Optional[int] = None,
-        height: Optional[int] = None,
+        width: int | None = None,
+        height: int | None = None,
         *,
         samples: int = 0,
         dtype: str = "f1",
@@ -216,7 +216,7 @@ class FramebufferManager:
         self._framebuffers[name] = fbo
         return fbo
 
-    def get(self, name: str) -> Optional[Framebuffer]:
+    def get(self, name: str) -> Framebuffer | None:
         """Get a framebuffer by name.
 
         Args:
