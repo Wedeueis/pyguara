@@ -33,47 +33,50 @@ See **[Entity Component System](ecs.md)** for the full reference.
 
 # Dependency Injection (DI)
 
-PyGuara features a native, reflection-based Dependency Injection container (`pyguara.di`).
-
-## Features
-
-- **Auto-Wiring**: Uses Python type hints (`typing.get_type_hints`) and `inspect` to automatically resolve constructor dependencies.
-- **Cycle Detection**: Detects and reports circular dependencies at runtime.
-- **Scopes**:
-    - `SINGLETON`: Shared across the entire application.
-    - `TRANSIENT`: Created new every time requested.
-    - `SCOPED`: Shared within a specific context (e.g., a Scene).
-
-## Usage
+The container (`pyguara.di`) resolves constructor dependencies from type hints.
+Three lifetimes: `SINGLETON` (one per container), `SCOPED` (one per `DIScope`)
+and `TRANSIENT` (one per request).
 
 ```python
 container = DIContainer()
 container.register_singleton(IPhysicsEngine, PymunkEngine)
-
-# Application is auto-wired with IPhysicsEngine
-app = container.get(Application)
+app = container.get(Application)   # dependencies injected recursively
 ```
+
+Two rules are load-bearing:
+
+- **Lifetimes cannot be captured downwards.** A singleton may not depend on a
+  scoped service; it would outlive the scope and keep a disposed object. The
+  container builds singletons without a scope so the attempt fails loudly.
+- **Cycles raise.** `CircularDependencyException` names the chain, and
+  detection state is thread-local so parallel resolutions cannot cross.
+
+See **[Dependency Injection](dependency-injection.md)** for the full reference.
 
 ---
 
 # Event System
 
-The Event System (`pyguara.events`) provides a decoupled communication channel between subsystems.
+The event system (`pyguara.events`) decouples subsystems: publishers do not
+know their subscribers, and subscription is by event type.
 
-## EventDispatcher
-
-- **Synchronous Dispatch**: `dispatch(event)` executes handlers immediately on the calling thread.
-- **Queued Dispatch**: `queue_event(event)` is thread-safe and processes events at the start of the next frame (useful for Network/Loader threads).
-- **Filtering & Priority**: Handlers can define priority levels and filter logic.
-
-## Protocol
-
-Events are defined using the `Event` protocol, typically implemented as Dataclasses.
+- **Structural events.** `Event` is a Protocol, so any dataclass with
+  `timestamp` and `source` qualifies — no base class required.
+- **Subclass matching.** Dispatch walks the event's MRO, so subscribing to
+  `KeyboardEvent` receives both `KeyDownEvent` and `KeyUpEvent`. Handlers
+  across the hierarchy merge into one priority-ordered pass.
+- **Consumption.** A handler returning `False` stops lower-priority handlers,
+  and `dispatch()` reports it — how a UI layer claims input before the game.
+- **Threading.** `queue_event()` is the only thread-safe entry point;
+  `process_queue()` drains on the main loop, under optional time and count
+  budgets.
 
 ```python
 @dataclass
-class PlayerDiedEvent:
+class PlayerDied:
     player_id: str
     timestamp: float = field(default_factory=time.time)
     source: Any = None
 ```
+
+See **[Event System](events.md)** for the full reference.

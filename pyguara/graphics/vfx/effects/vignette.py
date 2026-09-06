@@ -7,7 +7,7 @@ and creating a cinematic look.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
@@ -32,7 +32,7 @@ class VignetteEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
+        ctx: moderngl.Context,
         *,
         intensity: float = 0.5,
         radius: float = 0.75,
@@ -56,8 +56,8 @@ class VignetteEffect(PostProcessEffect):
         self.softness = softness
 
         # Shader program
-        self._program: Optional["moderngl.Program"] = None
-        self._vao: Optional["moderngl.VertexArray"] = None
+        self._program: moderngl.Program | None = None
+        self._vao: moderngl.VertexArray | None = None
 
         self._create_resources()
 
@@ -67,9 +67,9 @@ class VignetteEffect(PostProcessEffect):
         vert_path = _SHADER_DIR / "fullscreen_quad.vert"
         frag_path = _SHADER_DIR / "vignette.frag"
 
-        with open(vert_path, "r") as f:
+        with open(vert_path) as f:
             vert_source = f.read()
-        with open(frag_path, "r") as f:
+        with open(frag_path) as f:
             frag_source = f.read()
 
         self._program = self._ctx.program(
@@ -79,9 +79,9 @@ class VignetteEffect(PostProcessEffect):
 
     def apply(
         self,
-        ctx: "moderngl.Context",
-        input_fbo: "Framebuffer",
-        output_fbo: "Framebuffer",
+        ctx: moderngl.Context,
+        input_fbo: Framebuffer,
+        output_fbo: Framebuffer,
     ) -> None:
         """Apply the vignette effect.
 

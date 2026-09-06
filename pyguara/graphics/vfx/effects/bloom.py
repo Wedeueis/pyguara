@@ -9,7 +9,7 @@ Creates a glowing halo around bright areas by:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
@@ -34,8 +34,8 @@ class BloomEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
-        fbo_manager: "FramebufferManager",
+        ctx: moderngl.Context,
+        fbo_manager: FramebufferManager,
         *,
         threshold: float = 0.8,
         intensity: float = 1.0,
@@ -61,10 +61,10 @@ class BloomEffect(PostProcessEffect):
         self.blur_passes = blur_passes
 
         # Shader programs
-        self._threshold_program: Optional["moderngl.Program"] = None
-        self._blur_program: Optional["moderngl.Program"] = None
-        self._composite_program: Optional["moderngl.Program"] = None
-        self._vao: Optional["moderngl.VertexArray"] = None
+        self._threshold_program: moderngl.Program | None = None
+        self._blur_program: moderngl.Program | None = None
+        self._composite_program: moderngl.Program | None = None
+        self._vao: moderngl.VertexArray | None = None
 
         # Internal FBO names
         self._bright_fbo_name = "_bloom_bright"
@@ -76,12 +76,12 @@ class BloomEffect(PostProcessEffect):
         """Create shader programs."""
         # Load fullscreen quad vertex shader
         vert_path = _SHADER_DIR / "fullscreen_quad.vert"
-        with open(vert_path, "r") as f:
+        with open(vert_path) as f:
             vert_source = f.read()
 
         # Threshold shader
         threshold_path = _SHADER_DIR / "bloom_threshold.frag"
-        with open(threshold_path, "r") as f:
+        with open(threshold_path) as f:
             threshold_source = f.read()
         self._threshold_program = self._ctx.program(
             vertex_shader=vert_source, fragment_shader=threshold_source
@@ -89,7 +89,7 @@ class BloomEffect(PostProcessEffect):
 
         # Blur shader
         blur_path = _SHADER_DIR / "blur.frag"
-        with open(blur_path, "r") as f:
+        with open(blur_path) as f:
             blur_source = f.read()
         self._blur_program = self._ctx.program(
             vertex_shader=vert_source, fragment_shader=blur_source
@@ -97,7 +97,7 @@ class BloomEffect(PostProcessEffect):
 
         # Composite shader
         composite_path = _SHADER_DIR / "bloom_composite.frag"
-        with open(composite_path, "r") as f:
+        with open(composite_path) as f:
             composite_source = f.read()
         self._composite_program = self._ctx.program(
             vertex_shader=vert_source, fragment_shader=composite_source
@@ -108,9 +108,9 @@ class BloomEffect(PostProcessEffect):
 
     def apply(
         self,
-        ctx: "moderngl.Context",
-        input_fbo: "Framebuffer",
-        output_fbo: "Framebuffer",
+        ctx: moderngl.Context,
+        input_fbo: Framebuffer,
+        output_fbo: Framebuffer,
     ) -> None:
         """Apply the bloom effect.
 

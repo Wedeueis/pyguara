@@ -3,32 +3,28 @@
 Logic processors for the puzzle game.
 """
 
-from typing import Dict, Optional, Set, Tuple
-
-from pyguara.ecs.manager import EntityManager
-from pyguara.ecs.entity import Entity
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.common.types import Vector2
-from pyguara.animation.tween import Tween, TweenManager
-from pyguara.animation.easing import EasingType
-from pyguara.common.components import Transform
-
 from games.true_coral.components import (
-    GridPosition,
     Block,
     BlockType,
-    Pushable,
-    Moving,
-    MoveHistory,
+    GridPosition,
     LevelState,
+    MoveHistory,
+    Moving,
+    Pushable,
 )
 from games.true_coral.events import (
-    PlayerMoveEvent,
     BlockMoveEvent,
     LevelCompleteEvent,
+    PlayerMoveEvent,
     UndoEvent,
 )
-
+from pyguara.animation.easing import EasingType
+from pyguara.animation.tween import Tween, TweenManager
+from pyguara.common.components import Transform
+from pyguara.common.types import Vector2
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
+from pyguara.events.dispatcher import EventDispatcher
 
 # Grid constants
 CELL_SIZE = 50
@@ -44,7 +40,7 @@ def grid_to_world(gx: int, gy: int) -> Vector2:
     )
 
 
-def world_to_grid(wx: float, wy: float) -> Tuple[int, int]:
+def world_to_grid(wx: float, wy: float) -> tuple[int, int]:
     """Convert world coordinates to grid coordinates."""
     gx = int((wx - GRID_OFFSET_X) // CELL_SIZE)
     gy = int((wy - GRID_OFFSET_Y) // CELL_SIZE)
@@ -62,12 +58,12 @@ class GridSystem:
         self._dispatcher = event_dispatcher
 
         # Grid state: maps (x, y) -> set of entity IDs at that position
-        self._grid: Dict[Tuple[int, int], Set[str]] = {}
+        self._grid: dict[tuple[int, int], set[str]] = {}
 
         # Cache entity references
-        self._player: Optional[Entity] = None
-        self._move_history: Optional[MoveHistory] = None
-        self._level_state: Optional[LevelState] = None
+        self._player: Entity | None = None
+        self._move_history: MoveHistory | None = None
+        self._level_state: LevelState | None = None
 
         # Register event handlers
         self._dispatcher.subscribe(PlayerMoveEvent, self._on_player_move)
@@ -97,7 +93,7 @@ class GridSystem:
             self._level_state = entity.get_component(LevelState)
             break
 
-    def get_entities_at(self, x: int, y: int) -> Set[str]:
+    def get_entities_at(self, x: int, y: int) -> set[str]:
         """Get all entity IDs at a grid position."""
         return self._grid.get((x, y), set())
 
@@ -112,7 +108,7 @@ class GridSystem:
                     return False
         return True
 
-    def get_pushable_at(self, x: int, y: int) -> Optional[Entity]:
+    def get_pushable_at(self, x: int, y: int) -> Entity | None:
         """Get a pushable entity at position, if any."""
         entities = self.get_entities_at(x, y)
         for eid in entities:
@@ -265,7 +261,7 @@ class GridSystem:
 
     def _is_animating(self) -> bool:
         """Check if any entity is currently animating."""
-        for entity in self._em.get_entities_with(Moving):
+        for _entity in self._em.get_entities_with(Moving):
             return True
         return False
 
@@ -309,7 +305,7 @@ class BlockMoveSystem:
         self._tween_manager = TweenManager()
 
         # Map entity ID to active tween
-        self._active_tweens: Dict[str, Tween] = {}
+        self._active_tweens: dict[str, Tween] = {}
 
         # Register event handlers
         self._dispatcher.subscribe(BlockMoveEvent, self._on_block_move)
@@ -389,7 +385,7 @@ class InputSystem:
         if self._move_cooldown > 0:
             self._move_cooldown -= dt
 
-    def handle_move(self, direction: Tuple[int, int]) -> None:
+    def handle_move(self, direction: tuple[int, int]) -> None:
         """Request player movement in a direction."""
         if self._move_cooldown <= 0:
             self._dispatcher.dispatch(PlayerMoveEvent(direction=direction))

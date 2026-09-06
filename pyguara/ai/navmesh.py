@@ -5,7 +5,6 @@ Suitable for platformers, top-down games with obstacles, etc.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from pyguara.common.types import Vector2
 
@@ -63,7 +62,7 @@ class NavMeshPolygon:
 
     def get_shared_edge(
         self, other: "NavMeshPolygon"
-    ) -> Optional[tuple[Vector2, Vector2]]:
+    ) -> tuple[Vector2, Vector2] | None:
         """Find shared edge with another polygon.
 
         Args:
@@ -168,7 +167,7 @@ class NavMesh:
                 if e.poly1_id != polygon_id and e.poly2_id != polygon_id
             ]
 
-    def get_polygon(self, polygon_id: int) -> Optional[NavMeshPolygon]:
+    def get_polygon(self, polygon_id: int) -> NavMeshPolygon | None:
         """Get polygon by ID.
 
         Args:
@@ -179,7 +178,7 @@ class NavMesh:
         """
         return self._polygons.get(polygon_id)
 
-    def get_polygon_at(self, point: Vector2) -> Optional[NavMeshPolygon]:
+    def get_polygon_at(self, point: Vector2) -> NavMeshPolygon | None:
         """Find which polygon contains a point.
 
         Args:
@@ -241,7 +240,7 @@ class NavMesh:
         polygon = self._polygons.get(polygon_id)
         return polygon.neighbors if polygon else []
 
-    def get_edge_between(self, poly1_id: int, poly2_id: int) -> Optional[NavMeshEdge]:
+    def get_edge_between(self, poly1_id: int, poly2_id: int) -> NavMeshEdge | None:
         """Get edge connecting two polygons.
 
         Args:
@@ -289,7 +288,7 @@ class NavMeshPathfinder:
         """
         self.navmesh = navmesh
 
-    def find_path(self, start: Vector2, goal: Vector2) -> Optional[list[Vector2]]:
+    def find_path(self, start: Vector2, goal: Vector2) -> list[Vector2] | None:
         """Find path from start to goal.
 
         Args:
@@ -318,7 +317,7 @@ class NavMeshPathfinder:
         # Convert polygon path to waypoint path
         return self._create_waypoint_path(start, goal, polygon_path)
 
-    def _find_polygon_path(self, start_id: int, goal_id: int) -> Optional[list[int]]:
+    def _find_polygon_path(self, start_id: int, goal_id: int) -> list[int] | None:
         """Find path through polygons using A*.
 
         Args:

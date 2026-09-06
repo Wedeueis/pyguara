@@ -4,6 +4,7 @@ Custom game events.
 """
 
 from dataclasses import dataclass
+
 from pyguara.events.protocols import Event
 
 

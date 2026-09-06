@@ -1,6 +1,6 @@
 """Boolean toggle component."""
 
-from pyguara.common.types import Vector2, Rect, Color
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 from pyguara.ui.types import UIElementState, UIEventType

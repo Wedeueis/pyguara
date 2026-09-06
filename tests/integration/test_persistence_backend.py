@@ -1,13 +1,14 @@
 """Integration tests for Persistence System backend."""
 
-import pytest
-import tempfile
 import json
+import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
-from pyguara.persistence.storage import FileStorageBackend
+import pytest
+
 from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.storage import FileStorageBackend
 
 
 @pytest.fixture

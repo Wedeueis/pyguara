@@ -6,7 +6,7 @@ then renders to the world framebuffer for later compositing.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.common.types import Color
 from pyguara.graphics.components.camera import Camera2D
@@ -41,7 +41,7 @@ class WorldPass(BaseRenderPass):
         self,
         backend: IRenderer,
         *,
-        clear_color: Color = Color(0, 0, 0, 255),
+        clear_color: Color | None = None,
         enabled: bool = True,
     ) -> None:
         """Initialize the world pass.
@@ -49,18 +49,24 @@ class WorldPass(BaseRenderPass):
         Args:
             backend: The renderer backend for drawing batches.
             clear_color: Background color for clearing the framebuffer.
+                Defaults to opaque black.
             enabled: Whether this pass should execute.
         """
         super().__init__("world", enabled=enabled)
         self._backend = backend
-        self._clear_color = clear_color
+        # Built per instance, not shared as a default argument: Color is a
+        # mutable dataclass, so one default object would be aliased by every
+        # pass that took it.
+        self._clear_color = (
+            clear_color if clear_color is not None else Color(0, 0, 0, 255)
+        )
         self._queue = RenderQueue()
         self._batcher = Batcher()
 
         # Current frame's camera and viewport
-        self._camera: Optional[Camera2D] = None
-        self._viewport: Optional[Viewport] = None
-        self._default_viewport: Optional[Viewport] = None
+        self._camera: Camera2D | None = None
+        self._viewport: Viewport | None = None
+        self._default_viewport: Viewport | None = None
 
     @property
     def clear_color(self) -> Color:
@@ -89,7 +95,7 @@ class WorldPass(BaseRenderPass):
         )
         self._queue.push(cmd)
 
-    def set_camera(self, camera: Camera2D, viewport: Optional[Viewport] = None) -> None:
+    def set_camera(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
         """Set the camera and viewport for this frame.
 
         Args:
@@ -99,7 +105,7 @@ class WorldPass(BaseRenderPass):
         self._camera = camera
         self._viewport = viewport
 
-    def execute(self, ctx: "moderngl.Context", graph: "RenderGraph") -> None:
+    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
         """Execute the world render pass.
 
         Args:

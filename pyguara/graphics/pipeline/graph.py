@@ -7,7 +7,7 @@ FramebufferManager and coordinates pass execution.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
@@ -34,7 +34,7 @@ class RenderGraph:
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
+        ctx: moderngl.Context,
         width: int,
         height: int,
     ) -> None:
@@ -50,7 +50,7 @@ class RenderGraph:
         self._passes: list[BaseRenderPass] = []
 
     @property
-    def ctx(self) -> "moderngl.Context":
+    def ctx(self) -> moderngl.Context:
         """The ModernGL rendering context."""
         return self._ctx
 
@@ -81,7 +81,7 @@ class RenderGraph:
         """
         self._passes.insert(index, render_pass)
 
-    def remove_pass(self, name: str) -> Optional[BaseRenderPass]:
+    def remove_pass(self, name: str) -> BaseRenderPass | None:
         """Remove a render pass by name.
 
         Args:
@@ -95,7 +95,7 @@ class RenderGraph:
                 return self._passes.pop(i)
         return None
 
-    def get_pass(self, name: str) -> Optional[BaseRenderPass]:
+    def get_pass(self, name: str) -> BaseRenderPass | None:
         """Get a render pass by name.
 
         Args:

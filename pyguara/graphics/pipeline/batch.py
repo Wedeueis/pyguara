@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Tuple, Dict, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.common.types import Vector2
-from pyguara.graphics.types import RenderCommand, RenderBatch
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
+from pyguara.graphics.types import RenderBatch, RenderCommand
 
 if TYPE_CHECKING:
     from pyguara.graphics.materials.material import Material
@@ -27,12 +27,12 @@ class Batcher:
     def __init__(self) -> None:
         """Initialize the batcher with static batch cache."""
         # Cache for static sprite batches (pre-computed, reused every frame)
-        self._static_batches: Dict[int, RenderBatch] = {}
-        self._static_batch_keys: List[int] = []
+        self._static_batches: dict[int, RenderBatch] = {}
+        self._static_batch_keys: list[int] = []
 
     def create_batches(
-        self, sorted_commands: List[RenderCommand], camera: Camera2D, viewport: Viewport
-    ) -> List[RenderBatch]:
+        self, sorted_commands: list[RenderCommand], camera: Camera2D, viewport: Viewport
+    ) -> list[RenderBatch]:
         """Group compatible commands into batches to minimize draw calls.
 
         Creates batches with transform data when rotation/scale are non-default.
@@ -44,15 +44,15 @@ class Batcher:
         if not sorted_commands:
             return list(self._static_batches.values())
 
-        batches: List[RenderBatch] = []
+        batches: list[RenderBatch] = []
 
         # Initialize first batch state
         current_tex = sorted_commands[0].texture
-        current_material: Optional["Material"] = sorted_commands[0].material
+        current_material: Material | None = sorted_commands[0].material
         current_material_id = sorted_commands[0].material_id
-        current_dests: List[Tuple[float, float]] = []
-        current_rotations: List[float] = []
-        current_scales: List[Tuple[float, float]] = []
+        current_dests: list[tuple[float, float]] = []
+        current_rotations: list[float] = []
+        current_scales: list[tuple[float, float]] = []
         has_transforms = False
 
         # Optimization: Pre-calculate viewport offset

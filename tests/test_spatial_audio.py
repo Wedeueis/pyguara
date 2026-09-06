@@ -2,15 +2,15 @@
 
 import pytest
 
-from pyguara.common.types import Vector2
 from pyguara.audio.types import (
-    AudioPriority,
-    AudioBusType,
     AudioBus,
     AudioBusManager,
-    SpatialAudioConfig,
+    AudioBusType,
+    AudioPriority,
     PlayingSoundInfo,
+    SpatialAudioConfig,
 )
+from pyguara.common.types import Vector2
 
 
 class TestAudioPriority:

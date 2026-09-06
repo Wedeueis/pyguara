@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import moderngl
@@ -56,9 +56,9 @@ class PostProcessEffect(ABC):
     @abstractmethod
     def apply(
         self,
-        ctx: "moderngl.Context",
-        input_fbo: "Framebuffer",
-        output_fbo: "Framebuffer",
+        ctx: moderngl.Context,
+        input_fbo: Framebuffer,
+        output_fbo: Framebuffer,
     ) -> None:
         """Apply this effect.
 
@@ -97,8 +97,8 @@ class PostProcessStack:
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
-        fbo_manager: "FramebufferManager",
+        ctx: moderngl.Context,
+        fbo_manager: FramebufferManager,
     ) -> None:
         """Initialize the post-processing stack.
 
@@ -136,7 +136,7 @@ class PostProcessStack:
         """
         self._effects.insert(index, effect)
 
-    def remove_effect(self, name: str) -> Optional[PostProcessEffect]:
+    def remove_effect(self, name: str) -> PostProcessEffect | None:
         """Remove an effect by name.
 
         Args:
@@ -150,7 +150,7 @@ class PostProcessStack:
                 return self._effects.pop(i)
         return None
 
-    def get_effect(self, name: str) -> Optional[PostProcessEffect]:
+    def get_effect(self, name: str) -> PostProcessEffect | None:
         """Get an effect by name.
 
         Args:
@@ -164,7 +164,7 @@ class PostProcessStack:
                 return effect
         return None
 
-    def process(self, input_fbo: "Framebuffer") -> "Framebuffer":
+    def process(self, input_fbo: Framebuffer) -> Framebuffer:
         """Process the input through all enabled effects.
 
         Uses ping-pong buffers to chain effects efficiently.

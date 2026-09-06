@@ -1,8 +1,8 @@
 import pytest
 from PIL import Image
 
-from pyguara.graphics.spritesheet import SpriteSheet
 from pyguara.graphics.backends.pygame.types import PygameTextureFactory
+from pyguara.graphics.spritesheet import SpriteSheet
 
 
 @pytest.fixture

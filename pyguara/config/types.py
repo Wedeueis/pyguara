@@ -1,8 +1,9 @@
 """Configuration data structures."""
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Dict, Any
+from typing import Any
+
 from pyguara.common.types import Color
 from pyguara.log.types import LogLevel
 
@@ -108,7 +109,7 @@ class GameConfig:
     # Metadata
     version: str = "1.0"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary.
 
         `asdict()` alone leaves `RenderingBackend` as a plain `Enum` instance
@@ -121,7 +122,7 @@ class GameConfig:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "GameConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "GameConfig":
         """Create config from dictionary (manual for safety/speed)."""
         cfg = cls()
 

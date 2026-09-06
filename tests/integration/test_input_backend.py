@@ -1,9 +1,11 @@
 """Integration tests for Pygame input backend."""
 
 import os
-import pytest
+from collections.abc import Iterator
+
 import pygame
-from typing import Iterator
+import pytest
+
 from pyguara.input.backends.pygame_backend import PygameInputBackend
 
 # Ensure headless execution

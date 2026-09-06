@@ -6,13 +6,14 @@ Reloads Python modules at runtime when source files change.
 from __future__ import annotations
 
 import importlib
-from pyguara.log import get_logger
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Protocol, Type
+from typing import Any, Protocol
 
 from pyguara.dev.file_watcher import PollingFileWatcher
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -24,7 +25,7 @@ class StatefulSystem(Protocol):
     when hot-reloaded.
     """
 
-    def get_state(self) -> Dict[str, Any]:
+    def get_state(self) -> dict[str, Any]:
         """Get the current state for preservation.
 
         Returns:
@@ -32,7 +33,7 @@ class StatefulSystem(Protocol):
         """
         ...
 
-    def set_state(self, state: Dict[str, Any]) -> None:
+    def set_state(self, state: dict[str, Any]) -> None:
         """Restore preserved state after reload.
 
         Args:
@@ -54,8 +55,8 @@ class ReloadableModule:
 
     module_name: str
     file_path: str
-    module: Optional[Any] = None
-    classes: List[str] = field(default_factory=list)
+    module: Any | None = None
+    classes: list[str] = field(default_factory=list)
 
 
 class HotReloadManager:
@@ -83,11 +84,11 @@ class HotReloadManager:
             auto_reload: Whether to automatically reload on change.
         """
         self._watcher = PollingFileWatcher(poll_interval=poll_interval)
-        self._modules: Dict[str, ReloadableModule] = {}
-        self._reload_callbacks: List[Callable[[str], None]] = []
+        self._modules: dict[str, ReloadableModule] = {}
+        self._reload_callbacks: list[Callable[[str], None]] = []
         self._auto_reload = auto_reload
         self._paused = False
-        self._pending_reloads: List[str] = []
+        self._pending_reloads: list[str] = []
 
     @property
     def is_running(self) -> bool:
@@ -317,7 +318,7 @@ class HotReloadManager:
 
 def reload_system_class(
     old_instance: Any,
-    new_class: Type,
+    new_class: type,
     preserve_state: bool = True,
 ) -> Any:
     """Reload a system instance with a new class.

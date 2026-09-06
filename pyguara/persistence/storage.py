@@ -1,11 +1,11 @@
 """Concrete storage backend implementations."""
 
 import json
-from pyguara.log import get_logger
 import os
 import tempfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -81,7 +81,7 @@ class FileStorageBackend:
         if not os.path.exists(self.base_path):
             os.makedirs(self.base_path)
 
-    def _get_paths(self, key: str) -> Tuple[str, str]:
+    def _get_paths(self, key: str) -> tuple[str, str]:
         """Return (data_path, meta_path) for a given key."""
         # Sanitize key to avoid path traversal
         safe_key = "".join(c for c in key if c.isalnum() or c in ("_", "-"))
@@ -90,7 +90,7 @@ class FileStorageBackend:
             os.path.join(self.base_path, f"{safe_key}.meta"),
         )
 
-    def save(self, key: str, data: bytes, metadata: Dict[str, Any]) -> bool:
+    def save(self, key: str, data: bytes, metadata: dict[str, Any]) -> bool:
         """Save data and metadata to disk atomically.
 
         Uses atomic writes to prevent data corruption. Both files are
@@ -121,7 +121,7 @@ class FileStorageBackend:
             logger.error("Save failed for '%s': %s", key, e, exc_info=True)
             return False
 
-    def load(self, key: str) -> Optional[tuple[bytes, Dict[str, Any]]]:
+    def load(self, key: str) -> tuple[bytes, dict[str, Any]] | None:
         """Load data and metadata from disk.
 
         Args:
@@ -149,7 +149,7 @@ class FileStorageBackend:
             with open(data_path, "rb") as f:
                 data = f.read()
 
-            with open(meta_path, "r", encoding="utf-8") as f:
+            with open(meta_path, encoding="utf-8") as f:
                 meta = json.load(f)
 
             logger.debug("Loaded '%s' (%d bytes)", key, len(data))
@@ -185,7 +185,7 @@ class FileStorageBackend:
 
         return success
 
-    def list_keys(self) -> List[str]:
+    def list_keys(self) -> list[str]:
         """List all available keys in storage.
 
         Returns:

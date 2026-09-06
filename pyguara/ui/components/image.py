@@ -1,7 +1,8 @@
 """Image display component."""
 
-from typing import Any, Optional
-from pyguara.common.types import Vector2, Color
+from typing import Any
+
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 
@@ -14,7 +15,7 @@ class Image(Widget):
         texture: Any,
         position: Vector2,
         size: Vector2,
-        color: Optional[Color] = None,
+        color: Color | None = None,
     ) -> None:
         """Initialize the image widget."""
         super().__init__(position, size)

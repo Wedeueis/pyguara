@@ -1,8 +1,11 @@
 """Type definitions and data structures for DI."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Type
+from typing import Any
+
+from pyguara.errors import ErrorHandlingStrategy
 
 
 class ServiceLifetime(Enum):
@@ -11,36 +14,6 @@ class ServiceLifetime(Enum):
     SINGLETON = "singleton"  # One instance per container (shared)
     TRANSIENT = "transient"  # New instance every time it is requested
     SCOPED = "scoped"  # One instance per active scope
-
-
-class ErrorHandlingStrategy(Enum):
-    """Strategy for handling errors during dependency resolution.
-
-    Attributes:
-        LOG: Log the error and return None or raise.
-            Use this in production for graceful degradation.
-        RAISE: Log the error and re-raise the exception.
-            Use this in development for fail-fast debugging (default).
-        IGNORE: Silently ignore errors without logging.
-            Not recommended - use only for testing or specific edge cases.
-
-    Example:
-        >>> from pyguara.di.container import DIContainer
-        >>> from pyguara.di.types import ErrorHandlingStrategy
-        >>> # Development mode - fail fast
-        >>> container = DIContainer(error_strategy=ErrorHandlingStrategy.RAISE)
-        >>> # Production mode - graceful degradation
-        >>> container = DIContainer(error_strategy=ErrorHandlingStrategy.LOG)
-    """
-
-    LOG = "log"
-    """Log the error and continue (may return None or raise depending on context)."""
-
-    RAISE = "raise"
-    """Log the error and re-raise the exception (fail-fast)."""
-
-    IGNORE = "ignore"
-    """Silently ignore errors (not recommended)."""
 
 
 @dataclass
@@ -58,14 +31,14 @@ class ServiceRegistration:
             Cached during registration to avoid inspect.signature at runtime.
     """
 
-    interface: Type[Any]
-    implementation: Optional[Type[Any]] = None
-    factory: Optional[Callable[..., Any]] = None
-    instance: Optional[Any] = None
+    interface: type[Any]
+    implementation: type[Any] | None = None
+    factory: Callable[..., Any] | None = None
+    instance: Any | None = None
     lifetime: ServiceLifetime = ServiceLifetime.TRANSIENT
     # FIX: Explicitly mark as Optional to avoid 'unreachable' errors in post_init
-    dependencies: Optional[Dict[str, Type[Any]]] = None
-    param_defaults: Optional[set[str]] = None
+    dependencies: dict[str, type[Any]] | None = None
+    param_defaults: set[str] | None = None
 
     def __post_init__(self) -> None:
         """Ensure dependencies dict and param_defaults set are initialized."""
@@ -73,3 +46,9 @@ class ServiceRegistration:
             self.dependencies = {}
         if self.param_defaults is None:
             self.param_defaults = set()
+
+
+# Re-exported so `from pyguara.di.types import ErrorHandlingStrategy` keeps
+# working. The definition lives in pyguara.errors because EventDispatcher needs
+# the same enum and must not be imported from here.
+__all__ = ["ErrorHandlingStrategy", "ServiceLifetime", "ServiceRegistration"]

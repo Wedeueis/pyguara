@@ -15,11 +15,11 @@ Usage:
     the ModernGL backend instead of the default Pygame backend.
 """
 
-from pyguara.graphics.backends.moderngl.window import PygameGLWindow
+from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
 from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
 from pyguara.graphics.backends.moderngl.texture import GLTexture, GLTextureFactory
-from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
 from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
+from pyguara.graphics.backends.moderngl.window import PygameGLWindow
 
 __all__ = [
     "PygameGLWindow",

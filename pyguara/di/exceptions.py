@@ -1,7 +1,5 @@
 """Custom exceptions for the Dependency Injection system."""
 
-from typing import List, Type
-
 
 class DIException(Exception):
     """Base exception for all dependency injection errors."""
@@ -10,7 +8,7 @@ class DIException(Exception):
 class CircularDependencyException(DIException):
     """Raised when the container detects a cycle in dependencies."""
 
-    def __init__(self, dependency_chain: List[Type]) -> None:
+    def __init__(self, dependency_chain: list[type]) -> None:
         """Initialize the exception with the problematic chain.
 
         Args:
@@ -24,7 +22,7 @@ class CircularDependencyException(DIException):
 class ServiceNotFoundException(DIException):
     """Raised when requesting a service that has not been registered."""
 
-    def __init__(self, service_type: Type) -> None:
+    def __init__(self, service_type: type) -> None:
         """Initialize the exception.
 
         Args:

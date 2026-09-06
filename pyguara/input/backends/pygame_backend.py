@@ -1,7 +1,8 @@
 """Pygame-based input backend implementation."""
 
-import pygame
 from typing import Any
+
+import pygame
 
 from pyguara.input.protocols import IJoystick
 

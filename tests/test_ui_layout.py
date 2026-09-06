@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock
 
+from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.ui.layout import BoxContainer
 from pyguara.ui.components.text import Label
 from pyguara.ui.components.widget import Widget
-from pyguara.ui.types import LayoutDirection, LayoutAlignment
-from pyguara.common.types import Vector2
+from pyguara.ui.layout import BoxContainer
+from pyguara.ui.types import LayoutAlignment, LayoutDirection
 
 
 class MockWidget(Widget):

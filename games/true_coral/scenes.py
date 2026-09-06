@@ -4,21 +4,6 @@ Menu and gameplay scenes for the puzzle game.
 """
 
 import sys
-from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Vector2, Color, Rect
-from pyguara.common.components import Transform
-from pyguara.ui.manager import UIManager
-from pyguara.ui.layout import BoxContainer
-from pyguara.ui.components.button import Button
-from pyguara.ui.components.text import Label
-from pyguara.input.manager import InputManager
-from pyguara.input.types import InputDevice, ActionType
-from pyguara.input.keys import UP, DOWN, LEFT, RIGHT, Z, R, ESCAPE
-from pyguara.input.events import OnActionEvent
-from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
 
 from games.true_coral.components import (
     Block,
@@ -26,18 +11,33 @@ from games.true_coral.components import (
     GridSprite,
     LevelState,
 )
-from games.true_coral.systems import (
-    GridSystem,
-    BlockMoveSystem,
-    InputSystem,
-    CELL_SIZE,
-)
 from games.true_coral.events import (
     LevelCompleteEvent,
-    RestartLevelEvent,
     NextLevelEvent,
+    RestartLevelEvent,
 )
 from games.true_coral.level_loader import LevelLoader
+from games.true_coral.systems import (
+    CELL_SIZE,
+    BlockMoveSystem,
+    GridSystem,
+    InputSystem,
+)
+from pyguara.common.components import Transform
+from pyguara.common.types import Color, Rect, Vector2
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.input.events import OnActionEvent
+from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP, R, Z
+from pyguara.input.manager import InputManager
+from pyguara.input.types import ActionType, InputDevice
+from pyguara.scene.base import Scene
+from pyguara.scene.manager import SceneManager
+from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
+from pyguara.ui.components.button import Button
+from pyguara.ui.components.text import Label
+from pyguara.ui.layout import BoxContainer
+from pyguara.ui.manager import UIManager
 
 
 class MenuScene(Scene):

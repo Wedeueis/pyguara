@@ -15,7 +15,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import click
 
@@ -129,7 +129,7 @@ class AtlasGenerator:
         self.padding = padding
         self.allow_rotation = allow_rotation
 
-    def load_images(self, input_path: Path) -> List[Tuple[str, Image.Image]]:
+    def load_images(self, input_path: Path) -> list[tuple[str, Image.Image]]:
         """
         Load all images from a directory.
 
@@ -148,7 +148,7 @@ class AtlasGenerator:
         if not input_path.is_dir():
             raise ValueError(f"Input path is not a directory: {input_path}")
 
-        images: List[Tuple[str, Image.Image]] = []
+        images: list[tuple[str, Image.Image]] = []
         supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".tga"}
 
         for file_path in sorted(input_path.iterdir()):
@@ -170,8 +170,8 @@ class AtlasGenerator:
         return images
 
     def pack(
-        self, images: List[Tuple[str, Image.Image]]
-    ) -> Tuple[Image.Image, Dict[str, Any]]:
+        self, images: list[tuple[str, Image.Image]]
+    ) -> tuple[Image.Image, dict[str, Any]]:
         """
         Pack images into an atlas using shelf-packing algorithm.
 
@@ -190,8 +190,8 @@ class AtlasGenerator:
         # Create blank atlas with transparency
         atlas = Image.new("RGBA", (self.atlas_size, self.atlas_size), (0, 0, 0, 0))
 
-        shelves: List[Shelf] = []
-        packed_sprites: List[PackedSprite] = []
+        shelves: list[Shelf] = []
+        packed_sprites: list[PackedSprite] = []
         current_y = 0
 
         for name, img in sorted_images:
@@ -267,7 +267,7 @@ class AtlasGenerator:
         self,
         input_path: Path,
         output_path: Path,
-        metadata_path: Optional[Path] = None,
+        metadata_path: Path | None = None,
     ) -> None:
         """
         Generate atlas from input directory.
@@ -341,7 +341,7 @@ class AtlasGenerator:
 def atlas(
     input_dir: Path,
     output: Path,
-    metadata: Optional[Path],
+    metadata: Path | None,
     size: int,
     padding: int,
 ) -> None:
@@ -375,7 +375,7 @@ def atlas(
         )
     except Exception as e:
         click.echo(click.style(f"Error: {e}", fg="red"), err=True)
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
 
 def main() -> None:

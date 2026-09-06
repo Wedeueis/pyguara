@@ -1,31 +1,31 @@
-"""Standard lifecycle events for application state."""
+"""Application lifecycle events."""
 
-from dataclasses import dataclass
-from typing import Any
 import time
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
 class QuitEvent:
-    """Fired when the user requests the application to close."""
+    """Fired when the user asks the application to close.
 
-    timestamp: float = 0.0
+    Attributes:
+        timestamp: Unix time the event was created.
+        source: Whatever raised the event, if it identified itself.
+    """
+
+    timestamp: float = field(default_factory=time.time)
     source: Any = None
-
-    def __post_init__(self) -> None:
-        """Initialize timestamp if not provided."""
-        if self.timestamp == 0.0:
-            self.timestamp = time.time()
 
 
 @dataclass
 class ApplicationStartEvent:
-    """Fired when the engine loop begins."""
+    """Fired once when the engine loop begins.
 
-    timestamp: float = 0.0
+    Attributes:
+        timestamp: Unix time the event was created.
+        source: Whatever raised the event, if it identified itself.
+    """
+
+    timestamp: float = field(default_factory=time.time)
     source: Any = None
-
-    def __post_init__(self) -> None:
-        """Initialize timestamp if not provided."""
-        if self.timestamp == 0.0:
-            self.timestamp = time.time()

@@ -29,7 +29,7 @@ class PostProcessPass(BaseRenderPass):
 
     def __init__(
         self,
-        post_process_stack: "PostProcessStack",
+        post_process_stack: PostProcessStack,
         input_fbo_name: str = "composite",
         output_fbo_name: str = "post_processed",
         *,
@@ -49,7 +49,7 @@ class PostProcessPass(BaseRenderPass):
         self._output_fbo_name = output_fbo_name
 
     @property
-    def stack(self) -> "PostProcessStack":
+    def stack(self) -> PostProcessStack:
         """Get the post-processing stack."""
         return self._stack
 
@@ -68,7 +68,7 @@ class PostProcessPass(BaseRenderPass):
         """Name of the output framebuffer."""
         return self._output_fbo_name
 
-    def execute(self, ctx: "moderngl.Context", graph: "RenderGraph") -> None:
+    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
         """Execute the post-processing pass.
 
         Args:
@@ -101,9 +101,9 @@ class PostProcessPass(BaseRenderPass):
 
     def _blit(
         self,
-        ctx: "moderngl.Context",
-        src: "Framebuffer",
-        dst: "Framebuffer",
+        ctx: moderngl.Context,
+        src: Framebuffer,
+        dst: Framebuffer,
     ) -> None:
         """Copy one framebuffer to another.
 

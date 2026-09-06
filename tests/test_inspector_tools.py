@@ -10,9 +10,10 @@ import os
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 
+from unittest.mock import MagicMock
+
 import pygame
 import pytest
-from unittest.mock import MagicMock
 
 from pyguara.application.bootstrap import create_headless_application
 from pyguara.common.components import Transform

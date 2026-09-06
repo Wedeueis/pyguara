@@ -19,10 +19,11 @@ Example:
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
 
-from pyguara.common.types import Vector2, Rect
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from pyguara.common.types import Rect, Vector2
 from pyguara.ui.types import UIAnchor
 
 if TYPE_CHECKING:
@@ -48,12 +49,12 @@ class Margin:
     right: int = 0
 
     @classmethod
-    def all(cls, value: int) -> "Margin":
+    def all(cls, value: int) -> Margin:
         """Create uniform margin on all sides."""
         return cls(top=value, bottom=value, left=value, right=value)
 
     @classmethod
-    def symmetric(cls, vertical: int = 0, horizontal: int = 0) -> "Margin":
+    def symmetric(cls, vertical: int = 0, horizontal: int = 0) -> Margin:
         """Create symmetric margins."""
         return cls(top=vertical, bottom=vertical, left=horizontal, right=horizontal)
 
@@ -88,12 +89,12 @@ class Padding:
     right: int = 0
 
     @classmethod
-    def all(cls, value: int) -> "Padding":
+    def all(cls, value: int) -> Padding:
         """Create uniform padding on all sides."""
         return cls(top=value, bottom=value, left=value, right=value)
 
     @classmethod
-    def symmetric(cls, vertical: int = 0, horizontal: int = 0) -> "Padding":
+    def symmetric(cls, vertical: int = 0, horizontal: int = 0) -> Padding:
         """Create symmetric padding."""
         return cls(top=vertical, bottom=vertical, left=horizontal, right=horizontal)
 
@@ -130,19 +131,19 @@ class LayoutConstraints:
     offset: Vector2 = field(default_factory=Vector2.zero)
 
     # Size constraints
-    min_size: Optional[Vector2] = None
-    max_size: Optional[Vector2] = None
+    min_size: Vector2 | None = None
+    max_size: Vector2 | None = None
 
     # Relative sizing
-    width_percent: Optional[float] = None
-    height_percent: Optional[float] = None
+    width_percent: float | None = None
+    height_percent: float | None = None
     keep_aspect_ratio: bool = False
 
     def apply(
         self,
         element_rect: Rect,
         parent_rect: Rect,
-        element_size: Optional[Vector2] = None,
+        element_size: Vector2 | None = None,
     ) -> Rect:
         """Apply constraints to position and size an element.
 
@@ -238,7 +239,7 @@ class LayoutConstraints:
         return Vector2(x, y)
 
 
-def apply_constraints_to_element(element: "UIElement", parent_rect: Rect) -> None:
+def apply_constraints_to_element(element: UIElement, parent_rect: Rect) -> None:
     """Apply layout constraints to a UI element if present.
 
     Args:

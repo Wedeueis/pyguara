@@ -8,17 +8,17 @@ A Metroidvania-lite platformer demonstrating:
 - Collectibles and checkpoints
 """
 
-import sys
 import logging
 import os
+import sys
 
 # Ensure we can import pyguara from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from pyguara.application.application import Application
-from pyguara.events.dispatcher import EventDispatcher
 from games.guara_falcao.bootstrap import configure_game_container
 from games.guara_falcao.scenes import TitleScene
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
 
 
 def main():

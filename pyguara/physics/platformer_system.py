@@ -230,9 +230,12 @@ class PlatformerSystem:
             # Don't push into walls when airborne - this prevents fighting the physics engine
             # On ground, physics collision handles this naturally
             if not controller.is_grounded:
-                if controller.on_wall_left and controller.move_input < 0:
-                    new_velocity_x = 0.0
-                elif controller.on_wall_right and controller.move_input > 0:
+                if (
+                    controller.on_wall_left
+                    and controller.move_input < 0
+                    or controller.on_wall_right
+                    and controller.move_input > 0
+                ):
                     new_velocity_x = 0.0
                 else:
                     new_velocity_x = (

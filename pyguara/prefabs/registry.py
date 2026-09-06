@@ -7,11 +7,12 @@ enabling dynamic component instantiation from serialized data.
 from __future__ import annotations
 
 import dataclasses
-from pyguara.log import get_logger
-from typing import Any, Callable, Dict, Optional, Type, get_type_hints
+from collections.abc import Callable
+from typing import Any, get_type_hints
 
-from pyguara.ecs.component import Component
 from pyguara.common.types import Vector2
+from pyguara.ecs.component import Component
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -33,9 +34,9 @@ class ComponentRegistry:
 
     def __init__(self) -> None:
         """Initialize an empty registry."""
-        self._components: Dict[str, Type[Component]] = {}
-        self._deserializers: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
-        self._type_converters: Dict[type, Callable[[Any], Any]] = {
+        self._components: dict[str, type[Component]] = {}
+        self._deserializers: dict[str, Callable[[dict[str, Any]], Any]] = {}
+        self._type_converters: dict[type, Callable[[Any], Any]] = {
             Vector2: self._convert_vector2,
         }
         # Register built-in deserializers for special components
@@ -43,8 +44,8 @@ class ComponentRegistry:
 
     def register(
         self,
-        component_type: Type[Component],
-        name: Optional[str] = None,
+        component_type: type[Component],
+        name: str | None = None,
     ) -> None:
         """Register a component type.
 
@@ -63,7 +64,7 @@ class ComponentRegistry:
     def register_deserializer(
         self,
         name: str,
-        deserializer: Callable[[Dict[str, Any]], Any],
+        deserializer: Callable[[dict[str, Any]], Any],
     ) -> None:
         """Register a custom deserializer for a component type.
 
@@ -90,7 +91,7 @@ class ComponentRegistry:
         """
         self._type_converters[target_type] = converter
 
-    def get(self, name: str) -> Optional[Type[Component]]:
+    def get(self, name: str) -> type[Component] | None:
         """Get a registered component type by name.
 
         Args:
@@ -112,7 +113,7 @@ class ComponentRegistry:
         """
         return name in self._components
 
-    def create(self, name: str, data: Dict[str, Any]) -> Component:
+    def create(self, name: str, data: dict[str, Any]) -> Component:
         """Create a component instance from serialized data.
 
         Args:
@@ -139,8 +140,8 @@ class ComponentRegistry:
 
     def _instantiate_component(
         self,
-        component_type: Type[Component],
-        data: Dict[str, Any],
+        component_type: type[Component],
+        data: dict[str, Any],
     ) -> Component:
         """Instantiate a component with type conversion.
 
@@ -161,8 +162,8 @@ class ComponentRegistry:
 
     def _instantiate_dataclass(
         self,
-        cls: Type[Component],
-        data: Dict[str, Any],
+        cls: type[Component],
+        data: dict[str, Any],
     ) -> Component:
         """Instantiate a dataclass component with field conversion.
 
@@ -173,7 +174,7 @@ class ComponentRegistry:
         Returns:
             Component instance.
         """
-        converted_data: Dict[str, Any] = {}
+        converted_data: dict[str, Any] = {}
 
         # Get type hints for field conversion
         try:
@@ -250,7 +251,7 @@ class ComponentRegistry:
         # Transform has a custom __init__ and needs special handling
         self._deserializers["Transform"] = self._deserialize_transform
 
-    def _deserialize_transform(self, data: Dict[str, Any]) -> Any:
+    def _deserialize_transform(self, data: dict[str, Any]) -> Any:
         """Deserialize Transform component.
 
         Args:
@@ -289,7 +290,7 @@ class ComponentRegistry:
 
 
 # Global registry instance
-_global_registry: Optional[ComponentRegistry] = None
+_global_registry: ComponentRegistry | None = None
 
 
 def get_component_registry() -> ComponentRegistry:
@@ -307,8 +308,8 @@ def get_component_registry() -> ComponentRegistry:
 
 
 def register_component(
-    component_type: Type[Component], name: Optional[str] = None
-) -> Type[Component]:
+    component_type: type[Component], name: str | None = None
+) -> type[Component]:
     """Register a component with the global registry.
 
     Can be used as a decorator:

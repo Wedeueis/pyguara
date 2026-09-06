@@ -1,6 +1,7 @@
 """Pytest configuration and fixtures."""
 
 import pytest
+
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 

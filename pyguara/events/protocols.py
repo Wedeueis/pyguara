@@ -1,18 +1,27 @@
 """Core protocols defining the contracts for the Event System."""
 
-from typing import Any, Protocol, Optional, Type, TypeVar, runtime_checkable
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any, Protocol, TypeVar, runtime_checkable
+
 from pyguara.events.types import EventHandler
 
-# Define a generic type variable bound to the Event protocol
 E = TypeVar("E", bound="Event")
 
 
 @runtime_checkable
 class Event(Protocol):
-    """Core event protocol for type checking.
+    """Structural contract every event satisfies.
 
-    All concrete events should implement these fields.
-    Using a Protocol allows events to be simple dataclasses or complex objects.
+    A Protocol rather than a base class, so an event can be a plain dataclass
+    without inheriting anything. Prefer `field(default_factory=time.time)` for
+    the timestamp over a sentinel checked in `__post_init__`, which cannot
+    express a genuine timestamp of 0.0.
+
+    Attributes:
+        timestamp: Unix time the event was created.
+        source: Whatever raised the event, if it identified itself.
     """
 
     timestamp: float
@@ -26,11 +35,15 @@ class IEventDispatcher(Protocol):
     Responsible for routing events to registered handlers based on type.
     """
 
-    def dispatch(self, event: Event) -> None:
-        """Dispatch an event to all subscribers immediately (Synchronous).
+    def dispatch(self, event: Event) -> bool:
+        """Deliver an event to its subscribers immediately, on this thread.
 
         Args:
-            event: The event instance to broadcast.
+            event: The event to broadcast.
+
+        Returns:
+            True if every applicable handler ran; False if one consumed the
+            event by returning False.
         """
         ...
 
@@ -47,7 +60,7 @@ class IEventDispatcher(Protocol):
         ...
 
     def process_queue(
-        self, max_time_ms: Optional[float] = None, max_events: Optional[int] = None
+        self, max_time_ms: float | None = None, max_events: int | None = None
     ) -> int:
         """
         Flush the event queue and dispatch pending events with optional limits.
@@ -64,18 +77,24 @@ class IEventDispatcher(Protocol):
         ...
 
     def subscribe(
-        self, event_type: Type[E], handler: EventHandler[E], priority: int = 0
+        self,
+        event_type: type[E],
+        handler: EventHandler[E],
+        priority: int = 0,
+        filter_func: Callable[[E], bool] | None = None,
     ) -> None:
-        """Subscribe to an event type.
+        """Subscribe to an event type and its subclasses.
 
         Args:
-            event_type: The class of the event to listen for.
-            handler: A callable that will receive the event.
-            priority: Execution order (Higher runs first). Defaults to 0.
+            event_type: The class to listen for. Subclasses match too.
+            handler: Receives the event. Returning False stops propagation.
+            priority: Higher runs first. Ties keep subscription order.
+            filter_func: Optional predicate; the handler runs only if it
+                returns True.
         """
         ...
 
-    def unsubscribe(self, event_type: Type[E], handler: EventHandler[E]) -> None:
+    def unsubscribe(self, event_type: type[E], handler: EventHandler[E]) -> None:
         """Unsubscribe from an event type.
 
         Args:
@@ -84,7 +103,7 @@ class IEventDispatcher(Protocol):
         """
         ...
 
-    def clear_subscribers(self, event_type: Optional[Type[Event]] = None) -> None:
+    def clear_subscribers(self, event_type: type[Event] | None = None) -> None:
         """Clear subscribers for an event type or all events.
 
         Args:

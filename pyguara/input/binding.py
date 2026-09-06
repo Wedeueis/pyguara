@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from pyguara.log import get_logger
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from pyguara.input.types import (
     BindingConflict,
@@ -12,11 +11,12 @@ from pyguara.input.types import (
     InputDevice,
     RebindResult,
 )
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
 # Binding Key: (DeviceType, KeyCode/AxisIndex)
-BindingKey = Tuple[InputDevice, int]
+BindingKey = tuple[InputDevice, int]
 
 
 class KeyBindingManager:
@@ -32,9 +32,9 @@ class KeyBindingManager:
     def __init__(self) -> None:
         """Initialize the binding manager with default contexts."""
         # Map: Context -> BindingKey -> List[ActionName]
-        self._bindings: Dict[str, Dict[BindingKey, List[str]]] = {}
+        self._bindings: dict[str, dict[BindingKey, list[str]]] = {}
         # Reverse map for quick action lookup: Context -> ActionName -> List[BindingKey]
-        self._action_bindings: Dict[str, Dict[str, List[BindingKey]]] = {}
+        self._action_bindings: dict[str, dict[str, list[BindingKey]]] = {}
 
         for ctx in InputContext:
             self._bindings[ctx.value] = {}
@@ -74,7 +74,7 @@ class KeyBindingManager:
 
     def get_actions(
         self, device: InputDevice, code: int, context: InputContext
-    ) -> List[str]:
+    ) -> list[str]:
         """Lookup actions for a specific device input.
 
         Args:
@@ -90,7 +90,7 @@ class KeyBindingManager:
 
     def get_bindings_for_action(
         self, action: str, context: InputContext
-    ) -> List[BindingKey]:
+    ) -> list[BindingKey]:
         """Get all bindings for a specific action.
 
         Args:
@@ -130,7 +130,7 @@ class KeyBindingManager:
 
     def unbind_key(
         self, device: InputDevice, code: int, context: InputContext
-    ) -> List[str]:
+    ) -> list[str]:
         """Remove all action bindings from a specific key.
 
         Args:
@@ -164,7 +164,7 @@ class KeyBindingManager:
 
     def get_conflicts(
         self, device: InputDevice, code: int, context: InputContext
-    ) -> List[str]:
+    ) -> list[str]:
         """Get actions already bound to a key.
 
         Args:
@@ -185,7 +185,7 @@ class KeyBindingManager:
         new_code: int,
         context: InputContext,
         resolution: ConflictResolution = ConflictResolution.ERROR,
-    ) -> Tuple[RebindResult, Optional[BindingConflict]]:
+    ) -> tuple[RebindResult, BindingConflict | None]:
         """Rebind an action to a new key with conflict handling.
 
         Args:
@@ -209,7 +209,7 @@ class KeyBindingManager:
         # Remove self from conflict list
         conflicting_actions = [a for a in conflicting_actions if a != action]
 
-        conflict_info: Optional[BindingConflict] = None
+        conflict_info: BindingConflict | None = None
         if conflicting_actions:
             conflict_info = BindingConflict(
                 key=new_key,
@@ -273,19 +273,19 @@ class KeyBindingManager:
         )
         return result, conflict_info
 
-    def export_bindings(self) -> Dict[str, Any]:
+    def export_bindings(self) -> dict[str, Any]:
         """Export all bindings to a serializable dictionary.
 
         Returns:
             Dictionary suitable for JSON serialization.
         """
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "version": self.BINDING_FORMAT_VERSION,
             "bindings": {},
         }
 
         for ctx_name, ctx_bindings in self._bindings.items():
-            ctx_data: Dict[str, List[Dict[str, Any]]] = {}
+            ctx_data: dict[str, list[dict[str, Any]]] = {}
 
             for (device, code), actions in ctx_bindings.items():
                 for action in actions:
@@ -298,7 +298,7 @@ class KeyBindingManager:
 
         return data
 
-    def import_bindings(self, data: Dict[str, Any]) -> None:
+    def import_bindings(self, data: dict[str, Any]) -> None:
         """Import bindings from a dictionary, replacing current bindings.
 
         Args:

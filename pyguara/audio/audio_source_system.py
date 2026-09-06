@@ -5,14 +5,14 @@ Updates spatial audio positions and handles audio lifecycle.
 
 from __future__ import annotations
 
-from pyguara.log import get_logger
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
 from pyguara.audio.types import SpatialAudioConfig
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
+from pyguara.log import get_logger
 
 if TYPE_CHECKING:
     from pyguara.ecs.manager import EntityManager
@@ -42,7 +42,7 @@ class AudioSourceSystem:
         self,
         entity_manager: EntityManager,
         audio_system: IAudioSystem,
-        resource_manager: Optional[ResourceManager] = None,
+        resource_manager: ResourceManager | None = None,
     ) -> None:
         """Initialize the audio source system.
 
@@ -237,7 +237,7 @@ class AudioSourceSystem:
 
         self._audio_system.set_channel_mix(channel_id, attenuation, pan)
 
-    def _get_clip(self, path: str) -> Optional[AudioClip]:
+    def _get_clip(self, path: str) -> AudioClip | None:
         """Get or load an audio clip.
 
         Args:

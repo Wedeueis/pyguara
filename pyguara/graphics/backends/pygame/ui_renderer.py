@@ -1,9 +1,10 @@
 """Pygame implementation of the UI Renderer."""
 
-from typing import Tuple, Dict, Optional, Any
+from typing import Any
+
 import pygame
 
-from pyguara.common.types import Rect, Color, Vector2
+from pyguara.common.types import Color, Rect, Vector2
 
 
 class PygameUIRenderer:
@@ -15,7 +16,7 @@ class PygameUIRenderer:
     def __init__(self, target_surface: pygame.Surface) -> None:
         """Initialize the renderer."""
         self._surface = target_surface
-        self._font_cache: Dict[int, pygame.font.Font] = {}
+        self._font_cache: dict[int, pygame.font.Font] = {}
 
         if not pygame.font.get_init():
             pygame.font.init()
@@ -30,7 +31,7 @@ class PygameUIRenderer:
             self._font_cache[size] = pygame.font.SysFont("arial", size)
         return self._font_cache[size]
 
-    def _to_pygame_color(self, color: Color) -> Tuple[int, int, int, int]:
+    def _to_pygame_color(self, color: Color) -> tuple[int, int, int, int]:
         """Convert engine Color to Pygame tuple."""
         return (color.r, color.g, color.b, getattr(color, "a", 255))
 
@@ -89,7 +90,7 @@ class PygameUIRenderer:
         self._surface.blit(texture, (int(position.x), int(position.y)))
 
     def draw_texture(
-        self, texture: Any, rect: Rect, color: Optional[Color] = None
+        self, texture: Any, rect: Rect, color: Color | None = None
     ) -> None:
         """Draw an image texture."""
         if not isinstance(texture, pygame.Surface):
@@ -112,7 +113,7 @@ class PygameUIRenderer:
         else:
             self._surface.blit(scaled_tex, target_rect)
 
-    def get_text_size(self, text: str, size: int) -> Tuple[int, int]:
+    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
         """Calculate the width/height of a string."""
         font = self._get_font(size)
         txt_size = font.size(text)

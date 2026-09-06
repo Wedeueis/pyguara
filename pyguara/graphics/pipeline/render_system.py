@@ -1,7 +1,5 @@
 """The core Rendering System that orchestrates the pipeline."""
 
-from typing import Optional
-
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.batch import Batcher
@@ -31,9 +29,9 @@ class RenderSystem:
         self._batcher = Batcher()
 
         # Optimization: persistent viewport to avoid per-frame allocation
-        self._default_viewport: Optional[Viewport] = None
+        self._default_viewport: Viewport | None = None
 
-    def submit(self, item: Renderable, position: Optional[Vector2] = None) -> None:
+    def submit(self, item: Renderable, position: Vector2 | None = None) -> None:
         """
         Add a renderable object to the current frame's queue.
 
@@ -56,7 +54,7 @@ class RenderSystem:
         )
         self._queue.push(cmd)
 
-    def flush(self, camera: Camera2D, viewport: Optional[Viewport] = None) -> None:
+    def flush(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
         """
         Process the frame: Sort -> Batch -> Draw.
 

@@ -8,13 +8,12 @@ of "viewing" from the logic of "drawing".
 """
 
 from __future__ import annotations
+
 import math
 import random
 from dataclasses import dataclass
-from typing import Optional
 
-from pyguara.common.types import Vector2, Rect
-
+from pyguara.common.types import Rect, Vector2
 
 # ===== Camera Effects Data Structures =====
 
@@ -82,7 +81,7 @@ class CameraZoomTransition:
     elapsed: float = 0.0
     easing: str = "smooth"
 
-    def update(self, dt: float) -> Optional[float]:
+    def update(self, dt: float) -> float | None:
         """
         Calculate zoom for current frame.
 
@@ -160,10 +159,10 @@ class Camera2D:
         self.rotation: float = 0.0
 
         # Camera effects
-        self._shake: Optional[CameraShake] = None
-        self._zoom_transition: Optional[CameraZoomTransition] = None
-        self._target_position: Optional[Vector2] = None
-        self._follow_constraints: Optional[CameraFollowConstraints] = None
+        self._shake: CameraShake | None = None
+        self._zoom_transition: CameraZoomTransition | None = None
+        self._target_position: Vector2 | None = None
+        self._follow_constraints: CameraFollowConstraints | None = None
         self._follow_velocity: Vector2 = Vector2.zero()
 
     def set_viewport_size(self, width: int, height: int) -> None:
@@ -198,7 +197,7 @@ class Camera2D:
 
         # 3. Rotate (around camera center)
         if self.rotation != 0:
-            local_pos = local_pos.rotate(-self.rotation)
+            local_pos = local_pos.rotate_degrees(-self.rotation)
 
         screen_pos = local_pos + self.offset
 
@@ -223,7 +222,7 @@ class Camera2D:
 
         # 2. Inverse Rotate
         if self.rotation != 0:
-            local_pos = local_pos.rotate(self.rotation)
+            local_pos = local_pos.rotate_degrees(self.rotation)
 
         # 3. Inverse Scale
         # Avoid division by zero
@@ -301,7 +300,7 @@ class Camera2D:
     def follow(
         self,
         target: Vector2,
-        constraints: Optional[CameraFollowConstraints] = None,
+        constraints: CameraFollowConstraints | None = None,
     ) -> None:
         """
         Set the camera to follow a target position with optional constraints.

@@ -4,9 +4,9 @@ Custom events for shooter game logic.
 """
 
 from dataclasses import dataclass
-from pyguara.common.types import Vector2
 
 from games.protocolo_bandeira.components import EntityTeam
+from pyguara.common.types import Vector2
 
 
 @dataclass

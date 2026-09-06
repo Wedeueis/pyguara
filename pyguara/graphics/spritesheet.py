@@ -8,12 +8,10 @@ The implementation is backend-agnostic, using Pillow for image manipulation
 and a TextureFactory protocol for creating backend-specific textures.
 """
 
-from typing import List
-
 from PIL import Image
 
-from pyguara.resources.types import Texture
 from pyguara.graphics.protocols import TextureFactory
+from pyguara.resources.types import Texture
 
 
 class SpriteSheet:
@@ -42,7 +40,7 @@ class SpriteSheet:
         """
         self._path = image_path
         self._factory = factory
-        self._frames: List[Texture] = []
+        self._frames: list[Texture] = []
 
         # Load the image using Pillow
         self._image = Image.open(image_path).convert("RGBA")
@@ -82,7 +80,7 @@ class SpriteSheet:
 
     def slice_grid(
         self, frame_width: int, frame_height: int, count: int = 0
-    ) -> List[Texture]:
+    ) -> list[Texture]:
         """Slice the sprite sheet into a grid of equal-sized frames.
 
         Frames are extracted left-to-right, top-to-bottom (row-major order).
@@ -134,7 +132,7 @@ class SpriteSheet:
 
         return self._frames
 
-    def slice_regions(self, regions: List[tuple[int, int, int, int]]) -> List[Texture]:
+    def slice_regions(self, regions: list[tuple[int, int, int, int]]) -> list[Texture]:
         """Slice specific regions from the sprite sheet.
 
         Useful for sprite sheets with irregular frame sizes or layouts.
@@ -145,7 +143,7 @@ class SpriteSheet:
         Returns:
             List of Texture objects, one for each specified region.
         """
-        textures: List[Texture] = []
+        textures: list[Texture] = []
 
         for i, (x, y, width, height) in enumerate(regions):
             # Crop the region
@@ -165,6 +163,6 @@ class SpriteSheet:
         return textures
 
     @property
-    def frames(self) -> List[Texture]:
+    def frames(self) -> list[Texture]:
         """Get the list of previously sliced frames."""
         return self._frames

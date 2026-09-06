@@ -1,9 +1,10 @@
 """Input event definitions."""
 
 from dataclasses import dataclass
-from typing import Set, Any, Tuple
+from typing import Any
+
 from pyguara.events.protocols import Event
-from pyguara.input.types import GamepadButton, GamepadAxis
+from pyguara.input.types import GamepadAxis, GamepadButton
 
 
 @dataclass
@@ -23,7 +24,7 @@ class OnRawKeyEvent(Event):
 
     key_code: int
     is_down: bool
-    modifiers: Set[int]
+    modifiers: set[int]
     timestamp: float = 0.0
     source: Any = None
 
@@ -32,7 +33,7 @@ class OnRawKeyEvent(Event):
 class OnMouseEvent(Event):
     """Fired on mouse activity."""
 
-    position: Tuple[int, int]
+    position: tuple[int, int]
     button: int = 0
     is_down: bool = False
     is_motion: bool = False

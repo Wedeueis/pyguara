@@ -5,10 +5,9 @@ Pure data containers for the puzzle game.
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import List, Tuple
 
+from pyguara.common.types import Color, Vector2
 from pyguara.ecs.component import BaseComponent
-from pyguara.common.types import Vector2, Color
 
 
 class BlockType(Enum):
@@ -32,7 +31,7 @@ class GridPosition(BaseComponent):
         """Initialize the component."""
         super().__init__()
 
-    def to_tuple(self) -> Tuple[int, int]:
+    def to_tuple(self) -> tuple[int, int]:
         """Return position as tuple."""
         return (self.x, self.y)
 
@@ -61,7 +60,7 @@ class Pushable(BaseComponent):
 class MoveHistory(BaseComponent):
     """Stores move history for undo functionality."""
 
-    history: List[Tuple[int, int, int, int]] = field(default_factory=list)
+    history: list[tuple[int, int, int, int]] = field(default_factory=list)
     # Each entry: (player_from_x, player_from_y, crate_from_x, crate_from_y)
     # If no crate moved, crate coords are -1, -1
 
@@ -70,14 +69,14 @@ class MoveHistory(BaseComponent):
         super().__init__()
 
     def push(
-        self, player_from: Tuple[int, int], crate_from: Tuple[int, int] = (-1, -1)
+        self, player_from: tuple[int, int], crate_from: tuple[int, int] = (-1, -1)
     ) -> None:
         """Record a move."""
         self.history.append(
             (player_from[0], player_from[1], crate_from[0], crate_from[1])
         )
 
-    def pop(self) -> Tuple[Tuple[int, int], Tuple[int, int]] | None:
+    def pop(self) -> tuple[tuple[int, int], tuple[int, int]] | None:
         """Retrieve and remove the last move."""
         if not self.history:
             return None

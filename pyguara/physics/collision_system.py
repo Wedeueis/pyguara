@@ -23,7 +23,6 @@ Example:
 """
 
 import time
-from typing import Dict, Set, Tuple
 
 from pyguara.common.types import Vector2
 from pyguara.events.dispatcher import EventDispatcher
@@ -60,11 +59,11 @@ class CollisionSystem:
 
         # Track active collisions to distinguish begin/persist/end
         # Key: frozenset of (entity_a, entity_b)
-        self._active_collisions: Set[frozenset[str]] = set()
+        self._active_collisions: set[frozenset[str]] = set()
 
         # Track active triggers
         # Key: (trigger_entity_id, other_entity_id), Value: True if active
-        self._active_triggers: Dict[Tuple[str, str], bool] = {}
+        self._active_triggers: dict[tuple[str, str], bool] = {}
 
     def on_collision_begin(
         self,

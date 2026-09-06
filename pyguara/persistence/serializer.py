@@ -1,12 +1,12 @@
 """Serialization logic for converting objects to storage formats."""
 
+import dataclasses
 import json
 import pickle
-import dataclasses
-from typing import Any, Optional, Dict
+from typing import Any
 
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.persistence.types import SerializationFormat
-from pyguara.common.types import Vector2, Color, Rect
 
 # --- Pre-processing for JSON ---
 
@@ -54,8 +54,18 @@ def prepare_for_json(o: Any) -> Any:
 # --- Custom Decoders ---
 
 
-def game_object_hook(dct: Dict[str, Any]) -> Any:
-    """Hook to convert JSON dicts back to Objects."""
+def game_object_hook(dct: dict[str, Any]) -> Any:
+    """Rebuild engine value types from their JSON representation.
+
+    Passed to `json.loads` as its `object_hook`.
+
+    Args:
+        dct: One decoded JSON object.
+
+    Returns:
+        A `Vector2`, `Color` or `Rect` when the dict carries a matching
+        `__type__` tag, otherwise the dict unchanged.
+    """
     if "__type__" in dct:
         t = dct["__type__"]
 
@@ -74,16 +84,31 @@ def game_object_hook(dct: Dict[str, Any]) -> Any:
 
 
 class Serializer:
-    """
-    Handle serialization and deserialization of game objects.
-    """
+    """Serialises game data to JSON or pickled bytes, and back."""
 
     def __init__(self, default_format: SerializationFormat = SerializationFormat.JSON):
+        """Initialise the serialiser.
+
+        Args:
+            default_format: Format used when a call does not name one.
+        """
         self.default_format = default_format
 
     def serialize(
-        self, data: Any, format_type: Optional[SerializationFormat] = None
+        self, data: Any, format_type: SerializationFormat | None = None
     ) -> bytes:
+        """Encode data to bytes.
+
+        Args:
+            data: The object graph to encode.
+            format_type: Format to use. Defaults to the instance default.
+
+        Returns:
+            The encoded bytes.
+
+        Raises:
+            ValueError: If the format is not supported.
+        """
         fmt = format_type or self.default_format
 
         if fmt == SerializationFormat.JSON:
@@ -97,8 +122,20 @@ class Serializer:
         raise ValueError(f"Unsupported serialization format: {fmt}")
 
     def deserialize(
-        self, data: bytes, format_type: Optional[SerializationFormat] = None
+        self, data: bytes, format_type: SerializationFormat | None = None
     ) -> Any:
+        """Decode bytes produced by `serialize`.
+
+        Args:
+            data: The encoded bytes.
+            format_type: Format to use. Defaults to the instance default.
+
+        Returns:
+            The decoded object graph.
+
+        Raises:
+            ValueError: If the format is not supported.
+        """
         fmt = format_type or self.default_format
 
         if fmt == SerializationFormat.JSON:

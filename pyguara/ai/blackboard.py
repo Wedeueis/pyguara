@@ -1,6 +1,6 @@
 """Blackboard system for sharing data between AI nodes and states."""
 
-from typing import Any, Dict
+from typing import Any
 
 
 class Blackboard:
@@ -13,7 +13,7 @@ class Blackboard:
 
     def __init__(self) -> None:
         """Initialize the blackboard."""
-        self._data: Dict[str, Any] = {}
+        self._data: dict[str, Any] = {}
 
     def set(self, key: str, value: Any) -> None:
         """Set a value in the blackboard."""

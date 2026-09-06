@@ -1,10 +1,11 @@
 """Integration tests for Resource Loaders using real files."""
 
-import pytest
 import json
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
+
+import pytest
 
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager

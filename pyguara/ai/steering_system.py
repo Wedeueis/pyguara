@@ -1,8 +1,8 @@
 """System for updating steering behaviors."""
 
-from typing import cast, Dict, Optional
+from typing import cast
 
-from pyguara.ai.components import SteeringAgent, Navigator
+from pyguara.ai.components import Navigator, SteeringAgent
 from pyguara.ai.steering import SteeringBehavior
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
@@ -30,7 +30,7 @@ class SteeringSystem:
         """
         self._entity_manager = entity_manager
         # Store wander targets for persistence across frames
-        self._wander_targets: Dict[str, Vector2] = {}
+        self._wander_targets: dict[str, Vector2] = {}
 
     def update(self, dt: float) -> None:
         """Update all steering agents.
@@ -79,7 +79,7 @@ class SteeringSystem:
             if entity.has_component(Navigator) and target is not None:
                 self._update_navigator(entity, transform, target)
 
-    def _get_target(self, entity: Entity, agent: SteeringAgent) -> Optional[Vector2]:
+    def _get_target(self, entity: Entity, agent: SteeringAgent) -> Vector2 | None:
         """Get the target position for steering.
 
         Args:
@@ -105,7 +105,7 @@ class SteeringSystem:
         entity_id: str,
         agent: SteeringAgent,
         transform: Transform,
-        target: Optional[Vector2],
+        target: Vector2 | None,
     ) -> Vector2:
         """Calculate steering force based on behavior type.
 

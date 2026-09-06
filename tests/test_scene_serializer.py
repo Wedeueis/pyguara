@@ -1,29 +1,30 @@
 """Tests for scene serialization."""
 
-import pytest
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
-from pyguara.scene.serializer import SceneSerializer
-from pyguara.scene.base import Scene
+import pytest
+
+from pyguara.common.components import ResourceLink, Tag, Transform
+from pyguara.common.types import Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.persistence.manager import PersistenceManager
 from pyguara.persistence.types import StorageBackend
-from pyguara.common.components import Tag, Transform, ResourceLink
-from pyguara.common.types import Vector2
-from pyguara.physics.components import RigidBody, Collider
+from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.types import BodyType, ShapeType
+from pyguara.scene.base import Scene
+from pyguara.scene.serializer import SceneSerializer
 
 
 class MockStorageBackend(StorageBackend):
     """In-memory storage backend for testing."""
 
     def __init__(self) -> None:
-        self._storage: Dict[str, Tuple[bytes, Dict[str, Any]]] = {}
+        self._storage: dict[str, tuple[bytes, dict[str, Any]]] = {}
 
-    def save(self, key: str, data: bytes, metadata: Dict[str, Any]) -> None:
+    def save(self, key: str, data: bytes, metadata: dict[str, Any]) -> None:
         self._storage[key] = (data, metadata)
 
-    def load(self, key: str) -> Optional[Tuple[bytes, Dict[str, Any]]]:
+    def load(self, key: str) -> tuple[bytes, dict[str, Any]] | None:
         return self._storage.get(key)
 
     def delete(self, key: str) -> bool:

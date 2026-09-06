@@ -4,7 +4,6 @@ import tempfile
 import time
 from pathlib import Path
 
-
 from pyguara.dev.file_watcher import PollingFileWatcher, WatchedFile
 from pyguara.dev.hot_reload import HotReloadManager, reload_system_class
 

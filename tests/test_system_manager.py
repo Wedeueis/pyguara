@@ -1,5 +1,7 @@
 """Tests for system manager."""
 
+import pytest
+
 from pyguara.systems import SystemManager
 
 
@@ -90,11 +92,8 @@ class TestSystemManager:
         manager = SystemManager()
         invalid_system = object()
 
-        try:
+        with pytest.raises(ValueError, match="update"):
             manager.register(invalid_system)
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "update" in str(e)
 
     def test_get_system(self):
         """Should retrieve registered systems by type."""

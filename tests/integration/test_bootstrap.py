@@ -15,9 +15,9 @@ import pytest
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-from pyguara.application.bootstrap import create_application, _setup_container
-from pyguara.prefabs.registry import ComponentRegistry
 from games.boot_process.scenes import BootScene
+from pyguara.application.bootstrap import _setup_container, create_application
+from pyguara.prefabs.registry import ComponentRegistry
 
 
 @pytest.fixture

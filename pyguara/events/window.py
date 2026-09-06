@@ -1,20 +1,22 @@
 """Window management events."""
 
-from dataclasses import dataclass
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 
 @dataclass
 class WindowResizeEvent:
-    """Fired when the OS window dimensions change."""
+    """Fired when the OS window dimensions change.
+
+    Attributes:
+        width: New window width in pixels.
+        height: New window height in pixels.
+        timestamp: Unix time the event was created.
+        source: Whatever raised the event, if it identified itself.
+    """
 
     width: int
     height: int
-    timestamp: float = 0.0
+    timestamp: float = field(default_factory=time.time)
     source: Any = None
-
-    def __post_init__(self) -> None:
-        """Initialize timestamp if not provided."""
-        if self.timestamp == 0.0:
-            self.timestamp = time.time()

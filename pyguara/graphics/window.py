@@ -1,10 +1,12 @@
 """Core Window management module."""
 
-from pyguara.log import get_logger
-from typing import Any, Optional, Iterable
+from collections.abc import Iterable
+from typing import Any
+
+from pyguara.common.types import Color
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.protocols import IWindowBackend
-from pyguara.common.types import Color
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -43,7 +45,7 @@ class Window:
             self._native_handle = None
             self._is_open = False
 
-    def clear(self, color: Optional[Color] = None) -> None:
+    def clear(self, color: Color | None = None) -> None:
         """Clear the window with configured default Color."""
         self._backend.clear(color)
 

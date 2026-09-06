@@ -3,7 +3,7 @@
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.base import UIElement
-from pyguara.ui.types import LayoutDirection, LayoutAlignment
+from pyguara.ui.types import LayoutAlignment, LayoutDirection
 
 
 class BoxContainer(UIElement):

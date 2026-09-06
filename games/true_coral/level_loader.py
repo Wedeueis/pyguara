@@ -5,23 +5,21 @@ Loads puzzle levels from JSON files.
 
 import json
 from pathlib import Path
-from typing import Dict, List, Any, Optional
-
-from pyguara.ecs.manager import EntityManager
-from pyguara.common.types import Color
-from pyguara.common.components import Transform
+from typing import Any
 
 from games.true_coral.components import (
-    GridPosition,
     Block,
     BlockType,
-    Pushable,
-    MoveHistory,
-    LevelState,
+    GridPosition,
     GridSprite,
+    LevelState,
+    MoveHistory,
+    Pushable,
 )
 from games.true_coral.systems import grid_to_world
-
+from pyguara.common.components import Transform
+from pyguara.common.types import Color
+from pyguara.ecs.manager import EntityManager
 
 # Character mappings for level data
 CHAR_MAP = {
@@ -47,12 +45,12 @@ COLOR_MAP = {
 class LevelLoader:
     """Loads and manages puzzle levels."""
 
-    def __init__(self, levels_dir: Optional[Path] = None):
+    def __init__(self, levels_dir: Path | None = None):
         """Initialize the level loader."""
         if levels_dir is None:
             levels_dir = Path(__file__).parent / "assets" / "levels"
         self._levels_dir = levels_dir
-        self._levels: List[Dict[str, Any]] = []
+        self._levels: list[dict[str, Any]] = []
         self._current_level = 0
 
     def discover_levels(self) -> int:
@@ -66,11 +64,11 @@ class LevelLoader:
         level_files = sorted(self._levels_dir.glob("level_*.json"))
         for lf in level_files:
             try:
-                with open(lf, "r") as f:
+                with open(lf) as f:
                     level_data = json.load(f)
                     level_data["_path"] = str(lf)
                     self._levels.append(level_data)
-            except (json.JSONDecodeError, IOError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 print(f"Failed to load level {lf}: {e}")
 
         if not self._levels:

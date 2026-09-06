@@ -7,7 +7,7 @@ the default framebuffer (screen) for display.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
@@ -32,7 +32,7 @@ class FinalPass(BaseRenderPass):
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
+        ctx: moderngl.Context,
         input_fbo_name: str = "world",
         *,
         enabled: bool = True,
@@ -49,8 +49,8 @@ class FinalPass(BaseRenderPass):
         self._input_fbo_name = input_fbo_name
 
         # Create shader program for fullscreen blit
-        self._program: Optional["moderngl.Program"] = None
-        self._vao: Optional["moderngl.VertexArray"] = None
+        self._program: moderngl.Program | None = None
+        self._vao: moderngl.VertexArray | None = None
         self._create_resources()
 
     def _create_resources(self) -> None:
@@ -58,10 +58,10 @@ class FinalPass(BaseRenderPass):
         vert_path = _SHADER_DIR / "fullscreen_quad.vert"
         frag_path = _SHADER_DIR / "blit.frag"
 
-        with open(vert_path, "r") as f:
+        with open(vert_path) as f:
             vert_source = f.read()
 
-        with open(frag_path, "r") as f:
+        with open(frag_path) as f:
             frag_source = f.read()
 
         self._program = self._ctx.program(
@@ -82,7 +82,7 @@ class FinalPass(BaseRenderPass):
         """Set the input framebuffer name."""
         self._input_fbo_name = value
 
-    def execute(self, ctx: "moderngl.Context", graph: "RenderGraph") -> None:
+    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
         """Execute the final pass - blit to screen.
 
         Args:

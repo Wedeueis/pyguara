@@ -1,11 +1,11 @@
 """Type definitions for the Logging System."""
 
-from enum import Enum, IntEnum
 import logging
+from enum import Enum, IntEnum
 
 
 class LogLevel(IntEnum):
-    """Maps standard Python logging levels to our system."""
+    """Engine log levels, numerically identical to the stdlib's."""
 
     DEBUG = logging.DEBUG
     INFO = logging.INFO
@@ -15,10 +15,15 @@ class LogLevel(IntEnum):
 
 
 class LogCategory(str, Enum):
-    """Categories for organizing log streams."""
+    """Subsystem tag carried on every record, for filtering and routing.
+
+    Orthogonal to `LogLevel`: a category says *where* a message came from,
+    a level says how severe it is. DEBUG is the exception -- it is the default
+    category for `EngineLogger.debug()`, for messages that belong to no
+    particular subsystem.
+    """
 
     SYSTEM = "system"
-    # FIX: Added DEBUG category to resolve 'attr-defined' error
     DEBUG = "debug"
     GRAPHICS = "graphics"
     AUDIO = "audio"

@@ -5,9 +5,9 @@ SDL dummy drivers to verify that all systems and resource managers function
 without runtime crashes or regressions.
 """
 
+import logging
 import os
 import sys
-import logging
 
 # Ensure we can import pyguara from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
@@ -17,21 +17,19 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 import pygame
-from pyguara.application.application import Application
-from pyguara.events.dispatcher import EventDispatcher
+
+from games.asset_pipeline.bootstrap import configure_game_container as ap_bootstrap
+from games.asset_pipeline.scenes import AssetScene as APAssetScene
 
 # Import bootstrap configurations
 from games.guara_falcao.bootstrap import configure_game_container as gf_bootstrap
 from games.guara_falcao.scenes import GameScene as GFGameScene
-
 from games.protocolo_bandeira.bootstrap import configure_game_container as pb_bootstrap
 from games.protocolo_bandeira.scenes import ArenaScene as PBArenaScene
-
 from games.true_coral.bootstrap import configure_game_container as tc_bootstrap
 from games.true_coral.scenes import GameScene as TCGameScene
-
-from games.asset_pipeline.bootstrap import configure_game_container as ap_bootstrap
-from games.asset_pipeline.scenes import AssetScene as APAssetScene
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
 
 
 def validate_game(name: str, configure_container_fn, scene_class) -> bool:

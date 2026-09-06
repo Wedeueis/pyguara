@@ -5,13 +5,14 @@ Monitors files for changes to trigger hot-reload.
 
 from __future__ import annotations
 
-from pyguara.log import get_logger
 import os
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -96,10 +97,10 @@ class PollingFileWatcher:
             poll_interval: Seconds between polls.
         """
         self._poll_interval = poll_interval
-        self._watched_files: Dict[str, WatchedFile] = {}
-        self._callbacks: Dict[str, List[ChangeCallback]] = {}
+        self._watched_files: dict[str, WatchedFile] = {}
+        self._callbacks: dict[str, list[ChangeCallback]] = {}
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
 
     @property
@@ -144,7 +145,7 @@ class PollingFileWatcher:
         logger.debug(f"Watching file: {abs_path}")
         return True
 
-    def unwatch(self, path: str, callback: Optional[ChangeCallback] = None) -> None:
+    def unwatch(self, path: str, callback: ChangeCallback | None = None) -> None:
         """Stop watching a file.
 
         Args:
@@ -230,13 +231,13 @@ class PollingFileWatcher:
 
         logger.info("File watcher stopped")
 
-    def check_now(self) -> List[str]:
+    def check_now(self) -> list[str]:
         """Manually check all watched files for changes.
 
         Returns:
             List of changed file paths.
         """
-        changed: List[str] = []
+        changed: list[str] = []
 
         with self._lock:
             for path, watched in self._watched_files.items():

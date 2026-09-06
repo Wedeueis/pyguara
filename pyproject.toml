@@ -160,15 +160,36 @@ exclude = [
 line-length = 88
 indent-width = 4
 
-# Assume Python 3.9
-target-version = "py39"
+# Matches requires-python (>=3.12). Kept in sync deliberately: while this said
+# py39, ruff withheld every modernisation fix and the tree drifted back to
+# typing.Dict/Optional style faster than review could catch it.
+target-version = "py312"
 
 [tool.ruff.lint]
-# Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`) codes by default.
-# Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
-# McCabe complexity (`C901`) by default.
-select = ["E4", "E7", "E9", "F"]
-ignore = []
+# E/F  - pycodestyle errors and Pyflakes, the baseline.
+# UP   - pyupgrade: keeps annotations on modern syntax now that target-version
+#        matches requires-python.
+# B    - flake8-bugbear: catches real defects (mutable/call default arguments,
+#        raise-without-from, unused loop variables).
+# I    - isort: one canonical import order, so import blocks stop churning.
+# SIM  - flake8-simplify.
+# Docstring style is enforced by the separate pydocstyle pre-commit hook, which
+# is scoped to pyguara/ only; ruff's D rules are deliberately not enabled here
+# to avoid two tools disagreeing about the same thing.
+select = ["E4", "E7", "E9", "F", "UP", "B", "I", "SIM"]
+ignore = [
+    # Nesting often reads better than an `and` chain when the outer condition
+    # is a guard and the inner one is the real test; leaving this to judgement.
+    "SIM102",
+    # A ternary is not automatically clearer than an if/else block.
+    "SIM108",
+    # An empty method on a non-ABC base is how optional lifecycle hooks are
+    # declared here (Scene.on_exit, RenderPass hooks); they are deliberately
+    # overridable no-ops, not forgotten abstract methods.
+    "B027",
+    # PEP 695 `def f[T]()` syntax; deferred as a separate, deliberate migration.
+    "UP047",
+]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
@@ -176,6 +197,21 @@ unfixable = []
 
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.flake8-bugbear]
+# Vector2 subclasses pymunk.Vec2d, which is a NamedTuple: instances are
+# immutable and hashable, so sharing one as a default argument is safe. Without
+# this, B008 flags every `scale: Vector2 = Vector2(1, 1)` in the renderer
+# protocols and drowns out the one default that is genuinely mutable.
+extend-immutable-calls = [
+    "pyguara.common.types.Vector2",
+    "pyguara.common.types.Vector2.zero",
+    "pyguara.common.types.Vector2.one",
+    "pyguara.common.types.Vector2.up",
+    "pyguara.common.types.Vector2.down",
+    "pyguara.common.types.Vector2.left",
+    "pyguara.common.types.Vector2.right",
+]
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.

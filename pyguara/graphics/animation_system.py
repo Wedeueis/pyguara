@@ -6,7 +6,7 @@ in the scene, eliminating the need for manual update() calls in game code.
 """
 
 from pyguara.ecs.manager import EntityManager
-from pyguara.graphics.components.animation import Animator, AnimationStateMachine
+from pyguara.graphics.components.animation import AnimationStateMachine, Animator
 
 
 class AnimationSystem:

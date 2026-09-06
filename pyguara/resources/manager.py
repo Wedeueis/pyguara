@@ -9,18 +9,19 @@ of truth for all game assets. It handles:
 4. Asset metadata via `.meta` sidecar files for import settings.
 """
 
-from pyguara.log import get_logger
-import os
 import json
+import os
 from pathlib import Path
-from typing import Dict, Type, TypeVar
+from typing import TypeVar
 
-from .exceptions import InvalidMetadataError, ResourceLoadError
-from .loader import IResourceLoader, IMetaAwareLoader
-from .meta import MetaLoader, get_meta_loader
-from .types import Resource, Texture
 from pyguara.common.types import Rect
 from pyguara.graphics.atlas import Atlas, AtlasRegion
+from pyguara.log import get_logger
+
+from .exceptions import InvalidMetadataError, ResourceLoadError
+from .loader import IMetaAwareLoader, IResourceLoader
+from .meta import MetaLoader, get_meta_loader
+from .types import Resource, Texture
 
 logger = get_logger(__name__)
 
@@ -53,10 +54,10 @@ class ResourceManager:
         Args:
             meta_loader: Optional custom meta loader. If None, uses the global instance.
         """
-        self._cache: Dict[str, Resource] = {}
-        self._extension_map: Dict[str, IResourceLoader] = {}
-        self._path_index: Dict[str, str] = {}
-        self._reference_counts: Dict[str, int] = {}
+        self._cache: dict[str, Resource] = {}
+        self._extension_map: dict[str, IResourceLoader] = {}
+        self._path_index: dict[str, str] = {}
+        self._reference_counts: dict[str, int] = {}
         self._meta_loader = meta_loader or get_meta_loader()
 
     def register_loader(self, loader: IResourceLoader) -> None:
@@ -107,7 +108,7 @@ class ResourceManager:
                     # Also index the full filename just in case
                     self._path_index[file_path.name] = str(file_path)
 
-    def load(self, path_or_name: str, resource_type: Type[T]) -> T:
+    def load(self, path_or_name: str, resource_type: type[T]) -> T:
         """
         Retrieve a resource from the cache or loads it from disk if necessary.
 
@@ -368,7 +369,7 @@ class ResourceManager:
 
         # Load and parse the metadata JSON with detailed error reporting
         try:
-            with open(metadata_file, "r") as f:
+            with open(metadata_file) as f:
                 metadata = json.load(f)
         except json.JSONDecodeError as e:
             raise InvalidMetadataError(
@@ -392,7 +393,7 @@ class ResourceManager:
             raise ResourceLoadError(atlas_path, str(e)) from e
 
         # Parse regions from metadata with detailed error reporting
-        regions: Dict[str, AtlasRegion] = {}
+        regions: dict[str, AtlasRegion] = {}
         for name, region_data in metadata["regions"].items():
             try:
                 # Extract region properties

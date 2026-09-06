@@ -1,7 +1,5 @@
 """Queue module for managing render commands."""
 
-from typing import List
-
 from pyguara.graphics.types import RenderCommand
 
 
@@ -10,7 +8,7 @@ class RenderQueue:
 
     def __init__(self) -> None:
         """Initialize an empty queue."""
-        self._commands: List[RenderCommand] = []
+        self._commands: list[RenderCommand] = []
 
     def push(self, cmd: RenderCommand) -> None:
         """Add a command to the buffer."""
@@ -33,6 +31,6 @@ class RenderQueue:
         self._commands.clear()
 
     @property
-    def commands(self) -> List[RenderCommand]:
+    def commands(self) -> list[RenderCommand]:
         """Get the list of current commands."""
         return self._commands

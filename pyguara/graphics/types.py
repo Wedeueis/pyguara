@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional
 from enum import IntEnum
+from typing import TYPE_CHECKING
+
 from pyguara.common.types import Vector2
 from pyguara.resources.types import Texture
 
@@ -47,7 +48,7 @@ class RenderCommand:
     z_index: float
     rotation: float = 0.0
     scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
-    material: Optional["Material"] = None
+    material: Material | None = None
 
     @property
     def material_id(self) -> int:
@@ -69,12 +70,12 @@ class RenderBatch:
 
     texture: Texture
     # List of (screen_x, screen_y) tuples for this texture
-    destinations: List[tuple[float, float]]
+    destinations: list[tuple[float, float]]
 
     # Optional transform data (only used when transforms_enabled=True)
-    rotations: List[float] = field(default_factory=list)
-    scales: List[tuple[float, float]] = field(default_factory=list)
+    rotations: list[float] = field(default_factory=list)
+    scales: list[tuple[float, float]] = field(default_factory=list)
     transforms_enabled: bool = False
 
     # Optional material for custom shaders/uniforms
-    material: Optional["Material"] = None
+    material: Material | None = None

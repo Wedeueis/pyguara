@@ -45,4 +45,8 @@ repos:
     rev: 6.3.0
     hooks:
       - id: pydocstyle
-        match: ^pyguara/.*\.py$
+        # `files:`, not `match:`. pre-commit has no `match` key -- it warned
+        # "Unexpected key(s) present ... pydocstyle: match" on every run and
+        # ignored it, so this hook silently linted the whole repo, games/ and
+        # all, instead of the engine package it was meant to cover.
+        files: ^pyguara/.*\.py$

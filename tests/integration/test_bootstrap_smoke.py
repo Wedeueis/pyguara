@@ -23,9 +23,9 @@ import pytest
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 
+from games.boot_process.scenes import BootScene
 from pyguara.application.application import Application
 from pyguara.application.bootstrap import create_application, create_sandbox_application
-from games.boot_process.scenes import BootScene
 
 
 def _run_for_n_frames(app: Application, frames: int) -> int:
