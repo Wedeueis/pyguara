@@ -595,6 +595,24 @@ tickets inherit rather than revisit them):
   updated it too. No behavior change anywhere. Full suite green (1123 passed,
   unchanged count), all games boot clean, `ruff`/`mypy` (216 files) clean.
 
+- [Execute the live-tweakable inspector
+  tools](issues/48-execute-live-tweakable-inspector.md) — executed exactly as
+  specified. New `pyguara/tools/tweakable.py` shared dispatch; `EntityInspector`'s
+  existing display made editable; new `ConfigInspector` (F6). Found and fixed three
+  genuine pre-existing bugs, all directly blocking verification: `EntityInspector`'s
+  `entity.tag`/`entity.components` accesses were both already broken (no public
+  `components` property exists; `.tag` crashed for any untagged entity) — meaning
+  this tool had never been exercised end-to-end before, same root-cause theme as
+  this whole effort; and `GameConfig.to_dict()` never converted `RenderingBackend`
+  (a plain `Enum`) to JSON-safe form, so `ConfigManager.save()` had never actually
+  succeeded against the real default config, contradicting this ticket's own
+  decision text. Also handled a design detail the grilling missed: `Vector2.x`/`.y`
+  are read-only properties, so editing replaces the whole object on its parent
+  rather than mutating in place. 18 new tests (14 dispatch, 4 integration through
+  the real composition root); verified interactively via `SandboxApplication` with
+  both tools toggled on. Full suite green (1148 passed), `ruff`/`mypy` (218 files)
+  clean.
+
 ## Not yet specified
 
 Fog toward the destination. In scope, not yet sharp enough to ticket. Each patch graduates
