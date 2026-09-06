@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/config` — **in review (awaiting approval)**
+`pyguara/application` — **in review (awaiting approval)**
 
 ---
 
@@ -28,8 +28,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ### Tier 2 — Core runtime
 - [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(done)*
-- [x] `pyguara/config` — configuration loading/merging *(active)*
-- [ ] `pyguara/application` — Application loop, bootstrap, sandbox
+- [x] `pyguara/config` — configuration loading/merging *(done)*
+- [x] `pyguara/application` — Application loop, bootstrap, sandbox *(active)*
 - [ ] `pyguara/scene` — Scene base, SceneManager, serializer
 - [ ] `pyguara/systems` — system manager / base systems
 
@@ -59,6 +59,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/config` | 2026-09-06 | Fixed `Color` not surviving a save/load round trip (a second-launch crash), `fixed_dt` dividing by zero unvalidated, and `update_setting` accepting wrong types and out-of-range values. PR #7. |
 | `pyguara/log` | 2026-09-06 | Fixed source attribution (every record reported `logger.py:138`), a `shutdown()` that did not stop logging, handler clobbering on a process-global logger, and a docs page describing a nonexistent API. PR #5. |
 | `pyguara/di` | 2026-09-06 | Fixed a missing lock in `DIScope.get()` that fabricated circular dependencies under concurrency (140/160 resolutions), plus captive lifetimes, dead-scope resolution, silent re-registration and varargs injection. PR #4. |
 | `pyguara/events` | 2026-09-06 | Broke a latent `log` <-> `events` import cycle, fixed a timestamp sentinel that made 0.0 inexpressible, brought filter errors under the error strategy, and memoised handler resolution (5.7us -> 3.1us per dispatch). PR #3. |
@@ -168,6 +169,21 @@ Hoisted to a new top-level `pyguara/errors.py`, which imports nothing from the
 engine and so cannot cycle. `di/types.py` and `events/types.py` re-export it, so
 existing import paths keep working. `di.RAISE == events.RAISE` is now True.
 *Discovered in:* `di`. *Status:* **resolved**.
+
+### CC-11 — pygame reaches into the backend-agnostic core
+CLAUDE.md states the engine is backend-agnostic and that code should never
+import pygame directly, but `Application` uses `pygame.time.Clock` for all
+frame timing, compares against `pygame.QUIT`, calls `pygame.event.pump()` and
+catches `pygame.error`. `SandboxApplication` uses `pygame.K_F1`-style constants
+for its tool hotkeys. The ModernGL path therefore still depends on pygame for
+timing and quit detection.
+Not fixed in the `application` pass because the fix belongs on the other side
+of the boundary: `Window.poll_events()` would have to yield engine events
+rather than raw SDL ones, and a `Clock` protocol would have to join the
+graphics protocols. **Fix:** take it with the `graphics` audit, so the protocol
+and both backends move together. `WindowResizeEvent` is defined and never
+dispatched for the same reason -- nothing detects the resize.
+*Discovered in:* `application`. *Status:* parked until `graphics`.
 
 ### CC-8 — Package `__init__.py` files export nothing
 Most subsystem packages have a docstring-only `__init__.py`, so callers reach
@@ -492,7 +508,7 @@ misspelled. Renaming it means touching the mkdocs nav and any inbound links, so
 it is left for whoever next edits that file.
 
 
-### `pyguara/config` — awaiting approval (2026-09-06)
+### `pyguara/config` — CLOSED 2026-09-06 (PR #7, branch `refactor/config-audit`)
 
 **Verification:** 1371/1371 tests pass (up from 1343); ruff clean; mypy clean.
 
@@ -549,3 +565,49 @@ will catch the next field that fails to survive one.
 `application.md`'s config paragraph now links to it.
 
 **Deferred:** CC-3 through CC-8 (CC-1, CC-2, CC-9, CC-10 resolved).
+
+
+### `pyguara/application` — awaiting approval (2026-09-06)
+
+**Verification:** 1384/1384 tests pass (up from 1373); ruff clean; mypy clean.
+
+**Correctness fixes (all reproduced by probe before fixing):**
+- **The event-queue time budget was spent per fixed step, not per frame.**
+  `_fixed_update()` drained the queue, and it runs once per accumulated step,
+  so a frame lagging by the full `max_frame_time` called `process_queue(
+  max_time_ms=5)` **15 times** -- up to 75ms in one frame. The budget exists
+  specifically to stop an event death spiral, and it was multiplied by the step
+  count at exactly the moment a spiral begins. Drained once per frame now.
+- **`shutdown()` was neither idempotent nor exception-safe.** A raising
+  `scene_manager.cleanup()` meant the window was never closed and the log
+  manager never shut down -- on the crash path, where releasing them matters
+  most. Steps are isolated and logged now, and a second call is a no-op.
+- **The ModernGL render path hardcoded `Color(0, 0, 0, 255)`**, so
+  `display.default_color` silently did nothing under that backend while the
+  pygame path honoured it via `window.clear()`.
+- **Three lifecycle events had no publisher.** `ApplicationStartEvent` and
+  `QuitEvent` are now dispatched; `pyguara/tools/event_monitor.py` subscribes
+  to `QuitEvent`, so its handler had been unreachable. `WindowResizeEvent`
+  still has none -- see CC-11.
+- **`ServiceNotFoundException` was imported inside the `try` block whose
+  `except` names it**, so an ImportError there would have raised NameError
+  instead of being handled.
+- `raise e` in the loop's handler appended a frame to the traceback; now a bare
+  `raise`.
+
+**Tests:** 2 -> 13 in `test_app_flow.py`. The existing two covered a single
+frame and a scene switch; nothing covered shutdown, lifecycle events, the event
+budget, or the failure paths.
+
+**Docs:** `docs/core/application.md` rewritten. Its "Main Loop" section listed
+`Time.tick()`, `Input.process()`, `Update()`, `Render()` -- none of which are
+real method names -- so it described the loop's shape without matching the
+code. Now documents the actual sequence, why frame time is clamped, and why the
+event queue is drained outside the accumulator loop.
+
+**Parked:** CC-11 (pygame in the backend-agnostic core). `bootstrap.py` and
+`sandbox.py` were scanned and are otherwise clean; their `# type: ignore[
+type-abstract]` markers are the known mypy limitation around Protocol
+registration, not defects.
+
+**Deferred:** CC-3 through CC-8, CC-11.
