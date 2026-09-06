@@ -23,6 +23,7 @@ nav:
       - Event System: core/events.md
       - Dependency Injection: core/dependency-injection.md
       - Configuration: core/configuration.md
+      - Scenes: core/scenes.md
       - Application & Lifecycle: core/application.md
       - Logging: core/logging.md
   - Graphics:

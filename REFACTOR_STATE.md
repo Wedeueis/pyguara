@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/application` — **in review (awaiting approval)**
+`pyguara/scene` — **in review (awaiting approval)**
 
 ---
 
@@ -29,8 +29,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 ### Tier 2 — Core runtime
 - [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(done)*
 - [x] `pyguara/config` — configuration loading/merging *(done)*
-- [x] `pyguara/application` — Application loop, bootstrap, sandbox *(active)*
-- [ ] `pyguara/scene` — Scene base, SceneManager, serializer
+- [x] `pyguara/application` — Application loop, bootstrap, sandbox *(done)*
+- [x] `pyguara/scene` — Scene base, SceneManager, serializer *(active)*
 - [ ] `pyguara/systems` — system manager / base systems
 
 ### Tier 3 — Subsystems
@@ -59,6 +59,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/application` | 2026-09-06 | Fixed an event budget spent per fixed step (15x per lagged frame), a `shutdown()` that skipped everything after the first failure, and three lifecycle events with no publisher. PR #8. |
 | `pyguara/config` | 2026-09-06 | Fixed `Color` not surviving a save/load round trip (a second-launch crash), `fixed_dt` dividing by zero unvalidated, and `update_setting` accepting wrong types and out-of-range values. PR #7. |
 | `pyguara/log` | 2026-09-06 | Fixed source attribution (every record reported `logger.py:138`), a `shutdown()` that did not stop logging, handler clobbering on a process-global logger, and a docs page describing a nonexistent API. PR #5. |
 | `pyguara/di` | 2026-09-06 | Fixed a missing lock in `DIScope.get()` that fabricated circular dependencies under concurrency (140/160 resolutions), plus captive lifetimes, dead-scope resolution, silent re-registration and varargs injection. PR #4. |
@@ -171,6 +172,7 @@ existing import paths keep working. `di.RAISE == events.RAISE` is now True.
 *Discovered in:* `di`. *Status:* **resolved**.
 
 ### CC-11 — pygame reaches into the backend-agnostic core
+**Tracked as GitHub issue #9.**
 CLAUDE.md states the engine is backend-agnostic and that code should never
 import pygame directly, but `Application` uses `pygame.time.Clock` for all
 frame timing, compares against `pygame.QUIT`, calls `pygame.event.pump()` and
@@ -567,7 +569,7 @@ will catch the next field that fails to survive one.
 **Deferred:** CC-3 through CC-8 (CC-1, CC-2, CC-9, CC-10 resolved).
 
 
-### `pyguara/application` — awaiting approval (2026-09-06)
+### `pyguara/application` — CLOSED 2026-09-06 (PR #8, branch `refactor/application-audit`)
 
 **Verification:** 1384/1384 tests pass (up from 1373); ruff clean; mypy clean.
 
@@ -611,3 +613,53 @@ type-abstract]` markers are the known mypy limitation around Protocol
 registration, not defects.
 
 **Deferred:** CC-3 through CC-8, CC-11.
+
+
+### `pyguara/scene` — awaiting approval (2026-09-06)
+
+**Verification:** 1399/1399 tests pass (up from 1384); ruff clean; mypy clean.
+
+This module was visibly more careful than earlier ones -- dense "why" comments
+from prior wayfinder work, and `cleanup()` written specifically to avoid a
+leak. The defects are all at its seams rather than in its core logic.
+
+**Correctness fixes (all five reproduced by probe before fixing):**
+- **`switch_to()` abandoned every stacked scene.** It ended in a bare
+  `self._stack.clear()`, so a scene pushed under an overlay was never exited
+  and its SystemManager never cleaned -- it stayed live holding its
+  EntityManager, systems and physics bodies. `cleanup()`'s own docstring warns
+  against "leaking whatever's still on the stack past a bare `.clear()`", and
+  `switch_to()` did exactly that on every scene change. Now unwinds LIFO:
+  current scene first, then the stack top-down.
+- **A second stack change during a transition replaced the pending scene.**
+  `switch_to("b", fade)` then `switch_to("c", fade)` left 'b' skipped entirely
+  -- never entered -- while its predecessor had already been exited. All three
+  stack operations now refuse while a transition runs, and log it.
+- **`pop_scene()` with a transition stranded the scene it was returning to.**
+  The stack entry was removed up front, so between the call and completion the
+  previous scene was both off the stack and not yet current: a `cleanup()` in
+  that window never exited it. The entry is now held until completion.
+- **`cleanup()` missed a scene mid-transition.** A scene a transition had
+  started entering but not yet made current was invisible to it. Now included,
+  with an identity set so nothing is exited twice.
+- **`register()` before `set_container()` silently skipped wiring**, leaving a
+  live scene with no camera or render system -- surfacing much later as an
+  assertion inside `render()`. `set_container()` now wires any scenes already
+  registered.
+- **`register()` silently replaced a same-named scene.** Still replaces, since
+  that is occasionally intended, but logs that the displaced scene is now
+  unreachable.
+
+**Tests:** 18 -> 33 in `test_scene_stack.py`. The existing suite covered the
+stack shapes well (pause menu, dialog, inventory, nested pause flags) but
+nothing covered what happens to stacked scenes on a *switch*, or any
+re-entrancy during a transition -- which is where all five defects lived.
+
+**Note:** my first fix got the unwind order wrong, exiting the stack before
+the current scene. A test written for LIFO ordering caught it.
+
+**Docs:** new `docs/core/scenes.md`, added to the nav. The subsystem had no
+dedicated page; `pause_below` semantics, the switch-versus-push lifetime
+difference and the one-transition-at-a-time rule were undocumented.
+
+**Deferred:** CC-3 through CC-8, CC-11 (now GitHub issue #9).
