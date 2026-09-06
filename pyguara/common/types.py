@@ -1,237 +1,246 @@
-"""
-Common data structures and mathematical primitives for the pyGuara engine.
+"""Foundational value types for the PyGuara engine.
 
-This module provides the foundational types (Vector2, Color, Rect) used throughout
-the engine. `Vector2` inherits from `pymunk.Vec2d` for C-optimized physics math.
-`Color` and `Rect` are plain, backend-agnostic dataclasses -- neither pygame nor
-ModernGL is a dependency of this module. Conversion to a backend's native types
-(e.g. `pygame.Color`/`pygame.Rect`) happens only at that backend's boundary.
+`Vector2`, `Color` and `Rect` are the primitives every other subsystem shares.
+
+`Vector2` subclasses `pymunk.Vec2d` for C-optimised math and to pass into the
+physics backend without conversion. `Color` and `Rect` are plain dataclasses
+with no backend dependency -- neither pygame nor ModernGL is imported here.
+Conversion to a backend's native types happens only at that backend's
+boundary, in `graphics/backends/pygame/conversions.py`.
+
+Axis convention:
+    Y increases downwards, matching SDL, pygame and the engine's own default
+    gravity (`PhysicsConfig.gravity_y` is positive for a platformer). "Up" is
+    therefore negative Y. Every direction helper in this module and in
+    `Transform` follows that convention.
 """
 
 from __future__ import annotations
+
 import colorsys
 import math
 from dataclasses import dataclass
-from typing import ClassVar, Union, Tuple, List, Any
+from typing import Any, ClassVar
 
 import pymunk
 
-# Type alias for coordinates to allow flexibility in inputs
-Coordinate = Union[Tuple[float, float], List[float], pymunk.Vec2d]
+Coordinate = tuple[float, float] | list[float] | pymunk.Vec2d
+"""Anything accepted where a 2D coordinate is expected."""
+
+_CHANNEL_MIN = 0
+_CHANNEL_MAX = 255
 
 
 class Vector2(pymunk.Vec2d):
-    """
-    A 2D column vector used for positions, velocities, and physics.
+    """An immutable 2D vector for positions, velocities and directions.
 
-    Inherits from `pymunk.Vec2d` to utilize C-optimized math operations essential
-    for the physics engine. It standardizes method names to avoid leaking
-    Pymunk-specific naming (like `cpvrotate`) into the game logic.
+    Subclasses `pymunk.Vec2d` for C-optimised math, overriding the operators
+    and transforms so they return `Vector2` rather than `Vec2d`, and renaming
+    Pymunk-specific spellings so they do not leak into game code.
+
+    Being a `NamedTuple` subclass, a `Vector2` is immutable and hashable:
+    every method here returns a new vector rather than mutating in place.
 
     Attributes:
-        x (float): The X component.
-        y (float): The Y component.
+        x: The X component.
+        y: The Y component, increasing downwards.
     """
 
     @property
     def magnitude(self) -> float:
-        """
-        Get the length (magnitude) of the vector.
-
-        Returns:
-            float: The length of the vector.
-        """
+        """The length of the vector."""
         return float(self.length)
 
     @property
     def sqr_magnitude(self) -> float:
-        """
-        Get the squared length of the vector.
+        """The squared length of the vector.
 
-        Faster than magnitude() as it avoids the square root calculation.
-        Useful for distance comparisons.
-
-        Returns:
-            float: The squared length.
+        Avoids the square root in `magnitude`, so prefer it when comparing
+        distances rather than needing a real one.
         """
         return float(self.x * self.x + self.y * self.y)
 
-    # --- Operator Overloads (Fixing Return Types) ---
-
     def __add__(self, other: Any) -> Vector2:
-        """Vector addition."""
+        """Add another vector or coordinate pair."""
         if hasattr(other, "x") and hasattr(other, "y"):
             return Vector2(self.x + other.x, self.y + other.y)
         v = super().__add__(other)
         return Vector2(v.x, v.y)
 
     def __sub__(self, other: Any) -> Vector2:
-        """Vector subtraction."""
+        """Subtract another vector or coordinate pair."""
         if hasattr(other, "x") and hasattr(other, "y"):
             return Vector2(self.x - other.x, self.y - other.y)
         v = super().__sub__(other)
         return Vector2(v.x, v.y)
 
     def __mul__(self, other: float) -> Vector2:  # type: ignore[override]
-        """Scalar multiplication (Vector * float)."""
-        # Ignored override because Tuple expects int (repetition), we want float (math)
+        """Scale by a scalar."""
+        # Overrides tuple.__mul__, which would repeat the tuple for an int.
         v = super().__mul__(other)
         return Vector2(v.x, v.y)
 
     def __rmul__(self, other: float) -> Vector2:  # type: ignore[override]
-        """Reverse scalar multiplication (float * Vector)."""
-        # Ignored override because Tuple expects int (repetition), we want float (math)
+        """Scale by a scalar, with the scalar on the left."""
         v = super().__rmul__(other)
         return Vector2(v.x, v.y)
 
     def __truediv__(self, other: float) -> Vector2:
-        """Scalar division (Vector / float)."""
+        """Divide by a scalar.
+
+        Raises:
+            ZeroDivisionError: If `other` is zero.
+        """
         v = super().__truediv__(other)
         return Vector2(v.x, v.y)
 
     def __neg__(self) -> Vector2:
-        """Negation (-Vector)."""
+        """Return the vector pointing the opposite way."""
         return Vector2(-self.x, -self.y)
 
     def dot(self, other: Any) -> float:
-        """
-        Dot product.
+        """Return the dot product with another vector or coordinate pair.
 
-        Accepts Any (tuples or Vectors) to satisfy LSP against pymunk.Vec2d.
+        Args:
+            other: Any object with `x` and `y`, or a coordinate pair. Typed
+                loosely to stay substitutable for `pymunk.Vec2d.dot`.
+
+        Returns:
+            The scalar dot product.
         """
         return float(super().dot(other))
 
     def cross(self, other: Any) -> float:
-        """
-        Cross product / Determinant.
+        """Return the 2D cross product (determinant) with another vector.
 
-        Accepts Any (tuples or Vectors) to satisfy LSP against pymunk.Vec2d.
+        Args:
+            other: Any object with `x` and `y`, or a coordinate pair.
+
+        Returns:
+            The scalar cross product.
         """
         return float(super().cross(other))
 
     def normalize(self) -> Vector2:
-        """
-        Return a new vector with the same direction but length of 1.0.
+        """Return a unit vector in the same direction.
 
         Returns:
-            Vector2: The normalized vector.
+            The normalised vector, or a zero vector if this one has no length.
         """
-        # We cast the result back to Vector2 to maintain type consistency
         v = super().normalized()
         return Vector2(v.x, v.y)
 
     def rotated(self, angle_radians: float) -> Vector2:
-        """
-        Return a new vector rotated by the given angle in radians.
-
-        Overrides pymunk.Vec2d.rotated to ensure Vector2 return type.
+        """Return this vector rotated by an angle in **radians**.
 
         Args:
-            angle_radians (float): Rotation angle in radians.
+            angle_radians: Rotation angle in radians.
 
         Returns:
-            Vector2: The rotated vector.
+            The rotated vector.
         """
         v = super().rotated(angle_radians)
         return Vector2(v.x, v.y)
 
-    def rotate(self, angle_degrees: float) -> Vector2:
-        """
-        Return a new vector rotated by the given angle.
+    def rotate_degrees(self, angle_degrees: float) -> Vector2:
+        """Return this vector rotated by an angle in **degrees**.
+
+        Named explicitly rather than `rotate`: a bare `rotate`/`rotated` pair
+        differing only in angle unit is impossible to read correctly at a call
+        site, and `Transform.rotate()` takes radians.
 
         Args:
-            angle_degrees (float): The angle to rotate by, in degrees.
+            angle_degrees: Rotation angle in degrees.
 
         Returns:
-            Vector2: The rotated vector.
+            The rotated vector.
         """
         return self.rotated(math.radians(angle_degrees))
 
     def distance_to(self, other: Vector2) -> float:
-        """
-        Calculate the distance between this vector and another.
+        """Return the distance to another point.
 
         Args:
-            other (Vector2): The target vector.
+            other: The target point.
 
         Returns:
-            float: The distance between the points.
+            The straight-line distance.
         """
         return float(self.get_distance(other))
 
     def lerp(self, target: Vector2, t: float) -> Vector2:
-        """
-        Linearly interpolate between this vector and the target.
+        """Linearly interpolate towards a target.
+
+        `t` is not clamped, so values outside 0..1 extrapolate.
 
         Args:
-            target (Vector2): The end vector.
-            t (float): The interpolation factor (0.0 to 1.0).
+            target: The end point.
+            t: Interpolation factor, 0.0 at self and 1.0 at target.
 
         Returns:
-            Vector2: A new vector representing the interpolated position.
+            The interpolated point.
         """
-        # Helper implementation since Pymunk's interpolate can be obscure
-        x = self.x + (target.x - self.x) * t
-        y = self.y + (target.y - self.y) * t
-        return Vector2(x, y)
+        return Vector2(
+            self.x + (target.x - self.x) * t,
+            self.y + (target.y - self.y) * t,
+        )
 
-    def to_tuple(self) -> Tuple[float, float]:
-        """
-        Convert the vector to a standard Python float tuple.
-
-        Returns:
-            Tuple[float, float]: (x, y)
-        """
+    def to_tuple(self) -> tuple[float, float]:
+        """Return the components as a plain float tuple."""
         return (self.x, self.y)
 
-    def to_int_tuple(self) -> Tuple[int, int]:
-        """
-        Convert the vector to an integer tuple.
+    def to_int_tuple(self) -> tuple[int, int]:
+        """Return the components truncated to a plain int tuple.
 
-        Essential for pixel-perfect rendering calls in Pygame which
-        do not accept floats.
-
-        Returns:
-            Tuple[int, int]: (int(x), int(y))
+        Truncates towards zero, matching how pygame treats float coordinates.
         """
         return (int(self.x), int(self.y))
 
     @staticmethod
     def zero() -> Vector2:
-        """Return a Vector2(0, 0)."""
+        """Return `(0, 0)`."""
         return Vector2(0, 0)
 
     @staticmethod
     def one() -> Vector2:
-        """Return a Vector2(1, 1)."""
+        """Return `(1, 1)`."""
         return Vector2(1, 1)
 
     @staticmethod
     def up() -> Vector2:
-        """Return a Vector2(0, -1). Note: Y is down in Pygame/SDL."""
+        """Return `(0, -1)`. Y increases downwards, so up is negative."""
         return Vector2(0, -1)
 
     @staticmethod
+    def down() -> Vector2:
+        """Return `(0, 1)`. Y increases downwards, so down is positive."""
+        return Vector2(0, 1)
+
+    @staticmethod
+    def left() -> Vector2:
+        """Return `(-1, 0)`."""
+        return Vector2(-1, 0)
+
+    @staticmethod
     def right() -> Vector2:
-        """Return a Vector2(1, 0)."""
+        """Return `(1, 0)`."""
         return Vector2(1, 0)
 
 
 @dataclass(slots=True)
 class Color:
-    """
-    A container for RGBA color values (0-255 per channel).
+    """An RGBA colour, one byte per channel.
 
-    A plain, backend-agnostic value type -- no longer a `pygame.Color`
-    subclass (wayfinder ticket 31), so ModernGL never has to touch pygame to
-    represent a color. Only the pygame backend ever constructs a real
-    `pygame.Color`, via `graphics/backends/pygame/conversions.py`.
+    A backend-agnostic value type. Channels are coerced to `int` and clamped
+    to 0-255 on construction, so colour arithmetic that overshoots -- a fade,
+    a brightness multiplier, an out-of-range HSV conversion -- saturates
+    instead of handing a backend a value it cannot represent.
 
     Attributes:
-        r (int): Red channel, 0-255.
-        g (int): Green channel, 0-255.
-        b (int): Blue channel, 0-255.
-        a (int): Alpha channel, 0-255. Defaults to fully opaque.
+        r: Red channel, 0-255.
+        g: Green channel, 0-255.
+        b: Blue channel, 0-255.
+        a: Alpha channel, 0-255. Defaults to fully opaque.
     """
 
     r: int
@@ -239,11 +248,9 @@ class Color:
     b: int
     a: int = 255
 
-    # Common named colors -- assigned after the class body below, since a
-    # dataclass can't reference its own not-yet-defined type in its class
-    # body. Declared here (ClassVar, so the dataclass doesn't treat them as
-    # instance fields) purely for parity with Rect's added surface; no
-    # in-repo caller uses them yet.
+    # Assigned below the class body: a dataclass cannot reference its own
+    # not-yet-defined type from inside it. ClassVar keeps them off the
+    # generated __init__.
     WHITE: ClassVar[Color]
     BLACK: ClassVar[Color]
     RED: ClassVar[Color]
@@ -254,20 +261,26 @@ class Color:
     MAGENTA: ClassVar[Color]
     TRANSPARENT: ClassVar[Color]
 
+    def __post_init__(self) -> None:
+        """Coerce every channel to an int within 0-255."""
+        self.r = _clamp_channel(self.r)
+        self.g = _clamp_channel(self.g)
+        self.b = _clamp_channel(self.b)
+        self.a = _clamp_channel(self.a)
+
     @staticmethod
     def from_hex(hex_str: str) -> Color:
-        """
-        Create a Color object from a hex string.
+        """Parse a colour from a hex string.
 
         Args:
-            hex_str (str): A string like "#FF00AA", "0xFF00AA", or with an
-                optional alpha pair ("#FF00AAFF").
+            hex_str: A string such as `"#FF00AA"`, `"0xFF00AA"`, or with an
+                alpha pair, `"#FF00AAFF"`.
 
         Returns:
-            Color: The parsed color object.
+            The parsed colour.
 
         Raises:
-            ValueError: If the string isn't a valid 6 or 8-digit hex color.
+            ValueError: If the string is not a valid 6- or 8-digit hex colour.
         """
         s = hex_str.strip()
         if s.startswith("#"):
@@ -275,36 +288,43 @@ class Color:
         elif s.startswith(("0x", "0X")):
             s = s[2:]
 
-        if len(s) == 6:
-            return Color(int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
-        if len(s) == 8:
-            return Color(
-                int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16), int(s[6:8], 16)
-            )
+        try:
+            if len(s) == 6:
+                return Color(int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+            if len(s) == 8:
+                return Color(
+                    int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16), int(s[6:8], 16)
+                )
+        except ValueError:
+            raise ValueError(f"Invalid hex color string: {hex_str!r}") from None
         raise ValueError(f"Invalid hex color string: {hex_str!r}")
 
-    @property
-    def normalized(self) -> Tuple[float, float, float, float]:
-        """
-        Get the RGBA values normalized to the 0.0 - 1.0 range.
+    def to_hex(self, include_alpha: bool = False) -> str:
+        """Format the colour as a `#RRGGBB` string.
 
-        Useful for integration with shaders or OpenGL backends.
+        Args:
+            include_alpha: Append the alpha pair, giving `#RRGGBBAA`.
 
         Returns:
-            Tuple[float, float, float, float]: (r, g, b, a) as floats.
+            The hex string, upper case.
         """
+        base = f"#{self.r:02X}{self.g:02X}{self.b:02X}"
+        return f"{base}{self.a:02X}" if include_alpha else base
+
+    @property
+    def normalized(self) -> tuple[float, float, float, float]:
+        """The channels as floats in 0.0-1.0, for shaders and GL backends."""
         return (self.r / 255.0, self.g / 255.0, self.b / 255.0, self.a / 255.0)
 
     def lerp(self, target: Color, t: float) -> Color:
-        """
-        Linearly interpolate this color towards a target color.
+        """Linearly interpolate towards another colour.
 
         Args:
-            target (Color): The destination color.
-            t (float): Interpolation factor (0.0 to 1.0).
+            target: The destination colour.
+            t: Interpolation factor, clamped to 0.0-1.0.
 
         Returns:
-            Color: The blended color.
+            The blended colour.
         """
         t = max(0.0, min(1.0, t))
         return Color(
@@ -314,40 +334,50 @@ class Color:
             round(self.a + (target.a - self.a) * t),
         )
 
-    def to_hsv(self) -> Tuple[float, float, float]:
-        """
-        Convert to HSV.
+    def to_hsv(self) -> tuple[float, float, float]:
+        """Convert to HSV, discarding alpha.
 
         Returns:
-            Tuple[float, float, float]: (hue in 0-360, saturation 0-1, value 0-1).
+            `(hue in 0-360, saturation in 0-1, value in 0-1)`.
         """
         h, s, v = colorsys.rgb_to_hsv(self.r / 255.0, self.g / 255.0, self.b / 255.0)
         return (h * 360.0, s, v)
 
     @staticmethod
     def from_hsv(hue: float, saturation: float, value: float, a: int = 255) -> Color:
-        """
-        Create a Color from HSV components.
+        """Build a colour from HSV components.
 
         Args:
-            hue (float): Hue in degrees (0-360).
-            saturation (float): Saturation (0.0-1.0).
-            value (float): Value/brightness (0.0-1.0).
-            a (int): Alpha channel, 0-255.
+            hue: Hue in degrees; wraps at 360.
+            saturation: Saturation in 0.0-1.0.
+            value: Brightness in 0.0-1.0.
+            a: Alpha channel, 0-255.
 
         Returns:
-            Color: The resulting RGB color.
+            The resulting colour, with channels clamped to 0-255.
         """
         r, g, b = colorsys.hsv_to_rgb((hue % 360.0) / 360.0, saturation, value)
         return Color(round(r * 255), round(g * 255), round(b * 255), a)
 
     def __getitem__(self, index: int) -> int:
-        """Support tuple-like indexing (color[0] == r, ..., color[3] == a)."""
+        """Return a channel by index, ordered r, g, b, a."""
         return (self.r, self.g, self.b, self.a)[index]
 
     def __len__(self) -> int:
-        """Return 4, the number of channels (r, g, b, a)."""
+        """Return 4, the number of channels."""
         return 4
+
+
+def _clamp_channel(value: float) -> int:
+    """Coerce a channel value to an int within 0-255.
+
+    Args:
+        value: The raw channel value.
+
+    Returns:
+        The truncated, clamped channel.
+    """
+    return max(_CHANNEL_MIN, min(_CHANNEL_MAX, int(value)))
 
 
 Color.WHITE = Color(255, 255, 255)
@@ -363,20 +393,16 @@ Color.TRANSPARENT = Color(0, 0, 0, 0)
 
 @dataclass(slots=True)
 class Rect:
-    """
-    A 2D Rectangle defined by position (x, y) and size (width, height).
+    """An axis-aligned rectangle in integer pixel coordinates.
 
-    A plain, backend-agnostic value type -- no longer a `pygame.Rect`
-    subclass (wayfinder ticket 31). Only the pygame backend ever constructs
-    a real `pygame.Rect`, via `graphics/backends/pygame/conversions.py`.
-    Mutable, matching pygame.Rect's own semantics -- in-place assignment
-    (`rect.x = 5`) stays legal, which the UI layout engine relies on.
+    A backend-agnostic value type. Mutable, matching `pygame.Rect`, because
+    the UI layout engine assigns to `rect.x` and friends in place.
 
     Attributes:
-        x (int): Left position.
-        y (int): Top position.
-        width (int): Rectangle width.
-        height (int): Rectangle height.
+        x: Left position.
+        y: Top position.
+        width: Width in pixels.
+        height: Height in pixels.
     """
 
     x: int
@@ -385,11 +411,10 @@ class Rect:
     height: int
 
     def __post_init__(self) -> None:
-        """Truncate to int, matching pygame.Rect's own coordinate semantics.
+        """Truncate the fields to int, as `pygame.Rect` always did.
 
-        Several call sites construct a Rect directly from Vector2
-        components (floats) without an explicit `int()` cast, relying on
-        this truncation exactly as pygame.Rect always performed it.
+        Several call sites build a Rect straight from `Vector2` components
+        without an explicit cast and rely on this.
         """
         self.x = int(self.x)
         self.y = int(self.y)
@@ -398,77 +423,73 @@ class Rect:
 
     @property
     def left(self) -> int:
-        """Get the left edge (alias for x)."""
+        """The left edge; an alias for `x`."""
         return self.x
 
     @property
     def top(self) -> int:
-        """Get the top edge (alias for y)."""
+        """The top edge; an alias for `y`."""
         return self.y
 
     @property
     def right(self) -> int:
-        """Get the right edge (x + width)."""
+        """The right edge, `x + width`."""
         return self.x + self.width
 
     @property
     def bottom(self) -> int:
-        """Get the bottom edge (y + height)."""
+        """The bottom edge, `y + height`."""
         return self.y + self.height
 
     @property
     def centerx(self) -> int:
-        """Get the horizontal center."""
+        """The horizontal centre."""
         return self.x + self.width // 2
 
     @property
     def centery(self) -> int:
-        """Get the vertical center."""
+        """The vertical centre."""
         return self.y + self.height // 2
 
     @property
     def position(self) -> Vector2:
-        """
-        Get the top-left position as a Vector2.
-
-        Returns:
-            Vector2: The (x, y) coordinates.
-        """
+        """The top-left corner as a vector."""
         return Vector2(self.x, self.y)
 
     @property
     def center_vec(self) -> Vector2:
-        """
-        Get the center point as a Vector2.
-
-        Returns:
-            Vector2: The (center_x, center_y) coordinates.
-        """
+        """The centre point as a vector."""
         return Vector2(self.centerx, self.centery)
 
-    def contains_point(self, point: Vector2) -> bool:
-        """
-        Check if a vector point is inside this rectangle.
+    @property
+    def size(self) -> tuple[int, int]:
+        """The `(width, height)` pair."""
+        return (self.width, self.height)
 
-        Right/bottom edges are exclusive, matching pygame.Rect.collidepoint.
+    def contains_point(self, point: Vector2) -> bool:
+        """Report whether a point falls inside this rectangle.
+
+        Right and bottom edges are exclusive, matching
+        `pygame.Rect.collidepoint`.
 
         Args:
-            point (Vector2): The point to check.
+            point: The point to test.
 
         Returns:
-            bool: True if inside, False otherwise.
+            True if the point is inside.
         """
         return self.left <= point.x < self.right and self.top <= point.y < self.bottom
 
     def colliderect(self, other: Rect) -> bool:
-        """
-        Check if this rectangle overlaps another.
+        """Report whether this rectangle overlaps another.
+
+        Touching edges do not count as an overlap.
 
         Args:
-            other (Rect): The other rectangle.
+            other: The rectangle to test against.
 
         Returns:
-            bool: True if the two rectangles overlap at all.
+            True if the two rectangles overlap.
         """
         return (
             self.left < other.right
@@ -478,14 +499,13 @@ class Rect:
         )
 
     def contains(self, other: Rect) -> bool:
-        """
-        Check if another rectangle is entirely within this one.
+        """Report whether another rectangle lies entirely within this one.
 
         Args:
-            other (Rect): The candidate rectangle.
+            other: The candidate rectangle.
 
         Returns:
-            bool: True if `other` is completely inside this rectangle.
+            True if `other` is fully inside, edges inclusive.
         """
         return (
             self.left <= other.left
@@ -495,16 +515,22 @@ class Rect:
         )
 
     def inflate(self, dx: int, dy: int) -> Rect:
-        """
-        Return a new Rect grown (or shrunk) by dx/dy, keeping the same center.
+        """Return a copy grown by `dx`/`dy`, keeping the same centre.
+
+        Negative deltas shrink. The offset truncates towards zero rather than
+        flooring, so odd negative deltas land where `pygame.Rect.inflate`
+        puts them.
 
         Args:
-            dx (int): Amount to grow the width by (split evenly on each side).
-            dy (int): Amount to grow the height by (split evenly top/bottom).
+            dx: Amount to grow the width by, split across both sides.
+            dy: Amount to grow the height by, split across top and bottom.
 
         Returns:
-            Rect: The new, resized rectangle.
+            The resized rectangle.
         """
         return Rect(
-            self.x - dx // 2, self.y - dy // 2, self.width + dx, self.height + dy
+            self.x - int(dx / 2),
+            self.y - int(dy / 2),
+            self.width + dx,
+            self.height + dy,
         )

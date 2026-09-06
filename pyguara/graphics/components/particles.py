@@ -157,7 +157,7 @@ class ParticleSystem:
 
                 # Random Velocity Calculation
                 angle = random.uniform(0, spread)
-                direction = Vector2(1, 0).rotate(angle)
+                direction = Vector2.right().rotate_degrees(angle)
                 random_velocity = direction * random.uniform(speed * 0.5, speed * 1.5)
                 p.velocity = random_velocity
 
