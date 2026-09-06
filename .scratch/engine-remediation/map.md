@@ -565,6 +565,17 @@ tickets inherit rather than revisit them):
   `validate_demos.py` doesn't cover — verified manually via a throwaway harness.
   Full suite green (1123 passed), `ruff`/`mypy` clean.
 
+- [Execute the Transform-Sprite position
+  combination](issues/46-execute-transform-sprite-sync.md) — executed exactly as
+  specified. `RenderSystem.submit()` gained an optional `position` override,
+  `Scene.render()`'s default loop computes `transform.position + sprite.position`
+  without ever mutating `sprite.position`. Three new regression tests (offset
+  combination, standalone fallback, live recomputation across two `render()` calls
+  with no system tick) extend ticket 24's existing headless-application-based
+  suite. Full suite green (1126 passed), all 4 demos verified, `ruff`/`mypy` clean.
+  Unblocks [Execute fixed-timestep render
+  interpolation](issues/47-execute-fixed-timestep-interpolation.md).
+
 - [Execute the canonical Label merge](issues/43-execute-canonical-label-merge.md) —
   executed exactly as specified, `label.py` deleted. Found a 5th real caller the
   ticket's text didn't list (`tests/test_ui_components.py`) via grep before editing;
