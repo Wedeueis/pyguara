@@ -118,10 +118,23 @@ up; the likely fix is a public read-only components view.
 ### CC-6 — Component data-purity is advisory, not enforced
 `BaseComponent` only *warns* on logic methods; `StrictComponent` errors but is
 opt-in and, at the time of the `ecs` audit, had no adopters outside tests.
-Real components across `physics`, `ui` and `ai` may carry logic. **Fix:**
-after those subsystems are audited, migrate the tree to `StrictComponent` and
-consider making it the default.
-*Discovered in:* `ecs`. *Status:* parked — measure adoption per subsystem.
+**Named offender:** `common.Transform` sets `_allow_methods = True` and carries
+the whole parent hierarchy, world-transform caching and coordinate conversion
+(~330 lines). It is the largest violation in the engine and the one a
+`TransformSystem` would have to absorb; every other subsystem touches it, so it
+is deliberately not attempted piecemeal. **Fix:** once `physics`, `ui` and `ai`
+are audited and the true extent is known, migrate the tree to `StrictComponent`
+and consider making it the default.
+*Discovered in:* `ecs`; offender identified in `common`. *Status:* parked.
+
+### CC-7 — `x or default` used with falsy value types
+`pymunk.Vec2d` defines `__bool__`, so `Vector2(0, 0)` is falsy. `Transform
+.__init__` used `scale or Vector2(1, 1)`, which silently rewrote an explicitly
+requested zero scale to unit scale. Fixed there, but the idiom is common and
+the same trap applies to any zero vector, `Color(0,0,0,0)`, an empty `Rect`, or
+`0.0` defaults. **Fix:** sweep `grep -rn "or Vector2(\\|or Color(" pyguara/` and
+convert to explicit `is None` checks as each subsystem is audited.
+*Discovered in:* `common`. *Status:* open.
 
 ---
 
@@ -174,3 +187,58 @@ test modules migrated; 7 further tests added (1168 total, from 1161).
 
 **Deferred out of this subsystem:** CC-1 through CC-4, CC-6, and the remaining
 half of CC-5 (`Entity._components` reached into by `persistence`/`prefabs`).
+
+
+### `pyguara/common` — awaiting approval (2026-09-06)
+
+**Verification:** 1236/1236 tests pass (up from 1168); ruff clean; mypy clean
+across 217 files (one fewer: `constants.py` deleted).
+
+**Correctness fixes (all three reproduced by probe before fixing):**
+- `Transform.up` returned `(0, +1)` — the exact opposite of `Vector2.up()`'s
+  `(0, -1)`, and pointing *down* on screen. Gravity defaults positive
+  (`gravity_y = 900.0` in the shipped games), so the engine is unambiguously
+  Y-down; `Transform.up` was wrong. Both now agree, and the convention is
+  stated in both module docstrings and the new doc page.
+- `Transform.set_parent()` had no cycle guard. `t.set_parent(t)`, or any
+  loop, made every later `world_*` read recurse until the stack blew.
+  Now raises `ValueError`; `is_ancestor_of()` exposes the check.
+- `Transform.__init__` used `scale or Vector2(1, 1)`. `Vector2(0, 0)` is falsy,
+  so an explicitly requested zero scale silently became unit scale. Now
+  `is None`. Found by a test written against the documented behaviour, not by
+  reading the code — see CC-7.
+
+**API changes:**
+- `Vector2.rotate(degrees)` → `Vector2.rotate_degrees(degrees)`. It sat one
+  letter from `rotated(radians)`, and `Transform.rotate()` also takes radians;
+  a one-letter difference deciding the angle unit is unreadable at a call site.
+  All three call sites migrated (`camera.py` ×2, `particles.py`); all were
+  correct beforehand, so this closes a latent trap rather than a live bug.
+- `Color` now coerces channels to `int` and clamps to 0-255. It lost pygame
+  .Color's own validation in the ticket-31 migration and gained no replacement,
+  so `Color.from_hsv(0, 5, 5)` produced `Color(1275, -5100, -5100)`. Clamping
+  rather than raising: colour arithmetic overshoots legitimately, and a crash
+  mid-render is worse than saturation.
+- Added `Vector2.down()`/`left()` and `Transform.left`/`down` — `up`/`right`
+  existed without their opposites.
+- Added `Color.to_hex()` and `Rect.size`.
+- `Tag` and `ResourceLink` are now `@dataclass(slots=True)`, as the ECS docs
+  require. This required replacing `super().__init__()` with an explicit
+  `BaseComponent.__init__(self)`: `slots=True` returns a *new* class, so a
+  zero-arg `super()` resolves against the discarded original and raises on
+  every instantiation. Caught by 10 failing tests, not by review.
+- `Rect.inflate()` now truncates the offset towards zero instead of flooring,
+  matching `pygame.Rect` for odd negative deltas (was off by one pixel).
+
+**Cleanup:** deleted `pyguara/common/constants.py` (a file containing only a
+docstring, imported nowhere). `palette.BasicColors` now re-exports the `Color`
+constants instead of redefining all nine.
+
+**Tests:** 52 in `test_common_types.py` (from 24) plus a new
+`test_transform.py` with 36. `Vector2` and `Transform` previously had **zero**
+direct tests — Transform appeared in ten other modules only as an incidental
+fixture, so the most intricate logic in the package was exercised by accident.
+
+**Docs:** new `docs/core/common-types.md`, added to the mkdocs nav.
+
+**Deferred:** CC-1 through CC-4, CC-6, CC-7, and the remaining half of CC-5.
