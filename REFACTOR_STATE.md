@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/graphics` — **split across several iterations**; iterations 1-4 done; 4 (pipeline) in review. Slice 5 (assets & effects) remains.
+`pyguara/graphics` — **split across several iterations**; all five slices done; slice 5 (assets & effects) in review. **Tier 3 continues with `physics`.**
 
 **Tier 2 is complete:** `config`, `application`, `scene`, `systems`.
 
@@ -36,12 +36,12 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [x] `pyguara/systems` — system manager / base systems *(done)*
 
 ### Tier 3 — Subsystems
-- [~] `pyguara/graphics` — ~8,000 lines, too large for one iteration. Split:
+- [x] `pyguara/graphics` — ~8,000 lines, audited in five slices:
     - [x] 1. Window boundary — `window.py`, `IWindowBackend` *(active)*
     - [x] 2. Components — camera, particles, animation, geometry, sprite *(active)*
     - [x] 3. Backends — pygame, ModernGL, headless renderers *(active)*
     - [x] 4. Pipeline — graph, passes, framebuffer, viewport, batching *(active)*
-    - [ ] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting
+    - [x] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting *(active)*
 - [ ] `pyguara/physics` — protocols, pymunk backend, joints, materials
 - [ ] `pyguara/input` — input manager, rebinding
 - [ ] `pyguara/audio` — audio manager, spatial audio
@@ -900,5 +900,61 @@ saying plainly.
 `runtime_checkable` inconsistency found in slice 3. Not fixed here: it turns on
 whether `IRenderPass` or `BaseRenderPass(ABC)` is the real contract, which is a
 design decision rather than a defect.
+
+**Deferred:** CC-3 through CC-8, CC-11 (issue #9), issue #16.
+
+
+### `pyguara/graphics` iteration 5 — assets & effects — awaiting approval (2026-09-06)
+
+**Verification:** 1503/1503 tests pass; ruff clean; mypy clean.
+**This completes the graphics subsystem.**
+
+**Correctness fixes:**
+- **`NinePatchSprite.get_patch_rects()` produced negative source rectangles.**
+  Edges wider than the texture leave the centre with negative extent, and five
+  of the nine source rects came back malformed --
+  `Rect(x=40, y=0, width=-32, height=40)` for `uniform(40)` on a 48px texture --
+  which reach the renderer as geometry rather than as an error. The asymmetry
+  is the tell: `get_dest_rects()` clamps its own input with
+  `max(width, min_size)`, three lines the source side never had. Now raises,
+  naming both the edges and the texture size.
+- **`NinePatchMetrics` accepted negative edges.** `uniform(-5)` was fine, and
+  every rect derived from it was malformed. Rejected at construction.
+- **`PostProcessStack.effects` returned the live list**, so
+  `stack.effects.clear()` emptied the stack without releasing a single effect.
+- **Duplicate effect names were silent**, leaving the second unreachable
+  through `get_effect()` and surviving `remove_effect()`.
+
+The last two are the *same pair* fixed in `RenderGraph` one slice earlier.
+`PostProcessStack` and `RenderGraph` are siblings -- an ordered list plus a
+name lookup -- and carried identical defects. Fixed identically, and the
+docstrings now cross-reference so the parallel is visible.
+
+**Tests:** +18. `test_ninepatch.py` gains metrics validation, the source/
+destination asymmetry, and a check that valid source rects tile the texture
+exactly. New `test_post_process_stack.py` covers the stack's bookkeeping.
+
+**Surveyed, not deeply verified:** `materials/`, `vfx/effects/` (bloom,
+vignette) and the shader loading in `post_process.py` need a live GL context,
+so they remain covered only by the ModernGL integration tests -- the same
+caveat as slice 4. `spritesheet.py`, `atlas.py` and `animation_system.py` were
+read and probed and behaved correctly on degenerate input.
+
+### `pyguara/graphics` — SUMMARY of all five slices
+
+| Slice | Headline defect |
+| --- | --- |
+| 1. Boundary | `Window` reported the requested size, not the granted one |
+| 2. Components | `Box`/`Circle` hard-wired to pygame; camera zoom accepted 0 |
+| 3. Backends | pygame compatibility stubs had drifted from their counterparts |
+| 4. Pipeline | a zero-height window produced a 450px viewport at negative y |
+| 5. Assets | nine-patch produced negative source rects |
+
+**A pattern worth recording.** Four of the five slices turned up the same
+shape: a guard that avoids a crash by returning a wrong answer.
+`safe_zoom = 0.001`, `window_ratio ... else 0`, the nine-patch's missing
+clamp, and the DI container's swallowed disposal errors from an earlier tier.
+In every case the crash would have been easier to diagnose than the
+plausible-looking garbage substituted for it.
 
 **Deferred:** CC-3 through CC-8, CC-11 (issue #9), issue #16.
