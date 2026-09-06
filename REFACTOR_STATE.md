@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/di` — **in review (awaiting approval)**
+`pyguara/log` — **in review (awaiting approval)**
 
 ---
 
@@ -22,9 +22,9 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ### Tier 1 — Foundations (no intra-engine dependencies)
 - [x] `pyguara/common` — Vector2, Color, Rect, shared components *(done)*
-- [ ] `pyguara/log` — logging facade
+- [x] `pyguara/log` — logging facade *(active)*
 - [x] `pyguara/events` — EventDispatcher, Event protocol *(done)*
-- [x] `pyguara/di` — DIContainer, auto-wiring, lifetimes *(active)*
+- [x] `pyguara/di` — DIContainer, auto-wiring, lifetimes *(done)*
 
 ### Tier 2 — Core runtime
 - [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(done)*
@@ -59,6 +59,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/di` | 2026-09-06 | Fixed a missing lock in `DIScope.get()` that fabricated circular dependencies under concurrency (140/160 resolutions), plus captive lifetimes, dead-scope resolution, silent re-registration and varargs injection. PR #4. |
 | `pyguara/events` | 2026-09-06 | Broke a latent `log` <-> `events` import cycle, fixed a timestamp sentinel that made 0.0 inexpressible, brought filter errors under the error strategy, and memoised handler resolution (5.7us -> 3.1us per dispatch). PR #3. |
 | `pyguara/common` | 2026-09-06 | Fixed `Transform.up` pointing down, an unguarded parent cycle and a falsy-`Vector2` default; renamed `Vector2.rotate` to `rotate_degrees`; wrote the first tests for `Vector2` and `Transform`. PR #2. |
 | `pyguara/ecs` | 2026-09-06 | Fixed two silent query bugs (`add_entity()` bypassing the query cache; dead-entity resurrection), replaced the private removal hook with a subscribe/unsubscribe API, and modernised the module. PR #1. |
@@ -128,6 +129,17 @@ is deliberately not attempted piecemeal. **Fix:** once `physics`, `ui` and `ai`
 are audited and the true extent is known, migrate the tree to `StrictComponent`
 and consider making it the default.
 *Discovered in:* `ecs`; offender identified in `common`. *Status:* parked.
+
+### CC-10 — Documentation can describe APIs that do not exist
+`docs/core/logging.md` documented `pyguara.log.config.setup_logging()` and
+`pyguara.log.config.get_logger()`. Neither the module nor the function exists
+anywhere in the tree; every code sample on the page raised
+`ModuleNotFoundError`. Nothing catches this, because docs are never executed.
+**Fix:** enable `pytest --doctest-glob='*.md'` over `docs/`, or add a smoke
+test that imports every symbol the docs reference. Until then, treat "verify
+the documented API actually exists" as an explicit Phase C step in every
+iteration.
+*Discovered in:* `log`. *Status:* open.
 
 ### CC-9 — `ErrorHandlingStrategy` is defined twice
 `pyguara/di/types.py` and `pyguara/events/types.py` each declare their own enum
@@ -322,7 +334,7 @@ condensed to a summary and link.
 **Deferred:** CC-1 through CC-4, CC-6, CC-7, CC-8, and the rest of CC-5.
 
 
-### `pyguara/di` — awaiting approval (2026-09-06)
+### `pyguara/di` — CLOSED 2026-09-06 (PR #4, branch `refactor/di-audit`)
 
 **Verification:** 1286/1286 tests pass (up from 1262); ruff clean; mypy clean.
 
@@ -370,3 +382,55 @@ section condensed to a summary and link. That file's three original sections
 (ECS, DI, Events) are now all summaries pointing at dedicated pages.
 
 **Deferred:** CC-1 through CC-4, CC-6 through CC-9, and the rest of CC-5.
+
+
+### `pyguara/log` — awaiting approval (2026-09-06)
+
+**Verification:** 1303/1303 tests pass (up from 1286); ruff clean; mypy clean.
+
+**Correctness fixes (all reproduced by probe before fixing):**
+- **Every log record in the engine reported `logger.py:138` as its source.**
+  `EngineLogger._log()` called `self._logger.log()` without a `stacklevel`, so
+  the two wrapper frames were never skipped and every record attributed itself
+  to the same line inside the wrapper. The file formatter's `%(lineno)d`, and
+  the `module`/`line` fields carried into `OnLogEvent`, were that same constant
+  for every message ever logged. A caller-supplied `stacklevel` is now offset
+  rather than ignored.
+- **`reconfigure()` cleared the whole handler list of a process-global stdlib
+  logger**, silently tearing down handlers installed by the application, by a
+  test, or by a second `LogManager` using the same name. Each logger now tracks
+  and removes only the handlers it installed.
+- **`shutdown()` closed handlers but left them attached**, and a closed
+  `FileHandler` silently reopens its file on the next record -- so shutdown
+  did not actually stop logging. It detaches now, and a test asserts nothing
+  is written afterwards. (My first probe of this claimed data loss; checking
+  the file showed the opposite. The defect is that shutdown is a no-op, not
+  that it drops records.)
+- **`configure(dispatcher=None)` could not detach a dispatcher**, because
+  `if dispatcher:` cannot tell None from unspecified. A sentinel default now
+  distinguishes them.
+
+**Also:**
+- `EventIntegratedHandler.emit()` built a throwaway `LogRecord` on **every**
+  record, purely to compute a constant set of key names. Hoisted to a
+  module-level frozenset.
+- `propagate` is now configurable. Engine loggers install their own handlers
+  *and* propagate, so an application that also configures root logging sees
+  every record twice. Default left at True -- propagation is what lets an app
+  capture engine output, and the duplication only occurs when the app prints
+  too -- but the choice is now explicit and documented rather than implicit.
+- Removed a leftover `# FIX:` comment; documented `LogCategory` as orthogonal
+  to `LogLevel`. Modern typing, Google-style docstrings.
+
+**Tests:** 9 -> 26. Source attribution, handler ownership, shutdown semantics,
+`configure()` dispatcher handling, propagation, and the path from structured
+keyword arguments through to `OnLogEvent.context`.
+
+**Docs:** `docs/core/logging.md` **rewritten from scratch** -- see CC-10. It
+documented `pyguara.log.config.setup_logging()`, a module and function that
+have never existed in this tree; every code sample on the page raised
+`ModuleNotFoundError`.
+
+**Tier 1 is now complete:** `common`, `log`, `events`, `di`.
+
+**Deferred:** CC-1 through CC-4, CC-6 through CC-10, and the rest of CC-5.
