@@ -1,11 +1,12 @@
-"""Entity Component System (ECS) Core.
+"""Entity Component System core.
 
-Provides the foundational architecture for game objects:
-- Entity: Container for components.
-- Component: Data Protocol (interface).
-- BaseComponent: Reference implementation with legacy method support.
-- StrictComponent: Enforces data-only pattern (recommended for new components).
-- EntityManager: Database and query system.
+Public surface:
+
+- `Entity`: a uniquely identified container for components.
+- `Component`: the structural protocol every component satisfies.
+- `BaseComponent`: reference implementation; warns on logic methods.
+- `StrictComponent`: rejects logic methods at class-definition time.
+- `EntityManager`: registration, lifecycle and querying for one world.
 """
 
 from pyguara.ecs.component import (

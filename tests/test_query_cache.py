@@ -1,47 +1,107 @@
-"""Tests for P1-008: ECS Query Cache optimization."""
+"""Behavioural tests for the ECS query cache.
 
-from pyguara.ecs.manager import EntityManager
-from pyguara.common.components import Transform
-from pyguara.physics.components import RigidBody
-from pyguara.ecs.component import BaseComponent
+Every test here deliberately varies *how* an entity enters the world
+(`create_entity()` then attach, versus attach then `add_entity()`), because a
+cache-coherency bug once hid behind a suite that only ever used the first path.
+"""
+
 from dataclasses import dataclass
+
+from pyguara.common.components import Transform
+from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
+from pyguara.physics.components import RigidBody
 
 
 @dataclass
 class MockComponent(BaseComponent):
-    """Mock component for testing."""
+    """Component with no engine meaning, used to form third-party queries."""
 
     value: int = 0
 
 
 class TestQueryCacheRegistration:
-    """Test query cache registration and basic functionality."""
+    """Registration is observable: a registered query stops returning None."""
 
     def test_register_cached_query(self):
-        """Query can be registered for caching."""
+        """Registering makes the query cached rather than a fallback scan."""
         manager = EntityManager()
+        assert manager._query_cache.get_cached(Transform, RigidBody) is None
 
-        # Should not raise
         manager.register_cached_query(Transform, RigidBody)
 
+        assert manager._query_cache.get_cached(Transform, RigidBody) == frozenset()
+
     def test_multiple_query_registration(self):
-        """Multiple different queries can be registered."""
+        """Distinct combinations are tracked independently."""
         manager = EntityManager()
 
         manager.register_cached_query(Transform, RigidBody)
         manager.register_cached_query(Transform, MockComponent)
-        manager.register_cached_query(RigidBody, MockComponent)
 
-        # Should not raise
+        assert manager._query_cache.get_statistics()["registered_queries"] == 2
+        assert manager._query_cache.get_cached(RigidBody, MockComponent) is None
+
+    def test_registration_is_order_insensitive(self):
+        """A query is identified by its set of types, not the argument order."""
+        manager = EntityManager()
+        manager.register_cached_query(Transform, RigidBody)
+
+        assert manager._query_cache.get_cached(RigidBody, Transform) is not None
 
     def test_duplicate_registration_is_safe(self):
-        """Registering same query twice doesn't cause issues."""
+        """Re-registering must not double-register or discard cached ids."""
         manager = EntityManager()
+        manager.register_cached_query(Transform, RigidBody)
+
+        entity = manager.create_entity()
+        entity.add_component(Transform())
+        entity.add_component(RigidBody())
 
         manager.register_cached_query(Transform, RigidBody)
-        manager.register_cached_query(Transform, RigidBody)  # Duplicate
 
-        # Should not raise
+        stats = manager._query_cache.get_statistics()
+        assert stats["registered_queries"] == 1
+        assert stats["total_cached_entities"] == 1
+
+
+class TestQueryCacheEntryPaths:
+    """Entities must reach the cache however they were built."""
+
+    def test_entity_registered_with_components_already_attached(self):
+        """add_entity() on a pre-built entity must reach the cache."""
+        manager = EntityManager()
+        manager.register_cached_query(Transform, RigidBody)
+
+        entity = Entity("prebuilt")
+        entity.add_component(Transform())
+        entity.add_component(RigidBody())
+        manager.add_entity(entity)
+
+        assert [
+            e.id for e in manager.get_entities_with_cached(Transform, RigidBody)
+        ] == ["prebuilt"]
+
+    def test_both_entry_paths_agree_with_the_uncached_query(self):
+        """Cached and uncached results must not diverge by construction path."""
+        manager = EntityManager()
+        manager.register_cached_query(Transform, RigidBody)
+
+        incremental = manager.create_entity("incremental")
+        incremental.add_component(Transform())
+        incremental.add_component(RigidBody())
+
+        prebuilt = Entity("prebuilt")
+        prebuilt.add_component(Transform())
+        prebuilt.add_component(RigidBody())
+        manager.add_entity(prebuilt)
+
+        cached = sorted(
+            e.id for e in manager.get_entities_with_cached(Transform, RigidBody)
+        )
+        uncached = sorted(e.id for e in manager.get_entities_with(Transform, RigidBody))
+        assert cached == uncached == ["incremental", "prebuilt"]
 
 
 class TestQueryCacheBasicFunctionality:

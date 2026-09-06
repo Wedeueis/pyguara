@@ -1,46 +1,44 @@
-"""Entity Manager implementation for ECS with Spatial Indexing."""
+"""EntityManager: registration, lifecycle and querying for the ECS world."""
 
-from typing import (
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Type,
-    Iterator,
-    Set,
-    Tuple,
-    TypeVar,
-    overload,
-)
+from __future__ import annotations
+
 from collections import defaultdict
+from collections.abc import Iterator, Set as AbstractSet
+from typing import Callable, TypeVar, overload
 
 from pyguara.ecs.component import Component
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.query_cache import QueryCache
 
-# Type variables for component tuple queries
 C1 = TypeVar("C1", bound=Component)
 C2 = TypeVar("C2", bound=Component)
 C3 = TypeVar("C3", bound=Component)
 C4 = TypeVar("C4", bound=Component)
 
+_EMPTY_IDS: frozenset[str] = frozenset()
+
 
 class EntityManager:
-    """Manages the lifecycle and querying of entities.
+    """Central database for the entities in one world.
 
-    Acts as the central database for the game world.
-    Optimized with Inverted Indexes for O(1) component lookups.
+    Queries are backed by an inverted index (`ComponentType -> {EntityID}`), so
+    matching entities are found by set intersection rather than by scanning
+    every entity.
+
+    Entity removal is a two-step process. `remove_entity()` makes an entity
+    soft-dead immediately; `flush_pending_removals()` physically cleans up its
+    index entries at the frame boundary. Keeping the index stable for the whole
+    frame is what makes every query safe to iterate while systems destroy
+    entities.
     """
 
     def __init__(self) -> None:
-        """Initialize the entity manager."""
-        self._entities: Dict[str, Entity] = {}
+        """Initialise an empty world."""
+        self._entities: dict[str, Entity] = {}
 
-        # The Inverted Index: ComponentType -> Set[EntityID]
-        # This solves the O(N) Query Problem.
-        self._component_index: Dict[Type[Component], Set[str]] = defaultdict(set)
+        # The inverted index: ComponentType -> Set[EntityID].
+        self._component_index: dict[type[Component], set[str]] = defaultdict(set)
 
-        # Query cache for hot-path optimizations (P1-008)
         self._query_cache: QueryCache = QueryCache(self)
 
         # Entities removed this frame: their id is already gone from
@@ -48,353 +46,339 @@ class EntityManager:
         # until flush_pending_removals() runs at the frame boundary. This is
         # what makes single-type queries safe to alias the live index set
         # directly -- the set is never mutated mid-frame.
-        self._pending_index_cleanup: List[Tuple[Type[Component], str]] = []
+        self._pending_index_cleanup: list[tuple[type[Component], str]] = []
 
         # Optional hook fired synchronously in remove_entity(), at the moment
         # of soft-death, with the (still component-intact) removed Entity.
         # EntityManager stays decoupled from the event system: Scene.
         # resolve_dependencies() wires this to dispatch EntityDestroyed.
-        self._on_entity_removed: Optional[Callable[[Entity], None]] = None
+        self._on_entity_removed: Callable[[Entity], None] | None = None
 
-    def create_entity(self, entity_id: Optional[str] = None) -> Entity:
-        """Create and register a new entity."""
+    # -------------------------------------------------------------------------
+    # Lifecycle
+    # -------------------------------------------------------------------------
+
+    def create_entity(self, entity_id: str | None = None) -> Entity:
+        """Create an entity and register it with this manager.
+
+        Args:
+            entity_id: Explicit id. Defaults to a fresh UUID4 string.
+
+        Returns:
+            The newly registered entity.
+        """
         entity = Entity(entity_id)
         self.add_entity(entity)
         return entity
 
     def add_entity(self, entity: Entity) -> None:
-        """Register an existing entity."""
+        """Register an entity that was built outside this manager.
+
+        Components already attached to the entity — the usual case for clones,
+        prefabs and deserialised scenes — are indexed through the same path as
+        components added later, so cached queries see them too.
+
+        Args:
+            entity: An entity to bring into this world.
+
+        Raises:
+            RuntimeError: If the entity has already been removed. Removal is
+                terminal; re-registering a soft-dead entity would produce one
+                that is reachable by id but invisible to every query.
+        """
+        if entity._is_removed:
+            raise RuntimeError(
+                f"Entity {entity.id} has been removed; cannot add_entity() a dead "
+                f"entity. Removal is terminal -- use Entity.clone() to make a "
+                f"fresh, re-addable entity instead."
+            )
+
         self._entities[entity.id] = entity
 
-        # Hook into the entity's lifecycle to keep our index updated
-        # This dependency injection allows the Entity to notify us without
-        # knowing who we are (Observer pattern light).
+        # Observer hookup: the entity notifies us of component changes without
+        # holding a reference to the manager itself.
         entity._on_component_added = self._on_entity_component_added
         entity._on_component_removed = self._on_entity_component_removed
 
-        # Index any components that might already exist on this entity
-        for comp_type in entity._components:
-            self._component_index[comp_type].add(entity.id)
+        for component_type in entity._components:
+            self._on_entity_component_added(entity.id, component_type)
 
     def remove_entity(self, entity_id: str) -> None:
         """Soft-destroy an entity: immediate, terminal, not reusable.
 
-        The entity is gone from `_entities` and its manager callbacks
-        detached before this method returns -- nothing can see or resurrect
-        it from that instant on, and further `add_component()`/
-        `remove_component()` calls on it raise. Physical component-index
-        cleanup is deferred to `flush_pending_removals()` at the next frame
-        boundary, which is what makes every query path safe to iterate
-        regardless of how many component types are queried.
+        The entity is gone from the registry and its manager callbacks detached
+        before this method returns, so nothing can see or resurrect it from
+        that instant on; further mutation of it raises. Physical index cleanup
+        is deferred to `flush_pending_removals()`.
 
-        If an `_on_entity_removed` hook is set, it fires synchronously here,
-        after soft-death but before the deferred index cleanup -- the
-        entity's components are still intact, so handlers can still read
-        them.
+        If `_on_entity_removed` is set it fires synchronously here, after
+        soft-death but before the deferred cleanup, so handlers can still read
+        the entity's components.
+
+        Removing an unknown id is a no-op.
+
+        Args:
+            entity_id: The id of the entity to destroy.
         """
         entity = self._entities.get(entity_id)
         if entity is None:
             return
 
-        # 1. Soft-dead immediately: detach callbacks and mark terminal before
-        # anything else (including the removal hook below) runs, so no
+        # Soft-dead first, before the hook below can run any user code, so no
         # reentrant mutation can resurrect this id.
         entity._on_component_added = None
         entity._on_component_removed = None
         entity._is_removed = True
         del self._entities[entity_id]
 
-        # 2. Notify (components still intact).
         if self._on_entity_removed is not None:
             self._on_entity_removed(entity)
 
-        # 3. Defer physical index cleanup to the frame boundary.
-        for comp_type in entity._components:
-            self._pending_index_cleanup.append((comp_type, entity_id))
+        for component_type in entity._components:
+            self._pending_index_cleanup.append((component_type, entity_id))
 
     def flush_pending_removals(self) -> None:
-        """Physically clean up index entries for entities soft-removed since the last flush.
+        """Clean up index entries for entities soft-removed since the last flush.
 
-        Call once per frame, at the frame boundary (e.g. the end of a fixed
-        update), not mid-frame -- that's what keeps the index set stable
-        for the whole frame's queries.
+        Call once per frame at the frame boundary, never mid-frame: holding the
+        index stable for the duration of a frame is what keeps that frame's
+        queries safe to iterate.
         """
-        for comp_type, entity_id in self._pending_index_cleanup:
-            index = self._component_index.get(comp_type)
+        for component_type, entity_id in self._pending_index_cleanup:
+            index = self._component_index.get(component_type)
             if index is not None:
                 index.discard(entity_id)
-            self._query_cache.on_component_removed(entity_id, comp_type)
+            self._query_cache.on_component_removed(entity_id, component_type)
 
         self._pending_index_cleanup.clear()
 
-    def get_entity(self, entity_id: str) -> Optional[Entity]:
-        """Retrieve an entity by ID."""
+    # -------------------------------------------------------------------------
+    # Lookup
+    # -------------------------------------------------------------------------
+
+    def get_entity(self, entity_id: str) -> Entity | None:
+        """Retrieve a live entity by id.
+
+        Args:
+            entity_id: The id to look up.
+
+        Returns:
+            The entity, or None if it is unknown or already removed.
+        """
         return self._entities.get(entity_id)
 
     def get_all_entities(self) -> Iterator[Entity]:
-        """Return all registered entities."""
+        """Iterate every live entity in the world.
+
+        Yields:
+            Each registered entity.
+        """
         return iter(self._entities.values())
 
-    def get_entities_with(self, *component_types: Type[Component]) -> Iterator[Entity]:
-        """
-        Query for entities containing ALL specified component types.
+    def get_entities_with(self, *component_types: type[Component]) -> Iterator[Entity]:
+        """Iterate entities carrying all of the given component types.
 
-        Performance: O(K) where K is the number of entities matching the query,
-        independent of the total number of entities in the world.
+        Args:
+            *component_types: Component classes the entity must all carry.
+
+        Yields:
+            Each matching entity. Yields nothing if no types are given.
         """
         if not component_types:
             return
 
-        # 1. Get the sets of entity IDs for each requested component
-        # If any component type has no entities, the intersection is empty.
-        sets = []
-        for c_type in component_types:
-            if c_type not in self._component_index:
-                return  # Empty result
-            sets.append(self._component_index[c_type])
-
-        # 2. Sort by size (optimization: intersection is faster if we start small)
-        sets.sort(key=len)
-
-        # 3. Perform intersection
-        result_ids = sets[0]
-        for i in range(1, len(sets)):
-            result_ids = result_ids & sets[i]  # Intersection
-
-        # 4. Yield actual entities. Guard against ids soft-removed but not
-        # yet physically cleaned up (self._entities.get(...) is not None) --
-        # for a single component type, result_ids IS the live index set
-        # (aliased, not copied), so this is what makes iterating it safe
-        # while remove_entity() runs elsewhere this same frame.
-        for eid in result_ids:
-            entity = self._entities.get(eid)
+        for entity_id in self._matching_entity_ids(component_types):
+            entity = self._entities.get(entity_id)
             if entity is not None:
                 yield entity
 
-    def register_cached_query(self, *component_types: Type[Component]) -> None:
-        """
-        Register a query for caching (P1-008 optimization).
+    # -------------------------------------------------------------------------
+    # Cached queries
+    # -------------------------------------------------------------------------
 
-        Call this during system initialization for queries that will be executed
-        every frame (60+ FPS). Provides significant performance improvements for
-        hot-loop systems like physics and rendering.
+    def register_cached_query(self, *component_types: type[Component]) -> None:
+        """Mark a component combination as hot-path so its result set is cached.
 
-        Performance Impact:
-            - Uncached: ~8ms for 10,000 entities
-            - Cached: ~1ms for 10,000 entities
-            - Improvement: 8x faster
+        Register during system initialisation, for queries that run every
+        frame. The cache is maintained incrementally as components are added
+        and removed, trading a little bookkeeping for a query that skips the
+        set intersection entirely. Do not register one-off queries.
 
         Args:
-            *component_types: Component types to cache (e.g., Transform, RigidBody)
+            *component_types: The component classes forming the query.
 
         Example:
-            # In PhysicsSystem.__init__:
-            def __init__(self, entity_manager: EntityManager):
-                entity_manager.register_cached_query(Transform, RigidBody)
+            ```python
+            class PhysicsSystem:
+                def __init__(self, entity_manager: EntityManager) -> None:
+                    entity_manager.register_cached_query(Transform, RigidBody)
+            ```
         """
         self._query_cache.register_query(*component_types)
 
     def get_entities_with_cached(
-        self, *component_types: Type[Component]
+        self, *component_types: type[Component]
     ) -> Iterator[Entity]:
-        """
-        Fast cached query for hot-path systems (P1-008 optimization).
+        """Iterate entities for a query registered via `register_cached_query()`.
 
-        IMPORTANT: Query must be registered first via register_cached_query().
-        Falls back to standard query if not registered.
-
-        This method is significantly faster than get_entities_with() for queries
-        that are executed frequently (60+ FPS).
+        Falls back to `get_entities_with()` when the exact combination was
+        never registered. A registered query that currently matches nothing
+        yields nothing — it does not fall back.
 
         Args:
-            *component_types: Component types to query for
+            *component_types: The component classes forming the query.
 
-        Returns:
-            Iterator of entities matching the query
-
-        Example:
-            # Register once during initialization
-            entity_manager.register_cached_query(Transform, RigidBody)
-
-            # Use in update loops
-            for entity in entity_manager.get_entities_with_cached(Transform, RigidBody):
-                # ... process entity ...
+        Yields:
+            Each matching entity.
         """
         cached_ids = self._query_cache.get_cached(*component_types)
 
-        if cached_ids is not None:
-            # Registered (possibly empty right now) -- use the cache as-is,
-            # never fall back just because nothing currently matches.
-            for eid in cached_ids:
-                entity = self._entities.get(eid)  # Safety check
-                if entity is not None:
-                    yield entity
-        else:
-            # Not registered at all: fall back to standard query.
+        if cached_ids is None:
             yield from self.get_entities_with(*component_types)
+            return
 
-    def _on_entity_component_added(
-        self, entity_id: str, component_type: Type[Component]
-    ) -> None:
-        """Update inverted index when an entity adds a component.
+        for entity_id in cached_ids:
+            entity = self._entities.get(entity_id)
+            if entity is not None:
+                yield entity
 
-        Adds the entity to the inverted index for the component type,
-        ensuring it appears in queries for this component.
+    # -------------------------------------------------------------------------
+    # Fast-path tuple queries
+    # -------------------------------------------------------------------------
+    # These bypass the Entity wrapper and yield components directly. Use them in
+    # hot systems (physics, rendering) that never need the entity itself.
 
-        Also updates query cache for P1-008 optimization.
+    @overload
+    def get_components(
+        self, c1: type[C1], c2: type[C2], /
+    ) -> Iterator[tuple[C1, C2]]: ...
+
+    @overload
+    def get_components(
+        self, c1: type[C1], c2: type[C2], c3: type[C3], /
+    ) -> Iterator[tuple[C1, C2, C3]]: ...
+
+    @overload
+    def get_components(
+        self, c1: type[C1], c2: type[C2], c3: type[C3], c4: type[C4], /
+    ) -> Iterator[tuple[C1, C2, C3, C4]]: ...
+
+    @overload
+    def get_components(
+        self, *component_types: type[Component]
+    ) -> Iterator[tuple[Component, ...]]: ...
+
+    def get_components(
+        self, *component_types: type[Component]
+    ) -> Iterator[tuple[Component, ...]]:
+        """Iterate component tuples for entities carrying all the given types.
 
         Args:
-            entity_id: The ID of the entity that added a component.
-            component_type: The type of component that was added.
-        """
-        self._component_index[component_type].add(entity_id)
-        # Update query cache
-        self._query_cache.on_component_added(entity_id, component_type)
-
-    def _on_entity_component_removed(
-        self, entity_id: str, component_type: Type[Component]
-    ) -> None:
-        """Update inverted index when an entity removes a component.
-
-        Removes the entity from the inverted index for the component type,
-        ensuring it no longer appears in queries for this component.
-
-        Also updates query cache for P1-008 optimization.
-
-        Args:
-            entity_id: The ID of the entity that removed a component.
-            component_type: The type of component that was removed.
-        """
-        if component_type in self._component_index:
-            self._component_index[component_type].discard(entity_id)
-        # Update query cache
-        self._query_cache.on_component_removed(entity_id, component_type)
-
-    # =========================================================================
-    # Fast-Path Tuple Queries (ECS Optimization)
-    # =========================================================================
-    # These methods bypass the Entity wrapper and return component tuples directly.
-    # Use for high-performance systems (Physics, Rendering) where you need raw speed.
-
-    @overload
-    def get_components(
-        self, c1: Type[C1], c2: Type[C2], /
-    ) -> Iterator[Tuple[C1, C2]]: ...
-
-    @overload
-    def get_components(
-        self, c1: Type[C1], c2: Type[C2], c3: Type[C3], /
-    ) -> Iterator[Tuple[C1, C2, C3]]: ...
-
-    @overload
-    def get_components(
-        self, c1: Type[C1], c2: Type[C2], c3: Type[C3], c4: Type[C4], /
-    ) -> Iterator[Tuple[C1, C2, C3, C4]]: ...
-
-    @overload
-    def get_components(
-        self, *component_types: Type[Component]
-    ) -> Iterator[Tuple[Component, ...]]: ...
-
-    def get_components(
-        self, *component_types: Type[Component]
-    ) -> Iterator[Tuple[Component, ...]]:
-        """Fast-path query that yields component tuples directly.
-
-        This method bypasses the Entity wrapper and returns raw component tuples,
-        providing significant performance improvement for hot-path systems like
-        Physics and Rendering.
-
-        Performance:
-            - Standard query with Entity wrapper: ~8ms for 10,000 entities
-            - This fast-path tuple query: ~3ms for 10,000 entities
-            - Improvement: 2-3x faster in tight loops
-
-        Args:
-            *component_types: Component types to query for (2-4 types supported)
+            *component_types: Component classes the entity must all carry.
+                Overloads give precise tuple types for two to four arguments.
 
         Yields:
-            Tuples of components in the same order as the type arguments
+            One tuple per matching entity, with components in the order the
+            types were given.
 
         Example:
-            # Fast iteration without Entity wrapper overhead
-            for transform, rigidbody in entity_manager.get_components(Transform, RigidBody):
-                transform.position += rigidbody.velocity * dt
-
-            # For 3 components
-            for transform, sprite, animation in entity_manager.get_components(
-                Transform, Sprite, Animation
-            ):
-                # Direct component access, no entity.get_component() calls
-                sprite.position = transform.position
+            ```python
+            for transform, body in manager.get_components(Transform, RigidBody):
+                transform.position += body.velocity * dt
+            ```
         """
         if not component_types:
             return
 
-        # Get entity IDs matching all component types
-        sets = []
-        for c_type in component_types:
-            if c_type not in self._component_index:
-                return  # Empty result
-            sets.append(self._component_index[c_type])
-
-        # Sort by size and intersect
-        sets.sort(key=len)
-        result_ids = sets[0]
-        for i in range(1, len(sets)):
-            result_ids = result_ids & sets[i]
-
-        # Yield component tuples directly (bypasses Entity wrapper). Guard
-        # against ids soft-removed but not yet physically cleaned up.
-        for eid in result_ids:
-            entity = self._entities.get(eid)
+        for entity_id in self._matching_entity_ids(component_types):
+            entity = self._entities.get(entity_id)
             if entity is None:
                 continue
-            # Build tuple of components in requested order
-            components = tuple(entity._components[c_type] for c_type in component_types)
-            yield components
+            yield tuple(entity._components[c_type] for c_type in component_types)
 
     def get_components_with_entity(
-        self, *component_types: Type[Component]
-    ) -> Iterator[Tuple[Entity, Tuple[Component, ...]]]:
-        """Fast-path query that yields (entity, components) pairs.
+        self, *component_types: type[Component]
+    ) -> Iterator[tuple[Entity, tuple[Component, ...]]]:
+        """Iterate `(entity, components)` pairs for entities carrying all types.
 
-        Similar to get_components() but also returns the Entity for cases
-        where you need entity ID or want to modify components.
+        Use instead of `get_components()` when the loop body also needs the
+        entity — its id, its tags, or to attach and detach components.
 
         Args:
-            *component_types: Component types to query for
+            *component_types: Component classes the entity must all carry.
 
         Yields:
-            Tuples of (Entity, (Component1, Component2, ...))
-
-        Example:
-            for entity, (transform, rigidbody) in entity_manager.get_components_with_entity(
-                Transform, RigidBody
-            ):
-                if rigidbody.velocity.magnitude() > 100:
-                    # Can access entity.id or call entity methods
-                    print(f"Fast entity: {entity.id}")
+            `(entity, components)` pairs, with components in the order the
+            types were given.
         """
         if not component_types:
             return
 
-        # Get entity IDs matching all component types
-        sets = []
-        for c_type in component_types:
-            if c_type not in self._component_index:
-                return
-            sets.append(self._component_index[c_type])
-
-        sets.sort(key=len)
-        result_ids = sets[0]
-        for i in range(1, len(sets)):
-            result_ids = result_ids & sets[i]
-
-        # Guard against ids soft-removed but not yet physically cleaned up.
-        for eid in result_ids:
-            entity = self._entities.get(eid)
+        for entity_id in self._matching_entity_ids(component_types):
+            entity = self._entities.get(entity_id)
             if entity is None:
                 continue
             components = tuple(entity._components[c_type] for c_type in component_types)
             yield entity, components
+
+    # -------------------------------------------------------------------------
+    # Index maintenance
+    # -------------------------------------------------------------------------
+
+    def _matching_entity_ids(
+        self, component_types: tuple[type[Component], ...]
+    ) -> AbstractSet[str]:
+        """Intersect the inverted index for a non-empty set of component types.
+
+        Smallest index set first, so each intersection step scans as few ids as
+        possible.
+
+        For a single component type the result is the live index set itself,
+        not a copy. That is safe only because index cleanup is deferred to
+        `flush_pending_removals()`, so the set cannot change mid-frame; callers
+        must still skip ids whose entity is already soft-removed.
+
+        Args:
+            component_types: One or more component classes. Must not be empty.
+
+        Returns:
+            The ids of entities carrying every given type, possibly empty.
+        """
+        sets = []
+        for component_type in component_types:
+            index = self._component_index.get(component_type)
+            if not index:
+                return _EMPTY_IDS
+            sets.append(index)
+
+        sets.sort(key=len)
+        result: AbstractSet[str] = sets[0]
+        for other in sets[1:]:
+            result = result & other
+        return result
+
+    def _on_entity_component_added(
+        self, entity_id: str, component_type: type[Component]
+    ) -> None:
+        """Index an entity under a component type it just gained.
+
+        Args:
+            entity_id: The id of the entity that gained the component.
+            component_type: The component class that was attached.
+        """
+        self._component_index[component_type].add(entity_id)
+        self._query_cache.on_component_added(entity_id, component_type)
+
+    def _on_entity_component_removed(
+        self, entity_id: str, component_type: type[Component]
+    ) -> None:
+        """Drop an entity from the index for a component type it just lost.
+
+        Args:
+            entity_id: The id of the entity that lost the component.
+            component_type: The component class that was detached.
+        """
+        index = self._component_index.get(component_type)
+        if index is not None:
+            index.discard(entity_id)
+        self._query_cache.on_component_removed(entity_id, component_type)

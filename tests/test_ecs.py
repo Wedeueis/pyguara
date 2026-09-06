@@ -732,3 +732,173 @@ def test_query_cache_reports_correct_count_after_entity_removal() -> None:
 
     assert manager._query_cache.get_cached(Position) == frozenset()
     assert len(list(manager.get_entities_with_cached(Position))) == 0
+
+
+# -- add_entity(): pre-attached components and terminal removal --
+
+
+def test_add_entity_indexes_components_attached_before_registration() -> None:
+    """An entity built detached and then registered must be queryable.
+
+    This is the prefab / deserialisation path: components exist before the
+    manager ever sees the entity, so they never fire the component-added hook.
+    """
+    manager = EntityManager()
+
+    entity = Entity("detached")
+    entity.add_component(Position())
+    entity.add_component(Velocity())
+    manager.add_entity(entity)
+
+    assert [e.id for e in manager.get_entities_with(Position, Velocity)] == ["detached"]
+
+
+def test_add_entity_populates_registered_query_caches() -> None:
+    """Regression: add_entity() indexed pre-attached components directly into
+    _component_index, bypassing the query cache. A system using a cached query
+    silently never saw entities spawned from a prefab or a clone -- while the
+    equivalent uncached query saw them, so the two disagreed.
+    """
+    manager = EntityManager()
+    manager.register_cached_query(Position, Velocity)
+
+    entity = Entity("spawned")
+    entity.add_component(Position())
+    entity.add_component(Velocity())
+    manager.add_entity(entity)
+
+    cached = [e.id for e in manager.get_entities_with_cached(Position, Velocity)]
+    uncached = [e.id for e in manager.get_entities_with(Position, Velocity)]
+    assert cached == uncached == ["spawned"]
+
+
+def test_clone_then_add_entity_is_visible_to_cached_queries() -> None:
+    """The clone() -> add_entity() workflow named in Entity.clone()'s docstring
+    must produce an entity that cached queries can see."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    original = manager.create_entity("original")
+    original.add_component(Position(x=5))
+
+    manager.add_entity(original.clone("copy"))
+
+    assert sorted(e.id for e in manager.get_entities_with_cached(Position)) == [
+        "copy",
+        "original",
+    ]
+
+
+def test_add_entity_rejects_a_removed_entity() -> None:
+    """Removal is terminal. Re-registering a soft-dead entity used to succeed
+    and leave a zombie: reachable via get_entity(), dropped from every query at
+    the next flush, and raising on any attempt to mutate it.
+    """
+    manager = EntityManager()
+    entity = manager.create_entity("doomed")
+    entity.add_component(Position())
+    manager.remove_entity("doomed")
+
+    with pytest.raises(RuntimeError, match="Removal is terminal"):
+        manager.add_entity(entity)
+
+    assert manager.get_entity("doomed") is None
+
+
+def test_registering_a_query_after_entities_exist_backfills_the_cache() -> None:
+    """register_cached_query() builds from current world state, so systems that
+    register during a late init still see entities created before them."""
+    manager = EntityManager()
+
+    entity = manager.create_entity("early")
+    entity.add_component(Position())
+
+    manager.register_cached_query(Position)
+
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == ["early"]
+
+
+# -- QueryCache maintenance --
+
+
+def test_cached_query_ignores_component_types_it_does_not_mention() -> None:
+    """Adding an unrelated component must not disturb a registered query."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    entity = manager.create_entity("e")
+    entity.add_component(Position())
+    entity.add_component(Health())
+    entity.remove_component(Health)
+
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == ["e"]
+
+
+def test_rebuild_all_recovers_from_a_desynchronised_cache() -> None:
+    """rebuild_all() must restore agreement with the inverted index after a
+    change that bypassed the component hooks."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    entity = manager.create_entity("e")
+    entity.add_component(Position())
+
+    manager._query_cache._cache[frozenset({Position})] = frozenset({"ghost"})
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == []
+
+    manager._query_cache.rebuild_all()
+
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == ["e"]
+
+
+def test_query_cache_statistics_report_registered_queries_and_occupancy() -> None:
+    manager = EntityManager()
+    manager.register_cached_query(Position, Velocity)
+
+    entity = manager.create_entity("e")
+    entity.add_component(Position())
+    entity.add_component(Velocity())
+
+    stats = manager._query_cache.get_statistics()
+
+    assert stats["registered_queries"] == 1
+    assert stats["total_cached_entities"] == 1
+    assert stats["queries"] == [
+        {"component_types": ["Position", "Velocity"], "cached_entities": 1}
+    ]
+
+
+# -- Component validation --
+
+
+def test_base_component_reports_logic_methods_in_sorted_order() -> None:
+    """The warning lists offending methods deterministically, so the message is
+    stable enough to assert on and to diff across runs."""
+    with pytest.warns(UserWarning) as record:
+
+        @dataclass
+        class Messy(BaseComponent):
+            value: int = 0
+
+            def zeta(self) -> None: ...
+
+            def alpha(self) -> None: ...
+
+    assert "alpha, zeta" in str(record[0].message)
+
+
+def test_strict_component_accepts_class_keyword_arguments() -> None:
+    """__init_subclass__ must forward class kwargs rather than swallow them, so
+    StrictComponent composes with mixins that use them."""
+    received: dict[str, object] = {}
+
+    class KwargMixin:
+        def __init_subclass__(cls, marker: str = "", **kwargs: object) -> None:
+            received["marker"] = marker
+            super().__init_subclass__(**kwargs)
+
+    @dataclass
+    class Tagged(StrictComponent, KwargMixin, marker="ok"):
+        value: int = 0
+
+    assert received["marker"] == "ok"

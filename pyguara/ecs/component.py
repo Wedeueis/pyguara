@@ -1,163 +1,153 @@
 """Base component definitions for the Entity Component System.
 
-Components in the ECS pattern should be data-only containers. Logic belongs
-in Systems, not Components. This module provides:
+Components are data-only containers; logic belongs in Systems. Two base
+classes enforce that rule at different strengths:
 
-- BaseComponent: Reference implementation with legacy method support (warns)
-- StrictComponent: Enforces data-only pattern (errors on logic methods)
+- `BaseComponent` warns when a subclass declares a logic method.
+- `StrictComponent` raises `TypeError` at class-definition time instead.
 
-The allowed methods in components are:
-- Lifecycle methods: __init__, __post_init__, on_attach, on_detach
-- Dunder methods: __repr__, __str__, __eq__, __hash__, etc.
-- Properties (via @property decorator)
+Prefer `StrictComponent` for new components. A component may still declare
+lifecycle hooks (`__init__`, `__post_init__`, `on_attach`, `on_detach`),
+dunder methods, and `@property` accessors.
 """
 
-from pyguara.log import get_logger
+from __future__ import annotations
+
 import warnings
-from typing import Any, Optional, Protocol, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from pyguara.ecs.entity import Entity
 
-logger = get_logger(__name__)
-
-# Methods allowed in data-only components
-ALLOWED_METHODS: Set[str] = {
-    # Lifecycle
-    "__init__",
-    "__post_init__",
-    "on_attach",
-    "on_detach",
-    # Dataclass internals
-    "__dataclass_fields__",
-    "__dataclass_params__",
-    # Standard dunders
-    "__repr__",
-    "__str__",
-    "__eq__",
-    "__ne__",
-    "__hash__",
-    "__lt__",
-    "__le__",
-    "__gt__",
-    "__ge__",
-    "__bool__",
-    "__len__",
-    "__iter__",
-    "__getitem__",
-    "__setitem__",
-    "__delitem__",
-    "__contains__",
-    "__copy__",
-    "__deepcopy__",
-    "__reduce__",
-    "__reduce_ex__",
-    "__getstate__",
-    "__setstate__",
-    "__sizeof__",
-    "__format__",
-    # Class infrastructure
-    "__new__",
-    "__del__",
-    "__init_subclass__",
-    "__class_getitem__",
-    "__set_name__",
-}
+ALLOWED_METHODS: frozenset[str] = frozenset(
+    {
+        # Lifecycle
+        "__init__",
+        "__post_init__",
+        "on_attach",
+        "on_detach",
+        # Dataclass internals
+        "__dataclass_fields__",
+        "__dataclass_params__",
+        # Standard dunders
+        "__repr__",
+        "__str__",
+        "__eq__",
+        "__ne__",
+        "__hash__",
+        "__lt__",
+        "__le__",
+        "__gt__",
+        "__ge__",
+        "__bool__",
+        "__len__",
+        "__iter__",
+        "__getitem__",
+        "__setitem__",
+        "__delitem__",
+        "__contains__",
+        "__copy__",
+        "__deepcopy__",
+        "__reduce__",
+        "__reduce_ex__",
+        "__getstate__",
+        "__setstate__",
+        "__sizeof__",
+        "__format__",
+        # Class infrastructure
+        "__new__",
+        "__del__",
+        "__init_subclass__",
+        "__class_getitem__",
+        "__set_name__",
+    }
+)
 
 
 def _is_property(cls: type, name: str) -> bool:
-    """Check if a class attribute is a property."""
+    """Report whether a class attribute resolves to a property descriptor.
+
+    Args:
+        cls: The class whose MRO is searched.
+        name: The attribute name to resolve.
+
+    Returns:
+        True if the first definition of `name` in the MRO is a `property`.
+    """
     for base in cls.__mro__:
         if name in base.__dict__:
-            attr = base.__dict__[name]
-            return isinstance(attr, property)
+            return isinstance(base.__dict__[name], property)
     return False
 
 
 def _get_logic_methods(cls: type, base_cls: type) -> list[str]:
-    """Find methods that contain logic (not allowed in data-only components).
+    """Find methods on a component class that violate the data-only rule.
 
     Args:
-        cls: The class to check.
-        base_cls: The base component class to exclude from checking.
+        cls: The component subclass being validated.
+        base_cls: The component base class whose own methods are exempt.
 
     Returns:
-        List of method names that violate data-only principle.
+        Sorted names of callables declared by `cls` (or by a parent other
+        than `base_cls`) that are neither allowed lifecycle hooks nor
+        properties.
     """
     logic_methods = []
 
     for name in dir(cls):
-        # Skip private/magic unless it's a known method
-        if name.startswith("_") and name not in ALLOWED_METHODS:
-            # Check if it's a dunder we don't know about
-            if name.startswith("__") and name.endswith("__"):
-                continue
-            # Private methods starting with _ are suspicious but allowed
+        # Underscore-prefixed names are exempt: unrecognised dunders belong to
+        # Python or to @dataclass, and a private helper is a deliberate opt-out.
+        if name in ALLOWED_METHODS or name.startswith("_"):
             continue
 
-        # Skip allowed methods
-        if name in ALLOWED_METHODS:
-            continue
-
-        # Skip properties
         if _is_property(cls, name):
             continue
 
-        # Check if it's defined in the class (not inherited from base)
         try:
             attr = getattr(cls, name)
         except AttributeError:
             continue
 
-        # Skip class/static variables
         if not callable(attr):
             continue
 
-        # Check if this is defined in our class, not in BaseComponent/StrictComponent
         for base in cls.__mro__:
             if base is base_cls or base is object:
                 continue
             if name in base.__dict__:
-                # It's a method defined in this class or a non-base parent
                 logic_methods.append(name)
                 break
 
-    return logic_methods
+    return sorted(logic_methods)
 
 
 class Component(Protocol):
-    """Interface that all components must implement."""
+    """Structural interface that every component satisfies."""
 
-    entity: Optional["Entity"]
+    entity: Entity | None
 
-    def on_attach(self, entity: "Entity") -> None:
-        """Call when the component is added to an entity."""
+    def on_attach(self, entity: Entity) -> None:
+        """Bind the component to the entity that now owns it."""
         ...
 
     def on_detach(self) -> None:
-        """Call when the component is removed from an entity."""
+        """Unbind the component from its owning entity."""
         ...
 
 
 class BaseComponent:
-    """Reference implementation of the Component protocol.
+    """Reference implementation of the `Component` protocol.
 
-    Inherit from this to automatically satisfy ECS requirements.
+    Subclasses that declare logic methods trigger a `UserWarning` at class
+    definition time. Set `_allow_methods = True` on a subclass to opt out;
+    prefer `StrictComponent` for new code, which rejects such methods outright.
 
-    Note:
-        Components should be data-only containers. Logic belongs in Systems.
-        This class allows methods for backwards compatibility but will warn
-        if logic methods are detected. For strict enforcement, use
-        StrictComponent instead.
-
-    Memory Optimization:
-        This class uses __slots__ to reduce memory overhead. Subclasses that
-        use @dataclass should use @dataclass(slots=True) for optimal memory.
-        For non-dataclass subclasses, define your own __slots__.
+    `__slots__` keeps per-instance overhead low. Dataclass subclasses should
+    declare `@dataclass(slots=True)`; non-dataclass subclasses should declare
+    their own `__slots__`.
 
     Attributes:
-        _allow_methods: Class attribute to suppress method warnings.
-            Set to True on legacy components that need methods.
+        entity: The owning entity, or None while detached.
     """
 
     __slots__ = ("entity",)
@@ -165,79 +155,82 @@ class BaseComponent:
     _allow_methods: bool = False
 
     def __init__(self) -> None:
-        """Initialize the Base Component."""
-        self.entity: Optional["Entity"] = None
+        """Initialise the component in a detached state."""
+        self.entity: Entity | None = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Validate subclasses for data-only pattern compliance."""
+        """Warn if the subclass declares logic methods.
+
+        Args:
+            **kwargs: Class keyword arguments, forwarded to `super()`.
+        """
         super().__init_subclass__(**kwargs)
 
-        # Skip validation if methods are explicitly allowed
         if getattr(cls, "_allow_methods", False):
             return
 
-        # Find logic methods
         logic_methods = _get_logic_methods(cls, BaseComponent)
-
         if logic_methods:
-            method_list = ", ".join(sorted(logic_methods))
             warnings.warn(
-                f"Component '{cls.__name__}' has logic methods: {method_list}. "
-                f"Components should be data-only. Move logic to a System, or set "
-                f"_allow_methods = True to suppress this warning.",
+                f"Component '{cls.__name__}' has logic methods: "
+                f"{', '.join(logic_methods)}. Components should be data-only. "
+                f"Move logic to a System, or set _allow_methods = True to "
+                f"suppress this warning.",
                 UserWarning,
                 stacklevel=2,
             )
 
-    def on_attach(self, entity: "Entity") -> None:
-        """Store reference to the owner entity."""
+    def on_attach(self, entity: Entity) -> None:
+        """Bind the component to the entity that now owns it.
+
+        Args:
+            entity: The owning entity.
+        """
         self.entity = entity
 
     def on_detach(self) -> None:
-        """Clear reference to the owner entity."""
+        """Unbind the component from its owning entity."""
         self.entity = None
 
 
 class StrictComponent(BaseComponent):
-    """A component that strictly enforces the data-only pattern.
+    """A component that rejects logic methods at class-definition time.
 
-    Unlike BaseComponent, StrictComponent will raise a TypeError at class
-    definition time if logic methods are detected. Use this for new components
-    to ensure they follow proper ECS principles.
+    Where `BaseComponent` warns, `StrictComponent` raises `TypeError`. Use it
+    for new components so ECS boundaries cannot erode silently.
 
-    Memory Optimization:
-        This class inherits __slots__ from BaseComponent. For best memory
-        efficiency, subclasses using @dataclass should use @dataclass(slots=True).
+    Raises:
+        TypeError: If a subclass declares a method that is not a lifecycle
+            hook, a dunder, or a property.
 
     Example:
+        ```python
         @dataclass(slots=True)
         class Position(StrictComponent):
             x: float = 0.0
             y: float = 0.0
-            # No methods allowed!
-
-        @dataclass(slots=True)
-        class Velocity(StrictComponent):
-            dx: float = 0.0
-            dy: float = 0.0
-
-            def update(self):  # This will raise TypeError!
-                pass
+        ```
     """
 
-    __slots__ = ()  # No additional slots, inherits 'entity' from BaseComponent
+    __slots__ = ()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Validate subclasses and error on logic methods."""
-        # Skip BaseComponent's warning validation
-        object.__init_subclass__()
+        """Reject subclasses that declare logic methods.
 
-        # Find logic methods
+        Args:
+            **kwargs: Class keyword arguments, forwarded to `super()`.
+
+        Raises:
+            TypeError: If logic methods are found.
+        """
+        # Chain past BaseComponent deliberately: its warn-only check would
+        # otherwise fire alongside the hard error raised here.
+        super(BaseComponent, cls).__init_subclass__(**kwargs)
+
         logic_methods = _get_logic_methods(cls, StrictComponent)
-
         if logic_methods:
-            method_list = ", ".join(sorted(logic_methods))
             raise TypeError(
-                f"StrictComponent '{cls.__name__}' has logic methods: {method_list}. "
-                f"Components must be data-only. Move this logic to a System."
+                f"StrictComponent '{cls.__name__}' has logic methods: "
+                f"{', '.join(logic_methods)}. Components must be data-only. "
+                f"Move this logic to a System."
             )
