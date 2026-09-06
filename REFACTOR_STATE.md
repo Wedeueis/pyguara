@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/graphics` — **split across several iterations**; iterations 1 (window boundary) and 2 (components) in review.
+`pyguara/graphics` — **split across several iterations**; iterations 1 (window boundary), 2 (components) and 3 (backends) done; 3 in review.
 
 **Tier 2 is complete:** `config`, `application`, `scene`, `systems`.
 
@@ -39,7 +39,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [~] `pyguara/graphics` — ~8,000 lines, too large for one iteration. Split:
     - [x] 1. Window boundary — `window.py`, `IWindowBackend` *(active)*
     - [x] 2. Components — camera, particles, animation, geometry, sprite *(active)*
-    - [ ] 3. Backends — pygame, ModernGL, headless renderers
+    - [x] 3. Backends — pygame, ModernGL, headless renderers *(active)*
     - [ ] 4. Pipeline — graph, passes, framebuffer, viewport, batching
     - [ ] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting
 - [ ] `pyguara/physics` — protocols, pymunk backend, joints, materials
@@ -816,3 +816,40 @@ a fixed pool with documented degree units. `animation.py` carries
 -- which belongs to CC-6 rather than this slice.
 
 **Deferred:** CC-3 through CC-8, CC-11 (issue #9, now partly addressed).
+
+
+### `pyguara/graphics` iteration 3 — backends — awaiting approval (2026-09-06)
+
+**Verification:** 1464/1464 tests pass; ruff clean; mypy clean.
+
+**Correctness fixes:**
+- **The pygame compatibility stubs had drifted from the classes they stand in
+  for.** `graphics/backends/pygame/stubs.py` exists so game code using
+  framebuffers, lighting or post-processing runs unchanged on pygame; its
+  entire value is interface parity. Comparing each stub's public surface
+  against its real counterpart found two holes:
+  `PygameLightingSystem` was missing `collect_lights_screen_space` (called by
+  `pipeline/passes/light_pass.py`) and `PygameRenderGraph` was missing `ctx`
+  (read by `application.py`). Either is an `AttributeError` that appears only
+  after switching backend -- precisely the failure the stubs exist to prevent.
+  The file had **no test references at all**.
+
+**Tests:** new `tests/test_pygame_stubs.py`, 15 tests. Two are parametrised
+parity checks comparing every stub against its counterpart, by member name and
+by argument list, so the next divergence fails in CI rather than in a game.
+Verified they bite: removing `collect_lights_screen_space` again reproduces the
+failure with a message naming it. The rest cover the no-op behaviour itself --
+that the lighting stub reports *full* ambient rather than darkness, that the
+post-process stack passes frames through untouched, and that the lifecycle
+calls are harmless.
+
+**Surveyed and clean:** all six shipped implementations satisfy their protocols
+structurally (`IWindowBackend`, `IRenderer`, `UIRenderer`, `TextureFactory`),
+with no missing members and no signature drift; `conversions.py` is two
+one-line adapters. One inconsistency noted but not changed: `IFramebuffer` and
+`IRenderPass` are the only graphics protocols not marked `@runtime_checkable`,
+while the other four are. Nothing currently needs to `isinstance` them, so
+changing it now would be speculative -- it belongs with slice 4, which is where
+those two protocols are actually implemented.
+
+**Deferred:** CC-3 through CC-8, CC-11 (issue #9).
