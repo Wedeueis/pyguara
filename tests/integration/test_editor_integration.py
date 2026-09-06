@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+
 from pyguara.application.sandbox import SandboxApplication
 from pyguara.editor.layer import EditorTool
 from pyguara.graphics.window import Window

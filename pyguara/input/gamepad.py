@@ -1,11 +1,10 @@
 """Gamepad/Controller management system."""
 
-from pyguara.log import get_logger
+import contextlib
 import time
-from typing import Dict, List, Optional
 
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.input.events import GamepadButtonEvent, GamepadAxisEvent
+from pyguara.input.events import GamepadAxisEvent, GamepadButtonEvent
 from pyguara.input.protocols import IInputBackend, IJoystick
 from pyguara.input.types import (
     GamepadAxis,
@@ -13,6 +12,7 @@ from pyguara.input.types import (
     GamepadConfig,
     GamepadState,
 )
+from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,7 @@ class GamepadManager:
         self,
         event_dispatcher: EventDispatcher,
         input_backend: IInputBackend,
-        config: Optional[GamepadConfig] = None,
+        config: GamepadConfig | None = None,
     ) -> None:
         """Initialize the gamepad manager.
 
@@ -51,8 +51,8 @@ class GamepadManager:
         self._event_dispatcher = event_dispatcher
         self._config = config or GamepadConfig()
         self._input_backend = input_backend
-        self._controllers: Dict[int, GamepadState] = {}
-        self._joysticks: Dict[int, IJoystick] = {}
+        self._controllers: dict[int, GamepadState] = {}
+        self._joysticks: dict[int, IJoystick] = {}
 
         if not self._input_backend.is_initialized():
             self._input_backend.init_joysticks()
@@ -109,10 +109,8 @@ class GamepadManager:
             logger.info("Disconnected: %s (ID: %d)", state.name, controller_id)
 
         if controller_id in self._joysticks:
-            try:
+            with contextlib.suppress(Exception):
                 self._joysticks[controller_id].quit()
-            except Exception:
-                pass
             del self._joysticks[controller_id]
 
         # Keep the state for a frame to allow events to process
@@ -283,7 +281,7 @@ class GamepadManager:
             return False
         return self._controllers[controller_id].is_connected
 
-    def get_controller_name(self, controller_id: int) -> Optional[str]:
+    def get_controller_name(self, controller_id: int) -> str | None:
         """Get the name of a connected controller.
 
         Args:
@@ -296,7 +294,7 @@ class GamepadManager:
             return None
         return self._controllers[controller_id].name
 
-    def get_connected_controllers(self) -> List[int]:
+    def get_connected_controllers(self) -> list[int]:
         """Get a list of all connected controller IDs.
 
         Returns:

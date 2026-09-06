@@ -16,13 +16,15 @@ Example:
 """
 
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from pyguara.common.types import Color, Rect
-from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.graphics.protocols import IRenderer, UIRenderer
 
 if TYPE_CHECKING:
     from pyguara.scene.base import Scene
@@ -104,7 +106,7 @@ class Transition(ABC):
     Subclasses implement specific visual effects like fade, slide, wipe, etc.
     """
 
-    def __init__(self, config: Optional[TransitionConfig] = None):
+    def __init__(self, config: TransitionConfig | None = None):
         """Initialize transition.
 
         Args:
@@ -221,7 +223,7 @@ class SlideTransition(Transition):
 
     def __init__(
         self,
-        config: Optional[TransitionConfig] = None,
+        config: TransitionConfig | None = None,
         direction: str = "left",
     ):
         """Initialize slide transition.
@@ -272,7 +274,7 @@ class WipeTransition(Transition):
 
     def __init__(
         self,
-        config: Optional[TransitionConfig] = None,
+        config: TransitionConfig | None = None,
         direction: str = "left_to_right",
     ):
         """Initialize wipe transition.
@@ -348,12 +350,12 @@ class TransitionManager:
 
     def __init__(self) -> None:
         """Initialize transition manager."""
-        self.current_transition: Optional[Transition] = None
-        self.from_scene: Optional[Scene] = None
-        self.to_scene: Optional[Scene] = None
-        self.on_complete_callback: Optional[Callable[[], None]] = None
-        self._on_from_hidden: Optional[Callable[[], None]] = None
-        self._on_to_shown: Optional[Callable[[], None]] = None
+        self.current_transition: Transition | None = None
+        self.from_scene: Scene | None = None
+        self.to_scene: Scene | None = None
+        self.on_complete_callback: Callable[[], None] | None = None
+        self._on_from_hidden: Callable[[], None] | None = None
+        self._on_to_shown: Callable[[], None] | None = None
         self.screen_width = 800
         self.screen_height = 600
         self._phase_switched = False  # Track if we've switched to IN phase
@@ -371,11 +373,11 @@ class TransitionManager:
     def start_transition(
         self,
         transition: Transition,
-        from_scene: Optional[Scene],
+        from_scene: Scene | None,
         to_scene: Scene,
-        on_complete: Optional[Callable[[], None]] = None,
-        on_from_hidden: Optional[Callable[[], None]] = None,
-        on_to_shown: Optional[Callable[[], None]] = None,
+        on_complete: Callable[[], None] | None = None,
+        on_from_hidden: Callable[[], None] | None = None,
+        on_to_shown: Callable[[], None] | None = None,
     ) -> None:
         """Start a scene transition.
 

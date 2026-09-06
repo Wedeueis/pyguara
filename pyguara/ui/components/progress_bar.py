@@ -1,6 +1,6 @@
 """Progress indicator."""
 
-from pyguara.common.types import Vector2, Rect
+from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 

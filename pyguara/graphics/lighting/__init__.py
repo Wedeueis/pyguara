@@ -7,9 +7,9 @@ This module provides:
 """
 
 from pyguara.graphics.lighting.components import (
+    AmbientLight,
     LightSource,
     LightType,
-    AmbientLight,
 )
 from pyguara.graphics.lighting.light_system import LightData, LightingSystem
 

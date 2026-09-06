@@ -1,8 +1,7 @@
 """Input domain definitions."""
 
-from enum import Enum, auto
 from dataclasses import dataclass, field
-from typing import Dict
+from enum import Enum, auto
 
 
 class InputDevice(Enum):
@@ -105,10 +104,10 @@ class GamepadState:
     instance_id: int  # pygame joystick instance ID
     name: str  # Controller name (e.g., "Xbox Controller")
     is_connected: bool = True
-    button_states: Dict[GamepadButton, bool] = field(
+    button_states: dict[GamepadButton, bool] = field(
         default_factory=lambda: {button: False for button in GamepadButton}
     )
-    axis_values: Dict[GamepadAxis, float] = field(
+    axis_values: dict[GamepadAxis, float] = field(
         default_factory=lambda: {axis: 0.0 for axis in GamepadAxis}
     )
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Iterator, Set as AbstractSet
-from typing import Callable, TypeVar, overload
+from collections.abc import Callable, Iterator
+from collections.abc import Set as AbstractSet
+from typing import TypeVar, overload
 
 from pyguara.ecs.component import Component
 from pyguara.ecs.entity import Entity

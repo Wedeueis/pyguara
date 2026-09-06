@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import moderngl
@@ -23,7 +23,7 @@ class Shader:
     """
 
     name: str
-    program: "moderngl.Program"
+    program: moderngl.Program
 
     # Cached uniform locations
     _uniform_cache: dict[str, Any] = field(default_factory=dict, repr=False)
@@ -90,7 +90,7 @@ class ShaderCache:
     indexed by their source files.
     """
 
-    def __init__(self, ctx: "moderngl.Context") -> None:
+    def __init__(self, ctx: moderngl.Context) -> None:
         """Initialize the shader cache.
 
         Args:
@@ -105,7 +105,7 @@ class ShaderCache:
         vertex_source: str,
         fragment_source: str,
         *,
-        geometry_source: Optional[str] = None,
+        geometry_source: str | None = None,
     ) -> Shader:
         """Get a cached shader or compile a new one.
 
@@ -137,7 +137,7 @@ class ShaderCache:
         vertex_path: Path,
         fragment_path: Path,
         *,
-        geometry_path: Optional[Path] = None,
+        geometry_path: Path | None = None,
     ) -> Shader:
         """Get a cached shader or load and compile from files.
 
@@ -153,22 +153,22 @@ class ShaderCache:
         if name in self._cache:
             return self._cache[name]
 
-        with open(vertex_path, "r") as f:
+        with open(vertex_path) as f:
             vertex_source = f.read()
 
-        with open(fragment_path, "r") as f:
+        with open(fragment_path) as f:
             fragment_source = f.read()
 
         geometry_source = None
         if geometry_path is not None:
-            with open(geometry_path, "r") as f:
+            with open(geometry_path) as f:
                 geometry_source = f.read()
 
         return self.get_or_compile(
             name, vertex_source, fragment_source, geometry_source=geometry_source
         )
 
-    def get(self, name: str) -> Optional[Shader]:
+    def get(self, name: str) -> Shader | None:
         """Get a shader by name.
 
         Args:

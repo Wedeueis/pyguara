@@ -1,12 +1,13 @@
 """Performance monitoring tool implementation."""
 
-import pygame
 from collections import deque
 
+import pygame
+
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.tools.base import Tool
-from pyguara.common.types import Color, Rect, Vector2
 
 
 class PerformanceMonitor(Tool):

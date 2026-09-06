@@ -1,6 +1,6 @@
 """Interfaces for physics engine adapters."""
 
-from typing import Any, List, Optional, Protocol, Union, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from pyguara.common.types import Vector2
 from pyguara.physics.types import (
@@ -47,11 +47,11 @@ class IPhysicsBody(Protocol):
         """Set the linear velocity."""
         ...
 
-    def apply_force(self, force: Vector2, point: Optional[Vector2] = None) -> None:
+    def apply_force(self, force: Vector2, point: Vector2 | None = None) -> None:
         """Apply a continuous force to the body."""
         ...
 
-    def apply_impulse(self, impulse: Vector2, point: Optional[Vector2] = None) -> None:
+    def apply_impulse(self, impulse: Vector2, point: Vector2 | None = None) -> None:
         """Apply an instant impulse to the body."""
         ...
 
@@ -74,7 +74,7 @@ class IPhysicsEngine(Protocol):
 
     def create_body(
         self,
-        entity_id: Union[int, str],
+        entity_id: int | str,
         body_type: BodyType,
         position: Vector2,
         mass: float = 1.0,
@@ -90,7 +90,7 @@ class IPhysicsEngine(Protocol):
         self,
         body: IPhysicsBody,
         shape_type: ShapeType,
-        dimensions: List[float],
+        dimensions: list[float],
         offset: Vector2,
         material: PhysicsMaterial,
         collision_layer: CollisionLayer,
@@ -101,7 +101,7 @@ class IPhysicsEngine(Protocol):
 
     def raycast(
         self, start: Vector2, end: Vector2, mask: int = 0xFFFFFFFF
-    ) -> Optional[RaycastHit]:
+    ) -> RaycastHit | None:
         """Cast a ray in the physics world."""
         ...
 

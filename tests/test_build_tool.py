@@ -1,11 +1,12 @@
 """Tests for the standalone game compiler tool."""
 
 import sys
+
 from click.testing import CliRunner
 
 from pyguara.cli.build import (
-    _find_assets_folder,
     _build_pyinstaller_args,
+    _find_assets_folder,
     _path_separator,
     build,
 )

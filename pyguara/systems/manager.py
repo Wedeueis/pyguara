@@ -1,8 +1,8 @@
 """System manager for orchestrating game logic systems."""
 
-from typing import Any, Dict, List, Optional, Type
+from typing import Any
 
-from pyguara.systems.protocols import InitializableSystem, CleanupSystem
+from pyguara.systems.protocols import CleanupSystem, InitializableSystem
 
 
 class SystemManager:
@@ -25,13 +25,13 @@ class SystemManager:
 
     def __init__(self) -> None:
         """Initialize the system manager."""
-        self._systems: List[tuple[int, Any]] = []  # (priority, system)
-        self._systems_by_type: Dict[Type[Any], Any] = {}
+        self._systems: list[tuple[int, Any]] = []  # (priority, system)
+        self._systems_by_type: dict[type[Any], Any] = {}
         self._initialized = False
         self._enabled = True
 
     def register(
-        self, system: Any, priority: int = 100, system_type: Optional[Type[Any]] = None
+        self, system: Any, priority: int = 100, system_type: type[Any] | None = None
     ) -> None:
         """Register a system.
 
@@ -55,7 +55,7 @@ class SystemManager:
         key = system_type or type(system)
         self._systems_by_type[key] = system
 
-    def unregister(self, system_type: Type[Any]) -> Optional[Any]:
+    def unregister(self, system_type: type[Any]) -> Any | None:
         """Unregister a system by type.
 
         Args:
@@ -74,7 +74,7 @@ class SystemManager:
 
         return system
 
-    def get_system(self, system_type: Type[Any]) -> Optional[Any]:
+    def get_system(self, system_type: type[Any]) -> Any | None:
         """Get a registered system by type.
 
         Args:
@@ -85,7 +85,7 @@ class SystemManager:
         """
         return self._systems_by_type.get(system_type)
 
-    def has_system(self, system_type: Type[Any]) -> bool:
+    def has_system(self, system_type: type[Any]) -> bool:
         """Check if a system type is registered.
 
         Args:
@@ -156,7 +156,7 @@ class SystemManager:
         """Get number of registered systems."""
         return len(self._systems)
 
-    def get_all_systems(self) -> List[Any]:
+    def get_all_systems(self) -> list[Any]:
         """Get all registered systems in priority order.
 
         Returns:

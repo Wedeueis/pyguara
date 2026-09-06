@@ -4,6 +4,7 @@ Custom events for platformer game logic.
 """
 
 from dataclasses import dataclass
+
 from pyguara.common.types import Vector2
 
 

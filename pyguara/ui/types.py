@@ -1,7 +1,8 @@
 """UI domain definitions and constants."""
 
-from enum import Enum, auto
 from dataclasses import dataclass, field
+from enum import Enum, auto
+
 from pyguara.common.types import Color  # FIX: Import Color
 
 # --- Enums ---

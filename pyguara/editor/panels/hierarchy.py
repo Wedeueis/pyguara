@@ -1,21 +1,21 @@
 """Hierarchy Panel for the Editor."""
 
-from typing import Optional, Callable
+from collections.abc import Callable
 
 try:
     import imgui  #
 except ImportError:
     imgui = None
 
-from pyguara.ecs.manager import EntityManager
-from pyguara.ecs.entity import Entity
 from pyguara.common.components import Tag
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
 
 
 class HierarchyPanel:
     """Displays a list of all entities in the scene."""
 
-    def __init__(self, manager_provider: Callable[[], Optional[EntityManager]]) -> None:
+    def __init__(self, manager_provider: Callable[[], EntityManager | None]) -> None:
         """
         Initialize the Hierarchical Panel.
 
@@ -24,7 +24,7 @@ class HierarchyPanel:
                               (Because scenes change, we can't store a static reference).
         """
         self._provider = manager_provider
-        self.selected_entity: Optional[Entity] = None
+        self.selected_entity: Entity | None = None
 
     def render(self) -> None:
         """Draw the panel."""

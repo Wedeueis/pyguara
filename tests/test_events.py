@@ -96,8 +96,10 @@ def test_event_filtering(event_dispatcher) -> None:
 
 def test_error_handling_strategy_raise():
     """Test that RAISE strategy re-raises exceptions."""
-    import pytest
     import logging
+
+    import pytest
+
     from pyguara.events.dispatcher import EventDispatcher
     from pyguara.events.types import ErrorHandlingStrategy
 
@@ -119,6 +121,7 @@ def test_error_handling_strategy_raise():
 def test_error_handling_strategy_log():
     """Test that LOG strategy logs and continues."""
     import logging
+
     from pyguara.events.dispatcher import EventDispatcher
     from pyguara.events.types import ErrorHandlingStrategy
 
@@ -175,6 +178,7 @@ def test_error_handling_strategy_ignore():
 def test_default_logger_emits_queue_overflow_warning_without_explicit_logger(caplog):
     """No logger passed in still logs (logging migration, ticket 16)."""
     import logging
+
     from pyguara.events.dispatcher import EventDispatcher
 
     dispatcher = EventDispatcher(queue_warning_threshold=0)
@@ -188,11 +192,13 @@ def test_default_logger_emits_queue_overflow_warning_without_explicit_logger(cap
 
 def test_error_message_includes_context():
     """Test that error messages include handler and event type information."""
-    import pytest
     import logging
+    from unittest.mock import MagicMock
+
+    import pytest
+
     from pyguara.events.dispatcher import EventDispatcher
     from pyguara.events.types import ErrorHandlingStrategy
-    from unittest.mock import MagicMock
 
     logger = MagicMock(spec=logging.Logger)
     dispatcher = EventDispatcher(
@@ -251,6 +257,7 @@ def test_process_queue_max_events_limit():
 def test_process_queue_time_budget():
     """Test that max_time_ms parameter enforces time budget."""
     import time
+
     from pyguara.events.dispatcher import EventDispatcher
 
     dispatcher = EventDispatcher()
@@ -321,6 +328,7 @@ def test_queue_size_warning_threshold():
     """Test that large queue size triggers warning log."""
     import logging
     from unittest.mock import MagicMock
+
     from pyguara.events.dispatcher import EventDispatcher
 
     logger = MagicMock(spec=logging.Logger)
@@ -351,6 +359,7 @@ def test_queue_size_warning_custom_threshold():
     """Test custom queue warning threshold."""
     import logging
     from unittest.mock import MagicMock
+
     from pyguara.events.dispatcher import EventDispatcher
 
     logger = MagicMock(spec=logging.Logger)
@@ -367,6 +376,7 @@ def test_queue_size_warning_custom_threshold():
 def test_process_queue_mixed_limits():
     """Test that both max_time_ms and max_events work together."""
     import time
+
     from pyguara.events.dispatcher import EventDispatcher
 
     dispatcher = EventDispatcher()
@@ -434,8 +444,8 @@ def test_unprocessed_events_remain_in_queue():
 def test_base_class_subscriber_fires_on_leaf_dispatch(event_dispatcher):
     """A handler subscribed to a base class fires when a subclass is
     dispatched (walks type(event).__mro__, not just the exact type)."""
-    from pyguara.physics.events import CollisionEvent, OnCollisionBegin
     from pyguara.common.types import Vector2
+    from pyguara.physics.events import CollisionEvent, OnCollisionBegin
 
     received = []
     event_dispatcher.subscribe(CollisionEvent, lambda e: received.append(e))

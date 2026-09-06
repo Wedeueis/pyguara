@@ -1,24 +1,26 @@
-import pytest
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from pyguara.application.application import Application
-from pyguara.di.container import DIContainer
-from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
-from pyguara.events.dispatcher import EventDispatcher
+from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import GameConfig
+from pyguara.di.container import DIContainer
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
-from pyguara.ui.manager import UIManager
-from pyguara.systems.manager import SystemManager
-from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.graphics.window import Window
-from pyguara.graphics.protocols import UIRenderer, IRenderer
-from pyguara.audio.audio_system import IAudioSystem
-from pyguara.resources.manager import ResourceManager
-from pyguara.prefabs.registry import ComponentRegistry
 from pyguara.prefabs.loader import PrefabCache
+from pyguara.prefabs.registry import ComponentRegistry
+from pyguara.resources.manager import ResourceManager
+from pyguara.scene.base import Scene
+from pyguara.scene.manager import SceneManager
+from pyguara.scripting.coroutines import CoroutineManager
+from pyguara.systems.manager import SystemManager
+from pyguara.ui.manager import UIManager
 
 
 # --- Mocks ---

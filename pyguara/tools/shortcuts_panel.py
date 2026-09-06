@@ -1,8 +1,8 @@
 """Keyboard shortcuts reference panel."""
 
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.common.types import Color, Vector2, Rect
 from pyguara.tools.base import Tool
 
 

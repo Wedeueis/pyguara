@@ -1,8 +1,9 @@
 """Resource Loader strategy for Audio files."""
 
-from typing import List
 import pygame
+
 from pyguara.resources.types import Resource
+
 from .types import PygameAudioClip
 
 
@@ -14,7 +15,7 @@ class PygameSoundLoader:
     """
 
     @property
-    def supported_extensions(self) -> List[str]:
+    def supported_extensions(self) -> list[str]:
         """Return the list of support audio formats."""
         return [".wav", ".ogg", ".mp3"]
 

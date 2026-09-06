@@ -1,12 +1,13 @@
 """Live config editor tool for GameConfig, decoupled from any entity."""
 
-import pygame
-from typing import Any, List, Tuple
+from typing import Any
 
+import pygame
+
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.common.types import Color, Rect, Vector2
 from pyguara.tools.base import Tool
 from pyguara.tools.tweakable import (
     TweakableLeaf,
@@ -41,7 +42,7 @@ class ConfigInspector(Tool):
         self._highlight_color = Color(100, 200, 255)
         self._saved_flash_timer = 0.0
 
-        self._tweakable_rows: List[Tuple[Rect, TweakableLeaf]] = []
+        self._tweakable_rows: list[tuple[Rect, TweakableLeaf]] = []
 
     def update(self, dt: float) -> None:
         """Count down the "Saved" flash message, if one is showing.

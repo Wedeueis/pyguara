@@ -1,16 +1,16 @@
 """Module 6: UI & Scene Graph - Entry Point."""
 
-import sys
 import logging
 import os
+import sys
 
 # Ensure we can import pyguara from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from pyguara.application.application import Application
-from pyguara.events.dispatcher import EventDispatcher
 from games.ui_scene_graph.bootstrap import configure_game_container
 from games.ui_scene_graph.scenes import MenuScene
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
 
 
 def main():

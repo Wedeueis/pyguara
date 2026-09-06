@@ -3,34 +3,34 @@
 Registers Physics Engine and related systems.
 """
 
-from pyguara.di.container import DIContainer
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.config.manager import ConfigManager
-from pyguara.log.manager import LogManager
-from pyguara.log.types import LogLevel
-from pyguara.graphics.window import Window, WindowConfig
-from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
-from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
-from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
-from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.input.manager import InputManager
-from pyguara.input.backends.pygame_backend import PygameInputBackend
-from pyguara.input.protocols import IInputBackend
-from pyguara.scene.manager import SceneManager
-from pyguara.resources.manager import ResourceManager
+from pyguara.application.application import Application
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
-from pyguara.prefabs.loader import PrefabCache
-from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
-from pyguara.ui.manager import UIManager
-from pyguara.systems.manager import SystemManager
-from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.application.application import Application
+from pyguara.config.manager import ConfigManager
+from pyguara.di.container import DIContainer
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
+from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.window import Window, WindowConfig
+from pyguara.input.backends.pygame_backend import PygameInputBackend
+from pyguara.input.manager import InputManager
+from pyguara.input.protocols import IInputBackend
+from pyguara.log.manager import LogManager
+from pyguara.log.types import LogLevel
+from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.collision_system import CollisionSystem
 
 # Physics Imports
 from pyguara.physics.protocols import IPhysicsEngine
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
-from pyguara.physics.collision_system import CollisionSystem
+from pyguara.prefabs.loader import PrefabCache
+from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
+from pyguara.resources.manager import ResourceManager
+from pyguara.scene.manager import SceneManager
+from pyguara.scripting.coroutines import CoroutineManager
+from pyguara.systems.manager import SystemManager
+from pyguara.ui.manager import UIManager
 
 
 def configure_game_container() -> DIContainer:

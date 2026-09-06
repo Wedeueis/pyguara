@@ -1,12 +1,12 @@
 """Grid-based graph implementation."""
 
 import math
-from typing import Iterator, List, Set, Tuple
+from collections.abc import Iterator
 
 from pyguara.common.types import Vector2
 
 # GridNode is just an (x, y) tuple for efficiency
-GridNode = Tuple[int, int]
+GridNode = tuple[int, int]
 
 
 class GridGraph:
@@ -17,7 +17,7 @@ class GridGraph:
         self.width = width
         self.height = height
         self.allow_diagonal = allow_diagonal
-        self.walls: Set[GridNode] = set()
+        self.walls: set[GridNode] = set()
         self.weights: dict[GridNode, float] = {}  # For terrain costs
 
     def in_bounds(self, node: GridNode) -> bool:
@@ -110,7 +110,7 @@ class OctileDistance:
         return (dx + dy) + (math.sqrt(2) - 2) * min(dx, dy)
 
 
-def smooth_path(path: List[GridNode], graph: GridGraph) -> List[GridNode]:
+def smooth_path(path: list[GridNode], graph: GridGraph) -> list[GridNode]:
     """Smooth a grid path by removing unnecessary waypoints.
 
     Uses line-of-sight checks to skip intermediate points.
@@ -185,8 +185,8 @@ def _has_line_of_sight(start: GridNode, end: GridNode, graph: GridGraph) -> bool
 
 
 def path_to_world_coords(
-    path: List[GridNode], cell_size: float, offset: Vector2 = Vector2.zero()
-) -> List[Vector2]:
+    path: list[GridNode], cell_size: float, offset: Vector2 = Vector2.zero()
+) -> list[Vector2]:
     """Convert grid path to world coordinates.
 
     Args:

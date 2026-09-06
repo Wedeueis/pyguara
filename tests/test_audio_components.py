@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
 from pyguara.audio.audio_source_system import AudioSourceSystem
+from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
 from pyguara.audio.types import AudioPriority, SpatialAudioConfig
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2

@@ -7,10 +7,10 @@ light data for the light render pass.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
-from pyguara.common.types import Color, Vector2
 from pyguara.common.components import Transform
+from pyguara.common.types import Color, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.lighting.components import AmbientLight, LightSource
 
@@ -49,12 +49,12 @@ class LightingSystem:
             entity_manager: The ECS entity manager.
         """
         self._entity_manager = entity_manager
-        self._lights: List[LightData] = []
+        self._lights: list[LightData] = []
         self._ambient_color: Color = Color(30, 30, 40)
         self._ambient_intensity: float = 0.3
 
     @property
-    def lights(self) -> List[LightData]:
+    def lights(self) -> list[LightData]:
         """Get the current frame's processed lights."""
         return self._lights
 
@@ -131,7 +131,7 @@ class LightingSystem:
         camera_position: Vector2,
         camera_zoom: float,
         viewport_offset: Vector2,
-    ) -> List[LightData]:
+    ) -> list[LightData]:
         """Get lights with positions transformed to screen space.
 
         Args:
@@ -142,7 +142,7 @@ class LightingSystem:
         Returns:
             List of LightData with screen-space positions.
         """
-        screen_lights: List[LightData] = []
+        screen_lights: list[LightData] = []
 
         for light in self._lights:
             # Transform world position to screen space

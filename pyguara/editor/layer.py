@@ -1,7 +1,8 @@
 """The Editor Tool manages the ImGui context and tool overlays."""
 
+from typing import Any
+
 from pyguara.log import get_logger
-from typing import Optional, Any
 
 try:
     import imgui
@@ -15,14 +16,14 @@ except ImportError:
 
 from pyguara.di.container import DIContainer
 from pyguara.ecs.manager import EntityManager
-from pyguara.scene.manager import SceneManager
-from pyguara.scene.serializer import SceneSerializer
-from pyguara.resources.manager import ResourceManager
+from pyguara.editor.panels.assets import AssetsPanel
 from pyguara.editor.panels.hierarchy import HierarchyPanel
 from pyguara.editor.panels.inspector import InspectorPanel
-from pyguara.editor.panels.assets import AssetsPanel
-from pyguara.tools.base import Tool
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.resources.manager import ResourceManager
+from pyguara.scene.manager import SceneManager
+from pyguara.scene.serializer import SceneSerializer
+from pyguara.tools.base import Tool
 
 logger = get_logger(__name__)
 
@@ -34,7 +35,7 @@ class EditorTool(Tool):
         """Initialize the editor tool."""
         super().__init__("Editor", container)
 
-        self._renderer: Optional[PygameRenderer] = None
+        self._renderer: PygameRenderer | None = None
         self._initialized = False
 
         # Panels
@@ -49,7 +50,7 @@ class EditorTool(Tool):
 
         self._assets_panel = AssetsPanel(resource_manager, self._get_current_manager)
 
-    def _get_current_manager(self) -> Optional[EntityManager]:
+    def _get_current_manager(self) -> EntityManager | None:
         """Resolve the active EntityManager from the current scene."""
         scene_manager = self._container.get(SceneManager)
         if scene_manager.current_scene:
@@ -89,10 +90,7 @@ class EditorTool(Tool):
 
         # Consume mouse/keyboard if ImGui wants them
         io = imgui.get_io()
-        if io.want_capture_mouse or io.want_capture_keyboard:
-            return True
-
-        return False
+        return bool(io.want_capture_mouse or io.want_capture_keyboard)
 
     def update(self, dt: float) -> None:
         """Update editor logic."""

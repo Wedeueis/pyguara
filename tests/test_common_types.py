@@ -53,9 +53,9 @@ class TestColor:
         assert abs(restored.b - original.b) <= 1
 
     def test_named_color_constants(self) -> None:
-        assert Color.WHITE == Color(255, 255, 255)
-        assert Color.BLACK == Color(0, 0, 0)
-        assert Color.TRANSPARENT == Color(0, 0, 0, 0)
+        assert Color(255, 255, 255) == Color.WHITE
+        assert Color(0, 0, 0) == Color.BLACK
+        assert Color(0, 0, 0, 0) == Color.TRANSPARENT
 
     def test_indexing_and_length(self) -> None:
         c = Color(1, 2, 3, 4)

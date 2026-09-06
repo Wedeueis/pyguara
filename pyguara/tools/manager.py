@@ -1,11 +1,12 @@
 """Tool management system for coordinating developer tools."""
 
-from pyguara.log import get_logger
+from typing import Any
+
 import pygame
-from typing import Dict, List, Optional, Any
 
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.log import get_logger
 from pyguara.tools.base import Tool
 
 logger = get_logger(__name__)
@@ -25,13 +26,13 @@ class ToolManager:
             container: The global dependency injection container.
         """
         self._container = container
-        self._tools: Dict[str, Tool] = {}
+        self._tools: dict[str, Tool] = {}
         # Render order determines Z-index (last item is drawn on top)
-        self._render_order: List[str] = []
-        self._shortcuts: Dict[int, str] = {}
+        self._render_order: list[str] = []
+        self._shortcuts: dict[int, str] = {}
         self._is_globally_visible: bool = False
 
-    def register_tool(self, tool: Tool, shortcut_key: Optional[int] = None) -> None:
+    def register_tool(self, tool: Tool, shortcut_key: int | None = None) -> None:
         """Register a new tool with the manager.
 
         Args:
@@ -50,7 +51,7 @@ class ToolManager:
 
         logger.debug("Registered tool '%s' (Key: %s)", tool.name, shortcut_key)
 
-    def get_tool(self, name: str) -> Optional[Tool]:
+    def get_tool(self, name: str) -> Tool | None:
         """Retrieve a registered tool by name.
 
         Args:

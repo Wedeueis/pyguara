@@ -5,9 +5,9 @@ from __future__ import annotations
 import inspect
 import threading
 import types
+from collections.abc import Callable
 from typing import (
     Any,
-    Callable,
     TypeVar,
     Union,
     cast,

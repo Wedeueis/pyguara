@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyguara.physics.materials import Materials, MaterialConstants
+from pyguara.physics.materials import MaterialConstants, Materials
 from pyguara.physics.types import PhysicsMaterial
 
 

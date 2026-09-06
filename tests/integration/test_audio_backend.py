@@ -1,10 +1,13 @@
 """Integration tests for Pygame audio backend."""
 
 import os
-import pytest
-import pygame
-from typing import Iterator, Any
+from collections.abc import Iterator
+from typing import Any
 from unittest.mock import MagicMock
+
+import pygame
+import pytest
+
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.resources.types import AudioClip
 

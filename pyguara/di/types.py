@@ -1,8 +1,9 @@
 """Type definitions and data structures for DI."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Dict, Optional, Type
+from typing import Any
 
 
 class ServiceLifetime(Enum):
@@ -58,14 +59,14 @@ class ServiceRegistration:
             Cached during registration to avoid inspect.signature at runtime.
     """
 
-    interface: Type[Any]
-    implementation: Optional[Type[Any]] = None
-    factory: Optional[Callable[..., Any]] = None
-    instance: Optional[Any] = None
+    interface: type[Any]
+    implementation: type[Any] | None = None
+    factory: Callable[..., Any] | None = None
+    instance: Any | None = None
     lifetime: ServiceLifetime = ServiceLifetime.TRANSIENT
     # FIX: Explicitly mark as Optional to avoid 'unreachable' errors in post_init
-    dependencies: Optional[Dict[str, Type[Any]]] = None
-    param_defaults: Optional[set[str]] = None
+    dependencies: dict[str, type[Any]] | None = None
+    param_defaults: set[str] | None = None
 
     def __post_init__(self) -> None:
         """Ensure dependencies dict and param_defaults set are initialized."""

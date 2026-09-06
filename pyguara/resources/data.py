@@ -2,7 +2,7 @@
 
 import json
 from dataclasses import fields, is_dataclass
-from typing import Any, Dict, Type, TypeVar
+from typing import Any, TypeVar
 
 from pyguara.resources.types import Resource
 
@@ -22,7 +22,7 @@ class DataResource(Resource):
         data (Dict[str, Any]): The raw data dictionary loaded from disk.
     """
 
-    def __init__(self, path: str, data: Dict[str, Any]):
+    def __init__(self, path: str, data: dict[str, Any]):
         """Initialize the data resource.
 
         Args:
@@ -41,7 +41,7 @@ class DataResource(Resource):
         """
         return self._data
 
-    def to_object(self, cls: Type[T]) -> T:
+    def to_object(self, cls: type[T]) -> T:
         """
         Convert the raw data into a strong-typed Dataclass instance.
 

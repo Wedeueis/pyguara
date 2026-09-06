@@ -14,7 +14,6 @@ Deliberately left unmarked, like `test_bootstrap_smoke.py`, so it runs under
 
 import os
 from types import SimpleNamespace
-from typing import List
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -22,6 +21,7 @@ os.environ["SDL_AUDIODRIVER"] = "dummy"
 import pygame
 import pytest
 
+from games.boot_process.scenes import BootScene
 from pyguara.application.application import Application
 from pyguara.application.bootstrap import create_application
 from pyguara.common.components import Transform
@@ -29,7 +29,6 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.input.events import OnActionEvent
 from pyguara.input.types import ActionType, InputContext, InputDevice
-from games.boot_process.scenes import BootScene
 
 MOVE_KEY = pygame.K_d
 MOVE_STEP = 10.0
@@ -45,9 +44,9 @@ def _key_event(key: int, down: bool) -> SimpleNamespace:
     return SimpleNamespace(type=pygame.KEYDOWN if down else pygame.KEYUP, key=key)
 
 
-def _scripted_frames() -> List[List[SimpleNamespace]]:
+def _scripted_frames() -> list[list[SimpleNamespace]]:
     """Build a fixed schedule of pygame-shaped key events, one list per frame."""
-    frames: List[List[SimpleNamespace]] = [[] for _ in range(NUM_FRAMES)]
+    frames: list[list[SimpleNamespace]] = [[] for _ in range(NUM_FRAMES)]
     for frame_id, keys in SCRIPTED_PRESSES.items():
         for key in keys:
             frames[frame_id].append(_key_event(key, down=True))
@@ -55,7 +54,7 @@ def _scripted_frames() -> List[List[SimpleNamespace]]:
     return frames
 
 
-def _make_poll_events(frames: List[List[SimpleNamespace]]):
+def _make_poll_events(frames: list[list[SimpleNamespace]]):
     iterator = iter(frames)
     return lambda: next(iterator, [])
 

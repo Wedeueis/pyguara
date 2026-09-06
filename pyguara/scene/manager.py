@@ -1,13 +1,13 @@
 """Scene management system."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional, List
 
 from pyguara.common.components import Transform
 from pyguara.di.container import DIContainer
-from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.scene.base import Scene
-from pyguara.scene.transitions import TransitionManager, Transition
+from pyguara.scene.transitions import Transition, TransitionManager
 
 
 @dataclass
@@ -23,17 +23,17 @@ class SceneManager:
 
     def __init__(self) -> None:
         """Initialize Scene Manager."""
-        self._scenes: Dict[str, Scene] = {}
-        self._current_scene: Optional[Scene] = None
-        self._container: Optional[DIContainer] = None  # Store container ref
+        self._scenes: dict[str, Scene] = {}
+        self._current_scene: Scene | None = None
+        self._container: DIContainer | None = None  # Store container ref
         self._transition_manager = TransitionManager()
-        self._pending_scene: Optional[str] = None
+        self._pending_scene: str | None = None
 
         # Scene stack for overlays (pause menus, etc.). `_current_pause_below`
         # tracks the pause_below the *current* scene was activated with
         # (False for the base scene); each StackEntry carries the
         # pause_below that applied when that scene was itself current.
-        self._stack: List[StackEntry] = []
+        self._stack: list[StackEntry] = []
         self._current_pause_below: bool = False
 
     def set_container(self, container: DIContainer) -> None:
@@ -41,7 +41,7 @@ class SceneManager:
         self._container = container
 
     @property
-    def current_scene(self) -> Optional[Scene]:
+    def current_scene(self) -> Scene | None:
         """Get the currently active scene."""
         return self._current_scene
 
@@ -62,9 +62,7 @@ class SceneManager:
         """
         self._transition_manager.set_screen_size(width, height)
 
-    def switch_to(
-        self, scene_name: str, transition: Optional[Transition] = None
-    ) -> None:
+    def switch_to(self, scene_name: str, transition: Transition | None = None) -> None:
         """Transition to a new scene.
 
         Args:
@@ -84,7 +82,7 @@ class SceneManager:
             # Use transition
             self._pending_scene = scene_name
 
-            on_from_hidden: Optional[Callable[[], None]] = None
+            on_from_hidden: Callable[[], None] | None = None
             if from_scene is not None:
                 captured_from_scene = from_scene
                 on_from_hidden = lambda: self._exit_scene(captured_from_scene)  # noqa: E731
@@ -118,7 +116,7 @@ class SceneManager:
         self,
         scene_name: str,
         pause_below: bool = True,
-        transition: Optional[Transition] = None,
+        transition: Transition | None = None,
     ) -> None:
         """Push a new scene onto the stack.
 
@@ -167,7 +165,7 @@ class SceneManager:
             self._current_pause_below = pause_below
             self._current_scene.on_enter()
 
-    def pop_scene(self, transition: Optional[Transition] = None) -> Optional[Scene]:
+    def pop_scene(self, transition: Transition | None = None) -> Scene | None:
         """Pop the top scene off the stack.
 
         Returns:
@@ -190,7 +188,7 @@ class SceneManager:
             # scene's resume -- fire through the transition's callbacks
             # rather than synchronously, so a fade-out still has the
             # outgoing scene alive to render.
-            on_from_hidden: Optional[Callable[[], None]] = None
+            on_from_hidden: Callable[[], None] | None = None
             if popped_scene is not None:
                 captured_popped_scene = popped_scene
                 on_from_hidden = lambda: self._exit_scene(captured_popped_scene)  # noqa: E731

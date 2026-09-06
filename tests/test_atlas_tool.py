@@ -1,13 +1,14 @@
 """Tests for sprite atlas generation and loading."""
 
-import pytest
 import json
 import tempfile
 from pathlib import Path
-import pygame
 
-from pyguara.graphics.atlas import Atlas, AtlasRegion
+import pygame
+import pytest
+
 from pyguara.common.types import Rect
+from pyguara.graphics.atlas import Atlas, AtlasRegion
 from pyguara.resources.types import Texture
 
 
@@ -24,6 +25,7 @@ def pygame_init():
 PIL_AVAILABLE = False
 try:
     from PIL import Image
+
     from pyguara.cli.atlas_generator import AtlasGenerator, Shelf
 
     PIL_AVAILABLE = True
@@ -278,7 +280,7 @@ def test_atlas_generator_generate():
         assert atlas_img.size == (256, 256)
 
         # Verify metadata
-        with open(output_metadata, "r") as f:
+        with open(output_metadata) as f:
             metadata = json.load(f)
 
         assert metadata["sprite_count"] == 3
@@ -290,9 +292,9 @@ def test_atlas_generator_generate():
 
 def test_resource_manager_load_atlas_invalid_metadata(tmp_path):
     """ResourceManager should raise error for invalid metadata."""
-    from pyguara.resources.manager import ResourceManager
-    from pyguara.resources.exceptions import InvalidMetadataError
     from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
+    from pyguara.resources.exceptions import InvalidMetadataError
+    from pyguara.resources.manager import ResourceManager
 
     # Create a temporary atlas image
     atlas_path = tmp_path / "atlas.png"
@@ -317,8 +319,8 @@ def test_resource_manager_load_atlas_invalid_metadata(tmp_path):
 
 def test_resource_manager_load_atlas_missing_metadata():
     """ResourceManager should raise error for missing metadata file."""
-    from pyguara.resources.manager import ResourceManager
     from pyguara.resources.exceptions import InvalidMetadataError
+    from pyguara.resources.manager import ResourceManager
 
     manager = ResourceManager()
 
@@ -329,8 +331,8 @@ def test_resource_manager_load_atlas_missing_metadata():
 @pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
 def test_resource_manager_load_atlas_success(tmp_path, pygame_init):
     """ResourceManager should successfully load atlas with metadata."""
-    from pyguara.resources.manager import ResourceManager
     from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
+    from pyguara.resources.manager import ResourceManager
 
     # Create atlas image
     atlas_path = tmp_path / "atlas.png"

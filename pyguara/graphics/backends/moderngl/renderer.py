@@ -2,15 +2,13 @@
 
 import math
 from pathlib import Path
-from typing import Dict, List, Optional
 
-import moderngl
 import numpy as np
 
-from pyguara.common.types import Vector2, Color, Rect
-from pyguara.resources.types import Texture
+import moderngl
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.types import RenderBatch
-
+from pyguara.resources.types import Texture
 
 # Shader file paths (relative to this module)
 _SHADER_DIR = Path(__file__).parent / "shaders"
@@ -79,10 +77,10 @@ class ModernGLRenderer:
         # instance buffer above.
         self._shape_program = self._create_shape_shader_program()
         self._shape_quad_vbo = self._create_shape_quad_vbo()
-        self._shape_capacities: Dict[float, int] = {}
-        self._shape_vbos: Dict[float, moderngl.Buffer] = {}
-        self._shape_vaos: Dict[float, moderngl.VertexArray] = {}
-        self._shape_pending: Dict[float, List[List[float]]] = {}
+        self._shape_capacities: dict[float, int] = {}
+        self._shape_vbos: dict[float, moderngl.Buffer] = {}
+        self._shape_vaos: dict[float, moderngl.VertexArray] = {}
+        self._shape_pending: dict[float, list[list[float]]] = {}
         for shape_type in (
             self.SHAPE_TYPE_RECT,
             self.SHAPE_TYPE_CIRCLE,
@@ -100,17 +98,17 @@ class ModernGLRenderer:
         self._update_projection()
 
         # Viewport state
-        self._current_viewport: Optional[Rect] = None
+        self._current_viewport: Rect | None = None
 
     def _create_shader_program(self) -> moderngl.Program:
         """Load and compile the sprite shaders."""
         vert_path = _SHADER_DIR / "sprite.vert"
         frag_path = _SHADER_DIR / "sprite.frag"
 
-        with open(vert_path, "r") as f:
+        with open(vert_path) as f:
             vert_source = f.read()
 
-        with open(frag_path, "r") as f:
+        with open(frag_path) as f:
             frag_source = f.read()
 
         return self._ctx.program(
@@ -180,10 +178,10 @@ class ModernGLRenderer:
         vert_path = _SHADER_DIR / "shape.vert"
         frag_path = _SHADER_DIR / "shape.frag"
 
-        with open(vert_path, "r") as f:
+        with open(vert_path) as f:
             vert_source = f.read()
 
-        with open(frag_path, "r") as f:
+        with open(frag_path) as f:
             frag_source = f.read()
 
         return self._ctx.program(

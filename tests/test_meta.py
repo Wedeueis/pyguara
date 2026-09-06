@@ -4,21 +4,21 @@ Tests MetaLoader, TextureMeta, AudioMeta, SpritesheetMeta and related functional
 """
 
 import json
-import pytest
 from pathlib import Path
 
+import pytest
+
 from pyguara.resources.meta import (
-    TextureFilter,
-    AudioLoadMode,
-    TextureMeta,
-    AudioMeta,
-    SpritesheetMeta,
-    MetaLoader,
-    META_TYPES,
     EXTENSION_TO_META_TYPE,
+    META_TYPES,
+    AudioLoadMode,
+    AudioMeta,
+    MetaLoader,
+    SpritesheetMeta,
+    TextureFilter,
+    TextureMeta,
     get_meta_loader,
 )
-
 
 # =============================================================================
 # Enum Tests

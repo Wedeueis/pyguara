@@ -1,9 +1,9 @@
 """Physics subsystem."""
 
-from pyguara.physics.types import BodyType, ShapeType, CollisionLayer, PhysicsMaterial
-from pyguara.physics.components import RigidBody, Collider
-from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.physics_system import PhysicsSystem
+from pyguara.physics.types import BodyType, CollisionLayer, PhysicsMaterial, ShapeType
 
 __all__ = [
     "BodyType",

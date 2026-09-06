@@ -365,7 +365,7 @@ class TestEventSequences:
         )
 
         # Stay (multiple frames)
-        for i in range(3):
+        for _i in range(3):
             collision_system.on_collision_persist(
                 "checkpoint", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
             )

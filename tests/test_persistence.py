@@ -1,6 +1,7 @@
 import dataclasses
-from pyguara.persistence.serializer import Serializer, SerializationFormat
-from pyguara.common.types import Vector2, Color
+
+from pyguara.common.types import Color, Vector2
+from pyguara.persistence.serializer import SerializationFormat, Serializer
 
 
 @dataclasses.dataclass

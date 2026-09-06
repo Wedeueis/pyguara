@@ -3,17 +3,17 @@
 Demonstrates physics simulation with Pymunk backend.
 """
 
-from pyguara.scene.base import Scene
+from games.physics_integration.components import BoxSprite
+from pyguara.common.components import Transform
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.manager import ConfigManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Vector2, Color, Rect
+from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.protocols import IPhysicsEngine
-from pyguara.physics.components import RigidBody, Collider
 from pyguara.physics.types import BodyType
-from pyguara.common.components import Transform
-from games.physics_integration.components import BoxSprite
+from pyguara.scene.base import Scene
 
 
 class PhysicsScene(Scene):

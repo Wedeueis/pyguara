@@ -8,7 +8,7 @@ for post-processing or directly to the screen.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
@@ -37,10 +37,10 @@ class CompositePass(BaseRenderPass):
 
     def __init__(
         self,
-        ctx: "moderngl.Context",
+        ctx: moderngl.Context,
         world_fbo_name: str = "world",
         light_fbo_name: str = "lightmap",
-        output_fbo_name: Optional[str] = COMPOSITE_FBO_NAME,
+        output_fbo_name: str | None = COMPOSITE_FBO_NAME,
         *,
         enabled: bool = True,
     ) -> None:
@@ -60,8 +60,8 @@ class CompositePass(BaseRenderPass):
         self._output_fbo_name = output_fbo_name
 
         # GPU resources
-        self._program: Optional["moderngl.Program"] = None
-        self._vao: Optional["moderngl.VertexArray"] = None
+        self._program: moderngl.Program | None = None
+        self._vao: moderngl.VertexArray | None = None
 
         self._create_resources()
 
@@ -71,9 +71,9 @@ class CompositePass(BaseRenderPass):
         vert_path = _SHADER_DIR / "fullscreen_quad.vert"
         frag_path = _SHADER_DIR / "composite.frag"
 
-        with open(vert_path, "r") as f:
+        with open(vert_path) as f:
             vert_source = f.read()
-        with open(frag_path, "r") as f:
+        with open(frag_path) as f:
             frag_source = f.read()
 
         self._program = self._ctx.program(
@@ -84,7 +84,7 @@ class CompositePass(BaseRenderPass):
         # Create VAO (no vertex buffers needed - fullscreen quad uses gl_VertexID)
         self._vao = self._ctx.vertex_array(self._program, [])
 
-    def execute(self, ctx: "moderngl.Context", graph: "RenderGraph") -> None:
+    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
         """Execute the composite pass.
 
         Args:

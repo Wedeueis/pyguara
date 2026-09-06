@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import gzip
 import json
-from pyguara.log import get_logger
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
+from pyguara.log import get_logger
 from pyguara.replay.types import ReplayData
 
 logger = get_logger(__name__)
@@ -74,7 +74,7 @@ class ReplaySerializer:
             logger.error(f"Failed to save replay: {e}")
             return False
 
-    def load(self, path: str) -> Optional[ReplayData]:
+    def load(self, path: str) -> ReplayData | None:
         """Load replay data from a file.
 
         Args:
@@ -95,7 +95,7 @@ class ReplaySerializer:
                 with gzip.open(file_path, "rt", encoding="utf-8") as f:
                     json_str = f.read()
             else:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     json_str = f.read()
 
             # Parse JSON
@@ -117,7 +117,7 @@ class ReplaySerializer:
             logger.error(f"Failed to load replay: {e}")
             return None
 
-    def get_metadata(self, path: str) -> Optional[dict]:
+    def get_metadata(self, path: str) -> dict | None:
         """Load only the metadata from a replay file.
 
         Useful for displaying replay info without loading all frames.
@@ -140,7 +140,7 @@ class ReplaySerializer:
                     # Read just enough for metadata
                     content = f.read(10000)  # First 10KB should have metadata
             else:
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read(10000)
 
             # Try to parse just the metadata
@@ -149,7 +149,7 @@ class ReplaySerializer:
                 content[: content.rfind("}") + 1] if "frames" in content else content
             )
 
-            metadata: Dict[str, Any] = data.get("metadata", {})
+            metadata: dict[str, Any] = data.get("metadata", {})
             return metadata
 
         except Exception as e:
@@ -172,7 +172,7 @@ def save_replay(replay_data: ReplayData, path: str, compress: bool = True) -> bo
     return serializer.save(replay_data, path, compress)
 
 
-def load_replay(path: str) -> Optional[ReplayData]:
+def load_replay(path: str) -> ReplayData | None:
     """Load replay data from a file.
 
     Args:

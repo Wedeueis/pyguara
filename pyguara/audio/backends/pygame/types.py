@@ -1,6 +1,7 @@
 """Pygame-specific implementations for Audio resources."""
 
 import pygame
+
 from pyguara.resources.types import AudioClip
 
 

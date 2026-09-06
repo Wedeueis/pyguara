@@ -1,11 +1,9 @@
 """UI Manager and event integration."""
 
-from typing import List, Optional
-
 from pyguara.common.types import Vector2
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.ui.base import UIElement
 from pyguara.ui.types import UIEventType
 
@@ -15,9 +13,9 @@ class UIManager:
 
     def __init__(self, dispatcher: EventDispatcher) -> None:
         """Initialize the UI manager and subscribe to input events."""
-        self._root_elements: List[UIElement] = []
+        self._root_elements: list[UIElement] = []
         self._dispatcher = dispatcher
-        self._focused_element: Optional[UIElement] = None
+        self._focused_element: UIElement | None = None
 
         # Subscribe to Engine Input Events
         self._dispatcher.subscribe(OnMouseEvent, self._on_mouse_event)
@@ -38,7 +36,7 @@ class UIManager:
             if element.visible:
                 element.render(renderer)
 
-    def set_focus(self, element: Optional[UIElement]) -> None:
+    def set_focus(self, element: UIElement | None) -> None:
         """Set the focused element.
 
         Args:
@@ -60,7 +58,7 @@ class UIManager:
             )
 
     @property
-    def focused_element(self) -> Optional[UIElement]:
+    def focused_element(self) -> UIElement | None:
         """Get the currently focused element."""
         return self._focused_element
 
@@ -78,7 +76,7 @@ class UIManager:
         pos = Vector2(event.position[0], event.position[1])
 
         # On click, track focus changes
-        clicked_element: Optional[UIElement] = None
+        clicked_element: UIElement | None = None
 
         # Iterate in reverse (Front-to-Back) to find who clicks first
         for element in reversed(self._root_elements):

@@ -17,7 +17,8 @@ Example:
     >>> manager.update(dt)
 """
 
-from typing import Any, Callable, Generator, Optional
+from collections.abc import Callable, Generator
+from typing import Any
 
 
 class WaitInstruction:
@@ -110,9 +111,9 @@ class Coroutine:
             generator: Generator function to execute
         """
         self._generator = generator
-        self._current_instruction: Optional[WaitInstruction] = None
+        self._current_instruction: WaitInstruction | None = None
         self._is_complete = False
-        self._nested_coroutine: Optional["Coroutine"] = None
+        self._nested_coroutine: Coroutine | None = None
 
     def update(self, dt: float) -> bool:
         """Update the coroutine.

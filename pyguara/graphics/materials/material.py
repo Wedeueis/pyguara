@@ -7,7 +7,7 @@ combining a shader program with textures and uniform parameters.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pyguara.graphics.materials.shader import Shader
@@ -38,8 +38,8 @@ class Material:
     shader/texture switches.
     """
 
-    shader: "Shader"
-    texture: Optional["Texture"] = None
+    shader: Shader
+    texture: Texture | None = None
     uniforms: dict[str, Any] = field(default_factory=dict)
 
     # Unique ID for sorting (assigned at creation)
@@ -89,7 +89,7 @@ class Material:
         """
         return self.uniforms.get(name, default)
 
-    def clone(self) -> "Material":
+    def clone(self) -> Material:
         """Create a copy of this material with a new ID.
 
         Useful for creating variations with different uniforms.

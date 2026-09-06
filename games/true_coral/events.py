@@ -4,7 +4,6 @@ Custom events for puzzle game logic.
 """
 
 from dataclasses import dataclass
-from typing import Tuple
 
 
 @dataclass
@@ -12,15 +11,15 @@ class BlockMoveEvent:
     """Fired when a block moves from one grid cell to another."""
 
     entity_id: str
-    from_pos: Tuple[int, int]
-    to_pos: Tuple[int, int]
+    from_pos: tuple[int, int]
+    to_pos: tuple[int, int]
 
 
 @dataclass
 class PlayerMoveEvent:
     """Fired when the player attempts to move."""
 
-    direction: Tuple[int, int]  # (dx, dy)
+    direction: tuple[int, int]  # (dx, dy)
 
 
 @dataclass

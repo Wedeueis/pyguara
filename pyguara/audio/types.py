@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Dict, Optional
 
 from pyguara.common.types import Vector2
 
@@ -50,7 +49,7 @@ class AudioBus:
     name: str
     volume: float = 1.0
     muted: bool = False
-    parent: Optional[str] = None
+    parent: str | None = None
 
     def get_effective_volume(self, parent_volume: float = 1.0) -> float:
         """Calculate effective volume considering mute state and parent.
@@ -144,7 +143,7 @@ class PlayingSoundInfo:
     priority: AudioPriority
     bus: AudioBusType
     base_volume: float
-    position: Optional[Vector2] = None
+    position: Vector2 | None = None
     is_spatial: bool = False
 
 
@@ -156,7 +155,7 @@ class AudioBusManager:
     volume propagation.
     """
 
-    buses: Dict[str, AudioBus] = field(default_factory=dict)
+    buses: dict[str, AudioBus] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Initialize default bus hierarchy."""
@@ -172,7 +171,7 @@ class AudioBusManager:
             "voice": AudioBus("voice", volume=1.0, parent="master"),
         }
 
-    def get_bus(self, name: str) -> Optional[AudioBus]:
+    def get_bus(self, name: str) -> AudioBus | None:
         """Get a bus by name."""
         return self.buses.get(name)
 

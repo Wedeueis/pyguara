@@ -3,37 +3,34 @@
 Logic processors for the platformer game.
 """
 
-from typing import Optional
-
-from pyguara.ecs.manager import EntityManager
-from pyguara.ecs.entity import Entity
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.common.types import Vector2, Rect
+from games.guara_falcao.components import (
+    CameraTarget,
+    Collectible,
+    Hazard,
+    Health,
+    PlayerAnimState,
+    PlayerState,
+    Score,
+    ZoneTrigger,
+)
+from games.guara_falcao.events import (
+    CheckpointReachedEvent,
+    CollectiblePickedEvent,
+    PlayerDamagedEvent,
+    PlayerDeathEvent,
+    PlayerJumpedEvent,
+    PlayerLandedEvent,
+)
 from pyguara.common.components import Transform
+from pyguara.common.types import Rect, Vector2
+from pyguara.ecs.entity import Entity
+from pyguara.ecs.manager import EntityManager
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.components.camera import Camera2D, CameraFollowConstraints
 from pyguara.physics.platformer_controller import (
     PlatformerController,
     PlatformerInput,
     PlatformerState,
-)
-from pyguara.graphics.components.camera import Camera2D, CameraFollowConstraints
-
-from games.guara_falcao.components import (
-    PlayerState,
-    PlayerAnimState,
-    Health,
-    CameraTarget,
-    Collectible,
-    ZoneTrigger,
-    Score,
-    Hazard,
-)
-from games.guara_falcao.events import (
-    PlayerLandedEvent,
-    PlayerJumpedEvent,
-    PlayerDamagedEvent,
-    PlayerDeathEvent,
-    CollectiblePickedEvent,
-    CheckpointReachedEvent,
 )
 
 
@@ -46,7 +43,7 @@ class PlayerControlSystem:
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
 
         # Track previous grounded state for landing events
         self._was_grounded = False
@@ -156,8 +153,8 @@ class CameraFollowSystem:
     def __init__(self, entity_manager: EntityManager):
         """Initialize the system."""
         self._em = entity_manager
-        self._camera: Optional[Camera2D] = None
-        self._target: Optional[Entity] = None
+        self._camera: Camera2D | None = None
+        self._target: Entity | None = None
 
     def set_camera(self, camera: Camera2D) -> None:
         """Set the camera instance."""
@@ -218,7 +215,7 @@ class CollectibleSystem:
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
 
     def set_player(self, player: Entity) -> None:
         """Set the player entity."""
@@ -249,7 +246,7 @@ class CollectibleSystem:
                 to_collect.append((entity, collectible))
 
         # Process collections
-        for entity, collectible in to_collect:
+        for _entity, collectible in to_collect:
             collectible.collected = True
 
             if score:
@@ -278,7 +275,7 @@ class CheckpointSystem:
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
         self._current_spawn: Vector2 = Vector2(100, 300)
 
     def set_player(self, player: Entity) -> None:
@@ -365,7 +362,7 @@ class HazardSystem:
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
-        self._player: Optional[Entity] = None
+        self._player: Entity | None = None
 
     def set_player(self, player: Entity) -> None:
         """Set the player entity."""

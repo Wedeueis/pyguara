@@ -1,11 +1,11 @@
 """ECS components for AI."""
 
 from dataclasses import dataclass, field
-from typing import Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from pyguara.common.types import Vector2
 from pyguara.ai.blackboard import Blackboard
 from pyguara.ai.fsm import StateMachine
+from pyguara.common.types import Vector2
 from pyguara.ecs.component import BaseComponent
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ class AIComponent(BaseComponent):
     """
 
     blackboard: Blackboard = field(default_factory=Blackboard)
-    fsm: Optional[StateMachine] = None
+    fsm: StateMachine | None = None
     behavior_tree: Optional["BehaviorTree"] = None
     enabled: bool = True
 
@@ -53,7 +53,7 @@ class SteeringAgent(BaseComponent):
     max_force: float = 500.0
     mass: float = 1.0
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
-    target: Optional[Vector2] = None
+    target: Vector2 | None = None
     slowing_radius: float = 100.0
     behavior: str = "seek"  # "seek", "arrive", "flee", "wander"
     enabled: bool = True
@@ -79,16 +79,16 @@ class Navigator(BaseComponent):
 
     _allow_methods: bool = field(default=True, repr=False, init=False)
 
-    path: List[Vector2] = field(default_factory=list)
+    path: list[Vector2] = field(default_factory=list)
     current_index: int = 0
     reach_threshold: float = 5.0
 
-    def set_path(self, path: List[Vector2]) -> None:
+    def set_path(self, path: list[Vector2]) -> None:
         """Set the path defined by a list of vectors."""
         self.path = path
         self.current_index = 0
 
-    def get_current_target(self) -> Optional[Vector2]:
+    def get_current_target(self) -> Vector2 | None:
         """Return the current imediate destination."""
         if 0 <= self.current_index < len(self.path):
             return self.path[self.current_index]

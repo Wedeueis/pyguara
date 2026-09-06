@@ -1,6 +1,5 @@
-from typing import Optional
-from pyguara.ai.fsm import StateMachine, State
 from pyguara.ai.blackboard import Blackboard
+from pyguara.ai.fsm import State, StateMachine
 from pyguara.ecs.entity import Entity
 
 
@@ -11,7 +10,7 @@ class MockState(State):
         self.name = name
         self.entered = False
         self.exited = False
-        self.next_state: Optional[str] = None
+        self.next_state: str | None = None
 
     def on_enter(self):
         self.entered = True

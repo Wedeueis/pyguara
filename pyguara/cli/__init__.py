@@ -11,8 +11,8 @@ Usage:
 
 import click
 
-from pyguara.cli.build import build
 from pyguara.cli.atlas_generator import atlas
+from pyguara.cli.build import build
 
 
 @click.group()

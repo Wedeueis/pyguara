@@ -9,8 +9,9 @@ components in the ImGui inspector. It supports:
 """
 
 import dataclasses
+from collections.abc import Callable
 from enum import Enum
-from typing import Any, Callable, Dict, Type
+from typing import Any
 
 # Try importing ImGui, degrade gracefully
 try:
@@ -18,17 +19,17 @@ try:
 except ImportError:
     imgui = None
 
-from pyguara.common.types import Vector2, Color
 from pyguara.common.components import Transform
+from pyguara.common.types import Color, Vector2
 
 
 class InspectorDrawer:
     """Registry for component drawing strategies."""
 
-    _custom_drawers: Dict[Type, Callable[[str, Any], bool]] = {}
+    _custom_drawers: dict[type, Callable[[str, Any], bool]] = {}
 
     @classmethod
-    def register(cls, type_: Type, drawer: Callable[[str, Any], bool]) -> None:
+    def register(cls, type_: type, drawer: Callable[[str, Any], bool]) -> None:
         """Register a custom drawer for a specific type."""
         cls._custom_drawers[type_] = drawer
 

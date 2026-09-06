@@ -4,13 +4,11 @@ Spawns enemies in waves with scaling difficulty.
 """
 
 import random
-from typing import List, Tuple
 
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.common.types import Vector2
-
+from games.protocolo_bandeira.events import WaveCompleteEvent, WaveStartEvent
 from games.protocolo_bandeira.pooling import EnemyPool
-from games.protocolo_bandeira.events import WaveStartEvent, WaveCompleteEvent
+from pyguara.common.types import Vector2
+from pyguara.events.dispatcher import EventDispatcher
 
 
 class WaveManager:
@@ -49,7 +47,7 @@ class WaveManager:
         self._is_wave_active = False
 
         # Spawn queue
-        self._spawn_queue: List[Tuple[str, int]] = []
+        self._spawn_queue: list[tuple[str, int]] = []
 
     def start_wave(self, wave_number: int) -> None:
         """Start a new wave.
@@ -79,7 +77,7 @@ class WaveManager:
 
     def _generate_enemy_composition(
         self, wave: int, total: int
-    ) -> List[Tuple[str, int]]:
+    ) -> list[tuple[str, int]]:
         """Generate enemy types and health for a wave.
 
         Args:

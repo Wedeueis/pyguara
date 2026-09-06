@@ -1,56 +1,105 @@
-"""Decorators for auto-registering services."""
+"""Decorators that let a class carry its own DI registration metadata."""
 
-from typing import Type, TypeVar, Any
-from pyguara.di.types import ServiceLifetime
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any, Protocol, TypeVar, cast
+
 from pyguara.di.container import DIContainer
+from pyguara.di.types import ServiceLifetime
 
 T = TypeVar("T")
 
+_INTERFACE_ATTR = "_di_interface"
+_LIFETIME_ATTR = "_di_lifetime"
 
-def singleton(interface: Type[T]) -> Any:
-    """Mark a class as a Singleton service."""
 
-    def decorator(implementation: Type[T]) -> Type[T]:
-        # We attach metadata to the class itself
-        setattr(implementation, "_di_interface", interface)
-        setattr(implementation, "_di_lifetime", ServiceLifetime.SINGLETON)
+class _DIMarked(Protocol):
+    """A class carrying registration metadata written by these decorators."""
+
+    _di_interface: type[Any]
+    _di_lifetime: ServiceLifetime
+
+
+def _mark(
+    interface: type[T], lifetime: ServiceLifetime
+) -> Callable[[type[T]], type[T]]:
+    """Build a decorator that stamps registration metadata onto a class.
+
+    Args:
+        interface: The type the class should be registered against.
+        lifetime: The lifecycle to register it with.
+
+    Returns:
+        A class decorator returning its argument unchanged.
+    """
+
+    def decorator(implementation: type[T]) -> type[T]:
+        marked = cast(_DIMarked, implementation)
+        marked._di_interface = interface
+        marked._di_lifetime = lifetime
         return implementation
 
     return decorator
 
 
-def transient(interface: Type[T]) -> Any:
-    """Mark a class as a Transient service."""
+def singleton(interface: type[T]) -> Callable[[type[T]], type[T]]:
+    """Mark a class for singleton registration.
 
-    def decorator(implementation: Type[T]) -> Type[T]:
-        setattr(implementation, "_di_interface", interface)
-        setattr(implementation, "_di_lifetime", ServiceLifetime.TRANSIENT)
-        return implementation
+    Args:
+        interface: The type to register the class against.
 
-    return decorator
-
-
-def scoped(interface: Type[T]) -> Any:
-    """Mark a class as a Scoped service."""
-
-    def decorator(implementation: Type[T]) -> Type[T]:
-        setattr(implementation, "_di_interface", interface)
-        setattr(implementation, "_di_lifetime", ServiceLifetime.SCOPED)
-        return implementation
-
-    return decorator
+    Returns:
+        A class decorator.
+    """
+    return _mark(interface, ServiceLifetime.SINGLETON)
 
 
-def auto_register(container: DIContainer, *classes: Type[Any]) -> None:
-    """Register multiple decorated classes into the container automatically."""
+def transient(interface: type[T]) -> Callable[[type[T]], type[T]]:
+    """Mark a class for transient registration.
+
+    Args:
+        interface: The type to register the class against.
+
+    Returns:
+        A class decorator.
+    """
+    return _mark(interface, ServiceLifetime.TRANSIENT)
+
+
+def scoped(interface: type[T]) -> Callable[[type[T]], type[T]]:
+    """Mark a class for scoped registration.
+
+    Args:
+        interface: The type to register the class against.
+
+    Returns:
+        A class decorator.
+    """
+    return _mark(interface, ServiceLifetime.SCOPED)
+
+
+def auto_register(container: DIContainer, *classes: type[Any]) -> None:
+    """Register every marked class into a container.
+
+    Classes without registration metadata are skipped.
+
+    Args:
+        container: The container to register into.
+        *classes: Candidate classes, marked by `singleton`, `transient` or
+            `scoped`.
+    """
+    registrars = {
+        ServiceLifetime.SINGLETON: container.register_singleton,
+        ServiceLifetime.TRANSIENT: container.register_transient,
+        ServiceLifetime.SCOPED: container.register_scoped,
+    }
+
     for cls in classes:
-        if hasattr(cls, "_di_interface") and hasattr(cls, "_di_lifetime"):
-            interface = getattr(cls, "_di_interface")
-            lifetime = getattr(cls, "_di_lifetime")
-
-            if lifetime == ServiceLifetime.SINGLETON:
-                container.register_singleton(interface, cls)
-            elif lifetime == ServiceLifetime.TRANSIENT:
-                container.register_transient(interface, cls)
-            elif lifetime == ServiceLifetime.SCOPED:
-                container.register_scoped(interface, cls)
+        interface = getattr(cls, _INTERFACE_ATTR, None)
+        lifetime = getattr(cls, _LIFETIME_ATTR, None)
+        if interface is None or lifetime is None:
+            continue
+        register = registrars.get(lifetime)
+        if register is not None:
+            register(interface, cls)

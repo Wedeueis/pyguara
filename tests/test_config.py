@@ -1,4 +1,5 @@
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
+
 from pyguara.config.manager import ConfigManager
 
 SAMPLE_CONFIG_JSON = """
@@ -26,10 +27,12 @@ def test_defaults():
 def test_load_valid_config():
     manager = ConfigManager()
 
-    with patch("builtins.open", mock_open(read_data=SAMPLE_CONFIG_JSON)):
-        # We also need to mock Path.exists to true
-        with patch("pathlib.Path.exists", return_value=True):
-            success = manager.load()
+    # Path.exists must also report true for load() to read the mocked file.
+    with (
+        patch("builtins.open", mock_open(read_data=SAMPLE_CONFIG_JSON)),
+        patch("pathlib.Path.exists", return_value=True),
+    ):
+        success = manager.load()
 
     assert success
     assert manager.config.display.screen_width == 1920
@@ -40,10 +43,12 @@ def test_load_valid_config():
 def test_load_missing_file_creates_default():
     manager = ConfigManager()
 
-    with patch("pathlib.Path.exists", return_value=False):
-        # Should call save() which uses open('w')
-        with patch("builtins.open", mock_open()) as mocked_file:
-            success = manager.load()
+    # A missing file makes load() fall through to save(), which opens for write.
+    with (
+        patch("pathlib.Path.exists", return_value=False),
+        patch("builtins.open", mock_open()) as mocked_file,
+    ):
+        success = manager.load()
 
     assert success
     # Should have written defaults

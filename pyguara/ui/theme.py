@@ -1,19 +1,20 @@
 """Theme management system with JSON support."""
 
 from __future__ import annotations
+
 import json
-from pathlib import Path
-from typing import Optional, Dict, Any
 from copy import deepcopy
 from dataclasses import asdict, fields
+from pathlib import Path
+from typing import Any
 
 from pyguara.common.types import Color
 from pyguara.ui.types import (
-    ColorScheme,
-    SpacingScheme,
-    FontScheme,
     BorderScheme,
+    ColorScheme,
+    FontScheme,
     ShadowScheme,
+    SpacingScheme,
 )
 
 
@@ -38,11 +39,11 @@ class UITheme:
     def __init__(
         self,
         name: str = "default",
-        colors: Optional[ColorScheme] = None,
-        spacing: Optional[SpacingScheme] = None,
-        fonts: Optional[FontScheme] = None,
-        borders: Optional[BorderScheme] = None,
-        shadows: Optional[ShadowScheme] = None,
+        colors: ColorScheme | None = None,
+        spacing: SpacingScheme | None = None,
+        fonts: FontScheme | None = None,
+        borders: BorderScheme | None = None,
+        shadows: ShadowScheme | None = None,
     ) -> None:
         """Initialize the theme with optional overrides."""
         self.name = name
@@ -83,18 +84,18 @@ class UITheme:
             shadows=copy_scheme_with_colors(self.shadows),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert theme to dictionary for JSON serialization.
 
         Returns:
             Dictionary representation of the theme.
         """
 
-        def color_to_dict(color: Color) -> Dict[str, int]:
+        def color_to_dict(color: Color) -> dict[str, int]:
             """Convert Color to dict."""
             return {"r": color.r, "g": color.g, "b": color.b, "a": color.a}
 
-        def scheme_to_dict(scheme: Any) -> Dict[str, Any]:
+        def scheme_to_dict(scheme: Any) -> dict[str, Any]:
             """Convert a scheme dataclass to dict, handling Color fields."""
             result = {}
             for field in fields(scheme):
@@ -115,7 +116,7 @@ class UITheme:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> UITheme:
+    def from_dict(cls, data: dict[str, Any]) -> UITheme:
         """Create theme from dictionary.
 
         Args:
@@ -130,7 +131,7 @@ class UITheme:
         if not isinstance(data, dict):
             raise ThemeValidationError("Theme data must be a dictionary")
 
-        def dict_to_color(color_dict: Dict[str, int]) -> Color:
+        def dict_to_color(color_dict: dict[str, int]) -> Color:
             """Convert dict to Color."""
             if not isinstance(color_dict, dict):
                 raise ThemeValidationError("Color data must be a dictionary")
@@ -141,7 +142,7 @@ class UITheme:
                 color_dict.get("a", 255),
             )
 
-        def dict_to_scheme(scheme_class: type, scheme_dict: Dict[str, Any]) -> Any:
+        def dict_to_scheme(scheme_class: type, scheme_dict: dict[str, Any]) -> Any:
             """Convert dict to scheme dataclass, handling Color fields."""
             if not isinstance(scheme_dict, dict):
                 raise ThemeValidationError(
@@ -229,7 +230,7 @@ class UITheme:
         if not path.exists():
             raise FileNotFoundError(f"Theme file not found: {path}")
 
-        with open(path, "r") as f:
+        with open(path) as f:
             return cls.from_json(f.read())
 
 

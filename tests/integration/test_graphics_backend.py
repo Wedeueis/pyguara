@@ -1,13 +1,15 @@
 """Integration tests for Pygame graphics backend."""
 
 import os
-import pytest
+from collections.abc import Iterator
+
 import pygame
-from typing import Iterator
+import pytest
+
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
-from pyguara.common.types import Vector2, Color, Rect
-from pyguara.resources.types import Texture
 from pyguara.graphics.types import RenderBatch
+from pyguara.resources.types import Texture
 
 # Ensure headless execution
 os.environ["SDL_VIDEODRIVER"] = "dummy"

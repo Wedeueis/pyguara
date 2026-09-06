@@ -8,11 +8,11 @@ This module contains concrete render pass implementations:
 - FinalPass: Blits the composed result to the screen
 """
 
-from pyguara.graphics.pipeline.passes.world_pass import WorldPass
+from pyguara.graphics.pipeline.passes.composite_pass import CompositePass
 from pyguara.graphics.pipeline.passes.final_pass import FinalPass
 from pyguara.graphics.pipeline.passes.light_pass import LightPass
-from pyguara.graphics.pipeline.passes.composite_pass import CompositePass
 from pyguara.graphics.pipeline.passes.post_process_pass import PostProcessPass
+from pyguara.graphics.pipeline.passes.world_pass import WorldPass
 
 __all__ = [
     "WorldPass",

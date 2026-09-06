@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class SerializationFormat(Enum):
@@ -30,7 +30,7 @@ class SaveMetadata:
     version: str
     timestamp: datetime
     data_type: str
-    checksum: Optional[str] = None
+    checksum: str | None = None
     save_version: int = 1
 
 
@@ -38,7 +38,7 @@ class SaveMetadata:
 class StorageBackend(Protocol):
     """Interface for physical data storage mechanisms."""
 
-    def save(self, key: str, data: bytes, metadata: Dict[str, Any]) -> bool:
+    def save(self, key: str, data: bytes, metadata: dict[str, Any]) -> bool:
         """Save raw bytes and metadata to the storage medium.
 
         Args:
@@ -51,7 +51,7 @@ class StorageBackend(Protocol):
         """
         ...
 
-    def load(self, key: str) -> Optional[tuple[bytes, Dict[str, Any]]]:
+    def load(self, key: str) -> tuple[bytes, dict[str, Any]] | None:
         """Load raw bytes and metadata from the storage medium.
 
         Args:

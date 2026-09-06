@@ -7,18 +7,18 @@ and automatic dependency resolution.
 """
 
 from pyguara.di.container import DIContainer, DIScope
+from pyguara.di.decorators import (
+    auto_register,
+    scoped,
+    singleton,
+    transient,
+)
 from pyguara.di.exceptions import (
-    DIException,
     CircularDependencyException,
+    DIException,
     ServiceNotFoundException,
 )
 from pyguara.di.types import ServiceLifetime
-from pyguara.di.decorators import (
-    singleton,
-    transient,
-    scoped,
-    auto_register,
-)
 
 __all__ = [
     "DIContainer",

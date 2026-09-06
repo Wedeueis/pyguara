@@ -6,7 +6,8 @@ import copy
 import dataclasses
 import re
 import uuid
-from typing import Any, Callable, TypeVar, cast
+from collections.abc import Callable
+from typing import Any, TypeVar, cast
 
 from pyguara.ecs.component import Component
 

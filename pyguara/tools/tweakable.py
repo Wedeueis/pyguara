@@ -14,8 +14,9 @@ read-only display) rather than a decorator or manual registry.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable, Iterator
 from enum import Enum
-from typing import Any, Callable, Iterator, List, Tuple
+from typing import Any
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
@@ -44,7 +45,7 @@ class TweakableLeaf:
     apply: Callable[[Any], None]
 
 
-def _iter_own_fields(obj: Any) -> Iterator[Tuple[str, Any]]:
+def _iter_own_fields(obj: Any) -> Iterator[tuple[str, Any]]:
     """Yield `(name, value)` for `obj`'s own fields.
 
     Skips private (`_`-prefixed) attributes -- the same filter
@@ -66,7 +67,7 @@ def _iter_own_fields(obj: Any) -> Iterator[Tuple[str, Any]]:
         yield name, value
 
 
-def collect_tweakable_leaves(obj: Any, prefix: str = "") -> List[TweakableLeaf]:
+def collect_tweakable_leaves(obj: Any, prefix: str = "") -> list[TweakableLeaf]:
     """Recursively walk `obj`'s own fields into a flat list of leaves.
 
     Dispatch per field value: `bool` -> toggle; `Enum` -> cycle; `int`/
@@ -75,13 +76,13 @@ def collect_tweakable_leaves(obj: Any, prefix: str = "") -> List[TweakableLeaf]:
     else -> read-only (unchanged from what was displayed before this
     dispatch existed).
     """
-    leaves: List[TweakableLeaf] = []
+    leaves: list[TweakableLeaf] = []
     for name, value in _iter_own_fields(obj):
         leaves.extend(_leaves_for(obj, name, value, f"{prefix}{name}"))
     return leaves
 
 
-def _leaves_for(parent: Any, name: str, value: Any, label: str) -> List[TweakableLeaf]:
+def _leaves_for(parent: Any, name: str, value: Any, label: str) -> list[TweakableLeaf]:
     # bool before int/float: bool is an int subclass in Python.
     if isinstance(value, bool):
         return [TweakableLeaf(label, value, "bool", lambda v: setattr(parent, name, v))]
@@ -150,21 +151,21 @@ def format_leaf_value(leaf: TweakableLeaf) -> str:
 
 def render_tweakable_leaves(
     renderer: UIRenderer,
-    leaves: List[TweakableLeaf],
+    leaves: list[TweakableLeaf],
     x: int,
     y: int,
     row_width: int,
     row_height: int,
     text_color: Color,
     font_size: int = 14,
-) -> List[Tuple[Rect, TweakableLeaf]]:
+) -> list[tuple[Rect, TweakableLeaf]]:
     """Draw one text row per leaf (`label: value`) starting at `(x, y)`.
 
     Returns each editable row's screen `Rect` paired with its
     `TweakableLeaf`, for the caller's `process_event()` to hit-test clicks
     against. Read-only leaves are drawn but never returned as clickable.
     """
-    rows: List[Tuple[Rect, TweakableLeaf]] = []
+    rows: list[tuple[Rect, TweakableLeaf]] = []
     for leaf in leaves:
         renderer.draw_text(
             f"{leaf.label}: {format_leaf_value(leaf)}",

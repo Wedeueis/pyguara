@@ -5,10 +5,10 @@ from dataclasses import dataclass
 
 import pytest
 
-from pyguara.ecs.events import EntityDestroyed
-from pyguara.ecs.manager import EntityManager
 from pyguara.ecs.component import BaseComponent, StrictComponent
 from pyguara.ecs.entity import Entity
+from pyguara.ecs.events import EntityDestroyed
+from pyguara.ecs.manager import EntityManager
 
 
 # -- Mocks --

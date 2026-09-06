@@ -5,12 +5,11 @@ Records input events frame-by-frame for later playback.
 
 from __future__ import annotations
 
-from pyguara.log import get_logger
 import random
 import time
 from datetime import datetime
-from typing import Optional
 
+from pyguara.log import get_logger
 from pyguara.replay.types import (
     InputEventType,
     InputFrame,
@@ -53,8 +52,8 @@ class ReplayRecorder:
         """
         self._engine_version = engine_version
         self._state = ReplayState.IDLE
-        self._data: Optional[ReplayData] = None
-        self._current_frame: Optional[InputFrame] = None
+        self._data: ReplayData | None = None
+        self._current_frame: InputFrame | None = None
         self._start_time: float = 0.0
         self._seed: int = 0
 
@@ -82,7 +81,7 @@ class ReplayRecorder:
 
     def start_recording(
         self,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         scene_name: str = "",
         description: str = "",
     ) -> int:
@@ -123,7 +122,7 @@ class ReplayRecorder:
         logger.info(f"Started recording with seed {self._seed}")
         return self._seed
 
-    def stop_recording(self) -> Optional[ReplayData]:
+    def stop_recording(self) -> ReplayData | None:
         """Stop recording and return the replay data.
 
         Returns:
@@ -325,7 +324,7 @@ class ReplayRecorder:
             )
         )
 
-    def get_data(self) -> Optional[ReplayData]:
+    def get_data(self) -> ReplayData | None:
         """Get the current replay data without stopping.
 
         Returns:

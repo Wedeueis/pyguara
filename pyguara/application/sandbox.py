@@ -7,18 +7,17 @@ It is intended for use during development and testing phases.
 """
 
 import pygame
-from typing import Optional
 
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
+from pyguara.editor.layer import EditorTool
+from pyguara.tools.config_inspector import ConfigInspector
+from pyguara.tools.debugger import PhysicsDebugger
+from pyguara.tools.event_monitor import EventMonitor
+from pyguara.tools.inspector import EntityInspector
 from pyguara.tools.manager import ToolManager
 from pyguara.tools.performance import PerformanceMonitor
-from pyguara.tools.inspector import EntityInspector
-from pyguara.tools.config_inspector import ConfigInspector
-from pyguara.tools.event_monitor import EventMonitor
-from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.shortcuts_panel import ShortcutsPanel
-from pyguara.editor.layer import EditorTool
 
 
 class SandboxApplication(Application):
@@ -36,7 +35,7 @@ class SandboxApplication(Application):
             container: The dependency injection container.
         """
         super().__init__(container)
-        self._tool_manager: Optional[ToolManager] = None
+        self._tool_manager: ToolManager | None = None
 
         self.tools_logger = self._log_manager.get_logger("Sandbox")
         self.tools_logger.info("Sandbox Tools Initializing...")

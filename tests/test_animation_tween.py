@@ -3,7 +3,7 @@
 import pytest
 
 from pyguara.animation.easing import EasingType
-from pyguara.animation.tween import Tween, TweenState, TweenManager
+from pyguara.animation.tween import Tween, TweenManager, TweenState
 
 
 class TestTweenCreation:

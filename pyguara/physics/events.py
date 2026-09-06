@@ -17,7 +17,7 @@ Usage:
 """
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from pyguara.common.types import Vector2
 from pyguara.events.protocols import Event
@@ -47,7 +47,7 @@ class CollisionEvent(Event):
     normal: Vector2
     impulse: float = 0.0
     timestamp: float = 0.0
-    source: Optional[Any] = None
+    source: Any | None = None
 
 
 @dataclass
@@ -129,7 +129,7 @@ class TriggerEvent(Event):
     trigger_entity: str
     other_entity: str
     timestamp: float = 0.0
-    source: Optional[Any] = None
+    source: Any | None = None
 
 
 @dataclass

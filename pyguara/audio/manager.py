@@ -1,12 +1,10 @@
 """High-level Audio Manager for game audio management."""
 
-from pyguara.log import get_logger
-from typing import Optional, Dict
-
 from pyguara.audio.audio_system import IAudioSystem
-from pyguara.resources.types import AudioClip
-from pyguara.resources.manager import ResourceManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.log import get_logger
+from pyguara.resources.manager import ResourceManager
+from pyguara.resources.types import AudioClip
 
 logger = get_logger(__name__)
 
@@ -32,8 +30,8 @@ class AudioManager:
     def __init__(
         self,
         audio_system: IAudioSystem,
-        resource_manager: Optional[ResourceManager] = None,
-        event_dispatcher: Optional[EventDispatcher] = None,
+        resource_manager: ResourceManager | None = None,
+        event_dispatcher: EventDispatcher | None = None,
     ) -> None:
         """
         Initialize the audio manager.
@@ -48,17 +46,17 @@ class AudioManager:
         self._event_dispatcher = event_dispatcher
 
         # Track loaded audio clips
-        self._loaded_clips: Dict[str, AudioClip] = {}
+        self._loaded_clips: dict[str, AudioClip] = {}
 
         # Track active sound channels
-        self._active_channels: Dict[str, int] = {}
+        self._active_channels: dict[str, int] = {}
 
         # Current music track
-        self._current_music: Optional[str] = None
+        self._current_music: str | None = None
 
     # ========== SFX Methods ==========
 
-    def play_sfx(self, path: str, volume: float = 1.0, loops: int = 0) -> Optional[int]:
+    def play_sfx(self, path: str, volume: float = 1.0, loops: int = 0) -> int | None:
         """
         Play a sound effect by path.
 
@@ -79,7 +77,7 @@ class AudioManager:
 
     def play_sfx_clip(
         self, clip: AudioClip, volume: float = 1.0, loops: int = 0
-    ) -> Optional[int]:
+    ) -> int | None:
         """
         Play a pre-loaded sound effect clip.
 
@@ -146,7 +144,7 @@ class AudioManager:
         """Check if music is currently playing."""
         return self._audio_system.is_music_playing()
 
-    def get_current_music(self) -> Optional[str]:
+    def get_current_music(self) -> str | None:
         """Get the path of the currently playing music, if any."""
         return self._current_music
 
@@ -193,7 +191,7 @@ class AudioManager:
 
     # ========== Resource Management ==========
 
-    def preload_sfx(self, path: str) -> Optional[AudioClip]:
+    def preload_sfx(self, path: str) -> AudioClip | None:
         """
         Preload a sound effect into memory.
 
@@ -215,7 +213,7 @@ class AudioManager:
         if path in self._loaded_clips:
             del self._loaded_clips[path]
 
-    def _get_clip(self, path: str) -> Optional[AudioClip]:
+    def _get_clip(self, path: str) -> AudioClip | None:
         """
         Get an audio clip, loading it if necessary.
 

@@ -8,14 +8,15 @@ regardless of frame rate variations.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+import contextlib
+from typing import TYPE_CHECKING
 
 import pygame
 
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import UIRenderer, IRenderer
+from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
@@ -82,10 +83,10 @@ class Application:
         # key so game code using lighting/post-processing degrades gracefully;
         # that stub is resolvable but is not a real RenderGraph, so branch on
         # backend identity (isinstance) rather than mere resolvability.
-        self._render_graph: Optional["RenderGraph"] = None
+        self._render_graph: RenderGraph | None = None
         try:
-            from pyguara.graphics.pipeline.graph import RenderGraph
             from pyguara.di.exceptions import ServiceNotFoundException
+            from pyguara.graphics.pipeline.graph import RenderGraph
 
             candidate = container.get(RenderGraph)
             if isinstance(candidate, RenderGraph):
@@ -104,8 +105,8 @@ class Application:
         # Replay recording/playback (mutually exclusive; see start_recording()/
         # load_replay()). Idle by default: near-zero overhead when neither is active.
         self._replay_serializer = ReplaySerializer()
-        self._replay_recorder: Optional[ReplayRecorder] = None
-        self._replay_player: Optional[ReplayPlayer] = None
+        self._replay_recorder: ReplayRecorder | None = None
+        self._replay_player: ReplayPlayer | None = None
         self._replay_frame_id = 0
         self._replay_clock = 0.0
 
@@ -142,10 +143,8 @@ class Application:
         # (raises pygame.error) under a backend that never initializes SDL's
         # video subsystem at all, e.g. the headless test backend -- which has
         # no window to show in the first place.
-        try:
+        with contextlib.suppress(pygame.error):
             pygame.event.pump()
-        except pygame.error:
-            pass
 
         try:
             while self._is_running and self._window.is_open:
@@ -191,7 +190,7 @@ class Application:
             # CRITICAL: This ensures cleanup happens even if sys.exit() is called
             self.shutdown()
 
-    def start_recording(self, seed: Optional[int] = None, description: str = "") -> int:
+    def start_recording(self, seed: int | None = None, description: str = "") -> int:
         """Start recording input for a deterministic replay.
 
         Args:
@@ -220,7 +219,7 @@ class Application:
         self._replay_clock = 0.0
         return seed_used
 
-    def stop_recording(self) -> Optional[ReplayData]:
+    def stop_recording(self) -> ReplayData | None:
         """Stop recording and return the captured replay data.
 
         Returns:

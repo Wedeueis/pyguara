@@ -5,8 +5,9 @@ from __future__ import annotations
 import queue
 import time
 from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pyguara.events.protocols import Event
 from pyguara.events.types import ErrorHandlingStrategy, EventHandler
@@ -60,7 +61,7 @@ class EventDispatcher:
 
     def __init__(
         self,
-        logger: "EngineLogger | None" = None,
+        logger: EngineLogger | None = None,
         error_strategy: ErrorHandlingStrategy = ErrorHandlingStrategy.RAISE,
         queue_warning_threshold: int = DEFAULT_QUEUE_WARNING_THRESHOLD,
         enable_history: bool = False,

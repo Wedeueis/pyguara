@@ -1,39 +1,40 @@
 """Application setup and dependency wiring."""
 
 from pyguara.application.application import Application
+from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
+from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.audio.manager import AudioManager
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import RenderingBackend
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
-from pyguara.graphics.protocols import UIRenderer, IRenderer, TextureFactory
+from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.backends.pygame_backend import PygameInputBackend
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
 from pyguara.log import LogManager, default_log_manager
+from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.migration import MigrationManager, get_global_registry
+from pyguara.persistence.storage import FileStorageBackend
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.protocols import IPhysicsEngine
+from pyguara.prefabs.loader import PrefabCache, PrefabLoader
+from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
 from pyguara.scene.serializer import SceneSerializer
-from pyguara.persistence.manager import PersistenceManager
-from pyguara.persistence.migration import MigrationManager, get_global_registry
-from pyguara.persistence.storage import FileStorageBackend
-from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
-from pyguara.prefabs.loader import PrefabLoader, PrefabCache
-from pyguara.ui.manager import UIManager
-from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
-from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
-from pyguara.audio.manager import AudioManager
 from pyguara.scripting.coroutines import CoroutineManager
+from pyguara.ui.manager import UIManager
+
 from .sandbox import SandboxApplication
 
 
@@ -172,11 +173,11 @@ def _setup_container(headless: bool = False) -> DIContainer:
     elif disp_cfg.backend == RenderingBackend.MODERNGL:
         # ModernGL backend with hardware instancing
         from pyguara.graphics.backends.moderngl import (
-            PygameGLWindow,
-            ModernGLRenderer,
-            GLTextureLoader,
             GLTextureFactory,
+            GLTextureLoader,
             GLUIRenderer,
+            ModernGLRenderer,
+            PygameGLWindow,
         )
 
         gl_window_backend = PygameGLWindow()
@@ -204,7 +205,7 @@ def _setup_container(headless: bool = False) -> DIContainer:
         container.register_instance(TextureFactory, gl_texture_factory)  # type: ignore[type-abstract]
 
         # Render Pipeline (FBO management and render graph)
-        from pyguara.graphics.pipeline.passes import WorldPass, FinalPass
+        from pyguara.graphics.pipeline.passes import FinalPass, WorldPass
 
         fbo_manager = FramebufferManager(
             ctx, disp_cfg.screen_width, disp_cfg.screen_height
@@ -227,8 +228,8 @@ def _setup_container(headless: bool = False) -> DIContainer:
         gl_texture_loader = GLTextureLoader(ctx)
     else:
         # Default Pygame backend
-        from pyguara.graphics.backends.pygame.types import PygameTextureFactory
         from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
+        from pyguara.graphics.backends.pygame.types import PygameTextureFactory
 
         pygame_window_backend = PygameWindow()
         window = Window(win_config, pygame_window_backend)
@@ -338,17 +339,17 @@ def _register_core_components(registry: ComponentRegistry) -> None:
         registry: ComponentRegistry to register components with.
     """
     # Common components
-    from pyguara.common.components import Tag, Transform, ResourceLink
+    from pyguara.common.components import ResourceLink, Tag, Transform
 
     registry.register(Tag)
     registry.register(Transform)
     registry.register(ResourceLink)
 
     # Physics components
-    from pyguara.physics.components import RigidBody, Collider
+    from pyguara.physics.components import Collider, RigidBody
     from pyguara.physics.joints import Joint
-    from pyguara.physics.trigger_volume import TriggerVolume, EntityTags
     from pyguara.physics.platformer_controller import PlatformerController
+    from pyguara.physics.trigger_volume import EntityTags, TriggerVolume
 
     registry.register(RigidBody)
     registry.register(Collider)
@@ -358,14 +359,14 @@ def _register_core_components(registry: ComponentRegistry) -> None:
     registry.register(PlatformerController)
 
     # AI components
-    from pyguara.ai.components import AIComponent, SteeringAgent, Navigator
+    from pyguara.ai.components import AIComponent, Navigator, SteeringAgent
 
     registry.register(AIComponent)
     registry.register(SteeringAgent)
     registry.register(Navigator)
 
     # Animation components
-    from pyguara.graphics.components.animation import Animator, AnimationStateMachine
+    from pyguara.graphics.components.animation import AnimationStateMachine, Animator
 
     registry.register(Animator)
     registry.register(AnimationStateMachine)
@@ -376,7 +377,7 @@ def _register_core_components(registry: ComponentRegistry) -> None:
     registry.register(PrefabInstance)
 
     # Audio components
-    from pyguara.audio.components import AudioSource, AudioListener, AudioEmitter
+    from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
 
     registry.register(AudioSource)
     registry.register(AudioListener)

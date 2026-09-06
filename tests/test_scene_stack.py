@@ -2,11 +2,13 @@
 
 from unittest.mock import Mock
 
-from pyguara.scene.manager import SceneManager
-from pyguara.scene.base import Scene
-from pyguara.scene.transitions import FadeTransition, TransitionConfig
+import pytest
+
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.scene.base import Scene
+from pyguara.scene.manager import SceneManager
+from pyguara.scene.transitions import FadeTransition, TransitionConfig
 
 
 class MockScene(Scene):
@@ -264,11 +266,8 @@ class TestSceneStack:
         manager.register(scene1)
         manager.switch_to("scene1")
 
-        try:
+        with pytest.raises(ValueError, match="not registered"):
             manager.push_scene("nonexistent")
-            assert False, "Should have raised ValueError"
-        except ValueError as e:
-            assert "not registered" in str(e)
 
     def test_nested_pause_flags(self):
         """Test complex nesting with mixed pause_below flags."""

@@ -1,8 +1,9 @@
 """Tween system for animating values over time."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional, Union
 from enum import Enum, auto
+from typing import Any
 
 from pyguara.animation.easing import EasingType, ease
 
@@ -36,15 +37,15 @@ class Tween:
         >>> position = tween.current_value
     """
 
-    start_value: Union[float, tuple[float, ...]]
-    end_value: Union[float, tuple[float, ...]]
+    start_value: float | tuple[float, ...]
+    end_value: float | tuple[float, ...]
     duration: float
     easing: EasingType = EasingType.LINEAR
     delay: float = 0.0
     loops: int = 0  # 0 = no loop, -1 = infinite, N = loop N times
     yoyo: bool = False  # If True, alternate between start/end on loops
-    on_update: Optional[Callable[[Any], None]] = None
-    on_complete: Optional[Callable[[], None]] = None
+    on_update: Callable[[Any], None] | None = None
+    on_complete: Callable[[], None] | None = None
 
     # Runtime state (not part of init)
     state: TweenState = field(default=TweenState.IDLE, init=False)
@@ -177,14 +178,14 @@ class Tween:
                 self.on_complete()
 
     @property
-    def current_value(self) -> Union[float, tuple[float, ...]]:
+    def current_value(self) -> float | tuple[float, ...]:
         """Get the current interpolated value."""
         if not hasattr(self, "_current_value"):
             self._current_value = self.start_value
         return self._current_value
 
     @current_value.setter
-    def current_value(self, value: Union[float, tuple[float, ...]]) -> None:
+    def current_value(self, value: float | tuple[float, ...]) -> None:
         """Set the current interpolated value."""
         self._current_value = value
 

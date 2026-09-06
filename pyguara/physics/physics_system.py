@@ -1,7 +1,5 @@
 """System responsible for syncing ECS entities with the Physics Engine."""
 
-from typing import List
-
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
@@ -45,7 +43,7 @@ class PhysicsSystem:
         self._engine = engine
         self._entity_manager = entity_manager
         self._dispatcher = event_dispatcher
-        self._pending_teardown: List[IPhysicsBody] = []
+        self._pending_teardown: list[IPhysicsBody] = []
 
         if gravity is None:
             gravity = Vector2(0, 0)

@@ -1,6 +1,7 @@
 """Pygame-specific implementations of Resource types (Adapter Pattern)."""
 
 import pygame
+
 from pyguara.resources.types import Texture
 
 

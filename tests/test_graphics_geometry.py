@@ -1,7 +1,8 @@
 import pygame
+
 from pyguara.common.types import Color, Vector2
-from pyguara.graphics.components.geometry import Box, Circle
 from pyguara.graphics.backends.pygame.types import PygameTexture
+from pyguara.graphics.components.geometry import Box, Circle
 
 
 def test_box_texture_generation():

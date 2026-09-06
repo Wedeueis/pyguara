@@ -1,16 +1,17 @@
 """Tests for animation state machine."""
 
 import pytest
+
+from pyguara.graphics.animation_system import AnimationSystem
 from pyguara.graphics.components.animation import (
     AnimationClip,
-    Animator,
     AnimationState,
-    AnimationTransition,
     AnimationStateMachine,
+    AnimationTransition,
+    Animator,
     TransitionCondition,
 )
 from pyguara.graphics.components.sprite import Sprite
-from pyguara.graphics.animation_system import AnimationSystem
 from pyguara.resources.types import Texture
 
 

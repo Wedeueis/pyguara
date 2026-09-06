@@ -1,12 +1,10 @@
 """Resource loaders for ModernGL backend."""
 
-from typing import List
-
-import moderngl
 import pygame
 
-from pyguara.resources.types import Resource
+import moderngl
 from pyguara.graphics.backends.moderngl.texture import GLTexture
+from pyguara.resources.types import Resource
 
 
 class GLTextureLoader:
@@ -26,7 +24,7 @@ class GLTextureLoader:
         self._ctx = ctx
 
     @property
-    def supported_extensions(self) -> List[str]:
+    def supported_extensions(self) -> list[str]:
         """Return supported image file extensions."""
         return [".png", ".jpg", ".jpeg", ".bmp", ".tga"]
 

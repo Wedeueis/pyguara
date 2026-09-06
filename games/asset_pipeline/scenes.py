@@ -3,14 +3,14 @@
 Demonstrates loading resources and rendering sprites.
 """
 
-from pyguara.scene.base import Scene
+from games.asset_pipeline.components import Sprite, Transform
+from games.asset_pipeline.systems import MovementSystem
+from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.common.types import Vector2, Color
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.types import Texture
-from games.asset_pipeline.components import Transform, Sprite
-from games.asset_pipeline.systems import MovementSystem
+from pyguara.scene.base import Scene
 
 
 class AssetScene(Scene):

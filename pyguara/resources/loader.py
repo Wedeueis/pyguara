@@ -6,9 +6,10 @@ loading files. Any class that implements this protocol can be registered
 into the ResourceManager.
 """
 
-from typing import Protocol, List, Optional, runtime_checkable
-from .types import Resource
+from typing import Protocol, runtime_checkable
+
 from .meta import AssetMeta
+from .types import Resource
 
 
 @runtime_checkable
@@ -16,7 +17,7 @@ class IResourceLoader(Protocol):
     """A Protocol that defines how to load a specific file format from disk."""
 
     @property
-    def supported_extensions(self) -> List[str]:
+    def supported_extensions(self) -> list[str]:
         """
         A list of file extensions that this loader can handle.
 
@@ -53,7 +54,7 @@ class IMetaAwareLoader(IResourceLoader, Protocol):
     `.meta` files during loading.
     """
 
-    def load_with_meta(self, path: str, meta: Optional[AssetMeta]) -> Resource:
+    def load_with_meta(self, path: str, meta: AssetMeta | None) -> Resource:
         """
         Load a resource with optional metadata settings.
 

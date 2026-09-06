@@ -1,7 +1,6 @@
 """Generic A* pathfinding algorithm implementation."""
 
 import heapq
-from typing import Dict, List, Optional, Tuple
 
 from pyguara.ai.pathfinding.core import Graph, Heuristic, Node
 
@@ -11,17 +10,17 @@ class AStarPathfinder:
 
     def find_path(
         self, graph: Graph[Node], start: Node, goal: Node, heuristic: Heuristic[Node]
-    ) -> Optional[List[Node]]:
+    ) -> list[Node] | None:
         """
         Calculate the shortest path from start to goal.
 
         Optimized to reduce heap operations.
         """
-        frontier: List[Tuple[float, Node]] = []
+        frontier: list[tuple[float, Node]] = []
         heapq.heappush(frontier, (0, start))
 
-        came_from: Dict[Node, Optional[Node]] = {start: None}
-        cost_so_far: Dict[Node, float] = {start: 0.0}
+        came_from: dict[Node, Node | None] = {start: None}
+        cost_so_far: dict[Node, float] = {start: 0.0}
 
         while frontier:
             _, current = heapq.heappop(frontier)
@@ -41,13 +40,13 @@ class AStarPathfinder:
         return self._reconstruct_path(came_from, start, goal)
 
     def _reconstruct_path(
-        self, came_from: Dict[Node, Optional[Node]], start: Node, goal: Node
-    ) -> Optional[List[Node]]:
+        self, came_from: dict[Node, Node | None], start: Node, goal: Node
+    ) -> list[Node] | None:
         """Rebuild the path from the came_from map."""
         if goal not in came_from:
             return None
 
-        current: Optional[Node] = goal
+        current: Node | None = goal
         path = []
 
         while current is not None:

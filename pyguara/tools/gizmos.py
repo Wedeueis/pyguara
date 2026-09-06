@@ -6,7 +6,7 @@ and entity selection highlighting.
 
 import math
 from enum import Enum, auto
-from typing import Any, Optional
+from typing import Any
 
 import pygame  # Only for event handling key constants
 
@@ -59,7 +59,7 @@ class TransformGizmo(Tool):
         """
         super().__init__("transform_gizmo", container)
 
-        self._selected_entity: Optional[Entity] = None
+        self._selected_entity: Entity | None = None
         self._mode = GizmoMode.TRANSLATE
 
         # Gizmo visual settings
@@ -71,12 +71,12 @@ class TransformGizmo(Tool):
         self._line_width = 2
 
     @property
-    def selected_entity(self) -> Optional[Entity]:
+    def selected_entity(self) -> Entity | None:
         """Get the currently selected entity."""
         return self._selected_entity
 
     @selected_entity.setter
-    def selected_entity(self, entity: Optional[Entity]) -> None:
+    def selected_entity(self, entity: Entity | None) -> None:
         """Set the selected entity."""
         self._selected_entity = entity
 
@@ -90,7 +90,7 @@ class TransformGizmo(Tool):
         """Set the gizmo mode."""
         self._mode = mode
 
-    def select_at_position(self, screen_pos: Vector2) -> Optional[Entity]:
+    def select_at_position(self, screen_pos: Vector2) -> Entity | None:
         """Select an entity at the given screen position.
 
         Args:

@@ -1,7 +1,9 @@
-import pytest
 from unittest.mock import MagicMock, patch
-from pyguara.resources.manager import ResourceManager
+
+import pytest
+
 from pyguara.resources.loader import IResourceLoader
+from pyguara.resources.manager import ResourceManager
 from pyguara.resources.types import Resource
 
 
