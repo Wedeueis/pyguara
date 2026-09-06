@@ -576,6 +576,19 @@ tickets inherit rather than revisit them):
   Unblocks [Execute fixed-timestep render
   interpolation](issues/47-execute-fixed-timestep-interpolation.md).
 
+- [Execute fixed-timestep render
+  interpolation](issues/47-execute-fixed-timestep-interpolation.md) — executed
+  exactly as specified. `Transform` gained `interpolate`/`previous_position`;
+  `SceneManager.fixed_update()` snapshots it centrally before any system runs;
+  `Application`/`SceneManager` thread `alpha` through as `scene.render_alpha`, no
+  `Scene.render()` signature change; the combination formula (ticket 44) lerps when
+  `interpolate=True`. Found and fixed beyond the file list: `SandboxApplication`
+  fully overrides `_render()` and was computing no `alpha` at all — would have left
+  interpolation silently inert in sandbox mode only. Five new regression tests
+  (lerp at two alphas, non-interpolated ignoring alpha, snapshot-ordering across two
+  ticks, non-interpolated never snapshotted). Full suite green (1130 passed), all 4
+  demos verified as a no-op change (none opt in yet), `ruff`/`mypy` clean.
+
 - [Execute the canonical Label merge](issues/43-execute-canonical-label-merge.md) —
   executed exactly as specified, `label.py` deleted. Found a 5th real caller the
   ticket's text didn't list (`tests/test_ui_components.py`) via grep before editing;

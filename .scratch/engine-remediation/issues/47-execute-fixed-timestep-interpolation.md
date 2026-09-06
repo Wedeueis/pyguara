@@ -1,7 +1,8 @@
 # Execute fixed-timestep render interpolation
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: fog graduation, follows from Decide how fixed-timestep render
 interpolation should work, now that Transform-Sprite sync exists, ticket 45.
@@ -72,3 +73,38 @@ one's).
   `Transform.interpolate=True`, so this must be a no-op behavior change for all of
   them; `Scene.render()`'s new branch simply never triggers today).
 - `ruff check .` and `mypy pyguara` stay clean; full suite green.
+
+## Resolution
+
+Executed as specified, no deviations. `Transform` gained `interpolate: bool = False`
+and `previous_position: Vector2` (defaults to the construction-time position).
+`SceneManager.fixed_update()` snapshots `previous_position` for every
+`interpolate=True` entity in each active scene, once, before `system_manager.update()`
+or the scene's own `fixed_update()` run. `Application` persists `self._fixed_dt` (was
+a local in `run()`) so `_render()` can compute `alpha = accumulator / fixed_dt` and
+pass it through `SceneManager.render(..., alpha)`, which sets `scene.render_alpha`
+before each scene's own `render()` runs — `Scene.render()`'s signature is untouched.
+`Scene.render()`'s combination formula (ticket 44) extends to
+`lerp(previous_position, position, render_alpha) + sprite.position` when
+`interpolate=True`, unchanged (`position + sprite.position`) otherwise. `Camera2D`
+untouched, per the decision.
+
+One thing found and fixed beyond the ticket's file list: `SandboxApplication._render()`
+fully overrides the base `_render()` (never calls `super()`) and was computing no
+`alpha` at all, which would have made interpolation silently inert in sandbox mode
+only. Added the same `alpha` computation there too, rather than leaving one of the
+two run modes with a working feature that never activates.
+
+Five new regression tests in `tests/integration/test_scene_owned_systems.py`
+(broadened its docstring to cover tickets 44/45, not just 24): interpolated lerp at
+alpha=0.5 and alpha=1.0; a non-interpolated `Transform` ignoring `render_alpha`
+entirely; the snapshot ordering itself (a `_MoveSystem` registered at priority 999
+proves `previous_position` reflects the pre-tick value across two consecutive
+`fixed_update()` calls, not a same-tick post-move value); and a non-interpolated
+`Transform`'s `previous_position` never touched at all (a sentinel value stays put).
+
+Full suite green (1130 passed, up from 1126 for the 5 new tests), all 4
+`validate_demos.py` games verified unaffected (none currently set
+`Transform.interpolate=True`, confirming this is a no-op behavior change for every
+existing demo), `ruff check .` and `mypy pyguara` (216 files) clean. Commit
+`17169ba`.
