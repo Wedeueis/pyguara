@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pyguara.log import get_logger
+
 if TYPE_CHECKING:
     import moderngl
 
@@ -19,6 +21,9 @@ if TYPE_CHECKING:
 
 # Shader directory
 _SHADER_DIR = Path(__file__).parent.parent / "backends" / "moderngl" / "shaders"
+
+
+logger = get_logger(__name__)
 
 
 class PostProcessEffect(ABC):
@@ -116,25 +121,54 @@ class PostProcessStack:
 
     @property
     def effects(self) -> list[PostProcessEffect]:
-        """Get the effect list."""
-        return self._effects
+        """The effects, in application order.
+
+        A snapshot: change the stack through `add_effect()`,
+        `insert_effect()` and `remove_effect()`. This used to hand back the
+        live list, so `stack.effects.clear()` silently emptied the stack
+        without releasing a single effect.
+        """
+        return list(self._effects)
 
     def add_effect(self, effect: PostProcessEffect) -> None:
-        """Add an effect to the end of the stack.
+        """Append an effect to the stack.
 
         Args:
-            effect: The effect to add.
+            effect: The effect to add. Its name should be unique; effects are
+                looked up by name, so a duplicate is unreachable through
+                `get_effect()` and survives `remove_effect()`.
         """
+        self._warn_if_name_taken(effect)
         self._effects.append(effect)
 
     def insert_effect(self, index: int, effect: PostProcessEffect) -> None:
-        """Insert an effect at a specific position.
+        """Insert an effect at a position in the stack.
 
         Args:
             index: Position in the stack.
-            effect: The effect to insert.
+            effect: The effect to insert. Its name should be unique; see
+                `add_effect()`.
         """
+        self._warn_if_name_taken(effect)
         self._effects.insert(index, effect)
+
+    def _warn_if_name_taken(self, effect: PostProcessEffect) -> None:
+        """Report that an effect name now refers to more than one effect.
+
+        Both apply -- the effect list is the source of truth -- but
+        `get_effect()` returns only the first and `remove_effect()` removes
+        only the first, so the second is unreachable by name. The sibling
+        `RenderGraph` treats duplicate pass names the same way.
+
+        Args:
+            effect: The effect about to be added.
+        """
+        if any(existing.name == effect.name for existing in self._effects):
+            logger.warning(
+                f"A second post-process effect named '{effect.name}' is being "
+                f"added. Both will apply, but get_effect() and remove_effect() "
+                f"only ever reach the first. Give each effect a distinct name."
+            )
 
     def remove_effect(self, name: str) -> PostProcessEffect | None:
         """Remove an effect by name.

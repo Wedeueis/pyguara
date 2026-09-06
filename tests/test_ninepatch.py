@@ -252,3 +252,88 @@ class TestNinePatchUsagePatterns:
 
         # Content area accounts for asymmetry
         assert dest_rects[4].height == 160  # 200 - 30 - 10
+
+
+class TestNinePatchMetricsValidation:
+    """Negative edges produce negative-width rects that reach the renderer as
+    geometry rather than as an error."""
+
+    def test_negative_edges_are_rejected(self):
+        import pytest
+
+        from pyguara.graphics.ninepatch import NinePatchMetrics
+
+        with pytest.raises(ValueError, match="cannot be negative"):
+            NinePatchMetrics.uniform(-5)
+
+    def test_the_error_names_the_offending_edges(self):
+        import pytest
+
+        from pyguara.graphics.ninepatch import NinePatchMetrics
+
+        with pytest.raises(ValueError, match="'right'"):
+            NinePatchMetrics(left=4, right=-1, top=4, bottom=4)
+
+    def test_zero_edges_are_allowed(self):
+        from pyguara.graphics.ninepatch import NinePatchMetrics
+
+        assert NinePatchMetrics.uniform(0).left == 0
+
+
+class TestNinePatchSourceRects:
+    """get_dest_rects clamped its input; get_patch_rects did not.
+
+    Edges wider than the source leave the centre with negative extent, and five
+    of the nine source rects came out with negative width or height --
+    e.g. Rect(x=40, y=0, width=-32, height=40) for uniform(40) on a 48px
+    texture.
+    """
+
+    def _sprite(self, edge: int, size: int = 48):
+        from unittest.mock import MagicMock
+
+        from pyguara.graphics.ninepatch import NinePatchMetrics, NinePatchSprite
+
+        texture = MagicMock()
+        texture.width = size
+        texture.height = size
+        return NinePatchSprite(texture, NinePatchMetrics.uniform(edge))
+
+    def test_edges_wider_than_the_source_are_rejected(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="do not fit the source"):
+            self._sprite(40).get_patch_rects(48, 48)
+
+    def test_the_error_reports_both_the_edges_and_the_texture(self):
+        import pytest
+
+        with pytest.raises(ValueError, match="40\\+40.*48x48"):
+            self._sprite(40).get_patch_rects(48, 48)
+
+    def test_edges_exactly_filling_the_source_are_allowed(self):
+        """left+right == width leaves a zero-width centre, which is degenerate
+        but not negative -- a legitimate patch with no stretchable middle."""
+        rects = self._sprite(24).get_patch_rects(48, 48)
+
+        assert len(rects) == 9
+        assert all(r.width >= 0 and r.height >= 0 for r in rects)
+
+    def test_valid_metrics_produce_nine_non_negative_rects(self):
+        rects = self._sprite(16).get_patch_rects(48, 48)
+
+        assert len(rects) == 9
+        assert all(r.width >= 0 and r.height >= 0 for r in rects)
+
+    def test_the_source_rects_tile_the_texture(self):
+        rects = self._sprite(16).get_patch_rects(48, 48)
+        covered = sum(r.width * r.height for r in rects)
+
+        assert covered == 48 * 48
+
+    def test_destination_rects_stay_clamped_for_a_tiny_target(self):
+        """The destination side already handled this; the test pins it so the
+        two sides cannot diverge again."""
+        rects = self._sprite(16).get_dest_rects(0, 0, 4, 4)
+
+        assert all(r.width >= 0 and r.height >= 0 for r in rects)

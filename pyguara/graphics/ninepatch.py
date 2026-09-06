@@ -26,6 +26,28 @@ class NinePatchMetrics:
     top: int
     bottom: int
 
+    def __post_init__(self) -> None:
+        """Reject negative edges.
+
+        A negative edge produces negative-width source and destination rects,
+        which reach the renderer as geometry rather than as an error.
+
+        Raises:
+            ValueError: If any edge is negative.
+        """
+        negative = {
+            name: value
+            for name, value in (
+                ("left", self.left),
+                ("right", self.right),
+                ("top", self.top),
+                ("bottom", self.bottom),
+            )
+            if value < 0
+        }
+        if negative:
+            raise ValueError(f"Nine-patch edges cannot be negative: {negative}.")
+
     @classmethod
     def uniform(cls, size: int) -> "NinePatchMetrics":
         """Create uniform metrics (all edges same size).
@@ -100,10 +122,24 @@ class NinePatchSprite:
         Returns:
             List of 9 Rect objects for source positions
             in order: TL, T, TR, L, C, R, BL, B, BR
+
+        Raises:
+            ValueError: If the edges do not fit inside the source. Overlapping
+                edges leave the centre with negative extent, and five of the
+                nine source rects came out with negative width or height --
+                geometry the renderer has no way to interpret. `get_dest_rects`
+                already clamped its own equivalent; this side did not.
         """
         m = self.metrics
         sw = source_width
         sh = source_height
+
+        if m.left + m.right > sw or m.top + m.bottom > sh:
+            raise ValueError(
+                f"Nine-patch edges do not fit the source texture: edges "
+                f"{m.left}+{m.right} wide and {m.top}+{m.bottom} tall against a "
+                f"{sw}x{sh} texture. The centre patch would have negative extent."
+            )
 
         # Source rectangles (from texture)
         src_rects = [
