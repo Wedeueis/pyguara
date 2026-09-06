@@ -1,7 +1,8 @@
 # Decide how fixed-timestep render interpolation should work
 
 Type: grilling
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: external code review, verified against the codebase 2026-09-05
 
@@ -38,3 +39,33 @@ real, undecided design question, not a mechanical fill-in.
   disturbing the authoritative `Transform.position` that `_fixed_update()` itself reads
   and writes? (e.g. a read-only computed property vs. writing a second field vs.
   `RenderSystem` accepting `alpha` and computing the lerp itself at submission time.)
+
+## Resolution
+
+Deferred, not decided now — this ticket's own fourth question presupposes a
+mechanism that doesn't exist. `RenderSystem.submit(item: Renderable)` reads
+`item.position`, and for `Sprite` (what `Scene.render()`'s default path submits per
+*RenderSystem wiring*, ticket 13) that's `Sprite.position` — a field the component
+owns *separately* from `Transform.position`. Grepped for whatever is supposed to
+sync them (`sprite.position = transform.position` or equivalent) and found it
+doesn't exist as real, executed code anywhere — the only match was a comment inside
+a docstring example in `EntityManager.get_components()`. None of the four
+auto-registered engine systems (Steering, AI, AudioSource, Animation) do it either;
+the one demo that draws from `transform.position` directly (`ecs_mental_model`)
+bypasses `RenderSystem`/`Sprite` entirely via hand-rolled rendering, predating the
+migration.
+
+So today, any `Transform`-driven entity (physics, steering, the platformer
+controller) submitted through the default `Scene.render()` path would draw at
+whatever `Sprite.position` last happened to be — which nothing currently updates.
+The plain, non-interpolated sync doesn't exist yet, let alone an interpolated one.
+Deciding *how to interpolate* on top of a delivery mechanism that isn't decided or
+built risks redoing this ticket once that gap surfaces on its own.
+
+Decided: this ticket blocks on a new prerequisite question — spun off as [Decide how
+Transform position syncs to Sprite for rendering
+](44-transform-sprite-sync-decision.md). This ticket itself returns to the map's
+**Not yet specified** fog rather than closing with an answer, since interpolation's
+actual shape (where `previous_position` lives, opt-in vs. engine-wide, whether
+`Camera2D` needs it too) depends on whatever sync mechanism that prerequisite ticket
+lands on — deciding it in the abstract first would likely need redoing.

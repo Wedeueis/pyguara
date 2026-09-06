@@ -1,7 +1,8 @@
 # Decide how dev tools should consume input instead of raw pygame events
 
 Type: grilling
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: external code review, verified against the codebase 2026-09-05
 
@@ -42,3 +43,36 @@ parsers in sync as input handling evolves.
 - Is this worth doing now given nothing is currently broken (both backends share the
   same pygame-based windowing/event pump), or does it wait until a real non-pygame
   backend is on the roadmap?
+
+## Resolution
+
+Deferred, not decided now. Investigation surfaced that this is more architecturally
+loaded than "relocate some pygame constants":
+
+- `SandboxApplication._process_input()` feeds each raw event to `ToolManager.
+  process_event()` *before* `InputManager.process_event()` ever sees it; a consumed
+  event never reaches `InputManager` at all, so no translated event
+  (`OnActionEvent`/`OnRawKeyEvent`/`OnMouseEvent`) is ever produced for it. If tools
+  consumed `InputManager`'s translated output instead, translation would have to
+  happen *first* — inverting today's priority order. "Consume" would then mean
+  something different in kind: not "prevent translation," but "veto propagation of an
+  event already translated and possibly already dispatched to gameplay listeners."
+- `InputManager._context` is hardcoded to `InputContext.GAMEPLAY` and never switches;
+  `InputContext.UI`/`MENU` exist in the enum but have zero bindings registered
+  anywhere in the repo today. "Bind editor shortcuts as Actions" has no separate
+  context to land in without building real context-switching first — Q/W/E gizmo
+  shortcuts would otherwise collide with any game's own Q/W/E gameplay bindings in
+  the same binding table.
+- Not all of it is blocked on this, though: `TransformGizmo`'s mouse-click branch
+  (reading `event.pos` for world hit-testing) translates cleanly today, since
+  `OnMouseEvent.position` already carries the same raw `event.pos` unconverted — only
+  the keyboard-shortcut branches across all three flagged call sites hit the ordering
+  problem.
+
+Decided: defer rather than design a fix against requirements that don't exist yet.
+Revisit when either trigger condition arrives: a real non-pygame-windowed backend, or
+`InputManager`'s context system gets built out for its own reasons (at which point
+"tools get a real editor context" is likely a natural byproduct, not new design work).
+Graduated to the map's **Not yet specified** as its own fog patch rather than closed
+silently, since the investigation here (ordering + dead context system) is worth not
+re-deriving next time this is picked up.

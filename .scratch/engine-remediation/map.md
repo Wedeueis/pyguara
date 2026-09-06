@@ -415,6 +415,132 @@ tickets inherit rather than revisit them):
   against protocol interfaces, which turns out to fail `isinstance()` against a
   `@runtime_checkable` protocol despite `hasattr()` succeeding per-method.
 
+- [Decide whether to move PlatformerController/TriggerVolume logic into Systems now
+  ](issues/34-platformer-trigger-component-logic-decision.md) — stands alone, resolved
+  now. Mutating logic moves to a System when one exists to own it (`PlatformerController`'s
+  input methods become a `pending_input: PlatformerInput` field read by `PlatformerSystem`;
+  `reset_jump_state()` moves onto `PlatformerSystem`); a trivial single-field mutator with
+  no natural System destination gets deleted and inlined instead (`TriggerVolume.clear()`,
+  `EntityTags.add_tag()`/`remove_tag()`, the latter having zero production callers at all).
+  Pure predicates (`can_jump()`, `matches_tags()`, `has_tag()`, etc.) stay on the components
+  unchanged regardless — read-only means there's no ownership question to resolve. Lands as
+  [Execute the PlatformerController/TriggerVolume logic
+  move](issues/40-execute-platformer-trigger-logic-move.md).
+
+- [Decide how dev tools should consume input instead of raw pygame events
+  ](issues/35-dev-tools-raw-pygame-input-decision.md) — deferred, not decided.
+  Genuinely more loaded than a relocation: tools intercept raw events *before*
+  `InputManager` translates them today, so consuming via `InputManager`'s translated
+  output would invert priority order and change what "consume" even means (prevent
+  translation vs. veto an already-dispatched event); `InputManager`'s context system
+  is dead (`UI`/`MENU` contexts unused, `_context` never switches from `GAMEPLAY`), so
+  there's no separate editor context to bind shortcuts into without building that
+  first. Revisit when a real non-pygame backend arrives or the context system gets
+  built out for other reasons — graduated to **Not yet specified** rather than
+  closed silently.
+
+- [Decide how Checkbox should compute its layout size without mutating state in
+  render()](issues/36-checkbox-layout-mutation-decision.md) — decided now, cheap fix.
+  Corrected the ticket's own premise first: `UIElement.apply_layout()`/
+  `LayoutConstraints` are dead code, never invoked anywhere; the only live layout path
+  is `BoxContainer.layout()`, called once per scene setup, before any renderer exists
+  in scope. Also found `Checkbox` is entirely unused (zero games/tests instantiate
+  it), so the reported bug has never actually fired. New `measure(renderer)` hook on
+  `UIElement` (no-op default), overridden by `Checkbox` and both `Label` classes,
+  moves the `get_text_size()`-and-mutate logic out of `render()`; `BoxContainer.
+  layout(renderer)` calls it on each child before stacking math; `render()` still
+  calls it too, for standalone (non-contained) widgets. Renderer reaches the call
+  site via `self.container.get(UIRenderer)`, one line. Found and spun off rather than
+  fixed here: `label.py` and `text.py` define two independently-diverging `Label`
+  classes, with the public API exporting one and every game importing the other —
+  [Decide which Label class is canonical](issues/41-canonical-label-class-decision.md).
+  Lands as [Execute the Checkbox/Label layout measure()
+  hook](issues/42-execute-checkbox-layout-measure-hook.md).
+
+- [Decide which Label class is canonical](issues/41-canonical-label-class-decision.md)
+  — `text.py`'s `Label` wins (already the public API's export, and a strict superset
+  of `label.py`'s — adds `anchor`/`_auto_size`, identical defaults otherwise);
+  `label.py`'s gets deleted outright, no merge needed. Verified zero behavioral
+  divergence across all 13 real call sites (none use `anchor`/`set_text()`) and that
+  `Label` is the only duplicate-class-name pattern in `ui/components/` (AST-scanned).
+  No `CHANGELOG.md` entry — nothing observable changes for any caller. Lands as
+  [Execute the canonical Label merge](issues/43-execute-canonical-label-merge.md).
+
+- [Decide how fixed-timestep render interpolation should work
+  ](issues/37-fixed-timestep-interpolation-decision.md) — deferred, not decided.
+  Its own premise assumed a `Transform`→`Sprite` position sync exists for
+  interpolation to hook into; verified it doesn't (only a docstring-comment example,
+  never executed code) — any `Transform`-driven entity submitted through `Scene.
+  render()`'s default path renders at a `Sprite.position` nothing currently updates.
+  Blocks on [Decide how Transform position syncs to Sprite for rendering
+  ](issues/44-transform-sprite-sync-decision.md) — interpolation's actual shape
+  depends on whatever sync mechanism that lands on, so returns to **Not yet
+  specified** rather than being decided in the abstract first.
+
+- [Decide how Transform position syncs to Sprite for rendering
+  ](issues/44-transform-sprite-sync-decision.md) — no sync system; `Sprite.position`
+  is documented as an offset ("combined with entity Transform for final rendering
+  position"), so overwriting it would silently destroy that offset every frame, same
+  mutation-smell class as the Checkbox ticket. Instead, `Scene.render()`'s existing
+  default loop computes `transform.position + sprite.position` at submission time
+  (falling back to `sprite.position` alone when there's no `Transform`) and passes it
+  through a new optional `position` parameter on `RenderSystem.submit()` — never
+  written back to `sprite.position`. Runs after all of the tick's fixed-update work
+  by construction (it's in `render()`), sidestepping a priority-ordering dependency
+  on physics/platformer joining `SystemManager` (still-open **Demo migration** fog).
+  Purely additive — doesn't reopen *Scene-owned world and SystemManager* or
+  *RenderSystem wiring*. Unblocks and graduates [Decide how fixed-timestep render
+  interpolation should work, now that Transform-Sprite sync exists
+  ](issues/45-fixed-timestep-interpolation-decision-v2.md) (supersedes the original,
+  deferred [ticket 37](issues/37-fixed-timestep-interpolation-decision.md)). Lands as
+  [Execute the Transform-Sprite position
+  combination](issues/46-execute-transform-sprite-sync.md).
+
+- [Decide how fixed-timestep render interpolation should work, now that
+  Transform-Sprite sync exists](issues/45-fixed-timestep-interpolation-decision-v2.md)
+  — opt-in via `Transform.interpolate: bool = False` (a flag, not a separate marker
+  component — fits `Transform`'s existing internal-flag pattern like `_is_dirty`).
+  `previous_position` snapshot is centralized once per fixed tick, at the very start
+  of `SceneManager.fixed_update()`, before any system runs — not duplicated across
+  Steering/Physics/Platformer, same reasoning that ruled out a sync system in ticket
+  44. `alpha` reaches `Scene.render()`'s combination logic (ticket 44's formula,
+  extended) as a `self.render_alpha` attribute set by `SceneManager.render()`, not a
+  new parameter on `Scene.render()` — avoids a mechanical signature ripple across all
+  9 demo overrides for a value only the base default path uses. `Camera2D` ruled out
+  of scope: its `CameraFollowSystem` already smooths every variable-rate frame via
+  its own deadzone/lerp mechanism, no fixed-rate discretization artifact to correct.
+  Lands as [Execute fixed-timestep render
+  interpolation](issues/47-execute-fixed-timestep-interpolation.md) (depends on
+  [Execute the Transform-Sprite position
+  combination](issues/46-execute-transform-sprite-sync.md) landing first).
+
+- [Decide how live-tweakable values should work in the sandbox inspector
+  ](issues/38-live-tweakables-decision.md) — automatic dataclass/`__dict__`
+  introspection (matching 3 existing precedents in this codebase — `persistence/
+  serializer.py`, `ui/theme.py`, `EntityInspector` itself), not a decorator or manual
+  registry. Covers both domains as two `Tool` subclasses sharing one edit-control
+  dispatch: `EntityInspector` gets its existing read-only field display made
+  editable (writes back via `setattr`); a new `ConfigInspector` tool walks
+  `GameConfig`'s dataclass tree, since global config isn't attached to any entity.
+  Type dispatch: bool toggle, int/float stepper (no range metadata exists for
+  sliders), Enum cycle, `Color` recurses generically (a real dataclass since ticket
+  31), `Vector2` special-cased (subclasses `pymunk.Vec2d`, not a dataclass).
+  Export is config-only, via the already-existing `ConfigManager.save()` — prefab
+  export doesn't exist as a mechanism and isn't built here. Lands as [Execute the
+  live-tweakable inspector tools](issues/48-execute-live-tweakable-inspector.md).
+
+- [Decide on a declarative builder API for UI hierarchies
+  ](issues/39-declarative-ui-builder-decision.md) — architecture settled without
+  needing a prototype: opt-in sugar coexisting indefinitely alongside today's
+  imperative API (not a replacement — avoids overlapping the separate, larger **Demo
+  migration** fog for a purely ergonomic change); callbacks need no new mechanism
+  (`on_click` is already a bare post-construction attribute assignment in every
+  demo, the builder just does the same thing); theming needs no wiring
+  (`UIElement.__init__` already calls `get_theme()` unconditionally). The one open
+  question — DSL syntax ergonomics — isn't answerable from the codebase's current
+  state, so it's spun off rather than decided in the abstract: [Prototype the
+  declarative UI builder API](issues/49-prototype-ui-builder.md).
+
 ## Not yet specified
 
 Fog toward the destination. In scope, not yet sharp enough to ticket. Each patch graduates
@@ -451,6 +577,16 @@ into one or more tickets as the frontier reaches it.
   and tested but has no integration point in `Application`/`SystemManager`, and no
   player-facing need calls for it. Whether a pre-alpha engine carries live code reload — and
   where it would hook in if so — is a product-scope question, not a dead-code cleanup call.
+- **Dev tools' input consumption.** `TransformGizmo`/`EntityInspector`/`ToolManager`
+  parse raw pygame key events directly instead of going through `InputManager`,
+  duplicating translation logic. Not ticketable yet: fixing it means either building
+  real context-switching (`InputContext.UI`/`MENU` are currently dead — never bound,
+  never switched to) so tools get their own binding context, or redefining what
+  "consume" means once translation must happen before tools see an event instead of
+  after. Revisit when a real non-pygame-windowed backend is on the roadmap, or when
+  the input-context system gets built out for its own reasons. See [Decide how dev
+  tools should consume input instead of raw pygame
+  events](issues/35-dev-tools-raw-pygame-input-decision.md) for the full investigation.
 - **NumPy-backed columnar component storage.** `ecs/archetype.py` (deleted per Dead-code
   disposition) claimed cache-friendly contiguous arrays but stored plain Python object
   references — the cache-locality payoff doesn't transfer to CPython objects the way it does
