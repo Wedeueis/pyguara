@@ -33,26 +33,25 @@ See **[Entity Component System](ecs.md)** for the full reference.
 
 # Dependency Injection (DI)
 
-PyGuara features a native, reflection-based Dependency Injection container (`pyguara.di`).
-
-## Features
-
-- **Auto-Wiring**: Uses Python type hints (`typing.get_type_hints`) and `inspect` to automatically resolve constructor dependencies.
-- **Cycle Detection**: Detects and reports circular dependencies at runtime.
-- **Scopes**:
-    - `SINGLETON`: Shared across the entire application.
-    - `TRANSIENT`: Created new every time requested.
-    - `SCOPED`: Shared within a specific context (e.g., a Scene).
-
-## Usage
+The container (`pyguara.di`) resolves constructor dependencies from type hints.
+Three lifetimes: `SINGLETON` (one per container), `SCOPED` (one per `DIScope`)
+and `TRANSIENT` (one per request).
 
 ```python
 container = DIContainer()
 container.register_singleton(IPhysicsEngine, PymunkEngine)
-
-# Application is auto-wired with IPhysicsEngine
-app = container.get(Application)
+app = container.get(Application)   # dependencies injected recursively
 ```
+
+Two rules are load-bearing:
+
+- **Lifetimes cannot be captured downwards.** A singleton may not depend on a
+  scoped service; it would outlive the scope and keep a disposed object. The
+  container builds singletons without a scope so the attempt fails loudly.
+- **Cycles raise.** `CircularDependencyException` names the chain, and
+  detection state is thread-local so parallel resolutions cannot cross.
+
+See **[Dependency Injection](dependency-injection.md)** for the full reference.
 
 ---
 

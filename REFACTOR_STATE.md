@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/events` — **in review (awaiting approval)**
+`pyguara/di` — **in review (awaiting approval)**
 
 ---
 
@@ -23,8 +23,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 ### Tier 1 — Foundations (no intra-engine dependencies)
 - [x] `pyguara/common` — Vector2, Color, Rect, shared components *(done)*
 - [ ] `pyguara/log` — logging facade
-- [x] `pyguara/events` — EventDispatcher, Event protocol *(active)*
-- [ ] `pyguara/di` — DIContainer, auto-wiring, lifetimes
+- [x] `pyguara/events` — EventDispatcher, Event protocol *(done)*
+- [x] `pyguara/di` — DIContainer, auto-wiring, lifetimes *(active)*
 
 ### Tier 2 — Core runtime
 - [x] `pyguara/ecs` — Entity, Component, EntityManager, QueryCache *(done)*
@@ -59,6 +59,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/events` | 2026-09-06 | Broke a latent `log` <-> `events` import cycle, fixed a timestamp sentinel that made 0.0 inexpressible, brought filter errors under the error strategy, and memoised handler resolution (5.7us -> 3.1us per dispatch). PR #3. |
 | `pyguara/common` | 2026-09-06 | Fixed `Transform.up` pointing down, an unguarded parent cycle and a falsy-`Vector2` default; renamed `Vector2.rotate` to `rotate_degrees`; wrote the first tests for `Vector2` and `Transform`. PR #2. |
 | `pyguara/ecs` | 2026-09-06 | Fixed two silent query bugs (`add_entity()` bypassing the query cache; dead-entity resurrection), replaced the private removal hook with a subscribe/unsubscribe API, and modernised the module. PR #1. |
 
@@ -127,6 +128,16 @@ is deliberately not attempted piecemeal. **Fix:** once `physics`, `ui` and `ai`
 are audited and the true extent is known, migrate the tree to `StrictComponent`
 and consider making it the default.
 *Discovered in:* `ecs`; offender identified in `common`. *Status:* parked.
+
+### CC-9 — `ErrorHandlingStrategy` is defined twice
+`pyguara/di/types.py` and `pyguara/events/types.py` each declare their own enum
+of the same name with identical members (LOG / RAISE / IGNORE) and identical
+semantics. They are not interchangeable -- `di.RAISE != events.RAISE` -- so
+passing one where the other is expected fails a comparison silently rather than
+loudly. **Fix:** hoist a single definition to a shared home once more
+subsystems are audited and the full set of consumers is known; `di` must not
+import `events` (see CC-8) so it cannot simply re-export.
+*Discovered in:* `di`. *Status:* open.
 
 ### CC-8 — Package `__init__.py` files export nothing
 Most subsystem packages have a docstring-only `__init__.py`, so callers reach
@@ -255,7 +266,7 @@ fixture, so the most intricate logic in the package was exercised by accident.
 **Deferred:** CC-1 through CC-4, CC-6, CC-7, and the remaining half of CC-5.
 
 
-### `pyguara/events` — awaiting approval (2026-09-06)
+### `pyguara/events` — CLOSED 2026-09-06 (PR #3, branch `refactor/events-audit`)
 
 **Verification:** 1262/1262 tests pass (up from 1236); ruff clean; mypy clean.
 
@@ -309,3 +320,53 @@ exception text from the handler error message. Restored.
 condensed to a summary and link.
 
 **Deferred:** CC-1 through CC-4, CC-6, CC-7, CC-8, and the rest of CC-5.
+
+
+### `pyguara/di` — awaiting approval (2026-09-06)
+
+**Verification:** 1286/1286 tests pass (up from 1262); ruff clean; mypy clean.
+
+**Correctness fixes (all reproduced by probe before fixing):**
+- **`DIScope.get()` resolved without taking the container lock**, so parallel
+  resolutions through scopes shared one mutable cycle-detection stack and saw
+  each other's partial chains. With constructors that take a couple of
+  milliseconds this reported **140 spurious CircularDependencyExceptions out
+  of 160 resolutions**. It hid because every constructor in the test suite is
+  instant. Fixed twice over, deliberately: the scope now takes the lock like
+  the container does, and the resolution stack is thread-local, so the
+  invariant holds structurally rather than by remembering to lock -- which is
+  exactly the discipline that failed here.
+- **Captive dependency.** A singleton resolved inside a scope captured the
+  scoped instance; the scope disposed it and the singleton kept handing out
+  the dead object forever. Singletons are now built with `scope=None`, so the
+  attempt raises with a message explaining why.
+- **A disposed scope still resolved**, tracking new disposables in a list it
+  had already emptied -- they would never be cleaned up. Now raises.
+- **Re-registering an already-resolved singleton silently did nothing.** The
+  registration was replaced but the cached instance was not, so `get()` kept
+  returning the old implementation. The cached instance is now evicted.
+- **`*args`/`**kwargs` were treated as injection points.** `*args: int` was
+  read as a dependency named "args" of type `int`, making any class that
+  declares varargs unresolvable. Only POSITIONAL_OR_KEYWORD and KEYWORD_ONLY
+  parameters are considered now.
+- **`DIScope.dispose()` swallowed every exception** with a bare
+  `except Exception: pass`. Failures are logged, and the remaining services
+  are still disposed.
+
+**API additions:** `DIContainer.is_registered()` and `DIScope.disposed`, both
+needed to write the tests above without reaching into privates.
+
+**Also:** `_create_instance` could fall off the end and return None for a
+malformed registration; it now raises. Modern typing, Google-style docstrings,
+P2-003 ticket references removed from public docstrings (CC-3).
+
+**Tests:** 26 -> 40. The existing tests were reasonable but entirely
+single-threaded and single-scope, which is why the lock bug survived. Added
+lifetime-capture rules, disposal semantics, re-registration, signature edge
+cases, and three genuine concurrency tests.
+
+**Docs:** new `docs/core/dependency-injection.md`; `architecture.md`'s DI
+section condensed to a summary and link. That file's three original sections
+(ECS, DI, Events) are now all summaries pointing at dedicated pages.
+
+**Deferred:** CC-1 through CC-4, CC-6 through CC-9, and the rest of CC-5.
