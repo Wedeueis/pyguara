@@ -553,6 +553,18 @@ tickets inherit rather than revisit them):
   behavior — not this ticket's job to fix. Full suite green (1122 passed), all 4
   demos verified, `ruff`/`mypy` clean.
 
+- [Execute the Checkbox/Label layout measure()
+  hook](issues/42-execute-checkbox-layout-measure-hook.md) — executed exactly as
+  specified. `UIElement.measure(renderer)` (no-op default) added; `Checkbox` and
+  both `Label` classes override it, moving their `render()`-time sizing logic out;
+  `BoxContainer.layout()` gained a required `renderer` parameter and calls
+  `measure()` on every visible child before stacking math. New regression test
+  proves the fix (two differently-sized `Label`s, sibling position reflects real
+  measured height, not the placeholder). Found and closed rather than left implicit:
+  `games/ui_scene_graph`'s `MenuScene` is the one `container.layout()` call site
+  `validate_demos.py` doesn't cover — verified manually via a throwaway harness.
+  Full suite green (1123 passed), `ruff`/`mypy` clean.
+
 ## Not yet specified
 
 Fog toward the destination. In scope, not yet sharp enough to ticket. Each patch graduates

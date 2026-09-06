@@ -1,7 +1,8 @@
 # Execute the Checkbox/Label layout measure() hook
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: fog graduation, follows from Decide how Checkbox should compute its layout
 size without mutating state in render(), ticket 36
@@ -65,3 +66,38 @@ this ticket since both need the same mechanical fix regardless of which survives
   `measure()` override, so the no-op default must produce byte-identical positioning
   to today for the fixed-size case).
 - `ruff check .` and `mypy pyguara` stay clean.
+
+## Resolution
+
+Executed as specified, no deviations.
+
+`UIElement.measure(renderer)` added as a no-op default. `BoxContainer.layout()`
+gained a required `renderer: UIRenderer` parameter and now calls `child.measure
+(renderer)` on every visible child before the stacking-math loop. `Checkbox`,
+`label.py`'s `Label`, and `text.py`'s `Label` each gained a `measure()` override
+moving their exact prior `render()`-time sizing logic out of `render()`; `render()`
+in all three now calls `self.measure(renderer)` as its first line, preserving
+standalone (non-contained) widget behavior exactly.
+
+All 5 `container.layout()` call sites updated to `container.layout(self.container
+.get(UIRenderer))` (matching this codebase's existing `# type: ignore[type-abstract]`
+convention for resolving a Protocol via DI, per `application.py`'s own pattern).
+`tests/test_ui_layout.py`'s two existing tests updated to pass a
+`MagicMock(spec=UIRenderer)`.
+
+New regression test (`test_box_layout_measures_children_before_stacking`) is the
+first to actually prove the bug is fixed, not just moved: two `Label` children of
+different text lengths, laid out with a renderer whose `get_text_size` returns
+distinct sizes per string, asserts sibling `rect.y` reflects the real measured
+height rather than the construction-time `(0, 0)` placeholder.
+
+One gap found and closed rather than left implicit: `games/ui_scene_graph`'s
+`MenuScene` is the one `container.layout()` call site not covered by
+`games/validate_demos.py` (that script only validates 4 of the games). No existing
+test or harness covers this demo at all. Verified manually by ticking it 10 frames
+through a throwaway harness (not committed) rather than skipping verification for
+the one site with no existing coverage.
+
+Full suite green (1123 passed, up from 1122 for the new test), all 4
+`validate_demos.py` games plus `ui_scene_graph` (verified separately) boot clean,
+`ruff check .` and `mypy pyguara` (217 files) clean. Commit `61fdd8d`.
