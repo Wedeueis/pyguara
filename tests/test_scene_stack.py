@@ -550,3 +550,233 @@ class TestSceneLifecycleRepair:
         assert pause_menu.exited
         assert game.resumed
         assert enter_calls == []  # resumed, never re-entered
+
+
+class TestSwitchToUnwindsTheStack:
+    """switch_to() replaced the stack with a bare `.clear()`.
+
+    Every scene underneath was abandoned live -- still holding its
+    EntityManager, its systems and any physics bodies -- without ever
+    receiving on_exit(). cleanup() had been written specifically to avoid that
+    leak, and switch_to() reintroduced it on every scene change.
+    """
+
+    def test_switch_to_exits_the_scene_beneath_an_overlay(self):
+        manager = SceneManager()
+        game, pause, menu = MockScene("game"), MockScene("pause"), MockScene("menu")
+        for scene in (game, pause, menu):
+            manager.register(scene)
+
+        manager.switch_to("game")
+        manager.push_scene("pause")
+        manager.switch_to("menu")
+
+        assert game.exited
+        assert pause.exited
+
+    def test_switch_to_cleans_up_the_system_manager_of_stacked_scenes(self):
+        manager = SceneManager()
+        game, menu = MockScene("game"), MockScene("menu")
+        manager.register(game)
+        manager.register(menu)
+        game.system_manager = Mock()
+
+        manager.switch_to("game")
+        manager.push_scene("menu")
+        manager.switch_to("menu")
+
+        assert game.system_manager.cleanup.called
+
+    def test_switch_to_exits_a_deep_stack_top_down(self):
+        manager = SceneManager()
+        order: list[str] = []
+        scenes = [MockScene(n) for n in ("base", "mid", "top", "other")]
+        for scene in scenes:
+            scene.on_exit = lambda s=scene: order.append(s.name)  # type: ignore[method-assign]
+            manager.register(scene)
+
+        manager.switch_to("base")
+        manager.push_scene("mid")
+        manager.push_scene("top")
+        manager.switch_to("other")
+
+        assert order == ["top", "mid", "base"]
+
+    def test_the_stack_is_empty_after_a_switch(self):
+        manager = SceneManager()
+        for name in ("game", "pause", "menu"):
+            manager.register(MockScene(name))
+
+        manager.switch_to("game")
+        manager.push_scene("pause")
+        manager.switch_to("menu")
+
+        assert manager._stack == []
+        assert manager.pop_scene() is None
+
+
+class TestTransitionReentrancy:
+    """A second stack change during a transition replaced the pending scene.
+
+    The first target was skipped without ever receiving on_enter(), while the
+    scene it was replacing had already been exited.
+    """
+
+    def test_a_second_switch_during_a_transition_is_ignored(self):
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        for name in ("a", "b", "c"):
+            manager.register(MockScene(name))
+        manager.switch_to("a")
+
+        manager.switch_to("b", FadeTransition())
+        manager.switch_to("c", FadeTransition())
+
+        assert manager._pending_scene == "b"
+
+    def test_a_push_during_a_transition_is_ignored(self):
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        for name in ("a", "b", "c"):
+            manager.register(MockScene(name))
+        manager.switch_to("a")
+        manager.switch_to("b", FadeTransition())
+
+        manager.push_scene("c")
+
+        assert manager._stack == []
+
+    def test_a_pop_during_a_transition_is_ignored(self):
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        base, top, other = MockScene("base"), MockScene("top"), MockScene("other")
+        for scene in (base, top, other):
+            manager.register(scene)
+        manager.switch_to("base")
+        manager.push_scene("top")
+        manager.switch_to("other", FadeTransition())
+
+        assert manager.pop_scene() is None
+
+    def test_the_rejected_request_is_logged(self, caplog):
+        import logging
+
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        for name in ("a", "b", "c"):
+            manager.register(MockScene(name))
+        manager.switch_to("a")
+        manager.switch_to("b", FadeTransition())
+
+        with caplog.at_level(logging.WARNING):
+            manager.switch_to("c", FadeTransition())
+
+        assert "transition is already in progress" in caplog.text
+
+
+class TestPopDuringTransition:
+    def test_the_stack_entry_survives_until_the_transition_completes(self):
+        """Popping the entry up front left the previous scene both off the
+        stack and not yet current, so cleanup() could not find it."""
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        base, top = MockScene("base"), MockScene("top")
+        manager.register(base)
+        manager.register(top)
+        manager.switch_to("base")
+        manager.push_scene("top")
+
+        manager.pop_scene(FadeTransition())
+
+        assert len(manager._stack) == 1
+
+    def test_cleanup_mid_pop_still_exits_the_scene_being_returned_to(self):
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        base, top = MockScene("base"), MockScene("top")
+        manager.register(base)
+        manager.register(top)
+        manager.switch_to("base")
+        manager.push_scene("top")
+        manager.pop_scene(FadeTransition())
+
+        manager.cleanup()
+
+        assert base.exited
+        assert top.exited
+
+    def test_cleanup_mid_switch_exits_the_incoming_scene(self):
+        """A transition that has entered its target but not yet made it
+        current still leaves that scene holding its world."""
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        a, b = MockScene("a"), MockScene("b")
+        manager.register(a)
+        manager.register(b)
+        manager.switch_to("a")
+        manager.switch_to("b", FadeTransition(TransitionConfig(duration=1.0)))
+
+        manager.cleanup()
+
+        assert b.exited
+
+    def test_no_scene_is_exited_twice_by_cleanup(self):
+        manager = SceneManager()
+        manager.set_screen_size(800, 600)
+        counts: dict[str, int] = {}
+        for name in ("base", "top"):
+            scene = MockScene(name)
+            scene.on_exit = lambda s=scene: counts.__setitem__(  # type: ignore[method-assign]
+                s.name, counts.get(s.name, 0) + 1
+            )
+            manager.register(scene)
+        manager.switch_to("base")
+        manager.push_scene("top")
+        manager.pop_scene(FadeTransition())
+
+        manager.cleanup()
+
+        assert counts == {"base": 1, "top": 1}
+
+
+class TestRegistration:
+    def test_a_scene_registered_before_the_container_is_wired_later(self):
+        """register() silently skipped resolve_dependencies() with no
+        container, leaving the scene live but with no camera or render system
+        -- surfacing much later as an assertion inside render()."""
+        from unittest.mock import MagicMock
+
+        from pyguara.di.container import DIContainer
+
+        manager = SceneManager()
+        scene = MockScene("early")
+        manager.register(scene)
+        assert scene.container is None
+
+        container = MagicMock(spec=DIContainer)
+        manager.set_container(container)
+
+        assert scene.container is container
+
+    def test_replacing_a_registered_name_is_logged(self, caplog):
+        import logging
+
+        manager = SceneManager()
+        manager.register(MockScene("a"))
+
+        with caplog.at_level(logging.WARNING):
+            manager.register(MockScene("a"))
+
+        assert "already registered as 'a'" in caplog.text
+
+    def test_re_registering_the_same_object_is_not_flagged(self, caplog):
+        import logging
+
+        manager = SceneManager()
+        scene = MockScene("a")
+        manager.register(scene)
+
+        with caplog.at_level(logging.WARNING):
+            manager.register(scene)
+
+        assert caplog.text == ""

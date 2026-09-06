@@ -6,8 +6,11 @@ from dataclasses import dataclass
 from pyguara.common.components import Transform
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.log import get_logger
 from pyguara.scene.base import Scene
 from pyguara.scene.transitions import Transition, TransitionManager
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -37,8 +40,20 @@ class SceneManager:
         self._current_pause_below: bool = False
 
     def set_container(self, container: DIContainer) -> None:
-        """Receive the DI container from the Application."""
+        """Receive the DI container and wire every scene with it.
+
+        Scenes registered before the container arrived are wired here.
+        Without this, `register()` silently skipped `resolve_dependencies()`
+        and left the scene live but with no camera, render system or engine
+        systems -- surfacing much later as an assertion inside `render()`.
+
+        Args:
+            container: The application's DI container.
+        """
         self._container = container
+        for scene in self._scenes.values():
+            if scene.container is None:
+                scene.resolve_dependencies(container)
 
     @property
     def current_scene(self) -> Scene | None:
@@ -46,10 +61,25 @@ class SceneManager:
         return self._current_scene
 
     def register(self, scene: Scene) -> None:
-        """Add a scene to the manager and inject dependencies."""
+        """Add a scene under its name, wiring it if the container is available.
+
+        Registering before `set_container()` is fine: the scene is wired when
+        the container arrives.
+
+        Args:
+            scene: The scene to register. Replaces any scene already
+                registered under the same name, which is logged since the
+                displaced scene becomes unreachable.
+        """
+        existing = self._scenes.get(scene.name)
+        if existing is not None and existing is not scene:
+            logger.warning(
+                f"Replacing the scene already registered as '{scene.name}'. "
+                f"The previous one is now unreachable by name."
+            )
+
         self._scenes[scene.name] = scene
 
-        # Auto-wire the scene if we have the container
         if self._container:
             scene.resolve_dependencies(self._container)
 
@@ -63,29 +93,47 @@ class SceneManager:
         self._transition_manager.set_screen_size(width, height)
 
     def switch_to(self, scene_name: str, transition: Transition | None = None) -> None:
-        """Transition to a new scene.
+        """Replace the whole scene stack with one scene.
+
+        Every scene currently on the stack is exited, top-down, before the new
+        one is activated. A switch requested while a transition is already
+        running is ignored, so the in-flight one finishes rather than leaving
+        a half-entered scene behind.
 
         Args:
-            scene_name: Name of scene to switch to
-            transition: Optional transition effect. If None, switches immediately.
+            scene_name: Name of the scene to switch to.
+            transition: Optional transition effect. Switches immediately when
+                None.
 
         Raises:
-            ValueError: If scene_name is not registered
+            ValueError: If `scene_name` is not registered.
         """
         if scene_name not in self._scenes:
             raise ValueError(f"Scene '{scene_name}' not registered.")
 
+        if self._reject_during_transition(f"switch to '{scene_name}'"):
+            return
+
         target_scene = self._scenes[scene_name]
         from_scene = self._current_scene
+
+        # The stack is unwound as part of leaving, LIFO, after the current
+        # scene exits. A bare `.clear()` abandoned every scene underneath --
+        # still holding its EntityManager, systems and physics bodies --
+        # without ever calling on_exit(), the exact leak cleanup() was
+        # written to avoid.
+        def leave_everything() -> None:
+            if from_scene is not None:
+                self._exit_scene(from_scene)
+            self._unwind_stack()
 
         if transition:
             # Use transition
             self._pending_scene = scene_name
 
-            on_from_hidden: Callable[[], None] | None = None
-            if from_scene is not None:
-                captured_from_scene = from_scene
-                on_from_hidden = lambda: self._exit_scene(captured_from_scene)  # noqa: E731
+            # Deferred to on_from_hidden so a fade-out still has the outgoing
+            # scene alive to render.
+            on_from_hidden: Callable[[], None] | None = leave_everything
 
             def on_complete() -> None:
                 self._current_scene = target_scene
@@ -102,15 +150,11 @@ class SceneManager:
             )
         else:
             # Immediate switch
-            if from_scene is not None:
-                self._exit_scene(from_scene)
+            leave_everything()
 
             self._current_scene = target_scene
             self._current_pause_below = False
             self._current_scene.on_enter()
-
-        # Clear scene stack when switching scenes
-        self._stack.clear()
 
     def push_scene(
         self,
@@ -126,10 +170,13 @@ class SceneManager:
             transition: Optional transition effect
 
         Raises:
-            ValueError: If scene_name is not registered
+            ValueError: If `scene_name` is not registered.
         """
         if scene_name not in self._scenes:
             raise ValueError(f"Scene '{scene_name}' not registered.")
+
+        if self._reject_during_transition(f"push '{scene_name}'"):
+            return
 
         target_scene = self._scenes[scene_name]
 
@@ -166,20 +213,26 @@ class SceneManager:
             self._current_scene.on_enter()
 
     def pop_scene(self, transition: Transition | None = None) -> Scene | None:
-        """Pop the top scene off the stack.
+        """Return to the scene beneath the current one.
 
-        Returns:
-            The scene that was popped, or None if stack is empty
+        A pop requested while a transition is already running is ignored.
 
         Args:
-            transition: Optional transition effect
+            transition: Optional transition effect. Pops immediately when None.
+
+        Returns:
+            The scene that was popped, or None if the stack was empty or a
+            transition was already in flight.
         """
         if not self._stack:
             # No scenes to pop back to
             return None
 
+        if self._reject_during_transition("pop"):
+            return None
+
         popped_scene = self._current_scene
-        entry = self._stack.pop()
+        entry = self._stack[-1]
         previous_scene = entry.scene
         previous_pause_below = entry.pause_below
 
@@ -197,6 +250,11 @@ class SceneManager:
                 self._resume_scene(previous_scene)
 
             def on_complete() -> None:
+                # Only now drop the entry. Popping it up front left the
+                # previous scene both off the stack and not yet current, so a
+                # cleanup() during the transition never exited it.
+                if self._stack and self._stack[-1] is entry:
+                    self._stack.pop()
                 self._current_scene = previous_scene
                 self._current_pause_below = previous_pause_below
 
@@ -210,6 +268,7 @@ class SceneManager:
             )
         else:
             # Immediate pop
+            self._stack.pop()
             if popped_scene is not None:
                 self._exit_scene(popped_scene)
             self._current_scene = previous_scene
@@ -341,21 +400,64 @@ class SceneManager:
                 self._current_scene.render(world_renderer, ui_renderer)
 
     def cleanup(self) -> None:
-        """Cleanup resources, unwinding every scene ever entered, LIFO.
+        """Tear down every live scene, LIFO, exiting each exactly once.
 
-        `on_exit()` on the current scene first (entered last), then the
-        stack top-to-bottom -- every scene that was ever entered gets torn
-        down exactly once, rather than leaking whatever's still on the
-        stack past a bare `.clear()`.
+        The current scene goes first (entered last), then the stack top-down.
+        A scene that a transition has started entering but not yet made
+        current is included too, so an application shutting down mid-fade does
+        not leave it holding its world.
         """
-        if self._current_scene is not None:
-            self._exit_scene(self._current_scene)
-            self._current_scene = None
+        exited: set[int] = set()
+
+        for scene in (self._current_scene, self._transition_target()):
+            if scene is not None and id(scene) not in exited:
+                exited.add(id(scene))
+                self._exit_scene(scene)
+        self._current_scene = None
 
         for entry in reversed(self._stack):
-            self._exit_scene(entry.scene)
+            if id(entry.scene) not in exited:
+                exited.add(id(entry.scene))
+                self._exit_scene(entry.scene)
 
         self._stack.clear()
+
+    def _transition_target(self) -> Scene | None:
+        """Return the scene an in-flight transition is moving to, if any.
+
+        Returns:
+            The pending scene, or None when nothing is transitioning.
+        """
+        if self._pending_scene is None:
+            return None
+        return self._scenes.get(self._pending_scene)
+
+    def _unwind_stack(self) -> None:
+        """Exit and discard every stacked scene, top-down."""
+        for entry in reversed(self._stack):
+            self._exit_scene(entry.scene)
+        self._stack.clear()
+
+    def _reject_during_transition(self, action: str) -> bool:
+        """Refuse a stack change while a transition is running.
+
+        Letting a second request through replaced the pending scene, so the
+        first target was skipped without ever receiving `on_enter()` while its
+        predecessor had already been exited.
+
+        Args:
+            action: Human-readable description, for the log message.
+
+        Returns:
+            True if the caller should return without doing anything.
+        """
+        if not self.is_transitioning():
+            return False
+        logger.warning(
+            f"Ignoring request to {action}: a scene transition is already in "
+            f"progress. Wait for is_transitioning() to return False."
+        )
+        return True
 
     def _exit_scene(self, scene: Scene) -> None:
         """Run a scene's exit hook and guarantee its SystemManager is cleaned up.
