@@ -12,7 +12,7 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/graphics` — **split across several iterations**; iteration 1 (the window boundary) in review.
+`pyguara/graphics` — **split across several iterations**; iterations 1 (window boundary) and 2 (components) in review.
 
 **Tier 2 is complete:** `config`, `application`, `scene`, `systems`.
 
@@ -38,7 +38,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 ### Tier 3 — Subsystems
 - [~] `pyguara/graphics` — ~8,000 lines, too large for one iteration. Split:
     - [x] 1. Window boundary — `window.py`, `IWindowBackend` *(active)*
-    - [ ] 2. Components — camera, particles, animation, geometry, sprite
+    - [x] 2. Components — camera, particles, animation, geometry, sprite *(active)*
     - [ ] 3. Backends — pygame, ModernGL, headless renderers
     - [ ] 4. Pipeline — graph, passes, framebuffer, viewport, batching
     - [ ] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting
@@ -767,3 +767,52 @@ fix alone. The issue now carries a four-step sequence, each step independently
 shippable.
 
 **Deferred:** CC-3 through CC-8, CC-11 (issue #9).
+
+
+### `pyguara/graphics` iteration 2 — components — awaiting approval (2026-09-06)
+
+**Verification:** 1449/1449 tests pass; ruff clean; mypy clean.
+
+**Correctness fixes:**
+- **`components/geometry.py` was hard-wired to pygame** -- it imported pygame,
+  drew onto a `pygame.Surface` and constructed a `PygameTexture` directly. So
+  `Box` and `Circle` silently produced the wrong texture type under ModernGL:
+  an ECS-facing component that only worked on one backend. This was the
+  clearest single instance of issue #9, and the one the issue named as
+  cheapest to fix alone.
+
+  The abstraction already existed and was already used by `SpriteSheet` in the
+  same package: `TextureFactory.create_from_bytes()`. Shapes now rasterise to
+  plain RGBA bytes in pure Python and hand them to an injected factory, so they
+  work on pygame, ModernGL and headless alike. The module imports no backend at
+  all. Circle rasterisation fills by row spans -- each row's half-width follows
+  from the circle equation -- so it is O(diameter) rather than O(diameter^2).
+
+  `Box` and `Circle` gain a required `texture_factory` argument. Nothing in
+  `pyguara/` or `games/` constructs them, so no production caller breaks; the
+  precedent for how to obtain one is `SpriteSheet.from_container()`.
+
+- **`Camera2D.zoom` accepted zero and negative values**, and three code paths
+  then disagreed about what that meant: `world_to_screen` collapsed every point
+  onto the screen centre, `screen_to_world` substituted `0.001` and returned
+  coordinates six orders of magnitude out (`Vec2d(-390000, -290000)` for a
+  point at `(10, 10)`), and `get_view_bounds` raised `ZeroDivisionError`. A
+  negative zoom silently mirrored the world. `zoom` is now a validated property
+  and `zoom_to()` checks its target, so the invariant holds at assignment
+  rather than being papered over in one consumer and crashing in another. The
+  `safe_zoom = 0.001` fudge is gone.
+
+**Tests:** `test_graphics_geometry.py` rewritten, 6 -> 30. The originals
+asserted against `PygameTexture` and read pixels off a `pygame.Surface`, which
+is exactly the coupling being removed. Rasterisation is now checked against raw
+bytes (backend-free) *and* through the real pygame factory, so both the maths
+and the backend path are covered -- plus symmetry, span width, lazy generation
+and cache invalidation, which nothing checked before.
+
+**Surveyed and clean:** `animation.py` handles an unknown clip name correctly
+(logs and declines); `sprite.py` is a plain data component; `particles.py` uses
+a fixed pool with documented degree units. `animation.py` carries
+`_allow_methods = True` in two places -- playback and FSM logic on components
+-- which belongs to CC-6 rather than this slice.
+
+**Deferred:** CC-3 through CC-8, CC-11 (issue #9, now partly addressed).

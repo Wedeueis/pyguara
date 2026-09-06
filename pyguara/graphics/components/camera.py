@@ -155,7 +155,7 @@ class Camera2D:
         """
         self.position: Vector2 = Vector2.zero()
         self.offset: Vector2 = Vector2(width / 2, height / 2)
-        self.zoom: float = 1.0
+        self._zoom: float = 1.0
         self.rotation: float = 0.0
 
         # Camera effects
@@ -164,6 +164,34 @@ class Camera2D:
         self._target_position: Vector2 | None = None
         self._follow_constraints: CameraFollowConstraints | None = None
         self._follow_velocity: Vector2 = Vector2.zero()
+
+    @property
+    def zoom(self) -> float:
+        """The scale factor: 1.0 is natural size, 2.0 twice as large."""
+        return self._zoom
+
+    @zoom.setter
+    def zoom(self, value: float) -> None:
+        """Set the scale factor.
+
+        Args:
+            value: The new scale factor. Must be positive.
+
+        Raises:
+            ValueError: If `value` is zero or negative. A zero used to be
+                accepted and then handled three different ways: world_to_screen
+                collapsed every point onto the screen centre, screen_to_world
+                substituted 0.001 and returned coordinates six orders of
+                magnitude out, and get_view_bounds raised ZeroDivisionError. A
+                negative silently mirrored the world. Rejecting it here means
+                the invariant holds everywhere downstream.
+        """
+        if value <= 0:
+            raise ValueError(
+                f"Camera zoom must be positive, got {value}. Zoom is a scale "
+                f"factor; use a small positive value to zoom out."
+            )
+        self._zoom = value
 
     def set_viewport_size(self, width: int, height: int) -> None:
         """
@@ -224,10 +252,9 @@ class Camera2D:
         if self.rotation != 0:
             local_pos = local_pos.rotate_degrees(self.rotation)
 
-        # 3. Inverse Scale
-        # Avoid division by zero
-        safe_zoom = self.zoom if self.zoom != 0 else 0.001
-        local_pos = local_pos * (1.0 / safe_zoom)
+        # 3. Inverse scale. No zero guard needed: the zoom setter rejects
+        # non-positive values, so this cannot divide by zero.
+        local_pos = local_pos * (1.0 / self.zoom)
         world_pos = local_pos + self.position
 
         # 4. Translate back to world
@@ -283,13 +310,23 @@ class Camera2D:
         Start a smooth zoom transition.
 
         Args:
-            target_zoom (float): Target zoom level.
+            target_zoom (float): Target zoom level. Must be positive.
             duration (float): Transition duration in seconds (default: 0.5).
             easing (str): Easing function ("linear", "smooth", "ease_in", "ease_out").
+
+        Raises:
+            ValueError: If `target_zoom` is not positive. Checked here rather
+                than only when the transition lands, so the bad value is
+                reported at the call that supplied it.
 
         Example:
             camera.zoom_to(2.0, duration=1.0, easing="smooth")
         """
+        if target_zoom <= 0:
+            raise ValueError(
+                f"Camera zoom must be positive, got {target_zoom}. Zoom is a "
+                f"scale factor; use a small positive value to zoom out."
+            )
         self._zoom_transition = CameraZoomTransition(
             target_zoom=target_zoom,
             duration=duration,
