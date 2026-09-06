@@ -5,8 +5,12 @@ ground detection, jump mechanics, coyote time, jump buffering, wall sliding,
 and wall jumping. It's designed for responsive, game-feel-oriented character
 control in 2D platformer games.
 
+Movement/jump logic lives in `PlatformerSystem`; this component only carries
+data plus a small set of side-effect-free query predicates
+(`can_jump()`/`can_wall_jump()`/`is_wall_sliding()`).
+
 Usage:
-    from pyguara.physics.platformer_controller import PlatformerController
+    from pyguara.physics.platformer_controller import PlatformerController, PlatformerInput
 
     # Add controller to player entity
     player.add_component(PlatformerController(
@@ -16,16 +20,9 @@ Usage:
         jump_buffer=0.1
     ))
 
-    # In your update loop
+    # In your input-to-system code, submit this tick's intent
     controller = player.get_component(PlatformerController)
-
-    # Handle input
-    if input.is_key_down(Key.LEFT):
-        controller.move_left()
-    if input.is_key_down(Key.RIGHT):
-        controller.move_right()
-    if input.is_key_pressed(Key.SPACE):
-        controller.jump()
+    controller.pending_input = PlatformerInput(move=-1.0, jump=True)
 """
 
 from dataclasses import dataclass, field
@@ -43,6 +40,18 @@ class PlatformerState(Enum):
 
 
 @dataclass
+class PlatformerInput:
+    """One tick's movement/jump intent, submitted by an input-to-system caller.
+
+    Consumed and reset by `PlatformerSystem.update()` each fixed tick -- not
+    read by anything else.
+    """
+
+    move: float = 0.0
+    jump: bool = False
+
+
+@dataclass
 class PlatformerController(BaseComponent):
     """Component for 2D platformer character movement.
 
@@ -54,8 +63,9 @@ class PlatformerController(BaseComponent):
     and velocities. Ground detection is performed via raycasting.
 
     Note:
-        This is a legacy component with movement logic. Ideally, this logic
-        would be in a PlatformerMovementSystem.
+        Pure data plus side-effect-free query predicates
+        (`can_jump()`/`can_wall_jump()`/`is_wall_sliding()`). Movement/jump
+        logic lives in `PlatformerSystem`, driven by `pending_input`.
 
     Attributes:
         move_speed: Horizontal movement speed in pixels/second.
@@ -127,41 +137,13 @@ class PlatformerController(BaseComponent):
         default=False, init=False, repr=False
     )  # Prevents air jumps
 
+    # This tick's movement/jump intent (written by an input-to-system caller,
+    # consumed and reset by PlatformerSystem.update() every fixed tick)
+    pending_input: PlatformerInput = field(default_factory=PlatformerInput, init=False)
+
     def __post_init__(self) -> None:
         """Initialize base component state."""
         super().__init__()
-
-    def move_left(self) -> None:
-        """Move character left.
-
-        Call this from your input handler when left input is active.
-        """
-        self.move_input = -1.0
-        self.facing_right = False
-
-    def move_right(self) -> None:
-        """Move character right.
-
-        Call this from your input handler when right input is active.
-        """
-        self.move_input = 1.0
-        self.facing_right = True
-
-    def stop_move(self) -> None:
-        """Stop horizontal movement.
-
-        Call this when horizontal input is released.
-        """
-        self.move_input = 0.0
-
-    def jump(self) -> None:
-        """Request a jump.
-
-        Call this from your input handler when jump button is pressed.
-        The actual jump will be processed by PlatformerSystem.
-        """
-        self._jump_requested = True
-        self.jump_buffer_timer = self.jump_buffer
 
     def can_jump(self) -> bool:
         """Check if character can currently jump.
@@ -189,14 +171,3 @@ class PlatformerController(BaseComponent):
             True if currently wall sliding.
         """
         return self.current_state == PlatformerState.WALL_SLIDE
-
-    def reset_jump_state(self) -> None:
-        """Reset jump-related state.
-
-        Call this when character lands or respawns.
-        """
-        self._jump_requested = False
-        self.jump_buffer_timer = 0.0
-        self.coyote_timer = 0.0
-        self._can_double_jump = False
-        self._jump_used = False

@@ -40,8 +40,10 @@ class TriggerVolume(BaseComponent):
     Otherwise, you need to manually subscribe to OnTriggerEnter/Exit events.
 
     Note:
-        This is a legacy component with state query methods. Ideally, these
-        would be simple set operations in game code.
+        Mutation (`entities_inside`/`active`) happens directly as plain field
+        writes in `TriggerSystem`. The query predicates below
+        (`contains_entity()`, `matches_tags()`, etc.) stay on the component --
+        side-effect-free, so there's no ownership question to resolve.
 
     Attributes:
         shape_type: Geometric shape of the trigger zone.
@@ -107,14 +109,6 @@ class TriggerVolume(BaseComponent):
         """
         return len(self.entities_inside) > 0
 
-    def clear(self) -> None:
-        """Remove all entities from the trigger state.
-
-        This doesn't affect the actual physics simulation, only the
-        internal tracking. Use this when resetting or cleaning up.
-        """
-        self.entities_inside.clear()
-
     def matches_tags(self, entity_tags: Optional[Set[str]]) -> bool:
         """Check if entity's tags match this trigger's filter.
 
@@ -144,8 +138,9 @@ class EntityTags(BaseComponent):
     activate them. They can also be used for general entity categorization.
 
     Note:
-        This is a legacy component with tag manipulation methods. Ideally,
-        these would be simple set operations in game code.
+        Pure data plus side-effect-free query predicates. Add/remove a tag by
+        mutating `.tags` directly (a plain `Set[str]`) -- no natural System
+        owns tag mutation, and neither wrapped more than one `set` call.
 
     Attributes:
         tags: Set of string tags for this entity.
@@ -158,22 +153,6 @@ class EntityTags(BaseComponent):
     def __post_init__(self) -> None:
         """Initialize base component state."""
         super().__init__()
-
-    def add_tag(self, tag: str) -> None:
-        """Add a tag to this entity.
-
-        Args:
-            tag: Tag string to add.
-        """
-        self.tags.add(tag)
-
-    def remove_tag(self, tag: str) -> None:
-        """Remove a tag from this entity.
-
-        Args:
-            tag: Tag string to remove.
-        """
-        self.tags.discard(tag)
 
     def has_tag(self, tag: str) -> bool:
         """Check if entity has a specific tag.

@@ -632,8 +632,10 @@ def test_entity_destroyed_dispatched_synchronously_with_components_readable() ->
     entity.add_component(Position(3, 4))
 
     received = []
-    manager._on_entity_removed = lambda e: received.append(
-        (e, e.has_component(Position), e.get_component(Position))
+    manager.subscribe_entity_removed(
+        lambda e: received.append(
+            (e, e.has_component(Position), e.get_component(Position))
+        )
     )
 
     manager.remove_entity(entity.id)
@@ -653,8 +655,8 @@ def test_entity_destroyed_event_dispatches_through_a_real_dispatcher() -> None:
 
     dispatcher = EventDispatcher()
     manager = EntityManager()
-    manager._on_entity_removed = lambda e: dispatcher.dispatch(
-        EntityDestroyed(entity=e)
+    manager.subscribe_entity_removed(
+        lambda e: dispatcher.dispatch(EntityDestroyed(entity=e))
     )
 
     received: list[EntityDestroyed] = []
@@ -732,3 +734,294 @@ def test_query_cache_reports_correct_count_after_entity_removal() -> None:
 
     assert manager._query_cache.get_cached(Position) == frozenset()
     assert len(list(manager.get_entities_with_cached(Position))) == 0
+
+
+# -- add_entity(): pre-attached components and terminal removal --
+
+
+def test_add_entity_indexes_components_attached_before_registration() -> None:
+    """An entity built detached and then registered must be queryable.
+
+    This is the prefab / deserialisation path: components exist before the
+    manager ever sees the entity, so they never fire the component-added hook.
+    """
+    manager = EntityManager()
+
+    entity = Entity("detached")
+    entity.add_component(Position())
+    entity.add_component(Velocity())
+    manager.add_entity(entity)
+
+    assert [e.id for e in manager.get_entities_with(Position, Velocity)] == ["detached"]
+
+
+def test_add_entity_populates_registered_query_caches() -> None:
+    """Regression: add_entity() indexed pre-attached components directly into
+    _component_index, bypassing the query cache. A system using a cached query
+    silently never saw entities spawned from a prefab or a clone -- while the
+    equivalent uncached query saw them, so the two disagreed.
+    """
+    manager = EntityManager()
+    manager.register_cached_query(Position, Velocity)
+
+    entity = Entity("spawned")
+    entity.add_component(Position())
+    entity.add_component(Velocity())
+    manager.add_entity(entity)
+
+    cached = [e.id for e in manager.get_entities_with_cached(Position, Velocity)]
+    uncached = [e.id for e in manager.get_entities_with(Position, Velocity)]
+    assert cached == uncached == ["spawned"]
+
+
+def test_clone_then_add_entity_is_visible_to_cached_queries() -> None:
+    """The clone() -> add_entity() workflow named in Entity.clone()'s docstring
+    must produce an entity that cached queries can see."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    original = manager.create_entity("original")
+    original.add_component(Position(x=5))
+
+    manager.add_entity(original.clone("copy"))
+
+    assert sorted(e.id for e in manager.get_entities_with_cached(Position)) == [
+        "copy",
+        "original",
+    ]
+
+
+def test_add_entity_rejects_a_removed_entity() -> None:
+    """Removal is terminal. Re-registering a soft-dead entity used to succeed
+    and leave a zombie: reachable via get_entity(), dropped from every query at
+    the next flush, and raising on any attempt to mutate it.
+    """
+    manager = EntityManager()
+    entity = manager.create_entity("doomed")
+    entity.add_component(Position())
+    manager.remove_entity("doomed")
+
+    with pytest.raises(RuntimeError, match="Removal is terminal"):
+        manager.add_entity(entity)
+
+    assert manager.get_entity("doomed") is None
+
+
+def test_registering_a_query_after_entities_exist_backfills_the_cache() -> None:
+    """register_cached_query() builds from current world state, so systems that
+    register during a late init still see entities created before them."""
+    manager = EntityManager()
+
+    entity = manager.create_entity("early")
+    entity.add_component(Position())
+
+    manager.register_cached_query(Position)
+
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == ["early"]
+
+
+# -- QueryCache maintenance --
+
+
+def test_cached_query_ignores_component_types_it_does_not_mention() -> None:
+    """Adding an unrelated component must not disturb a registered query."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    entity = manager.create_entity("e")
+    entity.add_component(Position())
+    entity.add_component(Health())
+    entity.remove_component(Health)
+
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == ["e"]
+
+
+def test_rebuild_all_recovers_from_a_desynchronised_cache() -> None:
+    """rebuild_all() must restore agreement with the inverted index after a
+    change that bypassed the component hooks."""
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+
+    entity = manager.create_entity("e")
+    entity.add_component(Position())
+
+    manager._query_cache._cache[frozenset({Position})] = frozenset({"ghost"})
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == []
+
+    manager._query_cache.rebuild_all()
+
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == ["e"]
+
+
+def test_query_cache_statistics_report_registered_queries_and_occupancy() -> None:
+    manager = EntityManager()
+    manager.register_cached_query(Position, Velocity)
+
+    entity = manager.create_entity("e")
+    entity.add_component(Position())
+    entity.add_component(Velocity())
+
+    stats = manager._query_cache.get_statistics()
+
+    assert stats["registered_queries"] == 1
+    assert stats["total_cached_entities"] == 1
+    assert stats["queries"] == [
+        {"component_types": ["Position", "Velocity"], "cached_entities": 1}
+    ]
+
+
+# -- Component validation --
+
+
+def test_base_component_reports_logic_methods_in_sorted_order() -> None:
+    """The warning lists offending methods deterministically, so the message is
+    stable enough to assert on and to diff across runs."""
+    with pytest.warns(UserWarning) as record:
+
+        @dataclass
+        class Messy(BaseComponent):
+            value: int = 0
+
+            def zeta(self) -> None: ...
+
+            def alpha(self) -> None: ...
+
+    assert "alpha, zeta" in str(record[0].message)
+
+
+def test_strict_component_accepts_class_keyword_arguments() -> None:
+    """__init_subclass__ must forward class kwargs rather than swallow them, so
+    StrictComponent composes with mixins that use them."""
+    received: dict[str, object] = {}
+
+    class KwargMixin:
+        def __init_subclass__(cls, marker: str = "", **kwargs: object) -> None:
+            received["marker"] = marker
+            super().__init_subclass__(**kwargs)
+
+    @dataclass
+    class Tagged(StrictComponent, KwargMixin, marker="ok"):
+        value: int = 0
+
+    assert received["marker"] == "ok"
+
+
+# -- Entity-removal subscription API --
+
+
+def test_multiple_subscribers_are_all_notified() -> None:
+    """The single-slot `_on_entity_removed` attribute let whichever consumer
+    wired itself last silently displace every earlier one. Subscription must
+    fan out instead."""
+    manager = EntityManager()
+    entity = manager.create_entity("e")
+
+    seen: list[str] = []
+    manager.subscribe_entity_removed(lambda _e: seen.append("scene"))
+    manager.subscribe_entity_removed(lambda _e: seen.append("inspector"))
+
+    manager.remove_entity("e")
+
+    assert seen == ["scene", "inspector"]
+    assert entity._is_removed
+
+
+def test_subscribers_see_components_before_cleanup() -> None:
+    """Notification happens after soft-death but before index cleanup, so a
+    subscriber can still inspect what the entity was carrying."""
+    manager = EntityManager()
+    entity = manager.create_entity("e")
+    entity.add_component(Position(3, 4))
+
+    observed: list[tuple[bool, Position]] = []
+    manager.subscribe_entity_removed(
+        lambda e: observed.append(
+            (e.has_component(Position), e.get_component(Position))
+        )
+    )
+
+    manager.remove_entity("e")
+
+    assert observed == [(True, Position(3, 4))]
+
+
+def test_unsubscribe_stops_notifications() -> None:
+    manager = EntityManager()
+    seen: list[str] = []
+
+    def listener(entity: Entity) -> None:
+        seen.append(entity.id)
+
+    manager.subscribe_entity_removed(listener)
+    manager.remove_entity(manager.create_entity("first").id)
+
+    manager.unsubscribe_entity_removed(listener)
+    manager.remove_entity(manager.create_entity("second").id)
+
+    assert seen == ["first"]
+
+
+def test_unsubscribe_of_an_unknown_callback_is_a_noop() -> None:
+    manager = EntityManager()
+    manager.unsubscribe_entity_removed(lambda _e: None)
+
+
+def test_subscribing_a_bound_method_twice_notifies_once() -> None:
+    """Scene subscribes a bound method in resolve_dependencies(). Resolving
+    twice must not double-dispatch EntityDestroyed -- and bound methods are a
+    fresh object on every attribute access, so the dedupe has to compare by
+    equality, not identity."""
+
+    class Listener:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def handle(self, _entity: Entity) -> None:
+            self.calls += 1
+
+    manager = EntityManager()
+    listener = Listener()
+    manager.subscribe_entity_removed(listener.handle)
+    manager.subscribe_entity_removed(listener.handle)
+
+    manager.remove_entity(manager.create_entity("e").id)
+
+    assert listener.calls == 1
+
+
+def test_a_subscriber_may_unsubscribe_itself_during_notification() -> None:
+    """Notification iterates a copy, so a one-shot subscriber (or a teardown
+    that detaches observers) cannot corrupt the in-flight iteration."""
+    manager = EntityManager()
+    seen: list[str] = []
+
+    def once(entity: Entity) -> None:
+        seen.append(entity.id)
+        manager.unsubscribe_entity_removed(once)
+
+    manager.subscribe_entity_removed(once)
+    manager.subscribe_entity_removed(lambda e: seen.append(f"other:{e.id}"))
+
+    manager.remove_entity(manager.create_entity("first").id)
+    manager.remove_entity(manager.create_entity("second").id)
+
+    assert seen == ["first", "other:first", "other:second"]
+
+
+def test_subscriber_exceptions_propagate_after_the_entity_is_already_dead() -> None:
+    """A failing subscriber must not be swallowed, and must not leave the
+    world in a half-removed state: soft-death completes before notification."""
+    manager = EntityManager()
+    manager.create_entity("e").add_component(Position())
+    manager.subscribe_entity_removed(_raise_boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        manager.remove_entity("e")
+
+    assert manager.get_entity("e") is None
+    manager.flush_pending_removals()
+    assert list(manager.get_entities_with(Position)) == []
+
+
+def _raise_boom(_entity: Entity) -> None:
+    raise RuntimeError("boom")

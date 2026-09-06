@@ -14,8 +14,8 @@ from pyguara.events.dispatcher import EventDispatcher
 def _wire_entity_destroyed(manager: EntityManager, dispatcher: EventDispatcher) -> None:
     """Wire a manager's removal hook to dispatch EntityDestroyed, mirroring
     Scene.resolve_dependencies()."""
-    manager._on_entity_removed = lambda e: dispatcher.dispatch(
-        EntityDestroyed(entity=e, source=None)
+    manager.subscribe_entity_removed(
+        lambda e: dispatcher.dispatch(EntityDestroyed(entity=e, source=None))
     )
 
 

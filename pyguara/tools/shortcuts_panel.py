@@ -25,12 +25,13 @@ class ShortcutsPanel(Tool):
             ("F3", "Event Monitor"),
             ("F4", "Physics Debugger"),
             ("F5", "Robust ImGui Editor"),
+            ("F6", "Config Inspector"),
             ("F8", "Shortcuts Panel (This)"),
             ("F12", "Toggle ALL Tools"),
         ]
 
     def update(self, dt: float) -> None:
-        pass
+        """No-op -- this panel has nothing to update per frame."""
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the help overlay.

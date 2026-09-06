@@ -81,8 +81,29 @@ class DIContainer:
     def register_instance(
         self, interface: Type[TInterface], instance: TInterface
     ) -> DIContainer:
-        """Register an existing object as a singleton."""
+        """Register an existing object as a singleton.
+
+        Raises:
+            DIException: If `interface` is a `@runtime_checkable` Protocol and
+                `instance` doesn't structurally satisfy it. Only checked for
+                Protocols -- concrete-class interfaces are left alone, since at
+                least one deliberately registers an instance that is *not* a
+                real subclass (BOOT-1's Pygame `RenderGraph` stub, branched on
+                by identity elsewhere rather than treated as a real one). This
+                is also the only registration method that can check anything at
+                registration time at all -- the others only have a class, not
+                yet an instance.
+        """
         with self._lock:
+            if getattr(interface, "_is_protocol", False) and not isinstance(
+                instance, interface
+            ):
+                raise DIException(
+                    f"Registered instance of type "
+                    f"{type(instance).__name__!r} does not satisfy the "
+                    f"protocol {interface.__name__!r}."
+                )
+
             registration = ServiceRegistration(
                 interface=interface,
                 instance=instance,

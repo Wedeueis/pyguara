@@ -48,6 +48,17 @@ class UIElement(ABC):
         """Draw the element using the abstract renderer."""
         pass
 
+    def measure(self, renderer: UIRenderer) -> None:
+        """Recompute this element's own size, if it depends on renderer state.
+
+        No-op by default -- most elements have a fixed size. Override to set
+        `self.rect.width`/`height` from renderer-measured content (e.g. text),
+        called both by `render()` (so a standalone element still sizes itself
+        before drawing) and by a parent container's `layout()` (so sibling
+        stacking math sees the real size, not a placeholder).
+        """
+        pass
+
     def update(self, dt: float) -> None:
         """Process animations or logic."""
         for child in self.children:

@@ -16,7 +16,7 @@ from pyguara.common.components import Transform
 from pyguara.ui.manager import UIManager
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.components.button import Button
-from pyguara.ui.components.label import Label
+from pyguara.ui.components.text import Label
 from pyguara.input.manager import InputManager
 from pyguara.input.types import InputDevice, ActionType
 from pyguara.input.keys import UP, LEFT, RIGHT, SPACE, ESCAPE, R
@@ -89,7 +89,7 @@ class TitleScene(Scene):
         btn_quit.on_click = self._on_quit_click
         container.add_child(btn_quit)
 
-        container.layout()
+        container.layout(self.container.get(UIRenderer))  # type: ignore[type-abstract]
         ui_manager.add_element(container)
 
     def _on_start_click(self, el) -> None:
@@ -313,8 +313,8 @@ class GameScene(Scene):
                     health.invincible_time = 1.0
 
                 # Reset platformer controller state
-                if controller:
-                    controller.reset_jump_state()
+                if controller and self._platformer_system:
+                    self._platformer_system.reset_jump_state(controller)
                     controller.is_grounded = False
 
         self._is_dead = False

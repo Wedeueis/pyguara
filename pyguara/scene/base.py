@@ -7,6 +7,7 @@ from pyguara.ai.ai_system import AISystem
 from pyguara.ai.steering_system import SteeringSystem
 from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.common.components import Transform
 from pyguara.di.container import DIContainer  # Import Container
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.events import EntityDestroyed
@@ -62,6 +63,11 @@ class Scene(ABC):
         # New: Application will set this before on_enter
         self.container: Optional[DIContainer] = None
 
+        # Set by SceneManager.render() immediately before this scene's own
+        # render() runs each frame. 1.0 = fully at the current fixed step --
+        # a sane default before the first real render() call.
+        self.render_alpha: float = 1.0
+
     def resolve_dependencies(self, container: DIContainer) -> None:
         """
         Call by the Application/SceneManager to inject the container.
@@ -74,9 +80,9 @@ class Scene(ABC):
         """
         self.container = container
 
-        # EntityManager stays decoupled from the event system; wire its
-        # removal hook to dispatch EntityDestroyed here instead.
-        self.entity_manager._on_entity_removed = self._on_entity_removed
+        # EntityManager stays decoupled from the event system; this scene
+        # subscribes to its removals and republishes them as EntityDestroyed.
+        self.entity_manager.subscribe_entity_removed(self._dispatch_entity_destroyed)
 
         self.system_manager.register(
             SteeringSystem(self.entity_manager),
@@ -112,12 +118,15 @@ class Scene(ABC):
             prefab_resolver=container.get(PrefabCache).load,
         )
 
-    def _on_entity_removed(self, entity: Entity) -> None:
-        """Dispatch EntityDestroyed for an entity this scene just soft-removed.
+    def _dispatch_entity_destroyed(self, entity: Entity) -> None:
+        """Republish a soft-removed entity as an `EntityDestroyed` event.
 
-        Wired onto `self.entity_manager._on_entity_removed` in
-        `resolve_dependencies()`; fires synchronously from
-        `EntityManager.remove_entity()`, components still intact.
+        Subscribed to `self.entity_manager` in `resolve_dependencies()`; fires
+        synchronously from `EntityManager.remove_entity()` with the entity's
+        components still intact.
+
+        Args:
+            entity: The entity that was just removed.
         """
         self.event_dispatcher.dispatch(EntityDestroyed(entity=entity, source=self))
 
@@ -216,10 +225,20 @@ class Scene(ABC):
         """Frame render logic.
 
         Default implementation: submits every entity carrying a visible
-        `Sprite` component to `self.render_system`, then flushes. Override
-        only to add extra manual draws (debug overlays, UI-adjacent world
-        drawing), calling `super().render(world_renderer, ui_renderer)`
-        first so the default submission still happens.
+        `Sprite` component to `self.render_system`, then flushes. When the
+        entity also carries a `Transform`, `Sprite.position` is treated as an
+        offset from it, combined at submission time without ever writing back
+        to `sprite.position` -- preserving that offset instead of the sync
+        silently destroying it every frame. If that `Transform` has
+        `interpolate=True`, the position used is `lerp(previous_position,
+        position, self.render_alpha)` instead of `position` directly,
+        smoothing over the gap between fixed steps at display framerate; every
+        other `Transform` uses `position` directly, unaffected. An entity with
+        only a `Sprite` submits at its own `position` unchanged (the
+        standalone case). Override only to add extra manual draws (debug
+        overlays, UI-adjacent world drawing), calling
+        `super().render(world_renderer, ui_renderer)` first so the default
+        submission still happens.
         """
         assert self.render_system is not None and self.camera is not None, (
             "Scene.render() called before resolve_dependencies() built "
@@ -229,6 +248,17 @@ class Scene(ABC):
         for entity in self.entity_manager.get_entities_with(Sprite):
             sprite = entity.get_component(Sprite)
             if sprite.visible:
-                self.render_system.submit(sprite)
+                if entity.has_component(Transform):
+                    transform = entity.get_component(Transform)
+                    if transform.interpolate:
+                        base_position = transform.previous_position.lerp(
+                            transform.position, self.render_alpha
+                        )
+                    else:
+                        base_position = transform.position
+                    world_position = base_position + sprite.position
+                else:
+                    world_position = sprite.position
+                self.render_system.submit(sprite, position=world_position)
 
         self.render_system.flush(self.camera)

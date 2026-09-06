@@ -71,12 +71,14 @@ def app_container() -> DIContainer:
     mock_window.is_open = True
 
     c.register_instance(Window, mock_window)
-    c.register_instance(UIRenderer, MagicMock())  # type: ignore[type-abstract]
-    c.register_instance(IRenderer, MagicMock())  # type: ignore[type-abstract]
+    # spec= so isinstance() (wayfinder ticket 33) sees a real UIRenderer/
+    # IRenderer/IAudioSystem shape, not a bare MagicMock's auto-attributes.
+    c.register_instance(UIRenderer, MagicMock(spec=UIRenderer))  # type: ignore[type-abstract]
+    c.register_instance(IRenderer, MagicMock(spec=IRenderer))  # type: ignore[type-abstract]
 
     # Scene.resolve_dependencies() needs these to build the four per-scene
     # engine systems (Scene-owned world and SystemManager) and prefab factory.
-    c.register_instance(IAudioSystem, MagicMock())  # type: ignore[type-abstract]
+    c.register_instance(IAudioSystem, MagicMock(spec=IAudioSystem))  # type: ignore[type-abstract]
     c.register_instance(ResourceManager, MagicMock())
     c.register_instance(ComponentRegistry, MagicMock())
     c.register_instance(PrefabCache, MagicMock())

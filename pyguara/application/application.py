@@ -99,6 +99,7 @@ class Application:
 
         # Fixed timestep accumulator
         self._accumulator = 0.0
+        self._fixed_dt = 0.0  # set for real in run(), from config
 
         # Replay recording/playback (mutually exclusive; see start_recording()/
         # load_replay()). Idle by default: near-zero overhead when neither is active.
@@ -130,6 +131,7 @@ class Application:
         target_fps = self._config_manager.config.display.fps_target
         physics_config = self._config_manager.config.physics
         fixed_dt = physics_config.fixed_dt
+        self._fixed_dt = fixed_dt  # persisted so _render() can compute alpha
         max_frame_time = physics_config.max_frame_time
 
         self.logger.debug(
@@ -359,22 +361,26 @@ class Application:
         """Render frame.
 
         Uses the render graph pipeline if available (ModernGL), otherwise
-        falls back to direct rendering (Pygame).
+        falls back to direct rendering (Pygame). Computes `alpha` -- how far
+        the current frame sits between the last two fixed steps -- for
+        `Transform.interpolate` entities.
         """
-        if self._render_graph is not None:
-            self._render_with_graph()
-        else:
-            self._render_direct()
+        alpha = self._accumulator / self._fixed_dt if self._fixed_dt > 0 else 0.0
 
-    def _render_direct(self) -> None:
+        if self._render_graph is not None:
+            self._render_with_graph(alpha)
+        else:
+            self._render_direct(alpha)
+
+    def _render_direct(self, alpha: float) -> None:
         """Direct rendering path (Pygame backend)."""
         self._window.clear()
-        self._scene_manager.render(self._world_renderer, self._ui_renderer)
+        self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
         self._ui_manager.render(self._ui_renderer)
         self._ui_renderer.present()
         self._window.present()
 
-    def _render_with_graph(self) -> None:
+    def _render_with_graph(self, alpha: float) -> None:
         """Multi-pass rendering path using RenderGraph (ModernGL backend).
 
         Pipeline:
@@ -393,7 +399,7 @@ class Application:
         world_fbo.clear(Color(0, 0, 0, 255))  # Black background
 
         # Render scenes to the world FBO
-        self._scene_manager.render(self._world_renderer, self._ui_renderer)
+        self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
 
         # Execute final pass to blit world FBO to screen
         final_pass = self._render_graph.get_pass("final")

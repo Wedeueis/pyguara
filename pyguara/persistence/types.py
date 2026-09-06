@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
 
 class SerializationFormat(Enum):
@@ -34,6 +34,7 @@ class SaveMetadata:
     save_version: int = 1
 
 
+@runtime_checkable
 class StorageBackend(Protocol):
     """Interface for physical data storage mechanisms."""
 

@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional, List
 
+from pyguara.common.components import Transform
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer, IRenderer
 from pyguara.scene.base import Scene
@@ -231,13 +232,18 @@ class SceneManager:
         """Fixed-rate update for physics and deterministic game logic.
 
         Called at a fixed rate (e.g., 60 Hz) regardless of display framerate.
-        Ticks each active scene's own SystemManager (the four engine systems:
-        Steering, AI, AudioSource, Animation) before the scene's own
-        fixed_update() -- there's no global SystemManager anymore, each scene
-        owns and ticks its own. Flushes each scene's own EntityManager at the
-        end of its fixed-update work (the frame boundary the ECS lifecycle
-        contract defers physical index cleanup to) -- there's no global
-        EntityManager either, so this can't happen in Application anymore.
+        Snapshots `previous_position` for every `Transform.interpolate=True`
+        entity first, before any system runs this tick -- a single
+        centralized point every current and future position-mutating system
+        (Steering, Physics, the platformer controller) runs after, rather
+        than each needing its own snapshot logic. Ticks each active scene's
+        own SystemManager (the four engine systems: Steering, AI,
+        AudioSource, Animation) before the scene's own fixed_update() --
+        there's no global SystemManager anymore, each scene owns and ticks
+        its own. Flushes each scene's own EntityManager at the end of its
+        fixed-update work (the frame boundary the ECS lifecycle contract
+        defers physical index cleanup to) -- there's no global EntityManager
+        either, so this can't happen in Application anymore.
 
         Args:
             fixed_dt: Fixed delta time in seconds.
@@ -247,6 +253,12 @@ class SceneManager:
 
         # Find which scenes should update based on pause_below flags
         scenes_to_update = self._get_active_scenes()
+
+        for scene in scenes_to_update:
+            for entity in scene.entity_manager.get_entities_with(Transform):
+                transform = entity.get_component(Transform)
+                if transform.interpolate:
+                    transform.previous_position = transform.position
 
         # Fixed update all active scenes (in order, bottom to top)
         for scene in reversed(scenes_to_update):
@@ -299,12 +311,22 @@ class SceneManager:
 
         return scenes_to_update
 
-    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
+    def render(
+        self, world_renderer: IRenderer, ui_renderer: UIRenderer, alpha: float = 1.0
+    ) -> None:
         """Render current scene and transition effects.
 
         Args:
             world_renderer: World rendering interface
             ui_renderer: UI rendering interface
+            alpha: How far the current frame sits between the last two fixed
+                steps (`accumulator / fixed_dt`), for `Transform.interpolate`
+                entities. Set on each scene as `render_alpha` immediately
+                before that scene's `render()` runs, rather than threaded as
+                a `Scene.render()` parameter -- every one of the 9 demos
+                already overrides that exact two-parameter signature, so
+                adding a third would force a mechanical change across all of
+                them for a value only the base default combination uses.
         """
         if self.is_transitioning():
             # Transition manager handles rendering during transition
@@ -312,10 +334,12 @@ class SceneManager:
         else:
             # Render all scenes in the stack (bottom to top)
             for entry in self._stack:
+                entry.scene.render_alpha = alpha
                 entry.scene.render(world_renderer, ui_renderer)
 
             # Render current scene on top
             if self._current_scene:
+                self._current_scene.render_alpha = alpha
                 self._current_scene.render(world_renderer, ui_renderer)
 
     def cleanup(self) -> None:

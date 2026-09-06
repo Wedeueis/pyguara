@@ -5,7 +5,11 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.components import Collider, RigidBody
-from pyguara.physics.platformer_controller import PlatformerController, PlatformerState
+from pyguara.physics.platformer_controller import (
+    PlatformerController,
+    PlatformerInput,
+    PlatformerState,
+)
 from pyguara.physics.platformer_system import PlatformerSystem
 from pyguara.physics.types import BodyType, ShapeType
 
@@ -38,37 +42,22 @@ class TestPlatformerControllerComponent:
         assert controller.coyote_time == 0.2
         assert controller.wall_slide_enabled is False
 
-    def test_move_left(self):
-        """move_left should set move input and facing."""
+    def test_pending_input_default(self):
+        """A freshly created controller has no pending input."""
         controller = PlatformerController()
-        controller.move_left()
 
-        assert controller.move_input == -1.0
-        assert controller.facing_right is False
+        assert controller.pending_input == PlatformerInput()
+        assert controller.pending_input.move == 0.0
+        assert controller.pending_input.jump is False
 
-    def test_move_right(self):
-        """move_right should set move input and facing."""
+    def test_pending_input_can_be_set(self):
+        """Callers submit a tick's intent by assigning pending_input directly."""
         controller = PlatformerController()
-        controller.move_right()
 
-        assert controller.move_input == 1.0
-        assert controller.facing_right is True
+        controller.pending_input = PlatformerInput(move=-1.0, jump=True)
 
-    def test_stop_move(self):
-        """stop_move should reset move input."""
-        controller = PlatformerController()
-        controller.move_right()
-        controller.stop_move()
-
-        assert controller.move_input == 0.0
-
-    def test_jump_request(self):
-        """jump should request a jump and set buffer timer."""
-        controller = PlatformerController()
-        controller.jump()
-
-        assert controller._jump_requested is True
-        assert controller.jump_buffer_timer > 0
+        assert controller.pending_input.move == -1.0
+        assert controller.pending_input.jump is True
 
     def test_can_jump_when_grounded(self):
         """can_jump should return True when grounded."""
@@ -123,19 +112,6 @@ class TestPlatformerControllerComponent:
 
         controller.current_state = PlatformerState.GROUNDED
         assert controller.is_wall_sliding() is False
-
-    def test_reset_jump_state(self):
-        """reset_jump_state should clear jump-related state."""
-        controller = PlatformerController()
-        controller._jump_requested = True
-        controller.jump_buffer_timer = 0.1
-        controller.coyote_timer = 0.1
-
-        controller.reset_jump_state()
-
-        assert controller._jump_requested is False
-        assert controller.jump_buffer_timer == 0.0
-        assert controller.coyote_timer == 0.0
 
 
 class TestPlatformerSystem:
@@ -194,13 +170,13 @@ class TestPlatformerSystem:
         assert controller.coyote_timer < 0.15
         assert controller.jump_buffer_timer < 0.1
 
-    def test_move_input_reset(self):
-        """System should reset move_input after each update."""
+    def test_pending_input_reset(self):
+        """System should reset pending_input after consuming it each update."""
         entity = self.manager.create_entity()
         entity.add_component(Transform(position=Vector2(100, 100)))
         entity.add_component(RigidBody(body_type=BodyType.DYNAMIC))
         controller = PlatformerController()
-        controller.move_right()
+        controller.pending_input = PlatformerInput(move=1.0)
         entity.add_component(controller)
 
         # Create physics body
@@ -212,9 +188,46 @@ class TestPlatformerSystem:
         # Update system
         self.platformer_system.update(1 / 60)
 
-        # Move input should be reset
+        # This tick's intent should be consumed (translated to move_input/
+        # facing_right) and reset to a fresh, empty PlatformerInput
         controller = entity.get_component(PlatformerController)
-        assert controller.move_input == 0.0
+        assert controller.move_input == 1.0
+        assert controller.facing_right is True
+        assert controller.pending_input == PlatformerInput()
+
+    def test_reset_jump_state(self):
+        """PlatformerSystem.reset_jump_state should clear jump-related state."""
+        controller = PlatformerController()
+        controller._jump_requested = True
+        controller.jump_buffer_timer = 0.1
+        controller.coyote_timer = 0.1
+
+        self.platformer_system.reset_jump_state(controller)
+
+        assert controller._jump_requested is False
+        assert controller.jump_buffer_timer == 0.0
+        assert controller.coyote_timer == 0.0
+
+    def test_jump_intent_translates_to_buffer(self):
+        """pending_input.jump should translate into a buffered jump request."""
+        entity = self.manager.create_entity()
+        entity.add_component(Transform(position=Vector2(100, 100)))
+        entity.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+        controller = PlatformerController(jump_buffer=0.1)
+        entity.add_component(controller)
+
+        body = self.physics_engine.create_body(
+            entity.id, BodyType.DYNAMIC, Vector2(100, 100)
+        )
+        entity.get_component(RigidBody)._body_handle = body
+
+        controller.pending_input = PlatformerInput(jump=True)
+        self.platformer_system.update(1 / 60)
+
+        controller = entity.get_component(PlatformerController)
+        # Airborne with no ground/wall contact this tick: the jump is buffered,
+        # not yet consumed, and has ticked down by one frame's worth of dt.
+        assert 0.0 < controller.jump_buffer_timer < 0.1
 
 
 class TestPlatformerStates:
@@ -277,12 +290,12 @@ class TestJumpBuffering:
     """Test jump buffering mechanics."""
 
     def test_jump_buffer_stores_input(self):
-        """Jump input should be buffered."""
+        """Jump input is captured as intent; buffering itself is
+        PlatformerSystem's job (see test_jump_intent_translates_to_buffer)."""
         controller = PlatformerController(jump_buffer=0.1)
-        controller.jump()
+        controller.pending_input = PlatformerInput(jump=True)
 
-        assert controller._jump_requested is True
-        assert controller.jump_buffer_timer > 0
+        assert controller.pending_input.jump is True
 
     def test_buffered_jump_executes(self):
         """Buffered jump should execute when possible."""
@@ -348,23 +361,23 @@ class TestPlatformerUsagePatterns:
         assert player.has_component(Transform)
 
     def test_input_handling_pattern(self):
-        """Input handling for platformer movement."""
+        """Input handling for platformer movement flows through pending_input."""
         controller = PlatformerController()
 
         # Simulate left movement
-        controller.move_left()
-        assert controller.move_input == -1.0
+        controller.pending_input = PlatformerInput(move=-1.0)
+        assert controller.pending_input.move == -1.0
 
         # Simulate right movement
-        controller.move_right()
-        assert controller.move_input == 1.0
+        controller.pending_input = PlatformerInput(move=1.0)
+        assert controller.pending_input.move == 1.0
 
         # Simulate jump
-        controller.jump()
-        assert controller._jump_requested is True
+        controller.pending_input = PlatformerInput(jump=True)
+        assert controller.pending_input.jump is True
 
     def test_responsive_controls_pattern(self):
-        """Coyote time and jump buffering make controls responsive."""
+        """Coyote time makes controls responsive even without a system tick."""
         controller = PlatformerController(coyote_time=0.15, jump_buffer=0.1)
 
         # Player walks off ledge
@@ -374,12 +387,10 @@ class TestPlatformerUsagePatterns:
         # Player can still jump
         assert controller.can_jump() is True
 
-        # Player presses jump slightly early
-        controller.is_grounded = False
-        controller.jump()
-
-        # Jump is buffered
-        assert controller.jump_buffer_timer > 0
+        # Player presses jump slightly early -- captured as intent, buffered
+        # once PlatformerSystem.update() consumes it (see TestPlatformerSystem)
+        controller.pending_input = PlatformerInput(jump=True)
+        assert controller.pending_input.jump is True
 
     def test_wall_jump_pattern(self):
         """Wall jumping for advanced movement."""

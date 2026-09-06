@@ -67,12 +67,12 @@ class TestTriggerVolumeComponent:
         assert trigger.has_any_entity() is True
 
     def test_clear(self):
-        """clear should remove all entities from trigger."""
+        """entities_inside.clear() should remove all entities from trigger."""
         trigger = TriggerVolume()
         trigger.entities_inside.add("e1")
         trigger.entities_inside.add("e2")
 
-        trigger.clear()
+        trigger.entities_inside.clear()
 
         assert trigger.is_empty() is True
 
@@ -118,16 +118,16 @@ class TestEntityTags:
         assert tags.tags == {"player", "friendly"}
 
     def test_add_tag(self):
-        """add_tag should add a tag to the set."""
+        """Adding a tag mutates the plain `.tags` set directly."""
         tags = EntityTags()
-        tags.add_tag("player")
+        tags.tags.add("player")
 
         assert "player" in tags.tags
 
     def test_remove_tag(self):
-        """remove_tag should remove a tag from the set."""
+        """Removing a tag mutates the plain `.tags` set directly."""
         tags = EntityTags(tags={"player", "friendly"})
-        tags.remove_tag("friendly")
+        tags.tags.discard("friendly")
 
         assert "player" in tags.tags
         assert "friendly" not in tags.tags

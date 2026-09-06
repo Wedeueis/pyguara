@@ -1,11 +1,12 @@
 """Core interfaces for the Audio Subsystem."""
 
-from typing import Protocol, Optional
+from typing import Protocol, Optional, runtime_checkable
 from pyguara.resources.types import AudioClip
 from pyguara.common.types import Vector2
 from pyguara.audio.types import AudioPriority, AudioBusType
 
 
+@runtime_checkable
 class IAudioSystem(Protocol):
     """
     The main contract for playing audio in the engine.

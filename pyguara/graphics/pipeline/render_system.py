@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pyguara.common.types import Color
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.batch import Batcher
 from pyguara.graphics.pipeline.queue import RenderQueue
@@ -33,17 +33,21 @@ class RenderSystem:
         # Optimization: persistent viewport to avoid per-frame allocation
         self._default_viewport: Optional[Viewport] = None
 
-    def submit(self, item: Renderable) -> None:
+    def submit(self, item: Renderable, position: Optional[Vector2] = None) -> None:
         """
         Add a renderable object to the current frame's queue.
 
         Args:
             item: An entity or component that complies with the Renderable protocol.
+            position: World position to submit at, overriding `item.position`.
+                Lets a caller combine a separate position source (e.g. an
+                entity's `Transform`) without mutating `item` itself. Defaults
+                to `item.position` when omitted.
         """
         # Direct access - protocol guarantees these attributes exist
         cmd = RenderCommand(
             texture=item.texture,
-            world_position=item.position,
+            world_position=position if position is not None else item.position,
             layer=item.layer,
             z_index=item.z_index,
             rotation=item.rotation,

@@ -1,6 +1,6 @@
 """Core abstractions for pathfinding protocols."""
 
-from typing import Protocol, Iterator, TypeVar, Hashable
+from typing import Protocol, Iterator, TypeVar, Hashable, runtime_checkable
 
 # Generic type for a Node (invariant for Graphs as they produce and consume)
 Node = TypeVar("Node", bound=Hashable)
@@ -9,6 +9,7 @@ Node = TypeVar("Node", bound=Hashable)
 NodeContra = TypeVar("NodeContra", bound=Hashable, contravariant=True)
 
 
+@runtime_checkable
 class Graph(Protocol[Node]):
     """Interface for a navigation graph."""
 
@@ -21,6 +22,7 @@ class Graph(Protocol[Node]):
         ...
 
 
+@runtime_checkable
 class Heuristic(Protocol[NodeContra]):
     """Interface for heuristic functions."""
 
