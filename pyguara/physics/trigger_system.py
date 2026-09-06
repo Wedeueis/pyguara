@@ -137,7 +137,7 @@ class TriggerSystem:
         """
         for entity in self._entity_manager.get_entities_with(TriggerVolume):
             trigger_volume = entity.get_component(TriggerVolume)
-            trigger_volume.clear()
+            trigger_volume.entities_inside.clear()
 
     def get_triggers_containing(self, entity_id: str) -> list:
         """Get all trigger volumes that contain a specific entity.

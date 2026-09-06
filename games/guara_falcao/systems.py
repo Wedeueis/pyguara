@@ -10,7 +10,11 @@ from pyguara.ecs.entity import Entity
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.common.types import Vector2, Rect
 from pyguara.common.components import Transform
-from pyguara.physics.platformer_controller import PlatformerController, PlatformerState
+from pyguara.physics.platformer_controller import (
+    PlatformerController,
+    PlatformerInput,
+    PlatformerState,
+)
 from pyguara.graphics.components.camera import Camera2D, CameraFollowConstraints
 
 from games.guara_falcao.components import (
@@ -66,24 +70,13 @@ class PlayerControlSystem:
         if not controller:
             return
 
-        # Apply horizontal movement
-        if move_input < 0:
-            controller.move_left()
-        elif move_input > 0:
-            controller.move_right()
-        else:
-            controller.stop_move()
+        # Submit this tick's movement/jump intent for PlatformerSystem to consume
+        was_wall_sliding = controller.is_wall_sliding()
+        controller.pending_input = PlatformerInput(move=move_input, jump=jump_pressed)
 
-        # Handle jump
+        # Fire jump event
         if jump_pressed:
-            was_wall_sliding = controller.is_wall_sliding()
-            controller.jump()
-
-            # Fire jump event
-            if controller._jump_requested:
-                self._dispatcher.dispatch(
-                    PlayerJumpedEvent(is_wall_jump=was_wall_sliding)
-                )
+            self._dispatcher.dispatch(PlayerJumpedEvent(is_wall_jump=was_wall_sliding))
 
         # Check for landing
         if controller.is_grounded and not self._was_grounded:

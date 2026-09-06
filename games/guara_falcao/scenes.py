@@ -313,8 +313,8 @@ class GameScene(Scene):
                     health.invincible_time = 1.0
 
                 # Reset platformer controller state
-                if controller:
-                    controller.reset_jump_state()
+                if controller and self._platformer_system:
+                    self._platformer_system.reset_jump_state(controller)
                     controller.is_grounded = False
 
         self._is_dead = False

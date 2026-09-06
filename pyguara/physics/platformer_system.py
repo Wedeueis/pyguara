@@ -8,7 +8,11 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.physics.components import Collider, RigidBody
-from pyguara.physics.platformer_controller import PlatformerController, PlatformerState
+from pyguara.physics.platformer_controller import (
+    PlatformerController,
+    PlatformerInput,
+    PlatformerState,
+)
 from pyguara.physics.protocols import IPhysicsEngine
 
 
@@ -53,6 +57,16 @@ class PlatformerSystem:
                 else None
             )
 
+            # Consume this tick's movement/jump intent
+            if controller.pending_input.move < 0:
+                controller.facing_right = False
+            elif controller.pending_input.move > 0:
+                controller.facing_right = True
+            controller.move_input = controller.pending_input.move
+            if controller.pending_input.jump:
+                controller._jump_requested = True
+                controller.jump_buffer_timer = controller.jump_buffer
+
             # Get collider half-dimensions for raycast offsets
             half_height = collider.dimensions[1] / 2 if collider else 20.0
             half_width = collider.dimensions[0] / 2 if collider else 12.0
@@ -73,8 +87,22 @@ class PlatformerSystem:
             # Handle jumping
             self._handle_jump(controller, rigidbody)
 
-            # Reset input for next frame
-            controller.move_input = 0.0
+            # Reset intent for next frame
+            controller.pending_input = PlatformerInput()
+
+    def reset_jump_state(self, controller: PlatformerController) -> None:
+        """Reset a controller's jump-related state.
+
+        Call this when a character lands or respawns.
+
+        Args:
+            controller: PlatformerController component.
+        """
+        controller._jump_requested = False
+        controller.jump_buffer_timer = 0.0
+        controller.coyote_timer = 0.0
+        controller._can_double_jump = False
+        controller._jump_used = False
 
     def _update_ground_detection(
         self, controller: PlatformerController, transform: Transform, half_height: float
@@ -99,7 +127,7 @@ class PlatformerSystem:
         # Reset coyote time when landing
         if controller.is_grounded and not was_grounded:
             controller.coyote_timer = 0.0
-            controller.reset_jump_state()
+            self.reset_jump_state(controller)
 
         # Start coyote time when leaving ground
         if not controller.is_grounded and was_grounded:
