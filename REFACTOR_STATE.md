@@ -12,9 +12,9 @@ rather than fixed in place.
 
 ## Active Subsystem
 
-`pyguara/systems` — **in review (awaiting approval)**
+`pyguara/graphics` — **split across several iterations**; iteration 1 (the window boundary) in review.
 
-**Tier 2 completes with this iteration.**
+**Tier 2 is complete:** `config`, `application`, `scene`, `systems`.
 
 ---
 
@@ -33,10 +33,15 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [x] `pyguara/config` — configuration loading/merging *(done)*
 - [x] `pyguara/application` — Application loop, bootstrap, sandbox *(done)*
 - [x] `pyguara/scene` — Scene base, SceneManager, serializer *(done)*
-- [x] `pyguara/systems` — system manager / base systems *(active)*
+- [x] `pyguara/systems` — system manager / base systems *(done)*
 
 ### Tier 3 — Subsystems
-- [ ] `pyguara/graphics` — protocols, backends, window, batching
+- [~] `pyguara/graphics` — ~8,000 lines, too large for one iteration. Split:
+    - [x] 1. Window boundary — `window.py`, `IWindowBackend` *(active)*
+    - [ ] 2. Components — camera, particles, animation, geometry, sprite
+    - [ ] 3. Backends — pygame, ModernGL, headless renderers
+    - [ ] 4. Pipeline — graph, passes, framebuffer, viewport, batching
+    - [ ] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting
 - [ ] `pyguara/physics` — protocols, pymunk backend, joints, materials
 - [ ] `pyguara/input` — input manager, rebinding
 - [ ] `pyguara/audio` — audio manager, spatial audio
@@ -61,6 +66,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/systems` | 2026-09-06 | Fixed every game system starting up uninitialised (`initialize()` runs before `on_enter()`), an `unregister()` testing truthiness rather than `None`, and silent duplicate registration keys. PR #11. |
 | `pyguara/scene` | 2026-09-06 | Fixed `switch_to()` abandoning every stacked scene, unguarded re-entrancy during transitions, and a `pop_scene()` that stranded the scene it returned to. PR #10. |
 | `pyguara/application` | 2026-09-06 | Fixed an event budget spent per fixed step (15x per lagged frame), a `shutdown()` that skipped everything after the first failure, and three lifecycle events with no publisher. PR #8. |
 | `pyguara/config` | 2026-09-06 | Fixed `Color` not surviving a save/load round trip (a second-launch crash), `fixed_dt` dividing by zero unvalidated, and `update_setting` accepting wrong types and out-of-range values. PR #7. |
@@ -668,7 +674,7 @@ difference and the one-transition-at-a-time rule were undocumented.
 **Deferred:** CC-3 through CC-8, CC-11 (now GitHub issue #9).
 
 
-### `pyguara/systems` — awaiting approval (2026-09-06)
+### `pyguara/systems` — CLOSED 2026-09-06 (PR #11, branch `refactor/systems-audit`)
 
 **Verification:** 1414/1414 tests pass (up from 1401); ruff clean; mypy clean.
 
@@ -718,3 +724,46 @@ was written down nowhere.
 **Deferred:** CC-3 through CC-8, CC-11 (GitHub issue #9).
 
 **Tier 2 complete:** `config`, `application`, `scene`, `systems`.
+
+### `pyguara/graphics` iteration 1 — the window boundary — awaiting approval (2026-09-06)
+
+`pyguara/graphics` is ~8,000 lines across five distinct areas, so it is being
+audited in slices rather than as one iteration. This is the first: `window.py`
+and the `IWindowBackend` contract.
+
+**Verification:** 1427/1427 tests pass; ruff clean; mypy clean.
+
+**Correctness fixes:**
+- **`Window.width`/`height` reported the *requested* size, never the granted
+  one.** Both returned `WindowConfig` values unconditionally, so a window the
+  OS sized differently -- a fullscreen window is routinely handed the desktop
+  resolution instead -- reported whatever had been asked for.
+  `Application.__init__` feeds these straight into
+  `SceneManager.set_screen_size()`, and from there they reach transitions and
+  viewport calculations. They now come from the backend once the window
+  exists, falling back to config before `create()`.
+- **The `IWindowBackend` contract was split three ways.** The protocol declared
+  no size accessors, yet the ModernGL window and headless renderer both
+  implemented them and the pygame window did not. Nothing checked, because
+  nothing asked. `width`/`height` are now on the protocol and implemented by
+  all three -- mypy caught the missing headless implementation the moment the
+  protocol declared them, which is the protocol finally doing its job.
+- Corrected `Window.clear()`'s docstring, which claimed to use the configured
+  default colour while actually forwarding `None` for the backend to resolve.
+
+**Tests:** new `tests/test_window_boundary.py`, 13 tests. `Window` had no
+dedicated tests at all -- it was exercised only incidentally through
+`MagicMock` window fixtures in the application suite, which is why a size
+accessor that ignored the backend entirely went unnoticed. Includes protocol
+conformance checks for both real backends.
+
+**Issue #9 updated.** Mapping every non-backend pygame import turned up nine
+files across five subsystems, not the two originally recorded. Two matter:
+`input/manager.py` interprets SDL events directly (`pygame.KEYDOWN`,
+`pygame.key.get_mods()`, `KMOD_*`), so event translation is an input change as
+much as a graphics one; and `graphics/components/geometry.py` is an ECS
+component importing pygame, the clearest single violation and the cheapest to
+fix alone. The issue now carries a four-step sequence, each step independently
+shippable.
+
+**Deferred:** CC-3 through CC-8, CC-11 (issue #9).
