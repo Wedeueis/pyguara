@@ -12,7 +12,7 @@ from pyguara.common.types import Vector2, Color
 from pyguara.ui.manager import UIManager
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.components.button import Button
-from pyguara.ui.components.label import Label
+from pyguara.ui.components.text import Label
 
 
 class GameScene(Scene):

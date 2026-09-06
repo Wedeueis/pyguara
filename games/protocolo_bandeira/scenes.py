@@ -16,7 +16,7 @@ from pyguara.common.components import Transform
 from pyguara.ui.manager import UIManager
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.components.button import Button
-from pyguara.ui.components.label import Label
+from pyguara.ui.components.text import Label
 from pyguara.input.manager import InputManager
 from pyguara.input.types import InputDevice, ActionType
 from pyguara.input.keys import W, A, S, D, UP, DOWN, LEFT, RIGHT, SPACE, ESCAPE

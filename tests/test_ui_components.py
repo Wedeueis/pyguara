@@ -2,7 +2,7 @@ import pytest
 from typing import Any
 from unittest.mock import MagicMock
 from pyguara.common.types import Vector2, Color
-from pyguara.ui.components.label import Label
+from pyguara.ui.components.text import Label
 from pyguara.ui.components.button import Button
 from pyguara.ui.types import UIElementState, UIEventType
 from pyguara.graphics.protocols import UIRenderer
