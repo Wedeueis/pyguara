@@ -9,13 +9,16 @@ regardless of frame rate variations.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import pygame
 
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
+from pyguara.di.exceptions import ServiceNotFoundException
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.lifecycle import ApplicationStartEvent, QuitEvent
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
@@ -59,6 +62,7 @@ class Application:
         """
         self._container = container
         self._is_running = False
+        self._has_shut_down = False
         self._event_queue_time_budget_ms = event_queue_time_budget_ms
 
         # Resolve Core Dependencies
@@ -85,13 +89,16 @@ class Application:
         # backend identity (isinstance) rather than mere resolvability.
         self._render_graph: RenderGraph | None = None
         try:
-            from pyguara.di.exceptions import ServiceNotFoundException
+            # Imported here, not at module scope, because the ModernGL pipeline
+            # is an optional dependency. ServiceNotFoundException is imported
+            # above: naming it in the `except` while importing it inside the
+            # `try` meant an ImportError here would raise NameError instead.
             from pyguara.graphics.pipeline.graph import RenderGraph
 
             candidate = container.get(RenderGraph)
             if isinstance(candidate, RenderGraph):
                 self._render_graph = candidate
-        except (ImportError, KeyError, ServiceNotFoundException):
+        except (ImportError, ServiceNotFoundException):
             pass  # Render graph not available (Pygame backend or tests)
 
         self._scene_manager.set_container(container)
@@ -113,15 +120,22 @@ class Application:
         self.logger.info("Application instance created.")
 
     def run(self, starting_scene: Scene) -> None:
-        """Execute the main game loop with fixed timestep physics.
+        """Execute the main game loop with a fixed timestep, until the window closes.
 
-        The loop uses the accumulator pattern:
-        1. Measure frame time (variable)
-        2. Accumulate time for physics
-        3. Run physics updates at fixed rate (e.g., 60 Hz)
-        4. Render at display framerate
+        Each frame measures its own duration, clamps it to
+        `physics.max_frame_time`, accumulates it, and runs as many fixed-rate
+        updates as that buys before rendering once. Physics therefore behaves
+        identically regardless of display framerate.
 
-        This ensures deterministic physics regardless of display framerate.
+        Dispatches `ApplicationStartEvent` before the first frame, and always
+        calls `shutdown()` on the way out.
+
+        Args:
+            starting_scene: Scene to register and activate before the loop.
+
+        Raises:
+            ValueError: If `physics.fixed_timestep_hz` is not positive.
+            Exception: Anything raised inside the loop, after logging it.
         """
         self.logger.info(f"Starting with scene: {starting_scene.name}")
 
@@ -136,8 +150,11 @@ class Application:
         max_frame_time = physics_config.max_frame_time
 
         self.logger.debug(
-            f"Game loop: target_fps={target_fps}, physics_hz={physics_config.fixed_timestep_hz}, fixed_dt={fixed_dt}"
+            f"Game loop: target_fps={target_fps}, "
+            f"physics_hz={physics_config.fixed_timestep_hz}, fixed_dt={fixed_dt}"
         )
+
+        self._event_dispatcher.dispatch(ApplicationStartEvent(source=self))
 
         # Force an initial event pump to show the window immediately. No-op
         # (raises pygame.error) under a backend that never initializes SDL's
@@ -163,7 +180,17 @@ class Application:
                 self._input_manager.update()
                 self._process_input(frame_time)
 
-                # 3. Accumulate time and run fixed updates
+                # 3. Drain queued events once per frame, before the fixed
+                # updates that consume them. Not inside the accumulator loop:
+                # the time budget exists to stop an event death spiral, and a
+                # per-step budget multiplies by the step count, so a lagged
+                # frame could spend 15x the budget at exactly the moment the
+                # spiral is starting.
+                self._event_dispatcher.process_queue(
+                    max_time_ms=self._event_queue_time_budget_ms
+                )
+
+                # 4. Accumulate time and run fixed updates
                 self._accumulator += frame_time
 
                 while self._accumulator >= fixed_dt:
@@ -171,21 +198,23 @@ class Application:
                     self._fixed_update(fixed_dt)
                     self._accumulator -= fixed_dt
 
-                # 4. Variable-rate update (UI, animations that should be smooth)
+                # 5. Variable-rate update (UI, animations that should be smooth)
                 self._update(frame_time)
 
-                # 5. Render (at display framerate)
-                # The alpha value represents how far we are between physics steps
-                # This can be used for interpolation in the future
-                # alpha = self._accumulator / fixed_dt
+                # 6. Render at display framerate, interpolating between the
+                # last two fixed steps.
                 self._render()
         except KeyboardInterrupt:
             # Handle Ctrl+C gracefully
             self.logger.info("KeyboardInterrupt received. Stopping.")
-        except Exception as e:
-            # Log unexpected crashes before shutting down
-            self.logger.critical(f"Uncaught exception in game loop: {e}", exc_info=True)
-            raise e  # Re-raise to show traceback
+        except Exception as error:
+            # Log unexpected crashes before shutting down. Bare `raise` rather
+            # than `raise error`, which would append this frame to the
+            # traceback and obscure the original site.
+            self.logger.critical(
+                f"Uncaught exception in game loop: {error}", exc_info=True
+            )
+            raise
         finally:
             # CRITICAL: This ensures cleanup happens even if sys.exit() is called
             self.shutdown()
@@ -295,13 +324,23 @@ class Application:
                 self._replay_player = None
 
     def _process_input(self, frame_time: float) -> None:
-        """Poll system events, or feed replayed ones when a replay is active."""
+        """Poll system events, or feed replayed ones when a replay is active.
+
+        Args:
+            frame_time: This frame's duration in seconds, recorded alongside
+                the events when a replay is being captured.
+        """
         self._begin_replay_frame(frame_time)
 
         # This call is CRITICAL. It keeps the OS window responsive.
         for event in self._window.poll_events():
             if hasattr(event, "type") and event.type == pygame.QUIT:
                 self._is_running = False
+                # Publish the close request so game code and tools can react
+                # before shutdown() runs. QuitEvent had no publisher at all,
+                # which left tools/event_monitor.py subscribed to something
+                # that could never fire.
+                self._event_dispatcher.dispatch(QuitEvent(source=self))
 
             # While a replay drives the game, real input is swallowed rather
             # than dispatched, so both runs see exactly the same events.
@@ -311,41 +350,28 @@ class Application:
         self._end_replay_frame(frame_time)
 
     def _fixed_update(self, fixed_dt: float) -> None:
-        """Fixed-rate update for physics and deterministic game logic.
+        """Advance physics and deterministic game logic by one fixed step.
 
-        This method runs at a fixed rate (default 60 Hz) regardless of display
-        framerate. Use this for:
-        - Physics simulation
-        - Game logic that must be deterministic
-        - AI decision making
-        - Collision detection
+        May run several times in one frame, or none at all, depending on how
+        much time the accumulator holds. Anything that must be reproducible --
+        physics, AI decisions, collision response -- belongs here rather than
+        in `_update()`.
 
         Args:
-            fixed_dt: Fixed delta time in seconds (e.g., 1/60 for 60 Hz).
+            fixed_dt: Fixed delta time in seconds, e.g. 1/60.
         """
-        # 1. Process background thread events with time budget (P1-009)
-        # Enforce time budget to prevent event death spirals
-        self._event_dispatcher.process_queue(
-            max_time_ms=self._event_queue_time_budget_ms
-        )
-
-        # 2. Update each active scene's own SystemManager (Steering, AI,
-        # AudioSource, Animation) and scene logic at fixed rate. There's no
-        # global SystemManager: each scene owns and ticks its own.
+        # Each scene owns and ticks its own SystemManager (Steering, AI,
+        # AudioSource, Animation); there is no global one.
         self._scene_manager.fixed_update(fixed_dt)
 
     def _update(self, dt: float) -> None:
-        """Variable-rate update for UI and smooth animations.
+        """Advance everything that should track display framerate, once a frame.
 
-        This method runs once per frame at display framerate. Use this for:
-        - UI updates
-        - Smooth visual animations (tweens, particles)
-        - Camera smoothing
-        - Audio updates
-        - Coroutine-based scripting
+        UI, tweens, particles, camera smoothing and coroutines belong here:
+        they should look smooth rather than be reproducible.
 
         Args:
-            dt: Variable delta time in seconds (frame time).
+            dt: This frame's duration in seconds.
         """
         # Update UI at display framerate for smooth interactions
         self._ui_manager.update(dt)
@@ -357,12 +383,11 @@ class Application:
         self._scene_manager.update(dt)
 
     def _render(self) -> None:
-        """Render frame.
+        """Draw one frame through whichever pipeline the backend provides.
 
-        Uses the render graph pipeline if available (ModernGL), otherwise
-        falls back to direct rendering (Pygame). Computes `alpha` -- how far
-        the current frame sits between the last two fixed steps -- for
-        `Transform.interpolate` entities.
+        Computes `alpha` -- how far this frame sits between the last two fixed
+        steps -- which `Transform.interpolate` entities use to avoid looking
+        like they move at the physics rate.
         """
         alpha = self._accumulator / self._fixed_dt if self._fixed_dt > 0 else 0.0
 
@@ -372,7 +397,11 @@ class Application:
             self._render_direct(alpha)
 
     def _render_direct(self, alpha: float) -> None:
-        """Direct rendering path (Pygame backend)."""
+        """Draw straight to the window, for backends with no render graph.
+
+        Args:
+            alpha: Interpolation factor between the last two fixed steps.
+        """
         self._window.clear()
         self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
         self._ui_manager.render(self._ui_renderer)
@@ -380,22 +409,23 @@ class Application:
         self._window.present()
 
     def _render_with_graph(self, alpha: float) -> None:
-        """Multi-pass rendering path using RenderGraph (ModernGL backend).
+        """Draw through the multi-pass render graph (ModernGL backend).
 
-        Pipeline:
-        1. Render world to FBO (scene content)
-        2. Final pass blits to screen
-        3. UI overlay
+        The world is drawn into an offscreen buffer, the final pass blits it to
+        the screen, and UI is drawn on top.
+
+        Args:
+            alpha: Interpolation factor between the last two fixed steps.
         """
         if self._render_graph is None:
             return
 
-        from pyguara.common.types import Color
-
-        # Get the world FBO and bind it for scene rendering
+        # Honour the configured clear colour, as the direct path does through
+        # window.clear(). This used to be a hardcoded black, so
+        # display.default_color silently did nothing under ModernGL.
         world_fbo = self._render_graph.fbo_manager.get_or_create("world")
         world_fbo.bind()
-        world_fbo.clear(Color(0, 0, 0, 255))  # Black background
+        world_fbo.clear(self._config_manager.config.display.default_color)
 
         # Render scenes to the world FBO
         self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
@@ -413,13 +443,34 @@ class Application:
         self._window.present()
 
     def shutdown(self) -> None:
-        """Close Application."""
+        """Release every resource the application owns.
+
+        Called automatically when `run()` returns, including on the exception
+        path, and safe to call again afterwards.
+
+        Each step is isolated: a failure in one is logged and the rest still
+        run. Previously a raising `scene_manager.cleanup()` left the window
+        open and the log manager running, which is precisely the situation --
+        a crash -- where releasing them matters most.
+        """
+        if self._has_shut_down:
+            return
+        self._has_shut_down = True
+
         self.logger.info("Shutting down application")
-        self._scene_manager.cleanup()
 
-        # Release render graph resources (ModernGL only)
+        steps: list[tuple[str, Callable[[], None]]] = [
+            ("scene cleanup", self._scene_manager.cleanup),
+            ("window close", self._window.close),
+        ]
         if self._render_graph is not None:
-            self._render_graph.release()
+            steps.insert(1, ("render graph release", self._render_graph.release))
 
-        self._window.close()
+        for name, step in steps:
+            try:
+                step()
+            except Exception:
+                self.logger.error(f"Error during {name}; continuing.", exc_info=True)
+
+        # Last: it owns the logger everything above reports through.
         self._log_manager.shutdown()

@@ -151,3 +151,188 @@ def test_scene_switching_integration(app_container: DIContainer) -> None:
     sm.switch_to("B")
     assert sm._current_scene == scene_b
     assert scene_b.enter_called
+
+
+# -- Event queue budget --
+
+
+def test_the_event_queue_is_drained_once_per_frame(app_container: DIContainer) -> None:
+    """The budget exists to stop an event death spiral, but draining inside the
+    accumulator loop multiplied it by the step count -- a frame lagging by the
+    full max_frame_time spent 15x the budget, at exactly the moment a spiral is
+    starting.
+    """
+    dispatcher = app_container.get(EventDispatcher)
+    budgets: list[float | None] = []
+    dispatcher.process_queue = lambda **kw: (  # type: ignore[method-assign]
+        budgets.append(kw.get("max_time_ms")) or 0
+    )
+
+    app = Application(app_container)
+    fixed_dt = 1.0 / 60.0
+    app._accumulator = 0.25  # a full max_frame_time of backlog
+
+    while app._accumulator >= fixed_dt:
+        app._fixed_update(fixed_dt)
+        app._accumulator -= fixed_dt
+
+    assert budgets == [], "fixed_update must not drain the queue"
+
+
+def test_a_single_frame_drains_the_queue_exactly_once(
+    app_container: DIContainer,
+) -> None:
+    dispatcher = app_container.get(EventDispatcher)
+    calls: list[int] = []
+    dispatcher.process_queue = lambda **kw: calls.append(1) or 0  # type: ignore[method-assign]
+
+    window = app_container.get(Window)
+    frames = [True, False]
+    type(window).is_open = property(lambda self: frames.pop(0) if frames else False)
+    window.poll_events.return_value = []
+
+    app = Application(app_container)
+    app.run(MockScene("s", dispatcher))
+
+    assert len(calls) == 1
+    del type(window).is_open
+
+
+# -- Shutdown --
+
+
+def test_shutdown_is_idempotent(app_container: DIContainer) -> None:
+    app = Application(app_container)
+    window = app_container.get(Window)
+
+    app.shutdown()
+    app.shutdown()
+
+    assert window.close.call_count == 1
+
+
+def test_shutdown_closes_the_window_even_if_scene_cleanup_raises(
+    app_container: DIContainer,
+) -> None:
+    """A crash is exactly when releasing the window and log handlers matters
+    most, and it was exactly when they were skipped."""
+    app = Application(app_container)
+    window = app_container.get(Window)
+    app._scene_manager.cleanup = MagicMock(  # type: ignore[method-assign]
+        side_effect=RuntimeError("scene cleanup failed")
+    )
+
+    app.shutdown()
+
+    assert window.close.called
+
+
+def test_shutdown_logs_a_failing_step(app_container: DIContainer, caplog) -> None:
+    import logging
+
+    app = Application(app_container)
+    app._scene_manager.cleanup = MagicMock(  # type: ignore[method-assign]
+        side_effect=RuntimeError("scene cleanup failed")
+    )
+
+    with caplog.at_level(logging.ERROR):
+        app.shutdown()
+
+    assert "scene cleanup" in caplog.text
+
+
+def test_run_shuts_down_even_when_the_loop_raises(app_container: DIContainer) -> None:
+    window = app_container.get(Window)
+    window.poll_events.side_effect = RuntimeError("loop exploded")
+
+    app = Application(app_container)
+    with pytest.raises(RuntimeError, match="loop exploded"):
+        app.run(MockScene("s", app_container.get(EventDispatcher)))
+
+    assert window.close.called
+
+
+# -- Lifecycle events --
+
+
+def test_application_start_event_is_dispatched(app_container: DIContainer) -> None:
+    """ApplicationStartEvent was defined and never published by anything."""
+    from pyguara.events.lifecycle import ApplicationStartEvent
+
+    dispatcher = app_container.get(EventDispatcher)
+    seen = []
+    dispatcher.subscribe(ApplicationStartEvent, lambda e: seen.append(e))
+
+    window = app_container.get(Window)
+    type(window).is_open = property(lambda self: False)
+
+    Application(app_container).run(MockScene("s", dispatcher))
+
+    assert len(seen) == 1
+    del type(window).is_open
+
+
+def test_quit_event_is_dispatched_when_the_window_closes(
+    app_container: DIContainer,
+) -> None:
+    """QuitEvent had no publisher, so tools/event_monitor.py was subscribed to
+    something that could never fire."""
+    import pygame
+
+    from pyguara.events.lifecycle import QuitEvent
+
+    dispatcher = app_container.get(EventDispatcher)
+    seen = []
+    dispatcher.subscribe(QuitEvent, lambda e: seen.append(e))
+
+    quit_event = MagicMock()
+    quit_event.type = pygame.QUIT
+    window = app_container.get(Window)
+    window.poll_events.return_value = [quit_event]
+
+    app = Application(app_container)
+    app.run(MockScene("s", dispatcher))
+
+    assert len(seen) == 1
+    assert seen[0].source is app
+
+
+def test_a_quit_event_stops_the_loop(app_container: DIContainer) -> None:
+    import pygame
+
+    quit_event = MagicMock()
+    quit_event.type = pygame.QUIT
+    window = app_container.get(Window)
+    window.poll_events.return_value = [quit_event]
+
+    app = Application(app_container)
+    app.run(MockScene("s", app_container.get(EventDispatcher)))
+
+    assert not app._is_running
+
+
+# -- Fixed timestep --
+
+
+def test_a_non_positive_fixed_timestep_is_reported_against_the_setting(
+    app_container: DIContainer,
+) -> None:
+    """Application.run() reads fixed_dt on every startup; a zero in a config
+    file used to surface as a bare ZeroDivisionError naming neither the setting
+    nor the file."""
+    app_container.get(ConfigManager).config.physics.fixed_timestep_hz = 0
+
+    app = Application(app_container)
+    with pytest.raises(ValueError, match="fixed_timestep_hz must be positive"):
+        app.run(MockScene("s", app_container.get(EventDispatcher)))
+
+
+def test_frame_time_is_clamped_so_the_step_count_stays_bounded(
+    app_container: DIContainer,
+) -> None:
+    """max_frame_time is what stops a lag spike turning into an unbounded run
+    of fixed updates."""
+    config = app_container.get(ConfigManager).config
+    steps = int(config.physics.max_frame_time / config.physics.fixed_dt)
+
+    assert steps == 15
