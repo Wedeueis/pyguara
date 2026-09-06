@@ -5,6 +5,7 @@ import dis
 import pytest
 
 from pyguara.common.types import Color, Vector2
+from pyguara.graphics.backends.headless_renderer import HeadlessTextureFactory
 from pyguara.graphics.components.geometry import Box, Circle
 from pyguara.graphics.components.particles import Particle
 from pyguara.graphics.components.sprite import Sprite
@@ -89,12 +90,12 @@ def test_particle_has_rotation_and_scale():
 
 def test_geometry_has_rotation_and_scale():
     """Geometry components must have rotation and scale attributes."""
-    box = Box(width=100, height=100, color=Color(255, 0, 0))
+    box = Box(100, 100, Color(255, 0, 0), HeadlessTextureFactory())
 
     assert hasattr(box, "rotation")
     assert hasattr(box, "scale")
 
-    circle = Circle(radius=50, color=Color(0, 255, 0))
+    circle = Circle(50, Color(0, 255, 0), HeadlessTextureFactory())
 
     assert hasattr(circle, "rotation")
     assert hasattr(circle, "scale")
@@ -124,8 +125,8 @@ def test_all_renderables_implement_protocol():
     # Test all renderable types
     renderables = [
         Sprite(texture=texture, position=Vector2(10, 20)),
-        Box(width=100, height=100, color=Color(255, 0, 0)),
-        Circle(radius=50, color=Color(0, 255, 0)),
+        Box(100, 100, Color(255, 0, 0), HeadlessTextureFactory()),
+        Circle(50, Color(0, 255, 0), HeadlessTextureFactory()),
     ]
 
     for renderable in renderables:
