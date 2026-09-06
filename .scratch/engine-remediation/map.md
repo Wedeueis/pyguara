@@ -565,6 +565,12 @@ tickets inherit rather than revisit them):
   `validate_demos.py` doesn't cover — verified manually via a throwaway harness.
   Full suite green (1123 passed), `ruff`/`mypy` clean.
 
+- [Execute the canonical Label merge](issues/43-execute-canonical-label-merge.md) —
+  executed exactly as specified, `label.py` deleted. Found a 5th real caller the
+  ticket's text didn't list (`tests/test_ui_components.py`) via grep before editing;
+  updated it too. No behavior change anywhere. Full suite green (1123 passed,
+  unchanged count), all games boot clean, `ruff`/`mypy` (216 files) clean.
+
 ## Not yet specified
 
 Fog toward the destination. In scope, not yet sharp enough to ticket. Each patch graduates

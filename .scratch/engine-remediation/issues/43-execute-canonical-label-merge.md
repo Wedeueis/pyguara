@@ -1,7 +1,8 @@
 # Execute the canonical Label merge
 
 Type: task
-Status: open
+Status: resolved
+Assignee: Wedeueis Braz
 Blocked by: —
 Audit ref: fog graduation, follows from Decide which Label class is canonical,
 ticket 41
@@ -35,3 +36,19 @@ canonical](41-canonical-label-class-decision.md).
 - No remaining reference to `pyguara.ui.components.label` anywhere in the repo
   (`grep -r "ui.components.label"` returns nothing).
 - `ruff check .` and `mypy pyguara` stay clean; full suite green.
+
+## Resolution
+
+Executed as specified, no deviations. `pyguara/ui/components/label.py` deleted.
+Import updated to `from pyguara.ui.components.text import Label` in all 5 remaining
+call sites (the 4 games' `scenes.py` plus `tests/test_ui_components.py`, which this
+ticket's own text didn't list but grep turned up as a 5th real caller). No behavior
+change anywhere — `text.py`'s `Label` constructor signature is a strict superset,
+confirmed by `test_label_rendering` (which calls `Label(text, position, font_size=,
+color=)` positionally-then-kwargs) passing unchanged.
+
+`ui_scene_graph`'s `MenuScene` re-verified via the same throwaway harness ticket 42
+used (still the one call site `validate_demos.py` doesn't cover). Full suite green
+(1123 passed, unchanged count — no new tests needed for a pure rename), all 4
+`validate_demos.py` games plus `ui_scene_graph` boot clean, `ruff check .` and
+`mypy pyguara` (216 files, down from 217) clean. Commit `bbb3081`.
