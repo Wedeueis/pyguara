@@ -29,9 +29,17 @@ class HeadlessWindowBackend:
     def __init__(self) -> None:
         """Initialize the dummy window backend."""
         self._is_open = False
+        self._width = 0
+        self._height = 0
 
     def open(self, config: WindowConfig) -> bool:
-        """Pretend to open a window; no real display is ever created."""
+        """Pretend to open a window; no real display is ever created.
+
+        Records the requested size so the surface dimensions read back the way
+        a real backend's would.
+        """
+        self._width = config.screen_width
+        self._height = config.screen_height
         self._is_open = True
         return True
 
@@ -55,6 +63,16 @@ class HeadlessWindowBackend:
     def get_screen(self) -> Any:
         """Return `None`: there is no native surface/handle."""
         return None
+
+    @property
+    def width(self) -> int:
+        """The requested width; a headless window always gets what it asks for."""
+        return self._width
+
+    @property
+    def height(self) -> int:
+        """The requested height; a headless window always gets what it asks for."""
+        return self._height
 
 
 class HeadlessBackend:

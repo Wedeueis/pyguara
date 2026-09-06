@@ -280,16 +280,39 @@ class IWindowBackend(Protocol):
         ...
 
     def poll_events(self) -> Iterable[Any]:
-        """
-        Poll system events (input, window events).
+        """Poll system events and hand them on for interpretation.
 
         Returns:
-            Iterable of opaque event objects to be passed to InputManager.
+            Backend-native event objects, opaque to the engine.
+
+        Note:
+            These are the backend's own event objects -- SDL events under
+            pygame -- so every consumer has to know the backend's constants to
+            read them. That is why `Application` and `InputManager` still
+            import pygame despite the engine being nominally backend-agnostic.
+            Translating here, into engine events, is tracked as issue #9; it
+            spans graphics, input and application, so it is not something this
+            protocol can fix alone.
         """
         ...
 
     def get_screen(self) -> Any:
         """Return the native OS window."""
+        ...
+
+    @property
+    def width(self) -> int:
+        """The drawable surface width in pixels, as the OS actually granted it.
+
+        Not the width that was requested: a fullscreen window is commonly
+        handed the desktop resolution instead, and any resize changes it
+        again.
+        """
+        ...
+
+    @property
+    def height(self) -> int:
+        """The drawable surface height in pixels, as the OS actually granted it."""
         ...
 
 

@@ -38,6 +38,20 @@ class PygameWindow:
         self._is_open = True
         return True
 
+    @property
+    def width(self) -> int:
+        """The drawable surface width in pixels, read back from SDL."""
+        if self._screen is None:
+            return 0
+        return int(self._screen.get_width())
+
+    @property
+    def height(self) -> int:
+        """The drawable surface height in pixels, read back from SDL."""
+        if self._screen is None:
+            return 0
+        return int(self._screen.get_height())
+
     def close(self) -> None:
         """Quit the display module."""
         # Pygame uses quit() to kill the window context
