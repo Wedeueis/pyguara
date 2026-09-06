@@ -541,6 +541,18 @@ tickets inherit rather than revisit them):
   state, so it's spun off rather than decided in the abstract: [Prototype the
   declarative UI builder API](issues/49-prototype-ui-builder.md).
 
+- [Execute the PlatformerController/TriggerVolume logic
+  move](issues/40-execute-platformer-trigger-logic-move.md) — executed exactly as
+  specified. `PlatformerController` gained `PlatformerInput`/`pending_input`, lost
+  its four movement methods and `reset_jump_state()` (moved onto `PlatformerSystem`,
+  called from both its internal call site and the respawn handler);
+  `TriggerVolume.clear()`/`EntityTags.add_tag()`/`remove_tag()` deleted in favor of
+  direct field mutation. One quirk preserved deliberately: `PlayerControlSystem`'s
+  `PlayerJumpedEvent` dispatch guard was already dead code (always true), simplified
+  to match without changing the pre-existing "fires even for a rejected jump"
+  behavior — not this ticket's job to fix. Full suite green (1122 passed), all 4
+  demos verified, `ruff`/`mypy` clean.
+
 ## Not yet specified
 
 Fog toward the destination. In scope, not yet sharp enough to ticket. Each patch graduates
