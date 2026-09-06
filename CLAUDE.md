@@ -266,10 +266,26 @@ entity.add_component(Sprite(texture_path="assets/sprite.png"))
 - Minimum: Python 3.12
 - Uses modern Python features (match/case, type hints, Protocol, dataclasses)
 
-## Wayfinder Map
+## Ongoing Efforts
 
-Active engine-remediation effort tracked via the `/wayfinder` skill (local-markdown tracker):
+### Subsystem audit — ACTIVE
+
+A systematic audit of the engine, one subsystem per iteration: code and
+architecture, then tests, then documentation.
+
+**Tracker: `REFACTOR_STATE.md` in the repository root.** Read it first. It
+carries the completed subsystems, the pending queue in dependency order, the
+cross-cutting concerns parked out of individual iterations, and a log of what
+each iteration found.
+
+To resume: open `REFACTOR_STATE.md`, read "How to resume" at the top, and take
+the next subsystem from the pending queue.
+
+### Engine remediation (wayfinder) — essentially complete
+
+An earlier effort, tracked via the `/wayfinder` skill:
 - Map: `.scratch/engine-remediation/map.md`
 - Tickets: `.scratch/engine-remediation/issues/`
 
-To resume, load the map and pick an open, unblocked, unclaimed ticket (the frontier).
+48 of its 49 tickets are resolved. Do not start here unless a task explicitly
+refers to it; the subsystem audit above is where active work happens.

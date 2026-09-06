@@ -10,6 +10,47 @@ rather than fixed in place.
 
 ---
 
+## How to resume
+
+1. Read **Completed Subsystems** for what is done and **Pending Subsystems**
+   for what is next. The queue is ordered by dependency depth: foundations
+   first, leaves last.
+2. Read **Cross-Cutting Concerns**. Anything found that spans subsystems is
+   parked there rather than fixed in place, and several are now GitHub issues.
+3. Take the next unticked subsystem. For each one, in order:
+   - **Phase A** — audit the code. Reproduce every suspected defect with a
+     throwaway probe *before* fixing it. Reading is not enough: every
+     significant defect this audit has found looked correct on a read-through
+     and was obvious under a probe.
+   - **Phase B** — audit the tests. Look for uniform setup rather than missing
+     coverage; that is what has hidden most bugs here (see the note below).
+   - **Phase C** — audit the docs, and verify the documented API actually
+     exists. Three pages have described functions that never existed.
+4. Branch from `main` — see "Branching and Pull Requests" in `CLAUDE.md`.
+5. Verify each commit **in a clean checkout**, not the working tree:
+   `git worktree add --detach <tmp> <sha>` then run the suite there. A working
+   tree can pass with unstaged changes the commit does not contain; that has
+   happened once.
+6. Log the iteration at the bottom of this file and open a PR.
+
+### Two patterns worth carrying forward
+
+**Guards that return a wrong answer.** Four graphics slices and one DI
+iteration turned up the same shape: a check that avoids a crash by
+substituting a plausible-looking wrong value. `safe_zoom = 0.001` gave
+coordinates six orders of magnitude out; `window_ratio ... else 0` gave a
+450px viewport for a 0px window. In each case the crash would have been easier
+to diagnose. Grep for `if x != 0 else`, `or 1`, and bare `except: pass`.
+
+**Uniform test setup, not missing tests.** The blind spot has repeatedly been
+that every existing test built its subject the same way. `test_query_cache.py`
+always used `create_entity()`, so an `add_entity()` bug survived;
+`test_config.py` always mocked the filesystem, so no round-trip bug could
+surface; every DI test was single-threaded, so a missing lock survived. Ask
+how the subject is *constructed*, not just what is asserted.
+
+---
+
 ## Active Subsystem
 
 `pyguara/graphics` — **split across several iterations**; all five slices done; slice 5 (assets & effects) in review. **Tier 3 continues with `physics`.**
@@ -66,6 +107,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/graphics` | 2026-09-06 | Audited in five slices: window boundary, components, backends, pipeline, assets. Window reported the requested size not the granted one; `Box`/`Circle` were hard-wired to pygame; the pygame stubs had drifted; a zero-height window produced a 450px viewport; nine-patch produced negative source rects. PRs #12, #14, #15, #17, #18. |
 | `pyguara/systems` | 2026-09-06 | Fixed every game system starting up uninitialised (`initialize()` runs before `on_enter()`), an `unregister()` testing truthiness rather than `None`, and silent duplicate registration keys. PR #11. |
 | `pyguara/scene` | 2026-09-06 | Fixed `switch_to()` abandoning every stacked scene, unguarded re-entrancy during transitions, and a `pop_scene()` that stranded the scene it returned to. PR #10. |
 | `pyguara/application` | 2026-09-06 | Fixed an event budget spent per fixed step (15x per lagged frame), a `shutdown()` that skipped everything after the first failure, and three lifecycle events with no publisher. PR #8. |
@@ -75,6 +117,18 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 | `pyguara/events` | 2026-09-06 | Broke a latent `log` <-> `events` import cycle, fixed a timestamp sentinel that made 0.0 inexpressible, brought filter errors under the error strategy, and memoised handler resolution (5.7us -> 3.1us per dispatch). PR #3. |
 | `pyguara/common` | 2026-09-06 | Fixed `Transform.up` pointing down, an unguarded parent cycle and a falsy-`Vector2` default; renamed `Vector2.rotate` to `rotate_degrees`; wrote the first tests for `Vector2` and `Transform`. PR #2. |
 | `pyguara/ecs` | 2026-09-06 | Fixed two silent query bugs (`add_entity()` bypassing the query cache; dead-entity resurrection), replaced the private removal hook with a subscribe/unsubscribe API, and modernised the module. PR #1. |
+
+---
+
+## Tracked as GitHub issues
+
+Concerns that outgrew this file, or that need a decision rather than a fix:
+
+| Issue | Subject |
+| --- | --- |
+| [#9](https://github.com/Wedeueis/pyguara/issues/9) | pygame reaches into the backend-agnostic core (CC-11) — nine non-backend files across five subsystems |
+| [#16](https://github.com/Wedeueis/pyguara/issues/16) | `IFramebuffer`/`IRenderPass` not `runtime_checkable`; `IRenderPass` vs `BaseRenderPass(ABC)` overlap |
+| [#19](https://github.com/Wedeueis/pyguara/issues/19) | ~2,700 lines of GPU-dependent graphics code are read-audited only, with no headless GL coverage |
 
 ---
 
