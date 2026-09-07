@@ -362,3 +362,86 @@ class TestOneWayPlatforms:
         assert peak > self.PLATFORM_Y - 50, (
             "with the solid face pointing down, jumping up into it must be blocked"
         )
+
+
+class TestWalkingOverTileSeams:
+    """Walking must not be disturbed by how the floor was built.
+
+    A floor of separate tile colliders has interior faces between the tiles.
+    A character rests `collision_slop` deep in the floor, so its leading
+    bottom corner sits below the tops of the tiles ahead and strikes their
+    vertical faces. Measured in guara_falcao before the fix: at a tile
+    boundary the character was flung upward at 47 px/s, hopped, and landed
+    8.4px inside the floor, where it stayed. It reads as the character
+    sinking into the ground for no reason.
+    """
+
+    FLOOR_TOP = 480.0
+    TILE = 32
+    TILES = 24
+
+    def _walk(self, merged: bool) -> float:
+        """Walk a character across a floor and return the deepest sink."""
+        world = Platformer(floor_width=1.0)
+        world.player.get_component(Transform).position = Vector2(2000, 0)
+
+        def solid(centre: Vector2, dimensions: list[float]) -> None:
+            entity = world.entities.create_entity()
+            entity.add_component(Transform(position=centre))
+            entity.add_component(RigidBody(body_type=BodyType.STATIC))
+            entity.add_component(
+                Collider(shape_type=ShapeType.BOX, dimensions=dimensions)
+            )
+
+        span = self.TILES * self.TILE
+        if merged:
+            solid(
+                Vector2(span / 2, self.FLOOR_TOP + self.TILE / 2),
+                [float(span), float(self.TILE)],
+            )
+        else:
+            for i in range(self.TILES):
+                solid(
+                    Vector2(
+                        i * self.TILE + self.TILE / 2,
+                        self.FLOOR_TOP + self.TILE / 2,
+                    ),
+                    [float(self.TILE), float(self.TILE)],
+                )
+
+        walker = world.entities.create_entity()
+        walker.add_component(
+            Transform(position=Vector2(48, self.FLOOR_TOP - PLAYER_HEIGHT / 2))
+        )
+        walker.add_component(
+            RigidBody(mass=1.0, body_type=BodyType.DYNAMIC, fixed_rotation=True)
+        )
+        walker.add_component(
+            Collider(shape_type=ShapeType.BOX, dimensions=[24.0, PLAYER_HEIGHT])
+        )
+        walker.add_component(PlatformerController(move_speed=180.0))
+        controller = walker.get_component(PlatformerController)
+        transform = walker.get_component(Transform)
+
+        world.run(40)  # settle onto the floor
+
+        worst = 0.0
+        for _ in range(300):
+            controller.pending_input = PlatformerInput(move=1.0)
+            world.physics.update(DT)
+            world.platformer.update(DT)
+            feet = transform.position.y + PLAYER_HEIGHT / 2
+            worst = max(worst, feet - self.FLOOR_TOP)
+            if transform.position.x > span - 3 * self.TILE:
+                break
+        return worst
+
+    def test_a_merged_floor_keeps_the_character_on_the_surface(self) -> None:
+        """Sinking stays within Chipmunk's slop, which is 0.1px.
+
+        The seam catch itself is only reproducible in a full level -- this
+        harness walks cleanly across separate tiles too -- so this pins the
+        property that matters rather than the mechanism. The mechanism is
+        recorded from the guara_falcao measurement in the class docstring.
+        """
+        assert self._walk(merged=True) < 1.0

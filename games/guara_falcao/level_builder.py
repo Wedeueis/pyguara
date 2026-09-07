@@ -18,10 +18,11 @@ from games.guara_falcao.components import (
     ZoneTrigger,
 )
 from pyguara.common.components import Transform
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.platformer_controller import PlatformerController
+from pyguara.physics.tilemap import merge_tile_rects
 from pyguara.physics.types import BodyType
 
 # Tile size in pixels
@@ -121,13 +122,21 @@ class LevelBuilder:
         spawn = level_data.get("player_spawn", [4, 14])
         self._spawn_point = Vector2(spawn[0] * TILE_SIZE, spawn[1] * TILE_SIZE)
 
-        # Process tilemap
+        # Process tilemap. Sprites stay per-tile so the grid still reads as a
+        # grid, but collision is built from merged rectangles: a floor made of
+        # separate tile colliders has interior faces between them, and a
+        # walking character's leading corner catches on them and is flung
+        # upward. See pyguara/physics/tilemap.py.
         for y, row in enumerate(tiles):
             for x, tile in enumerate(row):
                 if tile == TILE_SOLID:
-                    self._create_solid_tile(entity_manager, x, y)
+                    self._create_solid_tile_sprite(entity_manager, x, y)
                 elif tile == TILE_HAZARD:
                     self._create_hazard(entity_manager, x, y)
+
+        solid = [[tile == TILE_SOLID for tile in row] for row in tiles]
+        for index, rect in enumerate(merge_tile_rects(solid, TILE_SIZE)):
+            self._create_solid_body(entity_manager, index, rect)
 
         # Create collectibles
         for pos in level_data.get("collectibles", []):
@@ -144,20 +153,46 @@ class LevelBuilder:
 
         return self._spawn_point
 
-    def _create_solid_tile(
+    def _create_solid_tile_sprite(
         self, entity_manager: EntityManager, gx: int, gy: int
     ) -> None:
-        """Create a solid tile entity."""
+        """Create the visual for one solid tile. Collision is merged separately.
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            gx: Tile column.
+            gy: Tile row.
+        """
         entity = entity_manager.create_entity(f"tile_{gx}_{gy}")
 
         world_x = gx * TILE_SIZE + TILE_SIZE // 2
         world_y = gy * TILE_SIZE + TILE_SIZE // 2
 
         entity.add_component(Transform(position=Vector2(world_x, world_y)))
-        entity.add_component(RigidBody(body_type=BodyType.STATIC))
-        entity.add_component(Collider(dimensions=[TILE_SIZE, TILE_SIZE]))
         entity.add_component(
             PlatformSprite(color=Color(70, 80, 90), size=Vector2(TILE_SIZE, TILE_SIZE))
+        )
+
+    def _create_solid_body(
+        self, entity_manager: EntityManager, index: int, rect: Rect
+    ) -> None:
+        """Create one static collider covering a merged run of solid tiles.
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            index: Sequence number, for a readable entity id.
+            rect: World-space area to cover.
+        """
+        entity = entity_manager.create_entity(f"solid_{index}")
+
+        entity.add_component(
+            Transform(
+                position=Vector2(rect.x + rect.width / 2, rect.y + rect.height / 2)
+            )
+        )
+        entity.add_component(RigidBody(body_type=BodyType.STATIC))
+        entity.add_component(
+            Collider(dimensions=[float(rect.width), float(rect.height)])
         )
 
     def _create_hazard(self, entity_manager: EntityManager, gx: int, gy: int) -> None:
