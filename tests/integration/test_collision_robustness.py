@@ -1,4 +1,4 @@
-"""Collision behaviour a 2D engine must get right, through the real ECS path.
+"""Collision and motion behaviour a 2D engine must get right.
 
 These go through EntityManager -> PhysicsSystem -> PymunkEngine, wired the
 way `application/bootstrap.py` wires it, because that is where the behaviour
@@ -144,3 +144,62 @@ def test_a_collision_raises_an_event() -> None:
     world.run(240)
 
     assert seen, "a box landing on the ground raised no collision event"
+
+
+class TestRenderInterpolation:
+    """Drawing between fixed ticks, which is what makes motion look smooth."""
+
+    def test_an_opted_in_transform_interpolates_between_ticks(self) -> None:
+        """The drawn position walks from the previous tick to the current one."""
+        transform = Transform(position=Vector2(10, 0), interpolate=True)
+        transform.previous_position = Vector2(0, 0)
+
+        assert transform.render_position(0.0) == Vector2(0, 0)
+        assert transform.render_position(0.5) == Vector2(5, 0)
+        assert transform.render_position(1.0) == Vector2(10, 0)
+
+    def test_a_transform_that_did_not_opt_in_is_drawn_where_it_is(self) -> None:
+        """Interpolation costs a tick of latency, so it stays opt-in.
+
+        `previous_position` is not maintained for these, so interpolating
+        anyway would drag the sprite toward a stale position.
+        """
+        transform = Transform(position=Vector2(10, 0))
+        transform.previous_position = Vector2(0, 0)
+
+        assert transform.render_position(0.5) == Vector2(10, 0)
+
+    def test_interpolation_evens_out_the_steps_a_viewer_sees(self) -> None:
+        """The point of the helper, stated as the property that matters.
+
+        Physics ticks at 60Hz; this frame budget is a 75Hz display, so ticks
+        and frames do not line up. Drawn raw, the body advances 0px on some
+        frames and 5px on others -- visible stutter. Interpolated, every
+        frame advances by close to the true average.
+        """
+        fixed_dt = 1.0 / 60.0
+        speed = 300.0
+        transform = Transform(position=Vector2(0, 0), interpolate=True)
+
+        accumulator = 0.0
+        raw: list[float] = []
+        smooth: list[float] = []
+        for _ in range(200):
+            accumulator += 1.0 / 75.0
+            while accumulator >= fixed_dt:
+                transform.previous_position = transform.position
+                transform.position = transform.position + Vector2(speed * fixed_dt, 0)
+                accumulator -= fixed_dt
+            alpha = accumulator / fixed_dt
+            raw.append(transform.position.x)
+            smooth.append(transform.render_position(alpha).x)
+
+        raw_steps = [b - a for a, b in zip(raw, raw[1:], strict=False)]
+        smooth_steps = [b - a for a, b in zip(smooth, smooth[1:], strict=False)]
+
+        # Raw motion stalls completely on some frames and jumps on others.
+        assert min(raw_steps) == pytest.approx(0.0, abs=0.01)
+        assert max(raw_steps) - min(raw_steps) > 4.0
+
+        # Interpolated motion stays close to the true per-frame distance.
+        assert max(smooth_steps) - min(smooth_steps) < 1.5

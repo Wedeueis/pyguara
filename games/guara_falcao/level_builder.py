@@ -247,8 +247,10 @@ class LevelBuilder:
 
         player = entity_manager.create_entity("player")
 
-        # Transform
-        player.add_component(Transform(position=spawn_pos))
+        # Transform. interpolate=True so the renderer can draw between fixed
+        # ticks: physics runs at 60Hz while frames present at the display's
+        # rate, and without it the player is drawn in uneven jumps.
+        player.add_component(Transform(position=spawn_pos, interpolate=True))
 
         # Physics
         player.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=1.0))

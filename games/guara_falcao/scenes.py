@@ -510,7 +510,12 @@ class GameScene(Scene):
                 health = player.get_component(Health)
 
                 if transform and sprite:
-                    screen_pos = transform.position - camera_offset
+                    # render_position, not position: drawing the raw fixed-tick
+                    # position makes motion stutter whenever the display rate
+                    # is not locked to the 60Hz physics rate.
+                    screen_pos = (
+                        transform.render_position(self.render_alpha) - camera_offset
+                    )
 
                     # Flash when invincible
                     color = sprite.color

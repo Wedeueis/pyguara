@@ -119,6 +119,34 @@ class Transform(BaseComponent):
         self.interpolate = interpolate
         self.previous_position: Vector2 = self._local_position
 
+    def render_position(self, alpha: float) -> Vector2:
+        """Return where this transform should be drawn between two ticks.
+
+        Physics advances at a fixed rate while frames are presented at the
+        display's rate, so drawing `position` directly shows the last
+        completed tick. When those rates are not locked together some frames
+        show no movement and the next shows two ticks' worth -- motion that
+        reads as stutter even though the simulation is perfectly regular.
+        At 60Hz physics on a 75Hz display, a body moving 300 px/s is drawn
+        in steps of 0 to 5 pixels where every step should be 4.
+
+        Interpolating between the previous tick and the current one, by how
+        far the frame sits between them, removes that. It costs one tick of
+        latency, which is why it is opt-in through `interpolate`; a transform
+        that has not opted in is drawn where it is, and `previous_position`
+        is not maintained for it.
+
+        Args:
+            alpha: Progress through the current tick, 0.0 to 1.0. The
+                application hands this to `Scene.render` as `render_alpha`.
+
+        Returns:
+            The position to draw at.
+        """
+        if not self.interpolate:
+            return self.position
+        return self.previous_position.lerp(self.position, alpha)
+
     # --- Properties ---
 
     @property
