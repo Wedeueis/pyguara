@@ -1,0 +1,67 @@
+# serializer version: 1
+# name: test_a_letterboxed_viewport_is_passed_through_verbatim
+  list([
+    'set_viewport x=0 y=60 w=800 h=480',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'render_batch hero.png n=1 transforms=off dest=[(400.000,300.000)]',
+    'end_frame',
+  ])
+# ---
+# name: test_an_empty_frame_still_sets_up_and_tears_down
+  list([
+    'set_viewport x=0 y=0 w=800 h=600',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'end_frame',
+  ])
+# ---
+# name: test_interleaved_textures_split_into_separate_batches
+  list([
+    'set_viewport x=0 y=0 w=800 h=600',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'render_batch hero.png n=1 transforms=off dest=[(400.000,300.000)]',
+    'render_batch tile.png n=1 transforms=off dest=[(432.000,300.000)]',
+    'render_batch hero.png n=1 transforms=off dest=[(464.000,300.000)]',
+    'render_batch tile.png n=1 transforms=off dest=[(496.000,300.000)]',
+    'end_frame',
+  ])
+# ---
+# name: test_one_texture_makes_one_batch
+  list([
+    'set_viewport x=0 y=0 w=800 h=600',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'render_batch hero.png n=4 transforms=off dest=[(400.000,300.000), (432.000,300.000), (464.000,300.000), (496.000,300.000)]',
+    'end_frame',
+  ])
+# ---
+# name: test_rotation_and_scale_switch_the_batch_to_the_transform_path
+  list([
+    'set_viewport x=0 y=0 w=800 h=600',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'render_batch hero.png n=2 transforms=on dest=[(400.000,300.000), (464.000,300.000)] rot=[45.000, 0.000] scale=[(1.000,1.000), (2.000,0.500)]',
+    'end_frame',
+  ])
+# ---
+# name: test_sprites_are_drawn_back_to_front
+  list([
+    'set_viewport x=0 y=0 w=800 h=600',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'render_batch tile.png n=2 transforms=off dest=[(400.000,300.000), (400.000,300.000)]',
+    'render_batch hero.png n=2 transforms=off dest=[(400.000,300.000), (400.000,300.000)]',
+    'end_frame',
+  ])
+# ---
+# name: test_the_camera_transform_reaches_the_batch
+  list([
+    'set_viewport x=0 y=0 w=800 h=600',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'render_batch hero.png n=3 transforms=off dest=[(400.000,300.000), (600.000,300.000), (400.000,500.000)]',
+    'end_frame',
+  ])
+# ---
