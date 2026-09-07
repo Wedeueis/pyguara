@@ -254,9 +254,12 @@ class LevelBuilder:
         player.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=1.0))
         player.add_component(Collider(dimensions=[24, 40]))
 
-        # Platformer controller with game-feel tuning
-        # Note: ground_check_distance must be > half player height (20) to detect ground
-        # from the player's center position
+        # Platformer controller with game-feel tuning.
+        # The detection rays start at the collider's edge, not its centre, so
+        # these are clearances beyond the character's own outline. They used to
+        # be set to half the character's size on the belief that the ray began
+        # at the centre, which reported ground while a full body-height above
+        # it.
         player.add_component(
             PlatformerController(
                 move_speed=180.0,
@@ -269,8 +272,8 @@ class LevelBuilder:
                 wall_slide_enabled=False,  # Disabled for now to debug gravity issues
                 wall_slide_speed=60.0,
                 wall_jump_enabled=False,
-                ground_check_distance=25.0,  # Must exceed half player height (20) + margin
-                wall_check_distance=16.0,  # Must exceed half player width (12) + margin
+                ground_check_distance=6.0,  # clearance below the feet
+                wall_check_distance=4.0,  # clearance beyond each side
             )
         )
 

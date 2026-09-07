@@ -72,8 +72,8 @@ class PlatformerSystem:
             half_width = collider.dimensions[0] / 2 if collider else 12.0
 
             # Perform ground and wall detection
-            self._update_ground_detection(controller, transform, half_height)
-            self._update_wall_detection(controller, transform, half_width)
+            self._update_ground_detection(controller, transform, half_height, entity.id)
+            self._update_wall_detection(controller, transform, half_width, entity.id)
 
             # Update timers
             self._update_timers(controller, delta_time)
@@ -105,7 +105,11 @@ class PlatformerSystem:
         controller._jump_used = False
 
     def _update_ground_detection(
-        self, controller: PlatformerController, transform: Transform, half_height: float
+        self,
+        controller: PlatformerController,
+        transform: Transform,
+        half_height: float,
+        entity_id: int | str,
     ) -> None:
         """Detect if character is on ground using raycast.
 
@@ -113,13 +117,19 @@ class PlatformerSystem:
             controller: PlatformerController component.
             transform: Transform component.
             half_height: Half the collider height (to start ray from feet).
+            entity_id: The character, excluded from the query. Offsetting the
+                ray start below the collider is not enough on its own: the
+                query is a swept circle, so its radius reaches back into the
+                collider and the character detects itself. That reads as
+                permanently grounded, which silently disables coyote time,
+                jump buffering and the landing reset that clears the
+                one-jump-per-landing flag.
         """
         # Cast ray downward from just below character's feet
-        # Start slightly below the collider to avoid self-intersection
         start = transform.position + Vector2(0, half_height + 1)
         end = start + Vector2(0, controller.ground_check_distance)
 
-        hit = self._physics_engine.raycast(start, end)
+        hit = self._physics_engine.raycast(start, end, ignore_entity_id=entity_id)
 
         was_grounded = controller.is_grounded
         controller.is_grounded = hit is not None
@@ -134,7 +144,11 @@ class PlatformerSystem:
             controller.coyote_timer = controller.coyote_time
 
     def _update_wall_detection(
-        self, controller: PlatformerController, transform: Transform, half_width: float
+        self,
+        controller: PlatformerController,
+        transform: Transform,
+        half_width: float,
+        entity_id: int | str,
     ) -> None:
         """Detect if character is touching walls using raycasts.
 
@@ -142,6 +156,8 @@ class PlatformerSystem:
             controller: PlatformerController component.
             transform: Transform component.
             half_width: Half the collider width (to start ray from sides).
+            entity_id: The character, excluded so the side rays cannot detect
+                its own collider as a wall.
         """
         # Always detect walls (needed to prevent pushing into them)
         # Wall sliding/jumping is a separate feature that uses this data
@@ -157,8 +173,12 @@ class PlatformerSystem:
         left_end = left_start + Vector2(-controller.wall_check_distance, 0)
         right_end = right_start + Vector2(controller.wall_check_distance, 0)
 
-        left_hit = self._physics_engine.raycast(left_start, left_end)
-        right_hit = self._physics_engine.raycast(right_start, right_end)
+        left_hit = self._physics_engine.raycast(
+            left_start, left_end, ignore_entity_id=entity_id
+        )
+        right_hit = self._physics_engine.raycast(
+            right_start, right_end, ignore_entity_id=entity_id
+        )
 
         controller.on_wall_left = left_hit is not None
         controller.on_wall_right = right_hit is not None

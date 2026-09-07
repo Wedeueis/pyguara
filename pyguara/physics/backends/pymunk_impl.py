@@ -23,6 +23,10 @@ from pyguara.physics.types import (
 # the solver cost -- cheap for the body counts a 2D game runs.
 DEFAULT_SUBSTEPS = 4
 
+# Ray queries are swept circles in Chipmunk. Keep the radius small: it
+# widens what the ray can touch, including the caster's own collider.
+RAYCAST_RADIUS = 1.0
+
 
 class PymunkBodyAdapter:
     """Wrapper around pymunk.Body to conform to IPhysicsBody."""
@@ -397,27 +401,66 @@ class PymunkEngine:
             return shape
 
     def raycast(
-        self, start: Vector2, end: Vector2, mask: int = 0xFFFFFFFF
+        self,
+        start: Vector2,
+        end: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
     ) -> RaycastHit | None:
-        """Perform a raycast query."""
+        """Perform a raycast query.
+
+        Args:
+            start: Ray origin in world space.
+            end: Ray end in world space.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Skip hits on this entity's own body.
+
+        Returns:
+            The nearest hit that is not excluded, or None.
+        """
         if not self.space:
             return None
 
-        query = self.space.segment_query_first(
-            (start.x, start.y),
-            (end.x, end.y),
-            1.0,  # Radius
-            pymunk.ShapeFilter(mask=mask),
-        )
+        shape_filter = pymunk.ShapeFilter(mask=mask)
 
-        if query:
-            return RaycastHit(
-                position=Vector2(query.point.x, query.point.y),
-                normal=Vector2(query.normal.x, query.normal.y),
-                distance=start.distance_to(Vector2(query.point.x, query.point.y)),
-                entity_id=getattr(query.shape.body, "entity_id", None),
+        if ignore_entity_id is None:
+            query = self.space.segment_query_first(
+                (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
             )
+            return self._to_hit(query, start)
+
+        # segment_query_first cannot exclude one body, so take every hit and
+        # return the nearest that is not the caster's own. A character casting
+        # for the ground under its feet starts the ray at its own edge, and a
+        # self-hit reads as permanently grounded.
+        hits = self.space.segment_query(
+            (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
+        )
+        for hit in sorted(hits, key=lambda h: h.alpha):
+            if getattr(hit.shape.body, "entity_id", None) != ignore_entity_id:
+                return self._to_hit(hit, start)
         return None
+
+    @staticmethod
+    def _to_hit(query: Any, start: Vector2) -> RaycastHit | None:
+        """Convert a pymunk query result into a `RaycastHit`.
+
+        Args:
+            query: A pymunk segment query result, or None.
+            start: The ray origin, for computing distance.
+
+        Returns:
+            The hit, or None when the query found nothing.
+        """
+        if not query:
+            return None
+        point = Vector2(query.point.x, query.point.y)
+        return RaycastHit(
+            position=point,
+            normal=Vector2(query.normal.x, query.normal.y),
+            distance=start.distance_to(point),
+            entity_id=getattr(query.shape.body, "entity_id", None),
+        )
 
     def create_joint(
         self,

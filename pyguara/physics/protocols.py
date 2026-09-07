@@ -100,9 +100,25 @@ class IPhysicsEngine(Protocol):
         ...
 
     def raycast(
-        self, start: Vector2, end: Vector2, mask: int = 0xFFFFFFFF
+        self,
+        start: Vector2,
+        end: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
     ) -> RaycastHit | None:
-        """Cast a ray in the physics world."""
+        """Cast a ray in the physics world.
+
+        Args:
+            start: Ray origin in world space.
+            end: Ray end in world space.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Skip hits on this entity's own body. A character
+                casting to find the ground beneath its feet starts the ray at
+                its own edge and would otherwise detect itself.
+
+        Returns:
+            The nearest hit, or None.
+        """
         ...
 
     def create_joint(
