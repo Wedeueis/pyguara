@@ -299,7 +299,10 @@ class GameScene(Scene):
                 controller = player.get_component(PlatformerController)
 
                 if transform:
-                    transform.position = spawn
+                    # teleport(), not assignment: a respawn is not motion, and
+                    # interpolating it would draw the player sliding back
+                    # across the level for a frame.
+                    transform.teleport(spawn)
 
                 # Also update physics body position and reset velocity
                 if rigidbody and rigidbody.handle:

@@ -125,6 +125,14 @@ class PhysicsSystem:
         Internal helper that handles the specific sequence of body creation
         and shape attachment.
         """
+        # This transform is now stepped at the fixed physics rate, so the
+        # renderer must draw it between ticks or motion stutters on any
+        # display not locked to that rate. Opt in here rather than asking
+        # every game to remember: the system that makes a transform
+        # fixed-stepped is the one that knows it needs interpolating.
+        transform.interpolate = True
+        transform.previous_position = transform.position
+
         # 1. Create Body in the backend
         body_handle = self._engine.create_body(
             entity.id, rb.body_type, transform.position, rb.mass

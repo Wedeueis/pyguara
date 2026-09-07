@@ -72,9 +72,16 @@ class Transform(BaseComponent):
         most of the engine, so it is not attempted piecemeal.
 
     Attributes:
-        interpolate: Opt in to fixed-timestep render interpolation.
+        interpolate: Whether the renderer draws this between fixed ticks.
+            Set automatically by `PhysicsSystem` for bodies it creates, which
+            are the transforms that need it: they advance at the fixed rate,
+            so drawing the raw tick position stutters on any display not
+            locked to it. Leave it off for a transform a system moves every
+            frame in variable-rate `update()` -- that is already frame-exact,
+            and interpolating it mixes two clocks and adds judder instead of
+            removing it. Use `teleport()` for moves that are not motion.
         previous_position: Position at the previous fixed tick, maintained by
-            `SceneManager.fixed_update()` when `interpolate` is set.
+            `SceneManager.fixed_update()` while `interpolate` is set.
     """
 
     _allow_methods = True  # See the note above: hierarchy math lives here.
@@ -92,7 +99,8 @@ class Transform(BaseComponent):
             position: Local position. Defaults to the origin.
             rotation: Local rotation in radians.
             scale: Local scale. Defaults to `(1, 1)`.
-            interpolate: Opt in to fixed-timestep render interpolation.
+            interpolate: Draw between fixed ticks. Physics-driven
+                transforms get this automatically; see the class docstring.
         """
         super().__init__()
 
@@ -118,6 +126,24 @@ class Transform(BaseComponent):
         # render_alpha instead of using the current position directly.
         self.interpolate = interpolate
         self.previous_position: Vector2 = self._local_position
+
+    def teleport(self, position: Vector2) -> None:
+        """Move without drawing the journey.
+
+        A normal position change is interpolated, so the renderer draws the
+        entity partway between where it was and where it now is. That is what
+        makes ordinary motion smooth, and exactly wrong for a move that is not
+        motion: a respawn, a level load, wrapping around a screen edge. Those
+        would be drawn as a streak across everything in between for one frame.
+
+        This sets both the current and previous position, leaving nothing to
+        interpolate across.
+
+        Args:
+            position: Where to place the transform.
+        """
+        self.position = position
+        self.previous_position = self.position
 
     def render_position(self, alpha: float) -> Vector2:
         """Return where this transform should be drawn between two ticks.

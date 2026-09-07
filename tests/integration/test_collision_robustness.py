@@ -158,16 +158,63 @@ class TestRenderInterpolation:
         assert transform.render_position(0.5) == Vector2(5, 0)
         assert transform.render_position(1.0) == Vector2(10, 0)
 
-    def test_a_transform_that_did_not_opt_in_is_drawn_where_it_is(self) -> None:
-        """Interpolation costs a tick of latency, so it stays opt-in.
+    def test_a_transform_that_opted_out_is_drawn_where_it_is(self) -> None:
+        """Opting out must keep working now that interpolation is the default.
 
-        `previous_position` is not maintained for these, so interpolating
-        anyway would drag the sprite toward a stale position.
+        `previous_position` is not maintained for an opted-out transform, so
+        interpolating anyway would drag the sprite toward a stale position.
         """
-        transform = Transform(position=Vector2(10, 0))
+        transform = Transform(position=Vector2(10, 0), interpolate=False)
         transform.previous_position = Vector2(0, 0)
 
         assert transform.render_position(0.5) == Vector2(10, 0)
+
+    def test_physics_turns_interpolation_on_for_the_bodies_it_creates(self) -> None:
+        """A game should not have to know to ask for this.
+
+        Interpolation is right for a transform stepped at the fixed rate and
+        wrong for one moved every frame in variable-rate update(), so it
+        cannot simply default on. The system that makes a transform
+        fixed-stepped is the one that knows, so it opts the transform in.
+        """
+        world = World(gravity=Vector2(0, 900))
+        box = world.add(Vector2(400, 100), BodyType.DYNAMIC, [20.0, 20.0])
+
+        assert box.get_component(Transform).interpolate is False, (
+            "not yet -- the body is created on the first update"
+        )
+
+        world.run(1)
+
+        assert box.get_component(Transform).interpolate is True
+
+    def test_a_plain_transform_is_left_alone(self) -> None:
+        """Nothing opts in a transform a variable-rate system drives.
+
+        Interpolating those adds judder rather than removing it: previous
+        position is snapshotted on the fixed clock while position advances on
+        the frame clock, so the lerp mixes the two.
+        """
+        assert Transform(position=Vector2(0, 0)).interpolate is False
+
+    def test_teleport_does_not_draw_the_journey(self) -> None:
+        """A respawn or screen-wrap must not streak across the screen.
+
+        Setting position alone leaves previous_position behind, so the frame
+        after a teleport is drawn somewhere between the two -- for a wrap from
+        one screen edge to the other, that is the whole screen away.
+        """
+        transform = Transform(position=Vector2(10, 0), interpolate=True)
+        transform.previous_position = Vector2(10, 0)
+
+        transform.position = Vector2(790, 0)
+        assert transform.render_position(0.5) == Vector2(400, 0), (
+            "a plain assignment interpolates, which is the hazard teleport exists for"
+        )
+
+        transform.teleport(Vector2(10, 0))
+        assert transform.render_position(0.5) == Vector2(10, 0)
+        assert transform.render_position(0.0) == Vector2(10, 0)
 
     def test_interpolation_evens_out_the_steps_a_viewer_sees(self) -> None:
         """The point of the helper, stated as the property that matters.
