@@ -53,7 +53,13 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-`pyguara/graphics` — **split across several iterations**; all five slices done; slice 5 (assets & effects) in review. **Tier 3 continues with `physics`.**
+`pyguara/physics` — **in progress** (PR #24, branch
+`fix/physics-collision-tunnelling`). Symptom-driven so far: four defects
+found and fixed from reported bad collision behaviour. The systematic pass
+over `collision_system`, `trigger_volume`/`trigger_system` and `joints` is
+still outstanding, as are Phase B and C.
+
+`pyguara/graphics` — all five slices done (PR #22 in review).
 
 **Tier 2 is complete:** `config`, `application`, `scene`, `systems`.
 
@@ -301,6 +307,61 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/physics` — IN PROGRESS (PR #24, branch `fix/physics-collision-tunnelling`)
+
+Driven by a report that collision "works really poorly", with a brief to
+judge the layer as **game** physics: Chipmunk simulates rigid bodies and
+knows nothing about characters, ground or jumping, so everything that makes
+a platformer feel right is PyGuara's own and is what was audited.
+
+Four defects, each reproduced before being touched:
+
+1. **Tunnelling from 600 px/s** through a 10px wall — one solver step per
+   tick moves a body `velocity/60` px in a straight jump. Not exotic: 600
+   px/s is two thirds of a second of falling under the demo's own gravity.
+   Fixed by substepping (`physics.substeps`, default 4). Same root cause as
+   the reported *sinking*: landing penetrated 11.2px and took 24 frames to
+   resolve; now 0.9px and 0 visible frames from a typical fall.
+
+2. **No render interpolation reachable from a custom renderer.** The engine
+   had the whole mechanism -- `render_alpha`, `previous_position`
+   snapshotting, a lerp in `scene/base.py` -- but only on the
+   Sprite/RenderSystem path, so a scene drawing its own rects got none of it
+   and had no supported way in. Drawn raw at 75Hz a body moves 0-5px per
+   frame where every frame should be 4. `Transform.render_position(alpha)`
+   plus automatic opt-in by `PhysicsSystem`.
+
+3. **Every character detected itself as ground.** The ground ray starts 1px
+   below the collider, but a Chipmunk segment query is a swept circle whose
+   radius reaches back inside. `is_grounded` was True in mid-air and with no
+   ground in the world at all. Coyote time never started, jump buffering had
+   nothing to buffer, and the landing reset never fired -- a character could
+   jump twice and then never again until it died. `raycast()` gained
+   `ignore_entity_id`.
+
+4. **`fixed_rotation` and `gravity_scale` were inert.** Declared on
+   RigidBody, documented, read by nothing.
+
+**The pattern, fourth instance.** Uniform setup again, not missing coverage:
+every viewport test used a fullscreen viewport, every collision test a slow
+body, every platformer test a character already resting on the floor. Each
+defect lived in the case no test set up.
+
+**A second pattern worth naming: options that are declared but not wired.**
+`fixed_rotation`, `gravity_scale`, and the interpolation machinery reachable
+only from one render path. A game sets them, nothing happens, and there is
+no signal distinguishing "inert" from "wrong value". Worth grepping other
+subsystems for the same shape.
+
+**Not yet done:** `collision_system.py`, `trigger_volume.py`,
+`trigger_system.py`, `joints.py`; Phase B (test assessment) and Phase C
+(docs). Two game-layer gaps recorded, not built: no one-way platforms and no
+moving-platform support, both staples of the genre the demos target.
+
+**Left open for a decision:** faster penetration recovery (measured, stack-
+stable, cuts visible sinking 11 frames to 4) and whether `physics.substeps`
+should default to 4 or 2 (4 costs 50% of a 60Hz frame at 200 bodies).
 
 ### `pyguara/ecs` — CLOSED 2026-09-06 (PR #1, branch `refactor/ecs-audit`)
 
