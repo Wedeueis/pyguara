@@ -78,6 +78,8 @@ class IPhysicsEngine(Protocol):
         body_type: BodyType,
         position: Vector2,
         mass: float = 1.0,
+        fixed_rotation: bool = False,
+        gravity_scale: float = 1.0,
     ) -> IPhysicsBody:
         """Create and register a new physics body."""
         ...

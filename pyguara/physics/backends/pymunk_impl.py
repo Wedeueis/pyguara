@@ -28,6 +28,30 @@ DEFAULT_SUBSTEPS = 4
 RAYCAST_RADIUS = 1.0
 
 
+def _scaled_gravity(scale: float) -> Any:
+    """Build a velocity callback applying scaled gravity to one body.
+
+    Chipmunk has no per-body gravity multiplier; the integration callback is
+    the supported place to vary it. Everything else about the default
+    integration -- damping, the mass term -- is left alone.
+
+    Args:
+        scale: Multiplier on world gravity for this body.
+
+    Returns:
+        A callback suitable for `pymunk.Body.velocity_func`.
+    """
+
+    def velocity_func(
+        body: pymunk.Body, gravity: Any, damping: float, dt: float
+    ) -> None:
+        pymunk.Body.update_velocity(
+            body, (gravity[0] * scale, gravity[1] * scale), damping, dt
+        )
+
+    return velocity_func
+
+
 class PymunkBodyAdapter:
     """Wrapper around pymunk.Body to conform to IPhysicsBody."""
 
@@ -298,8 +322,23 @@ class PymunkEngine:
         body_type: BodyType,
         position: Vector2,
         mass: float = 1.0,
+        fixed_rotation: bool = False,
+        gravity_scale: float = 1.0,
     ) -> IPhysicsBody:
-        """Create and register a new physics body."""
+        """Create and register a new physics body.
+
+        Args:
+            entity_id: Owning entity, stored on the body for collision routing.
+            body_type: Static, kinematic or dynamic.
+            position: World position.
+            mass: Mass for dynamic bodies.
+            fixed_rotation: Stop the body rotating. A character box that can
+                tip over is almost never wanted; this is how you keep one
+                upright without freezing its position.
+            gravity_scale: Multiplier on world gravity for this body alone.
+                0.0 floats, 2.0 falls twice as fast -- the usual way to give
+                a character a floaty jump or a fast fall.
+        """
         if not self.space:
             raise RuntimeError(
                 "Physics engine not initialized. Call initialize(gravity) first."
@@ -321,6 +360,17 @@ class PymunkEngine:
             body = pymunk.Body(body_type=pm_type)
 
         body.position = (position.x, position.y)
+
+        if pm_type == pymunk.Body.DYNAMIC:
+            if fixed_rotation:
+                # Infinite moment of inertia: torque produces no angular
+                # acceleration, so the body cannot be turned. Recorded on the
+                # body as well, because attaching a shape re-derives mass and
+                # moment from its density and would undo this.
+                body.moment = float("inf")
+            body.pyguara_fixed_rotation = fixed_rotation
+            if gravity_scale != 1.0:
+                body.velocity_func = _scaled_gravity(gravity_scale)
 
         # Store entity ID on body for collisions
         body.entity_id = entity_id
@@ -398,6 +448,13 @@ class PymunkEngine:
             shape.filter = filter
 
             self.space.add(shape)
+
+            # Setting density makes Chipmunk recompute the body's mass and
+            # moment from its shapes, which silently discards the infinite
+            # moment that fixed_rotation asked for.
+            if getattr(body, "pyguara_fixed_rotation", False):
+                body.moment = float("inf")
+
             return shape
 
     def raycast(

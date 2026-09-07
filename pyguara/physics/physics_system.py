@@ -135,7 +135,12 @@ class PhysicsSystem:
 
         # 1. Create Body in the backend
         body_handle = self._engine.create_body(
-            entity.id, rb.body_type, transform.position, rb.mass
+            entity.id,
+            rb.body_type,
+            transform.position,
+            rb.mass,
+            fixed_rotation=rb.fixed_rotation,
+            gravity_scale=rb.gravity_scale,
         )
         body_handle.rotation = transform.rotation
 

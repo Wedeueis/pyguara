@@ -178,3 +178,79 @@ def test_a_raycast_can_exclude_the_body_that_cast_it() -> None:
     assert included is not None, "the swept ray does touch the caster"
     assert included.entity_id == world.player.id
     assert excluded is None or excluded.entity_id != world.player.id
+
+
+class TestCharacterBodyOptions:
+    """RigidBody options a game needs for character feel.
+
+    Both were declared on the component and documented in its docstring, and
+    both were read by nothing: a game could set them, see no effect, and have
+    no way to tell the option was inert rather than its value wrong.
+    """
+
+    def _body(self, gravity: Vector2, **rigidbody: object) -> tuple[Platformer, Entity]:
+        world = Platformer(gravity=gravity)
+        entity = world.entities.create_entity()
+        entity.add_component(Transform(position=Vector2(400, 100)))
+        entity.add_component(
+            RigidBody(mass=1.0, body_type=BodyType.DYNAMIC, **rigidbody)  # type: ignore[arg-type]
+        )
+        entity.add_component(
+            Collider(shape_type=ShapeType.BOX, dimensions=[24.0, 40.0])
+        )
+        return world, entity
+
+    @pytest.mark.parametrize(
+        ("scale", "expected_ratio"),
+        [(0.0, 0.0), (0.5, 0.5), (2.0, 2.0)],
+    )
+    def test_gravity_scale_changes_how_fast_a_body_falls(
+        self, scale: float, expected_ratio: float
+    ) -> None:
+        """0.0 floats, 2.0 falls twice as fast -- floaty jumps and fast falls."""
+        baseline_world, baseline = self._body(Vector2(0, 900))
+        scaled_world, scaled = self._body(Vector2(0, 900), gravity_scale=scale)
+
+        # Half a second only: at 2x gravity a full second would land the body
+        # on the floor and the comparison would measure the floor, not gravity.
+        for _ in range(30):
+            baseline_world.physics.update(DT)
+            scaled_world.physics.update(DT)
+
+        normal_fall = baseline.get_component(Transform).position.y - 100
+        scaled_fall = scaled.get_component(Transform).position.y - 100
+
+        assert scaled_fall == pytest.approx(normal_fall * expected_ratio, rel=0.01)
+
+    def test_fixed_rotation_keeps_a_character_upright(self) -> None:
+        """A character box knocked off-centre must not tumble.
+
+        Setting the moment at creation is not enough: attaching a shape with
+        a density makes Chipmunk re-derive mass and moment from the shapes,
+        discarding it.
+        """
+        world, entity = self._body(Vector2(0, 0), fixed_rotation=True)
+        world.physics.update(DT)
+
+        body = entity.get_component(RigidBody)._body_handle._body
+        body.apply_impulse_at_local_point((200, 0), (0, -20))
+        for _ in range(120):
+            world.physics.update(DT)
+
+        assert entity.get_component(Transform).rotation == pytest.approx(0.0, abs=1e-6)
+
+    def test_a_body_without_fixed_rotation_still_turns(self) -> None:
+        """The control: the same shove must spin an ordinary body.
+
+        Without this, the test above would pass just as well if torque had
+        stopped working altogether.
+        """
+        world, entity = self._body(Vector2(0, 0))
+        world.physics.update(DT)
+
+        body = entity.get_component(RigidBody)._body_handle._body
+        body.apply_impulse_at_local_point((200, 0), (0, -20))
+        for _ in range(120):
+            world.physics.update(DT)
+
+        assert abs(entity.get_component(Transform).rotation) > 0.1
