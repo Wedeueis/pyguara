@@ -36,10 +36,11 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import ESCAPE, LEFT, RIGHT, SPACE, UP, R
+from pyguara.input.keys import ESCAPE, F1, LEFT, RIGHT, SPACE, UP, R
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.physics.components import RigidBody
+from pyguara.physics.debug_draw import ColliderDebugRenderer
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.physics.platformer_system import PlatformerSystem
@@ -128,6 +129,8 @@ class GameScene(Scene):
         # Systems
         self._physics_system: PhysicsSystem | None = None
         self._platformer_system: PlatformerSystem | None = None
+        self._collider_debug: ColliderDebugRenderer | None = None
+        self._show_colliders = False
         self._player_control: PlayerControlSystem | None = None
         self._animation_fsm: AnimationFSMSystem | None = None
         self._camera_follow: CameraFollowSystem | None = None
@@ -239,6 +242,7 @@ class GameScene(Scene):
         im.register_action("jump", ActionType.PRESS)
         im.register_action("restart", ActionType.PRESS)
         im.register_action("back", ActionType.PRESS)
+        im.register_action("toggle_colliders", ActionType.PRESS)
 
         im.bind_input(InputDevice.KEYBOARD, LEFT, "move_left")
         im.bind_input(InputDevice.KEYBOARD, RIGHT, "move_right")
@@ -246,6 +250,7 @@ class GameScene(Scene):
         im.bind_input(InputDevice.KEYBOARD, UP, "jump")
         im.bind_input(InputDevice.KEYBOARD, R, "restart")
         im.bind_input(InputDevice.KEYBOARD, ESCAPE, "back")
+        im.bind_input(InputDevice.KEYBOARD, F1, "toggle_colliders")
 
         # Subscribe to action events
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
@@ -266,6 +271,8 @@ class GameScene(Scene):
             self._restart_level()
         elif action == "back" and is_pressed:
             self.container.get(SceneManager).pop_scene()
+        elif action == "toggle_colliders" and is_pressed:
+            self._show_colliders = not self._show_colliders
 
     def _setup_hud(self) -> None:
         """Create HUD elements."""
@@ -273,7 +280,7 @@ class GameScene(Scene):
 
         # Instructions
         instructions = Label(
-            "Arrows/Space: Move & Jump | R: Restart | ESC: Menu",
+            "Arrows/Space: Move & Jump | R: Restart | F1: Colliders | ESC: Menu",
             position=Vector2(20, 560),
         )
         ui_manager.add_element(instructions)
@@ -549,6 +556,11 @@ class GameScene(Scene):
                             8,
                         )
                         world_renderer.draw_rect(indicator_rect, Color(255, 200, 150))
+
+        if self._show_colliders:
+            if self._collider_debug is None:
+                self._collider_debug = ColliderDebugRenderer(self.entity_manager)
+            self._collider_debug.render(world_renderer, camera_offset)
 
         # Render HUD
         self._render_hud(world_renderer)
