@@ -141,6 +141,28 @@ class IPhysicsEngine(Protocol):
         """
         ...
 
+    def overlap_box(
+        self,
+        centre: Vector2,
+        half_extents: Vector2,
+        ignore_entity_id: int | str | None = None,
+    ) -> bool:
+        """Report whether an axis-aligned box overlaps any solid shape.
+
+        The question a character mover asks before committing a step: "if I
+        were here, would I be inside something?" Sensors do not count -- they
+        are meant to be passed through.
+
+        Args:
+            centre: Box centre in world space.
+            half_extents: Half width and half height.
+            ignore_entity_id: Body to disregard, normally the mover itself.
+
+        Returns:
+            True if the box would overlap a solid shape.
+        """
+        ...
+
     def create_joint(
         self,
         body_a: IPhysicsBody,
