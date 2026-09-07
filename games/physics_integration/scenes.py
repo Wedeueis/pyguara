@@ -57,7 +57,10 @@ class PhysicsScene(Scene):
         box.add_component(Collider(dimensions=[50, 50]))
         box.add_component(BoxSprite(color=Color(255, 0, 0), size=Vector2(50, 50)))
 
-        print(f"Created entities. Gravity set to {physics_engine.gravity}")
+        print(
+            f"Created entities. Gravity set to "
+            f"({physics_config.gravity_x}, {physics_config.gravity_y})"
+        )
 
     def on_exit(self) -> None:
         """Clean up physics."""
