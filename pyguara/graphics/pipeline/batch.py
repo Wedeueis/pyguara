@@ -55,11 +55,9 @@ class Batcher:
         current_scales: list[tuple[float, float]] = []
         has_transforms = False
 
-        # Optimization: Pre-calculate viewport offset
+        # Optimization: Pre-calculate viewport offset once for the frame.
         # screen_pos = (world * zoom) + offset
-        offset = (
-            viewport.center_vec - (camera.position * camera.zoom)
-        ) + viewport.position
+        offset = camera.screen_offset(viewport)
         zoom = camera.zoom
 
         for cmd in sorted_commands:

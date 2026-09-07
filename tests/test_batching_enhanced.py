@@ -294,3 +294,87 @@ def test_batching_performance_transformed_sprites(benchmark):
     assert result[0].transforms_enabled
     assert len(result[0].rotations) == 1000
     assert len(result[0].scales) == 1000
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "width", "height"),
+    [
+        (0, 0, 800, 600),  # fullscreen: origin (0,0) hides the bug
+        (0, 60, 800, 480),  # letterboxed
+        (160, 0, 480, 600),  # pillarboxed
+        (400, 300, 400, 300),  # split-screen, bottom-right quadrant
+    ],
+)
+def test_the_camera_lands_on_the_viewport_centre(x, y, width, height):
+    """A sprite at the camera's position draws at the centre of the viewport.
+
+    The offset used to be `viewport.center_vec + viewport.position`, but
+    `center_vec` is `(centerx, centery)` and already absolute, so the origin
+    was counted twice and every sprite was displaced by it. A fullscreen
+    viewport has origin (0, 0), which hid it from every other test here.
+    """
+    viewport = Viewport(x, y, width, height)
+    camera = Camera2D(width, height)
+    camera.position = Vector2(500, 500)
+
+    command = RenderCommand(
+        texture=MockTexture("centred"),
+        world_position=Vector2(500, 500),
+        layer=0,
+        z_index=0,
+    )
+
+    batches = Batcher().create_batches([command], camera, viewport)
+
+    assert batches[0].destinations[0] == (x + width / 2, y + height / 2)
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "width", "height"),
+    [(0, 0, 800, 600), (0, 60, 800, 480), (160, 0, 480, 600), (400, 300, 400, 300)],
+)
+def test_particles_land_where_their_sprites_do(x, y, width, height):
+    """The particle system and the batcher must agree on world-to-screen.
+
+    They are two callers of the same transform. When they disagreed -- the
+    batcher added `viewport.position`, the particle system did not -- the
+    symptom under a letterboxed viewport was not "everything shifted", which
+    is easy to spot. It was particles detaching from the sprites emitting
+    them: smoke drifting off its engine, sparks landing away from the impact.
+
+    Both now go through `Camera2D.screen_offset`; this pins them together so
+    a future change to one cannot silently desynchronise the other.
+    """
+    from pyguara.graphics.components.particles import ParticleSystem
+
+    viewport = Viewport(x, y, width, height)
+    camera = Camera2D(width, height)
+    camera.position = Vector2(120, 340)
+    camera.zoom = 1.5
+
+    world_position = Vector2(500, 500)
+    texture = MockTexture("shared")
+
+    command = RenderCommand(
+        texture=texture, world_position=world_position, layer=0, z_index=0
+    )
+    sprite_destination = Batcher().create_batches([command], camera, viewport)[0]
+
+    system = ParticleSystem(capacity=1)
+    # speed=0 so the particle stays exactly where it was emitted; emit()
+    # otherwise gives it a random velocity, and this test is about the
+    # transform, not the simulation.
+    system.emit(texture, world_position, count=1, speed=0.0)
+
+    recorded: list[tuple[float, float]] = []
+
+    class CaptureBackend:
+        width = 800
+        height = 600
+
+        def render_batch(self, batch):
+            recorded.extend(batch.destinations)
+
+    system.render(CaptureBackend(), camera, viewport)
+
+    assert recorded == sprite_destination.destinations

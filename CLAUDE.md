@@ -65,7 +65,26 @@ pre-commit run --all-files
 ```bash
 # Run default example scene
 python main.py
+
+# Run a tutorial/capstone demo (see games/README.md for the full list)
+uv run python games/guara_falcao/main.py
 ```
+
+### Seeing what the engine draws (for agents)
+
+An agent cannot look at a window. `tools/agent_view.py` boots a demo
+headlessly, drives it, and writes PNG frames to `.agent-view/`:
+
+```bash
+uv run python tools/agent_view.py --list
+uv run python tools/agent_view.py guara_falcao --frames 120 --shot 1 --shot 119
+uv run python tools/agent_view.py guara_falcao --click 400,265@30 --shot 80
+```
+
+A capture proves the **render path** works. It does **not** prove a window
+appears on screen -- those have already diverged here, when vsync silently
+promoted the display to an OpenGL surface that never presented software blits.
+Read `docs/guides/agent-visual-inspection.md` before reporting on either.
 
 ## Branching and Pull Requests
 
@@ -235,7 +254,15 @@ entity.add_component(Sprite(texture_path="assets/sprite.png"))
 ### Testing
 - Tests are in `tests/` with separate `tests/integration/` for integration tests
 - Use pytest markers to categorize tests (unit, integration, performance, etc.)
-- Visual regression tests use Syrupy snapshots in `tests/visual/snapshots/`
+- Render pipeline snapshots live in `tests/visual/`, using Syrupy. They
+  record the ordered stream of backend calls one `RenderSystem.flush()`
+  produces -- sort order, batching, and the world-to-screen transform --
+  via a recording `IRenderer`. Nothing rasterises, so they are deterministic
+  and carry none of the platform brittleness of image snapshots. Update
+  them with `pytest tests/visual/ --snapshot-update`, and **read the diff**:
+  a changed snapshot is a changed frame.
+- `tests/integration/test_demos_render.py` complements them at the other
+  end, asserting each demo's real rendered frame is not a single flat colour.
 - Conftest fixtures are in `tests/conftest.py`
 
 ### Type Checking

@@ -205,6 +205,30 @@ class Camera2D:
         """
         self.offset = Vector2(width / 2, height / 2)
 
+    def screen_offset(self, viewport: Rect) -> Vector2:
+        """Compute the translation mapping a zoomed world point into a viewport.
+
+        Screen position is `world * zoom + offset`, so a caller batching many
+        points computes this once and adds it per point.
+
+        `viewport.center_vec` is `(centerx, centery)` and already absolute --
+        it carries the viewport's origin. Adding `viewport.position` on top of
+        it double-counts that origin, which is what the batcher used to do;
+        a fullscreen viewport hid it because its origin is (0, 0).
+
+        Note this deliberately ignores `self.rotation`, because the render
+        path does: neither the batcher nor the particle system rotates. It is
+        therefore *not* equivalent to `world_to_screen`, which does rotate and
+        centres on `self.offset` rather than the viewport.
+
+        Args:
+            viewport: The region being drawn into.
+
+        Returns:
+            The offset to add to every zoomed world position.
+        """
+        return viewport.center_vec - (self.position * self.zoom)
+
     def world_to_screen(self, world_pos: Vector2) -> Vector2:
         """
         Transform a point from World Space to Screen Space.

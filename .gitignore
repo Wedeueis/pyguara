@@ -179,3 +179,6 @@ screenshots/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Frames written by tools/agent_view.py
+.agent-view/
