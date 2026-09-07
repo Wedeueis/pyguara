@@ -254,14 +254,15 @@ entity.add_component(Sprite(texture_path="assets/sprite.png"))
 ### Testing
 - Tests are in `tests/` with separate `tests/integration/` for integration tests
 - Use pytest markers to categorize tests (unit, integration, performance, etc.)
-- There are **no** visual regression tests yet. `syrupy` is installed and
-  active as a pytest plugin, so the `snapshot` fixture is ready to use, but
-  no test calls it. Note the `[tool.syrupy]` block in `pyproject.toml` is
-  inert: syrupy reads none of those keys, and writes to a `__snapshots__`
-  directory beside each test file rather than the path it names.
-- `tests/integration/test_demos_render.py` is currently the only test
-  asserting anything about rendered output, and only that a frame is not a
-  single flat colour.
+- Render pipeline snapshots live in `tests/visual/`, using Syrupy. They
+  record the ordered stream of backend calls one `RenderSystem.flush()`
+  produces -- sort order, batching, and the world-to-screen transform --
+  via a recording `IRenderer`. Nothing rasterises, so they are deterministic
+  and carry none of the platform brittleness of image snapshots. Update
+  them with `pytest tests/visual/ --snapshot-update`, and **read the diff**:
+  a changed snapshot is a changed frame.
+- `tests/integration/test_demos_render.py` complements them at the other
+  end, asserting each demo's real rendered frame is not a single flat colour.
 - Conftest fixtures are in `tests/conftest.py`
 
 ### Type Checking

@@ -339,8 +339,3 @@ deps =
 commands =
     mypy pyguara
 """
-
-# Syrupy Configuration
-[tool.syrupy]
-pytest_snapshot_dir = "tests/visual/snapshots"
-include_paths = ["tests/visual/"]
