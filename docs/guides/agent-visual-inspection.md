@@ -110,13 +110,52 @@ powershell.exe -NoProfile -Command "
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing;
 \$b = [System.Windows.Forms.SystemInformation]::VirtualScreen;
 \$bmp = New-Object System.Drawing.Bitmap \$b.Width, \$b.Height;
-[System.Drawing.Graphics]::FromImage(\$bmp).CopyFromScreen(\$b.X, \$b.Y, 0, 0, \$bmp.Size);
-\$bmp.Save('C:\Users\<you>\AppData\Local\Temp\shot.png')"
+\$g = [System.Drawing.Graphics]::FromImage(\$bmp);
+\$g.CopyFromScreen(\$b.X, \$b.Y, 0, 0, \$bmp.Size);
+\$bmp.Save(\"\$env:TEMP\shot.png\", [System.Drawing.Imaging.ImageFormat]::Png);
+\$g.Dispose(); \$bmp.Dispose()"
 ```
 
-Then read `/mnt/c/Users/<you>/AppData/Local/Temp/shot.png`. Find the window
-first — WSLg windows are hosted by `msrdc`, and X11 coordinates do **not** map
-to Windows desktop coordinates:
+Dispose the `Graphics` and give `Save` an explicit format: without both, it
+throws `ExternalException` and writes nothing while still printing whatever
+you echoed after it.
+
+Read it back from `/mnt/c/Users/<windows-user>/AppData/Local/Temp/shot.png`.
+The Windows account name is often **not** your WSL username — ask for it
+rather than guessing:
+
+```bash
+powershell.exe -NoProfile -Command "\$env:TEMP"
+```
+
+### Reading window coordinates
+
+Two traps, both of which have already cost an hour here.
+
+**The virtual screen origin is not (0,0).** With a monitor to the left of the
+primary, it is negative. A window Windows reports at `(528,208)` is at bitmap
+pixel `(528 - originX, 208 - originY)` in the screenshot — with an origin of
+`(-2560,0)`, that is `(3088,208)`, i.e. the *other* monitor. Print the origin
+alongside the rect, and convert, before concluding a window is missing:
+
+```bash
+powershell.exe -NoProfile -Command "
+\$b = [System.Windows.Forms.SystemInformation]::VirtualScreen;
+Write-Output \"origin=(\$(\$b.X),\$(\$b.Y)) size=\$(\$b.Width)x\$(\$b.Height)\""
+```
+
+**`SetForegroundWindow` will not raise a window over a fullscreen app** when
+called from a background process; Windows refuses the foreground change and
+returns without error. Use `SetWindowPos` with `HWND_TOPMOST` (`-1`) to move
+the window somewhere empty and pin it, then `HWND_NOTOPMOST` (`-2`) to
+release it afterwards.
+
+Also beware stale windows: a window belonging to an already-exited process can
+linger in the enumeration at `(-32000,-32000)` with a tiny size, which is
+Windows' canonical position for a minimised window. Confirm the process is
+alive before believing anything you read about its window.
+
+WSLg windows are hosted by `msrdc`:
 
 ```bash
 powershell.exe -NoProfile -Command "
@@ -124,8 +163,47 @@ Get-Process msrdc | Where-Object {\$_.MainWindowTitle -ne ''} |
   Select-Object MainWindowTitle"
 ```
 
-A title containing `[WARN:COPY MODE]` means WSLg's graphics path is degraded;
-windows may never come to the front, whatever the app does.
+### When no window displays at all
+
+A title prefixed `[WARN:COPY MODE]` means WSLg fell back to copying surfaces
+over RDP instead of redirecting them. Windows then register normally — app
+list, taskbar icon, a real rect, `IsWindowVisible` true — while their pixels
+never reach the Windows compositor. Everything you can query says the window
+is fine; it simply never paints.
+
+The cause is in `/mnt/wslg/weston.log`, at WSLg startup:
+
+```
+rdp_allocate_shared_memory: Failed to open
+  "/mnt/shared_memory/{...}" with error: Input/output error
+RDP backend: use_gfxredir = 0
+```
+
+Check those two lines first:
+
+```bash
+grep -n "use_gfxredir\|rdp_allocate_shared_memory" /mnt/wslg/weston.log
+```
+
+`use_gfxredir = 0` is the fault. `use_gfxredir = 1` and no allocation failure
+means the graphics path is healthy and the problem is elsewhere.
+
+**The fix is to restart WSL** — from Windows, not from inside the distro:
+
+```
+wsl --shutdown
+```
+
+then reopen the terminal. The shared-memory device is created by the Windows
+host when the VM starts, so nothing inside Ubuntu can repair it. If it
+survives a restart, `wsl --update` and shut down again.
+
+Confirmed here: before, every window (including `xmessage`, with no SDL in it
+at all) failed to paint; after, `use_gfxredir = 1`, titles lost the prefix,
+and both a bare pygame window and `guara_falcao` displayed correctly.
+
+Note this clears `/tmp`, so anything scratch you left there is gone.
+`.agent-view/` lives in the repo root and survives.
 
 ### Fixes that do not work here
 
@@ -145,6 +223,10 @@ Windows desktop. Neither variable can help —
 - `SDL_RENDER_DRIVER` configures SDL's `SDL_Renderer` API. This codebase
   never creates one — the window is a plain `set_mode` surface — so the
   second line configures a subsystem that is not in use.
+
+When these were tried, the actual fault was WSLg's graphics redirection being
+off (see "When no window displays at all" above). No environment variable
+inside the distro can reach that; the SDL driver was never the problem.
 
 ### Always run the control first
 

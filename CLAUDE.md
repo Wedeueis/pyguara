@@ -254,7 +254,11 @@ entity.add_component(Sprite(texture_path="assets/sprite.png"))
 ### Testing
 - Tests are in `tests/` with separate `tests/integration/` for integration tests
 - Use pytest markers to categorize tests (unit, integration, performance, etc.)
-- Visual regression tests use Syrupy snapshots in `tests/visual/snapshots/`
+- There are **no** visual regression tests. `syrupy` is a dev dependency and
+  `[tool.syrupy]` points at `tests/visual/`, but neither that directory nor
+  any snapshot file exists. `tests/integration/test_demos_render.py` is the
+  only thing asserting anything about rendered output, and it only checks a
+  frame is not a single flat colour.
 - Conftest fixtures are in `tests/conftest.py`
 
 ### Type Checking
