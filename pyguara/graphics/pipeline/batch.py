@@ -57,9 +57,13 @@ class Batcher:
 
         # Optimization: Pre-calculate viewport offset
         # screen_pos = (world * zoom) + offset
-        offset = (
-            viewport.center_vec - (camera.position * camera.zoom)
-        ) + viewport.position
+        #
+        # `center_vec` is (centerx, centery) -- already absolute, so it
+        # carries the viewport's origin. Adding `viewport.position` on top
+        # counted that origin twice and displaced everything by it, which a
+        # fullscreen viewport hides because its origin is (0, 0). Only a
+        # letterboxed or split-screen viewport ever showed it.
+        offset = viewport.center_vec - (camera.position * camera.zoom)
         zoom = camera.zoom
 
         for cmd in sorted_commands:
