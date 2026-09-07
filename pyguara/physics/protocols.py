@@ -97,8 +97,26 @@ class IPhysicsEngine(Protocol):
         material: PhysicsMaterial,
         collision_layer: CollisionLayer,
         is_sensor: bool,
+        one_way: bool = False,
+        one_way_normal: Vector2 | None = None,
     ) -> Any:
-        """Attach a collision shape to a body."""
+        """Attach a collision shape to a body.
+
+        Args:
+            body: The body to attach to.
+            shape_type: Circle, box, segment or polygon.
+            dimensions: Radius, or width and height.
+            offset: Local offset from the body's centre.
+            material: Friction, restitution and density.
+            collision_layer: Category, mask and group filtering.
+            is_sensor: Detect overlaps without blocking.
+            one_way: Solid from one side only.
+            one_way_normal: Which side is solid, in world space. Defaults to
+                `(0, -1)` -- up the screen -- when `one_way` is set.
+
+        Returns:
+            The backend's shape object.
+        """
         ...
 
     def raycast(

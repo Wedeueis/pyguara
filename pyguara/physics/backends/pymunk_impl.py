@@ -28,6 +28,49 @@ DEFAULT_SUBSTEPS = 4
 RAYCAST_RADIUS = 1.0
 
 
+def _one_way_allows_contact(
+    arbiter: pymunk.Arbiter, shape_a: pymunk.Shape, shape_b: pymunk.Shape
+) -> bool:
+    """Decide whether a one-way surface should resist this contact.
+
+    Rejected per step from the pass-through side, rather than switched off
+    once at first contact: a character that jumps up through a platform and
+    lands on it never separates in between, so a one-shot decision would keep
+    letting it fall through the top.
+
+    The test is the contact normal, not the body's velocity. Velocity is zero
+    at the apex of a jump, so a velocity test flips to solid while the
+    character still overlaps the platform and ejects it.
+
+    Args:
+        arbiter: The pymunk arbiter for this contact.
+        shape_a: First shape in the pair.
+        shape_b: Second shape.
+
+    Returns:
+        True to let the contact resolve normally, False to pass through. The
+        caller suppresses the response via `arbiter.process_collision`, which
+        is what pymunk 7 honours -- a callback's return value is ignored.
+    """
+    for shape, sign in ((shape_a, 1.0), (shape_b, -1.0)):
+        solid = getattr(shape, "pyguara_one_way_normal", None)
+        if solid is None:
+            continue
+
+        # The arbiter normal runs from the first shape to the second, so it
+        # already points platform -> other body when the platform is first,
+        # and must be flipped when it is second.
+        normal = arbiter.contact_point_set.normal
+        towards_other_x = normal.x * sign
+        towards_other_y = normal.y * sign
+
+        # Positive means the other body sits on the solid face.
+        if towards_other_x * solid[0] + towards_other_y * solid[1] <= 0:
+            return False
+
+    return True
+
+
 def _scaled_gravity(scale: float) -> Any:
     """Build a velocity callback applying scaled gravity to one body.
 
@@ -206,10 +249,17 @@ class PymunkEngine:
         Returns:
             True to process collision, False to ignore.
         """
+        shape_a, shape_b = arbiter.shapes
+
+        if not _one_way_allows_contact(arbiter, shape_a, shape_b):
+            # pymunk 7 ignores the callback's return value; `process_collision`
+            # is what actually suppresses the response.
+            arbiter.process_collision = False
+            return False
+
         if not self._collision_system:
             return True
 
-        shape_a, shape_b = arbiter.shapes
         entity_a = getattr(shape_a.body, "entity_id", None)
         entity_b = getattr(shape_b.body, "entity_id", None)
 
@@ -229,9 +279,18 @@ class PymunkEngine:
         impulse = arbiter.total_impulse.length
         is_sensor = shape_a.sensor or shape_b.sensor
 
-        return self._collision_system.on_collision_begin(  # type: ignore[no-any-return]
+        process = self._collision_system.on_collision_begin(
             str(entity_a), str(entity_b), point, normal, impulse, is_sensor
         )
+
+        # The collision system returns False to mean "report this but do not
+        # resolve it physically" -- how a trigger that is not a sensor is meant
+        # to work. pymunk 7 ignores a callback's return value, so that has to
+        # be expressed through the arbiter or it does nothing at all.
+        if not process:
+            arbiter.process_collision = False
+
+        return bool(process)
 
     def _on_pymunk_persist(
         self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict
@@ -269,9 +328,18 @@ class PymunkEngine:
         impulse = arbiter.total_impulse.length
         is_sensor = shape_a.sensor or shape_b.sensor
 
-        return self._collision_system.on_collision_persist(  # type: ignore[no-any-return]
+        process = self._collision_system.on_collision_persist(
             str(entity_a), str(entity_b), point, normal, impulse, is_sensor
         )
+
+        # The collision system returns False to mean "report this but do not
+        # resolve it physically" -- how a trigger that is not a sensor is meant
+        # to work. pymunk 7 ignores a callback's return value, so that has to
+        # be expressed through the arbiter or it does nothing at all.
+        if not process:
+            arbiter.process_collision = False
+
+        return bool(process)
 
     def _on_pymunk_end(
         self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict
@@ -411,8 +479,26 @@ class PymunkEngine:
         material: PhysicsMaterial,
         collision_layer: CollisionLayer,
         is_sensor: bool,
+        one_way: bool = False,
+        one_way_normal: Vector2 | None = None,
     ) -> Any:
-        """Attach a collision shape to a body."""
+        """Attach a collision shape to a body.
+
+        Args:
+            body_handle: The body to attach to.
+            shape_type: Circle, box, segment or polygon.
+            dimensions: Radius, or width and height.
+            offset: Local offset from the body's centre.
+            material: Friction, restitution and density.
+            collision_layer: Category, mask and group filtering.
+            is_sensor: Detect overlaps without blocking.
+            one_way: Solid from one side only.
+            one_way_normal: Which side is solid, in world space. Defaults to
+                `(0, -1)` when `one_way` is set.
+
+        Returns:
+            The pymunk shape, or None if there is no space or shape type.
+        """
         if not self.space:
             return None
 
@@ -446,6 +532,12 @@ class PymunkEngine:
                 group=collision_layer.group,
             )
             shape.filter = filter
+
+            # Recorded on the shape so the pre-solve handler can find it: it
+            # sees pymunk shapes, not PyGuara components.
+            if one_way:
+                solid = one_way_normal if one_way_normal is not None else Vector2(0, -1)
+                shape.pyguara_one_way_normal = (solid.x, solid.y)
 
             self.space.add(shape)
 

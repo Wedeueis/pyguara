@@ -254,3 +254,111 @@ class TestCharacterBodyOptions:
             world.physics.update(DT)
 
         assert abs(entity.get_component(Transform).rotation) > 0.1
+
+
+class TestOneWayPlatforms:
+    """Drop-through platforms: solid from above, passable from below.
+
+    Chipmunk has no notion of a one-way surface, so this is entirely
+    PyGuara's. It is the staple of the genre the demos target and was the
+    one platform behaviour missing -- kinematic platforms already carry a
+    rider through friction.
+    """
+
+    PLATFORM_Y = 400.0
+    PLATFORM_HALF_HEIGHT = 10.0
+
+    def _world(self, one_way: bool) -> tuple[Platformer, Entity]:
+        """A lone platform at y=400 with a character 120px below it."""
+        world = Platformer(floor_width=1.0)
+        # The fixture's own character sits at x=400; move it out of the lane
+        # so the jumper below meets the platform and not it.
+        world.player.get_component(Transform).position = Vector2(2000, 0)
+
+        platform = world.entities.create_entity()
+        platform.add_component(Transform(position=Vector2(400, self.PLATFORM_Y)))
+        platform.add_component(RigidBody(body_type=BodyType.STATIC))
+        platform.add_component(
+            Collider(
+                shape_type=ShapeType.BOX,
+                dimensions=[200.0, self.PLATFORM_HALF_HEIGHT * 2],
+                one_way=one_way,
+            )
+        )
+
+        jumper = world.entities.create_entity()
+        jumper.add_component(Transform(position=Vector2(400, 520)))
+        jumper.add_component(
+            RigidBody(mass=1.0, body_type=BodyType.DYNAMIC, fixed_rotation=True)
+        )
+        jumper.add_component(
+            Collider(shape_type=ShapeType.BOX, dimensions=[24.0, PLAYER_HEIGHT])
+        )
+        return world, jumper
+
+    def _launch(self, world: Platformer, jumper: Entity) -> tuple[float, float]:
+        """Fire the character upward; return its peak and settled heights."""
+        world.physics.update(DT)
+        jumper.get_component(RigidBody)._body_handle.velocity = Vector2(0, -700)
+
+        peak = 520.0
+        for _ in range(30):
+            world.physics.update(DT)
+            peak = min(peak, jumper.get_component(Transform).position.y)
+        for _ in range(180):
+            world.physics.update(DT)
+        return peak, jumper.get_component(Transform).position.y
+
+    def test_a_character_jumps_up_through_and_lands_on_top(self) -> None:
+        """The whole behaviour in one test: through from below, solid above."""
+        world, jumper = self._world(one_way=True)
+        peak, settled = self._launch(world, jumper)
+
+        assert peak < self.PLATFORM_Y - 50, "should have passed clear through"
+
+        resting = self.PLATFORM_Y - self.PLATFORM_HALF_HEIGHT - PLAYER_HEIGHT / 2
+        assert settled == pytest.approx(resting, abs=3), (
+            "should have come back down and landed on top of the platform"
+        )
+
+    def test_an_ordinary_platform_still_blocks_from_below(self) -> None:
+        """The control. Without it, a platform that had stopped colliding at
+        all would pass the test above's first assertion."""
+        world, jumper = self._world(one_way=False)
+        peak, _ = self._launch(world, jumper)
+
+        assert peak > self.PLATFORM_Y - 50, "should have been blocked underneath"
+
+    def test_the_solid_side_can_be_pointed_the_other_way(self) -> None:
+        """A ceiling you can drop through but not jump up into.
+
+        Same mechanism, normal reversed -- so the check is on the contact
+        normal rather than hardcoded to gravity's direction.
+        """
+        world = Platformer(floor_width=1.0)
+        world.player.get_component(Transform).position = Vector2(2000, 0)
+        platform = world.entities.create_entity()
+        platform.add_component(Transform(position=Vector2(400, self.PLATFORM_Y)))
+        platform.add_component(RigidBody(body_type=BodyType.STATIC))
+        platform.add_component(
+            Collider(
+                shape_type=ShapeType.BOX,
+                dimensions=[200.0, 20.0],
+                one_way=True,
+                one_way_normal=Vector2(0, 1),  # solid from below
+            )
+        )
+        jumper = world.entities.create_entity()
+        jumper.add_component(Transform(position=Vector2(400, 520)))
+        jumper.add_component(
+            RigidBody(mass=1.0, body_type=BodyType.DYNAMIC, fixed_rotation=True)
+        )
+        jumper.add_component(
+            Collider(shape_type=ShapeType.BOX, dimensions=[24.0, PLAYER_HEIGHT])
+        )
+
+        peak, _ = self._launch(world, jumper)
+
+        assert peak > self.PLATFORM_Y - 50, (
+            "with the solid face pointing down, jumping up into it must be blocked"
+        )

@@ -159,6 +159,8 @@ class PhysicsSystem:
                 col.material,
                 col.layer,
                 col.is_sensor,
+                one_way=col.one_way,
+                one_way_normal=col.one_way_normal,
             )
 
     def cleanup(self) -> None:

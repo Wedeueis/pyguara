@@ -17,6 +17,14 @@ class Collider(BaseComponent):
         shape_type: Geometric shape.
         dimensions: Dimensions [radius] for circle, or [width, height] for box.
         offset: Local offset from the RigidBody center.
+        one_way: Solid from one side only. A character jumping from below
+            passes through and then lands on top -- the drop-through platform
+            every 2D platformer has. Chipmunk has no notion of this; the
+            contact is rejected per step when the other body is on the
+            pass-through side.
+        one_way_normal: Which side is solid, in world space. Defaults to
+            `(0, -1)`: up the screen, i.e. a platform you land on from above.
+            Ignored unless `one_way` is set.
     """
 
     shape_type: ShapeType = ShapeType.BOX
@@ -25,6 +33,8 @@ class Collider(BaseComponent):
     material: PhysicsMaterial = field(default_factory=PhysicsMaterial)
     layer: CollisionLayer = field(default_factory=CollisionLayer)
     is_sensor: bool = False
+    one_way: bool = False
+    one_way_normal: Vector2 = field(default_factory=lambda: Vector2(0, -1))
 
     def __post_init__(self) -> None:
         """Initialize base component state."""
