@@ -65,7 +65,26 @@ pre-commit run --all-files
 ```bash
 # Run default example scene
 python main.py
+
+# Run a tutorial/capstone demo (see games/README.md for the full list)
+uv run python games/guara_falcao/main.py
 ```
+
+### Seeing what the engine draws (for agents)
+
+An agent cannot look at a window. `tools/agent_view.py` boots a demo
+headlessly, drives it, and writes PNG frames to `.agent-view/`:
+
+```bash
+uv run python tools/agent_view.py --list
+uv run python tools/agent_view.py guara_falcao --frames 120 --shot 1 --shot 119
+uv run python tools/agent_view.py guara_falcao --click 400,265@30 --shot 80
+```
+
+A capture proves the **render path** works. It does **not** prove a window
+appears on screen -- those have already diverged here, when vsync silently
+promoted the display to an OpenGL surface that never presented software blits.
+Read `docs/guides/agent-visual-inspection.md` before reporting on either.
 
 ## Branching and Pull Requests
 
