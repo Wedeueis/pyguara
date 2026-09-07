@@ -17,6 +17,12 @@ from pyguara.physics.types import (
     ShapeType,
 )
 
+# One 1/60s step lets a body jump velocity/60 pixels; at 600 px/s that is 10
+# pixels, which clears a 10px wall outright. Four substeps put the threshold
+# above the speeds a platformer reaches under normal gravity, at four times
+# the solver cost -- cheap for the body counts a 2D game runs.
+DEFAULT_SUBSTEPS = 4
+
 
 class PymunkBodyAdapter:
     """Wrapper around pymunk.Body to conform to IPhysicsBody."""
@@ -69,8 +75,28 @@ class PymunkBodyAdapter:
 class PymunkEngine:
     """Pymunk backend implementation."""
 
-    def __init__(self) -> None:
-        """Initialize the Pymunk engine wrapper."""
+    def __init__(self, substeps: int = DEFAULT_SUBSTEPS) -> None:
+        """Initialize the Pymunk engine wrapper.
+
+        Args:
+            substeps: How many solver steps one call to `update()` becomes.
+                Chipmunk has no continuous collision detection, so a body
+                moves `velocity * dt` in a straight jump each step and passes
+                through anything thinner than that jump. Substepping shortens
+                the jump proportionally: each doubling roughly doubles the
+                speed a thin wall can stop.
+
+        Raises:
+            ValueError: If `substeps` is not positive. Zero would step the
+                simulation not at all and negative is meaningless; both are
+                far better caught here than as a frozen world.
+        """
+        if substeps <= 0:
+            raise ValueError(
+                f"substeps must be positive, got {substeps}. It is the number "
+                f"of solver steps per update; 1 disables substepping."
+            )
+        self._substeps = substeps
         self.space: pymunk.Space | None = None
         # Map entity_id -> PymunkBodyAdapter
         self._bodies: dict[int | str, PymunkBodyAdapter] = {}
@@ -244,9 +270,23 @@ class PymunkEngine:
         self._collision_system.on_collision_end(str(entity_a), str(entity_b), is_sensor)
 
     def update(self, delta_time: float) -> None:
-        """Step the physics simulation forward."""
-        if self.space:
-            self.space.step(delta_time)
+        """Step the physics simulation forward.
+
+        Splits the tick into `substeps` equal solver steps. The step size is
+        what decides whether a fast body is caught or passes through a thin
+        collider, and it is deliberately derived from a fixed count rather
+        than from the bodies' speeds: this engine supports deterministic
+        replay, so the number of steps must not depend on the simulation's
+        own state.
+
+        Args:
+            delta_time: Seconds to advance, normally one fixed tick.
+        """
+        if not self.space:
+            return
+        step = delta_time / self._substeps
+        for _ in range(self._substeps):
+            self.space.step(step)
 
     def create_body(
         self,
