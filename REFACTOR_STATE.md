@@ -129,8 +129,37 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#9](https://github.com/Wedeueis/pyguara/issues/9) | pygame reaches into the backend-agnostic core (CC-11) — nine non-backend files across five subsystems |
 | [#16](https://github.com/Wedeueis/pyguara/issues/16) | `IFramebuffer`/`IRenderPass` not `runtime_checkable`; `IRenderPass` vs `BaseRenderPass(ABC)` overlap |
 | [#19](https://github.com/Wedeueis/pyguara/issues/19) | ~2,700 lines of GPU-dependent graphics code are read-audited only, with no headless GL coverage |
+| [#23](https://github.com/Wedeueis/pyguara/issues/23) | `camera.rotation` is applied by `Camera2D.world_to_screen` but ignored by the render path; three definitions of world-to-screen disagree |
 
 ---
+
+### Out-of-band: render pipeline snapshots (PR #22)
+
+Not a queued subsystem. Adding Syrupy snapshots of the backend call stream
+`RenderSystem.flush()` produces turned up a live defect on the first run.
+
+**Found:** the batcher added `viewport.position` to `viewport.center_vec`,
+which is already absolute — the viewport origin was counted twice, displacing
+everything by it. Invisible at fullscreen (origin `(0,0)`), so 1514 tests
+passed over it. Pre-existing from `bb5fa03`, unchanged at `35ed7fa`.
+
+**Latent, not shipped:** nothing produces an offset viewport.
+`RenderSystem.flush()` has one call site passing none, `WorldPass._viewport`
+is never set, `Viewport.create_best_fit` has no production callers, and no
+config option letterboxes.
+
+**The deeper defect:** `particles.py` already had the transform right. Two
+copies of one formula had drifted apart, and under a letterboxed viewport
+they disagreed by the viewport origin — which would have presented as
+particles detaching from the sprites emitting them, not as a uniform shift.
+Both now call `Camera2D.screen_offset()`; a test pins them together.
+
+**Pattern, third instance:** the recurring blind spot here is uniform setup,
+not missing coverage. Every existing viewport test used a fullscreen
+viewport, exactly as every query-cache test used `create_entity()` and every
+config test mocked the filesystem.
+
+**Left open:** issue #23, camera rotation.
 
 ## Cross-Cutting Concerns
 
