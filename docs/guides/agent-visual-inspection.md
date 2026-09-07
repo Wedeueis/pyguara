@@ -57,6 +57,17 @@ you nothing. `boot_process` legitimately draws nothing — it only opens a
 window — so a blank frame there is correct, not a defect. Know what the demo
 is supposed to draw before reading the result.
 
+### Run automatically
+
+Two things use this tool without being asked:
+
+- `tests/integration/test_demos_render.py` asserts every demo draws a
+  non-flat frame. It found `physics_integration` crashing on its first run.
+- `.claude/hooks/graphics_render_check.py` — a warn-only `PostToolUse` hook
+  on edits under `pyguara/graphics/`. Boots `guara_falcao` for 20 frames
+  (~0.6s) and reports into the transcript if the frame comes out flat. It
+  never blocks and always exits 0, including when it cannot run at all.
+
 ## What this proves, and what it does not
 
 **It proves the render path works.** Entities were queried, sprites submitted,
@@ -115,6 +126,25 @@ Get-Process msrdc | Where-Object {\$_.MainWindowTitle -ne ''} |
 
 A title containing `[WARN:COPY MODE]` means WSLg's graphics path is degraded;
 windows may never come to the front, whatever the app does.
+
+### Fixes that do not work here
+
+Forcing the SDL drivers is the suggestion this comes up against most often:
+
+```python
+os.environ["SDL_VIDEODRIVER"] = "x11"       # already the default
+os.environ["SDL_RENDER_DRIVER"] = "software"  # nothing to configure
+```
+
+Tested, with a bare pygame window and no PyGuara in it: the window is
+created, X11 lists it, `msrdc` lists it, and it still does not appear on the
+Windows desktop. Neither variable can help —
+
+- pygame already resolves to `x11` here (`pygame.display.get_driver()`), so
+  the first line changes nothing.
+- `SDL_RENDER_DRIVER` configures SDL's `SDL_Renderer` API. This codebase
+  never creates one — the window is a plain `set_mode` surface — so the
+  second line configures a subsystem that is not in use.
 
 ### Always run the control first
 
