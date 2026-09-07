@@ -282,7 +282,7 @@ class ParticleSystem:
         batches: dict[Texture, list[tuple[float, float]]] = {}
         zoom = camera.zoom
 
-        offset_vec = viewport.center_vec - (camera.position * zoom)
+        offset_vec = camera.screen_offset(viewport)
         offset_x, offset_y = offset_vec.x, offset_vec.y
 
         for p in self._pool:

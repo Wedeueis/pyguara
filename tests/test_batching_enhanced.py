@@ -327,3 +327,54 @@ def test_the_camera_lands_on_the_viewport_centre(x, y, width, height):
     batches = Batcher().create_batches([command], camera, viewport)
 
     assert batches[0].destinations[0] == (x + width / 2, y + height / 2)
+
+
+@pytest.mark.parametrize(
+    ("x", "y", "width", "height"),
+    [(0, 0, 800, 600), (0, 60, 800, 480), (160, 0, 480, 600), (400, 300, 400, 300)],
+)
+def test_particles_land_where_their_sprites_do(x, y, width, height):
+    """The particle system and the batcher must agree on world-to-screen.
+
+    They are two callers of the same transform. When they disagreed -- the
+    batcher added `viewport.position`, the particle system did not -- the
+    symptom under a letterboxed viewport was not "everything shifted", which
+    is easy to spot. It was particles detaching from the sprites emitting
+    them: smoke drifting off its engine, sparks landing away from the impact.
+
+    Both now go through `Camera2D.screen_offset`; this pins them together so
+    a future change to one cannot silently desynchronise the other.
+    """
+    from pyguara.graphics.components.particles import ParticleSystem
+
+    viewport = Viewport(x, y, width, height)
+    camera = Camera2D(width, height)
+    camera.position = Vector2(120, 340)
+    camera.zoom = 1.5
+
+    world_position = Vector2(500, 500)
+    texture = MockTexture("shared")
+
+    command = RenderCommand(
+        texture=texture, world_position=world_position, layer=0, z_index=0
+    )
+    sprite_destination = Batcher().create_batches([command], camera, viewport)[0]
+
+    system = ParticleSystem(capacity=1)
+    # speed=0 so the particle stays exactly where it was emitted; emit()
+    # otherwise gives it a random velocity, and this test is about the
+    # transform, not the simulation.
+    system.emit(texture, world_position, count=1, speed=0.0)
+
+    recorded: list[tuple[float, float]] = []
+
+    class CaptureBackend:
+        width = 800
+        height = 600
+
+        def render_batch(self, batch):
+            recorded.extend(batch.destinations)
+
+    system.render(CaptureBackend(), camera, viewport)
+
+    assert recorded == sprite_destination.destinations
