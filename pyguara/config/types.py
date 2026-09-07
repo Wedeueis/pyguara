@@ -74,6 +74,12 @@ class PhysicsConfig:
     gravity_x: float = 0.0
     gravity_y: float = 0.0
 
+    # Solver steps per physics tick. Chipmunk has no continuous collision
+    # detection, so a body jumps velocity/tick pixels and passes through
+    # anything thinner. Each doubling roughly doubles the speed a thin wall
+    # can stop, at proportional solver cost. 1 disables substepping.
+    substeps: int = 4
+
     @property
     def fixed_dt(self) -> float:
         """The fixed timestep in seconds.
