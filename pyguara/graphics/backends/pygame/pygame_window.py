@@ -8,6 +8,9 @@ import pygame
 from pyguara.common.types import Color
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.backends.pygame.conversions import to_pygame_color
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class PygameWindow:
@@ -20,23 +23,66 @@ class PygameWindow:
         self._is_open = False
 
     def open(self, config: WindowConfig) -> bool:
-        """Create a Pygame display surface."""
-        # Standard Pygame setup
-        # flags = pygame.DOUBLEBUF | pygame.HWSURFACE
-        # For Linux WSL
+        """Create the display surface.
+
+        Args:
+            config: Window settings to open with.
+
+        Returns:
+            True once the surface exists.
+        """
         flags = 0
         self._default_color = config.default_color
         if config.fullscreen:
             flags |= pygame.FULLSCREEN
 
-        self._screen = pygame.display.set_mode(
-            (config.screen_width, config.screen_height),
-            flags,
-            vsync=1 if config.vsync else 0,
+        size = (config.screen_width, config.screen_height)
+        screen: pygame.Surface = pygame.display.set_mode(
+            size, flags, vsync=1 if config.vsync else 0
         )
+
+        if config.vsync and not (flags & pygame.OPENGL):
+            screen = self._drop_vsync_if_promoted_to_opengl(screen, size, flags)
+        self._screen = screen
+
         pygame.display.set_caption(config.title)
         self._is_open = True
         return True
+
+    def _drop_vsync_if_promoted_to_opengl(
+        self, screen: pygame.Surface, size: tuple[int, int], flags: int
+    ) -> pygame.Surface:
+        """Drop vsync if honouring it turned the display into an OpenGL surface.
+
+        SDL can only vsync a hardware-presented surface, so on drivers without
+        a software vsync path pygame quietly adds `pygame.OPENGL` to satisfy
+        the request. This renderer draws by blitting to the display surface,
+        and blits to an OpenGL display surface are never presented -- the
+        window opens, appears in the taskbar, and stays blank forever, with no
+        error anywhere.
+
+        A visible window without vsync beats an invisible one with it, so the
+        surface is recreated without the request and the trade is logged.
+
+        Args:
+            screen: The surface `set_mode` just returned.
+            size: Window size in pixels.
+            flags: The flags originally requested.
+
+        Returns:
+            The display surface to use.
+        """
+        if not screen.get_flags() & pygame.OPENGL:
+            return screen
+
+        logger.warning(
+            "This driver cannot vsync a software surface, so pygame promoted "
+            "the window to OpenGL -- which this renderer cannot draw to, "
+            "leaving the window blank. Recreating it without vsync. Set "
+            "display.vsync = false to silence this."
+        )
+        replacement: pygame.Surface = pygame.display.set_mode(size, flags, vsync=0)
+        return replacement
 
     @property
     def width(self) -> int:

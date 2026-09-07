@@ -166,3 +166,53 @@ class TestLifecycle:
         window.clear(Color(1, 2, 3))
 
         assert backend.cleared_with == [None, Color(1, 2, 3)]
+
+
+class TestVsyncDoesNotBlankTheWindow:
+    """SDL can only vsync a hardware-presented surface.
+
+    On a driver with no software vsync path, pygame quietly satisfies
+    `vsync=1` by adding `pygame.OPENGL` to the display. This renderer draws by
+    blitting to the display surface, and blits to an OpenGL display surface are
+    never presented -- so the window opens, appears in the taskbar and stays
+    blank, with no error logged anywhere. Reproduced on WSLg/XWayland, where
+    `set_mode((1280, 720), 0, vsync=1)` returns a surface with OPENGL set.
+    """
+
+    def test_the_display_is_never_left_as_an_opengl_surface(self) -> None:
+        import pygame
+
+        from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
+
+        pygame.init()
+        window = PygameWindow()
+        try:
+            window.open(WindowConfig(screen_width=320, screen_height=240, vsync=True))
+            surface = pygame.display.get_surface()
+
+            assert surface is not None
+            assert not surface.get_flags() & pygame.OPENGL, (
+                "the renderer blits to the display surface, which an OpenGL "
+                "surface never presents"
+            )
+        finally:
+            pygame.display.quit()
+            pygame.quit()
+
+    def test_the_surface_is_still_usable_with_vsync_off(self) -> None:
+        import pygame
+
+        from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
+
+        pygame.init()
+        window = PygameWindow()
+        try:
+            window.open(WindowConfig(screen_width=320, screen_height=240, vsync=False))
+            surface = pygame.display.get_surface()
+
+            assert surface is not None
+            assert not surface.get_flags() & pygame.OPENGL
+            assert (window.width, window.height) == (320, 240)
+        finally:
+            pygame.display.quit()
+            pygame.quit()
