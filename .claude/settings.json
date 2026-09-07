@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/graphics_render_check.py\"",
+            "timeout": 150,
+            "statusMessage": "Checking the render path..."
+          }
+        ]
+      }
+    ]
+  }
+}
