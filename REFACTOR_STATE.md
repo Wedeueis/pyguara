@@ -53,26 +53,27 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-`pyguara/physics` — **in progress** (branch
-`fix/physics-collision-tunnelling`, unmerged; only its first commit went out
-as PR #24). Symptom-driven so far: six defects found and fixed from reported
-bad collision behaviour, plus one-way platforms, a collider debug overlay, a
-swept character mover, and — this iteration — the switch itself. The
+`pyguara/physics` — **in progress, branch merged, subsystem not closed.**
+`fix/physics-collision-tunnelling` merged to `main` as **PR #25** (its first
+commit went out earlier, alone, as PR #24). Symptom-driven so far: six
+defects found and fixed from reported bad collision behaviour, plus one-way
+platforms, a collider debug overlay, and the character-mover switch. The
 systematic pass over `collision_system`, `trigger_volume`/`trigger_system`
-and `joints` is still outstanding, as are Phase B and C.
+and `joints` is still outstanding, as are Phase B and C — **cut a fresh
+branch from `main` for that** (the old one is gone; PR #25 deleted it on
+merge).
 
 **The big decision — move characters off dynamic rigid bodies onto
-`CharacterMover` — is resolved and built.** Full physical parity (knockback,
-platform riding, crate pushing), on Celeste's model. See
+`CharacterMover` — is resolved, built, and merged.** Full physical parity
+(knockback, platform riding, crate pushing), on Celeste's model. See
 `docs/physics/character-movement.md` for the shape it took; the summary:
 `CharacterBody` replaces `RigidBody` for a character (no engine shape at
 all), `SolidMover`/`SolidSystem` carry and push actors for moving platforms
 and crates, `apply_knockback()` gives `Hazard.knockback_force` something to
 consume. `guara_falcao` has a demo patrolling platform and a pushable crate.
 
-`pyguara/graphics` — all five slices done (PR #22 in review).
-
 **Tier 2 is complete:** `config`, `application`, `scene`, `systems`.
+`pyguara/graphics` is complete too — see Completed Subsystems below.
 
 ---
 
@@ -101,6 +102,9 @@ Ordered roughly by dependency depth: foundations first, leaves last.
     - [x] 4. Pipeline — graph, passes, framebuffer, viewport, batching *(active)*
     - [x] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting *(active)*
 - [ ] `pyguara/physics` — protocols, pymunk backend, joints, materials
+    - [x] Character movement switched to `CharacterMover` (PRs #24, #25)
+    - [ ] `collision_system.py`, `trigger_volume.py`, `trigger_system.py`,
+      `joints.py`; Phase B and C
 - [ ] `pyguara/input` — input manager, rebinding
 - [ ] `pyguara/audio` — audio manager, spatial audio
 - [ ] `pyguara/animation` — tween, easing, FSM
@@ -319,7 +323,7 @@ convert to explicit `is None` checks as each subsystem is audited.
 
 ## Iteration Log
 
-### `pyguara/physics` — IN PROGRESS (PR #24, branch `fix/physics-collision-tunnelling`)
+### `pyguara/physics` — IN PROGRESS (PRs #24 and #25, branch `fix/physics-collision-tunnelling`, merged)
 
 Driven by a report that collision "works really poorly", with a brief to
 judge the layer as **game** physics: Chipmunk simulates rigid bodies and
@@ -464,202 +468,6 @@ the most suspicious place to resume.
 **Also left open:** whether `physics.substeps` should default to 4 or 2 —
 4 costs about half a 60Hz frame at 200 dynamic bodies.
 
-
-## Cross-Cutting Concerns
-
-Architectural issues that span subsystems. Do **not** fix these inside a
-single-subsystem iteration; schedule a dedicated pass.
-
-### CC-1 — RESOLVED 2026-09-06 — Ruff `target-version` was `py39`
-`pyproject.toml` pins `target-version = "py39"` while `requires-python` is
-3.12+. Ruff therefore refuses modernisation fixes engine-wide, which is the
-root cause of the legacy `typing.Dict`/`Optional[X]` style found in every
-module audited so far. **Fix:** bump to `py312` and enable the `UP`
-(pyupgrade), `B` (bugbear) and `D` (pydocstyle, `convention = "google"`) rule
-sets in one deliberate formatting commit, so per-subsystem diffs stay
-reviewable.
-Bumped to `py312` and enabled `UP`, `B`, `I`, `SIM`. 1455 findings fixed
-mechanically, the rest by hand. Surfaced one real defect: a mutable `Color`
-shared as a default argument in `WorldPass`.
-*Discovered in:* `ecs`. *Status:* **resolved**.
-
-### CC-2 — RESOLVED 2026-09-06 — Lint rule set was minimal
-No pydocstyle, no bugbear, no pyupgrade, no complexity ceiling. Google-style
-docstrings (mandated by this refactor) are therefore unenforced and will drift
-straight back.
-Resolved with CC-1. Ruff's `D` rules stay off deliberately: pydocstyle runs as
-its own hook, and two tools disagreeing about docstring style is worse than one
-enforcing it. That hook was also found to be mis-scoped -- it used a `match:`
-key pre-commit does not recognise, so it had been linting the whole repository
-instead of `pyguara/`.
-*Discovered in:* `ecs`. *Status:* **resolved**.
-
-### CC-3 — Internal ticket ids leak into public docstrings
-Strings like `P1-008` appear in user-facing API docstrings (`EntityManager
-.register_cached_query`, `QueryCache` module header) and in test module
-docstrings. Tracker ids are not documentation. **Fix:** sweep
-`grep -rn "P[0-9]-[0-9]" pyguara/ tests/` once the per-subsystem passes are
-done.
-*Discovered in:* `ecs` (removed there). *Status:* open elsewhere.
-
-### CC-4 — Unverifiable benchmark numbers embedded in docstrings
-Hard-coded claims ("~8ms for 10,000 entities", "8x faster") sit in docstrings
-with no benchmark backing them in CI. They are untestable and rot silently.
-**Fix:** move to `.benchmarks/` with an actual `pytest-benchmark` run, and
-reference the benchmark rather than restating a number.
-*Discovered in:* `ecs` (removed there). *Status:* open elsewhere.
-
-### CC-5 — `EntityManager` internals reached into from outside the package
-**Removal hook: RESOLVED (2026-09-06).** `_on_entity_removed` was a single
-callback slot assigned directly by `pyguara/scene/base.py`, so any second
-observer would have silently displaced the scene's `EntityDestroyed` dispatch.
-Replaced with `subscribe_entity_removed()` / `unsubscribe_entity_removed()`,
-which fan out to every subscriber, dedupe by equality (so a bound method
-subscribed twice notifies once), and tolerate unsubscription during
-notification. `Scene`, `tests/test_ecs.py` and `tests/test_physics.py` migrated;
-no references to the private attribute remain anywhere in the tree.
-
-**Still open:** `Entity._components` and `_on_component_added` are read across
-module boundaries — by `EntityManager` itself (acceptable, same package) and by
-serialisation and prefab code (not). Audit when `persistence` and `prefabs` come
-up; the likely fix is a public read-only components view.
-*Discovered in:* `ecs`. *Status:* partially resolved.
-
-### CC-6 — Component data-purity is advisory, not enforced
-`BaseComponent` only *warns* on logic methods; `StrictComponent` errors but is
-opt-in and, at the time of the `ecs` audit, had no adopters outside tests.
-**Named offender:** `common.Transform` sets `_allow_methods = True` and carries
-the whole parent hierarchy, world-transform caching and coordinate conversion
-(~330 lines). It is the largest violation in the engine and the one a
-`TransformSystem` would have to absorb; every other subsystem touches it, so it
-is deliberately not attempted piecemeal. **Fix:** once `physics`, `ui` and `ai`
-are audited and the true extent is known, migrate the tree to `StrictComponent`
-and consider making it the default.
-*Discovered in:* `ecs`; offender identified in `common`. *Status:* parked.
-
-### CC-10 — RESOLVED 2026-09-06 — Documentation described APIs that do not exist
-`docs/core/logging.md` documented `pyguara.log.config.setup_logging()` and
-`pyguara.log.config.get_logger()`. Neither the module nor the function exists
-anywhere in the tree; every code sample on the page raised
-`ModuleNotFoundError`. Nothing catches this, because docs are never executed.
-**Fix:** enable `pytest --doctest-glob='*.md'` over `docs/`, or add a smoke
-test that imports every symbol the docs reference. Until then, treat "verify
-the documented API actually exists" as an explicit Phase C step in every
-iteration.
-`tests/test_docs_api.py` now extracts every `pyguara...` import and backticked
-dotted reference from the Markdown under `docs/` and asserts it resolves. It
-immediately found two more: `docs/core/application.md` documented an entire
-error hierarchy (`pyguara.error`, `EngineException`, `@safe_execute`, `@retry`)
-that has never existed, and `PROJECT_STRUCTURE.md` referenced
-`create_application_container` instead of `create_application`. Both fixed.
-*Discovered in:* `log`. *Status:* **resolved**.
-
-### CC-9 — RESOLVED 2026-09-06 — `ErrorHandlingStrategy` was defined twice
-`pyguara/di/types.py` and `pyguara/events/types.py` each declare their own enum
-of the same name with identical members (LOG / RAISE / IGNORE) and identical
-semantics. They are not interchangeable -- `di.RAISE != events.RAISE` -- so
-passing one where the other is expected fails a comparison silently rather than
-loudly. **Fix:** hoist a single definition to a shared home once more
-subsystems are audited and the full set of consumers is known; `di` must not
-import `events` (see CC-8) so it cannot simply re-export.
-Hoisted to a new top-level `pyguara/errors.py`, which imports nothing from the
-engine and so cannot cycle. `di/types.py` and `events/types.py` re-export it, so
-existing import paths keep working. `di.RAISE == events.RAISE` is now True.
-*Discovered in:* `di`. *Status:* **resolved**.
-
-### CC-11 — pygame reaches into the backend-agnostic core
-**Tracked as GitHub issue #9.**
-CLAUDE.md states the engine is backend-agnostic and that code should never
-import pygame directly, but `Application` uses `pygame.time.Clock` for all
-frame timing, compares against `pygame.QUIT`, calls `pygame.event.pump()` and
-catches `pygame.error`. `SandboxApplication` uses `pygame.K_F1`-style constants
-for its tool hotkeys. The ModernGL path therefore still depends on pygame for
-timing and quit detection.
-Not fixed in the `application` pass because the fix belongs on the other side
-of the boundary: `Window.poll_events()` would have to yield engine events
-rather than raw SDL ones, and a `Clock` protocol would have to join the
-graphics protocols. **Fix:** take it with the `graphics` audit, so the protocol
-and both backends move together. `WindowResizeEvent` is defined and never
-dispatched for the same reason -- nothing detects the resize.
-*Discovered in:* `application`. *Status:* parked until `graphics`.
-
-### CC-8 — Package `__init__.py` files export nothing
-Most subsystem packages have a docstring-only `__init__.py`, so callers reach
-into submodules (`from pyguara.events.dispatcher import ...`). Beyond the
-ergonomics, it actively hides import cycles: adding re-exports to
-`events/__init__.py` immediately exposed a latent `log` <-> `events` deadlock
-(fixed in that pass). Every package still lacking exports may be hiding the
-same thing. **Fix:** add a curated `__all__` per package as each is audited,
-and treat any cycle it reveals as a finding rather than a reason to revert.
-*Discovered in:* `events`. *Status:* open.
-
-### CC-7 — `x or default` used with falsy value types
-`pymunk.Vec2d` defines `__bool__`, so `Vector2(0, 0)` is falsy. `Transform
-.__init__` used `scale or Vector2(1, 1)`, which silently rewrote an explicitly
-requested zero scale to unit scale. Fixed there, but the idiom is common and
-the same trap applies to any zero vector, `Color(0,0,0,0)`, an empty `Rect`, or
-`0.0` defaults. **Fix:** sweep `grep -rn "or Vector2(\\|or Color(" pyguara/` and
-convert to explicit `is None` checks as each subsystem is audited.
-*Discovered in:* `common`. *Status:* open.
-
----
-
-## Iteration Log
-
-### `pyguara/physics` — IN PROGRESS (PR #24, branch `fix/physics-collision-tunnelling`)
-
-Driven by a report that collision "works really poorly", with a brief to
-judge the layer as **game** physics: Chipmunk simulates rigid bodies and
-knows nothing about characters, ground or jumping, so everything that makes
-a platformer feel right is PyGuara's own and is what was audited.
-
-Four defects, each reproduced before being touched:
-
-1. **Tunnelling from 600 px/s** through a 10px wall — one solver step per
-   tick moves a body `velocity/60` px in a straight jump. Not exotic: 600
-   px/s is two thirds of a second of falling under the demo's own gravity.
-   Fixed by substepping (`physics.substeps`, default 4). Same root cause as
-   the reported *sinking*: landing penetrated 11.2px and took 24 frames to
-   resolve; now 0.9px and 0 visible frames from a typical fall.
-
-2. **No render interpolation reachable from a custom renderer.** The engine
-   had the whole mechanism -- `render_alpha`, `previous_position`
-   snapshotting, a lerp in `scene/base.py` -- but only on the
-   Sprite/RenderSystem path, so a scene drawing its own rects got none of it
-   and had no supported way in. Drawn raw at 75Hz a body moves 0-5px per
-   frame where every frame should be 4. `Transform.render_position(alpha)`
-   plus automatic opt-in by `PhysicsSystem`.
-
-3. **Every character detected itself as ground.** The ground ray starts 1px
-   below the collider, but a Chipmunk segment query is a swept circle whose
-   radius reaches back inside. `is_grounded` was True in mid-air and with no
-   ground in the world at all. Coyote time never started, jump buffering had
-   nothing to buffer, and the landing reset never fired -- a character could
-   jump twice and then never again until it died. `raycast()` gained
-   `ignore_entity_id`.
-
-4. **`fixed_rotation` and `gravity_scale` were inert.** Declared on
-   RigidBody, documented, read by nothing.
-
-**The pattern, fourth instance.** Uniform setup again, not missing coverage:
-every viewport test used a fullscreen viewport, every collision test a slow
-body, every platformer test a character already resting on the floor. Each
-defect lived in the case no test set up.
-
-**A second pattern worth naming: options that are declared but not wired.**
-`fixed_rotation`, `gravity_scale`, and the interpolation machinery reachable
-only from one render path. A game sets them, nothing happens, and there is
-no signal distinguishing "inert" from "wrong value". Worth grepping other
-subsystems for the same shape.
-
-**Not yet done:** `collision_system.py`, `trigger_volume.py`,
-`trigger_system.py`, `joints.py`; Phase B (test assessment) and Phase C
-(docs). Two game-layer gaps recorded, not built: no one-way platforms and no
-moving-platform support, both staples of the genre the demos target.
-
-**Left open for a decision:** faster penetration recovery (measured, stack-
-stable, cuts visible sinking 11 frames to 4) and whether `physics.substeps`
-should default to 4 or 2 (4 costs 50% of a 60Hz frame at 200 bodies).
 
 ### `pyguara/ecs` — CLOSED 2026-09-06 (PR #1, branch `refactor/ecs-audit`)
 
