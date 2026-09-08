@@ -79,9 +79,82 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/ui` closed 2026-09-08 (branch `refactor/ui-audit`).**
-Next in the queue is Tier 4: `pyguara/prefabs` (prefab definition and
-instantiation). Open `REFACTOR_STATE.md` "How to resume" and take it.
+**None — `pyguara/prefabs` closed 2026-09-08 (branch `refactor/prefabs-audit`).**
+Next in the queue is Tier 4: `pyguara/editor` (in-engine editor, inspector
+tools). Open `REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/prefabs` in one slice, ~1,000 lines (`types`, `registry`, `loader`,
+`factory`). Headline: **a prefab with `children` crashed on any real scene.**
+`PrefabFactory._create_children` called `parent_entity.get_component_by_name(
+"Transform")` — a method that exists nowhere on `Entity` — so `factory.create()`
+raised `AttributeError` whenever a `prefab_resolver` was set, which
+`Scene.resolve_dependencies()` always does (`prefab_resolver=PrefabCache.load`).
+Past the crash, the parent-link step was `for _child in children: pass` with a
+"Optionally link children to parent here" comment — children were never
+attached despite `Transform` carrying a full `set_parent`/`children` API. There
+is **not one `.prefab` file in the repo** (tests build `PrefabData` by hand or
+via `tempfile`), so the whole file→loader→factory→children path had never run.
+Per the user's choice ("wire it properly, unify"): `_create_children` now
+instantiates each child as its own entity and parents its `Transform` via
+`set_parent(keep_world_transform=False)`, so the child's authored position is
+local to the parent and follows it; `PrefabChild.offset` applies in that local
+space. Dropped the dead loop and the `parent_position` bake it fed (that bake
+ignored parent rotation/scale). **BREAKING** (pre-alpha): `create()` loses
+`parent_position`, gains `source_path`.
+
+Other defects, all probe-reproduced: **`_resolve_inheritance` had no cycle
+guard** — `A extends B extends A` recursed to `RecursionError`; now tracks the
+`extends` chain and raises `ValueError` naming it (`b -> a -> b`), the shape the
+`common` Transform parent-cycle guard already uses. **`create()` swallowed
+component construction errors** in a blanket `except Exception` — a prefab with
+one bad field yielded a half-built entity, the component silently absent; per
+the user's choice ("fail loud") it now raises, and `_instantiate_dataclass`
+additionally rejects keys matching no field (a typo'd field name used to vanish
+silently). **`_convert_value` enum handling was `EnumType[value.upper()]`** —
+any non-SCREAMING_CASE member raised `KeyError` → swallowed → component dropped;
+now accepts a member name in any case or a raw value, and raises `ValueError`
+naming the members on a miss. **`PrefabInstance.prefab_path` was always the
+display `name`** (`create()` hard-coded `prefab_path=prefab.name`;
+`create_from_path` had the real path and discarded it) — the component's stated
+purpose ("tracking and hot-reload") was unmeetable; now threaded through
+`create_from_path` and child resolution, falling back to `name` only for
+in-memory prefabs. **`ComponentRegistry.clear()` wiped `_deserializers`**
+(losing the built-in `Transform` special-case) but not `_type_converters` —
+asymmetric, and since `Transform` is not a dataclass and has a custom
+`__init__`, a cleared registry could not round-trip it even after
+re-registering; `clear()` now re-seeds the built-ins. **`PrefabLoader` raised
+`AttributeError`** from `raw.get()` on a non-mapping top-level document (empty
+file → `None`, a JSON list) despite documenting `ValueError`; now validates.
+Removed **`PrefabReference`** — exported in `__all__`, constructed and consumed
+nowhere. Recurring shapes: "declared and wired to nothing" (`children`
+link-up, `PrefabReference`, `PrefabInstance.prefab_path`, `PrefabData.version`
+— see Phase D), "guard that returns/holds a wrong answer" (swallowed component
+errors, enum `.upper()`, `prefab_path`), and uniform test setup — every factory
+test hand-built `PrefabData` against a `Transform`+`Tag`-only registry;
+`_create_children`, `create_from_path`, inheritance cycles, `PrefabInstance`,
+and any file→loader→factory round trip had **zero** coverage, and
+`test_create_warns_on_unknown_component` asserted `... or entity is not None`
+(always true). Tests +17 (1799 → 1835, incl. parametrise expansion). New
+`docs/systems/prefabs.md` (the subsystem had no doc page at all). See the
+iteration log entry below.
+
+**Capability gaps (Phase D) → new issue** (sibling of #37/#40/#43/#46 and the
+UI Phase-D issue): no spawn tables / weighted prefab pools (a roguelike spawns
+waves/loot from weighted random selection; `create` is one-at-a-time with no
+selection primitive); `PrefabData.version` declared for migration and read by
+nothing (no prefab-schema migration, while `persistence` has a whole
+`MigrationRegistry`); no named variant library (`overrides` is per-call only);
+prefab children are linked Transform↔Transform only — the child entity has no
+parent-*entity* back-reference and no shared lifetime, so destroying an enemy
+leaks its prefab-attached child entities (needs an ECS-hierarchy decision,
+cross-cutting with `pyguara/ecs`); no asset-reference validation at load.
+Latent/parked: `ComponentRegistry` is a process-global mutable singleton
+(`get_component_registry()` + the `@register_component` decorator) — same shape
+as other engine singletons, parked as a CC.
+
+---
+
+### `pyguara/ui` — closed 2026-09-08 (branch `refactor/ui-audit`)
 
 `pyguara/ui` in one slice, ~1,900 lines (`base`, `layout`, `constraints`,
 `manager`, `theme`, `theme_presets`, `types`, `components/*`). Two headline
@@ -469,7 +542,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ### Tier 4 — Tooling & authoring
 - [x] `pyguara/ui` — layout engine, widgets, theming *(done)*
-- [ ] `pyguara/prefabs` — prefab definition and instantiation
+- [x] `pyguara/prefabs` — prefab definition and instantiation *(done)*
 - [ ] `pyguara/editor` — in-engine editor, inspector tools
 - [ ] `pyguara/scripting` — coroutines, script hosting
 - [ ] `pyguara/replay` — deterministic replay
@@ -483,6 +556,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/prefabs` | 2026-09-08 | One slice (`types`, `registry`, `loader`, `factory`; ~1,000 lines). Headline: **a prefab with `children` crashed on every real scene.** `PrefabFactory._create_children` called `parent_entity.get_component_by_name("Transform")` — a method that exists nowhere on `Entity` — so `factory.create()` raised `AttributeError` whenever a `prefab_resolver` was set, which `Scene.resolve_dependencies()` always does. Past the crash, the parent-link step was `for _child in children: pass` — children never attached despite `Transform` having a full `set_parent`/`children` API. **Zero `.prefab` files exist in the repo**, so the file→loader→factory→children path had never run. Per the user's choice (wire it properly, unify): children now instantiate as their own entities parented via `Transform.set_parent(keep_world_transform=False)` — authored position is local to the parent and follows it; `PrefabChild.offset` applies in local space. Dropped the dead loop and the `parent_position` bake (ignored parent rotation/scale). **BREAKING** (pre-alpha): `create()` loses `parent_position`, gains `source_path`. Also: **`_resolve_inheritance` had no cycle guard** (`A extends B extends A` → `RecursionError`) → now raises `ValueError` naming the chain. **`create()` swallowed component construction errors** in a blanket `except Exception`, yielding half-built entities → per the user's choice (fail loud) it now raises; `_instantiate_dataclass` also rejects unknown field keys (a typo used to vanish). **`_convert_value` enum handling was `EnumType[value.upper()]`** — non-SCREAMING_CASE members raised `KeyError` → swallowed → component dropped; now case-insensitive name or raw value, `ValueError` on a miss. **`PrefabInstance.prefab_path` was always the display `name`** (`create_from_path` had the real path and discarded it) → now threaded through, `name` only as the in-memory fallback. **`ComponentRegistry.clear()` wiped `_deserializers`** (losing the built-in `Transform` special-case; `Transform` is not a dataclass so a cleared registry couldn't round-trip it even re-registered) → now re-seeds built-ins. **`PrefabLoader` raised `AttributeError`** on a non-mapping top-level doc despite documenting `ValueError` → now validates. Removed **`PrefabReference`** (exported, used nowhere). Recurring shapes: "declared and wired to nothing" (`children` link-up, `PrefabReference`, `prefab_path`, `PrefabData.version`), "guard that holds a wrong answer" (swallowed errors, enum `.upper()`), uniform test setup (every factory test hand-built `PrefabData` against a `Transform`+`Tag`-only registry; `_create_children` / `create_from_path` / inheritance cycles / round-trip had **zero** coverage; `test_create_warns_on_unknown_component` asserted `... or entity is not None`). Tests +17 (1799 → 1835). New `docs/systems/prefabs.md` (no doc page existed). Phase D → **new issue** (sibling of #37/#40/#43/#46 + UI Phase-D): no spawn tables / weighted pools, `PrefabData.version` dead (no prefab-schema migration), no named variant library, prefab children lack an entity-level ownership/lifetime link (leak on parent destroy — needs an ECS-hierarchy decision), no asset-ref validation at load; `ComponentRegistry` process-global mutable singleton parked as a CC. |
 | `pyguara/ui` | 2026-09-08 | One slice (`base`, `layout`, `constraints`, `manager`, `theme`, `theme_presets`, `types`, `components/*`; ~1,900 lines). Two "declared and wired to nothing" headliners under 84 green tests. **The constraint layout system never ran** — `UIElement.apply_layout()` had no caller in the repo; `UIManager` had no layout pass; roots couldn't be constrained at all (`apply_layout` needs `self.parent`). Probe: `create_fill_constraints(margin=20)` under an 800×600 parent → child stays `Rect(0,0,10,10)` across three manager frames. So `constraints.py` (314 lines) + `element.padding` + every `create_*_constraints` helper were inert, though documented as "the heart of the UI system's power" with non-runnable examples. Per the user's choice (unify): `apply_layout()` → `UIElement.layout(available_rect, renderer)`; `UIManager` holds a screen `Rect` (seeded by `Application.set_screen_size()`, refreshed via a `WindowResizeEvent` subscription) and runs `layout()` over every root before render, **dirty-gated** (`add_element` / `set_screen_size` / new public `invalidate_layout()` arm it). Roots constrain against the screen; children against the parent's padding-aware content rect. `BoxContainer.layout()` folded into the same pass: resolves its own constraints first, honours `LayoutAlignment.STRETCH` (declared, no branch), skips hidden children in `render()`, recurses. **Theme was snapshotted per element at construction** (`self.theme = get_theme()` in `__init__`) so `set_theme()` re-skinned nothing already built (probe confirmed) — now `UIElement.theme` is a live property; `ProgressBar`/`Canvas`/`NavBar` defer their cached `Color`. **`ThemeConstants` `@dataclass(frozen=True)` decorated nothing** (`fields() == []`) — "All themes are immutable" was false, presets were mutable process-wide singletons; now a `__getattr__` hands back a fresh copy per access. Smaller: `Slider` rejects `max_val <= min_val` / non-positive width at construction; dead `UIElement.anchor` / `Label(anchor=)` param removed. Recurring shapes: "declared and wired to nothing" (`apply_layout`, `STRETCH`, `anchor`, fake `frozen`), "cached snapshot vs live lookup" (theme), uniform test setup (`test_ui_constraints.py`'s 513 lines only ever called `.apply()` on hand-built Rects; theme tests never built a `UIElement`). BREAKING (pre-alpha): `layout()` signature changed; four in-repo games had their now-redundant `container.layout(renderer)` call removed. Tests: new `test_ui_manager_layout.py` + rebuilt `test_ui_layout.py`. Phase D → new issue (sibling of #37/#40/#43/#46): `ShadowScheme`/`BorderScheme.radius`/`hover_overlay`/`press_overlay` consumed by no widget, no focus navigation, no scroll/clip container, no grid layout, no real text-input path (`TEXT_INPUT` declared/never dispatched), manual layout invalidation. |
 | `pyguara/ai` | 2026-09-08 | One slice (`fsm`, `blackboard`, `components`, `ai_system`, `steering`, `steering_system`, `behavior_tree`, `navmesh`, `pathfinding/*`; ~2,100 lines). **`world_to_grid_coords()` used `int()` not `floor`** — a non-zero grid `offset` or any negative local coord resolved to the wrong cell, and the quadrant left of/above the origin collapsed onto row/col 0 (world `(-10,-10)` → grid `(0,0)`, a sign flip). "Formula that returns a wrong answer" → `math.floor`. **`AISystem` passed the bare `Entity` as the BT context**, so `WaitNode` (any `context.dt` reader) fell back to a hardcoded `1/60` and drifted with frame rate — `WaitNode(1.0)` = ~2.1s @30fps, ~3.5s @144fps; the engine's own game hand-rolled its own AI system to dodge this. Fixed with a small `AIContext` (entity+dt+blackboard), passed to `tree.tick()`. **`SteeringSystem` only dispatched `seek/arrive/flee/wander`** — `pursuit`/`evade` (the only moving-target behaviors) were implemented but unreachable, and an unknown `behavior` string produced zero force silently. `behavior` is now a validated `SteeringBehaviorType` enum, all six wired, `SteeringAgent` gained `target_velocity`. **`behavior="arrive"` overshot and orbited the target forever** — system now enforces the arrive speed ramp on velocity and snaps to rest. **Generic `AStarPathfinder` crashed on a priority tie** with non-order-comparable nodes (`Node` is only `Hashable`; ties are common) — added the monotonic tie-break counter (also to `NavMeshPathfinder`). **`NavMesh.remove_polygon()` left dangling ids in other polygons' `neighbors`** — now pruned. FSM `set_initial_state()` / unknown transition targets were silent no-ops — now logged; a second `set_initial_state()` exits the prior state. `NavMeshPathfinder` docstring claimed a funnel algorithm it lacks — corrected. Recurring shapes: "guard/formula returns a wrong answer", "declared and wired to nothing" (`pursuit`/`evade`, `dt` never threaded), "hardcoded dt", uniform test setup (`TestCoordinateConversion` all-positive; **zero** tests for `AISystem`/`SteeringSystem`). Tests +29 (1770 → 1799). Phase D: BT/FSM authoring gaps (no reactive composites, no FSM transition table, no declarative blackboard nodes) → **#46** (sibling of #37/#40/#43); navmesh funnel/partial-portals/generation → parked (flow-field is #28's); steering-vs-physics → parked for the top-down `CharacterMover` slice. Left open: `WaitNode` keeps a named `getattr` dt fallback; the arrive fix is a velocity clamp (`_ARRIVE_STOP_DISTANCE = 1.0`), not a force-model redesign; `NavMeshPolygon.contains_point` has a fragile-but-unreachable `xinters`-before-assignment. |
 | `pyguara/persistence` | 2026-09-08 | One slice (`manager`, `storage`, `serializer`, `migration`, `types`; ~970 lines). The **migration half was sound** — the chain-integrity guards compose and the path loop provably terminates; overshoot/infinite-loop probes came back negative. The save/load half held the recurring shapes. **`save_data()` discarded `storage.save()`'s return** — `FileStorageBackend.save` returns `False` on `OSError`, so a full disk logged "Successfully saved" and returned `True`; now checked. **`FileStorageBackend` sanitised keys by deleting bad chars** — `"slot 1"`/`"slot/1"`/`"slot.1"` all collapsed onto `slot1` and silently overwrote each other (the resources F2 stem-collision shape); non-round-tripping keys now raise `ValueError`. **Data + meta were two independent `os.replace` calls** while the load path claimed "atomic save ensures both or neither" — a crash between them made an intact save unreadable (stale checksum → `None`). User chose the systemic fix: metadata is framed into **one blob** (`{header json}\n<payload>`), `StorageBackend` drops its `metadata` param (plain key→blob store), `FileStorageBackend` writes one `{key}.save` file + dir fsync + temp-sweep. **`compress=` was a documented no-op** → gzip, recorded in the header. **`SerializationFormat.MSGPACK` was a public enum member with no impl** though `msgpack` is a declared dep → implemented via the existing `prepare_for_json`/`game_object_hook` path, exposed through a new `fmt=` arg. `SaveMetadata` was hand-copied field by field and never read back on load → now carries `format`/`compressed`, used via `asdict`, engine version from `importlib.metadata` (was `"1.0.0"`), UTC timestamp. Migration gained `from_version >= 1` / `current_version >= 1` guards; `MigrationRegistry` is `eq=False`. Recurring shapes: "declared and wired to nothing" (`compress`, `MSGPACK`, `SaveMetadata`'s metadata half), "guard that returns a wrong answer" (swallowed `save()` failure, key mangling), "identity vs value" (`MigrationRegistry`), uniform test setup (every storage test used an already-safe key; every migration test used versions from 1). BREAKING: on-disk save format changed (`.dat`+`.meta` → `.save`); pre-alpha, no migration. Tests +35 (1735 → 1770). Phase D capability gaps: no backup/retention, no save-menu API (`list_saves`, cheap metadata read, `delete`/`exists` facade), CWD-relative save dir — grouped into #43 ("persistence production layer", sibling of #37); envelope `format_version` parked; run/meta split is #28's. Left open: `BINARY`/pickle load unauthenticated (trusted-input-only); mypy `python_version` 3.10 vs `requires-python` 3.12 forces a `# noqa: UP017` (possible CC). |
@@ -691,6 +765,189 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/prefabs` — CLOSED 2026-09-08 (branch `refactor/prefabs-audit`)
+
+One slice, ~1,000 lines: `prefabs/{types,registry,loader,factory}.py`. Every
+defect reproduced with a probe against the real code before any fix. Two
+upfront decisions put to the user:
+
+- **Child-prefab feature depth** — full crash-fix + real hierarchy wiring
+  vs. minimal crash-fix (flat, baked offset) vs. rip it out. User took
+  **wire it properly**.
+- **Malformed component data** — `create()` fail loud vs. keep
+  log-and-continue. User took **fail loud**.
+
+**Verification:** 1835 tests pass (up from 1799; +17 hand-written across a
+rebuilt `test_prefab.py` — parametrise expansion accounts for the rest).
+`ruff check .` clean; `ruff format --check` clean; `mypy pyguara` clean across
+226 files. Commits verified in a detached worktree at each SHA, not the
+working tree.
+
+**F1 — a prefab with `children` crashed on every real scene.**
+`PrefabFactory._create_children` (reached from `create()` whenever the prefab
+has children) did `parent_entity.get_component_by_name("Transform")`. `Entity`
+has no such method and its `__getattr__` only resolves snake_case component
+names from `_property_cache`, so the attribute access raised
+`AttributeError`. `_create_children` early-returns only when
+`self._prefab_resolver` is unset; `Scene.resolve_dependencies()` always sets
+one (`prefab_resolver=container.get(PrefabCache).load`), so in any real scene
+the crash was unconditional. Probe: `PrefabData` parent with one
+`PrefabChild`, resolver returning a child `PrefabData` →
+`AttributeError: 'Entity' object has no attribute or component
+'get_component_by_name'`. And past the crash the linking step was
+`for _child in children: pass` with a `# Optionally link children to parent
+here` comment — `Transform` has carried a full `set_parent`/`children`/
+`world_position` API since the `common` audit, unused here. There is **not
+one `.prefab` file in the repo** (`grep` for `*.prefab*` is empty; tests
+build `PrefabData` by hand or via `tempfile`), so nothing had ever exercised
+this path. Fix (user's "wire it properly"): `_create_children` instantiates
+each child via `self.create(child_prefab, entity_id=child.name,
+overrides=child.overrides, source_path=child.prefab)`, then, if both parent
+and child have a `Transform`, `child_t.set_parent(parent_t,
+keep_world_transform=False)` — the child's authored position stays as written
+and is now interpreted local to the parent, so the child follows the parent.
+`PrefabChild.offset` is added to the child's local position (an offset with
+no child `Transform` warns). The dead loop and the `parent_position`
+parameter that fed a one-time absolute-position bake (which ignored parent
+rotation and scale) are gone. **BREAKING** (pre-alpha): `create()` drops
+`parent_position`, adds `source_path`. Post-fix probe: child's
+`transform.parent is parent.transform`, child local `(10,0)` / world
+`(110,100)`, and moving the parent to `(200,100)` moves the child's world
+position to `(210,100)`.
+
+**F2 — `_resolve_inheritance` had no cycle guard.** It recurses on
+`prefab.extends` through the resolver with no visited set. Probe: `A extends
+"b"`, `B extends "a"`, resolver maps both → `RecursionError`. A self- or
+mutually-referential `extends` (an easy authoring slip) crashed with an
+opaque stack overflow rather than a diagnostic. Now threads the `extends`
+chain down the recursion and raises `ValueError("Prefab inheritance cycle
+detected: b -> a -> b")` — the shape the `common` `Transform.set_parent`
+cycle guard already uses.
+
+**F3 — `create()` swallowed component construction errors.** Each component
+was built inside `try: ... except Exception as e: logger.error(...)`, so a
+prefab with one bad field produced an entity silently missing that
+component. Compounded by **`_convert_value`'s enum branch**:
+`target_type[value.upper()]` assumes SCREAMING_CASE members, so a
+`class Facing(Enum): left = 1` with data `{"facing": "left"}` raised
+`KeyError` inside the swallow → component dropped, no error surfaced. Probe:
+entity built from `{"DcMover": {"facing": "left"}}` had no `DcMover`. Fix
+(user's "fail loud"): the `try/except` is gone — `registry.create` raising
+propagates out of `create()`. `_convert_enum` now accepts an exact or
+case-insensitive member name or a raw value and raises `ValueError` naming
+the members on a miss. `_instantiate_dataclass` additionally raises
+`ValueError` on any data key that matches no field (a typo'd field name used
+to be silently filtered out). Unregistered *component names* stay a
+warn-and-skip — distinct from malformed data, and plausibly a conditionally
+registered component.
+
+**F4 — `PrefabInstance.prefab_path` was always the display name.**
+`create()` hard-coded `prefab_path=prefab.name`; `create_from_path()`
+resolved the real path then called `self.create(prefab, ...)` without it. The
+component's docstring ("Stored on entities created from prefabs for tracking
+and hot-reload"; field: "Path to the source prefab") was unmeetable — you
+cannot reload an instance from a non-unique human label. Probe:
+`create_from_path("assets/prefabs/goblin.prefab.json")` →
+`PrefabInstance.prefab_path == "Goblin"`. Fix: `create()` takes
+`source_path`, uses `source_path or prefab.name`; `create_from_path` and
+`_create_children` pass the real path; a hand-built in-memory prefab still
+falls back to `name`.
+
+**F5 — `ComponentRegistry.clear()` was asymmetric and irreversible for
+`Transform`.** It cleared `_components` and `_deserializers` but not
+`_type_converters`, and did not re-seed the built-in `Transform` deserializer.
+`Transform` is **not** a dataclass and has a custom `__init__`, so the
+generic instantiation path can't build it from raw dict data — only the
+built-in `_deserialize_transform` can. Probe: `clear()` then re-`register(
+Transform)` then `create("Transform", {"position": {"x": 1, "y": 2}})` →
+`AttributeError: 'dict' object has no attribute 'x'`. Since
+`get_component_registry()` is a process-wide singleton, a caller doing this
+corrupts `Transform` deserialization for the whole process. Fix: `clear()`
+re-seeds `_type_converters = {Vector2: ...}` and re-runs
+`_register_builtin_deserializers()`; documented as "clear user registrations,
+restore built-in state".
+
+**F6 — `PrefabLoader` raised the wrong exception on a malformed file.**
+`_parse_prefab_data` calls `raw.get("name")` with no check that `raw` is a
+mapping. Probe: an empty `.prefab` (`yaml.safe_load` → `None`) →
+`AttributeError: 'NoneType' object has no attribute 'get'`; a JSON list →
+`AttributeError: 'list' ...`. The `load()` docstring promises
+`ValueError: If file format is invalid`. Now validates and raises
+`ValueError` naming the actual top-level type.
+
+**Removed `PrefabReference`** — a `@dataclass` in `types.py`, exported in
+`__all__`, with an `is_loaded()` method, constructed and consumed **nowhere**
+(grep: `types.py` + `__init__.py` only). Dead since it was written.
+
+**Phase B — test verdict.** `test_prefab.py` (346 lines, 27 tests) had solid
+deep-merge coverage (`test_deep_merge_nested_dicts`,
+`test_create_with_inheritance` genuinely exercise partial overrides) but the
+recurring blind spot in full force: **every `PrefabFactory` test hand-builds
+`PrefabData` against a fixture registry holding only `Transform` + `Tag`**
+(both trivial — no enum field, no non-Transform `Vector2`, no nested
+component), and **not one test goes file → `PrefabLoader` → `PrefabFactory`**
+— the "`test_config.py` mocked the filesystem" shape. `_create_children` had
+**zero** tests (the F1 crash lived exactly there); so did `create_from_path`,
+inheritance cycles, and any assertion that `PrefabInstance` is even attached.
+`test_create_warns_on_unknown_component` asserted
+`"UnknownComponent" in caplog.text or entity is not None` — the `or` clause
+is always true, so it could never fail (pure theatre). `test_clear_registry`
+checked `has()` returned `False` but not that the registry was still
+*usable*, so the F5 footgun was invisible. Rewritten: de-tautologised the
+warn test; added `TestPrefabChildren` (crash regression, parent-link +
+follow, local-space offset, source-path recording, no-resolver warning,
+offset-without-Transform warning), `TestPrefabInheritanceCycle`,
+`TestPrefabInstanceMetadata`, `TestPrefabFactoryFailsLoud`,
+`TestComponentRegistryConversion` (enum any-case + raw value, non-Transform
+`Vector2`, unknown-field raise, `clear()` still round-trips `Transform`),
+`TestPrefabLoaderRejectsMalformed`, `TestPrefabRoundTrip` (file → loader →
+factory). +17 hand-written tests; 1799 → 1835 including parametrise
+expansion.
+
+**Phase C — docs.** The subsystem had **no doc page**. Peripheral mentions
+(`docs/core/ecs.md`, `docs/core/scenes.md`) were accurate;
+`docs/guides/PROJECT_STRUCTURE.md` describes "prefabs" as hand-written
+factory functions (a convention doc, not an API reference — left as is);
+`docs/systems/resources.md`'s loader table listed only `.prefab` for the
+extension column. Wrote `docs/systems/prefabs.md` (layers, the registry's
+conversion rules and fail-loud contract, `extends` + cycle behavior, the
+child hierarchy semantics, `PrefabInstance` metadata, the JSON schema).
+Added it to `mkdocs.yml` nav and `docs/index.md`; corrected the
+`resources.md` row.
+
+**Phase D — capability gaps → new issue** (sibling of #37/#40/#43/#46 and
+the still-unfiled UI Phase-D issue):
+
+- **Spawn tables / weighted prefab pools.** `create` is one prefab at a
+  time; a roguelike spawns waves/loot from weighted random selection (ties
+  to #28's seeded RNG). None.
+- **`PrefabData.version` is dead** — declared "for migration support", read
+  by nothing. A renamed component field breaks every authored `.prefab`
+  with no upgrade path, while `pyguara/persistence` has a whole
+  `MigrationRegistry`.
+- **No named variant library** — `overrides` is per-call only; "elite
+  goblin = goblin + modifiers" needs an `extends` file per variant or raw
+  dicts at every spawn site.
+- **Prefab children have no entity-level ownership** — linked
+  `Transform`↔`Transform` only; the child entity has no parent-*entity*
+  back-reference and no shared lifetime, so despawning an enemy leaks its
+  prefab-attached child entities. A real fix likely needs an
+  `EntityManager` hierarchy (cross-cutting with `pyguara/ecs`).
+- **No asset-reference validation at load** — a prefab naming a missing
+  sprite fails only when the renderer reaches for it (overlaps #40).
+
+Parked as a CC: `ComponentRegistry` is a process-global mutable singleton
+(`get_component_registry()` + the `@register_component` decorator) — same
+shape as other engine singletons.
+
+**Left open.** `_deep_merge` replaces lists wholesale and has no way to
+*remove* an inherited component (design limitation, not a defect).
+`_create_children` partial state on a mid-way failure is not rolled back
+(consistent with fail-loud and with how other subsystems behave). The
+`SceneSerializer` shares this registry and has its own `try/except` fallback
+around `registry.create`, so the F3 fail-loud change is masked on that path —
+noted, not touched (serializer is `pyguara/scene`, already audited).
 
 ### `pyguara/ai` — CLOSED 2026-09-08 (branch `refactor/ai-audit`)
 

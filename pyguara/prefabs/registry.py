@@ -7,6 +7,7 @@ enabling dynamic component instantiation from serialized data.
 from __future__ import annotations
 
 import dataclasses
+import enum
 from collections.abc import Callable
 from typing import Any, get_type_hints
 
@@ -182,6 +183,22 @@ class ComponentRegistry:
         except Exception:
             hints = {}
 
+        assignable = {
+            f.name
+            for f in dataclasses.fields(cls)  # type: ignore[arg-type]
+            if not f.name.startswith("_")
+        }
+
+        # A key that matches no field is an authoring mistake (a typo, a
+        # renamed field, wrong component). Silently dropping it — the old
+        # behaviour — hid the error until the value was missing at runtime.
+        unknown = set(data) - assignable
+        if unknown:
+            raise ValueError(
+                f"{cls.__name__} has no field(s) {sorted(unknown)}; "
+                f"valid fields: {sorted(assignable)}"
+            )
+
         for dc_field in dataclasses.fields(cls):  # type: ignore[arg-type]
             field_name = dc_field.name
 
@@ -223,13 +240,38 @@ class ComponentRegistry:
         if isinstance(value, dict) and "x" in value and "y" in value:
             return Vector2(value["x"], value["y"])
 
-        # Handle enums
-        if hasattr(target_type, "__members__"):
-            if isinstance(value, str):
-                return target_type[value.upper()]
-            return target_type(value)
+        # Handle enums: accept a member name (case-insensitive) or a raw value.
+        if isinstance(target_type, type) and issubclass(target_type, enum.Enum):
+            return self._convert_enum(value, target_type)
 
         return value
+
+    def _convert_enum(self, value: Any, enum_type: type[enum.Enum]) -> Any:
+        """Coerce serialized data to an enum member.
+
+        Accepts an existing member, an exact or case-insensitive member name,
+        or a raw member value. A string that matches nothing raises
+        ``ValueError`` naming the valid members rather than a bare ``KeyError``.
+        """
+        if isinstance(value, enum_type):
+            return value
+
+        if isinstance(value, str):
+            if value in enum_type.__members__:
+                return enum_type[value]
+            for member in enum_type:
+                if member.name.lower() == value.lower():
+                    return member
+            try:
+                return enum_type(value)
+            except ValueError:
+                members = ", ".join(m.name for m in enum_type)
+                raise ValueError(
+                    f"{value!r} is not a valid {enum_type.__name__} "
+                    f"(expected one of: {members})"
+                ) from None
+
+        return enum_type(value)
 
     def _convert_vector2(self, value: Any) -> Vector2:
         """Convert data to Vector2.
@@ -284,9 +326,19 @@ class ComponentRegistry:
         return sorted(self._components.keys())
 
     def clear(self) -> None:
-        """Clear all registrations."""
+        """Clear user registrations, restoring the registry's built-in state.
+
+        Removes every component type and custom deserializer/type converter
+        added since construction, then re-seeds the built-ins (the ``Vector2``
+        type converter and the ``Transform`` deserializer). Without the
+        re-seed, a cleared registry could no longer round-trip ``Transform`` —
+        it has a custom ``__init__`` and is not a dataclass, so the generic
+        instantiation path cannot build it from raw dict data.
+        """
         self._components.clear()
         self._deserializers.clear()
+        self._type_converters = {Vector2: self._convert_vector2}
+        self._register_builtin_deserializers()
 
 
 # Global registry instance

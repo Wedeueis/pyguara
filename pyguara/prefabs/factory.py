@@ -10,6 +10,7 @@ import copy
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.log import get_logger
 from pyguara.prefabs.types import PrefabChild, PrefabData, PrefabInstance
@@ -75,7 +76,7 @@ class PrefabFactory:
         prefab: PrefabData,
         entity_id: str | None = None,
         overrides: dict[str, dict[str, Any]] | None = None,
-        parent_position: Vector2 | None = None,
+        source_path: str | None = None,
     ) -> Entity:
         """Create an entity from a prefab.
 
@@ -83,10 +84,18 @@ class PrefabFactory:
             prefab: The prefab data to instantiate.
             entity_id: Optional custom entity ID.
             overrides: Optional component data overrides.
-            parent_position: Optional parent position for offset calculation.
+            source_path: Path the prefab was loaded from. Recorded on the
+                entity's `PrefabInstance` so an instance can be traced back
+                to (and reloaded from) its source. Falls back to `prefab.name`
+                when the prefab was built in memory.
 
         Returns:
             The created entity with all components.
+
+        Raises:
+            ValueError: If the prefab's `extends` chain contains a cycle, or a
+                component's serialized data cannot be converted to its type.
+            KeyError: If a custom deserializer references an unregistered type.
         """
         # Resolve inheritance
         resolved_components = self._resolve_inheritance(prefab)
@@ -101,37 +110,24 @@ class PrefabFactory:
         # Add prefab metadata component
         entity.add_component(
             PrefabInstance(
-                prefab_path=prefab.name,
+                prefab_path=source_path or prefab.name,
                 instance_overrides=overrides or {},
             )
         )
 
-        # Create and add components
+        # Create and add components. A component whose data cannot be
+        # instantiated is an authoring error: let it raise rather than
+        # returning a half-built entity that fails mysteriously at runtime.
         for comp_name, comp_data in resolved_components.items():
             if not self._registry.has(comp_name):
                 logger.warning(f"Component '{comp_name}' not registered, skipping")
                 continue
 
-            try:
-                component = self._registry.create(comp_name, comp_data)
+            component = self._registry.create(comp_name, comp_data)
+            entity.add_component(component)
 
-                # Apply parent position offset for Transform
-                if comp_name == "Transform" and parent_position is not None:
-                    if hasattr(component, "position"):
-                        component.position = Vector2(
-                            component.position.x + parent_position.x,
-                            component.position.y + parent_position.y,
-                        )
-
-                entity.add_component(component)
-            except Exception as e:
-                logger.error(f"Failed to create component '{comp_name}': {e}")
-
-        # Create children
-        children = self._create_children(prefab.children, entity)
-        for _child in children:
-            # Optionally link children to parent here
-            pass
+        # Create children and parent them to this entity's Transform.
+        self._create_children(prefab.children, entity)
 
         logger.debug(f"Created entity from prefab '{prefab.name}': {entity.id}")
         return entity
@@ -161,21 +157,37 @@ class PrefabFactory:
             logger.error(f"Failed to resolve prefab: {prefab_path}")
             return None
 
-        return self.create(prefab, entity_id, overrides)
+        return self.create(prefab, entity_id, overrides, source_path=prefab_path)
 
-    def _resolve_inheritance(self, prefab: PrefabData) -> dict[str, dict[str, Any]]:
+    def _resolve_inheritance(
+        self,
+        prefab: PrefabData,
+        _chain: list[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
         """Resolve prefab inheritance chain.
 
         Merges component data from parent prefabs, with child overriding parent.
 
         Args:
             prefab: The prefab to resolve.
+            _chain: Internal. The `extends` paths already followed on this
+                branch, used to detect a cycle.
 
         Returns:
             Merged component data dictionary.
+
+        Raises:
+            ValueError: If the `extends` chain refers back to a prefab already
+                being resolved (a cycle would otherwise recurse until the
+                stack ran out).
         """
         if not prefab.extends or not self._prefab_resolver:
             return copy.deepcopy(prefab.components)
+
+        chain = _chain or []
+        if prefab.extends in chain:
+            cycle = " -> ".join([*chain, prefab.extends])
+            raise ValueError(f"Prefab inheritance cycle detected: {cycle}")
 
         # Load parent prefab
         parent_prefab = self._prefab_resolver(prefab.extends)
@@ -184,7 +196,9 @@ class PrefabFactory:
             return copy.deepcopy(prefab.components)
 
         # Recursively resolve parent inheritance
-        parent_components = self._resolve_inheritance(parent_prefab)
+        parent_components = self._resolve_inheritance(
+            parent_prefab, [*chain, prefab.extends]
+        )
 
         # Deep merge: child overrides parent
         merged = self._deep_merge(parent_components, prefab.components)
@@ -241,7 +255,13 @@ class PrefabFactory:
         children: list[PrefabChild],
         parent_entity: Entity,
     ) -> list[Entity]:
-        """Create child entities from prefab children.
+        """Create child entities and parent them to `parent_entity`.
+
+        Each child's Transform (if it has one) is attached to the parent's
+        Transform via `Transform.set_parent(..., keep_world_transform=False)`,
+        so the child's authored position is treated as local to the parent and
+        the child follows the parent when it moves. `PrefabChild.offset` is
+        added to that local position.
 
         Args:
             children: List of child prefab references.
@@ -250,8 +270,21 @@ class PrefabFactory:
         Returns:
             List of created child entities.
         """
-        if not self._prefab_resolver:
+        if not children:
             return []
+
+        if not self._prefab_resolver:
+            logger.warning(
+                "Prefab declares children but the factory has no prefab_resolver; "
+                "children skipped"
+            )
+            return []
+
+        parent_transform = (
+            parent_entity.get_component(Transform)
+            if parent_entity.has_component(Transform)
+            else None
+        )
 
         created: list[Entity] = []
 
@@ -261,24 +294,34 @@ class PrefabFactory:
                 logger.warning(f"Child prefab not found: {child.prefab}")
                 continue
 
-            # Calculate parent position for offset
-            parent_pos = None
-            transform = parent_entity.get_component_by_name("Transform")
-            if transform and hasattr(transform, "position"):
-                parent_pos = transform.position
-                if child.offset:
-                    parent_pos = Vector2(
-                        parent_pos.x + child.offset.get("x", 0),
-                        parent_pos.y + child.offset.get("y", 0),
-                    )
-
-            # Create child entity
             child_entity = self.create(
                 child_prefab,
                 entity_id=child.name,
                 overrides=child.overrides,
-                parent_position=parent_pos,
+                source_path=child.prefab,
             )
+
+            child_transform = (
+                child_entity.get_component(Transform)
+                if child_entity.has_component(Transform)
+                else None
+            )
+
+            if child.offset:
+                if child_transform is not None:
+                    child_transform.position = Vector2(
+                        child_transform.position.x + child.offset.get("x", 0.0),
+                        child_transform.position.y + child.offset.get("y", 0.0),
+                    )
+                else:
+                    logger.warning(
+                        f"Child prefab '{child.prefab}' has an offset but no "
+                        f"Transform component; offset ignored"
+                    )
+
+            if parent_transform is not None and child_transform is not None:
+                child_transform.set_parent(parent_transform, keep_world_transform=False)
+
             created.append(child_entity)
 
         return created

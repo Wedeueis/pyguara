@@ -40,5 +40,6 @@ nav:
       - Editor Tools: systems/editor.md
       - Input: systems/input.md
       - Persistence: systems/persistence.md
+      - Prefabs: systems/prefabs.md
       - Resources: systems/resources.md
       - Scripting: systems/scripting.md

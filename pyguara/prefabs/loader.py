@@ -137,7 +137,7 @@ class PrefabLoader:
         result = json.loads(content)
         return result
 
-    def _parse_prefab_data(self, raw: dict[str, Any], source_path: str) -> PrefabData:
+    def _parse_prefab_data(self, raw: Any, source_path: str) -> PrefabData:
         """Parse raw dictionary into PrefabData.
 
         Args:
@@ -148,8 +148,15 @@ class PrefabLoader:
             Parsed PrefabData.
 
         Raises:
-            ValueError: If required fields are missing.
+            ValueError: If the top-level document is not a mapping, or a
+                required field is missing.
         """
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"Prefab '{source_path}' must contain a mapping at the top "
+                f"level, got {type(raw).__name__}"
+            )
+
         # Required field
         name = raw.get("name")
         if not name:

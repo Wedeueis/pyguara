@@ -19,7 +19,6 @@ from pyguara.prefabs.types import (
     PrefabChild,
     PrefabData,
     PrefabInstance,
-    PrefabReference,
 )
 
 __all__ = [
@@ -27,7 +26,6 @@ __all__ = [
     "PrefabChild",
     "PrefabData",
     "PrefabInstance",
-    "PrefabReference",
     # Registry
     "ComponentRegistry",
     "get_component_registry",
