@@ -203,6 +203,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#19](https://github.com/Wedeueis/pyguara/issues/19) | ~2,700 lines of GPU-dependent graphics code are read-audited only, with no headless GL coverage |
 | [#23](https://github.com/Wedeueis/pyguara/issues/23) | `camera.rotation` is applied by `Camera2D.world_to_screen` but ignored by the render path; three definitions of world-to-screen disagree |
 | [#28](https://github.com/Wedeueis/pyguara/issues/28) | Roguelike core — framework-level subsystems the target genre needs (combat spine, seeded RNG service, stat/modifier system, projectile layer, procgen, tilemap, run/meta save split, flow-field pathfinding, hit-stop, combat juice, local co-op input) |
+| [#30](https://github.com/Wedeueis/pyguara/issues/30) | `docs/guides/*` physics references have drifted (pre-`CharacterMover`; style guide calls a nonexistent `get_body`) — a `docs/guides` pass, out of scope for the physics subsystem slice |
 
 ---
 
@@ -550,12 +551,16 @@ the knob for many hundreds of fast bodies. Both why-comments
 a "reach for it when" table, the shared rules, and the precise-vs-broad-phase
 distinction. `simulation.md` gains Substepping and Body sleeping subsections,
 a Spatial-queries pointer, and a forward reference from `RigidBody` to
-`CharacterBody`. `test_docs_api.py` passes. Final read of `materials.py`,
-`tilemap.py`, `debug_draw.py`: `tilemap`/`debug_draw` clean; `materials.py`'s
-docstring claimed "All materials are frozen dataclass instances" but
-`PhysicsMaterial` was a plain `@dataclass` — `Materials.ICE.friction = 0.9`
-would have rewritten ice game-wide. Frozen now (nothing mutates a material),
-as a separate `fix:` commit.
+`CharacterBody`. `test_docs_api.py` passes; `mkdocs build --strict` passes.
+Final read of `materials.py`, `tilemap.py`, `debug_draw.py`:
+`tilemap`/`debug_draw` clean; `materials.py`'s docstring claimed "All
+materials are frozen dataclass instances" but `PhysicsMaterial` was a plain
+`@dataclass` — `Materials.ICE.friction = 0.9` would have rewritten ice
+game-wide. Frozen now (nothing mutates a material), as a separate `fix:`
+commit. The `docs/guides/*` physics references (onboarding, style guide,
+zero-to-hero) have drifted pre-`CharacterMover` and one calls a nonexistent
+`get_body` — out of scope for a single-subsystem slice, filed as **issue
+#30** for a `docs/guides` pass.
 
 **Tests (+36).** New `tests/integration/test_physics_queries.py` (26, one
 class per query, built from moving and multi-shape bodies rather than the
