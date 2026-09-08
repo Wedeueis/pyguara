@@ -79,9 +79,75 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/ai` closed 2026-09-08 (branch `refactor/ai-audit`).**
-Next in the queue is Tier 4: `pyguara/ui` (layout engine, widgets, theming).
-Open `REFACTOR_STATE.md` "How to resume" and take it.
+**None — `pyguara/ui` closed 2026-09-08 (branch `refactor/ui-audit`).**
+Next in the queue is Tier 4: `pyguara/prefabs` (prefab definition and
+instantiation). Open `REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/ui` in one slice, ~1,900 lines (`base`, `layout`, `constraints`,
+`manager`, `theme`, `theme_presets`, `types`, `components/*`). Two headline
+"declared and wired to nothing" defects sat under 84 green tests because
+every test exercised a unit in isolation from the runtime loop.
+**The constraint layout system never ran.** `UIElement.apply_layout()` had
+no caller anywhere in the repo — `UIManager.update()`/`render()` had no
+layout pass, and root elements can't even be constrained (`apply_layout`
+early-outs unless `self.parent` is set). Probe: a child with
+`create_fill_constraints(margin=20)` under an 800×600 parent stayed at
+`Rect(0,0,10,10)` through three manager frames. So `constraints.py`
+(314 lines), `element.padding`, and every `create_*_constraints` helper were
+inert — yet documented as "the heart of the UI system's power" across two
+guides with non-runnable examples. Per the user's choice (unify, not a
+minimal shim, not park), `UIElement.apply_layout()` → `UIElement.layout(
+available_rect, renderer)`: `UIManager` holds a screen `Rect` (seeded by
+`Application` via a new `set_screen_size()`, refreshed by a
+`WindowResizeEvent` subscription), and runs `layout()` over every root
+before rendering, **dirty-gated** — `add_element` / `set_screen_size` / a
+new public `invalidate_layout()` arm it, a steady frame is free. Roots
+constrain against the screen rect; children against the parent's
+padding-aware content rect (so `padding` finally does something).
+`BoxContainer.layout()` was folded into the same signature/pass and now
+resolves its **own** constraints first, honours `LayoutAlignment.STRETCH`
+(declared, no branch → was silently `START`), skips hidden children in
+`render()` (every other traversal already did), and recurses into nested
+containers. **Theme was snapshotted per element at construction** —
+`UIElement.__init__` did `self.theme = get_theme()`, so `set_theme()` after
+the UI was built re-skinned nothing (probe: build `Button`,
+`set_theme(CYBERPUNK)`, still steel-blue). `get_theme()` is a function
+precisely to allow runtime swaps. Now `UIElement.theme` is a property doing
+the live lookup; `ProgressBar`/`Canvas`/`NavBar` (which cached a `Color` in
+`__init__`) defer to render time. **`ThemeConstants` `@dataclass(frozen=
+True)` decorated nothing** — `DARK = …` etc. had no annotations, so
+`fields() == []`, `frozen` protected nothing, and the docstring's "All
+themes are immutable" was false: probe mutated `Themes.DARK.colors.primary`
+in place, corrupting the process-wide singleton. Now a `__getattr__`
+accessor hands back a **fresh copy** per access. Smaller: `Slider` now
+rejects `max_val <= min_val` / non-positive width at construction (both
+divided by zero on interaction); dead `UIElement.anchor` / `Label(anchor=)`
+param removed (`LayoutConstraints.anchor` is the real mechanism). Recurring
+shapes: "declared and wired to nothing" (`apply_layout`, `STRETCH`,
+`anchor`, fake `frozen`), "cached snapshot where a live lookup was intended"
+(per-element theme), and uniform test setup — `test_ui_constraints.py`
+(513 lines) only ever called `LayoutConstraints.apply()` on hand-built
+`Rect`s, never through the manager; theme tests never built a `UIElement`.
+Tests: added `test_ui_manager_layout.py` (manager-driven layout, dirty
+gate, resize, live theme swap, preset copies) and rebuilt
+`test_ui_layout.py` for the new signature + STRETCH + visibility + nesting.
+See the iteration log entry below. **BREAKING** (pre-alpha): `BoxContainer.
+layout()` / `UIElement.layout()` signature changed; the four in-repo games
+that hand-called `container.layout(renderer)` had the now-redundant call
+removed (the manager does it).
+
+**Capability gaps (Phase D) → new issue.** The theme carries
+`ShadowScheme`, `BorderScheme.radius`, `ColorScheme.hover_overlay/
+press_overlay` that **no widget consumes** (`Widget.get_state_color` even
+says "you might blend colors here" and doesn't); no keyboard/gamepad focus
+navigation (`set_focus` exists, nothing moves it); no scroll/clip container
+(`UIRenderer` has no push/pop clip) for inventory lists and message logs;
+only linear `BoxContainer`, no grid/flex; real text input still rides
+`KEY_DOWN`+`chr()` with no shift/unicode/IME and `UIEventType.TEXT_INPUT`
+is declared but never dispatched (needs a `pyguara/input` SDL-TEXTINPUT
+surface); layout invalidation is manual (`invalidate_layout()`) rather than
+a dirty-tracking `set_text`/`visible`. Coherent and sizeable → sibling of
+#37/#40/#43/#46.
 
 `pyguara/ai` in one slice, ~2,100 lines (`fsm`, `blackboard`, `components`,
 `ai_system`, `steering`, `steering_system`, `behavior_tree`, `navmesh`,
@@ -402,7 +468,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [x] `pyguara/ai` — FSM, steering, pathfinding, navmesh, behaviour trees *(done)*
 
 ### Tier 4 — Tooling & authoring
-- [ ] `pyguara/ui` — layout engine, widgets, theming
+- [x] `pyguara/ui` — layout engine, widgets, theming *(done)*
 - [ ] `pyguara/prefabs` — prefab definition and instantiation
 - [ ] `pyguara/editor` — in-engine editor, inspector tools
 - [ ] `pyguara/scripting` — coroutines, script hosting
@@ -417,6 +483,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/ui` | 2026-09-08 | One slice (`base`, `layout`, `constraints`, `manager`, `theme`, `theme_presets`, `types`, `components/*`; ~1,900 lines). Two "declared and wired to nothing" headliners under 84 green tests. **The constraint layout system never ran** — `UIElement.apply_layout()` had no caller in the repo; `UIManager` had no layout pass; roots couldn't be constrained at all (`apply_layout` needs `self.parent`). Probe: `create_fill_constraints(margin=20)` under an 800×600 parent → child stays `Rect(0,0,10,10)` across three manager frames. So `constraints.py` (314 lines) + `element.padding` + every `create_*_constraints` helper were inert, though documented as "the heart of the UI system's power" with non-runnable examples. Per the user's choice (unify): `apply_layout()` → `UIElement.layout(available_rect, renderer)`; `UIManager` holds a screen `Rect` (seeded by `Application.set_screen_size()`, refreshed via a `WindowResizeEvent` subscription) and runs `layout()` over every root before render, **dirty-gated** (`add_element` / `set_screen_size` / new public `invalidate_layout()` arm it). Roots constrain against the screen; children against the parent's padding-aware content rect. `BoxContainer.layout()` folded into the same pass: resolves its own constraints first, honours `LayoutAlignment.STRETCH` (declared, no branch), skips hidden children in `render()`, recurses. **Theme was snapshotted per element at construction** (`self.theme = get_theme()` in `__init__`) so `set_theme()` re-skinned nothing already built (probe confirmed) — now `UIElement.theme` is a live property; `ProgressBar`/`Canvas`/`NavBar` defer their cached `Color`. **`ThemeConstants` `@dataclass(frozen=True)` decorated nothing** (`fields() == []`) — "All themes are immutable" was false, presets were mutable process-wide singletons; now a `__getattr__` hands back a fresh copy per access. Smaller: `Slider` rejects `max_val <= min_val` / non-positive width at construction; dead `UIElement.anchor` / `Label(anchor=)` param removed. Recurring shapes: "declared and wired to nothing" (`apply_layout`, `STRETCH`, `anchor`, fake `frozen`), "cached snapshot vs live lookup" (theme), uniform test setup (`test_ui_constraints.py`'s 513 lines only ever called `.apply()` on hand-built Rects; theme tests never built a `UIElement`). BREAKING (pre-alpha): `layout()` signature changed; four in-repo games had their now-redundant `container.layout(renderer)` call removed. Tests: new `test_ui_manager_layout.py` + rebuilt `test_ui_layout.py`. Phase D → new issue (sibling of #37/#40/#43/#46): `ShadowScheme`/`BorderScheme.radius`/`hover_overlay`/`press_overlay` consumed by no widget, no focus navigation, no scroll/clip container, no grid layout, no real text-input path (`TEXT_INPUT` declared/never dispatched), manual layout invalidation. |
 | `pyguara/ai` | 2026-09-08 | One slice (`fsm`, `blackboard`, `components`, `ai_system`, `steering`, `steering_system`, `behavior_tree`, `navmesh`, `pathfinding/*`; ~2,100 lines). **`world_to_grid_coords()` used `int()` not `floor`** — a non-zero grid `offset` or any negative local coord resolved to the wrong cell, and the quadrant left of/above the origin collapsed onto row/col 0 (world `(-10,-10)` → grid `(0,0)`, a sign flip). "Formula that returns a wrong answer" → `math.floor`. **`AISystem` passed the bare `Entity` as the BT context**, so `WaitNode` (any `context.dt` reader) fell back to a hardcoded `1/60` and drifted with frame rate — `WaitNode(1.0)` = ~2.1s @30fps, ~3.5s @144fps; the engine's own game hand-rolled its own AI system to dodge this. Fixed with a small `AIContext` (entity+dt+blackboard), passed to `tree.tick()`. **`SteeringSystem` only dispatched `seek/arrive/flee/wander`** — `pursuit`/`evade` (the only moving-target behaviors) were implemented but unreachable, and an unknown `behavior` string produced zero force silently. `behavior` is now a validated `SteeringBehaviorType` enum, all six wired, `SteeringAgent` gained `target_velocity`. **`behavior="arrive"` overshot and orbited the target forever** — system now enforces the arrive speed ramp on velocity and snaps to rest. **Generic `AStarPathfinder` crashed on a priority tie** with non-order-comparable nodes (`Node` is only `Hashable`; ties are common) — added the monotonic tie-break counter (also to `NavMeshPathfinder`). **`NavMesh.remove_polygon()` left dangling ids in other polygons' `neighbors`** — now pruned. FSM `set_initial_state()` / unknown transition targets were silent no-ops — now logged; a second `set_initial_state()` exits the prior state. `NavMeshPathfinder` docstring claimed a funnel algorithm it lacks — corrected. Recurring shapes: "guard/formula returns a wrong answer", "declared and wired to nothing" (`pursuit`/`evade`, `dt` never threaded), "hardcoded dt", uniform test setup (`TestCoordinateConversion` all-positive; **zero** tests for `AISystem`/`SteeringSystem`). Tests +29 (1770 → 1799). Phase D: BT/FSM authoring gaps (no reactive composites, no FSM transition table, no declarative blackboard nodes) → **#46** (sibling of #37/#40/#43); navmesh funnel/partial-portals/generation → parked (flow-field is #28's); steering-vs-physics → parked for the top-down `CharacterMover` slice. Left open: `WaitNode` keeps a named `getattr` dt fallback; the arrive fix is a velocity clamp (`_ARRIVE_STOP_DISTANCE = 1.0`), not a force-model redesign; `NavMeshPolygon.contains_point` has a fragile-but-unreachable `xinters`-before-assignment. |
 | `pyguara/persistence` | 2026-09-08 | One slice (`manager`, `storage`, `serializer`, `migration`, `types`; ~970 lines). The **migration half was sound** — the chain-integrity guards compose and the path loop provably terminates; overshoot/infinite-loop probes came back negative. The save/load half held the recurring shapes. **`save_data()` discarded `storage.save()`'s return** — `FileStorageBackend.save` returns `False` on `OSError`, so a full disk logged "Successfully saved" and returned `True`; now checked. **`FileStorageBackend` sanitised keys by deleting bad chars** — `"slot 1"`/`"slot/1"`/`"slot.1"` all collapsed onto `slot1` and silently overwrote each other (the resources F2 stem-collision shape); non-round-tripping keys now raise `ValueError`. **Data + meta were two independent `os.replace` calls** while the load path claimed "atomic save ensures both or neither" — a crash between them made an intact save unreadable (stale checksum → `None`). User chose the systemic fix: metadata is framed into **one blob** (`{header json}\n<payload>`), `StorageBackend` drops its `metadata` param (plain key→blob store), `FileStorageBackend` writes one `{key}.save` file + dir fsync + temp-sweep. **`compress=` was a documented no-op** → gzip, recorded in the header. **`SerializationFormat.MSGPACK` was a public enum member with no impl** though `msgpack` is a declared dep → implemented via the existing `prepare_for_json`/`game_object_hook` path, exposed through a new `fmt=` arg. `SaveMetadata` was hand-copied field by field and never read back on load → now carries `format`/`compressed`, used via `asdict`, engine version from `importlib.metadata` (was `"1.0.0"`), UTC timestamp. Migration gained `from_version >= 1` / `current_version >= 1` guards; `MigrationRegistry` is `eq=False`. Recurring shapes: "declared and wired to nothing" (`compress`, `MSGPACK`, `SaveMetadata`'s metadata half), "guard that returns a wrong answer" (swallowed `save()` failure, key mangling), "identity vs value" (`MigrationRegistry`), uniform test setup (every storage test used an already-safe key; every migration test used versions from 1). BREAKING: on-disk save format changed (`.dat`+`.meta` → `.save`); pre-alpha, no migration. Tests +35 (1735 → 1770). Phase D capability gaps: no backup/retention, no save-menu API (`list_saves`, cheap metadata read, `delete`/`exists` facade), CWD-relative save dir — grouped into #43 ("persistence production layer", sibling of #37); envelope `format_version` parked; run/meta split is #28's. Left open: `BINARY`/pickle load unauthenticated (trusted-input-only); mypy `python_version` 3.10 vs `requires-python` 3.12 forces a `# noqa: UP017` (possible CC). |
 | `pyguara/resources` | 2026-09-08 | One slice (`manager`, `meta`, `loader`, `types`, `data`, `data_loader`; hot reload lives downstream in `pyguara/dev`). No headline crash — better shape than recent subsystems — but the recurring shapes held. **Reference counting was internally inconsistent and wired to nothing**: `load()` auto-incremented on every call incl. cache hits, `release()` auto-unloaded at 0, so `unload_unused()` could never evict anything in use and a released resource was already gone — dead. No engine caller of acquire/release/unload/unload_unused; `AudioManager` `load()`s per play → count climbs forever. `Resource._ref_count` was a *third* dead counter. Reworked (user: "fix the model + add reload()"): `load()` is a pure cache-get → unpinned (0); `acquire()`/`release()` pin; `unload_unused()` now sweeps. `index_directory()` **silently resolved a stem collision to the last file walked** — now the ambiguous bare stem is dropped with a warning, full-name keys always win. `MetaLoader` **cached parsed meta by path with no invalidation** (stale after a disk change — wrong under hot reload) and the path-only key **swallowed the `expected_type` mismatch warning** after the first call — now mtime-pinned + re-read + `invalidate()`, check runs every call. `DataResource` docstring claimed "hot-reloaded by the ResourceManager" with **no reload API** — added `ResourceManager.reload()` (re-run loader, re-read `.meta`, swap in place, keep count). The **`.meta` import pipeline was ~70% scaffolding** (`AudioMeta`/`SpritesheetMeta` had no consumer, GL loader hardcoded `LINEAR`) — wired end to end (user: "wire it up in this slice"): `Resource.import_meta` carries the resolved sidecar; `GLTextureLoader` honours `filter` (default flips to `NEAREST`, matching the pygame path); audio backend applies `AudioMeta.volume_db` as a per-asset channel gain; `SpriteSheet` gained `margin`/`spacing` (previously meaningless) + `slice_from_meta`. Recurring shapes: "declared and wired to nothing" (the whole ref-count half; `AudioMeta`; `_ref_count`) and uniform test setup (`test_resources.py` asserted on `_reference_counts`/`_cache`/`_path_index` privates and hand-poked an impossible state into `test_unload_unused`; every `test_meta.py` test used a fresh `MetaLoader()`). Tests +21. Left open: `AudioMeta.loop_*`/`normalize`/`load_mode`, `TextureMeta.mipmaps`/`wrap_*` still unconsumed (need streaming/DSP/GL-state — authoring-layer gap, sibling of #37); audio should `acquire()` its clips under the new model (small `pyguara/audio` follow-up, no behaviour change today); no lock on the cache dicts (no concurrent caller, parked CC). |

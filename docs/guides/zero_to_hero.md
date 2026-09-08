@@ -327,33 +327,37 @@ ground.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[800, 40]))
 Creating buttons, health bars, and overlay dialogs requires a layout-agnostic framework to handle resolution adjustments automatically. PyGuara provides a constraint-based UI layout system.
 
 ### 1. Building responsive buttons and panels
-You instantiate UI widgets, attach declarative constraints, and add them to the `UIManager`:
+You instantiate UI widgets, attach declarative `LayoutConstraints`, and add
+the roots to the `UIManager`. The manager runs a layout pass over every root
+before it draws (and again after a window resize), so a constrained element's
+`position`/`size` are placeholders -- the constraints decide the final rect.
 
 ```python
+from pyguara.common.types import Vector2
 from pyguara.ui.manager import UIManager
 from pyguara.ui.components import Panel, Button
-from pyguara.ui.constraints import UIAnchor, LayoutConstraints
+from pyguara.ui.constraints import LayoutConstraints
+from pyguara.ui.types import UIAnchor
 
 # 1. Grab UIManager from DI Container
 ui_manager = self.container.get(UIManager)
 
-# 2. Setup container panel centered on screen
-panel = Panel()
+# 2. A panel covering the centre 50% x 60% of the screen.
+#    position/size are placeholders; the constraint wins.
+panel = Panel(Vector2(0, 0), Vector2(10, 10))
 panel.constraints = LayoutConstraints(
-    anchor_left=UIAnchor.CENTER,
-    anchor_top=UIAnchor.CENTER,
+    anchor=UIAnchor.CENTER,
     width_percent=0.5,
-    height_percent=0.6
+    height_percent=0.6,
 )
 ui_manager.add_element(panel)
 
-# 3. Create active action button inside the panel
-button = Button(text="Start Game")
+# 3. A button centred inside the panel's content rect.
+button = Button("Start Game", Vector2(0, 0))
 button.constraints = LayoutConstraints(
-    anchor_left=UIAnchor.CENTER,
-    anchor_top=UIAnchor.CENTER,
+    anchor=UIAnchor.CENTER,
     width_percent=0.3,
-    height_percent=0.1
+    height_percent=0.1,
 )
 
 def on_click(btn: Button):
@@ -363,6 +367,10 @@ def on_click(btn: Button):
 button.on_click = on_click
 panel.add_child(button)
 ```
+
+> If you mutate something a layout depends on after the first frame -- a
+> label's text, an element's `visible` flag -- call
+> `ui_manager.invalidate_layout()` so the next render re-runs the pass.
 
 ---
 
