@@ -63,9 +63,25 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/input` closed 2026-09-08 (branch `refactor/input-audit`).**
-Next in the queue is `pyguara/audio`. Open `REFACTOR_STATE.md` "How to
+**None — `pyguara/audio` closed 2026-09-08 (branch `refactor/audio-audit`).**
+Next in the queue is `pyguara/animation`. Open `REFACTOR_STATE.md` "How to
 resume" and take it.
+
+`pyguara/audio` in one slice: **SFX playback was dead end to end** —
+`PygameAudioSystem._play_sound` called `Channel.get_id()`, which pygame-ce
+has no such attribute (`Channel.id`), so every real `play_sfx` /
+`play_sfx_at_position` raised, was swallowed by a blind
+`except (AttributeError, Exception)`, and returned `None` while the sound
+played on untracked. Every one of the 107 audio tests missed it: they
+`patch("pygame.mixer")` wholesale (the "mock away the unit under test"
+smell). Volume + pan were set on the ResourceManager-shared `Sound`, not the
+channel, so concurrent plays of one clip corrupted each other's loudness;
+recycled channels kept the previous sound's hard pan; `AudioSourceSystem`
+never detected a finished one-shot (so `is_playing` lied forever, a source
+could not be replayed, and stale channel ids leaked spatial mix updates onto
+whatever reused the channel); `SpatialAudioConfig` had no validation (0 →
+`ZeroDivisionError` in `calculate_pan`); `IAudioSystem` had no `shutdown`.
+See the iteration log entry below.
 
 `pyguara/input` in one slice: `InputContext` was inert end to end (no way to
 leave `GAMEPLAY`), gamepad identity was by device index not SDL instance id
@@ -155,7 +171,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
     - [x] Spatial queries, body sleeping, `substeps` decision, Phase C
       (branch `refactor/physics-queries-sleep-close`)
 - [x] `pyguara/input` — input manager, rebinding *(done)*
-- [ ] `pyguara/audio` — audio manager, spatial audio
+- [x] `pyguara/audio` — audio manager, spatial audio *(done)*
 - [ ] `pyguara/animation` — tween, easing, FSM
 - [ ] `pyguara/resources` — loaders, meta, hot reload
 - [ ] `pyguara/persistence` — save/load, migration
@@ -177,6 +193,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/audio` | 2026-09-08 | One slice. **SFX playback was dead end to end**: the pygame backend called `Channel.get_id()` (pygame-ce has `Channel.id`), so every real `play_sfx`/`play_sfx_at_position` raised, was swallowed by `except (AttributeError, Exception)`, and returned `None` while the sound played on untracked — hidden because all 107 audio tests `patch("pygame.mixer")` wholesale. Loudness/pan were set on the ResourceManager-shared `Sound` not the channel, so concurrent plays of one clip corrupted each other and recycled channels kept the last sound's hard pan. `AudioSourceSystem` never detected a finished one-shot — `is_playing` lied forever, a source could not be replayed, and stale channel ids kept receiving spatial mix updates meant for whatever reused the channel; fixed with a new `IAudioSystem.is_channel_active()` reconciled each frame, plus an `_auto_played` latch (auto_play is "on awake", not loop — the fix exposed a retrigger storm). `SpatialAudioConfig` gained `__post_init__` validation (0 → `ZeroDivisionError` in `calculate_pan`; inverted range → attenuation cliff). Added `IAudioSystem.shutdown()` (idempotent `pygame.mixer.quit()`), wired into `Application.shutdown()`. Recurring shapes: "mock away the unit under test" (the whole `test_audio.py`) and "declared and wired to nothing" (`AudioManager._active_channels`, removed). Left open: bus/master volume changes don't re-mix already-playing non-spatial SFX (mixer limitation, documented). |
 | `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). Phase B also found the softer test smells — assertions on `_controllers` privates, `assert x is not None` on a list literal, `assert not raises` as the only check — and rewrote them. `input/manager.py` stays a CC-11 / issue #9 offender (raw pygame events) — parked. |
 | `pyguara/physics` | 2026-09-08 | Judged as *game* physics. Four slices: substepping stops ordinary-speed tunnelling (PR #24); characters moved off dynamic bodies onto `CharacterMover`/`CharacterBody` with full parity — knockback, platform riding, crate pushing — on Celeste's integer+remainder model (PR #25); trigger volumes and the entire `Joint` ECS layer were both inert end to end and were rebuilt and tested (PR #27); the close added five spatial queries, body sleeping, kept `substeps` at 4 on benchmark evidence, and froze `PhysicsMaterial`. Recurring shape: "declared and wired to nothing" (`fixed_rotation`, `gravity_scale`, the `return False` collision contract, `Joint`, `TriggerVolume`) and uniform test setup (every test a slow body already at rest). |
 | `pyguara/graphics` | 2026-09-06 | Audited in five slices: window boundary, components, backends, pipeline, assets. Window reported the requested size not the granted one; `Box`/`Circle` were hard-wired to pygame; the pygame stubs had drifted; a zero-height window produced a 450px viewport; nine-patch produced negative source rects. PRs #12, #14, #15, #17, #18. |
@@ -375,6 +392,134 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/audio` — CLOSED 2026-09-08 (branch `refactor/audio-audit`)
+
+One slice, ~1,700 lines (`manager`, `audio_system`, `audio_source_system`,
+`components`, `types`, the pygame backend + loaders). Every defect was
+reproduced with a probe against the **real** pygame-ce mixer (`SDL_AUDIODRIVER
+=dummy`) before being touched — which is how the headline one surfaced at
+all, since it is invisible to a mocked mixer.
+
+**Verification:** 1678 tests pass (up from 1658; the fix commit alone is
+1676, the docs commit adds 2 `test_docs_api` parametrisations for the new
+page); `ruff check .` clean; `ruff format --check` clean; `mypy pyguara`
+clean across 224 files; `mkdocs build --strict` exit 0; `test_docs_api.py`
+(52) passes. Fix commit verified standalone in a detached worktree.
+
+**F1 — SFX playback was dead end to end.** `PygameAudioSystem._play_sound`
+read the channel id with `played_channel.get_id()`. pygame-ce's
+`pygame.mixer.Channel` has **no `get_id()`** — the attribute is `.id`. So the
+call raised `AttributeError` on every real `play_sfx` /
+`play_sfx_at_position`, was caught by a blind
+`except (AttributeError, Exception)`, logged as "Error playing sound", and
+returned `None`. The sound had already been started by `native_sound.play()`
+one line earlier, so it played — untracked, unstoppable (caller got `None`),
+invisible to priority stealing / `set_channel_mix` / `stop_sfx` /
+`get_active_sound_count` (all of which read the never-populated
+`_playing_sounds`). **All 107 audio tests missed it**: `test_audio.py` and
+`test_audio_backend.py` `patch("pygame.mixer")` or hand a `MagicMock` as the
+`Sound`, and a Mock grows a `get_id()` on demand. The "fixtures that mock
+away the unit under test" smell, same shape as `test_config.py` mocking the
+filesystem. Fixed: acquire a `Channel`, call `channel.play(sound, loops=)` on
+it, id is `channel.id`; `except` narrowed to `pygame.error`.
+
+**F2 — loudness and pan were set on the shared `Sound`, not the channel.**
+`native_sound.set_volume(effective_volume)` where `native_sound` is the
+`AudioClip.native_handle` — one object the `ResourceManager` hands to every
+concurrent play of that clip. Probe: play one explosion near (vol 1.0) then
+another far (vol 0.16); the near one's loudness silently dropped to 0.16.
+`set_channel_mix` had the same bug on the update path. Fixed: volume+pan go
+on the channel via a `_set_channel_volume` helper — single-arg
+`set_volume(v)` when centred (also clears any stale split), two-arg
+`set_volume(l, r)` when panned. The `Sound` is never touched.
+
+**F3 — a recycled channel kept the previous sound's hard pan.** `_apply_pan`
+was only called when `abs(pan) > 0.01`, so a centred sound landing on a
+channel that last played a hard-panned one inherited its `(1.0, 0.0)` split.
+Fixed by F2's unconditional `_set_channel_volume`.
+
+**F4 — `AudioSourceSystem` never noticed a one-shot ending.** Nothing polled
+the mixer, so `_channel_id` / `_is_playing` were set once and cleared only by
+an explicit `stop()`. Consequences: `AudioSource.is_playing` reported `True`
+forever; a non-looping source could not be replayed (`_play_source`'s guard
+is `_is_playing and _channel_id is None`, and `_channel_id` never went
+`None`); the stale id kept getting `set_channel_mix` every frame, landing on
+whatever sound now owned that recycled channel. Fixed: new
+`IAudioSystem.is_channel_active(channel)` — `True` only while the exact sound
+this system started is still on that channel (verified by `get_busy()` **and**
+`get_sound() is` identity, reaping the tracking tables as a side effect) —
+called each frame by `AudioSourceSystem` to reconcile.
+
+**F5 — the F4 fix exposed an `auto_play` retrigger storm**, plus a latent
+falsy-`0` bug. With reconciliation clearing an ended one-shot,
+`auto_play and not _is_playing and not _channel_id` re-fired it every
+subsequent frame. Added an `_auto_played` latch (auto_play is "on awake",
+not loop). `not source._channel_id` also treated channel id **0** — a real
+channel — as "no channel"; changed to `is None`, matching the check four
+lines below it. A failed clip load now latches too, instead of hammering the
+loader once per frame.
+
+**F6 — `SpatialAudioConfig` had no validation.** `SpatialAudioConfig(
+max_distance=0)` constructed fine and `calculate_pan` then raised
+`ZeroDivisionError`; an inverted range (`max_distance < reference_distance`)
+gave a hard volume cliff dressed as a rolloff. `__post_init__` now rejects
+`reference_distance <= 0`, `max_distance <= reference_distance`, and negative
+`rolloff_factor` / `pan_strength`.
+
+**Also:** added `IAudioSystem.shutdown()` (idempotent `pygame.mixer.stop()` +
+`music.stop()` + `mixer.quit()`), wired as a step in `Application.shutdown()`
+— the mixer was previously never torn down. Removed
+`AudioManager._active_channels` (declared, written nowhere, `.clear()`d in
+cleanup — "wired to nothing"). `except (AttributeError, Exception)` →
+`except pygame.error`; two `try/except pygame.error: pass` →
+`contextlib.suppress`.
+
+**Phase B — verdict on the 107 existing tests (+18; `test_audio.py` and one
+integration test rewritten).**
+
+*`test_spatial_audio.py` (39) — the strong file.* Pure maths on
+`SpatialAudioConfig` / `AudioBus` / `AudioBusManager`, all through public
+surface, real assertions on real return values. Its one gap was the missing
+validation cases (F6) — added 3.
+
+*`test_audio.py` (34, was 30) — rewritten.* It did
+`patch("pygame.mixer")` for the whole module, so `Channel.id`, channel
+volume, the shared-`Sound` trap and F1 itself were unreachable — the mock
+supplied whatever attribute was asked for. Now runs the real dummy-driver
+mixer with real `Sound` buffers; only `pygame.mixer.music` (needs a file on
+disk) stays mocked. New tests: F1 (id names the busy channel), channel id 0
+is valid, F2 (concurrent plays don't share volume; `Sound` untouched), F3
+(recycled channel resets), `is_channel_active` across finish / reuse /
+unknown, `shutdown` idempotence. Learned that `Channel.get_volume()` only
+reflects a **single-arg** `set_volume`, so the panned split is verified via
+`_channel_stereo` as a pure unit.
+
+*`test_audio_components.py` (41, was 30) — mixed.* The `AudioSourceSystem`
+tests build a `MagicMock` audio system and drive real components/Entity
+Manager, which is honest for the ECS logic. Gaps were all uniform setup:
+every source was played and left playing — nothing simulated a sound
+*ending*, so F4/F5 had no test that could see them. Added finished-one-shot
+reconciliation, replay-after-end, the looping-source-not-reaped case, the
+`auto_play` latch, the failed-load latch, and channel-id-0.
+
+*`tests/integration/test_audio_backend.py` (5) — honest, thin.* Already
+dummy-driver + real mixer, but `test_play_sfx_mock` still handed a
+`MagicMock` as the `Sound`, dodging F1. Rewritten to a real `Sound`.
+
+**Phase C.** New `docs/systems/audio.md` (added to nav): the three layers,
+music, the SFX channel contract (including "id 0 is valid"), the one-shot
+lifecycle, spatial components + `SpatialAudioConfig` validation rules, buses,
+and the documented limitation that a bus/master volume change does not
+re-mix already-playing non-spatial SFX. `test_docs_api` and
+`mkdocs build --strict` pass. The subsystem had **no** doc page before.
+
+**Left open.** Bus / master / per-category volume changes re-apply to music
+and to spatial SFX (re-mixed every frame) but not to already-playing
+non-spatial SFX — a pygame-mixer limitation, documented rather than worked
+around. `calculate_pan` keys stereo spread off horizontal offset only
+(`test_pan_ignores_y_axis` pins this as intentional). `pygame_audio.py` and
+`loaders.py` import pygame — legitimately, they are the backend.
 
 ### `pyguara/input` — CLOSED 2026-09-08 (branch `refactor/input-audit`)
 
