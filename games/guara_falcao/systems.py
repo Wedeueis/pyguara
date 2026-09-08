@@ -27,11 +27,13 @@ from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D, CameraFollowConstraints
+from pyguara.physics.components import CharacterBody
 from pyguara.physics.platformer_controller import (
     PlatformerController,
     PlatformerInput,
     PlatformerState,
 )
+from pyguara.physics.platformer_system import apply_knockback
 
 
 class PlayerControlSystem:
@@ -355,6 +357,8 @@ class HazardSystem:
     """Handles hazard collision detection and damage."""
 
     HAZARD_DISTANCE = 20.0  # Distance to trigger hazard damage
+    KNOCKBACK_DURATION = 0.25  # Seconds input control stays suppressed
+    KNOCKBACK_LIFT = 0.5  # Fraction of knockback_force added upward
 
     def __init__(
         self, entity_manager: EntityManager, event_dispatcher: EventDispatcher
@@ -393,6 +397,7 @@ class HazardSystem:
             if distance < self.HAZARD_DISTANCE:
                 # Apply damage
                 alive = player_health.take_damage(hazard.damage)
+                self._apply_knockback(hazard, player_transform, transform)
 
                 self._dispatcher.dispatch(
                     PlayerDamagedEvent(
@@ -403,3 +408,29 @@ class HazardSystem:
                 if not alive:
                     self._dispatcher.dispatch(PlayerDeathEvent())
                 break  # Only one hazard can damage per frame
+
+    def _apply_knockback(
+        self, hazard: Hazard, player_transform: Transform, hazard_transform: Transform
+    ) -> None:
+        """Shove the player away from a hazard that just hit it.
+
+        Wires up Hazard.knockback_force, declared on the component from
+        the start but never consumed by anything until now -- there was
+        no velocity for a dynamic-body player to receive it as that didn't
+        also fight PlatformerSystem's own control every tick. A
+        CharacterBody has a real place for it: apply_knockback() overrides
+        velocity and suppresses input control for a short window instead.
+        """
+        if not self._player or not self._player.has_component(CharacterBody):
+            return
+
+        away = (player_transform.position - hazard_transform.position).normalize()
+        knockback = Vector2(
+            away.x * hazard.knockback_force,
+            -hazard.knockback_force * self.KNOCKBACK_LIFT,
+        )
+        apply_knockback(
+            self._player.get_component(CharacterBody),
+            knockback,
+            self.KNOCKBACK_DURATION,
+        )
