@@ -3,6 +3,7 @@ from typing import Any
 
 # We need to mock pygame constants since we mocked the module
 import pygame
+import pytest
 
 from pyguara.input.events import (
     GamepadAxisEvent,
@@ -399,6 +400,51 @@ def test_gamepad_hot_plug_detection(event_dispatcher: Any) -> None:
     manager.update()  # Should detect disconnection
 
     assert not manager.is_connected(0)
+
+
+@pytest.mark.parametrize("unplug_index", [0, 1])
+def test_gamepad_unplug_middle_of_list_keeps_survivor_identity(
+    event_dispatcher: Any, unplug_index: int
+) -> None:
+    """SDL renumbers device indices when a controller in the middle unplugs.
+    Identity must follow the instance id, not the index: the survivor keeps
+    its slot and its handle, and only the unplugged controller is reported
+    gone -- regardless of which one that was."""
+    pad_a = _StubJoystick(instance_id=100, name="Pad-A")
+    pad_b = _StubJoystick(instance_id=200, name="Pad-B")
+    backend = _StubInputBackend([pad_a, pad_b])
+    manager = GamepadManager(event_dispatcher, backend)
+
+    assert manager.get_connected_controllers() == [0, 1]
+    survivor = [pad_a, pad_b][1 - unplug_index]
+    survivor_slot = 1 - unplug_index
+
+    backend.joysticks.pop(unplug_index)
+    manager.update()
+
+    assert manager.get_connected_controllers() == [survivor_slot]
+    assert manager.get_controller_name(survivor_slot) == survivor.get_name()
+    assert not manager.is_connected(unplug_index)
+
+    # The survivor's polled state must still read through to the right device.
+    survivor.button_states[GamepadButton.A.value] = True
+    manager.update()
+    assert manager.get_button(survivor_slot, GamepadButton.A)
+
+
+def test_gamepad_reconnect_reuses_the_freed_slot(event_dispatcher: Any) -> None:
+    pad = _StubJoystick(instance_id=42, name="Pad")
+    backend = _StubInputBackend([pad])
+    manager = GamepadManager(event_dispatcher, backend)
+    assert manager.get_connected_controllers() == [0]
+
+    backend.joysticks.clear()
+    manager.update()
+    assert manager.get_connected_controllers() == []
+
+    backend.joysticks.append(_StubJoystick(instance_id=42, name="Pad"))
+    manager.update()
+    assert manager.get_connected_controllers() == [0]
 
 
 def test_gamepad_query_methods(event_dispatcher: Any) -> None:
