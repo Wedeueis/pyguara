@@ -221,41 +221,59 @@ Before diving into individual systems, it's crucial to understand the three core
 *   **Features:**
     *   **Finite State Machines (FSMs):** For simple, state-based AI.
     *   **Behavior Trees (BTs):** A professional-grade BT implementation for complex, hierarchical AI logic. Includes all standard node types (Sequence, Selector, Parallel, Decorators).
-    *   **Steering Behaviors:** For dynamic movement (seek, flee, arrive).
-    *   **Pathfinding:** A* pathfinding on a navigation mesh.
+    *   **Steering Behaviors:** For dynamic movement. `SteeringSystem` drives
+        an entity's `SteeringAgent` each frame; `behavior` is a
+        `SteeringBehaviorType` (`SEEK`, `ARRIVE`, `FLEE`, `WANDER`, `PURSUIT`,
+        `EVADE`). `PURSUIT`/`EVADE` lead a moving target, so keep
+        `SteeringAgent.target_velocity` up to date alongside `target`.
+    *   **Pathfinding:** A generic A* solver (`AStarPathfinder`) over any
+        `Graph`, a concrete `GridGraph` with heuristics and path smoothing, and
+        a polygon `NavMesh` (`NavMeshPathfinder` returns polygon-center
+        waypoints; funnel string-pulling is not yet implemented).
 *   **How to Use (Behavior Tree):**
     1.  Define simple functions that will act as your leaf nodes.
     2.  Compose these functions into a tree using `SequenceNode`, `SelectorNode`, etc.
     3.  Create a `BehaviorTree` instance with your root node.
     4.  Add an `AIComponent` to your entity and assign the tree to it.
 
+    Leaf callables receive the tick `context`. Under `AISystem` that is an
+    `AIContext` with `.entity`, `.dt`, and `.blackboard` -- pass `dt` on,
+    because `WaitNode` (and any timing node) reads `context.dt`.
+
     ```python
-    from pyguara.ai.behavior_tree import BehaviorTree, ActionNode, SequenceNode, SelectorNode, NodeStatus
+    from pyguara.ai import AIComponent
+    from pyguara.ai.behavior_tree import (
+        ActionNode, BehaviorTree, ConditionNode, NodeStatus, SelectorNode, SequenceNode,
+    )
 
     def find_player(context) -> NodeStatus:
         # ... logic to find player ...
         if found:
-            context.blackboard['player_pos'] = player_position
+            context.blackboard.set("player_pos", player_position)
             return NodeStatus.SUCCESS
         return NodeStatus.FAILURE
 
     def move_towards_player(context) -> NodeStatus:
-        # ... logic to move towards context.blackboard['player_pos'] ...
+        target = context.blackboard.get("player_pos")
+        # ... move using context.dt ...
         if close_enough:
             return NodeStatus.SUCCESS
-        return NodeStatus.RUNNING # Still moving
+        return NodeStatus.RUNNING  # Still moving
 
-    # In your scene
-    attack_sequence = SequenceNode([find_player, move_towards_player])
-    patrol_action = ActionNode(...)
-    root_node = SelectorNode([attack_sequence, patrol_action])
+    def patrol(context) -> NodeStatus:
+        return NodeStatus.RUNNING
 
-    tree = BehaviorTree(root=root_node)
-    ai_comp = AIComponent()
-    ai_comp.behavior_tree = tree # The AISystem will tick this
+    # In your scene: leaves must be wrapped in ActionNode/ConditionNode.
+    attack_sequence = SequenceNode([
+        ActionNode(find_player),
+        ActionNode(move_towards_player),
+    ])
+    root_node = SelectorNode([attack_sequence, ActionNode(patrol)])
+
+    ai_comp = AIComponent(behavior_tree=BehaviorTree(root=root_node))
 
     my_enemy = self.entity_manager.create_entity()
-    self.entity_manager.add_component(my_enemy, ai_comp)
+    my_enemy.add_component(ai_comp)  # AISystem ticks it each frame
     ```
 
 ---

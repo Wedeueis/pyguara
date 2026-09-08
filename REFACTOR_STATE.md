@@ -79,10 +79,87 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/persistence` closed 2026-09-08 (branch
-`refactor/persistence-audit`).** Next in the queue is `pyguara/ai`
-(FSM, steering, pathfinding, navmesh, behaviour trees). Open
-`REFACTOR_STATE.md` "How to resume" and take it.
+**None — `pyguara/ai` closed 2026-09-08 (branch `refactor/ai-audit`).**
+Next in the queue is Tier 4: `pyguara/ui` (layout engine, widgets, theming).
+Open `REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/ai` in one slice, ~2,100 lines (`fsm`, `blackboard`, `components`,
+`ai_system`, `steering`, `steering_system`, `behavior_tree`, `navmesh`,
+`pathfinding/{core,astar,grid}`). No single dead-end like audio's SFX, but
+the recurring shapes held. **`world_to_grid_coords()` used `int()`** (rounds
+toward zero) not `floor`, so any grid with a non-zero `offset` — or any
+negative local coordinate — resolved to the wrong cell, and the whole
+quadrant left of / above the origin collapsed onto row/column 0 (probe:
+world `(-10,-10)` → grid `(0,0)`, whose centre is `(16,16)` — a sign flip).
+"Guard/formula that returns a wrong answer." Now `math.floor`. **`AISystem`
+passed the raw `Entity` as the behavior-tree context**, so `WaitNode` (and
+any node reading `context.dt`) fell back to a hardcoded `1/60` and drifted
+with the real frame rate — `WaitNode(1.0)` took ~2.1 s at 30 fps, ~3.5 s at
+144 fps; the engine's own game (`protocolo_bandeira`) had to hand-roll its
+own AI system with a `dt`-carrying context to work around it. Fixed by a
+small `AIContext` (entity + dt + blackboard), user's choice, passed to
+`tree.tick()`. **`SteeringSystem` only dispatched `seek/arrive/flee/wander`**
+— `SteeringBehavior.pursuit()` / `.evade()`, the only two that lead a
+*moving* target (the roguelike "chase the player" case), were fully
+implemented but unreachable through the ECS system, and an unknown
+`behavior` string produced zero force with no warning. "Declared and wired
+to nothing" + silent guard. Per the user's choice, `behavior` is now a
+`SteeringBehaviorType` enum (`SEEK/ARRIVE/FLEE/WANDER/PURSUIT/EVADE`),
+coerced-and-validated in `__post_init__` (unknown → `ValueError` at
+construction), all six wired, `SteeringAgent` gained `target_velocity` for
+pursuit/evade. **`behavior="arrive"` overshot the target and orbited it
+forever** — the dt-scaled steering force is only a weak proportional brake;
+the system now enforces the arrive speed ramp directly and snaps to rest.
+**Generic `AStarPathfinder` crashed on a priority tie** (`TypeError: '<' not
+supported`) whenever graph nodes were not order-comparable — `Node` is bound
+only to `Hashable`, ties are the common case; latent for the shipped
+`GridGraph` (tuple nodes). Added the standard monotonic tie-break counter
+(also to `NavMeshPathfinder`'s copy). **`NavMesh.remove_polygon()` left the
+dangling id in every other polygon's `neighbors` list** — now pruned. FSM
+`set_initial_state()` / an unknown transition target were silent no-ops —
+now logged, and a second `set_initial_state()` calls the previous state's
+`on_exit()`. `NavMeshPathfinder`'s docstring claimed funnel smoothing it
+does not do — corrected. Recurring shapes: "guard/formula that returns a
+wrong answer" (`int` vs `floor`, silent steering/FSM no-ops), "declared and
+wired to nothing" (`pursuit`/`evade`, `AISystem` never threading `dt`),
+"one advance per frame / hardcoded dt" (`WaitNode`), and uniform test setup
+— `TestCoordinateConversion` used only positive coords + positive offsets
+(hid the floor bug), `test_wait_completes` baked the `0.016` fallback into
+its comment, and there was **no test at all** for `AISystem` or
+`SteeringSystem` despite both being auto-registered on every scene. Tests
++29 (1770 → 1799). See the iteration log entry below.
+
+**Capability gaps (Phase D)** — the subsystem is defect-free but thin: BT
+composites have memory with no *reactive* variant (a guard `ConditionNode`
+at the front of a `SequenceNode` stops being re-checked once the sequence
+advances past it) and `ParallelNode` re-ticks already-completed children;
+FSM has no transition table / event-driven transitions (only
+`update()`-returns-a-name); no declarative blackboard BT nodes (every leaf
+is a hand-written closure); `NavMesh` needs a full shared edge (no
+partial-edge portals / T-junctions), returns polygon-*centre* waypoints (no
+funnel string-pulling), and generates nothing (you hand it convex
+polygons). `SteeringSystem` integrates `transform.position` directly,
+bypassing physics/`CharacterMover` — agents don't collide or separate.
+`_wander_targets` is only evicted on scene exit, not per destroyed entity.
+Disposition: the BT/FSM authoring gaps → propose one **new issue** (sibling
+of #37/#40/#43); navmesh funnel/portals/generation → **parked** pending a
+real consumer (flow-field pathfinding is already #28's); steering-vs-physics
+→ **parked** for the top-down `CharacterMover` slice; `_wander_targets`
+eviction → left-open note. See the iteration log.
+
+**Left open.** `WaitNode` still has a `getattr(context, "dt", 1/60)`
+fallback for trees ticked with a bare object (now a named constant, not a
+magic literal). The arrive fix is a system-side velocity clamp, not a
+redesign of the force/integration model shared by all behaviors —
+`_ARRIVE_STOP_DISTANCE = 1.0` world units. `NavMeshPolygon.contains_point`
+references `xinters` before assignment on a code path the outer guards make
+unreachable (fragile, not fixed).
+
+---
+
+`pyguara/persistence` in one slice, ~970 lines (`manager`, `storage`,
+`serializer`, `migration`, `types`). The migration half was actually sound
+— the chain-integrity guards (`to_version > from_version`, `to_version <=
 
 `pyguara/persistence` in one slice, ~970 lines (`manager`, `storage`,
 `serializer`, `migration`, `types`). The migration half was actually sound
@@ -322,7 +399,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [x] `pyguara/animation` — tween, easing, FSM *(done)*
 - [x] `pyguara/resources` — loaders, meta, hot reload *(done)*
 - [x] `pyguara/persistence` — save/load, migration *(done)*
-- [ ] `pyguara/ai` — FSM, steering, pathfinding, navmesh, behaviour trees
+- [x] `pyguara/ai` — FSM, steering, pathfinding, navmesh, behaviour trees *(done)*
 
 ### Tier 4 — Tooling & authoring
 - [ ] `pyguara/ui` — layout engine, widgets, theming
@@ -340,6 +417,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/ai` | 2026-09-08 | One slice (`fsm`, `blackboard`, `components`, `ai_system`, `steering`, `steering_system`, `behavior_tree`, `navmesh`, `pathfinding/*`; ~2,100 lines). **`world_to_grid_coords()` used `int()` not `floor`** — a non-zero grid `offset` or any negative local coord resolved to the wrong cell, and the quadrant left of/above the origin collapsed onto row/col 0 (world `(-10,-10)` → grid `(0,0)`, a sign flip). "Formula that returns a wrong answer" → `math.floor`. **`AISystem` passed the bare `Entity` as the BT context**, so `WaitNode` (any `context.dt` reader) fell back to a hardcoded `1/60` and drifted with frame rate — `WaitNode(1.0)` = ~2.1s @30fps, ~3.5s @144fps; the engine's own game hand-rolled its own AI system to dodge this. Fixed with a small `AIContext` (entity+dt+blackboard), passed to `tree.tick()`. **`SteeringSystem` only dispatched `seek/arrive/flee/wander`** — `pursuit`/`evade` (the only moving-target behaviors) were implemented but unreachable, and an unknown `behavior` string produced zero force silently. `behavior` is now a validated `SteeringBehaviorType` enum, all six wired, `SteeringAgent` gained `target_velocity`. **`behavior="arrive"` overshot and orbited the target forever** — system now enforces the arrive speed ramp on velocity and snaps to rest. **Generic `AStarPathfinder` crashed on a priority tie** with non-order-comparable nodes (`Node` is only `Hashable`; ties are common) — added the monotonic tie-break counter (also to `NavMeshPathfinder`). **`NavMesh.remove_polygon()` left dangling ids in other polygons' `neighbors`** — now pruned. FSM `set_initial_state()` / unknown transition targets were silent no-ops — now logged; a second `set_initial_state()` exits the prior state. `NavMeshPathfinder` docstring claimed a funnel algorithm it lacks — corrected. Recurring shapes: "guard/formula returns a wrong answer", "declared and wired to nothing" (`pursuit`/`evade`, `dt` never threaded), "hardcoded dt", uniform test setup (`TestCoordinateConversion` all-positive; **zero** tests for `AISystem`/`SteeringSystem`). Tests +29 (1770 → 1799). Phase D: BT/FSM authoring gaps (no reactive composites, no FSM transition table, no declarative blackboard nodes) → propose a new issue (sibling of #37/#40/#43); navmesh funnel/partial-portals/generation → parked (flow-field is #28's); steering-vs-physics → parked for the top-down `CharacterMover` slice. Left open: `WaitNode` keeps a named `getattr` dt fallback; the arrive fix is a velocity clamp (`_ARRIVE_STOP_DISTANCE = 1.0`), not a force-model redesign; `NavMeshPolygon.contains_point` has a fragile-but-unreachable `xinters`-before-assignment. |
 | `pyguara/persistence` | 2026-09-08 | One slice (`manager`, `storage`, `serializer`, `migration`, `types`; ~970 lines). The **migration half was sound** — the chain-integrity guards compose and the path loop provably terminates; overshoot/infinite-loop probes came back negative. The save/load half held the recurring shapes. **`save_data()` discarded `storage.save()`'s return** — `FileStorageBackend.save` returns `False` on `OSError`, so a full disk logged "Successfully saved" and returned `True`; now checked. **`FileStorageBackend` sanitised keys by deleting bad chars** — `"slot 1"`/`"slot/1"`/`"slot.1"` all collapsed onto `slot1` and silently overwrote each other (the resources F2 stem-collision shape); non-round-tripping keys now raise `ValueError`. **Data + meta were two independent `os.replace` calls** while the load path claimed "atomic save ensures both or neither" — a crash between them made an intact save unreadable (stale checksum → `None`). User chose the systemic fix: metadata is framed into **one blob** (`{header json}\n<payload>`), `StorageBackend` drops its `metadata` param (plain key→blob store), `FileStorageBackend` writes one `{key}.save` file + dir fsync + temp-sweep. **`compress=` was a documented no-op** → gzip, recorded in the header. **`SerializationFormat.MSGPACK` was a public enum member with no impl** though `msgpack` is a declared dep → implemented via the existing `prepare_for_json`/`game_object_hook` path, exposed through a new `fmt=` arg. `SaveMetadata` was hand-copied field by field and never read back on load → now carries `format`/`compressed`, used via `asdict`, engine version from `importlib.metadata` (was `"1.0.0"`), UTC timestamp. Migration gained `from_version >= 1` / `current_version >= 1` guards; `MigrationRegistry` is `eq=False`. Recurring shapes: "declared and wired to nothing" (`compress`, `MSGPACK`, `SaveMetadata`'s metadata half), "guard that returns a wrong answer" (swallowed `save()` failure, key mangling), "identity vs value" (`MigrationRegistry`), uniform test setup (every storage test used an already-safe key; every migration test used versions from 1). BREAKING: on-disk save format changed (`.dat`+`.meta` → `.save`); pre-alpha, no migration. Tests +35 (1735 → 1770). Phase D capability gaps: no backup/retention, no save-menu API (`list_saves`, cheap metadata read, `delete`/`exists` facade), CWD-relative save dir — grouped into #43 ("persistence production layer", sibling of #37); envelope `format_version` parked; run/meta split is #28's. Left open: `BINARY`/pickle load unauthenticated (trusted-input-only); mypy `python_version` 3.10 vs `requires-python` 3.12 forces a `# noqa: UP017` (possible CC). |
 | `pyguara/resources` | 2026-09-08 | One slice (`manager`, `meta`, `loader`, `types`, `data`, `data_loader`; hot reload lives downstream in `pyguara/dev`). No headline crash — better shape than recent subsystems — but the recurring shapes held. **Reference counting was internally inconsistent and wired to nothing**: `load()` auto-incremented on every call incl. cache hits, `release()` auto-unloaded at 0, so `unload_unused()` could never evict anything in use and a released resource was already gone — dead. No engine caller of acquire/release/unload/unload_unused; `AudioManager` `load()`s per play → count climbs forever. `Resource._ref_count` was a *third* dead counter. Reworked (user: "fix the model + add reload()"): `load()` is a pure cache-get → unpinned (0); `acquire()`/`release()` pin; `unload_unused()` now sweeps. `index_directory()` **silently resolved a stem collision to the last file walked** — now the ambiguous bare stem is dropped with a warning, full-name keys always win. `MetaLoader` **cached parsed meta by path with no invalidation** (stale after a disk change — wrong under hot reload) and the path-only key **swallowed the `expected_type` mismatch warning** after the first call — now mtime-pinned + re-read + `invalidate()`, check runs every call. `DataResource` docstring claimed "hot-reloaded by the ResourceManager" with **no reload API** — added `ResourceManager.reload()` (re-run loader, re-read `.meta`, swap in place, keep count). The **`.meta` import pipeline was ~70% scaffolding** (`AudioMeta`/`SpritesheetMeta` had no consumer, GL loader hardcoded `LINEAR`) — wired end to end (user: "wire it up in this slice"): `Resource.import_meta` carries the resolved sidecar; `GLTextureLoader` honours `filter` (default flips to `NEAREST`, matching the pygame path); audio backend applies `AudioMeta.volume_db` as a per-asset channel gain; `SpriteSheet` gained `margin`/`spacing` (previously meaningless) + `slice_from_meta`. Recurring shapes: "declared and wired to nothing" (the whole ref-count half; `AudioMeta`; `_ref_count`) and uniform test setup (`test_resources.py` asserted on `_reference_counts`/`_cache`/`_path_index` privates and hand-poked an impossible state into `test_unload_unused`; every `test_meta.py` test used a fresh `MetaLoader()`). Tests +21. Left open: `AudioMeta.loop_*`/`normalize`/`load_mode`, `TextureMeta.mipmaps`/`wrap_*` still unconsumed (need streaming/DSP/GL-state — authoring-layer gap, sibling of #37); audio should `acquire()` its clips under the new model (small `pyguara/audio` follow-up, no behaviour change today); no lock on the cache dicts (no concurrent caller, parked CC). |
 | `pyguara/animation` | 2026-09-08 | One slice, both halves (`pyguara/animation` tween+easing, plus the sprite-animation FSM in `pyguara/graphics` only surveyed during the graphics audit). **`Tween` accepted only `float` scalars / `tuple`s**: `Tween(0, 100, 1.0)`, a `list`, mixed int/float, or a `Color` constructed fine then crashed on first `update()` with a bare `AssertionError` (`_interpolate` used `assert isinstance(x, float)` as validation, stripped under `-O`). `Tween` was a value-equality `@dataclass`, so `TweenManager.remove(b)` removed an equal-but-different `a` — now `@dataclass(eq=False)`. `Animator.update()` advanced ≤1 frame per call (`if`, not `while`) so a lag spike dropped frames and drifted behind forever while `_current_time` grew unbounded — now O(1) catch-up. `AnimationStateMachine` re-fired `on_complete` + the transition check every frame a non-looping clip sat finished (callback storm for any terminal state) — fixed with a `_completion_handled` latch reset on transition. `AnimationClip` gained `__post_init__` validation (`frame_rate<=0` → `ZeroDivisionError`, `frames=[]` → `IndexError`). `TransitionCondition.IMMEDIATE` was declared but `_check_transitions()` had no branch — now honoured (fires on entry). `Scene.update_animations()` removed: its docstring told games to call it from `scene.update()`, but `AnimationSystem` has been auto-registered on the scene's `SystemManager` since wayfinder ticket 24, so following the docs double-updated every animation; it had no real callers. Recurring shapes: "assert as runtime validation", "identity vs value" (the gamepad-index shape), "one advance per frame" (the audio/application shape), the `on_complete` retrigger storm (audio F5), "no `__post_init__`" (audio F6 / physics config), "declared and wired to nothing" (`IMMEDIATE`), and uniform test setup — every tween test used float `0.0→100.0`, every FSM test stepped `dt == 1/frame_rate` exactly and stopped updating on the completion frame. Left open: a single huge `dt` still resolves only one loop boundary per `Tween.update()` (catches up over later frames, documented); `Color` tweening unsupported (documented); `_allow_methods = True` on both FSM components stays CC-6. |
@@ -545,6 +623,156 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/ai` — CLOSED 2026-09-08 (branch `refactor/ai-audit`)
+
+One slice, ~2,100 lines: `ai/{fsm,blackboard,components,ai_system,steering,
+steering_system,behavior_tree,navmesh}.py` and `ai/pathfinding/{core,astar,
+grid}.py`. Every defect reproduced with a probe against the real code
+first. `games/protocolo_bandeira` is a *consumer* (its `EnemyAISystem`
+hand-rolls an `AIContext`-shaped object) and confirmed F2 from the outside;
+it was not modified.
+
+**Verification:** 1799 tests pass (up from 1770; +29 across a rewritten
+`test_ai.py`, a new `test_steering.py`, and additions to
+`test_behavior_tree.py` / `test_navmesh.py` / `test_pathfinding.py`).
+`ruff check .` clean; `ruff format --check` clean; `mypy pyguara` clean
+across 226 files; `mkdocs build --strict` exit 0; `test_docs_api.py` (54)
+passes.
+
+Two upfront decisions put to the user. **F2 fix depth:** a contained
+`WaitNode`-only patch, a lightweight proxy, or a real context object — the
+user took the **`AIContext`** (entity + dt + blackboard), so `AISystem` now
+constructs one per frame and hands it to `tree.tick()`; this changes what
+leaf callables receive under `AISystem` (bare `Entity` → `AIContext`), a
+breaking change that pre-alpha and the fact that `AISystem` was unusable for
+timed nodes make acceptable. **F3 scope:** validate-only, wire pursuit/evade,
+or a full enum — the user took the **full enum**: `SteeringBehaviorType`
+(`str, Enum`) with `__post_init__` coercion+validation, all six behaviors
+wired, `SteeringAgent.target_velocity` added for the moving-target pair.
+
+**F1 — `world_to_grid_coords()` truncated toward zero.** `int((p.x -
+offset.x) / cell_size)` rounds toward zero, not down. Probe: `cell_size=32`,
+world `-1` → grid `0` (should be `-1`), `-33` → `-1` (should be `-2`); with
+`offset=(100,100)`, world `(90,90)` → `(0,0)` (should be `(-1,-1)`). Any
+centred or camera-relative grid, and the entire quadrant left of / above the
+origin, was mis-resolved — a sign flip near the axes. Now `math.floor`.
+`TestCoordinateConversion` had used only positive coords and positive
+offsets — uniform setup, third instance of the pattern this audit keeps
+hitting.
+
+**F2 — `AISystem` never threaded `dt` into the tree.** `AISystem.update(dt)`
+called `ai.behavior_tree.tick(entity)`. `WaitNode.tick` does
+`getattr(context, "dt", <fallback>)`; an `Entity` has no `dt`, so every
+`WaitNode` (and any custom timing node) advanced by a hardcoded `1/60` per
+*tick*, not per real second. Probe: `WaitNode(1.0)` driven by `AISystem`
+completed after ~2.08 s at 30 fps and ~3.47 s at 144 fps. `protocolo_bandeira`
+already worked around this by building its own context object carrying `dt`.
+Fix: new `pyguara/ai/context.py::AIContext` (`entity`, `dt`, `blackboard`);
+`AISystem` builds one per component per frame. `WaitNode`'s literal `0.016`
+became a named `_WAIT_FALLBACK_DT` for the bare-object case. "Declared and
+wired to nothing" / "hardcoded dt".
+
+**F3 — `pursuit`/`evade` were implemented but unreachable; unknown behavior
+was silent.** `SteeringSystem._calculate_steering` branched only on
+`seek/arrive/flee/wander` (lower-cased string compare).
+`SteeringBehavior.pursuit()` / `.evade()` — the only behaviors that lead a
+moving target — had no branch, and `behavior="chase"` (a typo) or
+`"pursuit"` produced `Vector2(0,0)` every frame with no diagnostic. Probe:
+`behavior="pursuit"` with a target set → agent never moved. Fix per the
+user's choice: `SteeringBehaviorType(str, Enum)` with the six members;
+`SteeringAgent.__post_init__` does `self.behavior =
+SteeringBehaviorType(self.behavior)` (raises `ValueError` on an unknown
+name); `_calculate_steering` dispatches on the enum with all six wired;
+`SteeringAgent.target_velocity: Vector2` added, refreshed by the caller
+alongside `target`, consumed by pursuit/evade.
+
+**F7 — `arrive` overshot and orbited the target forever.** Probe: target at
+x=300, `max_speed=200`, `slowing_radius=100` — the agent reached x≈357 then
+swung 306 → 285 → 288 → … indefinitely, never settling.
+`SteeringBehavior.arrive`'s `if distance < 0.1: return -current_velocity`
+returns a *velocity* as a *force* and only fires within 0.1 px (never hit);
+the real brake is `desired - current_velocity` scaled by `dt/mass`, a weak
+proportional term the `max_force` cap plus Euler integration make unstable.
+Fix: `SteeringSystem.update` now enforces the arrive ramp on the resulting
+velocity — cap speed to `max_speed * distance / slowing_radius` inside the
+radius, snap to rest within `_ARRIVE_STOP_DISTANCE = 1.0`. A system-side
+clamp, not a redesign of the force model all behaviors share.
+
+**F4 — generic `AStarPathfinder` crashed on a priority tie.** `frontier`
+held `(priority, node)`; on equal priorities heapq compares the second
+element, and `core.Node` is bound only to `Hashable`. Probe: a 4-node
+diamond graph with a zero heuristic (so both mid nodes get priority 1.0) and
+nodes that are hashable but define no `__lt__` → `TypeError: '<' not
+supported between instances of 'Cell' and 'Cell'`. Latent for the shipped
+`GridGraph` (tuple nodes are orderable) but ties are the normal case. Fix:
+`itertools.count()` tie-breaker — `(priority, next(counter), node)` — so the
+node is never compared. Applied the same to `NavMeshPathfinder.
+_find_polygon_path` (int nodes today, same latent shape).
+
+**F5 — `NavMesh.remove_polygon()` left dangling neighbor ids.** It deleted
+the polygon and its edges but not the id from other polygons' `neighbors`
+lists. Probe: three rects in a row, `build_connections()`, `remove_polygon(2)`
+→ `get_neighbors(1)` still `[0, 2]`. `NavMeshPathfinder` defends
+(`get_polygon → None → continue`) but `get_neighbors` is public — a debug
+overlay or a third-party pathfinder hits the `None`. Fix: prune every
+remaining `neighbors` list in `remove_polygon`.
+
+**F6 — FSM silent failures.** `set_initial_state("Typo")` left the machine
+permanently `None` with no diagnostic; a state whose `update()` returns an
+unregistered name was silently ignored. Probes confirmed both. Fix: both
+paths `logger.warning(...)` (matching how `di`/`systems`/`input` handle
+unknown keys post-audit); `set_initial_state` also now calls the previous
+state's `on_exit()` if called a second time.
+
+**Phase B verdict.** The BT and pathfinding/navmesh suites are substantial
+(797 / 589 / 670 lines) and load-bearing — node-status truth tables,
+corner-cut prevention, A* around obstacles. But `test_ai.py` was 54 lines
+(only `Blackboard` + one FSM transition, asserting on `fsm._current_state`),
+there was **no `test_steering.py` at all** despite `SteeringSystem` being
+auto-registered on every scene, and no test exercised `AISystem`. Uniform
+setup hid F1 (`TestCoordinateConversion`: positive coords + positive offsets
+only) and `test_wait_completes` had `# 0.016 * 4 = 0.064 > 0.05` baked into
+its comment — a test pinning the bug. Added: negative/offset
+`world_to_grid_coords` cases; an A* test over a non-orderable-node graph;
+`remove_polygon` neighbor-pruning; `WaitNode`-honours-real-`dt`; a rewritten
+`test_ai.py` (FSM warnings, `AISystem`/`AIContext` integration incl. the
+frame-rate-independence regression); a new `test_steering.py` (all six
+behaviors reachable, arrive settles and does not re-oscillate, enum
+validation, wander-state persistence + cleanup, Navigator path-follow).
+
+**Phase D — capability gaps.** Defect-free but thin for a shipped game:
+
+- *BT/FSM authoring* (**propose new issue**, sibling of #37/#40/#43):
+  `SequenceNode`/`SelectorNode` have memory and there is no *reactive*
+  variant, so a guard `ConditionNode` at the front of a sequence is not
+  re-checked once the sequence advances past it — the "attack while visible,
+  else patrol" pattern silently keeps attacking; `ParallelNode` re-ticks
+  already-completed children (no latching, re-fires one-shots); FSM
+  transitions are only `update()`-returns-a-name (no `add_transition(from,
+  to, predicate)` table, no event-driven transitions); every BT leaf is a
+  hand-written closure (no `BlackboardCondition` / `SetBlackboard` /
+  cooldown / random-selector nodes).
+- *Navmesh* (**parked** — needs a real consumer; flow-field pathfinding is
+  already #28's): polygons must share a *full* edge (no partial-edge portals
+  / T-junctions), `NavMeshPathfinder` returns polygon-*centre* waypoints (no
+  funnel string-pulling — paths zig-zag), and nothing *generates* a mesh
+  (you supply convex polygons by hand).
+- *Steering vs. physics* (**parked** for the top-down `CharacterMover`
+  slice): `SteeringSystem` writes `transform.position` directly, so agents
+  don't collide with solids, don't separate from each other, and
+  double-integrate if they also carry a body.
+- *`_wander_targets` eviction* (**left-open note**): cleared only on scene
+  exit, not per destroyed entity — a scene that spawns/despawns many
+  wanderers leaks entries keyed by dead entity ids. The scene already has
+  `subscribe_entity_removed`; wiring it in is small.
+
+**Left open.** `WaitNode` keeps a `getattr(context, "dt",
+_WAIT_FALLBACK_DT)` for trees ticked with a bare object. The arrive fix is a
+velocity clamp, not a rework of the `dt`-scaled force/integration model.
+`NavMeshPolygon.contains_point` references `xinters` before assignment on a
+branch the outer `y > min / y <= max` guards make unreachable for a
+horizontal edge — fragile, not touched.
 
 ### `pyguara/persistence` — CLOSED 2026-09-08 (branch `refactor/persistence-audit`)
 
