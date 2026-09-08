@@ -63,9 +63,37 @@ The systematic pass over `collision_system`, `trigger_volume`/`trigger_system`
 and `joints` is now done on branch `refactor/physics-triggers-joints-audit`:
 trigger volumes and the entire `Joint` layer were both inert end to end and
 are now built and tested (see the iteration log entry below). Phase B for
-those files is done with it; **Phase C for the subsystem as a whole, and a
-last read of `materials.py`/`tilemap.py`/`debug_draw.py`, still remain**
-before the subsystem closes.
+those files is done with it.
+
+**To close the subsystem** (one more slice, cut fresh from `main`):
+
+- **Expose the remaining pymunk spatial queries** — `point_query`,
+  `shape_query`/`bb_query`, multi-hit `segment_query`. Only `raycast` and
+  `overlap_box` are exposed; the rest rule out click-picking, explosion
+  radii, melee arcs, piercing shots and "can I fit here". Small backend +
+  `IPhysicsEngine` additions. Dependency for the projectile layer in
+  issue #28.
+- **Body sleeping** — honour `space.sleep_time_threshold`. Every idle body
+  is simulated forever; a room-based game carries a lot of settled props
+  and debris. Small, pymunk-native.
+- **Resolve the `physics.substeps` default** (4 vs 2 — 4 costs ~half a
+  60Hz frame at 200 dynamic bodies).
+- **Phase C** (subsystem docs) and a last read of `materials.py`,
+  `tilemap.py`, `debug_draw.py`.
+
+**Next physics slice, its own build/PR (`CharacterMover`-sized):** a
+**top-down kinematic character controller** — 8-directional collide-and-slide
+with actor-vs-actor soft separation and push-out-of-overlap. The physics
+layer currently serves only platformers; every game the engine targets is
+top-down, and dynamic bodies there hit the same sink/creep/jitter family the
+platformer did, plus crowd stacking. Platformer polish (slope handling,
+variable jump height, corner correction) and `surface_velocity` (conveyors)
+are **parked as low priority** given the genre.
+
+Framework-level work above physics — combat spine, seeded RNG service,
+stat/modifier system, projectile layer, procgen, tilemap, run/meta save
+split, flow-field pathfinding, hit-stop, combat juice, local co-op input —
+is **issue #28 (roguelike core)**, out of scope for the physics audit.
 
 **The big decision — move characters off dynamic rigid bodies onto
 `CharacterMover` — is resolved, built, and merged.** Full physical parity
@@ -158,6 +186,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#16](https://github.com/Wedeueis/pyguara/issues/16) | `IFramebuffer`/`IRenderPass` not `runtime_checkable`; `IRenderPass` vs `BaseRenderPass(ABC)` overlap |
 | [#19](https://github.com/Wedeueis/pyguara/issues/19) | ~2,700 lines of GPU-dependent graphics code are read-audited only, with no headless GL coverage |
 | [#23](https://github.com/Wedeueis/pyguara/issues/23) | `camera.rotation` is applied by `Camera2D.world_to_screen` but ignored by the render path; three definitions of world-to-screen disagree |
+| [#28](https://github.com/Wedeueis/pyguara/issues/28) | Roguelike core — framework-level subsystems the target genre needs (combat spine, seeded RNG service, stat/modifier system, projectile layer, procgen, tilemap, run/meta save split, flow-field pathfinding, hit-stop, combat juice, local co-op input) |
 
 ---
 
