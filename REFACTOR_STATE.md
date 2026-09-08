@@ -63,9 +63,30 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/audio` closed 2026-09-08 (branch `refactor/audio-audit`).**
-Next in the queue is `pyguara/animation`. Open `REFACTOR_STATE.md` "How to
-resume" and take it.
+**None — `pyguara/animation` closed 2026-09-08 (branch
+`refactor/animation-audit`).** Next in the queue is `pyguara/resources`
+(loaders, meta, hot reload). Open `REFACTOR_STATE.md` "How to resume" and
+take it.
+
+`pyguara/animation` in one slice, both halves (tween/easing in
+`pyguara/animation`, and the sprite-animation FSM in
+`pyguara/graphics/{animation_system.py,components/animation.py}`, only
+"surveyed" during the graphics audit): **`Tween` accepted only `float`
+scalars and `tuple`s** — `Tween(0, 100, 1.0)` (int), a `list`, mixed
+int/float, or a `Color` all constructed fine then crashed on the first
+`update()` with a bare `AssertionError` (`_interpolate` used
+`assert isinstance(x, float)` as runtime validation). `Tween` was a
+value-equality `@dataclass`, so `TweenManager.remove(b)` removed an equal-
+but-different tween `a`. `Animator.update()` advanced at most one frame per
+call (`if`, not `while`), so a lag spike dropped frames and drifted
+permanently behind. `AnimationStateMachine` re-fired `on_complete` and the
+transition check every frame a non-looping clip sat finished (a callback
+storm for any terminal state). `AnimationClip` had no validation
+(`frame_rate=0` → `ZeroDivisionError`, `frames=[]` → `IndexError`).
+`TransitionCondition.IMMEDIATE` was declared but `_check_transitions()` had
+no branch for it. `Scene.update_animations()` — documented as the way to
+tick animations — double-updated everything now that `AnimationSystem` is
+auto-registered; removed. See the iteration log entry below.
 
 `pyguara/audio` in one slice: **SFX playback was dead end to end** —
 `PygameAudioSystem._play_sound` called `Channel.get_id()`, which pygame-ce
@@ -172,7 +193,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
       (branch `refactor/physics-queries-sleep-close`)
 - [x] `pyguara/input` — input manager, rebinding *(done)*
 - [x] `pyguara/audio` — audio manager, spatial audio *(done)*
-- [ ] `pyguara/animation` — tween, easing, FSM
+- [x] `pyguara/animation` — tween, easing, FSM *(done)*
 - [ ] `pyguara/resources` — loaders, meta, hot reload
 - [ ] `pyguara/persistence` — save/load, migration
 - [ ] `pyguara/ai` — FSM, steering, pathfinding, navmesh, behaviour trees
@@ -193,6 +214,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/animation` | 2026-09-08 | One slice, both halves (`pyguara/animation` tween+easing, plus the sprite-animation FSM in `pyguara/graphics` only surveyed during the graphics audit). **`Tween` accepted only `float` scalars / `tuple`s**: `Tween(0, 100, 1.0)`, a `list`, mixed int/float, or a `Color` constructed fine then crashed on first `update()` with a bare `AssertionError` (`_interpolate` used `assert isinstance(x, float)` as validation, stripped under `-O`). `Tween` was a value-equality `@dataclass`, so `TweenManager.remove(b)` removed an equal-but-different `a` — now `@dataclass(eq=False)`. `Animator.update()` advanced ≤1 frame per call (`if`, not `while`) so a lag spike dropped frames and drifted behind forever while `_current_time` grew unbounded — now O(1) catch-up. `AnimationStateMachine` re-fired `on_complete` + the transition check every frame a non-looping clip sat finished (callback storm for any terminal state) — fixed with a `_completion_handled` latch reset on transition. `AnimationClip` gained `__post_init__` validation (`frame_rate<=0` → `ZeroDivisionError`, `frames=[]` → `IndexError`). `TransitionCondition.IMMEDIATE` was declared but `_check_transitions()` had no branch — now honoured (fires on entry). `Scene.update_animations()` removed: its docstring told games to call it from `scene.update()`, but `AnimationSystem` has been auto-registered on the scene's `SystemManager` since wayfinder ticket 24, so following the docs double-updated every animation; it had no real callers. Recurring shapes: "assert as runtime validation", "identity vs value" (the gamepad-index shape), "one advance per frame" (the audio/application shape), the `on_complete` retrigger storm (audio F5), "no `__post_init__`" (audio F6 / physics config), "declared and wired to nothing" (`IMMEDIATE`), and uniform test setup — every tween test used float `0.0→100.0`, every FSM test stepped `dt == 1/frame_rate` exactly and stopped updating on the completion frame. Left open: a single huge `dt` still resolves only one loop boundary per `Tween.update()` (catches up over later frames, documented); `Color` tweening unsupported (documented); `_allow_methods = True` on both FSM components stays CC-6. |
 | `pyguara/audio` | 2026-09-08 | One slice. **SFX playback was dead end to end**: the pygame backend called `Channel.get_id()` (pygame-ce has `Channel.id`), so every real `play_sfx`/`play_sfx_at_position` raised, was swallowed by `except (AttributeError, Exception)`, and returned `None` while the sound played on untracked — hidden because all 107 audio tests `patch("pygame.mixer")` wholesale. Loudness/pan were set on the ResourceManager-shared `Sound` not the channel, so concurrent plays of one clip corrupted each other and recycled channels kept the last sound's hard pan. `AudioSourceSystem` never detected a finished one-shot — `is_playing` lied forever, a source could not be replayed, and stale channel ids kept receiving spatial mix updates meant for whatever reused the channel; fixed with a new `IAudioSystem.is_channel_active()` reconciled each frame, plus an `_auto_played` latch (auto_play is "on awake", not loop — the fix exposed a retrigger storm). `SpatialAudioConfig` gained `__post_init__` validation (0 → `ZeroDivisionError` in `calculate_pan`; inverted range → attenuation cliff). Added `IAudioSystem.shutdown()` (idempotent `pygame.mixer.quit()`), wired into `Application.shutdown()`. Recurring shapes: "mock away the unit under test" (the whole `test_audio.py`) and "declared and wired to nothing" (`AudioManager._active_channels`, removed). Left open: bus/master volume changes don't re-mix already-playing non-spatial SFX (mixer limitation, documented). |
 | `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). Phase B also found the softer test smells — assertions on `_controllers` privates, `assert x is not None` on a list literal, `assert not raises` as the only check — and rewrote them. `input/manager.py` stays a CC-11 / issue #9 offender (raw pygame events) — parked. |
 | `pyguara/physics` | 2026-09-08 | Judged as *game* physics. Four slices: substepping stops ordinary-speed tunnelling (PR #24); characters moved off dynamic bodies onto `CharacterMover`/`CharacterBody` with full parity — knockback, platform riding, crate pushing — on Celeste's integer+remainder model (PR #25); trigger volumes and the entire `Joint` ECS layer were both inert end to end and were rebuilt and tested (PR #27); the close added five spatial queries, body sleeping, kept `substeps` at 4 on benchmark evidence, and froze `PhysicsMaterial`. Recurring shape: "declared and wired to nothing" (`fixed_rotation`, `gravity_scale`, the `return False` collision contract, `Joint`, `TriggerVolume`) and uniform test setup (every test a slow body already at rest). |
@@ -392,6 +414,138 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/animation` — CLOSED 2026-09-08 (branch `refactor/animation-audit`)
+
+One slice, ~1,100 lines across both halves: `pyguara/animation/{easing,tween}.py`
+and the sprite-animation FSM in
+`pyguara/graphics/{animation_system.py,components/animation.py}` — the latter
+was only "read and probed on degenerate input" during graphics slice 5, never
+audited. Every defect was reproduced with a probe against the real code before
+being touched.
+
+**Verification:** 1714 tests pass (up from 1678; +36 across the three
+animation test files, 102 → 138). `ruff check .` clean; `ruff format --check`
+clean; `mypy pyguara` clean across 224 files; `mkdocs build --strict` exit 0;
+`test_docs_api.py` (52) passes. Each commit verified standalone in a detached
+worktree.
+
+**F1 — `Tween` accepted only `float` scalars and `tuple`s.**
+`Tween(0, 100, 1.0)` (int — the natural call), a `list`, mixed int/float, and
+`Color` all constructed fine, then crashed on the first `update()` with a
+bare `AssertionError` (empty message): `_interpolate` used
+`assert isinstance(self.start_value, float)` as runtime validation.
+`__post_init__` checked tuple-vs-tuple shape and length but never that a
+scalar was a number, and never rejected a non-`tuple` sequence. Under `-O`
+the asserts vanish and `list` misbehaves silently. Fixed: `__post_init__`
+classifies each endpoint as number-or-sequence (`_is_scalar` / `_is_sequence`
+`TypeGuard`s), rejects anything else (`Color`) with a clear `TypeError`, and
+`_interpolate` handles `int`/`list` without asserts. `Vector2` keeps working
+(it is a `pymunk.Vec2d`, a `tuple` subclass) but yields a plain `tuple` —
+documented.
+
+**F2 — `Tween` was a value-equality `@dataclass`.** Two independently
+created tweens with identical config compared `==`, so
+`TweenManager.remove(b)` removed the first equal element `a` (returned
+`True`, left `b`); `TweenManager.update()`'s internal `self._tweens.remove`
+had the same hazard. Bites any bag of identical fire-and-forget tweens
+(fade-outs, hit flashes). `@dataclass(eq=False)` restores identity equality
+(and makes `Tween` hashable again). "Identity vs value" — the gamepad-index
+shape from the `input` audit.
+
+**F3 — `Animator.update()` advanced at most one frame per call.** `if
+self._current_time >= seconds_per_frame`, not `while`. A 10fps clip given
+`update(0.5)` advanced one frame, not five; `_current_time` then climbed
+unbounded (0.4, 0.8, …). Any host slower than the clip's `frame_rate`, or any
+lag spike, silently dropped frames and fell permanently behind; a
+non-looping clip's `is_finished` was delayed arbitrarily. Replaced with an
+O(1) whole-frames-owed computation that wraps a looping clip with `%` and
+clamps a non-looping one to the last frame. Same "one advance per frame"
+shape as the audio one-shot reconciliation and the `application` event
+budget.
+
+**F4 — `AnimationStateMachine` re-fired `on_complete` and re-ran
+`_check_transitions()` every frame while a non-looping clip sat finished.**
+`Animator.is_finished` latches `True` for a non-looping clip until a new clip
+plays; the FSM gated purely on that flag. A terminal state with no
+`ANIMATION_END` transition (a death pose) → `on_complete` called 60×/s
+(probe: 9 calls in 10 frames). Fixed with a `_completion_handled` latch,
+reset in `transition_to()`. Exact shape of the audio F5 `_auto_played` latch.
+
+**F5 — `AnimationClip` had no validation.** `frame_rate=0` →
+`ZeroDivisionError` mid-`update()`; `frame_rate<0` → advances every frame,
+`_current_time` drifts negative; `frames=[]` → `IndexError` in `_apply_frame`
+on `play()`. `__post_init__` rejects all three at construction. Same
+"no `__post_init__`" pattern as `SpatialAudioConfig` (audio F6) and
+`PhysicsConfig`.
+
+**F6 — `TransitionCondition.IMMEDIATE` was declared but unreachable.**
+`_check_transitions()` only handled `ANIMATION_END`, and was only *called*
+when `is_finished`. An `IMMEDIATE` transition in a state's `transitions` list
+was silently never taken (probe: A→B IMMEDIATE, stuck in A). Now
+`_check_transitions()` runs every frame and honours `IMMEDIATE` (fires on the
+tick after entry) as well as `ANIMATION_END` (fires on finish); still one
+transition per update, priority-ordered. "Declared and wired to nothing."
+
+**F7 — `Scene.update_animations()` removed.** Its docstring Example told
+games to call it from `scene.update()`. But `AnimationSystem` has been
+auto-registered on every scene's `SystemManager` (priority 300, ticked at the
+fixed timestep) since wayfinder ticket 24 (`a934c8f`) — later than this
+method (`76a0203`). Following the doc updated every animation **twice per
+frame** (once fixed-rate, once variable-rate). Zero real callers. Touches
+`pyguara/scene`, but it is squarely a stale animation API.
+
+**F8 (Phase C) — `docs/systems/animation.md` was wrong.** Its usage example
+tweened `Vector2` and claimed `Color` works (`Color` crashes; `Vector2`
+yields a bare tuple); it said the `TweenManager` "is handled automatically by
+the `AnimationSystem`" — `AnimationSystem` never touches `TweenManager` and
+nothing in the engine does, so a reader got a tween that never advanced;
+easing, `Animator`, `AnimationClip` and the entire state machine were
+undocumented. Rewritten to cover both halves accurately, including the
+"you must tick `TweenManager` yourself" note, the identity-equality
+guarantee, the frame catch-up, the once-per-completion callback, and
+`IMMEDIATE` vs `ANIMATION_END`. `test_docs_api` won't catch a behavioural
+claim like this — CC-10 family.
+
+**Phase B — verdict on the 102 existing tests (+36; nothing rewritten
+wholesale, three `AnimationSystem` asserts moved off private state).**
+
+*`test_animation_easing.py` (48) — the strong file.* Endpoints for every
+`EasingType`, ease-in monotonicity, elastic/back overshoot, `ease()` input
+clamping, `isinstance(result, float)`. Real assertions on real returns
+through the public surface. Only gap was the two properties it never pinned:
+`ease_out` as the mirror of `ease_in`, and midpoint continuity for the
+`ease_in_out_*` family. Added both (10 params each).
+
+*`test_animation_tween.py` (30) — broad but uniform.* Every test built the
+subject with `start_value=0.0, end_value=100.0` (float) or `(0.0, 0.0)`
+tuples — never an int, list, `Vector2` or `Color`, so F1 was unreachable.
+Every `TweenManager` removal/query test used a single tween or tweens with
+deliberately *different* duration/end so no two were ever equal — F2
+invisible. `test_infinite_loop` stepped exactly one `duration` per `update()`
+so big-`dt` was never exercised. Added `TestTweenValueTypes` (int / mixed /
+list / `Vector2` / `Color`-rejected / str-rejected), two identity-isolation
+tests for the manager, and a test pinning the single-huge-`dt` one-cycle
+catch-up.
+
+*`test_animation_fsm.py` (24) — mixed.* `test_animator_is_finished` and the
+auto-transition tests stepped a uniform 10fps clip at `dt == 0.1` exactly, so
+F3 had no test that could see it; `test_state_machine_on_complete_callback`
+stopped updating *on* the completion frame, so F4's storm was invisible.
+`IMMEDIATE`, empty frames and zero `frame_rate` untested. The three
+`AnimationSystem` tests asserted on `animator._current_frame_index` (private
+— the tracker's named smell). Added multi-frame catch-up, the non-looping
+large-`dt` clamp, held-past-completion (fires once), replay re-arms,
+`IMMEDIATE`-on-entry, and `AnimationClip` validation; the `AnimationSystem`
+asserts now observe the driven `Sprite.texture`.
+
+**Left open.** A single `Tween.update(dt)` spanning many loops still resolves
+one loop boundary and carries the overshoot forward (catches up over the next
+few frames, no state lost) — a proper fix raises per-cycle-callback design
+questions; documented and pinned by a test. `Color` tweening is unsupported
+(tween its components / packed tuple) — documented. `_allow_methods = True`
+on `Animator` and `AnimationStateMachine` stays CC-6. `ease()` rebuilds its
+dispatch dict on every call — micro-perf, not touched.
 
 ### `pyguara/audio` — CLOSED 2026-09-08 (branch `refactor/audio-audit`)
 
