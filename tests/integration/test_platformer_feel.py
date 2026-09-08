@@ -25,7 +25,7 @@ from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
-from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.components import CharacterBody, Collider, RigidBody
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.platformer_controller import PlatformerController, PlatformerInput
 from pyguara.physics.platformer_system import PlatformerSystem
@@ -51,14 +51,12 @@ class Platformer:
         self.physics = PhysicsSystem(
             engine, self.entities, self.dispatcher, gravity=gravity
         )
-        self.platformer = PlatformerSystem(self.entities, engine)
+        self.platformer = PlatformerSystem(self.entities, engine, gravity=gravity)
 
         self.ground = self._body(
             Vector2(400, 500), BodyType.STATIC, [floor_width, 40.0]
         )
-        self.player = self._body(
-            Vector2(400, RESTING_Y), BodyType.DYNAMIC, [24.0, PLAYER_HEIGHT]
-        )
+        self.player = self._character(Vector2(400, RESTING_Y), [24.0, PLAYER_HEIGHT])
         self.player.add_component(PlatformerController(jump_force=350.0))
 
     def _body(
@@ -70,10 +68,23 @@ class Platformer:
         entity.add_component(Collider(shape_type=ShapeType.BOX, dimensions=dimensions))
         return entity
 
+    def _character(self, position: Vector2, dimensions: list[float]) -> Entity:
+        """A mover-driven character: CharacterBody, never a RigidBody."""
+        entity = self.entities.create_entity()
+        entity.add_component(Transform(position=position))
+        entity.add_component(CharacterBody())
+        entity.add_component(Collider(shape_type=ShapeType.BOX, dimensions=dimensions))
+        return entity
+
     @property
     def controller(self) -> PlatformerController:
         """The character's controller."""
         return self.player.get_component(PlatformerController)
+
+    @property
+    def body(self) -> CharacterBody:
+        """The character's CharacterBody."""
+        return self.player.get_component(CharacterBody)
 
     @property
     def y(self) -> float:
@@ -108,7 +119,7 @@ def test_a_character_in_mid_air_is_not_grounded() -> None:
     world.run(60)
     assert world.controller.is_grounded, "should be standing on the floor to start"
 
-    world.player.get_component(RigidBody)._body_handle.velocity = Vector2(0, -400)
+    world.player.get_component(CharacterBody).velocity = Vector2(0, -400)
     world.run(10)
 
     assert world.y < RESTING_Y - 20, "should have left the ground"
@@ -152,32 +163,52 @@ def test_leaving_a_ledge_starts_coyote_time() -> None:
     world.run(60)
     assert world.controller.coyote_timer == 0.0
 
-    world.player.get_component(RigidBody)._body_handle.velocity = Vector2(0, -400)
+    world.player.get_component(CharacterBody).velocity = Vector2(0, -400)
     world.run(10)
 
     assert not world.controller.is_grounded
     assert world.controller.coyote_timer > 0.0
 
 
-def test_a_raycast_can_exclude_the_body_that_cast_it() -> None:
-    """The engine-level capability the fix rests on."""
-    world = Platformer(gravity=Vector2(0, 0))
-    # Float the character far from the floor, so the only thing its own
-    # downward ray can possibly reach is the character itself.
+def test_a_character_has_no_shape_to_self_detect_at_all() -> None:
+    """The fix is structural now, not a query-time exclusion.
+
+    A character used to have its own Chipmunk shape, and a downward ray's
+    swept-circle geometry could reach back into it -- `ignore_entity_id` on
+    `raycast()` was the guard against that. A `CharacterBody` character
+    registers no shape with the engine whatsoever, so there is nothing left
+    to detect: a query centred exactly on the character finds only what is
+    genuinely there.
+    """
+    world = Platformer(gravity=Vector2(0, 0), floor_width=1.0)
     world.player.get_component(Transform).position = Vector2(400, 100)
     world.run(1)
 
-    centre = world.player.get_component(Transform).position
-    feet = centre + Vector2(0, PLAYER_HEIGHT / 2 + 1)
-    just_below = feet + Vector2(0, 3.0)
     engine = world.physics._engine
+    centre = world.player.get_component(Transform).position
 
-    included = engine.raycast(feet, just_below)
-    excluded = engine.raycast(feet, just_below, ignore_entity_id=world.player.id)
+    assert engine.overlap_box(centre, Vector2(12.0, 20.0)) is None
 
-    assert included is not None, "the swept ray does touch the caster"
-    assert included.entity_id == world.player.id
-    assert excluded is None or excluded.entity_id != world.player.id
+
+def test_ignore_entity_id_still_excludes_a_real_body() -> None:
+    """The exclusion mechanism itself still works, for bodies that do exist.
+
+    `overlap_box`/`raycast`'s `ignore_entity_id` is still real
+    infrastructure -- a moving platform or a pushed crate needs it to
+    query the world without detecting itself -- it's just no longer what a
+    character relies on for its own self-detection.
+    """
+    world = Platformer(gravity=Vector2(0, 0), floor_width=1.0)
+    engine = world.physics._engine
+    world.physics.sync_kinematic_transforms()
+
+    included = engine.overlap_box(Vector2(400, 500), Vector2(1.0, 1.0))
+    excluded = engine.overlap_box(
+        Vector2(400, 500), Vector2(1.0, 1.0), ignore_entity_id=world.ground.id
+    )
+
+    assert included == world.ground.id
+    assert excluded is None
 
 
 class TestCharacterBodyOptions:
@@ -409,15 +440,8 @@ class TestWalkingOverTileSeams:
                     [float(self.TILE), float(self.TILE)],
                 )
 
-        walker = world.entities.create_entity()
-        walker.add_component(
-            Transform(position=Vector2(48, self.FLOOR_TOP - PLAYER_HEIGHT / 2))
-        )
-        walker.add_component(
-            RigidBody(mass=1.0, body_type=BodyType.DYNAMIC, fixed_rotation=True)
-        )
-        walker.add_component(
-            Collider(shape_type=ShapeType.BOX, dimensions=[24.0, PLAYER_HEIGHT])
+        walker = world._character(
+            Vector2(48, self.FLOOR_TOP - PLAYER_HEIGHT / 2), [24.0, PLAYER_HEIGHT]
         )
         walker.add_component(PlatformerController(move_speed=180.0))
         controller = walker.get_component(PlatformerController)
@@ -437,11 +461,11 @@ class TestWalkingOverTileSeams:
         return worst
 
     def test_a_merged_floor_keeps_the_character_on_the_surface(self) -> None:
-        """Sinking stays within Chipmunk's slop, which is 0.1px.
+        """A swept mover has nothing to catch on, merged floor or not.
 
         The seam catch itself is only reproducible in a full level -- this
         harness walks cleanly across separate tiles too -- so this pins the
         property that matters rather than the mechanism. The mechanism is
         recorded from the guara_falcao measurement in the class docstring.
         """
-        assert self._walk(merged=True) < 1.0
+        assert self._walk(merged=True) == 0.0

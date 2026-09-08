@@ -86,10 +86,14 @@ class ColliderDebugRenderer:
     def _draw_probe_rays(
         self, renderer: IRenderer, entity: object, offset: Vector2
     ) -> None:
-        """Draw the ground and wall rays exactly where the system casts them.
+        """Draw the wall probes, and a marker at the ground probe's pixel.
 
-        The ray is where a grounding bug shows itself: too long and the
-        character is grounded while it floats, too short and it never lands.
+        Ground detection is a one-pixel overlap test now (Celeste's model),
+        not a variable-length ray, so there is no length to draw -- the
+        marker sits exactly on the pixel `CharacterMover.probe()` checks.
+        Colour is where a grounding bug shows itself: green while the
+        character floats reads as a false positive just as clearly as a
+        ray drawn too long used to.
         """
         transform = entity.get_component(Transform)  # type: ignore[attr-defined]
         collider = entity.get_component(Collider)  # type: ignore[attr-defined]
@@ -100,10 +104,8 @@ class ColliderDebugRenderer:
         position = transform.position - offset
 
         colour = GROUNDED if controller.is_grounded else AIRBORNE
-        start = position + Vector2(0, half_height + 1)
-        renderer.draw_line(
-            start, start + Vector2(0, controller.ground_check_distance), colour, width=2
-        )
+        foot = position + Vector2(0, half_height)
+        renderer.draw_line(foot + Vector2(-4, 1), foot + Vector2(4, 1), colour, width=2)
 
         for direction in (-1.0, 1.0):
             side_start = position + Vector2(direction * (half_width + 2), -10)

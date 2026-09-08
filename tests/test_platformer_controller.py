@@ -4,14 +4,14 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
-from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.components import CharacterBody, Collider
 from pyguara.physics.platformer_controller import (
     PlatformerController,
     PlatformerInput,
     PlatformerState,
 )
 from pyguara.physics.platformer_system import PlatformerSystem
-from pyguara.physics.types import BodyType, ShapeType
+from pyguara.physics.types import ShapeType
 
 
 class TestPlatformerControllerComponent:
@@ -122,7 +122,9 @@ class TestPlatformerSystem:
         self.manager = EntityManager()
         self.physics_engine = PymunkEngine()
         self.physics_engine.initialize(Vector2(0, 980))  # Gravity
-        self.platformer_system = PlatformerSystem(self.manager, self.physics_engine)
+        self.platformer_system = PlatformerSystem(
+            self.manager, self.physics_engine, gravity=Vector2(0, 980)
+        )
 
     def test_system_creation(self):
         """PlatformerSystem should be created successfully."""
@@ -137,10 +139,10 @@ class TestPlatformerSystem:
         # Should not raise
         self.platformer_system.update(1 / 60)
 
-        # Entity with controller and rigidbody but no transform
+        # Entity with controller and body but no transform
         entity2 = self.manager.create_entity()
         entity2.add_component(PlatformerController())
-        entity2.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+        entity2.add_component(CharacterBody())
 
         # Should not raise
         self.platformer_system.update(1 / 60)
@@ -149,17 +151,11 @@ class TestPlatformerSystem:
         """System should update coyote and jump buffer timers."""
         entity = self.manager.create_entity()
         entity.add_component(Transform(position=Vector2(100, 100)))
-        entity.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+        entity.add_component(CharacterBody())
         controller = PlatformerController()
         controller.coyote_timer = 0.15
         controller.jump_buffer_timer = 0.1
         entity.add_component(controller)
-
-        # Create physics body
-        body = self.physics_engine.create_body(
-            entity.id, BodyType.DYNAMIC, Vector2(100, 100)
-        )
-        entity.get_component(RigidBody)._body_handle = body
 
         # Update system
         dt = 1 / 60  # 60 FPS
@@ -174,16 +170,10 @@ class TestPlatformerSystem:
         """System should reset pending_input after consuming it each update."""
         entity = self.manager.create_entity()
         entity.add_component(Transform(position=Vector2(100, 100)))
-        entity.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+        entity.add_component(CharacterBody())
         controller = PlatformerController()
         controller.pending_input = PlatformerInput(move=1.0)
         entity.add_component(controller)
-
-        # Create physics body
-        body = self.physics_engine.create_body(
-            entity.id, BodyType.DYNAMIC, Vector2(100, 100)
-        )
-        entity.get_component(RigidBody)._body_handle = body
 
         # Update system
         self.platformer_system.update(1 / 60)
@@ -212,14 +202,9 @@ class TestPlatformerSystem:
         """pending_input.jump should translate into a buffered jump request."""
         entity = self.manager.create_entity()
         entity.add_component(Transform(position=Vector2(100, 100)))
-        entity.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+        entity.add_component(CharacterBody())
         controller = PlatformerController(jump_buffer=0.1)
         entity.add_component(controller)
-
-        body = self.physics_engine.create_body(
-            entity.id, BodyType.DYNAMIC, Vector2(100, 100)
-        )
-        entity.get_component(RigidBody)._body_handle = body
 
         controller.pending_input = PlatformerInput(jump=True)
         self.platformer_system.update(1 / 60)
@@ -345,9 +330,7 @@ class TestPlatformerUsagePatterns:
         # Create player
         player = manager.create_entity()
         player.add_component(Transform(position=Vector2(400, 300)))
-        player.add_component(
-            RigidBody(mass=1.0, body_type=BodyType.DYNAMIC, fixed_rotation=True)
-        )
+        player.add_component(CharacterBody())
         player.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[32, 64]))
         player.add_component(
             PlatformerController(
@@ -357,7 +340,7 @@ class TestPlatformerUsagePatterns:
 
         # Verify all components present
         assert player.has_component(PlatformerController)
-        assert player.has_component(RigidBody)
+        assert player.has_component(CharacterBody)
         assert player.has_component(Transform)
 
     def test_input_handling_pattern(self):

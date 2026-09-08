@@ -39,7 +39,7 @@ from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, F1, LEFT, RIGHT, SPACE, UP, R
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
-from pyguara.physics.components import RigidBody
+from pyguara.physics.components import CharacterBody
 from pyguara.physics.debug_draw import ColliderDebugRenderer
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.platformer_controller import PlatformerController
@@ -183,6 +183,7 @@ class GameScene(Scene):
         self._platformer_system = PlatformerSystem(
             entity_manager=self.entity_manager,
             physics_engine=physics_engine,
+            gravity=Vector2(physics_config.gravity_x, physics_config.gravity_y),
         )
 
         # Initialize game systems
@@ -302,7 +303,7 @@ class GameScene(Scene):
             if player:
                 transform = player.get_component(Transform)
                 health = player.get_component(Health)
-                rigidbody = player.get_component(RigidBody)
+                body = player.get_component(CharacterBody)
                 controller = player.get_component(PlatformerController)
 
                 if transform:
@@ -311,10 +312,10 @@ class GameScene(Scene):
                     # across the level for a frame.
                     transform.teleport(spawn)
 
-                # Also update physics body position and reset velocity
-                if rigidbody and rigidbody.handle:
-                    rigidbody.handle.position = spawn
-                    rigidbody.handle.velocity = Vector2.zero()
+                # Reset velocity so the fall that killed the player doesn't
+                # carry over into the respawn.
+                if body:
+                    body.velocity = Vector2.zero()
 
                 if health:
                     health.current = health.max_health

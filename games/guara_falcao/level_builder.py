@@ -20,7 +20,7 @@ from games.guara_falcao.components import (
 from pyguara.common.components import Transform
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.components import CharacterBody, Collider, RigidBody
 from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.physics.tilemap import merge_tile_rects
 from pyguara.physics.types import BodyType
@@ -285,16 +285,16 @@ class LevelBuilder:
         # PhysicsSystem sets interpolate on this when it creates the body.
         player.add_component(Transform(position=spawn_pos))
 
-        # Physics
-        player.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=1.0))
+        # Physics -- CharacterBody, not RigidBody: the player is swept by
+        # CharacterMover, not simulated by Chipmunk. See
+        # docs/physics/character-movement.md.
+        player.add_component(CharacterBody())
         player.add_component(Collider(dimensions=[24, 40]))
 
         # Platformer controller with game-feel tuning.
-        # The detection rays start at the collider's edge, not its centre, so
-        # these are clearances beyond the character's own outline. They used to
-        # be set to half the character's size on the belief that the ray began
-        # at the centre, which reported ground while a full body-height above
-        # it.
+        # wall_check_distance is a clearance beyond the character's own
+        # outline, not from its centre. Ground has no equivalent: it's a
+        # one-pixel overlap probe now, not a configurable-length ray.
         player.add_component(
             PlatformerController(
                 move_speed=180.0,
@@ -307,7 +307,6 @@ class LevelBuilder:
                 wall_slide_enabled=False,  # Disabled for now to debug gravity issues
                 wall_slide_speed=60.0,
                 wall_jump_enabled=False,
-                ground_check_distance=6.0,  # clearance below the feet
                 wall_check_distance=4.0,  # clearance beyond each side
             )
         )
