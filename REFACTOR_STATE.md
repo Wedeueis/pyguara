@@ -180,16 +180,19 @@ uniform test setup — `test_resources.py` asserted on `_reference_counts` /
 so the stale-cache bug had no test that could see it. See the iteration
 log entry below.
 
-**Left open.** `AudioMeta.loop_start/loop_end/normalize/load_mode`,
-`TextureMeta.mipmaps/wrap_s/wrap_t` still have no consumer — they need
-streaming / DSP / GL-state work past a single slice (authoring-layer gap,
-sibling of #37). Under the new lifecycle the audio system should
-`acquire()` clips it wants to survive a between-scene `unload_unused()` —
-a small `pyguara/audio` follow-up (no behaviour change today: nothing
-calls `unload_unused()` yet). `ResourceManager` has no lock on
-`_cache`/`_reference_counts` (check-then-act) — no concurrent caller exists,
-parked as CC. `load_atlas()` still re-parses its JSON on every call (no
-`Atlas` cache) — perf nicety, not a defect.
+**Capability gaps → #40** (async / batch / `preload` loading, hot-reload
+wiring + stale-holder handling, error context on a missing file, asset
+dependency graph — the resources equivalent of what Phase D now does
+explicitly). **Left open.** `AudioMeta.loop_start/loop_end/normalize/
+load_mode`, `TextureMeta.mipmaps/wrap_s/wrap_t` still have no consumer —
+they need streaming / DSP / GL-state work past a single slice
+(authoring-layer gap, sibling of #37). Under the new lifecycle the audio
+system should `acquire()` clips it wants to survive a between-scene
+`unload_unused()` — a small `pyguara/audio` follow-up (no behaviour change
+today: nothing calls `unload_unused()` yet). `ResourceManager` has no lock
+on `_cache`/`_reference_counts` (check-then-act) — no concurrent caller
+exists, parked as CC. `load_atlas()` still re-parses its JSON on every call
+(no `Atlas` cache) — perf nicety, not a defect.
 
 `pyguara/animation` in one slice, both halves (tween/easing in
 `pyguara/animation`, and the sprite-animation FSM in
@@ -369,6 +372,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#28](https://github.com/Wedeueis/pyguara/issues/28) | Roguelike core — framework-level subsystems the target genre needs (combat spine, seeded RNG service, stat/modifier system, projectile layer, procgen, tilemap, run/meta save split, flow-field pathfinding, hit-stop, combat juice, local co-op input) |
 | [#30](https://github.com/Wedeueis/pyguara/issues/30) | `docs/guides/*` physics references have drifted (pre-`CharacterMover`; style guide calls a nonexistent `get_body`) — a `docs/guides` pass, out of scope for the physics subsystem slice |
 | [#37](https://github.com/Wedeueis/pyguara/issues/37) | Animation authoring layer — the `pyguara/animation` audit found the primitives correct but barely wired to the ECS/game layer: no tween↔ECS integration, no sequences/timelines, no directional (8-way) animation, no animation frame events, no `Color` tween, no `Animator.playback_speed`. Time-scale/hit-stop is owned by #28 |
+| [#40](https://github.com/Wedeueis/pyguara/issues/40) | Resources capability gaps (from the `pyguara/resources` audit) — no async / batch / `preload` loading (every load blocks the main thread), hot-reload has a `reload()` primitive but nothing watches the filesystem and stale holders keep the old instance, no path/context on a missing-or-broken file, no asset dependency graph |
 | [#43](https://github.com/Wedeueis/pyguara/issues/43) | Persistence production layer — the `pyguara/persistence` audit (Phase D) found the subsystem defect-free but thin for a shipped game: no backup / prior-version retention, no save-menu API (`list_saves`, cheap metadata-header read, `delete`/`exists` facade), `FileStorageBackend` rooted at a CWD-relative dir not the OS user-data dir. Envelope `format_version` and run/meta split (#28) noted separately |
 
 ---
