@@ -11,6 +11,7 @@ and a TextureFactory protocol for creating backend-specific textures.
 from PIL import Image
 
 from pyguara.graphics.protocols import TextureFactory
+from pyguara.resources.meta import SpritesheetMeta
 from pyguara.resources.types import Texture
 
 
@@ -78,8 +79,35 @@ class SpriteSheet:
         """Get the height of the sprite sheet in pixels."""
         return self._image.height
 
+    def slice_from_meta(self, meta: SpritesheetMeta, count: int = 0) -> list[Texture]:
+        """Slice the sheet using a SpritesheetMeta sidecar's grid settings.
+
+        Reads ``frame_width``, ``frame_height``, ``margin`` and ``spacing``
+        from the meta. ``filter`` is a texture-import setting and is not
+        applied here.
+
+        Args:
+            meta: The spritesheet import settings.
+            count: Maximum number of frames to extract (0 = all that fit).
+
+        Returns:
+            List of Texture objects, one per extracted frame.
+        """
+        return self.slice_grid(
+            meta.frame_width,
+            meta.frame_height,
+            count=count,
+            margin=meta.margin,
+            spacing=meta.spacing,
+        )
+
     def slice_grid(
-        self, frame_width: int, frame_height: int, count: int = 0
+        self,
+        frame_width: int,
+        frame_height: int,
+        count: int = 0,
+        margin: int = 0,
+        spacing: int = 0,
     ) -> list[Texture]:
         """Slice the sprite sheet into a grid of equal-sized frames.
 
@@ -90,13 +118,22 @@ class SpriteSheet:
             frame_height: Height of a single frame in pixels.
             count: Maximum number of frames to extract. If 0, extracts all
                    frames that fit in the grid.
+            margin: Blank border in pixels between the sheet edge and the
+                    first row/column of frames.
+            spacing: Blank gutter in pixels between adjacent frames.
 
         Returns:
             List of Texture objects, one for each extracted frame.
         """
-        # Calculate grid dimensions
-        cols = self._image.width // frame_width
-        rows = self._image.height // frame_height
+        if frame_width <= 0 or frame_height <= 0:
+            raise ValueError("frame_width and frame_height must be positive")
+
+        # Calculate grid dimensions, accounting for margin and inter-frame
+        # spacing: n frames occupy n*frame + (n-1)*spacing, plus 2*margin.
+        stride_x = frame_width + spacing
+        stride_y = frame_height + spacing
+        cols = max(0, (self._image.width - 2 * margin + spacing) // stride_x)
+        rows = max(0, (self._image.height - 2 * margin + spacing) // stride_y)
 
         total_possible = cols * rows
         frames_to_load = count if count > 0 else total_possible
@@ -110,8 +147,8 @@ class SpriteSheet:
                     break
 
                 # Calculate the crop box (left, upper, right, lower)
-                left = x * frame_width
-                upper = y * frame_height
+                left = margin + x * stride_x
+                upper = margin + y * stride_y
                 right = left + frame_width
                 lower = upper + frame_height
 

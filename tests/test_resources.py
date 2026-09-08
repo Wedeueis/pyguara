@@ -1,57 +1,94 @@
-from unittest.mock import MagicMock, patch
+"""Tests for pyguara.resources.manager.ResourceManager.
+
+Lifecycle model under test (see ResourceManager docstring):
+    - load() is a cache-get; the resource enters the cache unpinned (count 0).
+    - acquire()/release() are the explicit pin API and must be balanced.
+    - unload_unused() evicts everything at count 0.
+    - reload() re-reads a cached resource and swaps it in place.
+"""
+
+import json
+from pathlib import Path
 
 import pytest
 
-from pyguara.resources.loader import IResourceLoader
+from pyguara.resources.data import DataResource
+from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
+from pyguara.resources.meta import AssetMeta, TextureMeta
 from pyguara.resources.types import Resource
 
 
 class MockRes(Resource):
+    """Minimal concrete Resource for cache/lifecycle tests."""
+
     @property
     def native_handle(self) -> str:
         return "mock"
 
 
-class MockLoader(IResourceLoader):
+class MockLoader:
+    """A loader that fabricates a MockRes without touching the disk."""
+
+    def __init__(self) -> None:
+        self.load_calls = 0
+
     @property
     def supported_extensions(self) -> list[str]:
         return [".mock"]
 
     def load(self, path: str) -> MockRes:
+        self.load_calls += 1
         return MockRes(path)
 
 
-def test_resource_caching() -> None:
+class MetaMockLoader(MockLoader):
+    """MockLoader that also implements the meta-aware protocol."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_meta: AssetMeta | None = None
+
+    def load_with_meta(self, path: str, meta: AssetMeta | None) -> MockRes:
+        self.seen_meta = meta
+        self.load_calls += 1
+        return MockRes(path)
+
+
+def _mgr(*loaders: object) -> ResourceManager:
     manager = ResourceManager()
+    for loader in loaders or (MockLoader(),):
+        manager.register_loader(loader)  # type: ignore[arg-type]
+    return manager
+
+
+# --------------------------------------------------------------------------
+# Loading, caching, type safety
+# --------------------------------------------------------------------------
+
+
+def test_load_caches_by_path() -> None:
     loader = MockLoader()
-    manager.register_loader(loader)
+    manager = _mgr(loader)
 
-    # Mock index
-    manager._path_index["test"] = "assets/test.mock"
+    res1 = manager.load("file.mock", MockRes)
+    res2 = manager.load("file.mock", MockRes)
 
-    # 1. Load (Cache Miss)
-    res1 = manager.load("test", MockRes)
-    assert res1.path == "assets/test.mock"
-
-    # 2. Load (Cache Hit)
-    res2 = manager.load("test", MockRes)
-    assert res1 is res2  # Same instance
+    assert res1 is res2
+    assert loader.load_calls == 1  # second call served from cache
 
 
-def test_loader_selection() -> None:
-    manager = ResourceManager()
-    loader = MockLoader()
-    manager.register_loader(loader)
+def test_load_resolves_indexed_name(tmp_path: Path) -> None:
+    (tmp_path / "hero.mock").write_text("x")
+    manager = _mgr()
+    manager.index_directory(str(tmp_path))
 
-    # Should select MockLoader for .mock extension
-    res = manager.load("file.mock", MockRes)
-    assert isinstance(res, MockRes)
+    res = manager.load("hero", MockRes)
+    assert res.path == str(tmp_path / "hero.mock")
 
 
-def test_wrong_type_error() -> None:
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
+def test_load_wrong_type_raises_on_miss() -> None:
+    manager = _mgr()
 
     class OtherRes(Resource):
         @property
@@ -62,166 +99,284 @@ def test_wrong_type_error() -> None:
         manager.load("file.mock", OtherRes)
 
 
-def test_indexing() -> None:
+def test_load_wrong_type_raises_on_cache_hit() -> None:
+    manager = _mgr()
+    manager.load("file.mock", MockRes)
+
+    class OtherRes(Resource):
+        @property
+        def native_handle(self) -> None:
+            return None
+
+    with pytest.raises(TypeError, match="cached as MockRes"):
+        manager.load("file.mock", OtherRes)
+
+
+def test_load_unknown_extension_raises() -> None:
+    manager = _mgr()
+    with pytest.raises(ValueError, match="No loader registered"):
+        manager.load("file.unknown", MockRes)
+
+
+def test_register_loader_warns_on_extension_clash(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     manager = ResourceManager()
     manager.register_loader(MockLoader())
+    with caplog.at_level("WARNING"):
+        manager.register_loader(MockLoader())
+    assert any("Overwriting loader" in r.message for r in caplog.records)
 
-    with patch("pathlib.Path.rglob") as mock_glob:
-        mock_file = MagicMock()
-        mock_file.is_file.return_value = True
-        mock_file.suffix = ".mock"
-        mock_file.stem = "hero"
-        mock_file.name = "hero.mock"
-        # Configure __str__ to return the path
-        type(mock_file).__str__ = lambda self: "assets/hero.mock"  # type: ignore[method-assign]
 
-        mock_glob.return_value = [mock_file]
+# --------------------------------------------------------------------------
+# index_directory
+# --------------------------------------------------------------------------
 
-        with patch("pathlib.Path.exists", return_value=True):
-            manager.index_directory("assets")
+
+def test_index_directory_recursive(tmp_path: Path) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "hero.mock").write_text("x")
+    (tmp_path / "sword.mock").write_text("x")
+    manager = _mgr()
+
+    manager.index_directory(str(tmp_path))
+
+    assert manager.load("hero", MockRes).path.endswith("a/hero.mock")
+    assert manager.load("sword.mock", MockRes).path.endswith("sword.mock")
+
+
+def test_index_directory_non_recursive_skips_subdirs(tmp_path: Path) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "deep.mock").write_text("x")
+    manager = _mgr()
+
+    manager.index_directory(str(tmp_path), recursive=False)
+
+    with pytest.raises(ValueError):
+        manager.load("deep", MockRes)  # never indexed -> no extension match...
+
+
+def test_index_directory_ambiguous_stem_is_dropped_with_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    (tmp_path / "enemies").mkdir()
+    (tmp_path / "npcs").mkdir()
+    (tmp_path / "enemies" / "goblin.mock").write_text("enemy")
+    (tmp_path / "npcs" / "goblin.mock").write_text("npc")
+    manager = _mgr()
+
+    with caplog.at_level("WARNING"):
+        manager.index_directory(str(tmp_path))
+
+    assert any("Ambiguous asset name 'goblin'" in r.message for r in caplog.records)
+    # The bare stem is refused...
+    assert "goblin" not in manager._path_index
+    # ...but each unambiguous full name still resolves to its own file.
+    g1 = manager.load(str(tmp_path / "enemies" / "goblin.mock"), MockRes)
+    assert Path(g1.path).read_text() == "enemy"
+
+
+def test_index_directory_same_file_twice_is_not_ambiguous(tmp_path: Path) -> None:
+    (tmp_path / "hero.mock").write_text("x")
+    manager = _mgr()
+
+    manager.index_directory(str(tmp_path))
+    manager.index_directory(str(tmp_path))  # re-scan must not self-collide
 
     assert "hero" in manager._path_index
-    assert manager._path_index["hero"] == "assets/hero.mock"
 
 
-def test_reference_counting_basic() -> None:
-    """Test that load increments ref count and release decrements it."""
+# --------------------------------------------------------------------------
+# Reference counting: load does NOT pin
+# --------------------------------------------------------------------------
+
+
+def test_load_leaves_resource_unpinned() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+    manager.load("a.mock", MockRes)  # repeated load must not accumulate
+
+    stats = manager.get_cache_stats()
+    assert stats["resources"]["a.mock"]["ref_count"] == 0
+
+
+def test_acquire_and_release_balance() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+
+    manager.acquire("a.mock")
+    manager.acquire("a.mock")
+    assert manager.get_cache_stats()["resources"]["a.mock"]["ref_count"] == 2
+
+    manager.release("a.mock")
+    assert "a.mock" in manager.get_cache_stats()["resources"]
+
+    manager.release("a.mock")  # back to 0 -> evicted
+    assert "a.mock" not in manager.get_cache_stats()["resources"]
+
+
+def test_release_without_acquire_raises() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+    with pytest.raises(ValueError, match="already zero"):
+        manager.release("a.mock")
+
+
+def test_acquire_unloaded_raises() -> None:
+    manager = _mgr()
+    with pytest.raises(KeyError, match="Cannot acquire"):
+        manager.acquire("ghost.mock")
+
+
+def test_release_unloaded_raises() -> None:
+    manager = _mgr()
+    with pytest.raises(KeyError, match="Cannot release"):
+        manager.release("ghost.mock")
+
+
+# --------------------------------------------------------------------------
+# unload / unload_unused
+# --------------------------------------------------------------------------
+
+
+def test_unload_unused_sweeps_everything_not_acquired() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+    manager.load("b.mock", MockRes)
+    manager.load("c.mock", MockRes)
+    manager.acquire("b.mock")  # pin one
+
+    freed = manager.unload_unused()
+
+    assert freed == 2
+    remaining = manager.get_cache_stats()["resources"]
+    assert set(remaining) == {"b.mock"}
+
+
+def test_unload_force_evicts_pinned_resource() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+    manager.acquire("a.mock")
+
+    manager.unload("a.mock", force=True)
+
+    assert "a.mock" not in manager.get_cache_stats()["resources"]
+
+
+def test_unload_without_force_decrements_a_pinned_resource() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+    manager.acquire("a.mock")
+    manager.acquire("a.mock")
+
+    manager.unload("a.mock")  # 2 -> 1, still cached
+    assert manager.get_cache_stats()["resources"]["a.mock"]["ref_count"] == 1
+
+    manager.unload("a.mock")  # 1 -> 0 -> evicted
+    assert "a.mock" not in manager.get_cache_stats()["resources"]
+
+
+def test_unload_missing_resource_is_a_noop() -> None:
+    manager = _mgr()
+    manager.unload("ghost.mock")  # must not raise
+
+
+# --------------------------------------------------------------------------
+# reload
+# --------------------------------------------------------------------------
+
+
+def test_reload_swaps_the_cached_instance_and_keeps_refcount(tmp_path: Path) -> None:
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps({"hp": 10}))
     manager = ResourceManager()
-    manager.register_loader(MockLoader())
+    manager.register_loader(JsonLoader())
 
-    # Load resource - should set ref count to 1
-    res1 = manager.load("test.mock", MockRes)
-    assert "test.mock" in manager._reference_counts
-    assert manager._reference_counts["test.mock"] == 1
+    first = manager.load(str(path), DataResource)
+    manager.acquire(str(path))
+    assert first.native_handle == {"hp": 10}
 
-    # Load again - should increment to 2
-    res2 = manager.load("test.mock", MockRes)
-    assert res1 is res2  # Same instance
-    assert manager._reference_counts["test.mock"] == 2
+    path.write_text(json.dumps({"hp": 99}))
+    second = manager.reload(str(path))
 
-    # Release once - ref count should be 1
-    manager.release("test.mock")
-    assert manager._reference_counts["test.mock"] == 1
-    assert "test.mock" in manager._cache  # Still cached
-
-    # Release again - ref count reaches 0, auto-unload
-    manager.release("test.mock")
-    assert "test.mock" not in manager._cache
-    assert "test.mock" not in manager._reference_counts
+    assert second is not first
+    assert second.native_handle == {"hp": 99}
+    assert manager.load(str(path), DataResource) is second  # cache updated
+    assert manager.get_cache_stats()["resources"][str(path)]["ref_count"] == 1
 
 
-def test_acquire_release() -> None:
-    """Test explicit acquire and release methods."""
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
-
-    # Load resource (ref count = 1)
-    manager.load("test.mock", MockRes)
-    assert manager._reference_counts["test.mock"] == 1
-
-    # Acquire additional reference (ref count = 2)
-    manager.acquire("test.mock")
-    assert manager._reference_counts["test.mock"] == 2
-
-    # Release once (ref count = 1)
-    manager.release("test.mock")
-    assert "test.mock" in manager._cache
-
-    # Release again (ref count = 0, auto-unload)
-    manager.release("test.mock")
-    assert "test.mock" not in manager._cache
+def test_reload_uncached_raises() -> None:
+    manager = _mgr()
+    with pytest.raises(KeyError, match="not loaded"):
+        manager.reload("never.mock")
 
 
-def test_acquire_unloaded_resource_error() -> None:
-    """Test that acquire raises error for unloaded resource."""
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
+def test_reload_picks_up_changed_meta(tmp_path: Path) -> None:
+    img = tmp_path / "hero.mock"
+    img.write_text("x")
+    meta = tmp_path / "hero.mock.meta"
+    meta.write_text(json.dumps({"type": "texture", "filter": "linear"}))
+    loader = MetaMockLoader()
+    manager = _mgr(loader)
 
-    with pytest.raises(KeyError, match="Cannot acquire reference to unloaded resource"):
-        manager.acquire("nonexistent.mock")
+    manager.load(str(img), MockRes)
+    assert isinstance(loader.seen_meta, TextureMeta)
+    assert loader.seen_meta.filter == "linear"
 
+    meta.write_text(json.dumps({"type": "texture", "filter": "nearest"}))
+    manager.reload(str(img))
 
-def test_release_unloaded_resource_error() -> None:
-    """Test that release raises error for unloaded resource."""
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
-
-    with pytest.raises(KeyError, match="Cannot release reference to unloaded resource"):
-        manager.release("nonexistent.mock")
-
-
-def test_release_zero_refcount_error() -> None:
-    """Test that release raises error when ref count is already zero."""
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
-
-    # Load and then release to zero
-    manager.load("test.mock", MockRes)
-    manager.release("test.mock")
-
-    # Try to release again - should error
-    with pytest.raises(KeyError):
-        manager.release("test.mock")
+    assert isinstance(loader.seen_meta, TextureMeta)
+    assert loader.seen_meta.filter == "nearest"
 
 
-def test_unload_unused() -> None:
-    """Test batch unloading of zero-ref resources."""
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
-
-    # Load 3 resources
-    manager.load("res1.mock", MockRes)
-    manager.load("res2.mock", MockRes)
-    manager.load("res3.mock", MockRes)
-
-    # Release res1 and res2 to zero
-    manager.release("res1.mock")
-    manager.release("res2.mock")
-
-    # res3 still has ref count 1, acquire another ref for res1
-    manager._reference_counts["res1.mock"] = 0  # Manually set to simulate zero refs
-    manager._cache["res1.mock"] = MockRes("res1.mock")  # Re-add to cache
-
-    # Batch unload
-    count = manager.unload_unused()
-
-    # Should have unloaded res1 (0 refs) but not res3 (1 ref)
-    assert count >= 1
-    assert "res3.mock" in manager._cache
-    assert manager._reference_counts["res3.mock"] == 1
+# --------------------------------------------------------------------------
+# Meta-aware loading through the manager
+# --------------------------------------------------------------------------
 
 
-def test_force_unload() -> None:
-    """Test force unload bypasses reference counting."""
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
+def test_meta_aware_loader_receives_and_attaches_meta(tmp_path: Path) -> None:
+    img = tmp_path / "hero.mock"
+    img.write_text("x")
+    (tmp_path / "hero.mock.meta").write_text(
+        json.dumps({"type": "texture", "filter": "linear"})
+    )
+    loader = MetaMockLoader()
+    manager = _mgr(loader)
 
-    # Load resource (ref count = 1)
-    manager.load("test.mock", MockRes)
-    assert manager._reference_counts["test.mock"] == 1
+    res = manager.load(str(img), MockRes)
 
-    # Force unload should work even with active references
-    manager.unload("test.mock", force=True)
-    assert "test.mock" not in manager._cache
-    assert "test.mock" not in manager._reference_counts
+    assert isinstance(loader.seen_meta, TextureMeta)
+    assert isinstance(res.import_meta, TextureMeta)
+    assert res.import_meta.filter == "linear"
 
 
-def test_cache_stats() -> None:
-    """Test get_cache_stats returns correct information."""
-    manager = ResourceManager()
-    manager.register_loader(MockLoader())
+def test_meta_aware_loader_without_sidecar_gets_none(tmp_path: Path) -> None:
+    img = tmp_path / "hero.mock"
+    img.write_text("x")
+    loader = MetaMockLoader()
+    manager = _mgr(loader)
 
-    # Load 2 resources
-    manager.load("res1.mock", MockRes)
-    manager.load("res2.mock", MockRes)
+    res = manager.load(str(img), MockRes)
 
-    # Acquire additional ref for res1
-    manager.acquire("res1.mock")
+    assert loader.seen_meta is None
+    assert res.import_meta is None
+
+
+# --------------------------------------------------------------------------
+# get_cache_stats
+# --------------------------------------------------------------------------
+
+
+def test_cache_stats_shape() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+    manager.load("b.mock", MockRes)
+    manager.acquire("a.mock")
 
     stats = manager.get_cache_stats()
 
     assert stats["resource_count"] == 2
-    assert stats["total_references"] == 3  # res1=2, res2=1
-    assert "res1.mock" in stats["resources"]
-    assert stats["resources"]["res1.mock"]["ref_count"] == 2
-    assert stats["resources"]["res2.mock"]["ref_count"] == 1
+    assert stats["total_references"] == 1
+    assert stats["resources"]["a.mock"] == {"type": "MockRes", "ref_count": 1}
+    assert stats["resources"]["b.mock"]["ref_count"] == 0

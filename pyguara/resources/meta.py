@@ -175,6 +175,9 @@ class MetaLoader:
     def __init__(self) -> None:
         """Initialize the meta loader."""
         self._cache: dict[str, AssetMeta] = {}
+        # mtime of the `.meta` file each cache entry was parsed from, so a
+        # file changed on disk (hot reload) is re-read instead of served stale.
+        self._cache_mtime: dict[str, float] = {}
 
     def get_meta_path(self, asset_path: str) -> Path:
         """Get the `.meta` file path for an asset.
@@ -213,12 +216,25 @@ class MetaLoader:
         Returns:
             The loaded AssetMeta, or None if no meta file exists.
         """
-        # Check cache first
-        if asset_path in self._cache:
-            return self._cache[asset_path]
-
         meta_path = self.get_meta_path(asset_path)
-        if not meta_path.exists():
+        try:
+            current_mtime: float | None = meta_path.stat().st_mtime
+        except OSError:
+            current_mtime = None
+
+        # Serve from cache only if the file is unchanged since it was parsed.
+        if (
+            asset_path in self._cache
+            and self._cache_mtime.get(asset_path) == current_mtime
+        ):
+            cached = self._cache[asset_path]
+            self._warn_on_type_mismatch(meta_path, cached, expected_type)
+            return cached
+
+        if current_mtime is None:
+            # No readable `.meta` file. Drop any stale cache entry.
+            self._cache.pop(asset_path, None)
+            self._cache_mtime.pop(asset_path, None)
             return None
 
         try:
@@ -250,15 +266,6 @@ class MetaLoader:
             logger.warning("Unknown meta type '%s' in '%s'", type_name, meta_path)
             return None
 
-        # Validate expected type if specified
-        if expected_type is not None and meta_class != expected_type:
-            logger.warning(
-                "Meta file '%s' has type '%s', expected '%s'",
-                meta_path,
-                type_name,
-                expected_type.get_type_name(),
-            )
-
         # Create meta object, ignoring unknown fields
         try:
             # Filter to only known fields
@@ -270,10 +277,43 @@ class MetaLoader:
             logger.warning("Invalid data in meta file '%s': %s", meta_path, e)
             return None
 
+        self._warn_on_type_mismatch(meta_path, meta, expected_type)
+
         # Cache and return
         self._cache[asset_path] = meta
+        self._cache_mtime[asset_path] = current_mtime
         logger.debug("Loaded meta for '%s': %s", asset_path, type_name)
         return meta
+
+    @staticmethod
+    def _warn_on_type_mismatch(
+        meta_path: Path, meta: AssetMeta, expected_type: type[AssetMeta] | None
+    ) -> None:
+        """Log a warning if a loaded meta is not the caller's expected type.
+
+        Runs on every load_meta() call, including cache hits, so the warning
+        is not silently swallowed once an entry is cached.
+        """
+        if expected_type is not None and not isinstance(meta, expected_type):
+            logger.warning(
+                "Meta file '%s' has type '%s', expected '%s'",
+                meta_path,
+                type(meta).get_type_name(),
+                expected_type.get_type_name(),
+            )
+
+    def invalidate(self, asset_path: str) -> None:
+        """Drop the cached metadata for one asset.
+
+        The next load_meta() for this path re-reads the `.meta` file. Called
+        by ResourceManager.reload() so import settings changed on disk take
+        effect.
+
+        Args:
+            asset_path: Path to the asset file (not the `.meta` file).
+        """
+        self._cache.pop(asset_path, None)
+        self._cache_mtime.pop(asset_path, None)
 
     def get_or_default(self, asset_path: str, meta_type: type[M]) -> M:
         """Get metadata for an asset, returning defaults if no meta file.
@@ -309,8 +349,13 @@ class MetaLoader:
             with open(meta_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
-            # Update cache
+            # Update cache, pinning it to the file we just wrote so a
+            # subsequent load_meta() does not treat it as stale.
             self._cache[asset_path] = meta
+            try:
+                self._cache_mtime[asset_path] = meta_path.stat().st_mtime
+            except OSError:
+                self._cache_mtime.pop(asset_path, None)
             logger.debug("Saved meta for '%s'", asset_path)
             return True
 
@@ -321,6 +366,7 @@ class MetaLoader:
     def clear_cache(self) -> None:
         """Clear the metadata cache."""
         self._cache.clear()
+        self._cache_mtime.clear()
 
 
 # Global meta loader instance

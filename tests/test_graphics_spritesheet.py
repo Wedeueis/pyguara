@@ -125,3 +125,48 @@ def test_spritesheet_slice_regions(sample_image, texture_factory):
     assert frames[0].native_handle.get_at((10, 10)) == (255, 0, 0, 255)
     # Second region is White
     assert frames[1].native_handle.get_at((10, 10)) == (255, 255, 255, 255)
+
+
+def test_spritesheet_slice_grid_margin_and_spacing(texture_factory):
+    """Margin and inter-frame spacing are skipped, not sliced as pixels."""
+    # 2x2 grid of 32px frames, 4px margin, 2px spacing:
+    # 4 + 32 + 2 + 32 + 4 = 74 per axis.
+    img = Image.new("RGBA", (74, 74))
+    for y in range(74):
+        for x in range(74):
+            img.putpixel((x, y), (0, 0, 0, 255))
+    # Paint the top-left frame body red (starts at margin=4).
+    for y in range(4, 36):
+        for x in range(4, 36):
+            img.putpixel((x, y), (255, 0, 0, 255))
+    # Paint the second column's top frame body green (starts at 4+32+2 = 38).
+    for y in range(4, 36):
+        for x in range(38, 70):
+            img.putpixel((x, y), (0, 255, 0, 255))
+
+    sheet = SpriteSheet.from_image(img, texture_factory, "padded")
+    frames = sheet.slice_grid(32, 32, margin=4, spacing=2)
+
+    assert len(frames) == 4
+    assert frames[0].native_handle.get_at((0, 0)) == (255, 0, 0, 255)
+    assert frames[1].native_handle.get_at((0, 0)) == (0, 255, 0, 255)
+
+
+def test_spritesheet_slice_from_meta(texture_factory):
+    """slice_from_meta pulls grid geometry off a SpritesheetMeta."""
+    from pyguara.resources.meta import SpritesheetMeta
+
+    img = Image.new("RGBA", (74, 74), (10, 10, 10, 255))
+    sheet = SpriteSheet.from_image(img, texture_factory, "meta_sheet")
+    meta = SpritesheetMeta(frame_width=32, frame_height=32, margin=4, spacing=2)
+
+    frames = sheet.slice_from_meta(meta)
+    assert len(frames) == 4
+    assert frames[0].native_handle.get_width() == 32
+
+
+def test_spritesheet_slice_grid_rejects_nonpositive_dims(sample_image, texture_factory):
+    """A zero frame size raises instead of ZeroDivisionError."""
+    sheet = SpriteSheet.from_image(sample_image, texture_factory, "bad")
+    with pytest.raises(ValueError):
+        sheet.slice_grid(0, 32)

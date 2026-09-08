@@ -10,6 +10,8 @@ the core engine depends on these abstract classes, while specific backends
 from abc import ABC, abstractmethod
 from typing import Any
 
+from pyguara.resources.meta import AssetMeta
+
 
 class Resource(ABC):
     """
@@ -17,17 +19,31 @@ class Resource(ABC):
 
     Attributes:
         path (str): The original file path or unique identifier of the resource.
+        import_meta (AssetMeta | None): The `.meta` sidecar settings a
+            meta-aware loader resolved for this resource, or None. Systems that
+            need import settings after load (e.g. the audio system reading
+            ``volume_db``) read them here instead of round-tripping through the
+            ResourceManager.
     """
 
     def __init__(self, path: str):
         """Initialize the resource with a file path."""
         self._path = path
-        self._ref_count = 0
+        self._import_meta: AssetMeta | None = None
 
     @property
     def path(self) -> str:
         """Get the file path associated with this resource."""
         return self._path
+
+    @property
+    def import_meta(self) -> AssetMeta | None:
+        """Get the `.meta` import settings resolved for this resource."""
+        return self._import_meta
+
+    @import_meta.setter
+    def import_meta(self, meta: AssetMeta | None) -> None:
+        self._import_meta = meta
 
     @property
     @abstractmethod
