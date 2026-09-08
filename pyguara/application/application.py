@@ -128,7 +128,10 @@ class Application:
         Each frame measures its own duration, clamps it to
         `physics.max_frame_time`, accumulates it, and runs as many fixed-rate
         updates as that buys before rendering once. Physics therefore behaves
-        identically regardless of display framerate.
+        identically regardless of display framerate. While a replay loaded via
+        `load_replay()` is driving the game, each frame's duration is taken from
+        the recording instead, so a replay reproduces time-dependent state on
+        any machine.
 
         Dispatches `ApplicationStartEvent` before the first frame, and always
         calls `shutdown()` on the way out.
@@ -175,6 +178,16 @@ class Application:
                 # (when updates take longer than real time, causing ever-growing backlog)
                 if frame_time > max_frame_time:
                     frame_time = max_frame_time
+
+                # While a replay drives the game, step the simulation by the
+                # recorded per-frame delta instead of wall-clock time, so the
+                # fixed-step count, tweens, particles and WaitForSeconds
+                # reproduce. clock.tick() above still throttles rendering to the
+                # display rate.
+                if self._replay_player is not None and self._replay_player.is_playing:
+                    recorded_dt = self._replay_player.peek_delta()
+                    if recorded_dt is not None:
+                        frame_time = recorded_dt
 
                 # 2. Input (once per frame, before physics)
                 # Gamepad state must be fresh before poll_events() drains this
