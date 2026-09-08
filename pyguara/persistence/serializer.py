@@ -5,6 +5,8 @@ import json
 import pickle
 from typing import Any
 
+import msgpack
+
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.persistence.types import SerializationFormat
 
@@ -116,6 +118,11 @@ class Serializer:
             clean_data = prepare_for_json(data)
             return json.dumps(clean_data, indent=2).encode("utf-8")
 
+        elif fmt == SerializationFormat.MSGPACK:
+            # prepare_for_json reduces engine value types to tagged dicts,
+            # which msgpack packs natively; game_object_hook rebuilds them.
+            return bytes(msgpack.packb(prepare_for_json(data), use_bin_type=True))
+
         elif fmt == SerializationFormat.BINARY:
             return pickle.dumps(data)
 
@@ -140,6 +147,11 @@ class Serializer:
 
         if fmt == SerializationFormat.JSON:
             return json.loads(data.decode("utf-8"), object_hook=game_object_hook)
+
+        elif fmt == SerializationFormat.MSGPACK:
+            return msgpack.unpackb(
+                data, object_hook=game_object_hook, raw=False, strict_map_key=False
+            )
 
         elif fmt == SerializationFormat.BINARY:
             return pickle.loads(data)

@@ -283,6 +283,10 @@ module = "PyInstaller.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = "msgpack.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = "pyguara.game.*"
 ignore_missing_imports = true
 

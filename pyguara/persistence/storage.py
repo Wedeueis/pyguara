@@ -1,20 +1,22 @@
 """Concrete storage backend implementations."""
 
-import json
+import contextlib
 import os
 import tempfile
-from typing import Any
 
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
+
+_TEMP_PREFIX = ".tmp_"
 
 
 def _atomic_write_bytes(path: str, data: bytes) -> None:
     """Atomically write bytes to a file using write-to-temp-then-rename.
 
     This ensures that the target file is never left in a partial state.
-    If a crash occurs during the write, only the temp file is affected.
+    If a crash occurs during the write, only the temp file is affected;
+    the previous contents of ``path`` remain intact until the rename.
 
     Args:
         path: The target file path.
@@ -26,7 +28,7 @@ def _atomic_write_bytes(path: str, data: bytes) -> None:
     dir_path = os.path.dirname(path) or "."
 
     # Create temp file in the same directory to ensure same filesystem
-    fd, temp_path = tempfile.mkstemp(dir=dir_path, prefix=".tmp_")
+    fd, temp_path = tempfile.mkstemp(dir=dir_path, prefix=_TEMP_PREFIX)
     try:
         os.write(fd, data)
         os.fsync(fd)  # Ensure data is flushed to disk
@@ -43,159 +45,156 @@ def _atomic_write_bytes(path: str, data: bytes) -> None:
             os.remove(temp_path)
         raise
 
-
-def _atomic_write_text(path: str, text: str, encoding: str = "utf-8") -> None:
-    """Atomically write text to a file using write-to-temp-then-rename.
-
-    Args:
-        path: The target file path.
-        text: The text to write.
-        encoding: The text encoding to use.
-
-    Raises:
-        OSError: If the write or rename fails.
-    """
-    _atomic_write_bytes(path, text.encode(encoding))
+    # Flush the rename itself so the swap survives a crash, not just the
+    # bytes inside the file.
+    try:
+        dir_fd = os.open(dir_path, os.O_DIRECTORY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        # Directory fsync is a durability nicety; platforms without
+        # O_DIRECTORY (or where it is not permitted) still get the rename.
+        pass
 
 
 class FileStorageBackend:
-    """
-    Storage backend that saves data to the local filesystem.
+    """Storage backend that saves each key as one file on the local disk.
 
-    Each 'key' maps to a file in the base directory.
-    Format:
-        {key}.dat -> Raw Data
-        {key}.meta -> Metadata (JSON)
+    Each key maps to a single ``{key}.save`` file under ``base_path``,
+    written with an atomic temp-file-then-rename so a crash mid-write never
+    corrupts the previous value.
 
-    Uses atomic writes to prevent data corruption on crash.
+    Keys must be filesystem-safe as given: alphanumerics, ``_`` and ``-``.
+    A key that would need rewriting to be safe is rejected with
+    ``ValueError`` rather than silently mangled -- two keys that sanitise to
+    the same name would otherwise overwrite each other.
     """
+
+    SUFFIX = ".save"
 
     def __init__(self, base_path: str = "saves") -> None:
-        """
-        Initialize the file storage.
+        """Initialize the file storage.
 
         Args:
-            base_path: Directory where files will be stored.
+            base_path: Directory where files will be stored. Created if
+                absent.
         """
         self.base_path = base_path
-        if not os.path.exists(self.base_path):
-            os.makedirs(self.base_path)
+        os.makedirs(self.base_path, exist_ok=True)
+        self._sweep_temp_files()
 
-    def _get_paths(self, key: str) -> tuple[str, str]:
-        """Return (data_path, meta_path) for a given key."""
-        # Sanitize key to avoid path traversal
-        safe_key = "".join(c for c in key if c.isalnum() or c in ("_", "-"))
-        return (
-            os.path.join(self.base_path, f"{safe_key}.dat"),
-            os.path.join(self.base_path, f"{safe_key}.meta"),
-        )
+    def _sweep_temp_files(self) -> None:
+        """Remove orphaned temp files left by a crashed write."""
+        try:
+            entries = os.listdir(self.base_path)
+        except OSError:
+            return
+        for name in entries:
+            if name.startswith(_TEMP_PREFIX):
+                with contextlib.suppress(OSError):
+                    os.remove(os.path.join(self.base_path, name))
 
-    def save(self, key: str, data: bytes, metadata: dict[str, Any]) -> bool:
-        """Save data and metadata to disk atomically.
+    def _path_for(self, key: str) -> str:
+        """Return the file path for a key, validating the key first.
 
-        Uses atomic writes to prevent data corruption. Both files are
-        written to temporary files first, then atomically renamed.
-        If a crash occurs during save, the previous version remains intact.
+        Args:
+            key: The storage key.
+
+        Returns:
+            Absolute-or-relative path to the key's ``.save`` file.
+
+        Raises:
+            ValueError: If the key is empty or contains characters that are
+                not alphanumeric, ``_`` or ``-``.
+        """
+        if not key:
+            raise ValueError("Storage key must be a non-empty string")
+        if any(not (c.isalnum() or c in ("_", "-")) for c in key):
+            raise ValueError(
+                f"Invalid storage key {key!r}: only letters, digits, '_' and "
+                f"'-' are allowed (no spaces, dots or path separators)"
+            )
+        return os.path.join(self.base_path, f"{key}{self.SUFFIX}")
+
+    def save(self, key: str, blob: bytes) -> bool:
+        """Write a blob to disk atomically.
 
         Args:
             key: Unique identifier for the data.
-            data: The raw binary data to store.
-            metadata: Dictionary of metadata associated with the data.
+            blob: The bytes to store.
 
         Returns:
-            True if the save was successful, False otherwise.
+            True if the write succeeded, False on an OS-level failure.
+
+        Raises:
+            ValueError: If the key is not filesystem-safe.
         """
-        data_path, meta_path = self._get_paths(key)
-
+        path = self._path_for(key)
         try:
-            # Write data file atomically first
-            _atomic_write_bytes(data_path, data)
-
-            # Write metadata file atomically
-            meta_json = json.dumps(metadata, indent=4)
-            _atomic_write_text(meta_path, meta_json)
-
-            logger.debug("Saved '%s' (%d bytes)", key, len(data))
+            _atomic_write_bytes(path, blob)
+            logger.debug("Saved '%s' (%d bytes)", key, len(blob))
             return True
         except OSError as e:
             logger.error("Save failed for '%s': %s", key, e, exc_info=True)
             return False
 
-    def load(self, key: str) -> tuple[bytes, dict[str, Any]] | None:
-        """Load data and metadata from disk.
+    def load(self, key: str) -> bytes | None:
+        """Read the blob stored under a key.
 
         Args:
             key: Unique identifier for the data.
 
         Returns:
-            A tuple (data, metadata) if found and valid, None otherwise.
-            Returns None if either file is missing (possibly corrupted save).
+            The stored bytes, or None if the file is absent or unreadable.
+
+        Raises:
+            ValueError: If the key is not filesystem-safe.
         """
-        data_path, meta_path = self._get_paths(key)
-
-        # Check both files exist (atomic save ensures both or neither)
-        if not os.path.exists(data_path):
-            if os.path.exists(meta_path):
-                logger.warning(
-                    "Corrupted save '%s': metadata exists but data missing", key
-                )
+        path = self._path_for(key)
+        if not os.path.exists(path):
             return None
-
-        if not os.path.exists(meta_path):
-            logger.warning("Corrupted save '%s': data exists but metadata missing", key)
-            return None
-
         try:
-            with open(data_path, "rb") as f:
-                data = f.read()
-
-            with open(meta_path, encoding="utf-8") as f:
-                meta = json.load(f)
-
-            logger.debug("Loaded '%s' (%d bytes)", key, len(data))
-            return data, meta
+            with open(path, "rb") as f:
+                blob = f.read()
+            logger.debug("Loaded '%s' (%d bytes)", key, len(blob))
+            return blob
         except OSError as e:
             logger.error("Load failed for '%s': %s", key, e, exc_info=True)
             return None
-        except json.JSONDecodeError as e:
-            logger.error("Metadata corrupted for '%s': %s", key, e, exc_info=True)
-            return None
 
     def delete(self, key: str) -> bool:
-        """Delete data and metadata files for a key.
+        """Delete the file for a key.
 
         Args:
             key: Unique identifier for the data to delete.
 
         Returns:
-            True if at least the data file was deleted, False if not found.
+            True if a file was removed, False if it was already absent.
+
+        Raises:
+            ValueError: If the key is not filesystem-safe.
         """
-        data_path, meta_path = self._get_paths(key)
-
-        success = False
-        if os.path.exists(data_path):
-            os.remove(data_path)
-            success = True
-
-        if os.path.exists(meta_path):
-            os.remove(meta_path)
-
-        if success:
-            logger.debug("Deleted '%s'", key)
-
-        return success
+        path = self._path_for(key)
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            return False
+        except OSError as e:
+            logger.error("Delete failed for '%s': %s", key, e, exc_info=True)
+            return False
+        logger.debug("Deleted '%s'", key)
+        return True
 
     def list_keys(self) -> list[str]:
-        """List all available keys in storage.
+        """List all keys currently present in storage.
 
         Returns:
-            List of key names (based on .meta files present).
+            Key names (files ending in ``.save``, suffix stripped).
         """
-        keys = []
-        if not os.path.exists(self.base_path):
+        try:
+            entries = os.listdir(self.base_path)
+        except OSError:
             return []
-
-        for filename in os.listdir(self.base_path):
-            if filename.endswith(".meta"):
-                keys.append(filename[:-5])
-        return keys
+        return [n[: -len(self.SUFFIX)] for n in entries if n.endswith(self.SUFFIX)]
