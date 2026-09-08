@@ -146,12 +146,14 @@ class IPhysicsEngine(Protocol):
         centre: Vector2,
         half_extents: Vector2,
         ignore_entity_id: int | str | None = None,
-    ) -> bool:
-        """Report whether an axis-aligned box overlaps any solid shape.
+    ) -> int | str | None:
+        """Report which entity's solid shape an axis-aligned box overlaps.
 
         The question a character mover asks before committing a step: "if I
-        were here, would I be inside something?" Sensors do not count -- they
-        are meant to be passed through.
+        were here, would I be inside something, and if so, what?" Knowing
+        *what* -- not just whether -- is what lets a mover recognise a
+        pushable crate rather than merely stopping at it. Sensors do not
+        count -- they are meant to be passed through.
 
         Args:
             centre: Box centre in world space.
@@ -159,7 +161,8 @@ class IPhysicsEngine(Protocol):
             ignore_entity_id: Body to disregard, normally the mover itself.
 
         Returns:
-            True if the box would overlap a solid shape.
+            The entity id of the first solid, non-sensor shape found
+            overlapping, or None if the box is clear.
         """
         ...
 

@@ -642,8 +642,8 @@ class PymunkEngine:
         centre: Vector2,
         half_extents: Vector2,
         ignore_entity_id: int | str | None = None,
-    ) -> bool:
-        """Report whether an axis-aligned box overlaps any solid shape.
+    ) -> int | str | None:
+        """Report which entity's solid shape an axis-aligned box overlaps.
 
         Args:
             centre: Box centre in world space.
@@ -651,10 +651,11 @@ class PymunkEngine:
             ignore_entity_id: Body to disregard, normally the mover itself.
 
         Returns:
-            True if the box would overlap a solid, non-sensor shape.
+            The entity id of the first solid, non-sensor shape found
+            overlapping, or None if the box is clear.
         """
         if not self.space:
-            return False
+            return None
 
         probe_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
         probe_body.position = (centre.x, centre.y)
@@ -665,10 +666,11 @@ class PymunkEngine:
         for hit in self.space.shape_query(probe):
             if hit.shape is None or hit.shape.sensor:
                 continue
-            if getattr(hit.shape.body, "entity_id", None) == ignore_entity_id:
+            entity_id = getattr(hit.shape.body, "entity_id", None)
+            if entity_id == ignore_entity_id:
                 continue
-            return True
-        return False
+            return entity_id
+        return None
 
     def create_joint(
         self,
