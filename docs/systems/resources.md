@@ -27,7 +27,7 @@ bootstrap wires:
 | `JsonLoader` | `.json`, `.manifest`, `.config` | `DataResource` |
 | `PygameImageLoader` / `GLTextureLoader` | `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga` | `Texture` |
 | `PygameSoundLoader` | `.wav`, `.ogg`, `.mp3` | `AudioClip` |
-| `PrefabLoader` | `.prefab` | prefab data |
+| `PrefabLoader` | `.prefab`, `.prefab.json`, `.prefab.yaml` | `PrefabData` (see [Prefabs](prefabs.md)) |
 
 Registering a second loader for an extension logs a warning and wins.
 
