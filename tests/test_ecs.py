@@ -1025,3 +1025,92 @@ def test_subscriber_exceptions_propagate_after_the_entity_is_already_dead() -> N
 
 def _raise_boom(_entity: Entity) -> None:
     raise RuntimeError("boom")
+
+
+# -- Entity.get_all_components --
+
+
+def test_get_all_components_returns_every_attached_component() -> None:
+    entity = Entity()
+    pos = entity.add_component(Position())
+    hp = entity.add_component(Health())
+
+    everything = entity.get_all_components()
+    assert len(everything) == 2
+    assert any(c is pos for c in everything)
+    assert any(c is hp for c in everything)
+
+
+def test_get_all_components_is_empty_for_a_bare_entity() -> None:
+    assert Entity().get_all_components() == ()
+
+
+def test_get_all_components_is_a_snapshot_safe_to_mutate_during_iteration() -> None:
+    entity = Entity()
+    entity.add_component(Position())
+    entity.add_component(Health())
+
+    # Removing a component mid-iteration must not disturb the walk.
+    seen = []
+    for component in entity.get_all_components():
+        seen.append(type(component).__name__)
+        entity.remove_component(type(component))
+
+    assert sorted(seen) == ["Health", "Position"]
+    assert entity.get_all_components() == ()
+
+
+# -- EntityManager.clear --
+
+
+def test_clear_removes_every_entity() -> None:
+    manager = EntityManager()
+    for _ in range(5):
+        manager.create_entity().add_component(Position())
+
+    manager.clear()
+
+    assert list(manager.get_all_entities()) == []
+    assert list(manager.get_entities_with(Position)) == []
+
+
+def test_clear_notifies_entity_removed_subscribers() -> None:
+    manager = EntityManager()
+    ids = [manager.create_entity(f"e{i}").id for i in range(3)]
+    seen: list[str] = []
+    manager.subscribe_entity_removed(lambda e: seen.append(e.id))
+
+    manager.clear()
+
+    assert sorted(seen) == sorted(ids)
+
+
+def test_clear_empties_cached_queries() -> None:
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+    for _ in range(3):
+        manager.create_entity().add_component(Position())
+    assert len(list(manager.get_entities_with_cached(Position))) == 3
+
+    manager.clear()
+
+    assert list(manager.get_entities_with_cached(Position)) == []
+
+
+def test_world_is_reusable_after_clear() -> None:
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+    manager.create_entity("old").add_component(Position())
+
+    manager.clear()
+
+    fresh = manager.create_entity("new")
+    fresh.add_component(Position())
+    assert [e.id for e in manager.get_entities_with_cached(Position)] == ["new"]
+    assert manager.get_entity("old") is None
+
+
+def test_clear_on_an_empty_world_is_a_noop() -> None:
+    manager = EntityManager()
+    manager.clear()
+    assert list(manager.get_all_entities()) == []

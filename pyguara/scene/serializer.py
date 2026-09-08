@@ -143,8 +143,9 @@ class SceneSerializer:
     def _serialize_entity(self, entity: Entity) -> dict[str, Any]:
         """Convert an entity to a dictionary."""
         components_data = {}
-        for comp_type, component in entity._components.items():
-            components_data[comp_type.__name__] = self._serialize_component(component)
+        for component in entity.get_all_components():
+            name = type(component).__name__
+            components_data[name] = self._serialize_component(component)
 
         return {"id": entity.id, "components": components_data}
 

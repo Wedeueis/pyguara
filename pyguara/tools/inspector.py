@@ -1,5 +1,6 @@
 """Entity Inspector tool for ECS debugging."""
 
+from collections.abc import Callable
 from typing import Any
 
 import pygame
@@ -21,19 +22,33 @@ from pyguara.tools.tweakable import (
 class EntityInspector(Tool):
     """Visualizes ECS entities and their components data.
 
-    Allows cycling through active entities and inspecting their component
-    states in real-time. Editable-typed fields (bool/int/float/Enum/Vector2,
-    or a nested dataclass of those) are click-to-edit, writing straight back
-    onto the live component -- see `pyguara.tools.tweakable`.
+    Editable-typed fields (bool/int/float/Enum/Vector2/Color, or a nested
+    dataclass of those) are click-to-edit, writing straight back onto the
+    live component -- see `pyguara.tools.tweakable`.
+
+    Subject selection has two modes:
+
+    - **Cycle** (default): TAB steps through the active scene's entities.
+    - **Provided**: pass `selection_provider` and the inspector shows
+      whatever entity it returns (e.g. `HierarchyTool.selected_entity`),
+      ignoring TAB.
     """
 
-    def __init__(self, container: DIContainer) -> None:
+    def __init__(
+        self,
+        container: DIContainer,
+        selection_provider: Callable[[], Entity | None] | None = None,
+    ) -> None:
         """Initialize the inspector.
 
         Args:
             container: The global DI container.
+            selection_provider: Optional callable returning the entity to
+                inspect. When given, TAB cycling is disabled and the inspector
+                follows this selection.
         """
         super().__init__("entity_inspector", container)
+        self._selection_provider = selection_provider
         self._selected_index: int = 0
         self._selected_entity: Entity | None = None
 
@@ -68,47 +83,51 @@ class EntityInspector(Tool):
         renderer.draw_rect(self._panel_rect, self._bg_color, 0)
         renderer.draw_rect(self._panel_rect, Color(100, 100, 100), 2)
 
-        # Header
+        provided = self._selection_provider is not None
+        header = (
+            "Entity Inspector (from Hierarchy)"
+            if provided
+            else ("Entity Inspector (TAB to Cycle)")
+        )
         renderer.draw_text(
-            "Entity Inspector (TAB to Cycle)",
+            header,
             Vector2(self._panel_rect.x + 10, self._panel_rect.y + 10),
             self._highlight_color,
             size=18,
         )
 
-        # Get Entities (Privileged access for debugging)
-        # Assuming EntityManager has an underlying dictionary or list
-        if hasattr(self._entity_manager, "_entities"):
-            entities = list(self._entity_manager._entities.values())
-        else:
-            return
+        entities = list(self._entity_manager.get_all_entities())
 
-        if not entities:
+        if provided:
+            assert self._selection_provider is not None
+            self._selected_entity = self._selection_provider()
+        elif entities:
+            if self._selected_index >= len(entities):
+                self._selected_index = 0
+            self._selected_entity = entities[self._selected_index]
+        else:
+            self._selected_entity = None
+
+        if self._selected_entity is None:
+            msg = "Nothing selected" if provided else "No Entities Active"
             renderer.draw_text(
-                "No Entities Active",
+                msg,
                 Vector2(self._panel_rect.x + 10, self._panel_rect.y + 40),
                 Color(150, 150, 150),
                 16,
             )
             return
 
-        # Validate selection
-        if self._selected_index >= len(entities):
-            self._selected_index = 0
-        self._selected_entity = entities[self._selected_index]
+        self._render_entity_details(renderer, self._selected_entity, 40)
 
-        # Draw Entity Info
-        y_offset = 40
-        self._render_entity_details(renderer, self._selected_entity, y_offset)
-
-        # Footer
-        footer_y = self._panel_rect.y + self._panel_rect.height - 30
-        renderer.draw_text(
-            f"Entity {self._selected_index + 1}/{len(entities)}",
-            Vector2(self._panel_rect.x + 10, footer_y),
-            Color(150, 150, 150),
-            14,
-        )
+        if not provided:
+            footer_y = self._panel_rect.y + self._panel_rect.height - 30
+            renderer.draw_text(
+                f"Entity {self._selected_index + 1}/{len(entities)}",
+                Vector2(self._panel_rect.x + 10, footer_y),
+                Color(150, 150, 150),
+                14,
+            )
 
     def _render_entity_details(
         self, renderer: UIRenderer, entity: Entity, start_y: int
@@ -139,11 +158,8 @@ class EntityInspector(Tool):
         )
         y += 10
 
-        # Components (privileged access for debugging -- no public
-        # iteration method exists on Entity, same as _entity_manager
-        # above)
-        for comp_type, component in entity._components.items():
-            comp_name = comp_type.__name__
+        for component in entity.get_all_components():
+            comp_name = type(component).__name__
             renderer.draw_text(
                 f"[{comp_name}]", Vector2(x, y), self._highlight_color, 16
             )
@@ -172,13 +188,15 @@ class EntityInspector(Tool):
         Args:
             event: Pygame event.
         """
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
-            # Cycle next
-            if hasattr(self._entity_manager, "_entities"):
-                count = len(self._entity_manager._entities)
-                if count > 0:
-                    self._selected_index = (self._selected_index + 1) % count
-                    return True
+        if (
+            self._selection_provider is None
+            and event.type == pygame.KEYDOWN
+            and event.key == pygame.K_TAB
+        ):
+            count = sum(1 for _ in self._entity_manager.get_all_entities())
+            if count > 0:
+                self._selected_index = (self._selected_index + 1) % count
+                return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos

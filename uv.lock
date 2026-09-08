@@ -470,12 +470,6 @@ wheels = [
 ]
 
 [[package]]
-name = "imgui"
-version = "2.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f1/aa/4abb0d3d6054da9a4390160fc25ca743a824263a9931cc6a95f30e3d75b4/imgui-2.0.0.tar.gz", hash = "sha256:2fbdb8eed3b8dbd7ea98af9e4c1c6582b0bc4da942a258de16333d8c653d67e1", size = 1473795, upload-time = "2023-04-19T16:46:44.547Z" }
-
-[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1333,7 +1327,6 @@ build = [
 ]
 dev = [
     { name = "build" },
-    { name = "imgui" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -1357,7 +1350,6 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=0.10.0" },
     { name = "click", specifier = ">=8.1.7" },
     { name = "dataclasses-json", specifier = ">=0.6.0" },
-    { name = "imgui", marker = "extra == 'dev'", specifier = ">=2.0.0" },
     { name = "memory-profiler", marker = "extra == 'benchmark'", specifier = ">=0.61.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.5.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0.0" },

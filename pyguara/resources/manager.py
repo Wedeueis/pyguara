@@ -11,6 +11,7 @@ of truth for all game assets. It handles:
 
 import json
 import os
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -434,6 +435,24 @@ class ResourceManager:
             "total_references": total_refs,
             "resources": resources_info,
         }
+
+    def iter_indexed(self) -> Iterator[tuple[str, str]]:
+        """Yield `(name, path)` for every asset `index_directory()` has mapped.
+
+        A read-only view for tooling such as an asset browser. `name` is the
+        lookup key -- a bare stem (`hero`) or a full filename (`hero.png`) --
+        and `path` its resolved location on disk. Iterates a snapshot.
+        """
+        yield from list(self._path_index.items())
+
+    def iter_cached(self) -> Iterator[tuple[str, Resource]]:
+        """Yield `(path, resource)` for every currently loaded resource.
+
+        A read-only view for tooling; unlike `get_cache_stats()` this hands
+        back the live resource objects. Iterates a snapshot, so a caller may
+        load or unload while iterating.
+        """
+        yield from list(self._cache.items())
 
     def load_atlas(self, atlas_path: str, metadata_path: str) -> Atlas:
         """

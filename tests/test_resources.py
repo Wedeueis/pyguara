@@ -380,3 +380,47 @@ def test_cache_stats_shape() -> None:
     assert stats["total_references"] == 1
     assert stats["resources"]["a.mock"] == {"type": "MockRes", "ref_count": 1}
     assert stats["resources"]["b.mock"]["ref_count"] == 0
+
+
+# --------------------------------------------------------------------------
+# Read-only browse accessors
+# --------------------------------------------------------------------------
+
+
+def test_iter_indexed_yields_name_path_pairs(tmp_path: Path) -> None:
+    (tmp_path / "hero.mock").write_text("x")
+    manager = _mgr()
+    manager.index_directory(str(tmp_path))
+
+    indexed = dict(manager.iter_indexed())
+
+    assert indexed["hero"] == str(tmp_path / "hero.mock")
+    assert indexed["hero.mock"] == str(tmp_path / "hero.mock")
+
+
+def test_iter_indexed_is_empty_before_indexing() -> None:
+    assert list(_mgr().iter_indexed()) == []
+
+
+def test_iter_cached_yields_live_resource_objects() -> None:
+    manager = _mgr()
+    res = manager.load("a.mock", MockRes)
+
+    cached = dict(manager.iter_cached())
+
+    assert cached == {"a.mock": res}
+    assert cached["a.mock"] is res
+
+
+def test_iter_cached_snapshot_survives_unload_during_iteration() -> None:
+    manager = _mgr()
+    manager.load("a.mock", MockRes)
+    manager.load("b.mock", MockRes)
+
+    seen = []
+    for path, _res in manager.iter_cached():
+        seen.append(path)
+        manager.unload(path, force=True)
+
+    assert sorted(seen) == ["a.mock", "b.mock"]
+    assert list(manager.iter_cached()) == []

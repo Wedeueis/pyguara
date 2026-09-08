@@ -79,9 +79,48 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/prefabs` closed 2026-09-08 (branch `refactor/prefabs-audit`).**
-Next in the queue is Tier 4: `pyguara/editor` (in-engine editor, inspector
-tools). Open `REFACTOR_STATE.md` "How to resume" and take it.
+**None — `pyguara/editor` closed 2026-09-08 (branch `refactor/editor-audit`).**
+Next in the queue is Tier 4: `pyguara/scripting` (coroutines, script
+hosting). Open `REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/editor` in one slice, ~705 lines (`layer`, `drawers`,
+`panels/{hierarchy,inspector,assets}`). Headline: **the entire subsystem
+was dead code and had never executed once.** `layer.py` imports
+`imgui.integrations.pygame`, which transitively runs `import OpenGL.GL` —
+pyimgui's pygame integration is a fixed-pipeline OpenGL renderer with no
+software path, and `PyOpenGL` is a dependency nowhere (only `imgui` in the
+`dev` extra). So `HAS_IMGUI` was unconditionally `False` in every install
+config: `initialize()` logged "ImGui not found. Editor disabled." and every
+`EditorTool` / panel / drawer method early-returned. `imgui` was imported
+nowhere else in the engine. It also duplicated the working `UIRenderer`
+dev-tool suite (`EntityInspector` F2, `ConfigInspector` F6) on a backend
+that violates the engine's "never import the renderer" rule. Per the user's
+choice ("delete and unify", **Full** scope): `pyguara/editor` deleted; the
+`imgui` dev dep dropped; `EntityManager.clear()` (callback-firing
+scene-reload teardown) and `Entity.get_all_components()` (the public
+components view CC-5 asked for) added; `ResourceManager.iter_indexed()` /
+`iter_cached()` added; `HierarchyTool` (F5) and `AssetsTool` (F7) rebuilt on
+`UIRenderer`, with `EntityInspector` taking an optional `selection_provider`
+so hierarchy→inspector behaves like an editor split, and `AssetsTool` spawn
+routed through the shared `ComponentRegistry.create` (the `SceneSerializer`
+path), not a bespoke map. **BREAKING** (pre-alpha): the F5 ImGui editor and
+`pyguara.editor` are gone. Tests +23 net (1808 → 1831; +25 added, −2
+theatre tests deleted). `docs/systems/editor.md` rewritten around the
+overlay. See the iteration log entry below.
+
+**Capability gaps (Phase D) → #53** (PyGuara Studio — companion authoring
+app: level/scene editor, animation editor, agentic authoring harness;
+needs the build-vs-ImGui architecture decision, gated on #49 / #28).
+In-overlay items — no text-field editing (no text input on `UIRenderer`,
+shared with #49), no custom per-type inspector hook, no scene save/load
+button, `AssetsTool` spawn ignores the `PrefabFactory` path (#51) and its
+preview is read-only, `TransformGizmo` unregistered and not wired to the
+hierarchy selection — the gizmo-wiring and drawer-hook ones parked for the
+`pyguara/tools` slice, the rest folded into #53.
+
+---
+
+### `pyguara/prefabs` — closed 2026-09-08 (branch `refactor/prefabs-audit`)
 
 `pyguara/prefabs` in one slice, ~1,000 lines (`types`, `registry`, `loader`,
 `factory`). Headline: **a prefab with `children` crashed on any real scene.**
@@ -543,7 +582,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 ### Tier 4 — Tooling & authoring
 - [x] `pyguara/ui` — layout engine, widgets, theming *(done)*
 - [x] `pyguara/prefabs` — prefab definition and instantiation *(done)*
-- [ ] `pyguara/editor` — in-engine editor, inspector tools
+- [x] `pyguara/editor` — deleted (dead ImGui layer); hierarchy + assets
+  panels rebuilt as `UIRenderer` tools *(done — branch `refactor/editor-audit`)*
 - [ ] `pyguara/scripting` — coroutines, script hosting
 - [ ] `pyguara/replay` — deterministic replay
 - [ ] `pyguara/dev` — dev-only helpers
@@ -595,6 +635,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#43](https://github.com/Wedeueis/pyguara/issues/43) | Persistence production layer — the `pyguara/persistence` audit (Phase D) found the subsystem defect-free but thin for a shipped game: no backup / prior-version retention, no save-menu API (`list_saves`, cheap metadata-header read, `delete`/`exists` facade), `FileStorageBackend` rooted at a CWD-relative dir not the OS user-data dir. Envelope `format_version` and run/meta split (#28) noted separately |
 | [#46](https://github.com/Wedeueis/pyguara/issues/46) | AI authoring gaps (from the `pyguara/ai` audit, Phase D) — `SequenceNode`/`SelectorNode` have memory with no *reactive* variant, so a front guard `ConditionNode` stops being re-checked once the sequence advances (the "attack while visible, else patrol" pattern silently keeps attacking); `ParallelNode` re-ticks already-completed children; FSM has no transition table / event-driven transitions; every BT leaf is a hand-written closure (no stock `BlackboardCondition` / `SetBlackboard` / `Cooldown` / `RandomSelector`); `_wander_targets` is evicted only on scene exit. Navmesh funnel/portals/generation and steering-vs-physics parked separately (flow-field is #28's) |
 | [#51](https://github.com/Wedeueis/pyguara/issues/51) | Prefab authoring & production layer (from the `pyguara/prefabs` audit, Phase D) — no spawn tables / weighted prefab pools (`create` is one at a time, no selection primitive); `PrefabData.version` declared "for migration support" and read by nothing (no prefab-schema migration, while `persistence` has a `MigrationRegistry`); no named variant library (`overrides` is per-call only); prefab children are linked `Transform`↔`Transform` only — the child entity has no parent-*entity* back-reference or shared lifetime, so despawning an enemy leaks its prefab-attached child entities (needs an ECS-hierarchy decision, cross-cutting with `pyguara/ecs`); no asset-reference validation at load. `ComponentRegistry` process-global mutable singleton parked as a CC |
+| [#53](https://github.com/Wedeueis/pyguara/issues/53) | PyGuara Studio — companion authoring app (from the `pyguara/editor` audit, which deleted a Dear ImGui editor that had never executed and rebuilt its useful parts as `UIRenderer` tools). Level/scene editor, animation editor, agentic authoring harness (grow `tools/agent_view.py`), data-table editors. Needs the build-vs-ImGui architecture decision; the "grow `pyguara/ui`" path is #49's scope. Gated on #49 / #28. In-overlay small items (custom inspector-drawer hook, `TransformGizmo` selection wiring) parked for the `pyguara/tools` slice |
 
 ---
 
@@ -680,11 +721,19 @@ subscribed twice notifies once), and tolerate unsubscription during
 notification. `Scene`, `tests/test_ecs.py` and `tests/test_physics.py` migrated;
 no references to the private attribute remain anywhere in the tree.
 
-**Still open:** `Entity._components` and `_on_component_added` are read across
-module boundaries — by `EntityManager` itself (acceptable, same package) and by
-serialisation and prefab code (not). Audit when `persistence` and `prefabs` come
-up; the likely fix is a public read-only components view.
-*Discovered in:* `ecs`. *Status:* partially resolved.
+**Components view: RESOLVED (2026-09-08, `pyguara/editor` audit).**
+`Entity.get_all_components()` returns a snapshot tuple of attached
+components — the public read-only view CC-5 called for. `EntityInspector`
+and `SceneSerializer._serialize_entity` migrated off `_components.items()`;
+`EntityManager.clear()` added as the supported bulk-teardown so tools stop
+clearing `_entities`/`_component_index` by hand. `ResourceManager` gained
+`iter_indexed()`/`iter_cached()` for the same reason.
+
+**Still open:** prefab code (`prefabs/factory.py`, `prefabs/registry.py`
+consumers) still reads `_components` directly — fold into the prefabs slice.
+`_on_component_added` is assigned only by `EntityManager` itself (same
+package, acceptable).
+*Discovered in:* `ecs`. *Status:* largely resolved; prefab reach-through remains.
 
 ### CC-6 — Component data-purity is advisory, not enforced
 `BaseComponent` only *warns* on logic methods; `StrictComponent` errors but is
@@ -766,6 +815,133 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/editor` — CLOSED 2026-09-08 (branch `refactor/editor-audit`)
+
+Tier 4, ~705 lines (`layer.py`, `drawers.py`, `panels/{hierarchy,inspector,
+assets}.py`). **Headline: the entire subsystem was dead code and had never
+executed once.** `layer.py` does `from imgui.integrations.pygame import
+PygameRenderer`, which transitively runs `import OpenGL.GL` — pyimgui's
+pygame integration is a fixed-pipeline OpenGL renderer with no software
+path, and `PyOpenGL` is a dependency nowhere (only `imgui` in the `dev`
+extra, beside a `# FIXED: Moved here` comment from a prior attempt that
+missed the real gap). So `HAS_IMGUI` was unconditionally `False` in every
+install configuration: `initialize()` logged "ImGui not found. Editor
+disabled." and every `EditorTool` / panel / drawer method early-returned.
+Probe (`SDL_VIDEODRIVER=dummy`, real 800×600 surface): `HAS_IMGUI: False`,
+three frames, no ImGui line reached. `imgui` was imported nowhere else in
+the engine. The subsystem also duplicated the working `UIRenderer`-based
+dev-tool suite (`EntityInspector` F2, `ConfigInspector` F6) on a backend
+that violates the engine's "never import the rendering backend" rule.
+
+Latent behind the dead import, all read- or probe-confirmed:
+`collapsing_header(label, imgui.TREE_NODE_DEFAULT_OPEN)` (3 sites) passed
+the flag into the `visible` parameter, not `flags` — the header would have
+grown a spurious close `[x]`, never default-opened, and returned a
+`(expanded, visible)` tuple making `if collapsing_header(...)` always true
+(body drawn regardless of collapse). `_load_current_scene` tore down the
+ECS by hand (`entity_manager._entities.clear()` + `._component_index.clear()`)
+— no `_query_cache` invalidation, zero `subscribe_entity_removed` callbacks
+(physics bodies / render batches / spatial-index entries for every entity
+leaked), and no public teardown method to call instead. `AssetsPanel._spawn_
+resource` passed raw JSON dicts where `Vector2` was expected via a hardcoded
+four-type `comp_map`; `_draw_dataclass` `setattr`'d unconditionally
+(`FrozenInstanceError` on any `frozen=True` component). Pervasive private
+reach-through: `_components`, `_entities`, `_path_index`, `_cache`, `_data`.
+
+**User decision (two rounds):** delete `pyguara/editor` and unify onto the
+`UIRenderer` tool suite (not revive ImGui — PyOpenGL + a GL context +
+ImGuizmo coexisting with moderngl and pygame-ce blitting is exactly the
+"diverged render path" hazard `CLAUDE.md` flags); and **Full** scope —
+rebuild the hierarchy *and* assets panels now, not just file a follow-up.
+A companion authoring application (level editor, animation editor, agentic
+harness) is out of scope and its build-vs-ImGui decision is deliberately
+left open → **issue #53**.
+
+Five commits:
+1. `refactor(editor)!` — delete `pyguara/editor/`, the F5 registration,
+   `test_editor_integration.py` (asserted only that an object named
+   "Editor" existed — would pass against a stub), the `imgui` dev dep +
+   its mypy override, the stale `ShortcutsPanel` row. **BREAKING**
+   (pre-alpha).
+2. `feat(ecs)` — `EntityManager.clear()` (routes every entity through
+   `remove_entity()` then `flush_pending_removals()`, so callbacks fire and
+   cached queries empty — the supported scene-reload teardown) and
+   `Entity.get_all_components()` (snapshot tuple; the public read-only
+   components view CC-5 asked for). Adopted in `EntityInspector` and
+   `SceneSerializer._serialize_entity`.
+3. `feat(resources)` — `ResourceManager.iter_indexed()` / `iter_cached()`
+   read-only browse accessors (the latter hands back live objects, which
+   `get_cache_stats()` does not).
+4. `feat(tools)` — `HierarchyTool` (F5: entity list + click-select,
+   publishes `selected_entity`, drops it when the entity leaves the scene);
+   `EntityInspector` gains an optional `selection_provider` (sandbox wires
+   it to the hierarchy — TAB cycling off in that mode, unchanged without a
+   provider); `AssetsTool` (F7: indexed + loaded resource lists, and for a
+   selected `DataResource` a read-only preview + Spawn — routed through the
+   shared `ComponentRegistry.create`, the same path `SceneSerializer` uses,
+   not a bespoke map — and Reload). Colour editing needed no port:
+   `tweakable.py`'s dataclass recursion already expands `Color` into
+   r/g/b/a steppers. `sandbox.py` renumbered; `pyguara/tools/__init__.py`
+   exports updated.
+5. `docs(editor)` — `docs/systems/editor.md` rewritten around the
+   `UIRenderer` overlay (was "powered by Dear ImGui"); `ONBOARDING.md` and
+   `docs/index.md` reconciled; this log entry.
+
+**Phase B — test verdict.** The deleted subsystem's two tests were pure
+theatre: `get_tool("Editor") is not None` and `tool.name == "Editor"` /
+`hasattr(tool, "render")`. Nothing built a renderer or drove a frame; with
+`HAS_IMGUI` always `False` nothing *could*, and nothing tried. 705 lines,
+zero behavioural coverage — the "fixture that mocks away the unit under
+test" smell in its terminal form (there was no unit). The parallel
+`pyguara/tools` suite is the counter-example and is load-bearing
+(`test_inspector_tools.py` drives real clicks through
+`create_headless_application()` and asserts the live component changed).
+New coverage matches that bar: `test_hierarchy_tool.py` (+6) and
+`test_assets_tool.py` (+6) use the real bootstrap, real click hit-testing,
+and assert on the spawned entity's actual components (`Tag.name ==
+"Goblin"`, `Transform.position.x == 10`, unregistered key skipped,
+no-active-scene path); `test_ecs.py` (+8) covers `clear()` callback
+fan-out / cached-query emptying / world reuse and `get_all_components()`
+snapshot safety; `test_resources.py` (+5); `test_inspector_tools.py` (+1,
+provider overrides TAB).
+
+**Phase C.** `docs/systems/editor.md` described a Dear ImGui editor with
+live hierarchy/inspector/assets and a File→Save/Load menu — none of which
+ran. Rewritten. Every API on the new page verified to exist
+(`create_sandbox_application`, `ToolManager.register_tool`,
+`Tool._entity_manager`, `SceneSerializer.save_scene/load_scene`,
+`EntityManager.clear`, `ResourceManager.reload/index_directory`).
+
+**Phase D — capability gaps.** Big picture → **#53** (companion authoring
+app: level editor, animation editor, agentic harness; needs the
+build-vs-ImGui architecture decision; gated on #49 / #28). In-overlay gaps:
+no text-field editing (`str` is read-only in `tweakable.py`; `UIRenderer`
+has no text input — shared with #49); no custom per-type inspector hook
+(the deleted `drawers.py` had `InspectorDrawer.register`; `tweakable.py`
+has no extension point, so a game's custom value type always renders
+read-only); no scene save/load button in the overlay (`SceneSerializer` is
+programmatic only now); `AssetsTool` spawn ignores the real `PrefabFactory`
+path (#51) and its data preview is read-only (the old panel had a recursive
+dict editor); `TransformGizmo` exists in `pyguara/tools/gizmos.py` but is
+registered by nothing and not wired to `hierarchy.selected_entity`. The
+gizmo-wiring and custom-drawer-hook items are small and squarely in
+`pyguara/tools` — **parked** as a "tools: inspector extensibility + gizmo
+selection" note (revisit when `pyguara/tools` gets its own slice); the rest
+are authoring-app scope → #53.
+
+**Verification:** 1831 tests pass (from 1808 on `main` after the two
+deleted editor tests; +23 net). `uv run ruff check .` clean, `uv run ruff
+format --check` clean, `uv run mypy pyguara` clean across 222 files.
+(Note: a stale system `ruff` 0.6.5 on PATH rejects `pyproject.toml`'s
+`UP047` — the locked `ruff` 0.14.10 via `uv run` is the real one; this
+predates the iteration.)
+
+**Note for whoever audits `pyguara/tools`:** it now absorbs the editor's
+hierarchy + assets panels. `TransformGizmo` is still unregistered. The
+`Tool` base's throwaway-`EntityManager` fallback (no active scene) is a
+latent footgun for any tool that mutates the world.
+
 
 ### `pyguara/prefabs` — CLOSED 2026-09-08 (branch `refactor/prefabs-audit`)
 
@@ -949,6 +1125,7 @@ shape as other engine singletons.
 `SceneSerializer` shares this registry and has its own `try/except` fallback
 around `registry.create`, so the F3 fail-loud change is masked on that path —
 noted, not touched (serializer is `pyguara/scene`, already audited).
+
 
 ### `pyguara/ai` — CLOSED 2026-09-08 (branch `refactor/ai-audit`)
 

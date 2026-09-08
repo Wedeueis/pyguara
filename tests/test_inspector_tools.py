@@ -122,6 +122,45 @@ class TestEntityInspectorEditing:
         app.shutdown()
 
 
+class TestEntityInspectorSelectionProvider:
+    def test_inspector_follows_the_provided_selection_not_tab(self) -> None:
+        app = create_headless_application()
+        scene = _TestScene("test_scene", app._event_dispatcher)
+        app._scene_manager.register(scene)
+        app._scene_manager.switch_to(scene.name)
+
+        a = scene.entity_manager.create_entity()
+        a.add_component(Transform(position=Vector2(0, 0)))
+        b = scene.entity_manager.create_entity()
+        b.add_component(Transform(position=Vector2(0, 0)))
+
+        picked: list = [b]
+        inspector = EntityInspector(
+            app._container, selection_provider=lambda: picked[0]
+        )
+        renderer = MagicMock(spec=UIRenderer)
+        renderer.get_text_size.return_value = (50, 16)
+
+        inspector.render(renderer)
+        assert inspector._selected_entity is b
+
+        # TAB is ignored in provided mode.
+        tab = MagicMock()
+        tab.type = pygame.KEYDOWN
+        tab.key = pygame.K_TAB
+        assert inspector.process_event(tab) is False
+
+        picked[0] = a
+        inspector.render(renderer)
+        assert inspector._selected_entity is a
+
+        picked[0] = None
+        inspector.render(renderer)
+        assert inspector._selected_entity is None
+
+        app.shutdown()
+
+
 class TestConfigInspectorEditing:
     def test_renders_game_config_tree_without_crashing(self) -> None:
         app = create_headless_application()
