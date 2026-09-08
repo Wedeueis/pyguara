@@ -63,10 +63,58 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/animation` closed 2026-09-08 (branch
-`refactor/animation-audit`).** Next in the queue is `pyguara/resources`
-(loaders, meta, hot reload). Open `REFACTOR_STATE.md` "How to resume" and
-take it.
+**None — `pyguara/resources` closed 2026-09-08 (branch
+`refactor/resources-audit`).** Next in the queue is `pyguara/persistence`
+(save/load, migration). Open `REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/resources` in one slice, ~1,100 lines (`manager`, `meta`,
+`loader`, `types`, `data`, `data_loader`, `exceptions`; hot reload itself
+lives downstream in `pyguara/dev`). No headline crash like audio's dead
+SFX — the subsystem was in better shape — but the same recurring shapes.
+**Reference counting was internally inconsistent and wired to nothing**:
+`load()` auto-incremented on every call including cache hits, `release()`
+auto-unloaded at 0, so `unload_unused()` ("cleanup between scenes") could
+never evict a resource anything used and a released one was already gone —
+dead code. No engine caller of acquire/release/unload/unload_unused;
+`AudioManager` `load()`s per play, so the count climbed forever.
+`Resource._ref_count` was a *third*, entirely dead counter. Reworked (user
+chose "fix the model + add reload()"): `load()` is a pure cache-get, the
+resource enters unpinned (0); `acquire()`/`release()` pin; `unload_unused()`
+now meaningfully sweeps. `index_directory()` **silently resolved a stem
+collision to whichever file the walk hit last** — now the ambiguous bare
+stem is dropped with a warning, full-name keys always win. `MetaLoader`
+**cached parsed meta by path with no invalidation** (stale after a disk
+change — wrong under hot reload) and the path-only key **swallowed the
+`expected_type` mismatch warning** after the first call — now mtime-pinned
++ re-read on change + `invalidate()`, and the type check runs every call.
+`DataResource`'s docstring claimed "hot-reloaded by the ResourceManager"
+with **no reload API** — added `ResourceManager.reload()` (re-run loader,
+re-read `.meta`, swap in place, keep count). The **`.meta` import pipeline
+was ~70% scaffolding** (`AudioMeta`/`SpritesheetMeta` had no consumer, GL
+loader hardcoded `LINEAR`) — wired end to end per the user's choice:
+`Resource.import_meta` carries the resolved sidecar, `GLTextureLoader`
+honours `filter` (and its default flips to `NEAREST`, matching the pygame
+path — the two backends disagreed), the audio backend applies
+`AudioMeta.volume_db` as a per-asset channel gain, `SpriteSheet` gained
+`margin`/`spacing` (previously meaningless everywhere) + `slice_from_meta`.
+Recurring shapes: "declared and wired to nothing" (the whole ref-count
+half; `AudioMeta`; `_ref_count`), "identity vs value" absent here, and
+uniform test setup — `test_resources.py` asserted on `_reference_counts` /
+`_cache` / `_path_index` privates and hand-poked an impossible state into
+`test_unload_unused`; every `test_meta.py` test used a fresh `MetaLoader()`
+so the stale-cache bug had no test that could see it. See the iteration
+log entry below.
+
+**Left open.** `AudioMeta.loop_start/loop_end/normalize/load_mode`,
+`TextureMeta.mipmaps/wrap_s/wrap_t` still have no consumer — they need
+streaming / DSP / GL-state work past a single slice (authoring-layer gap,
+sibling of #37). Under the new lifecycle the audio system should
+`acquire()` clips it wants to survive a between-scene `unload_unused()` —
+a small `pyguara/audio` follow-up (no behaviour change today: nothing
+calls `unload_unused()` yet). `ResourceManager` has no lock on
+`_cache`/`_reference_counts` (check-then-act) — no concurrent caller exists,
+parked as CC. `load_atlas()` still re-parses its JSON on every call (no
+`Atlas` cache) — perf nicety, not a defect.
 
 `pyguara/animation` in one slice, both halves (tween/easing in
 `pyguara/animation`, and the sprite-animation FSM in
@@ -194,7 +242,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [x] `pyguara/input` — input manager, rebinding *(done)*
 - [x] `pyguara/audio` — audio manager, spatial audio *(done)*
 - [x] `pyguara/animation` — tween, easing, FSM *(done)*
-- [ ] `pyguara/resources` — loaders, meta, hot reload
+- [x] `pyguara/resources` — loaders, meta, hot reload *(done)*
 - [ ] `pyguara/persistence` — save/load, migration
 - [ ] `pyguara/ai` — FSM, steering, pathfinding, navmesh, behaviour trees
 
@@ -214,6 +262,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/resources` | 2026-09-08 | One slice (`manager`, `meta`, `loader`, `types`, `data`, `data_loader`; hot reload lives downstream in `pyguara/dev`). No headline crash — better shape than recent subsystems — but the recurring shapes held. **Reference counting was internally inconsistent and wired to nothing**: `load()` auto-incremented on every call incl. cache hits, `release()` auto-unloaded at 0, so `unload_unused()` could never evict anything in use and a released resource was already gone — dead. No engine caller of acquire/release/unload/unload_unused; `AudioManager` `load()`s per play → count climbs forever. `Resource._ref_count` was a *third* dead counter. Reworked (user: "fix the model + add reload()"): `load()` is a pure cache-get → unpinned (0); `acquire()`/`release()` pin; `unload_unused()` now sweeps. `index_directory()` **silently resolved a stem collision to the last file walked** — now the ambiguous bare stem is dropped with a warning, full-name keys always win. `MetaLoader` **cached parsed meta by path with no invalidation** (stale after a disk change — wrong under hot reload) and the path-only key **swallowed the `expected_type` mismatch warning** after the first call — now mtime-pinned + re-read + `invalidate()`, check runs every call. `DataResource` docstring claimed "hot-reloaded by the ResourceManager" with **no reload API** — added `ResourceManager.reload()` (re-run loader, re-read `.meta`, swap in place, keep count). The **`.meta` import pipeline was ~70% scaffolding** (`AudioMeta`/`SpritesheetMeta` had no consumer, GL loader hardcoded `LINEAR`) — wired end to end (user: "wire it up in this slice"): `Resource.import_meta` carries the resolved sidecar; `GLTextureLoader` honours `filter` (default flips to `NEAREST`, matching the pygame path); audio backend applies `AudioMeta.volume_db` as a per-asset channel gain; `SpriteSheet` gained `margin`/`spacing` (previously meaningless) + `slice_from_meta`. Recurring shapes: "declared and wired to nothing" (the whole ref-count half; `AudioMeta`; `_ref_count`) and uniform test setup (`test_resources.py` asserted on `_reference_counts`/`_cache`/`_path_index` privates and hand-poked an impossible state into `test_unload_unused`; every `test_meta.py` test used a fresh `MetaLoader()`). Tests +21. Left open: `AudioMeta.loop_*`/`normalize`/`load_mode`, `TextureMeta.mipmaps`/`wrap_*` still unconsumed (need streaming/DSP/GL-state — authoring-layer gap, sibling of #37); audio should `acquire()` its clips under the new model (small `pyguara/audio` follow-up, no behaviour change today); no lock on the cache dicts (no concurrent caller, parked CC). |
 | `pyguara/animation` | 2026-09-08 | One slice, both halves (`pyguara/animation` tween+easing, plus the sprite-animation FSM in `pyguara/graphics` only surveyed during the graphics audit). **`Tween` accepted only `float` scalars / `tuple`s**: `Tween(0, 100, 1.0)`, a `list`, mixed int/float, or a `Color` constructed fine then crashed on first `update()` with a bare `AssertionError` (`_interpolate` used `assert isinstance(x, float)` as validation, stripped under `-O`). `Tween` was a value-equality `@dataclass`, so `TweenManager.remove(b)` removed an equal-but-different `a` — now `@dataclass(eq=False)`. `Animator.update()` advanced ≤1 frame per call (`if`, not `while`) so a lag spike dropped frames and drifted behind forever while `_current_time` grew unbounded — now O(1) catch-up. `AnimationStateMachine` re-fired `on_complete` + the transition check every frame a non-looping clip sat finished (callback storm for any terminal state) — fixed with a `_completion_handled` latch reset on transition. `AnimationClip` gained `__post_init__` validation (`frame_rate<=0` → `ZeroDivisionError`, `frames=[]` → `IndexError`). `TransitionCondition.IMMEDIATE` was declared but `_check_transitions()` had no branch — now honoured (fires on entry). `Scene.update_animations()` removed: its docstring told games to call it from `scene.update()`, but `AnimationSystem` has been auto-registered on the scene's `SystemManager` since wayfinder ticket 24, so following the docs double-updated every animation; it had no real callers. Recurring shapes: "assert as runtime validation", "identity vs value" (the gamepad-index shape), "one advance per frame" (the audio/application shape), the `on_complete` retrigger storm (audio F5), "no `__post_init__`" (audio F6 / physics config), "declared and wired to nothing" (`IMMEDIATE`), and uniform test setup — every tween test used float `0.0→100.0`, every FSM test stepped `dt == 1/frame_rate` exactly and stopped updating on the completion frame. Left open: a single huge `dt` still resolves only one loop boundary per `Tween.update()` (catches up over later frames, documented); `Color` tweening unsupported (documented); `_allow_methods = True` on both FSM components stays CC-6. |
 | `pyguara/audio` | 2026-09-08 | One slice. **SFX playback was dead end to end**: the pygame backend called `Channel.get_id()` (pygame-ce has `Channel.id`), so every real `play_sfx`/`play_sfx_at_position` raised, was swallowed by `except (AttributeError, Exception)`, and returned `None` while the sound played on untracked — hidden because all 107 audio tests `patch("pygame.mixer")` wholesale. Loudness/pan were set on the ResourceManager-shared `Sound` not the channel, so concurrent plays of one clip corrupted each other and recycled channels kept the last sound's hard pan. `AudioSourceSystem` never detected a finished one-shot — `is_playing` lied forever, a source could not be replayed, and stale channel ids kept receiving spatial mix updates meant for whatever reused the channel; fixed with a new `IAudioSystem.is_channel_active()` reconciled each frame, plus an `_auto_played` latch (auto_play is "on awake", not loop — the fix exposed a retrigger storm). `SpatialAudioConfig` gained `__post_init__` validation (0 → `ZeroDivisionError` in `calculate_pan`; inverted range → attenuation cliff). Added `IAudioSystem.shutdown()` (idempotent `pygame.mixer.quit()`), wired into `Application.shutdown()`. Recurring shapes: "mock away the unit under test" (the whole `test_audio.py`) and "declared and wired to nothing" (`AudioManager._active_channels`, removed). Left open: bus/master volume changes don't re-mix already-playing non-spatial SFX (mixer limitation, documented). |
 | `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). Phase B also found the softer test smells — assertions on `_controllers` privates, `assert x is not None` on a list literal, `assert not raises` as the only check — and rewrote them. `input/manager.py` stays a CC-11 / issue #9 offender (raw pygame events) — parked. |
@@ -415,6 +464,167 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/resources` — CLOSED 2026-09-08 (branch `refactor/resources-audit`)
+
+One slice, ~1,100 lines: `resources/{manager,meta,loader,types,data,
+exceptions}.py` + `resources/loaders/data_loader.py`. Hot reload as a
+*mechanism* lives downstream in `pyguara/dev` (Tier 4); this slice covered
+the reload primitive the ResourceManager owes it. Every defect reproduced
+with a probe against the real code first.
+
+**Verification:** 1735 tests pass (up from 1714; +21 across
+`test_resources.py` — rewritten — `test_meta.py`, `test_audio.py`,
+`test_graphics_spritesheet.py`). `ruff check .` clean; `ruff format --check`
+clean; `mypy pyguara` clean across 225 files; `mkdocs build --strict`
+exit 0; `test_docs_api.py` (52) passes. Both commits verified standalone in
+a detached worktree (`git worktree add --detach`, `uv sync --extra dev`):
+1735 / 1735.
+
+Two upfront decisions put to the user (both shape the whole PR): F1 → "fix
+the model + add `reload()`"; F4 → "wire it up in this slice".
+
+**F1 — the reference-counting lifecycle was internally inconsistent and
+wired to nothing.** `load()` auto-incremented the count on *every* call,
+including cache hits ("Auto-increment ref count on load"); `release()`
+auto-unloaded at 0. So `unload_unused()` — documented "useful for cleanup
+between scenes" — could never evict a resource anything still held (those
+are at ≥1), and a properly released one was already gone (evicted at 0). It
+was dead. Probe: `load()`×2 of one asset → count 2; `unload_unused()` → 0
+freed. No engine code calls `acquire`/`release`/`unload`/`unload_unused`;
+`AudioManager` / `AudioSourceSystem` call `load()` per play, so the
+audio-clip count climbed monotonically forever. `Resource._ref_count`
+(types.py) was a *third* counter, assigned once in `__init__` and read
+nowhere. New model: `load()` is a pure cache-get — the resource enters the
+cache **unpinned** (count 0) and a repeated `load()` does not change that;
+`acquire()`/`release()` are the explicit balanced pin API; `release()`
+below 0 raises `ValueError` ("you didn't acquire"); `unload_unused()` now
+meaningfully sweeps everything unpinned. Removed `_ref_count`.
+`test_reference_counting_basic` / `test_acquire_release` /
+`test_release_zero_refcount_error` / `test_force_unload` / `test_cache_stats`
+pinned the old model — rewritten.
+
+**F2 — `index_directory()` silently resolved a stem collision to whichever
+file the walk hit last.** `chars/hero.png` and `fx/hero.png` both claim the
+bare name `hero`; the second overwrites the first with no warning (whereas
+`register_loader` *does* warn on an extension clash). `load("hero", …)`
+then returns the wrong file. Probe confirmed. Now: on collision the
+ambiguous bare stem is removed from the index and a warning names both
+paths; the unambiguous full-name keys (`hero.png`) are always kept, so the
+caller resolves the clash with the full name or path.
+
+**F3 — `MetaLoader` cached parsed meta by path with no invalidation, and
+the cache swallowed the `expected_type` warning.** After a `.meta` changed
+on disk, `load_meta()` kept returning the stale object (probe); the only
+escape was the process-wide `clear_cache()`, which `ResourceManager` never
+called — wrong in the hot-reload context this subsystem owns. And because
+the cache key was the path alone, `load_meta(p)` then `load_meta(p,
+OtherType)` served the cached object and skipped the type-mismatch warning
+entirely. Now: each cache entry is pinned to the `.meta` file's mtime and
+re-read when it changes; a deleted file drops the entry; the
+`expected_type` check runs on *every* call including cache hits; and
+`MetaLoader.invalidate(path)` forces a re-read (called by `reload()`).
+
+**F5 — `DataResource` docstring claimed "hot-reloaded by the
+ResourceManager"; no reload API existed.** Added `ResourceManager.reload()`:
+re-runs the loader (re-reading the `.meta` sidecar via `invalidate()`),
+type-checks the result against the previously cached instance, swaps it
+into the cache in place, and preserves the reference count. Callers holding
+the *old* instance keep that stale object — documented; this is what a
+file-watching loop does. `_load_from_disk()` extracted so `load()` (miss)
+and `reload()` share the loader+meta+type-check path.
+
+**F4 — the `.meta` import pipeline was ~70% scaffolding.** `AudioMeta`
+(fully built + tested — dB math, loop points) had **no consumer**:
+`PygameSoundLoader` was not meta-aware. `SpritesheetMeta` had no consumer.
+`GLTextureLoader` was not meta-aware and hardcoded `moderngl.LINEAR`,
+ignoring `TextureMeta.get_filter_mode()` — the one setting the pygame
+loader's own comment says GL is meant to honour. Wired end to end:
+- `Resource.import_meta` — a settable slot carrying the resolved sidecar;
+  `ResourceManager._load_from_disk()` attaches it after a meta-aware load
+  so systems read import settings there instead of round-tripping the
+  manager.
+- `GLTextureLoader` is meta-aware and maps `filter` → `moderngl.NEAREST` /
+  `LINEAR`. **Its default flips from LINEAR to NEAREST** — matching the
+  pygame image path (the two backends silently disagreed) and
+  `TextureMeta`'s own default for a pixel-art engine. Called out as an
+  intentional backend-alignment change, not a silent regression.
+- `PygameSoundLoader` is meta-aware; `load_mode: stream` warns (clips via
+  the ResourceManager are always fully decoded — that is `play_music`'s
+  job). The pygame audio backend multiplies `AudioMeta.volume_db`'s linear
+  gain into the **channel** volume per play (never the shared `Sound` —
+  respecting the audio audit's D2 fix).
+- `SpriteSheet.slice_grid()` gained `margin` / `spacing` (grid maths now
+  `margin + i*(frame+spacing)`) — `SpritesheetMeta.margin`/`spacing` were
+  meaningless everywhere before — and raises on a non-positive frame size
+  instead of `ZeroDivisionError`. `SpriteSheet.slice_from_meta(meta)` reads
+  the geometry off a `SpritesheetMeta`.
+
+**Minor.** `get_cache_stats() -> dict[str, Any]` with a real field spec in
+the docstring (was bare `dict`). Portuguese comments in `manager.py` /
+`audio/backends/pygame/loaders.py` translated. `load_atlas()` now
+`acquire()`s its texture (under the new model `load()` no longer pins it,
+so `unload_unused()` could pull it out from under the atlas). Curated
+`__all__` on `pyguara.resources` and a new `loaders/__init__.py` (CC-8) —
+no import cycle exposed.
+
+**Phase B — verdict on the 69 existing tests (+21; `test_resources.py`
+rewritten, nothing else wholesale).**
+
+*`test_meta.py` (55, +5) — the strong file.* Real `tmp_path` files, real
+save/load round-trips, all through the public surface — none of the
+"mock away the filesystem" smell. Its one blind spot was **uniform
+setup**: every test built a fresh `MetaLoader()`, so nothing reloaded the
+same loader after a disk change and F3 was unreachable;
+`test_load_meta_caches_result` actively pinned the stale behaviour as
+intended. Added: reparse-on-mtime-change, drop-cache-on-delete,
+`invalidate()`, and the cache-hit `expected_type` warning.
+
+*`test_resources.py` (14 → rewritten, now ~40) — the weak file.* Decent
+behavioural coverage of ref counting, but: every test built the manager
+the same way (`MockLoader`, no real files); assertions read
+`manager._reference_counts[...]` / `._cache` / `._path_index` (the
+tracker's named private-state smell) rather than `get_cache_stats()`;
+`test_indexing` mocked `Path.rglob` (mock-away-the-filesystem — so F2 was
+unreachable); and `test_unload_unused` *hand-poked*
+`manager._reference_counts["res1.mock"] = 0` and re-inserted into `_cache`
+to manufacture a state the public API cannot produce — proving the method
+works only against an impossible input. Rewritten: real `tmp_path` files, a
+`MockLoader` that counts its own calls, assertions via `get_cache_stats()`,
+and new coverage for the F1 lifecycle, `reload()` (incl. changed meta), the
+F2 collision, and meta-aware load + `import_meta` attach through the
+manager.
+
+*`tests/test_graphics_spritesheet.py` (+3), `tests/test_audio.py` (+1).*
+`SpriteSheet` margin/spacing + `slice_from_meta` + zero-dim rejection; the
+`AudioMeta.volume_db` → channel gain path on the real dummy-driver mixer.
+`GLTextureLoader`'s filter branch is not covered — no headless GL context
+in CI (issue #19 shape: a real adapter, read-audited only).
+
+**Phase C.** `docs/systems/resources.md` (15 lines) documented `load()`,
+type safety, caching and indexing — and **nothing else**: no
+reference-counting API, no `.meta` system (a module with its own test
+file), no `reload()`, `load_atlas()` or `get_cache_stats()`. It also
+carried a stale duplicated **"Audio System"** section (`systems/audio.md`
+owns that since the audio audit) and a **"Persistence"** section belonging
+to that subsystem. Rewritten: loader table, the name index + collision
+rule, the `load()`/`acquire()`/`release()`/`unload_unused()` lifecycle,
+`reload()` and its stale-holder caveat, the `.meta` pipeline with an honest
+per-type table of what each setting *currently* affects, atlases,
+`get_cache_stats()`. Audio and persistence sections dropped —
+`pyguara/persistence` is next in the queue and gets its own page.
+
+**Left open.** `AudioMeta.loop_start` / `loop_end` / `normalize` /
+`load_mode` and `TextureMeta.mipmaps` / `wrap_s` / `wrap_t` still have no
+consumer — honoring them needs real streaming / DSP / GL-state work beyond
+a single slice (authoring-layer gap, sibling of #37). Under the new
+lifecycle the audio system should `acquire()` the clips it wants to survive
+a between-scene `unload_unused()` — a small `pyguara/audio` follow-up, no
+behaviour change today (nothing calls `unload_unused()`). `ResourceManager`
+does check-then-act on `_cache` / `_reference_counts` with no lock — no
+concurrent caller exists, parked as CC (the DI audit's shape, if resource
+loading ever moves to a background thread). `load_atlas()` still re-parses
+its JSON every call (no `Atlas` cache) — a perf nicety, not a defect.
 
 ### `pyguara/animation` — CLOSED 2026-09-08 (branch `refactor/animation-audit`)
 
