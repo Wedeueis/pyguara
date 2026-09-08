@@ -34,6 +34,22 @@ class MockTexture(Texture):
         return None
 
 
+# ===== AnimationClip Tests =====
+
+
+def test_animation_clip_rejects_empty_frames():
+    """A clip with no frames cannot be played -- reject it at construction."""
+    with pytest.raises(ValueError, match="has no frames"):
+        AnimationClip("broken", [], frame_rate=10.0)
+
+
+@pytest.mark.parametrize("rate", [0.0, -10.0])
+def test_animation_clip_rejects_nonpositive_frame_rate(rate):
+    """frame_rate <= 0 is a ZeroDivisionError / reversed playback waiting to happen."""
+    with pytest.raises(ValueError, match="frame_rate must be positive"):
+        AnimationClip("broken", [MockTexture()], frame_rate=rate)
+
+
 # ===== Animator Tests =====
 
 
@@ -56,6 +72,38 @@ def test_animator_properties():
     assert animator.is_playing is True
     assert animator.current_clip_name == "idle"
     assert animator.is_finished is False
+
+
+def test_animator_catches_up_multiple_frames_in_one_update():
+    """A dt larger than one frame period should advance every frame it covers."""
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"run_{i}") for i in range(8)]
+    animator.add_clip(AnimationClip("run", frames, frame_rate=10.0, loop=True))
+    animator.play("run")
+
+    # 10 FPS => 0.1s/frame. A 0.45s lag spike should land on frame 4, not 1.
+    animator.update(0.45)
+    assert sprite.texture is frames[4]
+
+    # A dt that wraps past the end of a looping clip lands correctly.
+    animator.update(0.6)  # +6 frames from 4 => 10 => wraps to 2
+    assert sprite.texture is frames[2]
+
+
+def test_animator_non_looping_clamps_on_a_large_dt():
+    """A huge dt on a non-looping clip stops on the last frame, not past it."""
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"a_{i}") for i in range(3)]
+    animator.add_clip(AnimationClip("attack", frames, frame_rate=10.0, loop=False))
+    animator.play("attack")
+
+    animator.update(5.0)  # far past the 0.3s clip
+
+    assert sprite.texture is frames[-1]
+    assert animator.is_playing is False
+    assert animator.is_finished is True
 
 
 def test_animator_is_finished():
@@ -324,6 +372,82 @@ def test_state_machine_on_complete_callback():
     assert len(completed) == 1
 
 
+def test_state_machine_on_complete_fires_once_when_held_past_completion():
+    """A terminal state must not re-fire on_complete every subsequent frame."""
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    fsm = AnimationStateMachine(sprite, animator)
+
+    completed = []
+    clip = AnimationClip(
+        "death",
+        [MockTexture(f"death_{i}") for i in range(2)],
+        frame_rate=10.0,
+        loop=False,
+    )
+    # No ANIMATION_END transition: the FSM will sit on this finished clip.
+    state = AnimationState("death", clip, on_complete=lambda: completed.append(True))
+    fsm.add_state(state)
+    fsm.set_default_state("death")
+
+    for _ in range(20):
+        fsm.update(0.1)
+
+    assert completed == [True]  # exactly one, not one-per-frame
+
+
+def test_state_machine_on_complete_refires_after_replaying_the_state():
+    """Re-entering a terminal state arms its completion callback again."""
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    fsm = AnimationStateMachine(sprite, animator)
+
+    completed = []
+    clip = AnimationClip(
+        "hit", [MockTexture(f"hit_{i}") for i in range(2)], frame_rate=10.0, loop=False
+    )
+    fsm.add_state(AnimationState("hit", clip, on_complete=lambda: completed.append(1)))
+    fsm.set_default_state("hit")
+
+    for _ in range(5):
+        fsm.update(0.1)
+    assert len(completed) == 1
+
+    fsm.transition_to("hit", force=True)  # replay
+    for _ in range(5):
+        fsm.update(0.1)
+    assert len(completed) == 2
+
+
+def test_state_machine_immediate_transition_fires_on_entry():
+    """An IMMEDIATE transition in a state's list is taken on the next update."""
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    fsm = AnimationStateMachine(sprite, animator)
+
+    intro_to_loop = AnimationTransition(
+        from_state="intro",
+        to_state="loop",
+        condition=TransitionCondition.IMMEDIATE,
+    )
+    fsm.add_state(
+        AnimationState(
+            "intro",
+            AnimationClip("intro", [MockTexture("intro")], loop=True),
+            transitions=[intro_to_loop],
+        )
+    )
+    fsm.add_state(
+        AnimationState("loop", AnimationClip("loop", [MockTexture("loop")], loop=True))
+    )
+
+    fsm.set_default_state("intro")
+    assert fsm.current_state_name == "intro"
+
+    fsm.update(0.016)
+    assert fsm.current_state_name == "loop"
+
+
 def test_state_machine_transition_priority():
     """State machine should respect transition priority."""
     sprite = Sprite(MockTexture())
@@ -381,23 +505,19 @@ def test_animation_system_updates_animator():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
 
-    clip = AnimationClip(
-        "idle", [MockTexture(f"idle_{i}") for i in range(4)], frame_rate=10.0
-    )
-    animator.add_clip(clip)
+    frames = [MockTexture(f"idle_{i}") for i in range(4)]
+    animator.add_clip(AnimationClip("idle", frames, frame_rate=10.0))
     animator.play("idle")
-
-    assert animator._current_frame_index == 0
+    assert sprite.texture is frames[0]
 
     entity_manager = EntityManager()
     entity = entity_manager.create_entity()
     entity.add_component(animator)
 
-    system = AnimationSystem(entity_manager)
-    system.update(0.1)
+    AnimationSystem(entity_manager).update(0.1)
 
-    # Animator should have advanced to the next frame
-    assert animator._current_frame_index == 1
+    # One frame period elapsed -> the driven sprite shows the next frame.
+    assert sprite.texture is frames[1]
 
 
 def test_animation_system_updates_state_machine():
@@ -408,53 +528,42 @@ def test_animation_system_updates_state_machine():
     animator = Animator(sprite)
     fsm = AnimationStateMachine(sprite, animator)
 
-    clip = AnimationClip(
-        "idle", [MockTexture(f"idle_{i}") for i in range(4)], frame_rate=10.0
+    frames = [MockTexture(f"idle_{i}") for i in range(4)]
+    fsm.add_state(
+        AnimationState("idle", AnimationClip("idle", frames, frame_rate=10.0))
     )
-    state = AnimationState("idle", clip)
-    fsm.add_state(state)
     fsm.set_default_state("idle")
-
-    assert animator._current_frame_index == 0
+    assert sprite.texture is frames[0]
 
     entity_manager = EntityManager()
     entity = entity_manager.create_entity()
     entity.add_component(fsm)
 
-    system = AnimationSystem(entity_manager)
-    system.update(0.1)
+    AnimationSystem(entity_manager).update(0.1)
 
-    # State machine should have been updated (which updates the animator)
-    assert animator._current_frame_index == 1
+    assert sprite.texture is frames[1]
 
 
 def test_animation_system_prioritizes_state_machine():
-    """AnimationSystem should prioritize FSM over standalone Animator."""
+    """AnimationSystem should update an FSM-driven animator exactly once."""
     from pyguara.ecs.manager import EntityManager
 
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     fsm = AnimationStateMachine(sprite, animator)
 
-    clip = AnimationClip(
-        "idle", [MockTexture(f"idle_{i}") for i in range(4)], frame_rate=10.0
+    frames = [MockTexture(f"idle_{i}") for i in range(4)]
+    fsm.add_state(
+        AnimationState("idle", AnimationClip("idle", frames, frame_rate=10.0))
     )
-    state = AnimationState("idle", clip)
-    fsm.add_state(state)
     fsm.set_default_state("idle")
-
-    assert animator._current_frame_index == 0
 
     entity_manager = EntityManager()
     entity = entity_manager.create_entity()
     entity.add_component(animator)
     entity.add_component(fsm)
 
-    system = AnimationSystem(entity_manager)
+    AnimationSystem(entity_manager).update(0.1)
 
-    # Should only update FSM (which updates animator internally)
-    # This prevents double-updating the animator
-    system.update(0.1)
-
-    # Verify it was updated once (should be on frame 1)
-    assert animator._current_frame_index == 1
+    # Frame 1, not frame 2: the entity's Animator is not also updated directly.
+    assert sprite.texture is frames[1]

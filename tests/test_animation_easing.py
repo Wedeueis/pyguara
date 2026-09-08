@@ -258,6 +258,63 @@ class TestEaseFunction:
             assert ease(1.0, easing_type) == pytest.approx(1.0, abs=1e-6)
 
 
+class TestEasingReflection:
+    """ease_out(t) should be the mirror of ease_in: 1 - ease_in(1 - t)."""
+
+    @pytest.mark.parametrize(
+        ("in_type", "out_type"),
+        [
+            (EasingType.EASE_IN_QUAD, EasingType.EASE_OUT_QUAD),
+            (EasingType.EASE_IN_CUBIC, EasingType.EASE_OUT_CUBIC),
+            (EasingType.EASE_IN_QUART, EasingType.EASE_OUT_QUART),
+            (EasingType.EASE_IN_QUINT, EasingType.EASE_OUT_QUINT),
+            (EasingType.EASE_IN_SINE, EasingType.EASE_OUT_SINE),
+            (EasingType.EASE_IN_EXPO, EasingType.EASE_OUT_EXPO),
+            (EasingType.EASE_IN_CIRC, EasingType.EASE_OUT_CIRC),
+            (EasingType.EASE_IN_BACK, EasingType.EASE_OUT_BACK),
+            (EasingType.EASE_IN_BOUNCE, EasingType.EASE_OUT_BOUNCE),
+        ],
+    )
+    def test_out_is_mirror_of_in(self, in_type, out_type):
+        """ease_out(t) == 1 - ease_in(1 - t) across the domain."""
+        for i in range(21):
+            t = i / 20.0
+            assert ease(t, out_type) == pytest.approx(
+                1.0 - ease(1.0 - t, in_type), abs=1e-9
+            )
+
+
+class TestEaseInOutContinuity:
+    """The ease_in_out_* family must not jump at the t=0.5 handover."""
+
+    @pytest.mark.parametrize(
+        "easing_type",
+        [
+            EasingType.EASE_IN_OUT_QUAD,
+            EasingType.EASE_IN_OUT_CUBIC,
+            EasingType.EASE_IN_OUT_QUART,
+            EasingType.EASE_IN_OUT_QUINT,
+            EasingType.EASE_IN_OUT_SINE,
+            EasingType.EASE_IN_OUT_EXPO,
+            EasingType.EASE_IN_OUT_CIRC,
+            EasingType.EASE_IN_OUT_BACK,
+            EasingType.EASE_IN_OUT_BOUNCE,
+            EasingType.EASE_IN_OUT_ELASTIC,
+        ],
+    )
+    def test_no_discontinuity_at_midpoint(self, easing_type):
+        """The two piecewise halves must meet at t=0.5 (no jump).
+
+        A tiny epsilon keeps steep-but-continuous curves (circ has a vertical
+        tangent here) from reading as a break; a real piecewise bug jumps by
+        ~0.1 or more.
+        """
+        below = ease(0.5 - 1e-9, easing_type)
+        above = ease(0.5 + 1e-9, easing_type)
+        assert below == pytest.approx(above, abs=1e-3)
+        assert ease(0.5, easing_type) == pytest.approx(0.5, abs=1e-2)
+
+
 class TestEasingMonotonicity:
     """Test that ease-in functions are monotonically increasing."""
 
