@@ -54,27 +54,6 @@ class PrefabChild:
 
 
 @dataclass
-class PrefabReference:
-    """Lightweight reference to a prefab for lazy loading.
-
-    Used when you want to reference a prefab without loading it immediately.
-
-    Attributes:
-        path: Path to the prefab file.
-        loaded: Whether the prefab data has been loaded.
-        data: The loaded prefab data, or None if not loaded.
-    """
-
-    path: str
-    loaded: bool = False
-    data: PrefabData | None = None
-
-    def is_loaded(self) -> bool:
-        """Check if the prefab data has been loaded."""
-        return self.loaded and self.data is not None
-
-
-@dataclass
 class PrefabInstance(BaseComponent):
     """Metadata about an instantiated prefab.
 
