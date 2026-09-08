@@ -41,5 +41,6 @@ nav:
       - Input: systems/input.md
       - Persistence: systems/persistence.md
       - Prefabs: systems/prefabs.md
+      - Replay: systems/replay.md
       - Resources: systems/resources.md
       - Scripting: systems/scripting.md

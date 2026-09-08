@@ -79,9 +79,77 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/scripting` closed 2026-09-08 (branch `refactor/scripting-audit`).**
-Next in the queue is Tier 4: `pyguara/replay` (deterministic replay). Open
+**None — `pyguara/replay` closed 2026-09-08 (branch `refactor/replay-audit`).**
+Next in the queue is Tier 4: `pyguara/dev` (dev-only helpers). Open
 `REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/replay` in one slice, ~1,030 lines (`types`, `recorder`, `player`,
+`serializer`), wired via `Application` (`start_recording` / `stop_recording` /
+`save_recording` / `load_replay`) and `InputManager`
+(`attach_recorder` / `process_replayed_event`) since wayfinder ticket 18. The
+defects were all "declared and wired to nothing" or "guard that returns a wrong
+answer", and every one hid behind uniform test setup. **`ReplaySerializer.save()`
+wrote an unloadable file on its default call.** It only appended an extension
+when the path had none, but `if compress or endswith(".gz")` still gzipped —
+`save(data, "run.replay")` (and `compress=True` is the default) put a gzip
+stream in a `.replay` file, which `load()` reads as text, `json.loads` chokes on
+the magic byte, the blanket `except Exception` swallows it, `load()` returns
+`None`. `save()` had already returned `True`. Now the on-disk format is derived
+from the extension and an explicit one wins, so a gzip is never named `.replay`;
+`load()` also refuses a `metadata.version` above `SUPPORTED_VERSION` (it was
+written and never read — replay has no migration). **`get_metadata()` returned
+`None` for any replay over ~10 KB** — it read the first 10 KB and sliced at the
+last `}`, unbalanced JSON for a 400-frame file, while the metadata sat in the
+first ~120 bytes; now it parses the file and returns the block. **Gamepad input
+was never recorded** — `record_gamepad_button` / `record_gamepad_axis` had zero
+callers (gamepad flows through `GamepadManager` → `_on_gamepad_*`, which never
+touched the recorder), so a controller session recorded as empty input while
+`process_replayed_event` carried GAMEPAD branches for events recording never
+produced; both callbacks now feed the recorder. **Playback dropped pointer
+position and the raw UI stream** — `process_replayed_event` rebuilt only bound
+actions, discarding `event.position` and never re-emitting
+`OnRawKeyEvent` / `OnMouseEvent`, so menu clicks and pointer-aimed gameplay did
+not replay; it now re-dispatches the raw key/mouse stream with recorded position
+and modifiers (`RecordedInputEvent` gained a `modifiers` field) and replays
+MOUSE_MOVE. `ReplayRecorder` stamps the installed `pyguara` version (was
+hard-coded `"0.0.0"`) and a UTC `recorded_at` — the pair `pyguara/persistence`
+already fixed.
+
+Per the user's choice (maximal on all three forks): **playback now re-drives the
+loop from the recorded per-frame `delta_time`.** `Application.run()`, while a
+replay is playing, takes each frame's duration from `ReplayPlayer.peek_delta()`
+instead of the wall clock, so the fixed-step accumulator count, `_update()`
+deltas, tweens, particles and `WaitForSeconds` reproduce on any machine — before
+this, only discrete input→action chains replayed and anything time-dependent
+diverged. Touches the already-closed `pyguara/application` loop (cross-cutting;
+`SandboxApplication` inherits `run()`). The `ReplayPlayer` scrubbing surface
+(`update()` timestamp model, `seek_to_frame`, `pause`/`resume`, `playback_speed`)
+is kept as a supported public API for a caller driving its own loop, with
+`advance_frame()`/`update()` now sharing `_emit_frame()` / `_finish_if_exhausted()`
+instead of two copies. Tests +22 (1869 → 1891): the old 25 were broad but
+shallow and uniform — every player test drove one fixture through
+`advance_frame()` only (`update()` had zero coverage), every serializer test
+saved to an extensionless path (hiding the compress/extension bug), nothing
+recorded or replayed gamepad. New `docs/systems/replay.md` (the subsystem had no
+page). See the iteration log entry below.
+
+**Capability gaps (Phase D) → new issue** ("replay production layer", sibling of
+#37/#40/#43/#46/#51/#55; **needs `gh issue create`** — draft in the iteration
+log): the recorded `seed` is exposed as `ReplayPlayer.seed` but nothing reseeds
+a random source on playback (no engine RNG service yet — cross-cut #28); no
+replay-library API (`list_replays` / `delete` / browse, the shape #43 names for
+saves) and `FileStorage`-style user-data-dir rooting; the scrubbing API has no
+`pyguara/tools` overlay driving it (scrub bar / step / slow-mo — cross-cut #53);
+capture is input+time only, so a game reading `time.time()` / the filesystem /
+the network directly breaks determinism silently; `record_action()` (synthetic
+AI/script-driven actions) has a playback branch but no in-repo consumer.
+**Left open:** format `version` is validated but there is no migration layer;
+a length-framed metadata line would let `get_metadata` skip the frame bytes —
+both small parked adds.
+
+---
+
+### `pyguara/scripting` — closed 2026-09-08 (branch `refactor/scripting-audit`)
 
 `pyguara/scripting` in one slice, ~310 lines (`coroutines.py` — the whole
 subsystem). Unlike `editor`, it **is** wired in: the bootstrap registers a
@@ -642,7 +710,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
   panels rebuilt as `UIRenderer` tools *(done — branch `refactor/editor-audit`)*
 - [x] `pyguara/scripting` — coroutines, script hosting *(done — branch
   `refactor/scripting-audit`)*
-- [ ] `pyguara/replay` — deterministic replay
+- [x] `pyguara/replay` — deterministic replay *(done — branch
+  `refactor/replay-audit`)*
 - [ ] `pyguara/dev` — dev-only helpers
 - [ ] `pyguara/cli` — command line entry points
 - [ ] `pyguara/tools` — atlas/build tooling
@@ -653,6 +722,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/replay` | 2026-09-08 | One slice, ~1,030 lines (`types`, `recorder`, `player`, `serializer`); wired via `Application` + `InputManager` since wayfinder ticket 18. Defects were all "wired to nothing" / "guard returns a wrong answer", each hidden by uniform test setup. **`ReplaySerializer.save()` wrote an unloadable file on its default call** — it appended an extension only when absent, but `if compress or endswith(".gz")` still gzipped, so `save(data, "run.replay")` (default `compress=True`) put a gzip stream in a `.replay` file; `load()` reads it as text, `json.loads` chokes on the magic byte, the blanket `except Exception` swallows it, returns `None` after `save()` returned `True`. Now the format is derived from the extension (explicit wins); `load()` also refuses a `metadata.version` over `SUPPORTED_VERSION` (written, never read — no migration layer). **`get_metadata()` returned `None` for any replay over ~10 KB** — read first 10 KB, sliced at the last `}`, unbalanced JSON for a 400-frame file while the metadata sat in the first ~120 bytes; now parses the file. **Gamepad input was never recorded** — `record_gamepad_button` / `record_gamepad_axis` had zero callers (gamepad flows `GamepadManager` → `_on_gamepad_*`, never touching the recorder), so a controller session recorded empty while `process_replayed_event` carried GAMEPAD branches for events recording never produced; both callbacks now feed it. **Playback dropped pointer position + the raw UI stream** — `process_replayed_event` rebuilt only bound actions, discarding `event.position` and never re-emitting `OnRawKeyEvent` / `OnMouseEvent`; it now re-dispatches the raw key/mouse stream with recorded position + modifiers (`RecordedInputEvent` gained `modifiers`) and replays MOUSE_MOVE. `ReplayRecorder` stamps the installed package version (was `"0.0.0"`) + UTC `recorded_at` (the persistence pair). **User chose maximal on all three forks: playback now re-drives the loop from recorded per-frame `delta_time`** — `Application.run()`, while a replay plays, takes each frame's duration from `ReplayPlayer.peek_delta()` not the wall clock, so fixed-step count, tweens, particles and `WaitForSeconds` reproduce on any machine (cross-cuts the closed `pyguara/application` loop; `SandboxApplication` inherits `run()`). `ReplayPlayer`'s scrubbing surface (`update()` timestamp model, `seek`, `pause`/`resume`, `playback_speed`) kept as supported public API; `advance_frame()`/`update()` now share `_emit_frame()` / `_finish_if_exhausted()`. Tests +22 (1869 → 1891): the old 25 were broad but shallow + uniform (every player test = one fixture through `advance_frame()`; `update()` had zero coverage; every serializer test saved to an extensionless path; nothing recorded/replayed gamepad). New `docs/systems/replay.md` (no page existed). Phase D → **new issue** ("replay production layer", sibling of #37/#40/#43/#46/#51/#55; needs `gh issue create`, draft in the iteration log): recorded `seed` reseeds nothing on playback (no RNG service — #28); no replay-library API (`list_replays`/`delete`/browse, user-data-dir rooting — the #43 shape); the scrubbing API has no `pyguara/tools` overlay (#53); capture is input+time only (a game reading `time.time()`/filesystem/network directly breaks determinism silently); `record_action()` has a playback branch but no in-repo consumer. Left open: no format migration layer; a length-framed metadata line would let `get_metadata` skip frame bytes. |
 | `pyguara/scripting` | 2026-09-08 | One slice, ~310 lines (`coroutines.py` is the whole subsystem). Unlike `editor` it **is** wired in — bootstrap registers a `CoroutineManager` singleton, `Application._update()` ticks it every frame. Headline: **one scripted sequence that raised took down the frame loop and abandoned every other coroutine.** `Coroutine.update()` caught only `StopIteration`; any other exception from the generator body propagated through `CoroutineManager.update()`'s list comprehension out of `Application._update()`, and the comprehension `self._coroutines = [c for c in self._coroutines if c.update(dt)]` also skipped every coroutine ordered after the raiser and left stale entries on a re-raise. Fixed with the shared `ErrorHandlingStrategy` (as `EventDispatcher`/`DIContainer`): `CoroutineManager(error_strategy=RAISE)` default logs + stops + re-raises; `LOG`/`IGNORE` contain it; under all three the offender is stopped and dropped and siblings still run. **`Coroutine.stop()` abandoned the generator** — `finally`/`with` cleanup in a sequence only ran at GC; now `stop()` calls `generator.close()` (guarded by `gi_running` for the self-stop case). **`CoroutineManager.update()` corrupted its list when a coroutine started/stopped coroutines from inside its own body** (the comprehension iterated the list the body mutated — stopping an earlier sibling skipped a later one; `stop_all()` from a body left survivors); now iterates a frame-start snapshot and reconciles. Recurring shapes: "catch only the happy exception", "mutate the container you're iterating", "cleanup deferred to GC", and uniform test setup — all 30 existing tests built the coroutine from a benign `yield` body; none raised, stopped a sibling, or needed `finally`, which is exactly where the defects were. Tests +12 (1835 → 1847). `docs/systems/scripting.md` rewritten (was 39 lines: omitted `WaitWhile` from its concepts, non-runnable example, documented no wiring / lifecycle / error model / `stop()` semantics). Phase D → **#55** ("scripting production layer", sibling of #37/#40/#43/#46/#51): no scene scoping (a coroutine outlives its scene, no teardown hook), no coroutine tagging/grouping (kill entity → its scripted sequences keep running), no `yield from` result to a parent, no frame-count / fixed-step / scaled-time waits (time-scale is #28's). Left open: `WaitForSeconds` timing is frame-granular — yielding frame uncounted, overshoot discarded, so a long chain of short waits drifts by ~1 frame each (documented; sub-frame precision is not a goal of the variable-rate step). |
 | `pyguara/prefabs` | 2026-09-08 | One slice (`types`, `registry`, `loader`, `factory`; ~1,000 lines). Headline: **a prefab with `children` crashed on every real scene.** `PrefabFactory._create_children` called `parent_entity.get_component_by_name("Transform")` — a method that exists nowhere on `Entity` — so `factory.create()` raised `AttributeError` whenever a `prefab_resolver` was set, which `Scene.resolve_dependencies()` always does. Past the crash, the parent-link step was `for _child in children: pass` — children never attached despite `Transform` having a full `set_parent`/`children` API. **Zero `.prefab` files exist in the repo**, so the file→loader→factory→children path had never run. Per the user's choice (wire it properly, unify): children now instantiate as their own entities parented via `Transform.set_parent(keep_world_transform=False)` — authored position is local to the parent and follows it; `PrefabChild.offset` applies in local space. Dropped the dead loop and the `parent_position` bake (ignored parent rotation/scale). **BREAKING** (pre-alpha): `create()` loses `parent_position`, gains `source_path`. Also: **`_resolve_inheritance` had no cycle guard** (`A extends B extends A` → `RecursionError`) → now raises `ValueError` naming the chain. **`create()` swallowed component construction errors** in a blanket `except Exception`, yielding half-built entities → per the user's choice (fail loud) it now raises; `_instantiate_dataclass` also rejects unknown field keys (a typo used to vanish). **`_convert_value` enum handling was `EnumType[value.upper()]`** — non-SCREAMING_CASE members raised `KeyError` → swallowed → component dropped; now case-insensitive name or raw value, `ValueError` on a miss. **`PrefabInstance.prefab_path` was always the display `name`** (`create_from_path` had the real path and discarded it) → now threaded through, `name` only as the in-memory fallback. **`ComponentRegistry.clear()` wiped `_deserializers`** (losing the built-in `Transform` special-case; `Transform` is not a dataclass so a cleared registry couldn't round-trip it even re-registered) → now re-seeds built-ins. **`PrefabLoader` raised `AttributeError`** on a non-mapping top-level doc despite documenting `ValueError` → now validates. Removed **`PrefabReference`** (exported, used nowhere). Recurring shapes: "declared and wired to nothing" (`children` link-up, `PrefabReference`, `prefab_path`, `PrefabData.version`), "guard that holds a wrong answer" (swallowed errors, enum `.upper()`), uniform test setup (every factory test hand-built `PrefabData` against a `Transform`+`Tag`-only registry; `_create_children` / `create_from_path` / inheritance cycles / round-trip had **zero** coverage; `test_create_warns_on_unknown_component` asserted `... or entity is not None`). Tests +17 (1799 → 1835). New `docs/systems/prefabs.md` (no doc page existed). Phase D → **new issue** (sibling of #37/#40/#43/#46 + UI Phase-D): no spawn tables / weighted pools, `PrefabData.version` dead (no prefab-schema migration), no named variant library, prefab children lack an entity-level ownership/lifetime link (leak on parent destroy — needs an ECS-hierarchy decision), no asset-ref validation at load; `ComponentRegistry` process-global mutable singleton parked as a CC. |
 | `pyguara/ui` | 2026-09-08 | One slice (`base`, `layout`, `constraints`, `manager`, `theme`, `theme_presets`, `types`, `components/*`; ~1,900 lines). Two "declared and wired to nothing" headliners under 84 green tests. **The constraint layout system never ran** — `UIElement.apply_layout()` had no caller in the repo; `UIManager` had no layout pass; roots couldn't be constrained at all (`apply_layout` needs `self.parent`). Probe: `create_fill_constraints(margin=20)` under an 800×600 parent → child stays `Rect(0,0,10,10)` across three manager frames. So `constraints.py` (314 lines) + `element.padding` + every `create_*_constraints` helper were inert, though documented as "the heart of the UI system's power" with non-runnable examples. Per the user's choice (unify): `apply_layout()` → `UIElement.layout(available_rect, renderer)`; `UIManager` holds a screen `Rect` (seeded by `Application.set_screen_size()`, refreshed via a `WindowResizeEvent` subscription) and runs `layout()` over every root before render, **dirty-gated** (`add_element` / `set_screen_size` / new public `invalidate_layout()` arm it). Roots constrain against the screen; children against the parent's padding-aware content rect. `BoxContainer.layout()` folded into the same pass: resolves its own constraints first, honours `LayoutAlignment.STRETCH` (declared, no branch), skips hidden children in `render()`, recurses. **Theme was snapshotted per element at construction** (`self.theme = get_theme()` in `__init__`) so `set_theme()` re-skinned nothing already built (probe confirmed) — now `UIElement.theme` is a live property; `ProgressBar`/`Canvas`/`NavBar` defer their cached `Color`. **`ThemeConstants` `@dataclass(frozen=True)` decorated nothing** (`fields() == []`) — "All themes are immutable" was false, presets were mutable process-wide singletons; now a `__getattr__` hands back a fresh copy per access. Smaller: `Slider` rejects `max_val <= min_val` / non-positive width at construction; dead `UIElement.anchor` / `Label(anchor=)` param removed. Recurring shapes: "declared and wired to nothing" (`apply_layout`, `STRETCH`, `anchor`, fake `frozen`), "cached snapshot vs live lookup" (theme), uniform test setup (`test_ui_constraints.py`'s 513 lines only ever called `.apply()` on hand-built Rects; theme tests never built a `UIElement`). BREAKING (pre-alpha): `layout()` signature changed; four in-repo games had their now-redundant `container.layout(renderer)` call removed. Tests: new `test_ui_manager_layout.py` + rebuilt `test_ui_layout.py`. Phase D → new issue (sibling of #37/#40/#43/#46): `ShadowScheme`/`BorderScheme.radius`/`hover_overlay`/`press_overlay` consumed by no widget, no focus navigation, no scroll/clip container, no grid layout, no real text-input path (`TEXT_INPUT` declared/never dispatched), manual layout invalidation. |
@@ -695,6 +765,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#51](https://github.com/Wedeueis/pyguara/issues/51) | Prefab authoring & production layer (from the `pyguara/prefabs` audit, Phase D) — no spawn tables / weighted prefab pools (`create` is one at a time, no selection primitive); `PrefabData.version` declared "for migration support" and read by nothing (no prefab-schema migration, while `persistence` has a `MigrationRegistry`); no named variant library (`overrides` is per-call only); prefab children are linked `Transform`↔`Transform` only — the child entity has no parent-*entity* back-reference or shared lifetime, so despawning an enemy leaks its prefab-attached child entities (needs an ECS-hierarchy decision, cross-cutting with `pyguara/ecs`); no asset-reference validation at load. `ComponentRegistry` process-global mutable singleton parked as a CC |
 | [#53](https://github.com/Wedeueis/pyguara/issues/53) | PyGuara Studio — companion authoring app (from the `pyguara/editor` audit, which deleted a Dear ImGui editor that had never executed and rebuilt its useful parts as `UIRenderer` tools). Level/scene editor, animation editor, agentic authoring harness (grow `tools/agent_view.py`), data-table editors. Needs the build-vs-ImGui architecture decision; the "grow `pyguara/ui`" path is #49's scope. Gated on #49 / #28. In-overlay small items (custom inspector-drawer hook, `TransformGizmo` selection wiring) parked for the `pyguara/tools` slice |
 | [#55](https://github.com/Wedeueis/pyguara/issues/55) | Scripting production layer (from the `pyguara/scripting` audit, Phase D) — `CoroutineManager` is one app-global singleton with no scene scoping (a sequence outlives its scene and ticks against unloaded entities; no teardown hook, unlike `SystemManager`); no coroutine tagging / grouping (kill an entity → its scripted sequences keep running, cross-cutting with #51); no `yield from` result / return value or completion signal to a parent sequence; no frame-count / fixed-step waits (`WaitForFrames`, `WaitForFixedUpdate`) and no scaled-vs-realtime wait for a paused game (time-scale is #28's). `WaitForSeconds` frame-granular drift and missing arg validation left open, documented |
+| #NN *(pending `gh issue create` — draft in the `pyguara/replay` iteration log)* | Replay production layer (from the `pyguara/replay` audit, Phase D) — recorded `seed` is exposed as `ReplayPlayer.seed` but nothing reseeds a random source on playback (no engine RNG service yet — cross-cut #28; replay should reseed it on `load_replay()`); no replay-library API (`list_replays` / `delete` / browse, the shape #43 names for saves) and `FileStorage`-style user-data-dir rooting; the `ReplayPlayer` scrubbing surface (`seek`, `pause`/`resume`, `playback_speed`, `update()`) has no `pyguara/tools` overlay driving it (scrub bar / step / slow-mo — cross-cut #53); capture is input+time only, so a game reading `time.time()` / the filesystem / the network directly breaks determinism silently; `record_action()` (synthetic AI/script-driven actions) has a playback branch but no in-repo consumer. Left open: format `version` validated but no migration layer; a length-framed metadata line would let `get_metadata` skip the frame bytes |
 
 ---
 
@@ -874,6 +945,182 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/replay` — CLOSED 2026-09-08 (branch `refactor/replay-audit`)
+
+One slice, ~1,030 lines: `pyguara/replay/{types,recorder,player,serializer}.py`.
+Every defect reproduced with a probe against the real code before any fix.
+
+**Branch base.** Cut from `main` after PR #56 (`refactor/scripting-audit`)
+merged. History: `feat(replay)` (05b28d9) built the subsystem in isolation;
+wayfinder ticket 18 (65c6c9e) wired it into `Application` + `InputManager`,
+explicitly scoping to discrete keyboard / mouse-button input only.
+
+**Three forks put to the user, all answered maximal:**
+- *Playback determinism scope* → **feed recorded dt on playback** (touch the
+  closed `pyguara/application` loop), not "input-macro replay + document".
+- *Dead `ReplayPlayer` surface* (`update()`, `seek`, `pause`, `playback_speed`)
+  → **keep as public API, add tests**, not delete.
+- *Mouse / UI replay fidelity* → **full raw-event re-dispatch**
+  (`OnRawKeyEvent` / `OnMouseEvent` with recorded position + modifiers,
+  MOUSE_MOVE replayed), not action-path-only.
+
+**Verification:** 1891 tests pass (up from 1869; +22 — the C4 determinism test
+plus a rebuilt `test_replay.py`, 25 → 46). `ruff check .` / `ruff format
+--check` / `mypy pyguara` clean across 222 files. All five commits verified in a
+detached worktree at each SHA (1868 → 1868 → 1868 → 1869 → 1891).
+
+**F1 — `ReplaySerializer.save()` wrote an unloadable file on its default call.**
+It only appended an extension when the path carried none, but the write branch
+was `if compress or str(file_path).endswith(".gz")`. So `save(data,
+"run.replay")` — and `compress=True` is the default — wrote a gzip stream into a
+file named `.replay`. `load()` doesn't see `.gz`, opens it as text, `json.loads`
+hits the gzip magic byte `\x1f`, the blanket `except Exception` swallows it, and
+`load()` returns `None`. `save()` had already returned `True`. Probe: first
+bytes `b'\x1f\x8b\x08\x08'`, `load()` → `None`. Fix: the on-disk format is
+derived from the extension — `.replay.gz` gzip, `.replay` plain, a bare path
+gets one per `compress` — and an explicit extension wins, so a gzip is never
+named `.replay`. `save()` now catches only `OSError` (a `to_dict()` / `dumps()`
+failure is a data-model bug and should surface). `load()` catches
+`OSError` / `BadGzipFile` / `JSONDecodeError` and refuses a `metadata.version`
+above `SUPPORTED_VERSION` — `FORMAT_VERSION` was written and never read, and
+replay has no migration layer.
+
+**F2 — `get_metadata()` returned `None` for any replay over ~10 KB.** It read
+the first 10 KB and parsed `content[:content.rfind("}")+1]` — unbalanced JSON
+for a file whose frames overflow 10 KB. Probe: 3 frames OK, 50 OK, **400 frames
+(54 KB) → `None`**, while the metadata sits in the first ~120 bytes. The one
+function built for "replay info without loading all frames" failed exactly on
+the replays big enough to matter. Now it parses the file and returns the
+`metadata` block (a length-framed leading line would let it skip the frame
+bytes — parked).
+
+**F3 — gamepad input was never recorded.** `ReplayRecorder.record_gamepad_button`
+/ `record_gamepad_axis` / `record_action` had **zero callers**.
+`InputManager.process_event` fed the recorder from the KEY_* and MOUSE_*
+branches, but gamepad input never goes through `process_event` — `GamepadManager`
+polls device state and fires `GamepadButtonEvent` / `GamepadAxisEvent`, handled
+by `_on_gamepad_button` / `_on_gamepad_axis`, which never touched the recorder.
+Probe: recorder attached, keyboard press + A-button press + left-stick axis in
+one frame → recorded events `[KEY_DOWN]` only. Meanwhile `process_replayed_event`
+carried GAMEPAD_* / AXIS / ACTION playback branches — consuming events recording
+could not produce. Fix: both gamepad callbacks now feed the recorder.
+
+**F4 — playback dropped pointer position and the raw UI event stream.**
+`process_replayed_event` for MOUSE_DOWN/UP called `_handle_input(MOUSE, code)`
+and ignored `event.position`; MOUSE_MOVE was explicitly dropped ("nothing to
+replay"); it never re-dispatched `OnRawKeyEvent` / `OnMouseEvent`. Probe: replay
+a MOUSE_DOWN at (123, 456) → no `OnMouseEvent` seen. So the UI layer (menu
+clicks, drag) and any pointer-aimed gameplay did not replay — only
+keyboard/mouse-button → bound-action chains did. Fix: `RecordedInputEvent` gains
+`modifiers` (held shift/ctrl/alt, round-tripped); `process_event` captures the
+modifier set once (factored into `_current_modifiers()`, shared with the
+existing `OnRawKeyEvent` path) and threads it into `record_key_*` /
+`record_mouse_*`; `process_replayed_event` re-dispatches the raw key/mouse
+stream with recorded position + modifiers and replays MOUSE_MOVE.
+
+**F5 — recorder stamps were placeholders.** `Application.start_recording` built
+`ReplayRecorder()` with no `engine_version`, so every replay recorded
+`engine_version="0.0.0"`; `recorded_at` used naive local `datetime.now()`. Now
+`ReplayRecorder._ENGINE_VERSION = version("pyguara")` (guarded by
+`PackageNotFoundError`) is the default, and `recorded_at` is UTC — the exact
+pair `pyguara/persistence` fixed.
+
+**Determinism — the headline design fix.** Playback fed events to the input
+manager on the right *frame*, but `Application.run()` still advanced its clock
+by wall-clock `frame_time`. So `_update(dt)`, the `_accumulator += frame_time`
+fixed-step count, tweens, particles and coroutine `WaitForSeconds` all ran at
+the *playback* machine's cadence. Only discrete input→action chains reproduced;
+physics, animation and timed waits diverged — the "deterministic replay" the
+subsystem is named for. Probe: a session recorded at a lumpy 33/33/10/25/16/...
+ms cadence, replayed on a "machine" ticking a steady 16 ms, saw `_update()`
+deltas of 16 ms throughout. Fix: `ReplayPlayer.peek_delta()` returns the
+`delta_time` of the frame `advance_frame()` will emit next; `run()`, while a
+replay is playing, takes `frame_time` from it instead of `clock.tick()`.
+Rendering still throttles to the display rate. Base `Application` only —
+`SandboxApplication` inherits `run()`. Cross-cutting: `pyguara/application`
+closed 2026-09-06; this reopens its loop for one guarded branch. New integration
+test (`test_playback_steps_the_loop_by_recorded_dt_not_wall_clock`) records 10
+frames at a lumpy cadence and asserts the first 10 playback `_update()` deltas
+are the recorded ones.
+
+**Player model reconciliation (kept, per the user's choice).**
+`ReplayPlayer` had two playback models: `advance_frame()` (one frame per call,
+what `Application` uses) and `update(dt)` (timestamp-based, honours
+`playback_speed`) — plus `seek_to_frame`, `pause`/`resume`, `get_frame_events`,
+`get_current_frame_data`, all with **zero external callers**. Rather than
+delete, they are now a supported public API for a caller driving its own
+playback loop (a replay-scrubbing dev overlay is the intended consumer → Phase D
+issue). `advance_frame()` and `update()` now share `_emit_frame()` (handler
+dispatch with per-handler exception isolation) and `_finish_if_exhausted()`
+(single "playback complete" log — `advance_frame()` used to log it twice).
+
+**Phase B — test verdict.** 25 tests, broad but shallow and uniformly set up.
+Every `TestReplayPlayer` test drove one `sample_replay` fixture through
+`advance_frame()` — `update()`, a whole playback model, had **zero coverage**,
+as did `get_metadata`, `playback_speed`, out-of-range `seek`, and the
+handler-raises path. Every `TestReplaySerializer` test saved to an
+**extensionless tempfile path**, which is exactly the shape that hid F1. Nothing
+recorded or replayed gamepad; no test round-tripped a pointer position or
+`modifiers` through `to_dict`/`from_dict`. `test_replay_wiring.py` (the
+load-bearing integration test) asserted only a dt-independent entity position.
+Rebuilt: position/modifier + origin-position dict round-trips; the serializer
+extension/compression contract + the `SUPPORTED_VERSION` gate + truncated-JSON;
+`get_metadata` on a 500-frame (>20 KB) replay, compressed, and missing; recorder
+engine-version / tz-aware stamp, the double-`start_recording` guard,
+between-frames drop, gamepad/modifier helpers; the `update()` timestamp model
+incl. `playback_speed`, `peek_delta()`, rejected seeks, handler isolation; and
+an `InputManager` wiring class (headless bootstrap) for gamepad capture and the
+replayed `OnMouseEvent` / `OnRawKeyEvent` stream. `test_replay.py` 25 → 46;
+`test_replay_wiring.py` +1.
+
+**Phase C.** No `docs/systems/replay.md` existed. New page: wiring (the
+`Application` surface — you never build `ReplayRecorder`/`ReplayPlayer`
+yourself), what is captured, an explicit **what reproduces / what does not**
+determinism section (RNG, `time.time()`, filesystem, floating-point, starting
+state), the file format, and the API surface incl. the two playback models.
+Every API on the page verified to exist. Linked from `mkdocs.yml` and
+`docs/index.md`.
+
+**Phase D — capability gaps → new issue** (needs `gh issue create`;
+`gh issue create` was blocked in-session). Draft:
+
+> **Title:** Replay production layer — RNG seeding, replay library API, in-game
+> scrubbing overlay
+>
+> From the `pyguara/replay` audit (Phase D). Sibling of
+> #37 / #40 / #43 / #46 / #51 / #55.
+> - **Seed is recorded, consumed by nothing.** `metadata.seed` is captured and
+>   exposed as `ReplayPlayer.seed`, but no random source is reseeded on
+>   playback — there is no engine RNG service yet. Cross-cut #28; replay should
+>   reseed it on `load_replay()`.
+> - **No replay-library API.** One save/load path + `get_metadata`; no
+>   `list_replays()` / `delete` / browse for a "watch a past run" menu (the gap
+>   #43 names for saves), and `FileStorage`-style user-data-dir rooting.
+> - **The `ReplayPlayer` scrubbing surface has no UI.** `seek_to_frame`,
+>   `pause`/`resume`, `playback_speed`, `get_frame_events` are supported and
+>   tested but nothing in `pyguara/tools` drives them — a replay-debug overlay
+>   (scrub bar, step, slow-mo) belongs with the dev-tool suite / #53.
+> - **Capture is input+time only.** A game reading `time.time()` /
+>   `datetime.now()` / the filesystem / the network directly is not captured
+>   and breaks determinism silently — needs at minimum a documented "don't",
+>   ideally an engine time service replay drives.
+> - **`record_action()` is unproven** — the path for synthetic
+>   AI/script-driven actions exists with a matching playback branch but no
+>   in-repo consumer.
+>
+> Left open: `version` is validated on load but there is no migration layer; a
+> length-framed metadata line would let `get_metadata` skip the frame bytes.
+
+**Recurring shapes this iteration:** "declared and wired to nothing"
+(`record_gamepad_*`, `FORMAT_VERSION`, the whole `update()`/`seek`/`pause`
+surface, `RecordedInputEvent` position on playback), "guard that returns a wrong
+answer" (`save()`'s compress/extension mismatch → silent data loss;
+`get_metadata`'s brace heuristic → `None`; both blanket `except Exception`),
+"placeholder stamp never filled in" (`engine_version`, `recorded_at` — the
+persistence pair, third sighting), and uniform test setup — every serializer
+test's extensionless path, every player test's single fixture through one of the
+two models.
 
 ### `pyguara/scripting` — CLOSED 2026-09-08 (branch `refactor/scripting-audit`)
 

@@ -36,6 +36,8 @@ class RecordedInputEvent:
         value: Event value (1.0 for press, 0.0 for release, or axis value).
         action: Optional action name if this is an action event.
         position: Optional mouse position for mouse events.
+        modifiers: Held modifier key codes (shift/ctrl/alt) at event time, for
+            keyboard and mouse events. Empty for other devices.
     """
 
     event_type: InputEventType
@@ -44,6 +46,7 @@ class RecordedInputEvent:
     value: float = 1.0
     action: str | None = None
     position: tuple[float, float] | None = None
+    modifiers: list[int] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dictionary."""
@@ -53,17 +56,19 @@ class RecordedInputEvent:
             "code": self.code,
             "value": self.value,
         }
-        if self.action:
+        if self.action is not None:
             data["action"] = self.action
-        if self.position:
+        if self.position is not None:
             data["position"] = list(self.position)
+        if self.modifiers:
+            data["modifiers"] = list(self.modifiers)
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RecordedInputEvent:
         """Create from dictionary."""
         position = None
-        if "position" in data:
+        if data.get("position") is not None:
             position = tuple(data["position"])
         return cls(
             event_type=InputEventType[data["event_type"]],
@@ -72,6 +77,7 @@ class RecordedInputEvent:
             value=data.get("value", 1.0),
             action=data.get("action"),
             position=position,
+            modifiers=list(data.get("modifiers", [])),
         )
 
 

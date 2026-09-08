@@ -87,6 +87,74 @@ def _quit_pygame():
     pygame.quit()
 
 
+class _FakeClock:
+    """Stand-in for `pygame.time.Clock` whose `tick()` returns a scripted ms."""
+
+    def __init__(self, ms_sequence: list[int]) -> None:
+        self._it = iter(ms_sequence)
+
+    def tick(self, _fps: float = 0.0) -> int:
+        return next(self._it, 16)
+
+
+def _run_frames(app: Application, scene: BootScene, n: int) -> None:
+    """Drive `app.run()` for exactly `n` frames by stopping it from `_render`."""
+    remaining = n
+    real_render = app._render
+
+    def render_then_maybe_stop() -> None:
+        nonlocal remaining
+        real_render()
+        remaining -= 1
+        if remaining <= 0:
+            app._is_running = False
+
+    app._render = render_then_maybe_stop  # type: ignore[method-assign]
+    app.run(scene)
+
+
+def test_playback_steps_the_loop_by_recorded_dt_not_wall_clock(tmp_path):
+    # Record at a lumpy, machine-specific frame cadence...
+    record_ms = [33, 33, 10, 25, 16, 16, 16, 20, 8, 20]
+    # ...then play back on a "machine" running at a steady, different one.
+    playback_ms = [16] * 40
+
+    record_app = create_application()
+    scene = _boot(record_app)
+    record_app._window.poll_events = _make_poll_events(_scripted_frames())
+    record_app._clock = _FakeClock(record_ms)  # type: ignore[assignment]
+    record_app.start_recording(seed=7)
+    _run_frames(record_app, scene, len(record_ms))
+    replay_data = record_app.stop_recording()
+    assert replay_data is not None
+    recorded_dts = [round(f.delta_time, 6) for f in replay_data.frames]
+    assert recorded_dts == [round(ms / 1000.0, 6) for ms in record_ms]
+    replay_path = str(tmp_path / "cadence.replay.gz")
+    assert record_app.save_recording(replay_data, replay_path)
+    record_app.shutdown()
+
+    playback_app = create_application()
+    scene = _boot(playback_app)
+    seen_dts: list[float] = []
+    real_update = playback_app._update
+
+    def capture_update(dt: float) -> None:
+        seen_dts.append(round(dt, 6))
+        real_update(dt)
+
+    playback_app._update = capture_update  # type: ignore[method-assign]
+    playback_app._window.poll_events = _make_poll_events([[] for _ in playback_ms])
+    playback_app._clock = _FakeClock(playback_ms)  # type: ignore[assignment]
+    assert playback_app.load_replay(replay_path)
+    _run_frames(playback_app, scene, len(record_ms) + 5)
+    playback_app.shutdown()
+
+    # The first N _update() calls ran on the recorded deltas, not the 16 ms
+    # wall-clock cadence this "machine" was ticking at.
+    assert seen_dts[: len(recorded_dts)] == recorded_dts
+    assert playback_app._replay_player is None  # finished on schedule
+
+
 def test_recorded_session_replays_to_the_same_entity_state(tmp_path):
     template = Entity("template")
     template.add_component(Transform(position=Vector2(0.0, 0.0)))

@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 
 from pyguara.log import get_logger
 from pyguara.replay.types import (
@@ -44,13 +45,19 @@ class ReplayRecorder:
     # Current replay format version
     FORMAT_VERSION = 1
 
-    def __init__(self, engine_version: str = "0.0.0") -> None:
+    try:
+        _ENGINE_VERSION = version("pyguara")
+    except PackageNotFoundError:  # pragma: no cover - editable/source checkout
+        _ENGINE_VERSION = "0.0.0"
+
+    def __init__(self, engine_version: str | None = None) -> None:
         """Initialize the recorder.
 
         Args:
-            engine_version: Version string of the engine.
+            engine_version: Version string to stamp into the replay. Defaults to
+                the installed ``pyguara`` package version.
         """
-        self._engine_version = engine_version
+        self._engine_version = engine_version or self._ENGINE_VERSION
         self._state = ReplayState.IDLE
         self._data: ReplayData | None = None
         self._current_frame: InputFrame | None = None
@@ -111,7 +118,7 @@ class ReplayRecorder:
                 seed=self._seed,
                 start_scene=scene_name,
                 engine_version=self._engine_version,
-                recorded_at=datetime.now().isoformat(),
+                recorded_at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017
                 description=description,
             )
         )
@@ -191,11 +198,12 @@ class ReplayRecorder:
 
         self._current_frame.events.append(event)
 
-    def record_key_down(self, code: int) -> None:
+    def record_key_down(self, code: int, modifiers: list[int] | None = None) -> None:
         """Record a keyboard key press.
 
         Args:
             code: Key code.
+            modifiers: Held modifier key codes at the time of the press.
         """
         self.record_event(
             RecordedInputEvent(
@@ -203,14 +211,16 @@ class ReplayRecorder:
                 device="keyboard",
                 code=code,
                 value=1.0,
+                modifiers=list(modifiers or []),
             )
         )
 
-    def record_key_up(self, code: int) -> None:
+    def record_key_up(self, code: int, modifiers: list[int] | None = None) -> None:
         """Record a keyboard key release.
 
         Args:
             code: Key code.
+            modifiers: Held modifier key codes at the time of the release.
         """
         self.record_event(
             RecordedInputEvent(
@@ -218,15 +228,22 @@ class ReplayRecorder:
                 device="keyboard",
                 code=code,
                 value=0.0,
+                modifiers=list(modifiers or []),
             )
         )
 
-    def record_mouse_down(self, button: int, position: tuple[float, float]) -> None:
+    def record_mouse_down(
+        self,
+        button: int,
+        position: tuple[float, float],
+        modifiers: list[int] | None = None,
+    ) -> None:
         """Record a mouse button press.
 
         Args:
             button: Mouse button code.
             position: Mouse position at time of press.
+            modifiers: Held modifier key codes at the time of the press.
         """
         self.record_event(
             RecordedInputEvent(
@@ -235,15 +252,22 @@ class ReplayRecorder:
                 code=button,
                 value=1.0,
                 position=position,
+                modifiers=list(modifiers or []),
             )
         )
 
-    def record_mouse_up(self, button: int, position: tuple[float, float]) -> None:
+    def record_mouse_up(
+        self,
+        button: int,
+        position: tuple[float, float],
+        modifiers: list[int] | None = None,
+    ) -> None:
         """Record a mouse button release.
 
         Args:
             button: Mouse button code.
             position: Mouse position at time of release.
+            modifiers: Held modifier key codes at the time of the release.
         """
         self.record_event(
             RecordedInputEvent(
@@ -252,6 +276,7 @@ class ReplayRecorder:
                 code=button,
                 value=0.0,
                 position=position,
+                modifiers=list(modifiers or []),
             )
         )
 
