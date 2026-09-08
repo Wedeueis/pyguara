@@ -10,9 +10,11 @@ import pygame
 
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
+from pyguara.tools.assets_browser import AssetsTool
 from pyguara.tools.config_inspector import ConfigInspector
 from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.event_monitor import EventMonitor
+from pyguara.tools.hierarchy import HierarchyTool
 from pyguara.tools.inspector import EntityInspector
 from pyguara.tools.manager import ToolManager
 from pyguara.tools.performance import PerformanceMonitor
@@ -50,15 +52,22 @@ class SandboxApplication(Application):
         perf_monitor = PerformanceMonitor(self._container)
         self._tool_manager.register_tool(perf_monitor, pygame.K_F1)
 
-        # 2. Entity Inspector (F2) - ECS Data Viewer
-        inspector = EntityInspector(self._container)
+        # 2. Hierarchy (F5) - entity list + selection. Built before the
+        #    inspector, which follows its selection.
+        hierarchy = HierarchyTool(self._container)
+        self._tool_manager.register_tool(hierarchy, pygame.K_F5)
+
+        # 3. Entity Inspector (F2) - inspects whatever the Hierarchy selects.
+        inspector = EntityInspector(
+            self._container, selection_provider=lambda: hierarchy.selected_entity
+        )
         self._tool_manager.register_tool(inspector, pygame.K_F2)
 
-        # 3. Event Monitor (F3) - Log Viewer
+        # 4. Event Monitor (F3) - Log Viewer
         event_mon = EventMonitor(self._container)
         self._tool_manager.register_tool(event_mon, pygame.K_F3)
 
-        # 4. Physics Debugger (F4) - Collision Wireframes
+        # 5. Physics Debugger (F4) - Collision Wireframes
         debugger = PhysicsDebugger(self._container)
         self._tool_manager.register_tool(debugger, pygame.K_F4)
 
@@ -66,7 +75,11 @@ class SandboxApplication(Application):
         config_inspector = ConfigInspector(self._container)
         self._tool_manager.register_tool(config_inspector, pygame.K_F6)
 
-        # 7. Shortcuts Panel (F8) - Help Overlay
+        # 7. Assets Browser (F7) - resource list + spawn from data
+        assets = AssetsTool(self._container)
+        self._tool_manager.register_tool(assets, pygame.K_F7)
+
+        # 8. Shortcuts Panel (F8) - Help Overlay
         shortcuts = ShortcutsPanel(self._container)
         self._tool_manager.register_tool(shortcuts, pygame.K_F8)
 
