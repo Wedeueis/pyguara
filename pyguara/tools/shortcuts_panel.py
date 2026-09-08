@@ -24,7 +24,6 @@ class ShortcutsPanel(Tool):
             ("F2", "Entity Inspector"),
             ("F3", "Event Monitor"),
             ("F4", "Physics Debugger"),
-            ("F5", "Robust ImGui Editor"),
             ("F6", "Config Inspector"),
             ("F8", "Shortcuts Panel (This)"),
             ("F12", "Toggle ALL Tools"),

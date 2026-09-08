@@ -1,1 +1,0 @@
-"""Editor module for PyGuara."""

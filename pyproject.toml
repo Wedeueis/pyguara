@@ -50,9 +50,6 @@ dev = [
     "tox>=4.0.0",
     "build>=0.10.0",
     "twine>=4.0.0",
-
-    # Engine Dev
-    "imgui>=2.0.0",   # FIXED: Moved here
 ]
 
 docs = [
@@ -260,11 +257,6 @@ no_implicit_optional = true
 [[tool.mypy.overrides]]
 module = "pygame.*"
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["imgui", "imgui.*"]
-ignore_missing_imports = true
-disable_error_code = ["import-untyped"]
 
 [[tool.mypy.overrides]]
 module = "pymunk.*"

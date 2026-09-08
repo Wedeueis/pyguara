@@ -10,7 +10,6 @@ import pygame
 
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
-from pyguara.editor.layer import EditorTool
 from pyguara.tools.config_inspector import ConfigInspector
 from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.event_monitor import EventMonitor
@@ -62,10 +61,6 @@ class SandboxApplication(Application):
         # 4. Physics Debugger (F4) - Collision Wireframes
         debugger = PhysicsDebugger(self._container)
         self._tool_manager.register_tool(debugger, pygame.K_F4)
-
-        # 5. Robust Editor (F5) - ImGui Based
-        editor_tool = EditorTool(self._container)
-        self._tool_manager.register_tool(editor_tool, pygame.K_F5)
 
         # 6. Config Inspector (F6) - Live GameConfig Editor
         config_inspector = ConfigInspector(self._container)
