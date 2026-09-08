@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timezone
+from importlib.metadata import PackageNotFoundError, version
 
 from pyguara.log import get_logger
 from pyguara.replay.types import (
@@ -44,13 +45,19 @@ class ReplayRecorder:
     # Current replay format version
     FORMAT_VERSION = 1
 
-    def __init__(self, engine_version: str = "0.0.0") -> None:
+    try:
+        _ENGINE_VERSION = version("pyguara")
+    except PackageNotFoundError:  # pragma: no cover - editable/source checkout
+        _ENGINE_VERSION = "0.0.0"
+
+    def __init__(self, engine_version: str | None = None) -> None:
         """Initialize the recorder.
 
         Args:
-            engine_version: Version string of the engine.
+            engine_version: Version string to stamp into the replay. Defaults to
+                the installed ``pyguara`` package version.
         """
-        self._engine_version = engine_version
+        self._engine_version = engine_version or self._ENGINE_VERSION
         self._state = ReplayState.IDLE
         self._data: ReplayData | None = None
         self._current_frame: InputFrame | None = None
@@ -111,7 +118,7 @@ class ReplayRecorder:
                 seed=self._seed,
                 start_scene=scene_name,
                 engine_version=self._engine_version,
-                recorded_at=datetime.now().isoformat(),
+                recorded_at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017
                 description=description,
             )
         )
