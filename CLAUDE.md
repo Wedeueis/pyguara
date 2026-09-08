@@ -132,6 +132,35 @@ pytest && ruff check . && mypy pyguara
 When a branch carries several commits, each one should pass on its own, not
 merely the tip.
 
+### Once a PR is open, the branch is frozen
+
+Do not push more commits to a branch after its PR is up for review. The PR
+can merge at any moment — `delete_branch_on_merge` then removes the branch,
+and a later `git push` to that name **recreates it** as a zombie: commits
+that are not in `main`, sitting on a branch with no open PR, that nothing
+will ever merge. This has happened repeatedly.
+
+Anything that comes after — review feedback, an extra test, a tracker or docs
+fix, the next phase of an audit — goes on a **new branch cut from `main`**
+with its own PR (or a stacked branch if it is a genuine dependency, per
+above). Before pushing to any pre-existing branch, confirm its PR is still
+open:
+
+```bash
+gh pr view <branch> --json state,title   # MERGED / CLOSED -> new branch from main
+```
+
+On handoff, say which it is: "PR is final, nothing else coming" versus "still
+adding X, do not merge yet" — so a fast merge is never a gamble.
+
+### Cleaning up
+
+After a PR merges, delete any local branch that tracked it
+(`git fetch --prune` clears the remote-tracking ref; `git branch -d <branch>`
+the local one). Periodically reconcile: `git branch -a` against
+`gh pr list --state merged` — a branch with a merged PR and no follow-up work
+is dead weight, remote (`git push origin --delete <branch>`) and local both.
+
 ## Architecture Overview
 
 ### Core Design Principles
