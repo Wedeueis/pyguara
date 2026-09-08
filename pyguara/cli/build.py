@@ -60,7 +60,10 @@ def _build_pyinstaller_args(
     debug: bool,
 ) -> list[str]:
     """Build the PyInstaller command arguments."""
-    args = ["pyinstaller"]
+    # Invoke via the running interpreter rather than a bare ``pyinstaller``
+    # entry script: ``import PyInstaller`` succeeding (see _check_pyinstaller)
+    # does not guarantee a console script on PATH, especially inside a venv.
+    args = [sys.executable, "-m", "PyInstaller"]
 
     # Entry point
     args.append(str(entry_point))
@@ -222,27 +225,21 @@ def build(
     clean: bool,
     debug: bool,
     dry_run: bool,
-) -> None:
-    r"""Build a standalone executable from a PyGuara game.
+) -> None:  # noqa: D301  (\b is Click's no-wrap marker; r""" would defeat it)
+    """Build a standalone executable from a PyGuara game.
 
     ENTRY_POINT is the main Python file of your game (e.g., main.py).
 
+    \b
     Examples:
-        \b
-        # Basic build
-        pyguara build main.py
-
-        \b
-        # Custom output and name
-        pyguara build main.py --output builds/ --name MyGame
-
-        \b
-        # Single file with icon
-        pyguara build main.py --onefile --icon assets/icon.ico
-
-        \b
-        # Include multiple asset directories
-        pyguara build main.py -a assets/ -a levels/
+      # Basic build
+      pyguara build main.py
+      # Custom output and name
+      pyguara build main.py --output builds/ --name MyGame
+      # Single file with icon
+      pyguara build main.py --onefile --icon assets/icon.ico
+      # Include multiple asset directories
+      pyguara build main.py -a assets/ -a levels/
     """
     # Resolve paths to absolute paths to prevent PyInstaller --specpath resolution issues
     entry_point = entry_point.resolve().absolute()
@@ -310,29 +307,9 @@ def build(
     logger.info("Running PyInstaller with args: %s", args)
 
     try:
-        result = subprocess.run(args, check=True)
-        if result.returncode == 0:
-            click.echo()
-            click.echo(click.style("Build successful!", fg="green", bold=True))
-
-            # Show output location
-            exe_name = name or entry_point.stem
-            if onefile:
-                if sys.platform == "win32":
-                    exe_path = output / f"{exe_name}.exe"
-                else:
-                    exe_path = output / exe_name
-            else:
-                exe_path = output / exe_name
-
-            click.echo(f"Output: {click.style(str(exe_path), fg='cyan')}")
-
-            # Clean up build artifacts
-            build_dir = output / "build"
-            if build_dir.exists():
-                shutil.rmtree(build_dir)
-                logger.debug("Cleaned up build directory")
-
+        # check=True: a non-zero exit raises CalledProcessError below, so
+        # reaching this point means the build succeeded.
+        subprocess.run(args, check=True)
     except subprocess.CalledProcessError as e:
         click.echo(
             click.style("Build failed!", fg="red", bold=True)
@@ -343,7 +320,29 @@ def build(
     except FileNotFoundError as e:
         click.echo(
             click.style("Error: ", fg="red", bold=True)
-            + "PyInstaller executable not found in PATH",
+            + "could not launch PyInstaller via "
+            + click.style(f"{sys.executable} -m PyInstaller", fg="cyan"),
             err=True,
         )
         raise SystemExit(1) from e
+
+    click.echo()
+    click.echo(click.style("Build successful!", fg="green", bold=True))
+
+    # Show output location. onedir nests the executable inside a bundle
+    # directory named after the app; onefile drops it directly in output/.
+    exe_name = name or entry_point.stem
+    binary = f"{exe_name}.exe" if sys.platform == "win32" else exe_name
+    exe_path = output / binary if onefile else output / exe_name / binary
+    click.echo(f"Output: {click.style(str(exe_path), fg='cyan')}")
+
+    # Clean up build artifacts: the work directory and the generated .spec,
+    # both of which PyInstaller drops in output/ (see --workpath/--specpath).
+    build_dir = output / "build"
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
+        logger.debug("Cleaned up build directory")
+    spec_file = output / f"{exe_name}.spec"
+    if spec_file.exists():
+        spec_file.unlink()
+        logger.debug("Cleaned up .spec file")

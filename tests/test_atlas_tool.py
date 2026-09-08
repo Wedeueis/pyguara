@@ -250,6 +250,101 @@ def test_atlas_generator_pack_too_large():
 
 
 @pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
+def test_atlas_generator_pack_raises_when_sprite_too_wide():
+    """A sprite wider than the atlas must raise, not get silently clipped.
+
+    Only the vertical dimension used to be checked; an over-wide sprite was
+    placed at x=0 and truncated by Image.paste while its metadata kept the
+    full (wrong) width.
+    """
+    images = [("wide", Image.new("RGBA", (300, 16), (255, 0, 0, 255)))]
+    generator = AtlasGenerator(atlas_size=256, padding=0)
+
+    with pytest.raises(ValueError, match="too small to fit all sprites"):
+        generator.pack(images)
+
+
+@pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
+def test_atlas_generator_pack_raises_when_sprite_too_tall():
+    """A sprite taller than the atlas must raise (the dimension that always
+    worked -- kept as an explicit companion to the too-wide case)."""
+    images = [("tall", Image.new("RGBA", (16, 300), (255, 0, 0, 255)))]
+    generator = AtlasGenerator(atlas_size=256, padding=0)
+
+    with pytest.raises(ValueError, match="too small to fit all sprites"):
+        generator.pack(images)
+
+
+@pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
+def test_atlas_generator_pack_rejects_duplicate_names():
+    """pack() must reject two sprites that would claim the same region name."""
+    images = [
+        ("dup", Image.new("RGBA", (16, 16), (255, 0, 0, 255))),
+        ("dup", Image.new("RGBA", (16, 16), (0, 255, 0, 255))),
+    ]
+    generator = AtlasGenerator(atlas_size=128, padding=0)
+
+    with pytest.raises(ValueError, match="[Dd]uplicate.*dup"):
+        generator.pack(images)
+
+
+@pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
+def test_atlas_generator_pack_metadata_is_internally_consistent():
+    """sprite_count must equal the number of emitted regions."""
+    images = [
+        ("a", Image.new("RGBA", (32, 32), (255, 0, 0, 255))),
+        ("b", Image.new("RGBA", (24, 24), (0, 255, 0, 255))),
+        ("c", Image.new("RGBA", (16, 16), (0, 0, 255, 255))),
+    ]
+    _, metadata = AtlasGenerator(atlas_size=128, padding=2).pack(images)
+
+    assert metadata["sprite_count"] == len(metadata["regions"]) == 3
+
+
+@pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
+def test_atlas_generator_load_images_rejects_stem_collision():
+    """hero.png + hero.jpg both map to region name 'hero' -> must raise."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        Image.new("RGBA", (64, 64), (255, 0, 0, 255)).save(tmpdir_path / "hero.png")
+        Image.new("RGB", (40, 40), (0, 255, 0)).save(tmpdir_path / "hero.jpg")
+        Image.new("RGBA", (16, 16), (0, 0, 255, 255)).save(tmpdir_path / "enemy.png")
+
+        generator = AtlasGenerator()
+
+        with pytest.raises(ValueError, match="hero.jpg") as exc:
+            generator.load_images(tmpdir_path)
+        assert "hero.png" in str(exc.value)
+
+
+@pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
+def test_atlas_generator_generate_excludes_own_output():
+    """Re-running generate() into the input dir must not ingest the prior atlas.
+
+    Without the exclusion the second run would either pack an extra 'atlas'
+    sprite or, once a same-stem .json/.png pair exists, raise a stem collision.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        for i in range(2):
+            Image.new("RGBA", (32, 32), (255, 0, 0, 255)).save(
+                tmpdir_path / f"s{i}.png"
+            )
+
+        generator = AtlasGenerator(atlas_size=128, padding=2)
+        out_img = tmpdir_path / "atlas.png"
+        out_meta = tmpdir_path / "atlas.json"
+
+        generator.generate(tmpdir_path, out_img, out_meta)
+        generator.generate(tmpdir_path, out_img, out_meta)  # must not raise
+
+        with open(out_meta) as f:
+            metadata = json.load(f)
+        assert metadata["sprite_count"] == 2
+        assert set(metadata["regions"]) == {"s0", "s1"}
+
+
+@pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
 def test_atlas_generator_generate():
     """Atlas generator should create atlas and metadata files."""
     with tempfile.TemporaryDirectory() as tmpdir:

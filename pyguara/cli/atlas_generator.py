@@ -11,7 +11,6 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
 import json
 import sys
 from pathlib import Path
@@ -115,7 +114,6 @@ class AtlasGenerator:
         self,
         atlas_size: int = 2048,
         padding: int = 2,
-        allow_rotation: bool = False,
     ):
         """
         Initialize the atlas generator.
@@ -123,24 +121,30 @@ class AtlasGenerator:
         Args:
             atlas_size (int): Maximum atlas dimension (width and height).
             padding (int): Padding between sprites to prevent bleeding.
-            allow_rotation (bool): Whether to allow 90-degree rotation (not implemented).
         """
         self.atlas_size = atlas_size
         self.padding = padding
-        self.allow_rotation = allow_rotation
 
-    def load_images(self, input_path: Path) -> list[tuple[str, Image.Image]]:
+    def load_images(
+        self,
+        input_path: Path,
+        exclude: set[Path] | None = None,
+    ) -> list[tuple[str, Image.Image]]:
         """
         Load all images from a directory.
 
         Args:
             input_path (Path): Directory containing sprite images.
+            exclude (Optional[Set[Path]]): Resolved paths to skip (e.g. the
+                atlas the caller is about to write into this same directory).
 
         Returns:
             List[Tuple[str, Image.Image]]: List of (name, image) tuples.
 
         Raises:
-            ValueError: If no images found or path is invalid.
+            ValueError: If no images found, the path is invalid, or two files
+                share a stem (``hero.png`` and ``hero.jpg`` would both claim the
+                region name ``hero`` and silently overwrite each other).
         """
         if not input_path.exists():
             raise ValueError(f"Input path does not exist: {input_path}")
@@ -148,21 +152,38 @@ class AtlasGenerator:
         if not input_path.is_dir():
             raise ValueError(f"Input path is not a directory: {input_path}")
 
+        excluded = exclude or set()
         images: list[tuple[str, Image.Image]] = []
+        stems: dict[str, list[str]] = {}
         supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".tga"}
 
         for file_path in sorted(input_path.iterdir()):
-            if file_path.suffix.lower() in supported_formats:
-                try:
-                    img: Image.Image = Image.open(file_path)
-                    # Convert to RGBA to ensure consistent format
-                    if img.mode != "RGBA":
-                        img = img.convert("RGBA")
-                    name = file_path.stem  # Filename without extension
-                    images.append((name, img))
-                except Exception as e:
-                    print(f"Warning: Failed to load {file_path}: {e}")
-                    continue
+            if file_path.suffix.lower() not in supported_formats:
+                continue
+            if file_path.resolve() in excluded:
+                continue
+            try:
+                img: Image.Image = Image.open(file_path)
+                # Convert to RGBA to ensure consistent format
+                if img.mode != "RGBA":
+                    img = img.convert("RGBA")
+                name = file_path.stem  # Filename without extension
+                stems.setdefault(name, []).append(file_path.name)
+                images.append((name, img))
+            except Exception as e:
+                print(f"Warning: Failed to load {file_path}: {e}")
+                continue
+
+        collisions = {stem: files for stem, files in stems.items() if len(files) > 1}
+        if collisions:
+            detail = "; ".join(
+                f"{stem!r} <- {', '.join(sorted(files))}"
+                for stem, files in sorted(collisions.items())
+            )
+            raise ValueError(
+                f"Multiple files map to the same atlas region name in "
+                f"{input_path}: {detail}. Rename or remove the duplicates."
+            )
 
         if not images:
             raise ValueError(f"No valid images found in {input_path}")
@@ -182,8 +203,17 @@ class AtlasGenerator:
             Tuple[Image.Image, Dict[str, Any]]: The atlas image and metadata dict.
 
         Raises:
-            ValueError: If sprites don't fit in atlas size.
+            ValueError: If two sprites share a name, or a sprite does not fit
+                the atlas in either dimension.
         """
+        names = [name for name, _ in images]
+        dupes = sorted({n for n in names if names.count(n) > 1})
+        if dupes:
+            raise ValueError(
+                f"Duplicate sprite name(s) passed to pack(): {', '.join(dupes)}. "
+                f"Region names must be unique."
+            )
+
         # Sort images by height (descending) for better packing
         sorted_images = sorted(images, key=lambda x: x[1].height, reverse=True)
 
@@ -218,11 +248,15 @@ class AtlasGenerator:
 
             # Create new shelf if needed
             if not placed:
-                if current_y + height > self.atlas_size:
+                # Guard both dimensions: a sprite wider than the atlas used to
+                # slip past this check (only height was tested) and get silently
+                # clipped by Image.paste while its metadata kept the full width.
+                if width > self.atlas_size or current_y + height > self.atlas_size:
                     raise ValueError(
                         f"Atlas size {self.atlas_size}x{self.atlas_size} "
-                        f"is too small to fit all sprites. "
-                        f"Try increasing --size or reducing sprite count."
+                        f"is too small to fit all sprites "
+                        f"(sprite {name!r} needs {width}x{height}px including "
+                        f"padding). Try increasing --size or reducing sprite count."
                     )
 
                 shelf = Shelf(current_y, height, self.atlas_size)
@@ -277,8 +311,14 @@ class AtlasGenerator:
             output_path (Path): Path for output atlas image.
             metadata_path (Optional[Path]): Path for JSON metadata file.
         """
+        # Never re-ingest our own output when it is written back into the
+        # input directory (a common -i/-o overlap).
+        exclude = {output_path.resolve()}
+        if metadata_path is not None:
+            exclude.add(metadata_path.resolve())
+
         print(f"Loading images from: {input_path}")
-        images = self.load_images(input_path)
+        images = self.load_images(input_path, exclude=exclude)
         print(f"Loaded {len(images)} images")
 
         print("Packing atlas...")
@@ -344,24 +384,20 @@ def atlas(
     metadata: Path | None,
     size: int,
     padding: int,
-) -> None:
-    r"""Generate a sprite atlas from multiple images.
+) -> None:  # noqa: D301  (\b is Click's no-wrap marker; r""" would defeat it)
+    """Generate a sprite atlas from multiple images.
 
     Pack sprites from INPUT directory into a single texture atlas using
     shelf-packing algorithm.
 
+    \b
     Examples:
-        \b
-        # Basic usage
-        pyguara atlas -i assets/sprites/ -o atlas.png
-
-        \b
-        # With metadata
-        pyguara atlas -i assets/sprites/ -o atlas.png -m atlas.json
-
-        \b
-        # Custom size and padding
-        pyguara atlas -i assets/sprites/ -o atlas.png -s 4096 -p 4
+      # Basic usage
+      pyguara atlas -i assets/sprites/ -o atlas.png
+      # With metadata
+      pyguara atlas -i assets/sprites/ -o atlas.png -m atlas.json
+      # Custom size and padding
+      pyguara atlas -i assets/sprites/ -o atlas.png -s 4096 -p 4
     """
     try:
         generator = AtlasGenerator(
@@ -379,73 +415,13 @@ def atlas(
 
 
 def main() -> None:
-    """Legacy CLI entry point using argparse."""
-    parser = argparse.ArgumentParser(
-        description="Generate sprite atlas from multiple images",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Basic usage
-  python -m pyguara.cli.atlas_generator -i assets/sprites/ -o atlas.png
+    """Entry point for ``python -m pyguara.cli.atlas_generator``.
 
-  # With metadata
-  python -m pyguara.cli.atlas_generator -i assets/sprites/ -o atlas.png -m atlas.json
-
-  # Custom size and padding
-  python -m pyguara.cli.atlas_generator -i assets/sprites/ -o atlas.png -s 4096 -p 4
-        """,
-    )
-
-    parser.add_argument(
-        "-i",
-        "--input",
-        type=Path,
-        required=True,
-        help="Input directory containing sprite images",
-    )
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        required=True,
-        help="Output path for atlas image (PNG)",
-    )
-    parser.add_argument(
-        "-m",
-        "--metadata",
-        type=Path,
-        help="Output path for JSON metadata (optional)",
-    )
-    parser.add_argument(
-        "-s",
-        "--size",
-        type=int,
-        default=2048,
-        help="Atlas size (width and height, default: 2048)",
-    )
-    parser.add_argument(
-        "-p",
-        "--padding",
-        type=int,
-        default=2,
-        help="Padding between sprites (default: 2)",
-    )
-
-    args = parser.parse_args()
-
-    try:
-        generator = AtlasGenerator(
-            atlas_size=args.size,
-            padding=args.padding,
-        )
-        generator.generate(
-            input_path=args.input,
-            output_path=args.output,
-            metadata_path=args.metadata,
-        )
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+    Delegates straight to the :func:`atlas` Click command so the module-level
+    invocation and ``pyguara atlas`` share one option surface and one code
+    path (they used to be a hand-kept argparse copy that could drift).
+    """
+    atlas.main(prog_name="pyguara.cli.atlas_generator")
 
 
 if __name__ == "__main__":

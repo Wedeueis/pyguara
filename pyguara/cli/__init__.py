@@ -11,8 +11,12 @@ Usage:
 
 import click
 
-from pyguara.cli.atlas_generator import atlas
-from pyguara.cli.build import build
+# Alias on import: a bare ``from ... import build`` would rebind the
+# ``pyguara.cli.build`` *module* attribute to the command object, so
+# ``import pyguara.cli.build`` would hand back a Click Command instead of the
+# module. Keep the submodules reachable by dotted path.
+from pyguara.cli.atlas_generator import atlas as atlas_command
+from pyguara.cli.build import build as build_command
 
 
 @click.group()
@@ -22,8 +26,8 @@ def main() -> None:
     pass
 
 
-main.add_command(build)
-main.add_command(atlas)
+main.add_command(build_command)
+main.add_command(atlas_command)
 
 
 if __name__ == "__main__":
