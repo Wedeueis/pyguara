@@ -94,11 +94,14 @@ Framework-level work above physics — combat spine, seeded RNG service,
 stat/modifier system, projectile layer, procgen, tilemap, run/meta save
 split, flow-field pathfinding, hit-stop, combat juice, local co-op input —
 is **issue #28 (roguelike core)**, out of scope for the physics audit.
-Prior art: `github.com/Wedeueis/reclaimer_legacy`, an earlier iteration of
-this engine (fused with one game, hence the restart) that already built and
-tested combat, stats, equipment/modules, procgen, GOAP/utility AI and
-projectiles — read its `reclaimer/game/<subsystem>` module before starting
-the matching #28 piece.
+#28 carries the layering decision: three layers (core / `pyguara/kits/*` /
+game), mechanism in core and world-model vocabulary in an opt-in kit, core
+may not import a kit. Prior art: `github.com/Wedeueis/reclaimer_legacy`, an
+earlier iteration of this engine (fused with one game, hence the restart)
+that already built and tested combat, stats, equipment/modules, procgen,
+GOAP/utility AI and projectiles — mine it **per kit**, reading its
+`reclaimer/game/<subsystem>` for interface shape and tests before starting
+the matching `pyguara/kits/<kit>` piece.
 
 **The big decision — move characters off dynamic rigid bodies onto
 `CharacterMover` — is resolved, built, and merged.** Full physical parity
