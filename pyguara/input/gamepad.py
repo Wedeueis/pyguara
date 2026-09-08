@@ -1,7 +1,6 @@
 """Gamepad/Controller management system."""
 
 import contextlib
-import time
 
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.events import GamepadAxisEvent, GamepadButtonEvent
@@ -51,8 +50,16 @@ class GamepadManager:
         self._event_dispatcher = event_dispatcher
         self._config = config or GamepadConfig()
         self._input_backend = input_backend
+        # Controllers are keyed by a stable `controller_id` -- a small slot
+        # number ("Player 1") that stays pinned to one physical device for as
+        # long as it is plugged in. It is NOT the pygame device index: SDL
+        # renumbers the remaining devices when one in the middle unplugs, so
+        # indexing by it flags the wrong controller as gone. `_instance_ids`
+        # maps our slot to SDL's stable instance id, which is what a scan
+        # reconciles against.
         self._controllers: dict[int, GamepadState] = {}
         self._joysticks: dict[int, IJoystick] = {}
+        self._instance_ids: dict[int, int] = {}
 
         if not self._input_backend.is_initialized():
             self._input_backend.init_joysticks()
@@ -60,61 +67,102 @@ class GamepadManager:
         # Initial device scan
         self._scan_devices()
 
+    def _allocate_controller_id(self) -> int:
+        """Return the lowest slot number not currently assigned to a controller."""
+        candidate = 0
+        while candidate in self._controllers:
+            candidate += 1
+        return candidate
+
     def _scan_devices(self) -> None:
-        """Scan for connected gamepad devices and initialize them."""
+        """Reconcile tracked controllers against the devices SDL reports now.
+
+        Enumeration is by SDL instance id, not device index: a fresh handle is
+        taken for every present device each scan (device indices may have
+        shifted), and controllers whose instance id is no longer present are
+        disconnected.
+        """
         joystick_count = self._input_backend.get_joystick_count()
 
-        # Detect new controllers
+        present: dict[int, IJoystick] = {}
         for i in range(joystick_count):
-            if i not in self._joysticks:
-                try:
-                    joystick = self._input_backend.get_joystick(i)
-                    joystick.init()
+            try:
+                joystick = self._input_backend.get_joystick(i)
+                joystick.init()
+                present[joystick.get_instance_id()] = joystick
+            except Exception as e:
+                logger.error(
+                    "Failed to query joystick at device index %d: %s",
+                    i,
+                    e,
+                    exc_info=True,
+                )
 
-                    # Create state tracking for this controller
-                    state = GamepadState(
-                        controller_id=i,
-                        instance_id=joystick.get_instance_id(),
-                        name=joystick.get_name(),
-                        is_connected=True,
-                    )
+        # Disconnect controllers whose device is no longer present.
+        for controller_id in list(self._controllers):
+            if self._instance_ids.get(controller_id) not in present:
+                self._disconnect_controller(controller_id)
 
-                    self._joysticks[i] = joystick
-                    self._controllers[i] = state
+        # Connect devices we are not already tracking; refresh handles for the
+        # ones we are (their device index, and thus the old handle, may have
+        # moved).
+        instance_to_slot = {iid: cid for cid, iid in self._instance_ids.items()}
+        for instance_id, joystick in present.items():
+            existing_slot = instance_to_slot.get(instance_id)
+            if existing_slot is not None:
+                self._joysticks[existing_slot] = joystick
+                continue
 
-                    logger.info("Connected: %s (ID: %d)", state.name, i)
-                except Exception as e:
-                    logger.error(
-                        "Failed to initialize controller %d: %s", i, e, exc_info=True
-                    )
-
-        # Detect disconnected controllers
-        disconnected = []
-        for controller_id in list(self._joysticks.keys()):
-            if controller_id >= joystick_count:
-                disconnected.append(controller_id)
-
-        for controller_id in disconnected:
-            self._disconnect_controller(controller_id)
+            try:
+                controller_id = self._allocate_controller_id()
+                state = GamepadState(
+                    controller_id=controller_id,
+                    instance_id=instance_id,
+                    name=joystick.get_name(),
+                    is_connected=True,
+                )
+                self._joysticks[controller_id] = joystick
+                self._controllers[controller_id] = state
+                self._instance_ids[controller_id] = instance_id
+                logger.info(
+                    "Connected: %s (slot %d, instance %d)",
+                    state.name,
+                    controller_id,
+                    instance_id,
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to initialize controller (instance %d): %s",
+                    instance_id,
+                    e,
+                    exc_info=True,
+                )
 
     def _disconnect_controller(self, controller_id: int) -> None:
-        """Mark a controller as disconnected and clean up resources.
+        """Mark a controller as disconnected and release its handle.
+
+        The `GamepadState` is dropped, so the slot is free for reuse; a caller
+        that queried it will see it as an unknown controller from here on.
 
         Args:
             controller_id: The controller ID to disconnect.
         """
         if controller_id in self._controllers:
             state = self._controllers[controller_id]
-            state.is_connected = False
-            logger.info("Disconnected: %s (ID: %d)", state.name, controller_id)
+            logger.info(
+                "Disconnected: %s (slot %d, instance %d)",
+                state.name,
+                controller_id,
+                self._instance_ids.get(controller_id, -1),
+            )
+            del self._controllers[controller_id]
 
         if controller_id in self._joysticks:
             with contextlib.suppress(Exception):
                 self._joysticks[controller_id].quit()
             del self._joysticks[controller_id]
 
-        # Keep the state for a frame to allow events to process
-        # Could be removed after a delay or on next update
+        self._instance_ids.pop(controller_id, None)
 
     def update(self) -> None:
         """Update all controller states and fire events for changes.
@@ -171,7 +219,6 @@ class GamepadManager:
                     controller_id=controller_id,
                     button=button,
                     is_pressed=is_pressed,
-                    timestamp=time.time(),
                     source=self,
                 )
                 self._event_dispatcher.dispatch(event)
@@ -231,7 +278,6 @@ class GamepadManager:
                     axis=axis,
                     value=processed_value,
                     previous_value=previous_value,
-                    timestamp=time.time(),
                     source=self,
                 )
                 self._event_dispatcher.dispatch(event)

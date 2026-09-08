@@ -122,12 +122,16 @@ class ConflictResolution(Enum):
 
 
 class RebindResult(Enum):
-    """Result of a rebind operation."""
+    """Outcome of a `KeyBindingManager.rebind()` call.
 
-    SUCCESS = auto()  # Binding was successful
-    CONFLICT = auto()  # Conflict detected (only with ERROR strategy)
-    SWAPPED = auto()  # Bindings were swapped
-    UNBOUND = auto()  # Previous binding was removed
+    There is no ``CONFLICT`` member: the ``ERROR`` resolution raises
+    ``ValueError`` rather than returning, so a conflict is never reported as a
+    result value.
+    """
+
+    SUCCESS = auto()  # Bound to the new key with no conflict fallout
+    SWAPPED = auto()  # Traded keys with the conflicting action(s)
+    UNBOUND = auto()  # Conflicting action(s) lost their binding
 
 
 @dataclass

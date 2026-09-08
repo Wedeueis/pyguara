@@ -53,8 +53,16 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/physics` closed 2026-09-08.** Next in the queue is
-`pyguara/input`. Open `REFACTOR_STATE.md` "How to resume" and take it.
+**None — `pyguara/input` closed 2026-09-08 (branch `refactor/input-audit`).**
+Next in the queue is `pyguara/audio`. Open `REFACTOR_STATE.md` "How to
+resume" and take it.
+
+`pyguara/input` in one slice: `InputContext` was inert end to end (no way to
+leave `GAMEPLAY`), gamepad identity was by device index not SDL instance id
+(unplugging a non-last pad flagged the wrong one), `rebind(SWAP)` reported
+`SWAPPED` when it had actually just unbound, `RebindResult.CONFLICT` was
+unreachable, and `OnAction`/`OnRawKey`/`OnMouse` events were frozen at
+`timestamp=0.0`. See the iteration log entry below.
 
 `pyguara/physics` ran over four slices: PR #24 (substepping), PR #25
 (character movement onto `CharacterMover`), PR #27 (triggers + joints, both
@@ -136,7 +144,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
       `joints.py` — triggers + joints rebuilt end to end (PR #27)
     - [x] Spatial queries, body sleeping, `substeps` decision, Phase C
       (branch `refactor/physics-queries-sleep-close`)
-- [ ] `pyguara/input` — input manager, rebinding
+- [x] `pyguara/input` — input manager, rebinding *(done)*
 - [ ] `pyguara/audio` — audio manager, spatial audio
 - [ ] `pyguara/animation` — tween, easing, FSM
 - [ ] `pyguara/resources` — loaders, meta, hot reload
@@ -159,6 +167,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). `input/manager.py` stays a CC-11 / issue #9 offender (raw pygame events) — parked. |
 | `pyguara/physics` | 2026-09-08 | Judged as *game* physics. Four slices: substepping stops ordinary-speed tunnelling (PR #24); characters moved off dynamic bodies onto `CharacterMover`/`CharacterBody` with full parity — knockback, platform riding, crate pushing — on Celeste's integer+remainder model (PR #25); trigger volumes and the entire `Joint` ECS layer were both inert end to end and were rebuilt and tested (PR #27); the close added five spatial queries, body sleeping, kept `substeps` at 4 on benchmark evidence, and froze `PhysicsMaterial`. Recurring shape: "declared and wired to nothing" (`fixed_rotation`, `gravity_scale`, the `return False` collision contract, `Joint`, `TriggerVolume`) and uniform test setup (every test a slow body already at rest). |
 | `pyguara/graphics` | 2026-09-06 | Audited in five slices: window boundary, components, backends, pipeline, assets. Window reported the requested size not the granted one; `Box`/`Circle` were hard-wired to pygame; the pygame stubs had drifted; a zero-height window produced a 450px viewport; nine-patch produced negative source rects. PRs #12, #14, #15, #17, #18. |
 | `pyguara/systems` | 2026-09-06 | Fixed every game system starting up uninitialised (`initialize()` runs before `on_enter()`), an `unregister()` testing truthiness rather than `None`, and silent duplicate registration keys. PR #11. |
@@ -355,6 +364,97 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/input` — CLOSED 2026-09-08 (branch `refactor/input-audit`)
+
+One slice, ~1,500 lines (`manager`, `binding`, `gamepad`, `types`, `events`,
+`protocols`, `keys`, the pygame backend). Four defects, each reproduced with
+a probe against the real code before being touched, plus the unreachable
+public surface they hid behind.
+
+**Verification:** 1652 tests pass (up from 1644); `ruff check .` clean;
+`ruff format` clean; `mypy pyguara` clean across 224 files;
+`mkdocs build --strict` clean. Each of the three commits verified in a
+detached worktree (`git worktree add --detach`, `uv sync --extra dev`):
+1649 / 1652 / 1652.
+
+**F1 — `InputContext` was inert end to end.** `InputManager._context` was
+set to `GAMEPLAY` in `__init__` and there was no public way to change it:
+`dir(InputManager)` had `bind_input`, `register_action`, `update`,
+`process_event` and nothing else. So `KeyBindingManager`'s entire
+per-context machinery, the `context=` parameter on `bind_input()`, and three
+of the four `InputContext` members (`UI`, `MENU`, `DEBUG`) were unreachable —
+a binding registered for any of them could never fire. `test_context_switching`
+"passed" only because it assigned `manager._context = InputContext.MENU`
+directly, a private attribute, because no public one existed. Added a
+`context` property + `set_context()` alias that publishes a new
+`InputContextChangedEvent` on a real change (silent no-op when unchanged),
+and a `bindings` property — `rebind()` / `import_bindings` / `export_bindings`
+had *no* entry point on `InputManager` at all, and no caller anywhere in the
+tree outside their own unit test.
+
+**F2 — gamepad identity was the device index, not the SDL instance id.**
+`GamepadManager` keyed `_joysticks`/`_controllers` by pygame device index and
+detected unplugs with `controller_id >= joystick_count` — a tail-only check.
+SDL renumbers the remaining devices when one in the *middle* unplugs. Probe:
+Pad-A at index 0, Pad-B at index 1; unplug Pad-A; the manager reported
+*Pad-B* disconnected, kept Pad-A's stale handle as controller 0, and would
+have polled the dead device every frame. `instance_id` was already stored in
+`GamepadState` and never used. `_scan_devices()` now reconciles against the
+set of instance ids SDL reports, takes a fresh handle for every present
+device each scan, and pins `controller_id` to one instance id for the life
+of the connection — "player 1" stays player 1 when "player 2" unplugs.
+
+**F3 — `rebind(SWAP)` lied when the moved action had no prior binding.**
+No key to trade back, so the conflicting action was just unbound while the
+call still returned `SWAPPED`. Now returns `UNBOUND`.
+
+**F4 — `RebindResult.CONFLICT` was unreachable.** The `ERROR` resolution
+raises `ValueError` rather than returning, so `CONFLICT` and half the
+`-> tuple[RebindResult, BindingConflict | None]` return type were dead.
+Removed; the enum is `SUCCESS` / `SWAPPED` / `UNBOUND`, all produced.
+
+**F5 — input event timestamps frozen at 0.0.** `pyguara/input/events.py`
+still used `timestamp: float = 0.0` with no `default_factory` — the exact
+idiom the `events` audit replaced across `pyguara/events/*.py` — and
+`InputManager` constructs `OnActionEvent` / `OnRawKeyEvent` / `OnMouseEvent`
+without a timestamp, so every one read 0.0. All five event dataclasses now
+use `field(default_factory=time.time)`; the redundant explicit
+`timestamp=time.time()` in `gamepad.py` is gone.
+
+**Patterns, extended.** *Declared and wired to nothing*: the context system,
+and the whole rebind/conflict/serialization layer (reachable only via a
+private attribute, used by nothing). *Uniform test setup*: every gamepad
+hot-plug test unplugged only the last/only pad, so the mid-list reindex bug
+had no test that could see it; every `rebind` SWAP test pre-bound both
+actions, so the degenerate case returned the wrong result unnoticed.
+Seventh and eighth instances.
+
+**Phase B (+8).** `test_context_switching` migrated to the public API; new:
+a dormant non-active-context binding fires nothing until switched; exactly
+one `InputContextChangedEvent` per real change; SWAP-without-prior-binding
+returns `UNBOUND`; `OnActionEvent`/`GamepadButtonEvent` carry a real
+timestamp; gamepad mid-list unplug parametrised on *which* pad goes, each
+asserting the survivor keeps slot, name and a working button read; reconnect
+reuses the freed slot.
+
+**Phase C.** `docs/systems/input.md` rewritten — it had described contexts
+(no public API), an "SDL2" backend (does not exist), and told game code to
+pass `pygame.K_SPACE` (CLAUDE.md forbids it). Now: the action/binding/context
+model with the new accessors, the full event table, the gamepad API with the
+stable-slot rule, and the rebinding + export/import surface with the honest
+`RebindResult` set. `test_docs_api` and `mkdocs build --strict` pass. Also
+added a curated `__all__` to `pyguara/input` (CC-8).
+
+**Left open.** `input/manager.py` imports `pygame` directly and
+`process_event()` consumes raw pygame key/mouse events and `KMOD_*`
+constants — a CC-11 / issue #9 offender, parked with the rest of that
+cross-cutting concern (the fix is `Window.poll_events()` yielding engine
+events). `_handle_input` silently does nothing for an `ANALOG` action bound
+to a digital key, or a `PRESS`/`RELEASE` action bound to an axis — documented
+in the new page rather than changed. `import_bindings` does not coerce
+`code` to `int`, so a hand-edited string code binds but never matches a
+lookup — noted, not fixed.
 
 ### `pyguara/physics` close — spatial queries, sleeping, substeps, Phase C — CLOSED 2026-09-08 (branch `refactor/physics-queries-sleep-close`)
 

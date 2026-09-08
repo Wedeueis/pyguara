@@ -196,7 +196,9 @@ class KeyBindingManager:
             resolution: Strategy for handling conflicts.
 
         Returns:
-            Tuple of (result, conflict_info). Conflict is None on success.
+            Tuple of ``(result, conflict_info)``. ``conflict_info`` is ``None``
+            when the new key was free. A ``SWAP`` on an action that had no prior
+            binding has no key to trade back and returns ``UNBOUND``.
 
         Raises:
             ValueError: If resolution is ERROR and a conflict exists.
@@ -243,7 +245,10 @@ class KeyBindingManager:
                     for old_key in old_bindings:
                         self.bind(old_key[0], old_key[1], conf_action, context)
 
-                result = RebindResult.SWAPPED
+                # A swap needs a key to swap *into*. When `action` had no prior
+                # binding there is none, so the conflicting actions were just
+                # unbound -- report that, not SWAPPED.
+                result = RebindResult.SWAPPED if old_bindings else RebindResult.UNBOUND
             elif resolution == ConflictResolution.UNBIND:
                 # Unbind conflicting actions
                 self.unbind_key(new_device, new_code, context)

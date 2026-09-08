@@ -9,6 +9,7 @@ from pyguara.input.binding import KeyBindingManager
 from pyguara.input.events import (
     GamepadAxisEvent,
     GamepadButtonEvent,
+    InputContextChangedEvent,
     OnActionEvent,
     OnMouseEvent,
     OnRawKeyEvent,
@@ -71,6 +72,60 @@ class InputManager:
             The GamepadManager instance.
         """
         return self._gamepad_manager
+
+    @property
+    def bindings(self) -> KeyBindingManager:
+        """The binding table, for rebinding, conflict queries and persistence.
+
+        Returns:
+            The `KeyBindingManager` this manager resolves inputs against.
+        """
+        return self._bindings
+
+    @property
+    def context(self) -> InputContext:
+        """The input context bindings are currently resolved against.
+
+        Only bindings registered for this context fire. Starts at
+        `InputContext.GAMEPLAY`.
+
+        Returns:
+            The active `InputContext`.
+        """
+        return self._context
+
+    @context.setter
+    def context(self, context: InputContext) -> None:
+        """Switch the active input context.
+
+        A game sets this when it changes mode -- opening a menu, focusing a
+        text field, entering a debug overlay -- so the same physical key can
+        drive `InputContext.GAMEPLAY` "jump" and `InputContext.MENU` "confirm".
+        Setting the context it already holds is a no-op and fires no event.
+
+        Args:
+            context: The context to make active.
+        """
+        if context == self._context:
+            return
+
+        old_context = self._context
+        self._context = context
+        self._dispatcher.dispatch(
+            InputContextChangedEvent(
+                old_context=old_context.value,
+                new_context=context.value,
+                source=self,
+            )
+        )
+
+    def set_context(self, context: InputContext) -> None:
+        """Switch the active input context (imperative alias for `context`).
+
+        Args:
+            context: The context to make active.
+        """
+        self.context = context
 
     def attach_recorder(self, recorder: ReplayRecorder) -> None:
         """Start feeding every processed input event to `recorder`.
