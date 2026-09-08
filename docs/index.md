@@ -59,7 +59,7 @@ Essential engine features:
 *   **[Scripting](systems/scripting.md)**: Coroutine-based sequential logic.
 *   **[Resources](systems/resources.md)**: Caching and type-safe asset loading.
 *   **[Prefabs](systems/prefabs.md)**: Data-driven entity templates with inheritance and child hierarchies.
-*   **[Editor & Tools](systems/editor.md)**: In-game debug overlay and inspector.
+*   **[Developer Tools](systems/editor.md)**: In-game debug overlay -- hierarchy, inspector, assets browser.
 
 ## 🚀 Quick Start
 
