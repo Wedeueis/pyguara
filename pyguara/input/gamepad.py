@@ -1,7 +1,6 @@
 """Gamepad/Controller management system."""
 
 import contextlib
-import time
 
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.events import GamepadAxisEvent, GamepadButtonEvent
@@ -171,7 +170,6 @@ class GamepadManager:
                     controller_id=controller_id,
                     button=button,
                     is_pressed=is_pressed,
-                    timestamp=time.time(),
                     source=self,
                 )
                 self._event_dispatcher.dispatch(event)
@@ -231,7 +229,6 @@ class GamepadManager:
                     axis=axis,
                     value=processed_value,
                     previous_value=previous_value,
-                    timestamp=time.time(),
                     source=self,
                 )
                 self._event_dispatcher.dispatch(event)

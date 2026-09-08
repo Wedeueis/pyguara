@@ -163,6 +163,30 @@ class TestRebinding:
             InputDevice.KEYBOARD, 32, InputContext.GAMEPLAY
         ) == ["attack"]
 
+    def test_rebind_swap_without_prior_binding_reports_unbound(self, binding_manager):
+        """SWAP needs one of the action's own keys to trade back to. When the
+        action being rebound has never been bound, the conflicting action is
+        simply unbound -- the result must say UNBOUND, not SWAPPED."""
+        binding_manager.bind(InputDevice.KEYBOARD, 97, "attack", InputContext.GAMEPLAY)
+
+        result, conflict = binding_manager.rebind(
+            "block",  # never bound
+            InputDevice.KEYBOARD,
+            97,
+            InputContext.GAMEPLAY,
+            resolution=ConflictResolution.SWAP,
+        )
+
+        assert result == RebindResult.UNBOUND
+        assert conflict is not None and "attack" in conflict.existing_actions
+        assert binding_manager.get_actions(
+            InputDevice.KEYBOARD, 97, InputContext.GAMEPLAY
+        ) == ["block"]
+        assert (
+            binding_manager.get_bindings_for_action("attack", InputContext.GAMEPLAY)
+            == []
+        )
+
     def test_rebind_conflict_unbind(self, binding_manager):
         """Test rebind removes conflicting binding with UNBIND strategy."""
         binding_manager.bind(InputDevice.KEYBOARD, 32, "jump", InputContext.GAMEPLAY)
