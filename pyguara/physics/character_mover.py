@@ -182,7 +182,7 @@ class CharacterMover:
         probe_half = Vector2(
             max(half_extents.x - SKIN, 0.01), max(half_extents.y - SKIN, 0.01)
         )
-        return self._engine.overlap_box(centre, probe_half, entity_id)
+        return self._engine.overlap_box(centre, probe_half, ignore_entity_id=entity_id)
 
     def _move_axis(
         self,
@@ -254,4 +254,4 @@ class CharacterMover:
         probe = Vector2(
             max(half_extents.x - SKIN, 0.01), max(half_extents.y - SKIN, 0.01)
         )
-        return self._engine.overlap_box(centre, probe, entity_id)
+        return self._engine.overlap_box(centre, probe, ignore_entity_id=entity_id)

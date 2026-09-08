@@ -232,4 +232,28 @@ class ConfigValidator:
                     "0.25 is the usual ceiling.",
                 )
             )
+        if physics.substeps < 1:
+            issues.append(
+                ValidationIssue(
+                    ValidationSeverity.CRITICAL,
+                    "physics",
+                    "substeps",
+                    f"Substeps must be at least 1, got {physics.substeps}. "
+                    f"The physics engine steps this many times per tick and "
+                    f"raises on startup below 1.",
+                    "Use 4, or 1 to disable substepping.",
+                )
+            )
+        if physics.sleep_time_threshold < 0.0:
+            issues.append(
+                ValidationIssue(
+                    ValidationSeverity.ERROR,
+                    "physics",
+                    "sleep_time_threshold",
+                    f"Sleep time threshold must be non-negative, got "
+                    f"{physics.sleep_time_threshold}. It is seconds of "
+                    f"stillness before a body may sleep.",
+                    "0.5 is a good default; 0 disables sleeping.",
+                )
+            )
         return issues

@@ -2,7 +2,7 @@
 
 from typing import Any, Protocol, runtime_checkable
 
-from pyguara.common.types import Vector2
+from pyguara.common.types import Rect, Vector2
 from pyguara.physics.types import (
     BodyType,
     CollisionLayer,
@@ -64,8 +64,17 @@ class IPhysicsEngine(Protocol):
         """Initialize the physics world."""
         ...
 
-    def cleanup(self) -> None:  # <--- Add this
+    def cleanup(self) -> None:
         """Destroy the physics world and free resources."""
+        ...
+
+    def set_collision_system(self, collision_system: Any) -> None:
+        """Register the object that collision callbacks are routed to.
+
+        The engine calls `on_collision_begin`/`_persist`/`_end` on it for
+        every contact pair. `bootstrap.py` wires the `CollisionSystem` here
+        after construction.
+        """
         ...
 
     def update(self, delta_time: float) -> None:
@@ -145,6 +154,7 @@ class IPhysicsEngine(Protocol):
         self,
         centre: Vector2,
         half_extents: Vector2,
+        mask: int = 0xFFFFFFFF,
         ignore_entity_id: int | str | None = None,
     ) -> int | str | None:
         """Report which entity's solid shape an axis-aligned box overlaps.
@@ -153,16 +163,143 @@ class IPhysicsEngine(Protocol):
         were here, would I be inside something, and if so, what?" Knowing
         *what* -- not just whether -- is what lets a mover recognise a
         pushable crate rather than merely stopping at it. Sensors do not
-        count -- they are meant to be passed through.
+        count -- they are meant to be passed through. Single-hit by design:
+        this is the mover's per-step primitive and stops at the first solid.
+        Use `overlap_box_all` when every overlapping entity is wanted.
 
         Args:
             centre: Box centre in world space.
             half_extents: Half width and half height.
+            mask: Collision mask; shapes outside it are ignored.
             ignore_entity_id: Body to disregard, normally the mover itself.
 
         Returns:
             The entity id of the first solid, non-sensor shape found
             overlapping, or None if the box is clear.
+        """
+        ...
+
+    def overlap_box_all(
+        self,
+        centre: Vector2,
+        half_extents: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose solid shape an axis-aligned box overlaps.
+
+        The multi-hit sibling of `overlap_box`: a box-shaped melee swing, a
+        marquee selection in an editor, "everything on this tile". Sensors
+        are skipped. A multi-shape entity is reported once.
+
+        Args:
+            centre: Box centre in world space.
+            half_extents: Half width and half height.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            Entity ids of the solid, non-sensor shapes the box overlaps, in
+            no guaranteed order. Empty when the box is clear.
+        """
+        ...
+
+    def overlap_circle(
+        self,
+        centre: Vector2,
+        radius: float,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose solid shape a circle overlaps.
+
+        Explosion radius, melee arc, "which enemies are within aggro range".
+        Sensors are skipped. A multi-shape entity is reported once.
+
+        Args:
+            centre: Circle centre in world space.
+            radius: Circle radius.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard, normally the source.
+
+        Returns:
+            Entity ids of the solid, non-sensor shapes the circle overlaps,
+            in no guaranteed order. Empty when nothing is in range.
+        """
+        ...
+
+    def point_query(
+        self,
+        point: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose solid shape contains a world point.
+
+        Click-picking: "what is under the cursor?". Sensors are skipped. A
+        multi-shape entity is reported once. Results are ordered with the
+        most deeply enclosing shape first, so `result[0]` is the best pick
+        when several shapes stack under the point.
+
+        Args:
+            point: The world-space point to test.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            Entity ids under the point, most-enclosed first. Empty when the
+            point is in open space.
+        """
+        ...
+
+    def region_query(
+        self,
+        bounds: Rect,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose *bounding box* overlaps a rectangle.
+
+        The cheapest spatial test there is: it compares axis-aligned
+        bounding boxes and never the shapes themselves, so a circle or a
+        rotated polygon whose box reaches into `bounds` is reported even
+        when the shape does not. Use it to cut a large world down to a
+        candidate set fast, then confirm each with `overlap_box_all`,
+        `overlap_circle` or a per-entity check. Sensors are skipped.
+
+        Args:
+            bounds: The world-space rectangle to test against.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            Entity ids whose bounding box overlaps `bounds`, in no
+            guaranteed order. Empty when the rectangle is clear.
+        """
+        ...
+
+    def raycast_all(
+        self,
+        start: Vector2,
+        end: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[RaycastHit]:
+        """Cast a ray and return every shape along it, nearest first.
+
+        A piercing shot or a hitscan laser that passes through several
+        targets, where `raycast` (nearest hit only) would stop at the first.
+        Sensors are skipped, matching `raycast`.
+
+        Args:
+            start: Ray origin in world space.
+            end: Ray end in world space.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Skip hits on this entity's own body.
+
+        Returns:
+            Every hit between `start` and `end`, ordered by distance from
+            `start`. Empty when the ray hits nothing.
         """
         ...
 

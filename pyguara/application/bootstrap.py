@@ -305,6 +305,7 @@ def _setup_container(headless: bool = False) -> DIContainer:
     physics_engine = PymunkEngine(
         substeps=physics_config.substeps,
         penetration_recovery=physics_config.penetration_recovery,
+        sleep_time_threshold=physics_config.sleep_time_threshold,
     )
     container.register_instance(IPhysicsEngine, physics_engine)  # type: ignore[type-abstract]
 
