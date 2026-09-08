@@ -1,7 +1,8 @@
 # PyGuara Refactor State
 
 Shared memory for the incremental subsystem audit. One subsystem per iteration:
-audit (Phase A) -> tests (Phase B) -> docs (Phase C) -> approval -> next.
+audit (Phase A) -> tests (Phase B) -> docs (Phase C) -> capability gaps
+(Phase D) -> approval -> next.
 
 **Started:** 2026-09-06
 **Method:** Never analyse more than one subsystem at a time. Every finding that
@@ -36,6 +37,21 @@ rather than fixed in place.
      names.
    - **Phase C** — audit the docs, and verify the documented API actually
      exists. Three pages have described functions that never existed.
+   - **Phase D** — capability gaps. A subsystem can be defect-free and still
+     be missing something the engine's target genre (roguelikes — issue #28)
+     will need. Ask: what would a shipped game reach for here and not find?
+     Name each gap in the iteration log with a rough size and a
+     **disposition**:
+       - *in-slice* — small enough and squarely in this subsystem; build it
+         now (e.g. the resources `reload()` primitive).
+       - *new issue* — coherent, sizeable, or needs a product decision; open
+         a GitHub issue and add it to "Tracked as GitHub issues" (e.g. #37
+         for the animation authoring layer).
+       - *parked* — note it under "Left open" / a CC; revisit when a
+         downstream subsystem forces the question.
+     This is not a licence to widen the slice — the default for anything
+     non-trivial is *new issue* or *parked*. It replaces the ad-hoc
+     "Left open" notes with a deliberate forward-looking pass.
 4. Branch from `main` — see "Branching and Pull Requests" in `CLAUDE.md`.
 5. Verify each commit **in a clean checkout**, not the working tree:
    `git worktree add --detach <tmp> <sha>` then run the suite there. A working
@@ -108,15 +124,24 @@ setup — every storage test used an already-safe key (`save1`, `slot_a`,
 positive versions from 1 so the guards had no test. Tests +35 (1735 →
 1770). See the iteration log entry below.
 
-**Left open.** `save_data` still always writes JSON metadata + records the
-payload `fmt`; there is no per-call *metadata* format choice (fine — the
-header is meant to stay greppable). `BINARY` (pickle) load is unauthenticated
-— documented as trusted-input-only, not fixed (a signature scheme is its own
-slice). No `PersistenceManager` facade for `delete`/`list`/`exists` — callers
-still reach into `.storage` (only `SceneSerializer` does, via save/load).
-Mypy's `python_version` is `3.10` while `requires-python` is `3.12`, so
-`datetime.UTC` (ruff UP017's fix) fails typecheck — one `# noqa: UP017` and a
-possible CC (mypy target vs `requires-python`).
+**Capability gaps (Phase D)** — the subsystem is defect-free but thin for a
+shipped game: no backup / prior-version retention (one `.save` file, no
+fallback on a bad-but-valid save or bit-rot), no `list_saves()` / cheap
+metadata-header read / `delete`/`exists` facade for a save-menu UI,
+`FileStorageBackend` roots at CWD-relative `saves/` not the OS user-data
+dir. First three grouped into a planned "persistence production layer"
+issue (drafted, sibling of #37 — file it and add the number to "Tracked as
+GitHub issues"). Envelope `format_version` header field is a small parked
+add. Run/meta save split is #28's. Async save and tamper-resistance
+(HMAC vs. accept user-editable) need a decision. See the iteration log.
+
+**Left open.** `save_data` always writes JSON metadata + records the
+payload `fmt`; no per-call *metadata* format choice (fine — the header is
+meant to stay greppable). `BINARY` (pickle) load is unauthenticated —
+documented trusted-input-only, not fixed (a signature scheme is its own
+slice). Mypy's `python_version` is `3.10` while `requires-python` is `3.12`,
+so `datetime.UTC` (ruff UP017's fix) fails typecheck — one `# noqa: UP017`
+and a possible CC (mypy target vs `requires-python`).
 
 `pyguara/resources` in one slice, ~1,100 lines (`manager`, `meta`,
 `loader`, `types`, `data`, `data_loader`, `exceptions`; hot reload itself
@@ -313,7 +338,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
-| `pyguara/persistence` | 2026-09-08 | One slice (`manager`, `storage`, `serializer`, `migration`, `types`; ~970 lines). The **migration half was sound** — the chain-integrity guards compose and the path loop provably terminates; overshoot/infinite-loop probes came back negative. The save/load half held the recurring shapes. **`save_data()` discarded `storage.save()`'s return** — `FileStorageBackend.save` returns `False` on `OSError`, so a full disk logged "Successfully saved" and returned `True`; now checked. **`FileStorageBackend` sanitised keys by deleting bad chars** — `"slot 1"`/`"slot/1"`/`"slot.1"` all collapsed onto `slot1` and silently overwrote each other (the resources F2 stem-collision shape); non-round-tripping keys now raise `ValueError`. **Data + meta were two independent `os.replace` calls** while the load path claimed "atomic save ensures both or neither" — a crash between them made an intact save unreadable (stale checksum → `None`). User chose the systemic fix: metadata is framed into **one blob** (`{header json}\n<payload>`), `StorageBackend` drops its `metadata` param (plain key→blob store), `FileStorageBackend` writes one `{key}.save` file + dir fsync + temp-sweep. **`compress=` was a documented no-op** → gzip, recorded in the header. **`SerializationFormat.MSGPACK` was a public enum member with no impl** though `msgpack` is a declared dep → implemented via the existing `prepare_for_json`/`game_object_hook` path, exposed through a new `fmt=` arg. `SaveMetadata` was hand-copied field by field and never read back on load → now carries `format`/`compressed`, used via `asdict`, engine version from `importlib.metadata` (was `"1.0.0"`), UTC timestamp. Migration gained `from_version >= 1` / `current_version >= 1` guards; `MigrationRegistry` is `eq=False`. Recurring shapes: "declared and wired to nothing" (`compress`, `MSGPACK`, `SaveMetadata`'s metadata half), "guard that returns a wrong answer" (swallowed `save()` failure, key mangling), "identity vs value" (`MigrationRegistry`), uniform test setup (every storage test used an already-safe key; every migration test used versions from 1). BREAKING: on-disk save format changed (`.dat`+`.meta` → `.save`); pre-alpha, no migration. Tests +35 (1735 → 1770). Left open: `BINARY`/pickle load is unauthenticated (documented trusted-input-only); no `PersistenceManager` facade for `delete`/`list`; mypy `python_version` 3.10 vs `requires-python` 3.12 forces a `# noqa: UP017` (possible CC). |
+| `pyguara/persistence` | 2026-09-08 | One slice (`manager`, `storage`, `serializer`, `migration`, `types`; ~970 lines). The **migration half was sound** — the chain-integrity guards compose and the path loop provably terminates; overshoot/infinite-loop probes came back negative. The save/load half held the recurring shapes. **`save_data()` discarded `storage.save()`'s return** — `FileStorageBackend.save` returns `False` on `OSError`, so a full disk logged "Successfully saved" and returned `True`; now checked. **`FileStorageBackend` sanitised keys by deleting bad chars** — `"slot 1"`/`"slot/1"`/`"slot.1"` all collapsed onto `slot1` and silently overwrote each other (the resources F2 stem-collision shape); non-round-tripping keys now raise `ValueError`. **Data + meta were two independent `os.replace` calls** while the load path claimed "atomic save ensures both or neither" — a crash between them made an intact save unreadable (stale checksum → `None`). User chose the systemic fix: metadata is framed into **one blob** (`{header json}\n<payload>`), `StorageBackend` drops its `metadata` param (plain key→blob store), `FileStorageBackend` writes one `{key}.save` file + dir fsync + temp-sweep. **`compress=` was a documented no-op** → gzip, recorded in the header. **`SerializationFormat.MSGPACK` was a public enum member with no impl** though `msgpack` is a declared dep → implemented via the existing `prepare_for_json`/`game_object_hook` path, exposed through a new `fmt=` arg. `SaveMetadata` was hand-copied field by field and never read back on load → now carries `format`/`compressed`, used via `asdict`, engine version from `importlib.metadata` (was `"1.0.0"`), UTC timestamp. Migration gained `from_version >= 1` / `current_version >= 1` guards; `MigrationRegistry` is `eq=False`. Recurring shapes: "declared and wired to nothing" (`compress`, `MSGPACK`, `SaveMetadata`'s metadata half), "guard that returns a wrong answer" (swallowed `save()` failure, key mangling), "identity vs value" (`MigrationRegistry`), uniform test setup (every storage test used an already-safe key; every migration test used versions from 1). BREAKING: on-disk save format changed (`.dat`+`.meta` → `.save`); pre-alpha, no migration. Tests +35 (1735 → 1770). Phase D capability gaps: no backup/retention, no save-menu API (`list_saves`, cheap metadata read, `delete`/`exists` facade), CWD-relative save dir — grouped into a planned "persistence production layer" issue (sibling of #37); envelope `format_version` parked; run/meta split is #28's. Left open: `BINARY`/pickle load unauthenticated (trusted-input-only); mypy `python_version` 3.10 vs `requires-python` 3.12 forces a `# noqa: UP017` (possible CC). |
 | `pyguara/resources` | 2026-09-08 | One slice (`manager`, `meta`, `loader`, `types`, `data`, `data_loader`; hot reload lives downstream in `pyguara/dev`). No headline crash — better shape than recent subsystems — but the recurring shapes held. **Reference counting was internally inconsistent and wired to nothing**: `load()` auto-incremented on every call incl. cache hits, `release()` auto-unloaded at 0, so `unload_unused()` could never evict anything in use and a released resource was already gone — dead. No engine caller of acquire/release/unload/unload_unused; `AudioManager` `load()`s per play → count climbs forever. `Resource._ref_count` was a *third* dead counter. Reworked (user: "fix the model + add reload()"): `load()` is a pure cache-get → unpinned (0); `acquire()`/`release()` pin; `unload_unused()` now sweeps. `index_directory()` **silently resolved a stem collision to the last file walked** — now the ambiguous bare stem is dropped with a warning, full-name keys always win. `MetaLoader` **cached parsed meta by path with no invalidation** (stale after a disk change — wrong under hot reload) and the path-only key **swallowed the `expected_type` mismatch warning** after the first call — now mtime-pinned + re-read + `invalidate()`, check runs every call. `DataResource` docstring claimed "hot-reloaded by the ResourceManager" with **no reload API** — added `ResourceManager.reload()` (re-run loader, re-read `.meta`, swap in place, keep count). The **`.meta` import pipeline was ~70% scaffolding** (`AudioMeta`/`SpritesheetMeta` had no consumer, GL loader hardcoded `LINEAR`) — wired end to end (user: "wire it up in this slice"): `Resource.import_meta` carries the resolved sidecar; `GLTextureLoader` honours `filter` (default flips to `NEAREST`, matching the pygame path); audio backend applies `AudioMeta.volume_db` as a per-asset channel gain; `SpriteSheet` gained `margin`/`spacing` (previously meaningless) + `slice_from_meta`. Recurring shapes: "declared and wired to nothing" (the whole ref-count half; `AudioMeta`; `_ref_count`) and uniform test setup (`test_resources.py` asserted on `_reference_counts`/`_cache`/`_path_index` privates and hand-poked an impossible state into `test_unload_unused`; every `test_meta.py` test used a fresh `MetaLoader()`). Tests +21. Left open: `AudioMeta.loop_*`/`normalize`/`load_mode`, `TextureMeta.mipmaps`/`wrap_*` still unconsumed (need streaming/DSP/GL-state — authoring-layer gap, sibling of #37); audio should `acquire()` its clips under the new model (small `pyguara/audio` follow-up, no behaviour change today); no lock on the cache dicts (no concurrent caller, parked CC). |
 | `pyguara/animation` | 2026-09-08 | One slice, both halves (`pyguara/animation` tween+easing, plus the sprite-animation FSM in `pyguara/graphics` only surveyed during the graphics audit). **`Tween` accepted only `float` scalars / `tuple`s**: `Tween(0, 100, 1.0)`, a `list`, mixed int/float, or a `Color` constructed fine then crashed on first `update()` with a bare `AssertionError` (`_interpolate` used `assert isinstance(x, float)` as validation, stripped under `-O`). `Tween` was a value-equality `@dataclass`, so `TweenManager.remove(b)` removed an equal-but-different `a` — now `@dataclass(eq=False)`. `Animator.update()` advanced ≤1 frame per call (`if`, not `while`) so a lag spike dropped frames and drifted behind forever while `_current_time` grew unbounded — now O(1) catch-up. `AnimationStateMachine` re-fired `on_complete` + the transition check every frame a non-looping clip sat finished (callback storm for any terminal state) — fixed with a `_completion_handled` latch reset on transition. `AnimationClip` gained `__post_init__` validation (`frame_rate<=0` → `ZeroDivisionError`, `frames=[]` → `IndexError`). `TransitionCondition.IMMEDIATE` was declared but `_check_transitions()` had no branch — now honoured (fires on entry). `Scene.update_animations()` removed: its docstring told games to call it from `scene.update()`, but `AnimationSystem` has been auto-registered on the scene's `SystemManager` since wayfinder ticket 24, so following the docs double-updated every animation; it had no real callers. Recurring shapes: "assert as runtime validation", "identity vs value" (the gamepad-index shape), "one advance per frame" (the audio/application shape), the `on_complete` retrigger storm (audio F5), "no `__post_init__`" (audio F6 / physics config), "declared and wired to nothing" (`IMMEDIATE`), and uniform test setup — every tween test used float `0.0→100.0`, every FSM test stepped `dt == 1/frame_rate` exactly and stopped updating on the completion frame. Left open: a single huge `dt` still resolves only one loop boundary per `Tween.update()` (catches up over later frames, documented); `Color` tweening unsupported (documented); `_allow_methods = True` on both FSM components stays CC-6. |
 | `pyguara/audio` | 2026-09-08 | One slice. **SFX playback was dead end to end**: the pygame backend called `Channel.get_id()` (pygame-ce has `Channel.id`), so every real `play_sfx`/`play_sfx_at_position` raised, was swallowed by `except (AttributeError, Exception)`, and returned `None` while the sound played on untracked — hidden because all 107 audio tests `patch("pygame.mixer")` wholesale. Loudness/pan were set on the ResourceManager-shared `Sound` not the channel, so concurrent plays of one clip corrupted each other and recycled channels kept the last sound's hard pan. `AudioSourceSystem` never detected a finished one-shot — `is_playing` lied forever, a source could not be replayed, and stale channel ids kept receiving spatial mix updates meant for whatever reused the channel; fixed with a new `IAudioSystem.is_channel_active()` reconciled each frame, plus an `_auto_played` latch (auto_play is "on awake", not loop — the fix exposed a retrigger storm). `SpatialAudioConfig` gained `__post_init__` validation (0 → `ZeroDivisionError` in `calculate_pan`; inverted range → attenuation cliff). Added `IAudioSystem.shutdown()` (idempotent `pygame.mixer.quit()`), wired into `Application.shutdown()`. Recurring shapes: "mock away the unit under test" (the whole `test_audio.py`) and "declared and wired to nothing" (`AudioManager._active_channels`, removed). Left open: bus/master volume changes don't re-mix already-playing non-spatial SFX (mixer limitation, documented). |
@@ -664,16 +689,42 @@ protocol and `FileStorageBackend`'s key rule, and the migration pipeline
 new backticked references (52 → 54) and they resolve. Notes the
 `BINARY`/pickle "trusted files only" caveat.
 
+**Phase D — capability gaps.** The subsystem is defect-free after this
+slice but thin for a shipped game, especially a permadeath roguelike (#28).
+The first three below are grouped into a **planned "persistence production
+layer" issue** (sibling of #37; drafted, not yet filed — add its number to
+"Tracked as GitHub issues" once created).
+
+- **Backup / prior-version retention** — *planned issue.* One `.save` file
+  per key; the atomic write stops a torn write but not a valid save of
+  corrupt state, bit-rot, or a bad migration, and there is no fallback
+  copy. Cheap (`{key}.save.bak` + fall back on integrity failure) and
+  high-value; grouped with the save-UI gap rather than widening this slice.
+- **Save-menu support on the manager** — *planned issue.* No `list_saves()`,
+  no way to read a slot's metadata header without deserializing the whole
+  payload, no `delete`/`exists` facade (callers reach into `.storage`). Any
+  load-game screen needs these.
+- **User-data-dir backend** — *planned issue.* `FileStorageBackend`'s
+  `base_path="saves"` is CWD-relative; a shipped game needs the OS
+  user-data dir (`platformdirs`).
+- **Envelope `format_version` in the header** — *parked, small.* The header
+  has `save_version` (game schema) and `version` (engine) but nothing
+  identifying the container format; this slice changed that format with no
+  detection field. Add on the next persistence touch.
+- **Run vs. meta save split** — *owned by #28.* The namespaced-store /
+  `SaveProfile` primitive belongs here; the policy is roguelike-core's.
+- **Async / non-blocking save**, **tamper resistance (HMAC vs.
+  user-editable)** — *parked, need a decision / their own slice.*
+
 **Left open.** `save_data` records the payload `fmt` but the *metadata*
 header is always JSON — deliberate, it stays greppable. `BINARY`/pickle
 load is unauthenticated (an MD5 the attacker can recompute is no defence);
-documented as trusted-input-only, a signing scheme is its own slice. No
-`PersistenceManager` facade for `delete`/`list`/`exists` — callers reach
-into `.storage` (only `SceneSerializer` does). `ResourceManager`-style: no
-lock on anything, but persistence has no concurrent caller. Mypy's
-`python_version = "3.10"` vs `requires-python` 3.12 makes ruff's UP017
-(`datetime.UTC`) and mypy disagree — one `# noqa: UP017`; worth a CC if it
-recurs.
+documented as trusted-input-only, a signing scheme is its own slice. The
+missing `PersistenceManager` `delete`/`list`/`exists` facade moved up into
+Phase D (planned issue). No lock on anything, but persistence has no
+concurrent caller. Mypy's `python_version = "3.10"` vs `requires-python`
+3.12 makes ruff's UP017 (`datetime.UTC`) and mypy disagree — one
+`# noqa: UP017`; worth a CC if it recurs.
 
 ### `pyguara/resources` — CLOSED 2026-09-08 (branch `refactor/resources-audit`)
 
