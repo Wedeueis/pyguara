@@ -232,25 +232,36 @@ class PollingFileWatcher:
         logger.info("File watcher stopped")
 
     def check_now(self) -> list[str]:
-        """Manually check all watched files for changes.
+        """Check all watched files for changes and fire their callbacks.
+
+        Intended for the polling thread or a single-threaded manual caller.
+        The watch set is snapshotted under the lock, then files are stat'd
+        and callbacks fired with the lock **released**: a change callback
+        very commonly calls back into the watcher (`watch()`, `unwatch()`,
+        `watched_count`), and holding this non-reentrant lock across it
+        deadlocks the polling thread.
 
         Returns:
             List of changed file paths.
         """
-        changed: list[str] = []
-
         with self._lock:
-            for path, watched in self._watched_files.items():
-                if watched.has_changed():
-                    changed.append(path)
-                    self._notify_change(path)
+            snapshot = list(self._watched_files.items())
+
+        changed: list[str] = []
+        for path, watched in snapshot:
+            if watched.has_changed():
+                changed.append(path)
+                self._notify_change(path)
 
         return changed
 
     def _poll_loop(self) -> None:
         """Poll files for changes in a loop (runs in thread)."""
         while self._running:
-            self.check_now()
+            try:
+                self.check_now()
+            except Exception as e:
+                logger.exception(e, "File watcher poll cycle failed; continuing")
             time.sleep(self._poll_interval)
 
     def _notify_change(self, path: str) -> None:
@@ -259,13 +270,14 @@ class PollingFileWatcher:
         Args:
             path: Path of the changed file.
         """
-        callbacks = self._callbacks.get(path, [])
+        with self._lock:
+            callbacks = list(self._callbacks.get(path, []))
 
         for callback in callbacks:
             try:
                 callback(path)
             except Exception as e:
-                logger.error(f"Error in file change callback: {e}")
+                logger.exception(e, "Error in file change callback")
 
 
 class FileChangeEvent:

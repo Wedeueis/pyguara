@@ -16,6 +16,7 @@ import pygame
 
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
+from pyguara.dev.asset_reload import AssetReloadWatcher
 from pyguara.di.container import DIContainer
 from pyguara.di.exceptions import ServiceNotFoundException
 from pyguara.events.dispatcher import EventDispatcher
@@ -28,6 +29,7 @@ from pyguara.replay.player import ReplayPlayer
 from pyguara.replay.recorder import ReplayRecorder
 from pyguara.replay.serializer import ReplaySerializer
 from pyguara.replay.types import ReplayData
+from pyguara.resources.manager import ResourceManager
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager
@@ -120,7 +122,33 @@ class Application:
         self._replay_frame_id = 0
         self._replay_clock = 0.0
 
+        # Asset hot-reload (dev only). Idle unless enable_asset_hot_reload()
+        # is called; SandboxApplication calls it automatically.
+        self._asset_reload_watcher: AssetReloadWatcher | None = None
+
         self.logger.info("Application instance created.")
+
+    def enable_asset_hot_reload(self, poll_interval: float = 0.5) -> None:
+        """Watch every loaded asset's file and re-import it on change.
+
+        Development aid: edit a texture, tilemap or data file on disk and the
+        running game picks it up. Reloads are applied on the main thread at
+        frame start (see `_update()`), never from the watcher thread.
+
+        Idempotent -- a second call is a no-op. There is no matching
+        disable(); `shutdown()` stops the watcher.
+
+        Args:
+            poll_interval: Seconds between file-modification polls.
+        """
+        if self._asset_reload_watcher is not None:
+            return
+        resource_manager = self._container.get(ResourceManager)
+        self._asset_reload_watcher = AssetReloadWatcher(
+            resource_manager, poll_interval=poll_interval
+        )
+        self._asset_reload_watcher.start()
+        self.logger.info("Asset hot-reload enabled")
 
     def run(self, starting_scene: Scene) -> None:
         """Execute the main game loop with a fixed timestep, until the window closes.
@@ -389,6 +417,10 @@ class Application:
         Args:
             dt: This frame's duration in seconds.
         """
+        # Apply any pending asset hot-reloads (dev only; no-op when disabled).
+        if self._asset_reload_watcher is not None:
+            self._asset_reload_watcher.drain()
+
         # Update UI at display framerate for smooth interactions
         self._ui_manager.update(dt)
 
@@ -480,6 +512,8 @@ class Application:
             ("audio shutdown", self._audio_system.shutdown),
             ("window close", self._window.close),
         ]
+        if self._asset_reload_watcher is not None:
+            steps.insert(0, ("asset hot-reload stop", self._asset_reload_watcher.stop))
         if self._render_graph is not None:
             steps.insert(1, ("render graph release", self._render_graph.release))
 
