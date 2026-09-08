@@ -221,6 +221,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#23](https://github.com/Wedeueis/pyguara/issues/23) | `camera.rotation` is applied by `Camera2D.world_to_screen` but ignored by the render path; three definitions of world-to-screen disagree |
 | [#28](https://github.com/Wedeueis/pyguara/issues/28) | Roguelike core — framework-level subsystems the target genre needs (combat spine, seeded RNG service, stat/modifier system, projectile layer, procgen, tilemap, run/meta save split, flow-field pathfinding, hit-stop, combat juice, local co-op input) |
 | [#30](https://github.com/Wedeueis/pyguara/issues/30) | `docs/guides/*` physics references have drifted (pre-`CharacterMover`; style guide calls a nonexistent `get_body`) — a `docs/guides` pass, out of scope for the physics subsystem slice |
+| [#37](https://github.com/Wedeueis/pyguara/issues/37) | Animation authoring layer — the `pyguara/animation` audit found the primitives correct but barely wired to the ECS/game layer: no tween↔ECS integration, no sequences/timelines, no directional (8-way) animation, no animation frame events, no `Color` tween, no `Animator.playback_speed`. Time-scale/hit-stop is owned by #28 |
 
 ---
 
