@@ -2,12 +2,15 @@
 
 from typing import cast
 
-from pyguara.ai.components import Navigator, SteeringAgent
+from pyguara.ai.components import Navigator, SteeringAgent, SteeringBehaviorType
 from pyguara.ai.steering import SteeringBehavior
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
+
+# Distance (world units) within which an ARRIVE agent is snapped to rest.
+_ARRIVE_STOP_DISTANCE = 1.0
 
 
 class SteeringSystem:
@@ -47,7 +50,7 @@ class SteeringSystem:
 
             # Determine target position
             target = self._get_target(entity, agent)
-            if target is None and agent.behavior != "wander":
+            if target is None and agent.behavior != SteeringBehaviorType.WANDER:
                 continue
 
             # Calculate steering force based on behavior
@@ -71,6 +74,22 @@ class SteeringSystem:
                     Vector2, new_velocity.normalized() * agent.max_speed
                 )
             agent.velocity = new_velocity
+
+            # ARRIVE must actually stop. The dt-scaled force above is only a
+            # weak proportional brake, so on its own the agent overshoots the
+            # target and orbits it forever. Enforce the arrive speed ramp on
+            # the velocity directly: cap speed to max_speed * d / slowing_radius
+            # inside the radius, and snap to rest at the target.
+            if agent.behavior == SteeringBehaviorType.ARRIVE and target is not None:
+                distance = (target - transform.position).length
+                if distance <= _ARRIVE_STOP_DISTANCE:
+                    agent.velocity = Vector2(0, 0)
+                elif distance < agent.slowing_radius and agent.slowing_radius > 0:
+                    ramp_speed = agent.max_speed * (distance / agent.slowing_radius)
+                    if agent.velocity.length > ramp_speed:
+                        agent.velocity = cast(
+                            Vector2, agent.velocity.normalized() * ramp_speed
+                        )
 
             # Update position
             transform.position = transform.position + agent.velocity * dt
@@ -118,24 +137,9 @@ class SteeringSystem:
         Returns:
             Steering force vector.
         """
-        behavior = agent.behavior.lower()
+        behavior = agent.behavior
 
-        if behavior == "seek" and target is not None:
-            return SteeringBehavior.seek(
-                transform, target, agent.max_speed, agent.velocity
-            )
-
-        elif behavior == "arrive" and target is not None:
-            return SteeringBehavior.arrive(
-                transform, target, agent.max_speed, agent.velocity, agent.slowing_radius
-            )
-
-        elif behavior == "flee" and target is not None:
-            return SteeringBehavior.flee(
-                transform, target, agent.max_speed, agent.velocity
-            )
-
-        elif behavior == "wander":
+        if behavior == SteeringBehaviorType.WANDER:
             wander_target = self._wander_targets.get(entity_id)
             force, new_wander_target = SteeringBehavior.wander(
                 transform,
@@ -146,7 +150,43 @@ class SteeringSystem:
             self._wander_targets[entity_id] = new_wander_target
             return force
 
-        return Vector2(0, 0)
+        if target is None:
+            return Vector2(0, 0)
+
+        if behavior == SteeringBehaviorType.SEEK:
+            return SteeringBehavior.seek(
+                transform, target, agent.max_speed, agent.velocity
+            )
+
+        if behavior == SteeringBehaviorType.ARRIVE:
+            return SteeringBehavior.arrive(
+                transform, target, agent.max_speed, agent.velocity, agent.slowing_radius
+            )
+
+        if behavior == SteeringBehaviorType.FLEE:
+            return SteeringBehavior.flee(
+                transform, target, agent.max_speed, agent.velocity
+            )
+
+        if behavior == SteeringBehaviorType.PURSUIT:
+            return SteeringBehavior.pursuit(
+                transform,
+                target,
+                agent.target_velocity,
+                agent.max_speed,
+                agent.velocity,
+            )
+
+        # Only EVADE remains: WANDER returned above, and every other member is
+        # handled just above; SteeringAgent.__post_init__ rejects anything else
+        # at construction.
+        return SteeringBehavior.evade(
+            transform,
+            target,
+            agent.target_velocity,
+            agent.max_speed,
+            agent.velocity,
+        )
 
     def _update_navigator(
         self, entity: Entity, transform: Transform, target: Vector2

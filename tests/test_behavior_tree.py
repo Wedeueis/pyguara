@@ -184,6 +184,29 @@ class TestWaitNode:
         status = node.tick(context)
         assert status == NodeStatus.RUNNING
 
+    def test_wait_uses_context_dt_not_a_fixed_step(self):
+        """Elapsed time tracks the context's real dt, whatever its value.
+
+        Regression: WaitNode read a hardcoded ~1/60 fallback, so under a
+        context that carried a real (larger or smaller) dt the wait drifted.
+        """
+        node = WaitNode(duration=1.0)
+        ctx = MockContext()
+        ctx.dt = 0.25  # 4 ticks == 1.0s, regardless of frame rate
+
+        assert node.tick(ctx) == NodeStatus.RUNNING
+        assert node.tick(ctx) == NodeStatus.RUNNING
+        assert node.tick(ctx) == NodeStatus.RUNNING
+        assert node.tick(ctx) == NodeStatus.SUCCESS
+
+    def test_wait_completes_in_one_tick_for_a_large_dt(self):
+        """A single long frame satisfies the whole wait."""
+        node = WaitNode(duration=0.5)
+        ctx = MockContext()
+        ctx.dt = 2.0
+
+        assert node.tick(ctx) == NodeStatus.SUCCESS
+
 
 class TestSequenceNode:
     """Test SequenceNode functionality."""

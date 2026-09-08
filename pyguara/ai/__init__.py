@@ -4,6 +4,7 @@ Provides behavior trees, finite state machines, steering behaviors,
 and other AI utilities.
 """
 
+from pyguara.ai.ai_system import AISystem
 from pyguara.ai.behavior_tree import (
     ActionNode,
     BehaviorNode,
@@ -22,7 +23,13 @@ from pyguara.ai.behavior_tree import (
     WaitNode,
 )
 from pyguara.ai.blackboard import Blackboard
-from pyguara.ai.components import AIComponent, Navigator, SteeringAgent
+from pyguara.ai.components import (
+    AIComponent,
+    Navigator,
+    SteeringAgent,
+    SteeringBehaviorType,
+)
+from pyguara.ai.context import AIContext
 from pyguara.ai.fsm import State, StateMachine
 from pyguara.ai.navmesh import (
     NavMesh,
@@ -67,7 +74,10 @@ __all__ = [
     "StateMachine",
     # Components
     "AIComponent",
+    "AIContext",
+    "AISystem",
     "SteeringAgent",
+    "SteeringBehaviorType",
     "Navigator",
     # Steering
     "SteeringBehavior",

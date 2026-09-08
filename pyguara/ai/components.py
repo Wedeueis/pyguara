@@ -1,6 +1,7 @@
 """ECS components for AI."""
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
 from pyguara.ai.blackboard import Blackboard
@@ -10,6 +11,23 @@ from pyguara.ecs.component import BaseComponent
 
 if TYPE_CHECKING:
     from pyguara.ai.behavior_tree import BehaviorTree
+
+
+class SteeringBehaviorType(str, Enum):
+    """Steering behavior a ``SteeringAgent`` runs each frame.
+
+    Subclasses ``str`` so an agent constructed with a plain string
+    (``SteeringAgent(behavior="seek")``) and serialized forms keep working;
+    ``SteeringAgent.__post_init__`` coerces the field to this enum and raises
+    ``ValueError`` on an unknown name rather than silently producing no force.
+    """
+
+    SEEK = "seek"
+    ARRIVE = "arrive"
+    FLEE = "flee"
+    WANDER = "wander"
+    PURSUIT = "pursuit"
+    EVADE = "evade"
 
 
 @dataclass
@@ -45,8 +63,12 @@ class SteeringAgent(BaseComponent):
         mass: Used to calculate acceleration (Force / Mass).
         velocity: Current velocity of the agent.
         target: Target position for steering (if None, uses Navigator path).
+        target_velocity: Velocity of the target, used by ``pursuit``/``evade``
+            to lead a moving target. The caller refreshes it each frame
+            alongside ``target``; ignored by the other behaviors.
         slowing_radius: Distance at which to start slowing for arrive behavior.
-        behavior: Active steering behavior type.
+        behavior: Active steering behavior. Accepts a ``SteeringBehaviorType``
+            or its string value; coerced in ``__post_init__``.
     """
 
     max_speed: float = 200.0
@@ -54,12 +76,16 @@ class SteeringAgent(BaseComponent):
     mass: float = 1.0
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
     target: Vector2 | None = None
+    target_velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
     slowing_radius: float = 100.0
-    behavior: str = "seek"  # "seek", "arrive", "flee", "wander"
+    behavior: SteeringBehaviorType = SteeringBehaviorType.SEEK
     enabled: bool = True
 
     def __post_init__(self) -> None:
-        """Call superclass init after initialization."""
+        """Coerce ``behavior`` to the enum, then call superclass init."""
+        # Raises ValueError on an unknown name -- fail at construction rather
+        # than run every frame producing a zero force with no diagnostic.
+        self.behavior = SteeringBehaviorType(self.behavior)
         super().__init__()
 
 

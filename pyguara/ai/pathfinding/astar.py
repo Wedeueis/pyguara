@@ -1,6 +1,7 @@
 """Generic A* pathfinding algorithm implementation."""
 
 import heapq
+from itertools import count
 
 from pyguara.ai.pathfinding.core import Graph, Heuristic, Node
 
@@ -16,14 +17,20 @@ class AStarPathfinder:
 
         Optimized to reduce heap operations.
         """
-        frontier: list[tuple[float, Node]] = []
-        heapq.heappush(frontier, (0, start))
+        # The monotonic tie-breaker is load-bearing, not cosmetic: on a
+        # priority tie heapq compares the next tuple element, and Node is only
+        # bound to Hashable -- an arbitrary graph node need not be
+        # order-comparable, so (priority, node) tuples raise TypeError. The
+        # counter is always distinct, so the node is never compared.
+        counter = count()
+        frontier: list[tuple[float, int, Node]] = []
+        heapq.heappush(frontier, (0.0, next(counter), start))
 
         came_from: dict[Node, Node | None] = {start: None}
         cost_so_far: dict[Node, float] = {start: 0.0}
 
         while frontier:
-            _, current = heapq.heappop(frontier)
+            _, _, current = heapq.heappop(frontier)
 
             if current == goal:
                 break
@@ -34,7 +41,7 @@ class AStarPathfinder:
                 if next_node not in cost_so_far or new_cost < cost_so_far[next_node]:
                     cost_so_far[next_node] = new_cost
                     priority = new_cost + heuristic.estimate(next_node, goal)
-                    heapq.heappush(frontier, (priority, next_node))
+                    heapq.heappush(frontier, (priority, next(counter), next_node))
                     came_from[next_node] = current
 
         return self._reconstruct_path(came_from, start, goal)

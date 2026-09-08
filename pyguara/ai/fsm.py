@@ -4,6 +4,9 @@ from abc import ABC, abstractmethod
 
 from pyguara.ai.blackboard import Blackboard
 from pyguara.ecs.entity import Entity
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class State(ABC):
@@ -52,10 +55,21 @@ class StateMachine:
 
     def set_initial_state(self, name: str) -> None:
         """Set the starting state."""
-        if name in self._states:
-            self._current_state = self._states[name]
-            self._current_state_name = name
-            self._current_state.on_enter()
+        if name not in self._states:
+            logger.warning(
+                "set_initial_state(%r): no such state registered; "
+                "the machine stays inert. Known states: %s",
+                name,
+                sorted(self._states),
+            )
+            return
+
+        if self._current_state is not None:
+            self._current_state.on_exit()
+
+        self._current_state = self._states[name]
+        self._current_state_name = name
+        self._current_state.on_enter()
 
     def update(self, dt: float) -> None:
         """Update current state and handle transitions."""
@@ -71,6 +85,14 @@ class StateMachine:
     def _transition_to(self, name: str) -> None:
         """Execute transition logic."""
         if name not in self._states:
+            logger.warning(
+                "State %r asked to transition to %r, which is not registered; "
+                "staying in %r. Known states: %s",
+                self._current_state_name,
+                name,
+                self._current_state_name,
+                sorted(self._states),
+            )
             return
 
         if self._current_state:

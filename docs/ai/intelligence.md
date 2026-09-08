@@ -21,39 +21,63 @@ PyGuara features a professional-grade Behavior Tree (BT) implementation, perfect
 ### Usage Example
 
 ```python
+from pyguara.ai import AIComponent
 from pyguara.ai.behavior_tree import BehaviorTree, SequenceNode, ActionNode, NodeStatus
 
 def move_to_player(context):
-    # Logic...
+    # context.entity, context.dt, context.blackboard are available
     return NodeStatus.SUCCESS
 
 def attack_player(context):
-    # Logic...
     return NodeStatus.SUCCESS
 
-# Define structure
+# Define structure -- leaves are wrapped in ActionNode/ConditionNode
 root = SequenceNode([
     ActionNode(move_to_player),
-    ActionNode(attack_player)
+    ActionNode(attack_player),
 ])
 
-# Create component
-ai_component = AIComponent()
-ai_component.behavior_tree = BehaviorTree(root)
+# Attach to an entity; AISystem ticks the tree once per frame
+ai_component = AIComponent(behavior_tree=BehaviorTree(root))
 ```
+
+### The tick context
+
+`AISystem` passes each tree an **`AIContext`** (`pyguara.ai.AIContext`) with
+`entity`, `dt`, and `blackboard` fields. Timing nodes such as `WaitNode` read
+`context.dt`; ticking a tree with a bare object that has no `dt` falls back to a
+fixed step and drifts with the real frame rate.
 
 ## 🔄 Finite State Machines (FSM)
 
 For simpler logic, use the FSM system.
 
 *   **State**: Abstract base class with `on_enter`, `update`, `on_exit`.
-*   **StateMachine**: Manages current state and transitions.
+*   **StateMachine**: Manages current state and transitions. `add_state(name,
+    state)` registers a state; `set_initial_state(name)` and a state's
+    `update()` return value drive transitions by name. An unknown name is
+    logged as a warning and ignored -- the machine is not left in a half-
+    transitioned state.
 
 ## 🧭 Pathfinding & Steering
 
-*   **AStarPathfinder**: Grid and Graph based pathfinding.
-*   **Steering**: Common behaviors like `Seek`, `Flee`, and `Arrive` for natural movement.
-*   **Navmesh**: Tools for generating and navigating walkable surfaces.
+*   **AStarPathfinder**: A generic A* solver over any `Graph` (a `get_neighbors`
+    / `cost` protocol). Graph nodes only need to be hashable, not orderable.
+*   **GridGraph**: A concrete 4/8-directional grid with pluggable heuristics
+    (`ManhattanDistance`, `EuclideanDistance`, `DiagonalDistance`,
+    `OctileDistance`), `smooth_path`, and `world_to_grid_coords` /
+    `path_to_world_coords` (both floor toward negative infinity, so a non-zero
+    grid `offset` works).
+*   **Steering**: `SteeringSystem` runs an entity's `SteeringAgent` each frame.
+    `SteeringAgent.behavior` is a `SteeringBehaviorType`: `SEEK`, `ARRIVE`,
+    `FLEE`, `WANDER`, `PURSUIT`, `EVADE`. `PURSUIT` and `EVADE` intercept or
+    dodge a *moving* target -- set `SteeringAgent.target_velocity` alongside
+    `target`. An unknown behavior string is rejected when the component is
+    built.
+*   **Navmesh**: `NavMesh` holds convex polygons you supply and connects those
+    that share a full edge; `NavMeshPathfinder.find_path` runs A* over the
+    polygon graph and returns polygon-center waypoints. Funnel string-pulling
+    and partial-edge portals are not yet implemented.
 
 ## 📝 Blackboard
 

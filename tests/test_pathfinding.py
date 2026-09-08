@@ -366,6 +366,71 @@ class TestAStarPathfinder:
         assert len(path2) > original_length
 
 
+class TestAStarGenericGraph:
+    """A* over a graph whose nodes are not order-comparable.
+
+    ``Node`` is bound only to ``Hashable``; before the monotonic tie-breaker
+    a priority tie made heapq compare the node objects and raise
+    ``TypeError: '<' not supported``. Priority ties are the common case, not
+    the exotic one.
+    """
+
+    class _Cell:
+        """Hashable, equatable, deliberately NOT ordered."""
+
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def __hash__(self) -> int:
+            return hash(self.name)
+
+        def __eq__(self, other: object) -> bool:
+            return isinstance(other, type(self)) and other.name == self.name
+
+        def __repr__(self) -> str:
+            return f"_Cell({self.name})"
+
+    class _DiamondGraph:
+        """A -> B, A -> C, B -> D, C -> D; every edge costs 1."""
+
+        def __init__(self, a, b, c, d) -> None:
+            self._adj = {a: [b, c], b: [d], c: [d], d: []}
+
+        def get_neighbors(self, node):
+            return iter(self._adj[node])
+
+        def cost(self, from_node, to_node) -> float:
+            return 1.0
+
+    class _ZeroHeuristic:
+        """Uniform h == 0, so B and C are pushed with an identical priority."""
+
+        def estimate(self, current, goal) -> float:
+            return 0.0
+
+    def test_priority_tie_with_unordered_nodes(self):
+        """Equal priorities must not force a comparison of the nodes."""
+        a, b, c, d = (self._Cell(n) for n in "ABCD")
+        graph = self._DiamondGraph(a, b, c, d)
+
+        path = AStarPathfinder().find_path(graph, a, d, self._ZeroHeuristic())
+
+        assert path is not None
+        assert path[0] == a
+        assert path[-1] == d
+        assert len(path) == 3  # A -> (B or C) -> D
+
+    def test_unreachable_goal_returns_none(self):
+        """A disconnected goal still returns None, not a crash."""
+        a, b, c, d = (self._Cell(n) for n in "ABCD")
+        island = self._Cell("Z")
+        graph = self._DiamondGraph(a, b, c, d)
+
+        path = AStarPathfinder().find_path(graph, a, island, self._ZeroHeuristic())
+
+        assert path is None
+
+
 class TestPathSmoothing:
     """Test path smoothing functionality."""
 
@@ -465,6 +530,47 @@ class TestCoordinateConversion:
         grid_pos = world_to_grid_coords(world_pos, cell_size)
 
         assert grid_pos == (0, 0)
+
+    def test_world_to_grid_negative_coords_floor_not_truncate(self):
+        """A point left of / above the origin floors, it does not truncate.
+
+        ``int()`` rounds toward zero, so ``-10`` would land in cell 0 and
+        ``-40`` in cell -1 -- one cell too high, and a sign flip near the
+        axis. The cell containing ``-10`` (with cell_size 32) is ``-1``.
+        """
+        cell_size = 32.0
+
+        assert world_to_grid_coords(Vector2(-1.0, -1.0), cell_size) == (-1, -1)
+        assert world_to_grid_coords(Vector2(-10.0, -31.0), cell_size) == (-1, -1)
+        assert world_to_grid_coords(Vector2(-32.0, -32.0), cell_size) == (-1, -1)
+        assert world_to_grid_coords(Vector2(-33.0, -64.0), cell_size) == (-2, -2)
+
+    def test_world_to_grid_offset_puts_origin_inside_playfield(self):
+        """With an offset, local coords go negative -- and must still floor.
+
+        A centered grid (offset at the play area's middle) resolves points in
+        the top-left quadrant to negative cells; truncation collapsed that
+        whole quadrant onto row/column 0.
+        """
+        cell_size = 32.0
+        offset = Vector2(100.0, 100.0)
+
+        # 10px left of and above the offset origin -> cell (-1, -1).
+        assert world_to_grid_coords(Vector2(90.0, 90.0), cell_size, offset) == (-1, -1)
+        # On the origin -> (0, 0).
+        assert world_to_grid_coords(Vector2(100.0, 100.0), cell_size, offset) == (0, 0)
+        # 40px right/below -> (1, 1).
+        assert world_to_grid_coords(Vector2(140.0, 140.0), cell_size, offset) == (1, 1)
+
+    def test_round_trip_conversion_negative_cell(self):
+        """world -> grid -> world -> grid is stable in the negative quadrant."""
+        cell_size = 32.0
+        original = Vector2(-70.0, -145.0)
+
+        grid_pos = world_to_grid_coords(original, cell_size)
+        world_center = path_to_world_coords([grid_pos], cell_size)[0]
+
+        assert world_to_grid_coords(world_center, cell_size) == grid_pos
 
     def test_path_to_world_coords_basic(self):
         """Should convert grid path to world coords."""
