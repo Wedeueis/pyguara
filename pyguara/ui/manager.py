@@ -1,11 +1,15 @@
 """UI Manager and event integration."""
 
-from pyguara.common.types import Vector2
+from pyguara.common.types import Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
+from pyguara.log import get_logger
 from pyguara.ui.base import UIElement
 from pyguara.ui.types import UIEventType
+
+logger = get_logger(__name__)
 
 
 class UIManager:
@@ -17,13 +21,44 @@ class UIManager:
         self._dispatcher = dispatcher
         self._focused_element: UIElement | None = None
 
+        # Space the roots lay themselves out in. Seeded by Application via
+        # set_screen_size(); a resize refreshes it. Layout is skipped while
+        # this is degenerate (nothing has told us the screen size yet).
+        self._screen_rect = Rect(0, 0, 0, 0)
+        self._layout_dirty = True
+        self._warned_no_screen = False
+
         # Subscribe to Engine Input Events
         self._dispatcher.subscribe(OnMouseEvent, self._on_mouse_event)
         self._dispatcher.subscribe(OnRawKeyEvent, self._on_key_event)
+        self._dispatcher.subscribe(WindowResizeEvent, self._on_resize_event)
 
     def add_element(self, element: UIElement) -> None:
         """Add a root-level UI element."""
         self._root_elements.append(element)
+        self._layout_dirty = True
+
+    def set_screen_size(self, width: int, height: int) -> None:
+        """Tell the UI the size of the surface its roots lay out against.
+
+        Called once at startup and again whenever the window is resized, so
+        percentage- and anchor-based constraints resolve against the real
+        drawable area.
+        """
+        new_rect = Rect(0, 0, width, height)
+        if new_rect == self._screen_rect:
+            return
+        self._screen_rect = new_rect
+        self._layout_dirty = True
+
+    def invalidate_layout(self) -> None:
+        """Force a layout pass on the next render.
+
+        Call after mutating something a layout depends on but the manager
+        cannot see -- a label's text, an element's `visible` flag, a
+        container's child list.
+        """
+        self._layout_dirty = True
 
     def update(self, dt: float) -> None:
         """Update all managed UI elements."""
@@ -32,9 +67,40 @@ class UIManager:
 
     def render(self, renderer: UIRenderer) -> None:
         """Draw the entire UI stack using the abstract renderer."""
+        if self._layout_dirty:
+            self._run_layout(renderer)
+            self._layout_dirty = False
+
         for element in self._root_elements:
             if element.visible:
                 element.render(renderer)
+
+    def _run_layout(self, renderer: UIRenderer) -> None:
+        """Lay every root out against the current screen rect."""
+        if self._screen_rect.width <= 0 or self._screen_rect.height <= 0:
+            has_constraints = any(
+                self._subtree_has_constraints(el) for el in self._root_elements
+            )
+            if has_constraints and not self._warned_no_screen:
+                logger.warning(
+                    "UI layout skipped: screen size unknown. Call "
+                    "UIManager.set_screen_size() before adding constrained "
+                    "elements."
+                )
+                self._warned_no_screen = True
+            return
+
+        for element in self._root_elements:
+            element.layout(self._screen_rect, renderer)
+
+    @staticmethod
+    def _subtree_has_constraints(element: UIElement) -> bool:
+        """Report whether `element` or any descendant carries constraints."""
+        if element.constraints is not None:
+            return True
+        return any(
+            UIManager._subtree_has_constraints(child) for child in element.children
+        )
 
     def set_focus(self, element: UIElement | None) -> None:
         """Set the focused element.
@@ -98,3 +164,7 @@ class UIManager:
 
         # Route to focused element
         self._focused_element.handle_event(event_type, Vector2(0, 0), event.key_code)
+
+    def _on_resize_event(self, event: WindowResizeEvent) -> None:
+        """Re-lay the UI out against the new window size."""
+        self.set_screen_size(event.width, event.height)

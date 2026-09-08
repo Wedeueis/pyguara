@@ -14,14 +14,18 @@ class Canvas(Widget):
     def __init__(
         self, position: Vector2, size: Vector2, bg_color: Color | None = None
     ) -> None:
-        """Initialize the canvas."""
+        """Initialize the canvas.
+
+        `bg_color` defaults to the active theme's background, resolved at
+        render time so a later `set_theme()` is honoured.
+        """
         super().__init__(position, size)
-        self.bg_color = bg_color or self.theme.colors.background
+        self.bg_color = bg_color
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the background and children."""
         # Draw background / Clear
-        renderer.draw_rect(self.rect, self.bg_color)
+        renderer.draw_rect(self.rect, self.bg_color or self.theme.colors.background)
 
         # The 'custom drawing' is usually done by attaching children
         # or overriding render() in a subclass of Canvas.

@@ -80,7 +80,6 @@ class MenuScene(Scene):
         btn_quit.on_click = self._on_quit_click
         container.add_child(btn_quit)
 
-        container.layout(self.container.get(UIRenderer))  # type: ignore[type-abstract]
         ui_manager.add_element(container)
 
     def _on_start_click(self, el) -> None:
@@ -568,7 +567,6 @@ class GameOverScene(Scene):
         btn_menu.on_click = self._on_menu_click
         container.add_child(btn_menu)
 
-        container.layout(self.container.get(UIRenderer))  # type: ignore[type-abstract]
         ui_manager.add_element(container)
 
     def _on_retry_click(self, el) -> None:

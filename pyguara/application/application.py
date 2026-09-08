@@ -77,6 +77,7 @@ class Application:
         self._scene_manager.set_screen_size(self._window.width, self._window.height)
         self._config_manager = container.get(ConfigManager)
         self._ui_manager = container.get(UIManager)
+        self._ui_manager.set_screen_size(self._window.width, self._window.height)
         self._coroutine_manager = container.get(CoroutineManager)
         self._audio_system = container.get(IAudioSystem)  # type: ignore[type-abstract]
 

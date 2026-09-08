@@ -194,6 +194,7 @@ Before diving into individual systems, it's crucial to understand the three core
     5.  Add the element to the `UIManager`.
 
     ```python
+    from pyguara.common.types import Vector2
     from pyguara.ui.components import Button
     from pyguara.ui.constraints import create_centered_constraints
 

@@ -138,10 +138,15 @@ Game code using these features runs unchanged on Pygame - stubs accept the API c
 The UI system (`pyguara.ui`) is immediate-mode friendly but retains state via an Object-Oriented widget tree.
 
 ## Architecture
-- **UIManager**: Routes input events (`OnMouseEvent`) to widgets.
+- **UIManager**: Routes input events (`OnMouseEvent`) to widgets, and runs a
+  layout pass over every root before rendering -- applying `LayoutConstraints`
+  and container stacking -- re-run on window resize or `invalidate_layout()`.
 - **UIElement**: Base class for all widgets (`Button`, `Panel`, `Label`).
-- **Layouts**: `BoxContainer` handles automatic positioning (Vertical/Horizontal).
-- **Theme**: A centralized `UITheme` controls colors and spacing.
+- **Layouts**: `LayoutConstraints` position/size an element against its parent
+  (anchor, margin, percentage); `BoxContainer` stacks children
+  vertically/horizontally with alignment.
+- **Theme**: a global `UITheme` (`get_theme()`/`set_theme()`) controls colors
+  and spacing; elements read it live, so a swap re-skins existing widgets.
 
 ## Integration
 The UI is rendered via the `UIRenderer` protocol, allowing it to sit on top of the main game render pass.

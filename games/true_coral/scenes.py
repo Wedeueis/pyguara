@@ -74,7 +74,6 @@ class MenuScene(Scene):
         btn_quit.on_click = self._on_quit_click
         container.add_child(btn_quit)
 
-        container.layout(self.container.get(UIRenderer))  # type: ignore[type-abstract]
         ui_manager.add_element(container)
 
     def _on_start_click(self, el) -> None:
