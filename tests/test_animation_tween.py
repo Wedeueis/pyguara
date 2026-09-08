@@ -4,6 +4,7 @@ import pytest
 
 from pyguara.animation.easing import EasingType
 from pyguara.animation.tween import Tween, TweenManager, TweenState
+from pyguara.common.types import Color, Vector2
 
 
 class TestTweenCreation:
@@ -34,14 +35,67 @@ class TestTweenCreation:
             Tween(start_value=0.0, end_value=100.0, duration=-1.0)
 
     def test_mismatched_types_raises_error(self):
-        """start_value and end_value must have same type."""
-        with pytest.raises(ValueError, match="must both be float or both be tuple"):
+        """start_value and end_value must have same shape."""
+        with pytest.raises(
+            ValueError, match="must both be numbers or both be sequences"
+        ):
             Tween(start_value=0.0, end_value=(100.0, 50.0), duration=1.0)
 
     def test_mismatched_tuple_length_raises_error(self):
-        """Tuple start_value and end_value must have same length."""
-        with pytest.raises(ValueError, match="tuples must have same length"):
+        """Sequence start_value and end_value must have same length."""
+        with pytest.raises(ValueError, match="sequences must have the same length"):
             Tween(start_value=(0.0, 0.0), end_value=(100.0,), duration=1.0)
+
+
+class TestTweenValueTypes:
+    """Endpoints may be ints, floats, tuples or lists -- but not arbitrary objects."""
+
+    def test_int_scalar_endpoints(self):
+        """Plain-int endpoints must interpolate to a float, not crash."""
+        tween = Tween(start_value=0, end_value=100, duration=1.0)
+        tween.start()
+        tween.update(0.5)
+        assert tween.current_value == pytest.approx(50.0)
+        assert isinstance(tween.current_value, float)
+
+    def test_mixed_int_and_float_scalars(self):
+        """One int and one float endpoint is still a valid scalar tween."""
+        tween = Tween(start_value=0, end_value=100.0, duration=1.0)
+        tween.start()
+        tween.update(0.25)
+        assert tween.current_value == pytest.approx(25.0)
+
+    def test_list_endpoints_behave_like_tuple(self):
+        """A list of numbers is accepted; the result is a plain tuple."""
+        tween = Tween(start_value=[0.0, 10.0], end_value=[100.0, 20.0], duration=1.0)
+        tween.start()
+        tween.update(0.5)
+        assert tween.current_value == pytest.approx((50.0, 15.0))
+        assert isinstance(tween.current_value, tuple)
+
+    def test_vector2_endpoints_work_as_tuple(self):
+        """Vector2 is a tuple subclass, so it tweens (yielding a bare tuple)."""
+        tween = Tween(
+            start_value=Vector2(0, 0), end_value=Vector2(100, 50), duration=1.0
+        )
+        tween.start()
+        tween.update(0.5)
+        x, y = tween.current_value
+        assert (x, y) == pytest.approx((50.0, 25.0))
+
+    def test_color_endpoints_rejected(self):
+        """Color is neither number nor sequence -- reject it at construction."""
+        with pytest.raises(TypeError, match="number or a sequence of numbers"):
+            Tween(
+                start_value=Color(0, 0, 0),
+                end_value=Color(255, 255, 255),
+                duration=1.0,
+            )
+
+    def test_string_endpoint_rejected(self):
+        """Any non-number, non-sequence value is rejected with a clear error."""
+        with pytest.raises(TypeError, match="start_value must be a number"):
+            Tween(start_value="nope", end_value="also nope", duration=1.0)
 
 
 class TestTweenLifecycle:
@@ -236,6 +290,22 @@ class TestTweenLooping:
             still_playing = tween.update(1.0)
             assert still_playing is True
             assert tween.state == TweenState.PLAYING
+
+    def test_single_huge_dt_consumes_one_cycle_and_keeps_overshoot(self):
+        """A dt spanning many cycles advances one cycle now and catches up later.
+
+        This pins current behaviour: `update()` resolves at most one loop
+        boundary per call but preserves the remaining time, so subsequent
+        frames burn the backlog down rather than losing it.
+        """
+        tween = Tween(start_value=0.0, end_value=1.0, duration=0.1, loops=-1)
+        tween.start()
+
+        tween.update(1.0)  # ten durations in one frame
+
+        assert tween.current_loop == 1
+        assert tween.elapsed == pytest.approx(0.9)  # overshoot retained
+        assert tween.state == TweenState.PLAYING
 
 
 class TestTweenYoyo:
@@ -469,6 +539,33 @@ class TestTweenManager:
         removed = manager.remove(tween)
 
         assert removed is False
+
+    def test_identically_configured_tweens_do_not_alias(self):
+        """Two tweens with the same config are distinct; remove() is by identity."""
+        manager = TweenManager()
+        a = Tween(start_value=1.0, end_value=0.0, duration=0.3)
+        b = Tween(start_value=1.0, end_value=0.0, duration=0.3)
+        manager.add(a)
+        manager.add(b)
+
+        assert manager.remove(b) is True
+        remaining = manager.active_tweens
+        assert len(remaining) == 1
+        assert remaining[0] is a  # not b, and not "some equal tween"
+
+    def test_auto_remove_drops_the_finished_instance_not_an_equal_one(self):
+        """update() must reap the exact tween that finished, not an equal sibling."""
+        manager = TweenManager()
+        finished = Tween(start_value=0.0, end_value=1.0, duration=1.0)
+        idle_twin = Tween(start_value=0.0, end_value=1.0, duration=1.0)
+        finished.start()  # idle_twin is left IDLE
+        manager.add(finished)
+        manager.add(idle_twin)
+
+        manager.update(1.0)  # `finished` completes; `idle_twin` never started
+
+        assert manager.tween_count == 1
+        assert manager.active_tweens[0] is idle_twin
 
     def test_update_all_tweens(self):
         """Should update all tweens."""

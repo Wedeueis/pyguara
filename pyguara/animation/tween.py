@@ -1,9 +1,9 @@
 """Tween system for animating values over time."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any
+from typing import Any, TypeGuard
 
 from pyguara.animation.easing import EasingType, ease
 
@@ -17,11 +17,31 @@ class TweenState(Enum):
     COMPLETE = auto()
 
 
-@dataclass
+def _is_scalar(value: object) -> TypeGuard[float]:
+    """Return True for a plain number (int/float, but not bool)."""
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _is_sequence(value: object) -> TypeGuard[Sequence[float]]:
+    """Return True for a tuple/list of values (Vector2 is a tuple subclass)."""
+    return isinstance(value, tuple | list)
+
+
+@dataclass(eq=False)
 class Tween:
     """Animates a value from start to end over a duration.
 
     Supports different easing functions, delays, loops, and callbacks.
+
+    The endpoints must be either two numbers (``int``/``float``) or two
+    equal-length sequences of numbers (``tuple``/``list``). ``Vector2`` works
+    because it is a ``tuple`` subclass, but ``current_value`` is then a plain
+    ``tuple`` -- wrap it if you need the original type back. ``Color`` and
+    other non-sequence objects are not supported; tween their components.
+
+    Two ``Tween`` instances are equal only if they are the *same* object, so a
+    ``TweenManager`` can hold many identically configured tweens without them
+    aliasing each other.
 
     Example:
         >>> # Animate position from (0, 0) to (100, 50) over 1 second
@@ -58,17 +78,34 @@ class Tween:
         if self.duration <= 0:
             raise ValueError("Duration must be positive")
 
-        # Ensure start and end have same structure
-        if isinstance(self.start_value, tuple) != isinstance(self.end_value, tuple):
+        # Reject types that are neither a number nor a sequence (e.g. Color).
+        for label, value in (
+            ("start_value", self.start_value),
+            ("end_value", self.end_value),
+        ):
+            if not _is_sequence(value) and not _is_scalar(value):
+                raise TypeError(
+                    f"{label} must be a number or a sequence of numbers, "
+                    f"got {type(value).__name__}"
+                )
+
+        start_seq = _is_sequence(self.start_value)
+        end_seq = _is_sequence(self.end_value)
+
+        # Ensure start and end have the same shape.
+        if start_seq != end_seq:
             raise ValueError(
-                "start_value and end_value must both be float or both be tuple"
+                "start_value and end_value must both be numbers or both be sequences"
             )
 
-        if isinstance(self.start_value, tuple) and isinstance(self.end_value, tuple):
-            if len(self.start_value) != len(self.end_value):
-                raise ValueError(
-                    "start_value and end_value tuples must have same length"
-                )
+        if (
+            _is_sequence(self.start_value)
+            and _is_sequence(self.end_value)
+            and len(self.start_value) != len(self.end_value)
+        ):
+            raise ValueError(
+                "start_value and end_value sequences must have the same length"
+            )
 
     def start(self) -> None:
         """Start or restart the tween."""
@@ -138,21 +175,18 @@ class Tween:
         return self.state == TweenState.PLAYING
 
     def _interpolate(self, t: float) -> None:
-        """Interpolate between start and end values."""
-        if isinstance(self.start_value, tuple) and isinstance(self.end_value, tuple):
-            # Tuple interpolation
+        """Interpolate between start and end values.
+
+        Sequence endpoints always yield a plain ``tuple``; scalar endpoints
+        always yield a ``float`` (``__post_init__`` guarantees the shapes match).
+        """
+        start, end = self.start_value, self.end_value
+        if _is_sequence(start) and _is_sequence(end):
             self.current_value = tuple(
-                self.start_value[i] + (self.end_value[i] - self.start_value[i]) * t
-                for i in range(len(self.start_value))
+                s + (e - s) * t for s, e in zip(start, end, strict=True)
             )
-        else:
-            # Scalar interpolation
-            # At this point both must be floats due to validation in __post_init__
-            assert isinstance(self.start_value, float)
-            assert isinstance(self.end_value, float)
-            self.current_value = (
-                self.start_value + (self.end_value - self.start_value) * t
-            )
+        elif _is_scalar(start) and _is_scalar(end):
+            self.current_value = start + (end - start) * t
 
     def _handle_completion(self) -> None:
         """Handle tween completion and looping."""

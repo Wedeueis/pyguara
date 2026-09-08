@@ -13,7 +13,6 @@ from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.animation_system import AnimationSystem
-from pyguara.graphics.components.animation import AnimationStateMachine, Animator
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.render_system import RenderSystem
@@ -128,33 +127,6 @@ class Scene(ABC):
             entity: The entity that was just removed.
         """
         self.event_dispatcher.dispatch(EntityDestroyed(entity=entity, source=self))
-
-    def update_animations(self, dt: float) -> None:
-        """
-        Update all animation components in the scene.
-
-        Automatically updates all Animator and AnimationStateMachine components.
-        Call this in your scene's update() method to enable automatic animation updates.
-
-        Args:
-            dt (float): Delta time in seconds.
-
-        Example:
-            def update(self, dt: float) -> None:
-                self.update_animations(dt)  # Update all animations
-                # ... rest of scene logic
-        """
-        # Update AnimationStateMachine components (higher priority)
-        for entity in self.entity_manager.get_entities_with(AnimationStateMachine):
-            fsm = entity.get_component(AnimationStateMachine)
-            fsm.update(dt)
-
-        # Update standalone Animator components (if not controlled by FSM)
-        for entity in self.entity_manager.get_entities_with(Animator):
-            # Skip if entity also has AnimationStateMachine (FSM updates animator)
-            if not entity.has_component(AnimationStateMachine):
-                animator = entity.get_component(Animator)
-                animator.update(dt)
 
     @abstractmethod
     def on_enter(self) -> None:
