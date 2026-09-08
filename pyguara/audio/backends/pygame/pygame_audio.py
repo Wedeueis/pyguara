@@ -14,6 +14,7 @@ from pyguara.audio.types import (
 )
 from pyguara.common.types import Vector2
 from pyguara.log import get_logger
+from pyguara.resources.meta import AudioMeta
 from pyguara.resources.types import AudioClip
 
 logger = get_logger(__name__)
@@ -152,10 +153,18 @@ class PygameAudioSystem:
 
         base_volume = max(0.0, min(1.0, volume))
 
+        # Per-asset import gain from an AudioMeta sidecar (volume_db), if any.
+        import_meta = clip.import_meta
+        import_gain = (
+            import_meta.get_volume_multiplier()
+            if isinstance(import_meta, AudioMeta)
+            else 1.0
+        )
+
         # Calculate effective volume through bus hierarchy
         bus_name = self._bus_manager.get_bus_for_type(bus)
         bus_volume = self._bus_manager.get_effective_volume(bus_name)
-        effective_volume = base_volume * bus_volume
+        effective_volume = max(0.0, min(1.0, base_volume * import_gain * bus_volume))
 
         # Find available channel or steal one
         channel = self._get_available_channel(priority)

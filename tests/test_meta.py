@@ -4,6 +4,8 @@ Tests MetaLoader, TextureMeta, AudioMeta, SpritesheetMeta and related functional
 """
 
 import json
+import os
+import time
 from pathlib import Path
 
 import pytest
@@ -345,6 +347,60 @@ class TestMetaLoaderLoadMeta:
         result2 = loader.load_meta(str(asset_path))
         assert result1 is result2
         assert str(asset_path) in loader._cache
+
+    def test_load_meta_reparses_when_file_changes_on_disk(self, tmp_path: Path) -> None:
+        loader = MetaLoader()
+        asset_path = tmp_path / "test.png"
+        meta_path = tmp_path / "test.png.meta"
+        meta_path.write_text(json.dumps({"type": "texture", "filter": "linear"}))
+
+        first = loader.load_meta(str(asset_path))
+        assert isinstance(first, TextureMeta) and first.filter == "linear"
+
+        # Rewrite with a distinct mtime.
+        meta_path.write_text(json.dumps({"type": "texture", "filter": "nearest"}))
+        os.utime(meta_path, (time.time() + 2, time.time() + 2))
+
+        second = loader.load_meta(str(asset_path))
+        assert isinstance(second, TextureMeta) and second.filter == "nearest"
+
+    def test_load_meta_drops_cache_when_file_deleted(self, tmp_path: Path) -> None:
+        loader = MetaLoader()
+        asset_path = tmp_path / "test.png"
+        meta_path = tmp_path / "test.png.meta"
+        meta_path.write_text(json.dumps({"type": "texture"}))
+
+        assert loader.load_meta(str(asset_path)) is not None
+        meta_path.unlink()
+        assert loader.load_meta(str(asset_path)) is None
+        assert str(asset_path) not in loader._cache
+
+    def test_invalidate_forces_reparse(self, tmp_path: Path) -> None:
+        loader = MetaLoader()
+        asset_path = tmp_path / "test.png"
+        meta_path = tmp_path / "test.png.meta"
+        meta_path.write_text(json.dumps({"type": "texture", "filter": "linear"}))
+        loader.load_meta(str(asset_path))
+
+        # Same mtime (fast rewrite) would otherwise be served from cache.
+        meta_path.write_text(json.dumps({"type": "texture", "filter": "nearest"}))
+        os.utime(meta_path, (1_000_000, 1_000_000))
+        loader.invalidate(str(asset_path))
+
+        result = loader.load_meta(str(asset_path))
+        assert isinstance(result, TextureMeta) and result.filter == "nearest"
+
+    def test_load_meta_warns_on_type_mismatch_even_from_cache(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        loader = MetaLoader()
+        asset_path = tmp_path / "test.png"
+        (tmp_path / "test.png.meta").write_text(json.dumps({"type": "texture"}))
+
+        loader.load_meta(str(asset_path))  # primes the cache, no expected_type
+        with caplog.at_level("WARNING"):
+            loader.load_meta(str(asset_path), expected_type=AudioMeta)
+        assert any("expected 'audio'" in r.message for r in caplog.records)
 
     def test_load_meta_invalid_json(self, tmp_path: Path) -> None:
         loader = MetaLoader()

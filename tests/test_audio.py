@@ -184,6 +184,26 @@ def test_play_sfx_centred_volume_is_set_on_the_channel_not_the_sound(
     assert audio_clip.native_handle.get_volume() == pytest.approx(1.0)
 
 
+def test_play_sfx_applies_audiometa_volume_db_as_per_asset_gain(
+    audio_system: PygameAudioSystem,
+) -> None:
+    """A clip whose import_meta is an AudioMeta(volume_db=...) is played at
+    the corresponding linear gain, multiplied into the channel volume."""
+    from pyguara.resources.meta import AudioMeta
+
+    clip = _make_clip("quiet.wav")
+    clip.import_meta = AudioMeta(volume_db=-6.0)  # ~0.501x
+
+    channel_id = audio_system.play_sfx(clip, volume=1.0)
+    assert channel_id is not None
+
+    assert pygame.mixer.Channel(channel_id).get_volume() == pytest.approx(
+        0.501, abs=0.02
+    )
+    # The shared Sound is still untouched (D2 from the audio audit).
+    assert clip.native_handle.get_volume() == pytest.approx(1.0)
+
+
 def test_channel_stereo_split_is_pure_and_symmetric() -> None:
     """The pan -> (left, right) maths, tested directly (the applied split is
     not observable through ``Channel.get_volume()``)."""

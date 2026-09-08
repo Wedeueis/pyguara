@@ -12,7 +12,7 @@ of truth for all game assets. It handles:
 import json
 import os
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from pyguara.common.types import Rect
 from pyguara.graphics.atlas import Atlas, AtlasRegion
@@ -31,6 +31,19 @@ T = TypeVar("T", bound=Resource)
 
 class ResourceManager:
     """Orchestrate the loading, caching, and lifecycle of game resources.
+
+    Lifecycle model:
+        - ``load()`` is a cache-get. On a miss it reads from disk and caches
+          the result; on a hit it returns the cached instance. Either way the
+          resource sits in the cache **unpinned** (reference count 0).
+        - ``acquire()`` / ``release()`` are the explicit pin API. They must be
+          balanced. A ``release()`` that drops the count to 0 evicts the
+          resource immediately.
+        - ``unload_unused()`` evicts every resource whose count is 0. Call it
+          between scenes to drop everything nothing has acquired.
+        - ``unload(path, force=True)`` evicts regardless of the count.
+        - ``reload()`` re-reads a cached resource from disk and swaps the
+          cached instance in place, keeping the reference count.
 
     The ResourceManager supports asset metadata via `.meta` sidecar files.
     When loading a resource, it checks for a corresponding `.meta` file
@@ -71,10 +84,9 @@ class ResourceManager:
             loader (IResourceLoader): The loader instance to register.
         """
         for ext in loader.supported_extensions:
-            # Normaliza para lowercase para evitar erros (PNG vs png)
+            # Normalise to lowercase so "PNG" and "png" resolve alike.
             clean_ext = ext.lower()
 
-            # Opcional: Aviso se já existir um loader para essa extensão
             if clean_ext in self._extension_map:
                 logger.warning("Overwriting loader for extension: %s", clean_ext)
 
@@ -87,6 +99,12 @@ class ResourceManager:
         This allows requesting assets by name (e.g., 'hero') instead of full path
         (e.g., 'assets/chars/hero.png'), mimicking Godot's resource system.
 
+        Two files that share a stem (``chars/hero.png`` and ``fx/hero.png``)
+        would both claim the bare name ``hero``. That is ambiguous, so the
+        bare-stem entry is dropped and a warning is logged naming both paths;
+        the unambiguous full-name keys (``hero.png``) are always kept. Resolve
+        the clash by loading the colliding asset via its full name or path.
+
         Args:
             root_path (str): The directory to scan.
             recursive (bool): If True, scans subdirectories as well.
@@ -98,15 +116,35 @@ class ResourceManager:
 
         iterator = path_obj.rglob("*") if recursive else path_obj.glob("*")
 
+        ambiguous_stems: set[str] = set()
+
         for file_path in iterator:
             if file_path.is_file():
                 extension = file_path.suffix.lower()
                 # Only index files we know how to load
-                if extension in self._extension_map:
-                    filename = file_path.stem  # e.g., 'hero' from 'hero.png'
-                    self._path_index[filename] = str(file_path)
-                    # Also index the full filename just in case
-                    self._path_index[file_path.name] = str(file_path)
+                if extension not in self._extension_map:
+                    continue
+
+                str_path = str(file_path)
+                stem = file_path.stem  # e.g., 'hero' from 'hero.png'
+                existing = self._path_index.get(stem)
+                if existing is not None and existing != str_path:
+                    logger.warning(
+                        "Ambiguous asset name '%s': both '%s' and '%s' claim it; "
+                        "load one by its full name or path.",
+                        stem,
+                        existing,
+                        str_path,
+                    )
+                    ambiguous_stems.add(stem)
+                elif stem not in ambiguous_stems:
+                    self._path_index[stem] = str_path
+
+                # The full filename is unambiguous; always index it.
+                self._path_index[file_path.name] = str_path
+
+        for stem in ambiguous_stems:
+            self._path_index.pop(stem, None)
 
     def load(self, path_or_name: str, resource_type: type[T]) -> T:
         """
@@ -138,23 +176,47 @@ class ResourceManager:
                     f"Resource '{path_or_name}' is cached as {type(res).__name__}, "
                     f"but {resource_type.__name__} was requested."
                 )
-            # Increment ref count for cached resource too
-            if actual_path not in self._reference_counts:
-                self._reference_counts[actual_path] = 0
-            self._reference_counts[actual_path] += 1
             return res
 
-        # 3. Find Loader (O(1) Lookup)
+        # 3. Load from disk
+        resource = self._load_from_disk(actual_path, resource_type)
+
+        self._cache[actual_path] = resource
+
+        # A load is a cache-get, not an acquire: the resource enters the cache
+        # unpinned (ref count 0). Callers that need it to survive
+        # unload_unused() must acquire() it explicitly.
+        self._reference_counts[actual_path] = 0
+
+        return resource
+
+    def _load_from_disk(self, actual_path: str, resource_type: type[T]) -> T:
+        """Run the registered loader for a path and type-check the result.
+
+        Shared by load() (cache miss) and reload(). Does not touch the cache
+        or the reference counts.
+
+        Args:
+            actual_path: The resolved filesystem path.
+            resource_type: The expected class.
+
+        Returns:
+            The freshly loaded resource.
+
+        Raises:
+            ValueError: If no loader is registered for the file extension.
+            TypeError: If the loader returns the wrong type.
+        """
         extension = os.path.splitext(actual_path)[1].lower()
         loader = self._extension_map.get(extension)
 
         if not loader:
             raise ValueError(f"No loader registered for extension: {extension}")
 
-        # 4. Load with metadata if supported
         logger.debug("Loading resource: %s", actual_path)
 
         # Check for meta-aware loader and load metadata
+        meta = None
         if isinstance(loader, IMetaAwareLoader):
             meta = self._meta_loader.load_meta(actual_path)
             if meta:
@@ -169,15 +231,52 @@ class ResourceManager:
                 f"expected {resource_type.__name__}."
             )
 
+        # Record the resolved import settings on the resource so systems that
+        # need them post-load can read resource.import_meta.
+        resource.import_meta = meta
+
+        return resource
+
+    def reload(self, path_or_name: str) -> Resource:
+        """Re-read a cached resource from disk and swap it in place.
+
+        Runs the registered loader again (re-reading the `.meta` sidecar too,
+        if the loader is meta-aware) and replaces the cached instance. The
+        reference count is preserved, so anything that acquired the resource
+        keeps its hold.
+
+        Note:
+            Callers that already hold a reference to the *previous* instance
+            keep that stale object -- ``reload()`` swaps the cache entry, it
+            does not mutate the old instance. Re-``load()`` after a reload to
+            pick up the new one. This is what a hot-reload watcher does.
+
+        Args:
+            path_or_name: The full path or indexed filename of the asset.
+
+        Returns:
+            The freshly loaded resource now in the cache.
+
+        Raises:
+            KeyError: If the resource is not currently cached.
+            ValueError: If no loader is registered for the file extension.
+            TypeError: If the file now loads as a different type than the
+                cached instance.
+        """
+        actual_path = self._path_index.get(path_or_name, path_or_name)
+
+        if actual_path not in self._cache:
+            raise KeyError(
+                f"Cannot reload a resource that is not loaded: {path_or_name}"
+            )
+
+        old_type = type(self._cache[actual_path])
+        # Drop any cached .meta so import settings changed on disk take effect.
+        self._meta_loader.invalidate(actual_path)
+        resource = self._load_from_disk(actual_path, old_type)
+
         self._cache[actual_path] = resource
-
-        # Initialize reference count for new resource
-        if actual_path not in self._reference_counts:
-            self._reference_counts[actual_path] = 0
-
-        # Auto-increment ref count on load
-        self._reference_counts[actual_path] += 1
-
+        logger.debug("Reloaded resource: %s", actual_path)
         return resource
 
     def acquire(self, path_or_name: str) -> None:
@@ -312,12 +411,14 @@ class ResourceManager:
 
         return len(to_unload)
 
-    def get_cache_stats(self) -> dict:
+    def get_cache_stats(self) -> dict[str, Any]:
         """
         Get statistics about the current resource cache state.
 
         Returns:
-            dict: Statistics including resource count, total refs, and resource details.
+            A dict with ``resource_count`` (int), ``total_references`` (int)
+            and ``resources`` (a ``{path: {"type": str, "ref_count": int}}``
+            mapping).
         """
         total_refs = sum(self._reference_counts.values())
         resources_info = {
@@ -417,6 +518,11 @@ class ResourceManager:
                     metadata_path,
                     f"Region '{name}' has invalid data: {e}",
                 ) from e
+
+        # The Atlas holds the texture for its whole lifetime; pin it so
+        # unload_unused() cannot pull it out from under the atlas. Drop it
+        # with unload(atlas_path, force=True) when the atlas is finished.
+        self.acquire(atlas_path)
 
         # Create and return the atlas
         atlas = Atlas(texture=texture, regions=regions)
