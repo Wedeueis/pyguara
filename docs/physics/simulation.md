@@ -25,16 +25,67 @@ The `PhysicsSystem` synchronizes the ECS `Transform` component with the Pymunk b
 
 ## Collision Handling
 
-Collisions generate events via the `CollisionSystem`.
+Collisions generate events via the `CollisionSystem`, which `bootstrap.py`
+wires to the physics engine. Subscribe on the `EventDispatcher`:
 
-*   **`OnCollisionBegin`**: Physical contact started.
-*   **`OnCollisionEnd`**: Physical contact ended.
-*   **`OnTriggerEnter`**: Entered a trigger volume.
+*   **`OnCollisionBegin` / `OnCollisionPersist` / `OnCollisionEnd`**: two
+    solid (non-sensor) colliders touching.
+*   **`OnTriggerEnter` / `OnTriggerStay` / `OnTriggerExit`**: something
+    overlapping a sensor collider.
 
 ```python
 def on_collision(self, event: OnCollisionBegin):
     print(f"Entities {event.entity_a} and {event.entity_b} collided!")
 ```
+
+The engine reports a contact pair in Chipmunk's own order and tells
+`CollisionSystem` which side owns the sensor; the trigger events always come
+out with `trigger_entity` set to the sensor's entity and `other_entity` the
+body that entered it, regardless of that order.
+
+## Trigger volumes
+
+A `TriggerVolume` component is the high-level way to use a sensor: it keeps a
+live `entities_inside` set and supports tag filtering and one-shot
+deactivation. It needs **three** systems running -- `PhysicsSystem`,
+`CollisionSystem`, and `TriggerSystem` (the last is opt-in; create one and
+tick it each frame). `TriggerSystem` gives the entity the pieces it needs to
+enter the simulation:
+
+*   a sensor `Collider` matching the volume's shape, and
+*   a static `RigidBody`, if the entity has none -- `PhysicsSystem` only
+    registers shapes for entities that have a body. Add your own KINEMATIC
+    `RigidBody` instead if the trigger has to move with a platform.
+
+```python
+zone = entity_manager.create_entity()
+zone.add_component(Transform(position=Vector2(400, 300)))
+zone.add_component(TriggerVolume(
+    shape_type=ShapeType.BOX, dimensions=[100, 100], tags={"player"},
+))
+# ...later, any frame:
+if zone.get_component(TriggerVolume).contains_entity(player.id):
+    ...
+```
+
+## Joints
+
+`Joint` connects two entities' `RigidBody` bodies -- pin, distance, spring,
+slider. The component is pure data; `pyguara.physics.joint_system.JointSystem`
+is what turns it into a real constraint. Like `PhysicsSystem` it is opt-in:
+create one and tick it each fixed step, **after** `PhysicsSystem.update()`.
+
+```python
+from pyguara.physics.joints import create_pin_joint
+
+bob.add_component(create_pin_joint(target_entity_id=anchor.id))
+```
+
+`JointSystem` builds the constraint once both entities have a body in the
+engine (retrying on later ticks until then), and destroys it when either
+entity is removed or the `Joint` component is taken off its entity. Factory
+helpers: `create_pin_joint`, `create_distance_joint`, `create_spring_joint`,
+`create_slider_joint`, plus `create_rope_chain` for a segmented rope.
 
 ## Platformer characters: CharacterMover, not RigidBody
 
