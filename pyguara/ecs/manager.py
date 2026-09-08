@@ -161,6 +161,22 @@ class EntityManager:
 
         self._pending_index_cleanup.clear()
 
+    def clear(self) -> None:
+        """Remove every entity from the world, then flush the indexes.
+
+        Each entity is taken through `remove_entity()`, so
+        `subscribe_entity_removed()` callbacks fire and downstream state
+        (physics bodies, render batches, spatial indexes) is torn down, then
+        `flush_pending_removals()` empties the inverted index and every cached
+        query. The world is left empty and safe to repopulate -- the intended
+        entry point for reloading a scene from disk, instead of clearing the
+        internal dicts by hand (which leaves cached queries and subscribers
+        out of sync).
+        """
+        for entity_id in list(self._entities):
+            self.remove_entity(entity_id)
+        self.flush_pending_removals()
+
     def subscribe_entity_removed(self, callback: EntityRemovedCallback) -> None:
         """Register a callback to run when an entity is removed from this world.
 

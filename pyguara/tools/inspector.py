@@ -76,12 +76,7 @@ class EntityInspector(Tool):
             size=18,
         )
 
-        # Get Entities (Privileged access for debugging)
-        # Assuming EntityManager has an underlying dictionary or list
-        if hasattr(self._entity_manager, "_entities"):
-            entities = list(self._entity_manager._entities.values())
-        else:
-            return
+        entities = list(self._entity_manager.get_all_entities())
 
         if not entities:
             renderer.draw_text(
@@ -139,11 +134,8 @@ class EntityInspector(Tool):
         )
         y += 10
 
-        # Components (privileged access for debugging -- no public
-        # iteration method exists on Entity, same as _entity_manager
-        # above)
-        for comp_type, component in entity._components.items():
-            comp_name = comp_type.__name__
+        for component in entity.get_all_components():
+            comp_name = type(component).__name__
             renderer.draw_text(
                 f"[{comp_name}]", Vector2(x, y), self._highlight_color, 16
             )
@@ -174,11 +166,10 @@ class EntityInspector(Tool):
         """
         if event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
             # Cycle next
-            if hasattr(self._entity_manager, "_entities"):
-                count = len(self._entity_manager._entities)
-                if count > 0:
-                    self._selected_index = (self._selected_index + 1) % count
-                    return True
+            count = sum(1 for _ in self._entity_manager.get_all_entities())
+            if count > 0:
+                self._selected_index = (self._selected_index + 1) % count
+                return True
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos

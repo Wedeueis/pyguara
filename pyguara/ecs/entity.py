@@ -123,6 +123,20 @@ class Entity:
         """
         return component_type in self._components
 
+    def get_all_components(self) -> tuple[Component, ...]:
+        """Return every component attached to this entity, in insertion order.
+
+        The supported way to enumerate an entity's components from outside --
+        inspectors, serialisers and editor tools should iterate this rather
+        than reaching into `_components`. The result is a snapshot tuple, so
+        the caller may add or remove components while iterating it.
+
+        Returns:
+            All attached components. Get each one's registered name with
+            `type(component).__name__`.
+        """
+        return tuple(self._components.values())
+
     def remove_component(self, component_type: type[Component]) -> None:
         """Detach a component by type, keeping manager indexes consistent.
 
