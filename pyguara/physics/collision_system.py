@@ -65,6 +65,31 @@ class CollisionSystem:
         # Key: (trigger_entity_id, other_entity_id), Value: True if active
         self._active_triggers: dict[tuple[str, str], bool] = {}
 
+    @staticmethod
+    def _order_trigger_pair(
+        entity_a: str, entity_b: str, sensor_entity_id: str
+    ) -> tuple[str, str]:
+        """Return ``(trigger_entity, other_entity)`` with the sensor first.
+
+        The backend reports a contact pair in an arbitrary order -- Chipmunk
+        decides which shape is A -- and only it knows which of the two shapes
+        is the sensor. Without reordering here, the trigger volume and the
+        body that entered it are swapped for roughly half of all pairs, and
+        ``TriggerSystem`` then silently drops every event whose nominal
+        trigger entity has no ``TriggerVolume`` component.
+
+        Args:
+            entity_a: First entity in the pair, as the backend reported it.
+            entity_b: Second entity in the pair.
+            sensor_entity_id: Which of the two owns the sensor shape.
+
+        Returns:
+            The pair reordered so the sensor entity comes first.
+        """
+        if sensor_entity_id == entity_b:
+            return entity_b, entity_a
+        return entity_a, entity_b
+
     def on_collision_begin(
         self,
         entity_a: str,
@@ -72,7 +97,7 @@ class CollisionSystem:
         point: Vector2,
         normal: Vector2,
         impulse: float,
-        is_sensor: bool,
+        sensor_entity_id: str | None,
     ) -> bool:
         """Handle collision begin event from physics engine.
 
@@ -82,14 +107,19 @@ class CollisionSystem:
             point: Contact point in world coordinates.
             normal: Surface normal (from A to B).
             impulse: Collision impulse magnitude.
-            is_sensor: True if either collider is a sensor.
+            sensor_entity_id: The entity owning the sensor shape when this
+                contact is a trigger overlap, or None for a solid collision.
+                The backend resolves this; the pair itself arrives unordered.
 
         Returns:
             True to process collision physically, False to ignore.
         """
-        if is_sensor:
+        if sensor_entity_id is not None:
             # Handle as trigger, not physical collision
-            self._handle_trigger_begin(entity_a, entity_b)
+            trigger, other = self._order_trigger_pair(
+                entity_a, entity_b, sensor_entity_id
+            )
+            self._handle_trigger_begin(trigger, other)
             return False  # Don't process physically
         else:
             # Handle as physical collision
@@ -114,7 +144,7 @@ class CollisionSystem:
         point: Vector2,
         normal: Vector2,
         impulse: float,
-        is_sensor: bool,
+        sensor_entity_id: str | None,
     ) -> bool:
         """Handle collision persist event from physics engine.
 
@@ -124,14 +154,18 @@ class CollisionSystem:
             point: Contact point in world coordinates.
             normal: Surface normal (from A to B).
             impulse: Current collision impulse magnitude.
-            is_sensor: True if either collider is a sensor.
+            sensor_entity_id: The entity owning the sensor shape when this
+                contact is a trigger overlap, or None for a solid collision.
 
         Returns:
             True to continue processing collision, False to ignore.
         """
-        if is_sensor:
+        if sensor_entity_id is not None:
             # Handle as trigger
-            self._handle_trigger_stay(entity_a, entity_b)
+            trigger, other = self._order_trigger_pair(
+                entity_a, entity_b, sensor_entity_id
+            )
+            self._handle_trigger_stay(trigger, other)
             return False
         else:
             # Dispatch persist event
@@ -150,18 +184,22 @@ class CollisionSystem:
         self,
         entity_a: str,
         entity_b: str,
-        is_sensor: bool,
+        sensor_entity_id: str | None,
     ) -> None:
         """Handle collision end event from physics engine.
 
         Args:
             entity_a: ID of first entity.
             entity_b: ID of second entity.
-            is_sensor: True if either collider is a sensor.
+            sensor_entity_id: The entity owning the sensor shape when this
+                contact was a trigger overlap, or None for a solid collision.
         """
-        if is_sensor:
+        if sensor_entity_id is not None:
             # Handle as trigger
-            self._handle_trigger_end(entity_a, entity_b)
+            trigger, other = self._order_trigger_pair(
+                entity_a, entity_b, sensor_entity_id
+            )
+            self._handle_trigger_end(trigger, other)
         else:
             # Remove from active collisions
             collision_key = frozenset({entity_a, entity_b})
