@@ -34,13 +34,15 @@ class TestTweenCreation:
             Tween(start_value=0.0, end_value=100.0, duration=-1.0)
 
     def test_mismatched_types_raises_error(self):
-        """start_value and end_value must have same type."""
-        with pytest.raises(ValueError, match="must both be float or both be tuple"):
+        """start_value and end_value must have same shape."""
+        with pytest.raises(
+            ValueError, match="must both be numbers or both be sequences"
+        ):
             Tween(start_value=0.0, end_value=(100.0, 50.0), duration=1.0)
 
     def test_mismatched_tuple_length_raises_error(self):
-        """Tuple start_value and end_value must have same length."""
-        with pytest.raises(ValueError, match="tuples must have same length"):
+        """Sequence start_value and end_value must have same length."""
+        with pytest.raises(ValueError, match="sequences must have the same length"):
             Tween(start_value=(0.0, 0.0), end_value=(100.0,), duration=1.0)
 
 

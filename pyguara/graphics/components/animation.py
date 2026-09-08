@@ -21,6 +21,16 @@ class AnimationClip:
     frame_rate: float = 10.0  # Frames per second
     loop: bool = True
 
+    def __post_init__(self) -> None:
+        """Reject clips that cannot be played (empty, or non-positive rate)."""
+        if not self.frames:
+            raise ValueError(f"AnimationClip '{self.name}' has no frames")
+        if self.frame_rate <= 0:
+            raise ValueError(
+                f"AnimationClip '{self.name}' frame_rate must be positive, "
+                f"got {self.frame_rate}"
+            )
+
 
 class Animator(BaseComponent):
     """Component that manages playback of AnimationClips.
@@ -79,31 +89,38 @@ class Animator(BaseComponent):
         self._apply_frame()
 
     def update(self, dt: float) -> None:
-        """Advance the animation timer."""
+        """Advance the animation timer.
+
+        Catches up all whole frames owed for ``dt`` in one call, so a lag
+        spike or a host running slower than the clip's ``frame_rate`` does not
+        silently drop frames or fall permanently behind.
+        """
         if not self._playing or not self._current_clip:
             return
 
         self._current_time += dt
 
-        # Calculate duration of a single frame
+        # Duration of a single frame; frame_rate is > 0 (AnimationClip validates).
         seconds_per_frame = 1.0 / self._current_clip.frame_rate
+        if self._current_time < seconds_per_frame:
+            return
 
-        if self._current_time >= seconds_per_frame:
-            # Move to next frame
-            self._current_time -= seconds_per_frame
-            self._current_frame_index += 1
+        frames_advanced = int(self._current_time / seconds_per_frame)
+        self._current_time -= frames_advanced * seconds_per_frame
 
-            # Handle Looping
-            total_frames = len(self._current_clip.frames)
+        total_frames = len(self._current_clip.frames)
+        raw_index = self._current_frame_index + frames_advanced
 
-            if self._current_frame_index >= total_frames:
-                if self._current_clip.loop:
-                    self._current_frame_index = 0
-                else:
-                    self._current_frame_index = total_frames - 1
-                    self._playing = False  # Stop at end
+        if raw_index < total_frames:
+            self._current_frame_index = raw_index
+        elif self._current_clip.loop:
+            self._current_frame_index = raw_index % total_frames
+        else:
+            self._current_frame_index = total_frames - 1
+            self._current_time = 0.0
+            self._playing = False  # Stop at end
 
-            self._apply_frame()
+        self._apply_frame()
 
     def _apply_frame(self) -> None:
         """Update the visual Sprite component with the current texture."""
@@ -209,6 +226,9 @@ class AnimationStateMachine(BaseComponent):
         self._states: dict[str, AnimationState] = {}
         self._current_state: AnimationState | None = None
         self._default_state: str | None = None
+        # Latch so on_complete / ANIMATION_END fire once per clip completion,
+        # not every frame the finished clip sits on its last frame.
+        self._completion_handled: bool = False
 
     def add_state(self, state: AnimationState) -> None:
         """
@@ -264,6 +284,7 @@ class AnimationStateMachine(BaseComponent):
 
         # Enter new state
         self._current_state = target_state
+        self._completion_handled = False
 
         # Call on_enter callback
         if target_state.on_enter:
@@ -287,14 +308,15 @@ class AnimationStateMachine(BaseComponent):
         if not self._current_state:
             return
 
-        # Check if animation finished
-        if self._animator.is_finished:
-            # Call on_complete callback
+        # Fire the completion callback once, on the frame the clip finishes.
+        if self._animator.is_finished and not self._completion_handled:
+            self._completion_handled = True
             if self._current_state.on_complete:
                 self._current_state.on_complete()
 
-            # Check for automatic transitions
-            self._check_transitions()
+        # Check for automatic transitions every frame (IMMEDIATE fires as soon
+        # as the state is entered; ANIMATION_END only once the clip finishes).
+        self._check_transitions()
 
     def _check_transitions(self) -> None:
         """Check if any transitions should trigger based on current conditions."""
@@ -307,15 +329,14 @@ class AnimationStateMachine(BaseComponent):
         )
 
         for transition in sorted_transitions:
-            # Check if condition is met
-            should_transition = False
+            should_transition = (
+                transition.condition == TransitionCondition.IMMEDIATE
+                or (
+                    transition.condition == TransitionCondition.ANIMATION_END
+                    and self._animator.is_finished
+                )
+            )
 
-            if transition.condition == TransitionCondition.ANIMATION_END:
-                # Transition when animation finishes
-                if self._animator.is_finished:
-                    should_transition = True
-
-            # Execute transition if condition met
             if should_transition:
                 self.transition_to(transition.to_state)
                 break  # Only execute one transition per update
