@@ -157,3 +157,31 @@ class Score(BaseComponent):
         """Add coins and update score."""
         self.coins_collected += amount
         self.value += amount * 100
+
+
+@dataclass
+class PatrolMotion(BaseComponent):
+    """Moves a MovingSolid back and forth between two points.
+
+    Demo content for the CharacterMover switch: a `MovingSolid` needs
+    something to author its Transform's motion, and this game had nothing
+    that did. Its only job is to move the Transform -- SolidSystem is what
+    turns that displacement into carrying/pushing whatever touches it.
+
+    Attributes:
+        start: One end of the patrol, in world space.
+        end: The other end.
+        speed: Travel speed in pixels/second.
+    """
+
+    start: Vector2 = field(default_factory=lambda: Vector2(0, 0))
+    end: Vector2 = field(default_factory=lambda: Vector2(0, 0))
+    speed: float = 60.0
+
+    # Which end the patrol is currently headed toward: +1.0 is end, -1.0
+    # is start. Internal state PatrolSystem owns.
+    _direction: float = field(default=1.0, repr=False)
+
+    def __post_init__(self) -> None:
+        """Initialize the component."""
+        super().__init__()

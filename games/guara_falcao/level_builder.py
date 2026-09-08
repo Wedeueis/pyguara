@@ -12,6 +12,7 @@ from games.guara_falcao.components import (
     Collectible,
     Hazard,
     Health,
+    PatrolMotion,
     PlatformSprite,
     PlayerState,
     Score,
@@ -20,7 +21,13 @@ from games.guara_falcao.components import (
 from pyguara.common.components import Transform
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.components import CharacterBody, Collider, RigidBody
+from pyguara.physics.components import (
+    CharacterBody,
+    Collider,
+    MovingSolid,
+    Pushable,
+    RigidBody,
+)
 from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.physics.tilemap import merge_tile_rects
 from pyguara.physics.types import BodyType
@@ -61,6 +68,9 @@ class LevelBuilder:
             "collectibles": [[8, 14], [12, 12], [18, 10], [25, 14]],
             "checkpoints": [[15, 14]],
             "goal": [38, 14],
+            # Patrols in tile columns between 5 and 10, at row 13.
+            "moving_platform": {"start": [5, 13], "end": [10, 13], "speed": 60.0},
+            "crate": [20, 14],
         }
 
         # Create tilemap (20 rows, 40 columns)
@@ -151,6 +161,16 @@ class LevelBuilder:
         if goal_pos:
             self._create_goal(entity_manager, goal_pos[0], goal_pos[1])
 
+        # Demo content for the CharacterMover switch -- a rideable, patrolling
+        # platform and a crate the player can shove. See
+        # docs/physics/character-movement.md.
+        moving_platform = level_data.get("moving_platform")
+        if moving_platform:
+            self._create_moving_platform(entity_manager, moving_platform)
+        crate_pos = level_data.get("crate")
+        if crate_pos:
+            self._create_crate(entity_manager, crate_pos[0], crate_pos[1])
+
         return self._spawn_point
 
     def _create_solid_tile_sprite(
@@ -193,6 +213,60 @@ class LevelBuilder:
         entity.add_component(RigidBody(body_type=BodyType.STATIC))
         entity.add_component(
             Collider(dimensions=[float(rect.width), float(rect.height)])
+        )
+
+    def _create_moving_platform(
+        self, entity_manager: EntityManager, spec: dict[str, Any]
+    ) -> None:
+        """Create a rideable platform that patrols between two tile positions.
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            spec: `{"start": [gx, gy], "end": [gx, gy], "speed": px/s}`.
+        """
+        entity = entity_manager.create_entity("moving_platform")
+
+        start = Vector2(
+            *(coord * TILE_SIZE + TILE_SIZE // 2 for coord in spec["start"])
+        )
+        end = Vector2(*(coord * TILE_SIZE + TILE_SIZE // 2 for coord in spec["end"]))
+        dimensions = [TILE_SIZE * 3.0, TILE_SIZE / 2]
+
+        entity.add_component(Transform(position=start))
+        entity.add_component(RigidBody(body_type=BodyType.KINEMATIC))
+        entity.add_component(Collider(dimensions=dimensions))
+        entity.add_component(MovingSolid())
+        entity.add_component(
+            PatrolMotion(start=start, end=end, speed=float(spec.get("speed", 60.0)))
+        )
+        entity.add_component(
+            PlatformSprite(
+                color=Color(150, 110, 200), size=Vector2(dimensions[0], dimensions[1])
+            )
+        )
+
+    def _create_crate(self, entity_manager: EntityManager, gx: int, gy: int) -> None:
+        """Create a crate the player can push (but not carry).
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            gx: Tile column.
+            gy: Tile row.
+        """
+        entity = entity_manager.create_entity(f"crate_{gx}_{gy}")
+
+        world_x = gx * TILE_SIZE + TILE_SIZE // 2
+        world_y = gy * TILE_SIZE + TILE_SIZE // 2
+
+        entity.add_component(Transform(position=Vector2(world_x, world_y)))
+        entity.add_component(RigidBody(body_type=BodyType.KINEMATIC))
+        entity.add_component(Collider(dimensions=[float(TILE_SIZE), float(TILE_SIZE)]))
+        entity.add_component(MovingSolid())
+        entity.add_component(Pushable())
+        entity.add_component(
+            PlatformSprite(
+                color=Color(160, 120, 60), size=Vector2(TILE_SIZE, TILE_SIZE)
+            )
         )
 
     def _create_hazard(self, entity_manager: EntityManager, gx: int, gy: int) -> None:

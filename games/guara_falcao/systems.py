@@ -8,6 +8,7 @@ from games.guara_falcao.components import (
     Collectible,
     Hazard,
     Health,
+    PatrolMotion,
     PlayerAnimState,
     PlayerState,
     Score,
@@ -434,3 +435,35 @@ class HazardSystem:
             knockback,
             self.KNOCKBACK_DURATION,
         )
+
+
+class PatrolSystem:
+    """Moves every PatrolMotion entity back and forth between two points.
+
+    Demo content for the CharacterMover switch: `MovingSolid` needs
+    something to author its Transform's motion, and this is the simplest
+    thing that could -- a straight line, reversing at each end. Its only
+    job is to move the Transform; SolidSystem (run right after this, before
+    PlatformerSystem, in GameplayScene.fixed_update) is what turns that
+    displacement into carrying or pushing whatever touches it.
+    """
+
+    def __init__(self, entity_manager: EntityManager) -> None:
+        """Initialize the system."""
+        self._em = entity_manager
+
+    def update(self, dt: float) -> None:
+        """Advance every patrol by one tick."""
+        for entity in self._em.get_entities_with(PatrolMotion, Transform):
+            motion = entity.get_component(PatrolMotion)
+            transform = entity.get_component(Transform)
+
+            target = motion.end if motion._direction > 0 else motion.start
+            to_target = target - transform.position
+            step = motion.speed * dt
+
+            if to_target.magnitude <= step:
+                transform.position = target
+                motion._direction *= -1.0
+            else:
+                transform.position = transform.position + to_target.normalize() * step

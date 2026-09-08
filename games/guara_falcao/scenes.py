@@ -27,6 +27,7 @@ from games.guara_falcao.systems import (
     CollectibleSystem,
     HazardSystem,
     HealthSystem,
+    PatrolSystem,
     PlayerControlSystem,
 )
 from pyguara.common.components import Transform
@@ -45,6 +46,8 @@ from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.physics.platformer_system import PlatformerSystem
 from pyguara.physics.protocols import IPhysicsEngine
+from pyguara.physics.solid_mover import SolidMover
+from pyguara.physics.solid_system import SolidSystem
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
@@ -129,6 +132,8 @@ class GameScene(Scene):
         # Systems
         self._physics_system: PhysicsSystem | None = None
         self._platformer_system: PlatformerSystem | None = None
+        self._solid_system: SolidSystem | None = None
+        self._patrol_system: PatrolSystem | None = None
         self._collider_debug: ColliderDebugRenderer | None = None
         self._show_colliders = False
         self._player_control: PlayerControlSystem | None = None
@@ -180,11 +185,17 @@ class GameScene(Scene):
             gravity=Vector2(physics_config.gravity_x, physics_config.gravity_y),
         )
 
+        solid_mover = SolidMover(
+            self.entity_manager, physics_engine, self.event_dispatcher
+        )
         self._platformer_system = PlatformerSystem(
             entity_manager=self.entity_manager,
             physics_engine=physics_engine,
             gravity=Vector2(physics_config.gravity_x, physics_config.gravity_y),
+            solid_mover=solid_mover,
         )
+        self._solid_system = SolidSystem(self.entity_manager, solid_mover)
+        self._patrol_system = PatrolSystem(self.entity_manager)
 
         # Initialize game systems
         self._player_control = PlayerControlSystem(
@@ -375,11 +386,28 @@ class GameScene(Scene):
         # Reset jump flag after it's been consumed
         self._jump_pressed = False
 
-        # Platformer system must run at fixed rate with physics
+        # 1. Whatever authors a solid's motion (patrol, here) runs first.
+        if self._patrol_system:
+            self._patrol_system.update(fixed_dt)
+
+        # 2. Push those Transform changes into the engine before anything
+        #    queries it this tick -- solids are still ordinary Chipmunk
+        #    kinematic bodies, so raycasts/overlap queries against them
+        #    need to see where they already are.
+        if self._physics_system:
+            self._physics_system.sync_kinematic_transforms()
+
+        # 3. Solids carry/push whatever they touched.
+        if self._solid_system:
+            self._solid_system.update(fixed_dt)
+
+        # 4. The character's own movement, swept by CharacterMover against
+        #    this tick's (already current) geometry.
         if self._platformer_system:
             self._platformer_system.update(fixed_dt)
 
-        # Physics simulation step
+        # 5. Step the simulation, for whatever is still a genuine Chipmunk
+        #    dynamic body -- nothing character-adjacent is, any more.
         if self._physics_system:
             self._physics_system.update(fixed_dt)
 
