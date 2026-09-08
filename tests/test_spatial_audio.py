@@ -111,6 +111,22 @@ class TestSpatialAudioConfig:
         assert config.rolloff_factor == 0.5
         assert config.pan_strength == 0.8
 
+    def test_zero_reference_distance_is_rejected(self) -> None:
+        """reference_distance == 0 would divide by zero in calculate_pan."""
+        with pytest.raises(ValueError, match="reference_distance"):
+            SpatialAudioConfig(reference_distance=0.0)
+
+    def test_max_distance_must_exceed_reference_distance(self) -> None:
+        """An inverted range is a hard volume cliff, not a soft rolloff."""
+        with pytest.raises(ValueError, match="max_distance"):
+            SpatialAudioConfig(max_distance=50.0, reference_distance=100.0)
+
+    def test_negative_factors_are_rejected(self) -> None:
+        with pytest.raises(ValueError, match="rolloff_factor"):
+            SpatialAudioConfig(rolloff_factor=-1.0)
+        with pytest.raises(ValueError, match="pan_strength"):
+            SpatialAudioConfig(pan_strength=-0.5)
+
 
 class TestSpatialAudioAttenuation:
     """Test distance-based attenuation calculations."""

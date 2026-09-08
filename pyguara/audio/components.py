@@ -50,6 +50,9 @@ class AudioSource(BaseComponent):
     _channel_id: int | None = field(default=None, repr=False, compare=False)
     _is_playing: bool = field(default=False, repr=False, compare=False)
     _stop_requested: bool = field(default=False, repr=False, compare=False)
+    # Latches once auto_play has fired, so a one-shot sound that ends is not
+    # immediately restarted by the auto_play path on the next frame.
+    _auto_played: bool = field(default=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Initialize the component."""

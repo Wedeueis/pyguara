@@ -1,64 +1,82 @@
-"""Tests for the audio system."""
+"""Tests for the audio system.
 
+These drive the **real** pygame mixer under the ``dummy`` SDL driver with
+real ``Sound`` buffers. Only ``pygame.mixer.music`` -- the file-streaming API,
+which needs a real file on disk -- is mocked. The previous version of this
+file patched ``pygame.mixer`` wholesale, so channel ids, stereo volume, the
+shared-``Sound`` volume trap and ``Channel.id`` (the real attribute, vs the
+non-existent ``get_id()`` the backend called) were never exercised.
+"""
+
+import os
+from collections.abc import Iterator
 from typing import Any
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
-from pyguara.audio.manager import AudioManager
-from pyguara.resources.types import AudioClip
+os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
+import pygame  # noqa: E402
+
+from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem  # noqa: E402
+from pyguara.audio.manager import AudioManager  # noqa: E402
+from pyguara.resources.types import AudioClip  # noqa: E402
+
+_SAMPLE_RATE = 44100
 
 # ========== Fixtures ==========
 
 
-@pytest.fixture  # type: ignore[misc]
-def mock_pygame_mixer() -> Any:
-    """Mock pygame.mixer to avoid actual audio initialization."""
-    with patch("pygame.mixer") as mock_mixer:
-        # Setup default mocks
-        mock_mixer.get_init.return_value = True
-        mock_mixer.set_num_channels.return_value = None
-        mock_mixer.music = Mock()
-        mock_mixer.music.get_busy.return_value = False
-        mock_mixer.music.load.return_value = None
-        mock_mixer.music.play.return_value = None
-        mock_mixer.music.stop.return_value = None
-        mock_mixer.music.pause.return_value = None
-        mock_mixer.music.unpause.return_value = None
-        mock_mixer.music.fadeout.return_value = None
-        mock_mixer.music.set_volume.return_value = None
-        mock_mixer.pause.return_value = None
-        mock_mixer.unpause.return_value = None
-        mock_mixer.Channel.return_value.stop.return_value = None
-
-        yield mock_mixer
+@pytest.fixture(autouse=True, scope="module")
+def _mixer() -> Iterator[None]:
+    """Bring the real (dummy-driver) mixer up for the module."""
+    pygame.mixer.init(_SAMPLE_RATE, -16, 2, 512)
+    yield
+    pygame.mixer.quit()
 
 
-@pytest.fixture  # type: ignore[misc]
-def audio_system(mock_pygame_mixer: Any) -> PygameAudioSystem:
-    """Create a PygameAudioSystem instance with mocked pygame."""
-    return PygameAudioSystem()
+@pytest.fixture
+def mock_music() -> Iterator[Any]:
+    """Mock only the music-streaming API; channels stay real."""
+    with patch("pygame.mixer.music") as music:
+        music.get_busy.return_value = False
+        yield music
 
 
-@pytest.fixture  # type: ignore[misc]
-def mock_audio_clip() -> AudioClip:
-    """Create a mock audio clip for testing."""
-    clip = Mock(spec=AudioClip)
-    clip.path = "test_sound.wav"
+def _make_clip(path: str = "test_sound.wav", seconds: float = 1.0) -> AudioClip:
+    """Build a real AudioClip wrapping a real Sound of `seconds` of silence."""
+    frames = int(_SAMPLE_RATE * seconds)
+    sound = pygame.mixer.Sound(buffer=b"\x00\x00\x00\x00" * frames)
 
-    # Mock pygame Sound object
-    mock_sound = Mock()
-    mock_sound.set_volume = Mock()
-    mock_sound.play = Mock(return_value=Mock(get_id=Mock(return_value=0)))
+    class _Clip(AudioClip):
+        @property
+        def duration(self) -> float:
+            return seconds
 
-    clip.native_handle = mock_sound
-    return clip
+        @property
+        def native_handle(self) -> pygame.mixer.Sound:
+            return sound
+
+    return _Clip(path)
 
 
-@pytest.fixture  # type: ignore[misc]
+@pytest.fixture
+def audio_system(mock_music: Any) -> Iterator[PygameAudioSystem]:
+    """A PygameAudioSystem on the real mixer, isolated between tests."""
+    system = PygameAudioSystem(num_channels=8)
+    yield system
+    pygame.mixer.stop()
+
+
+@pytest.fixture
+def audio_clip() -> AudioClip:
+    return _make_clip()
+
+
+@pytest.fixture
 def audio_manager(audio_system: PygameAudioSystem) -> AudioManager:
-    """Create an AudioManager instance."""
     return AudioManager(audio_system)
 
 
@@ -66,226 +84,333 @@ def audio_manager(audio_system: PygameAudioSystem) -> AudioManager:
 
 
 def test_master_volume_control(audio_system: PygameAudioSystem) -> None:
-    """Test master volume getter and setter."""
-    # Default volume should be 1.0
+    """Master volume getter/setter, with clamping."""
     assert audio_system.get_master_volume() == 1.0
 
-    # Set new volume
     audio_system.set_master_volume(0.5)
     assert audio_system.get_master_volume() == 0.5
 
-    # Test clamping
-    audio_system.set_master_volume(1.5)  # Above max
+    audio_system.set_master_volume(1.5)
     assert audio_system.get_master_volume() == 1.0
 
-    audio_system.set_master_volume(-0.5)  # Below min
+    audio_system.set_master_volume(-0.5)
     assert audio_system.get_master_volume() == 0.0
 
 
 def test_sfx_volume_control(audio_system: PygameAudioSystem) -> None:
-    """Test SFX volume getter and setter."""
-    # Default volume should be 1.0
+    """SFX volume getter/setter, with clamping."""
     assert audio_system.get_sfx_volume() == 1.0
 
-    # Set new volume
     audio_system.set_sfx_volume(0.7)
     assert audio_system.get_sfx_volume() == 0.7
 
-    # Test clamping
     audio_system.set_sfx_volume(2.0)
     assert audio_system.get_sfx_volume() == 1.0
 
 
-def test_music_volume_control(
-    audio_system: PygameAudioSystem, mock_pygame_mixer: Any
-) -> None:
-    """Test music volume getter and setter."""
-    # Default volume should be 1.0
+def test_music_volume_control(audio_system: PygameAudioSystem, mock_music: Any) -> None:
+    """Music volume getter/setter pushes the effective volume to the stream."""
     assert audio_system.get_music_volume() == 1.0
 
-    # Set new volume
     audio_system.set_music_volume(0.3)
     assert audio_system.get_music_volume() == 0.3
-
-    # Verify pygame.mixer.music.set_volume was called with effective volume
-    mock_pygame_mixer.music.set_volume.assert_called()
-
-
-def test_volume_hierarchy(audio_system: PygameAudioSystem) -> None:
-    """Test that master volume affects both SFX and music."""
-    audio_system.set_master_volume(0.5)
-    audio_system.set_sfx_volume(0.8)
-    audio_system.set_music_volume(0.6)
-
-    assert audio_system.get_master_volume() == 0.5
-    assert audio_system.get_sfx_volume() == 0.8
-    assert audio_system.get_music_volume() == 0.6
-
-    # Effective volumes should be: master * category
-    # This will be verified in play methods
+    mock_music.set_volume.assert_called()
 
 
 # ========== SFX Playback Tests ==========
 
 
-def test_play_sfx(audio_system: PygameAudioSystem, mock_audio_clip: AudioClip) -> None:
-    """Test playing a sound effect."""
-    channel_id = audio_system.play_sfx(mock_audio_clip, volume=0.8)
+def test_play_sfx_plays_on_the_channel_it_returns(
+    audio_system: PygameAudioSystem, audio_clip: AudioClip
+) -> None:
+    """The returned id names the channel actually carrying our sound.
 
-    # Verify sound was played
-    mock_audio_clip.native_handle.set_volume.assert_called_once()
-    mock_audio_clip.native_handle.play.assert_called_once_with(loops=0)
+    Regression: the backend called ``Channel.get_id()`` (does not exist on
+    pygame-ce), so every real ``play_sfx`` raised, was swallowed, and returned
+    ``None`` while the sound played on untracked.
+    """
+    channel_id = audio_system.play_sfx(audio_clip, volume=0.8)
 
-    # Should return a channel ID
     assert channel_id is not None
+    assert isinstance(channel_id, int)
+    pg = pygame.mixer.Channel(channel_id)
+    assert pg.get_busy()
+    assert pg.get_sound() is audio_clip.native_handle
 
 
-def test_play_sfx_with_loops(
-    audio_system: PygameAudioSystem, mock_audio_clip: AudioClip
+def test_play_sfx_channel_id_zero_is_valid(
+    audio_system: PygameAudioSystem, audio_clip: AudioClip
 ) -> None:
-    """Test playing a looping sound effect."""
-    audio_system.play_sfx(mock_audio_clip, volume=1.0, loops=3)
+    """Channel 0 is a real channel; it must come back as 0, not be treated
+    as falsy/absent."""
+    channel_id = audio_system.play_sfx(audio_clip)
+    assert channel_id == 0
+    assert audio_system.is_channel_active(0)
 
-    # Verify loops parameter was passed
-    mock_audio_clip.native_handle.play.assert_called_once_with(loops=3)
 
-
-def test_play_sfx_volume_application(
-    audio_system: PygameAudioSystem, mock_audio_clip: AudioClip
+def test_play_sfx_loops_forever_when_requested(
+    audio_system: PygameAudioSystem,
 ) -> None:
-    """Test that SFX volume is correctly applied."""
+    """loops=-1 keeps a short clip busy well past its own length."""
+    import time
+
+    clip = _make_clip(seconds=0.05)
+    channel_id = audio_system.play_sfx(clip, loops=-1)
+    assert channel_id is not None
+    time.sleep(0.2)
+    assert pygame.mixer.Channel(channel_id).get_busy()
+
+
+def test_play_sfx_centred_volume_is_set_on_the_channel_not_the_sound(
+    audio_system: PygameAudioSystem, audio_clip: AudioClip
+) -> None:
+    """Effective volume = clip * sfx * master, applied to the channel; the
+    shared Sound object is left untouched.
+
+    ``Channel.get_volume()`` only reflects a single-argument ``set_volume``
+    (the centred path), so a non-spatial clip is used here.
+    """
     audio_system.set_master_volume(0.5)
     audio_system.set_sfx_volume(0.8)
 
-    audio_system.play_sfx(mock_audio_clip, volume=0.6)
+    channel_id = audio_system.play_sfx(audio_clip, volume=0.6)
+    assert channel_id is not None
 
-    # Effective volume should be: 0.6 * 0.8 * 0.5 = 0.24
-    expected_volume = 0.6 * 0.8 * 0.5
-    mock_audio_clip.native_handle.set_volume.assert_called_once_with(expected_volume)
-
-
-def test_stop_sfx(audio_system: PygameAudioSystem, mock_pygame_mixer: Any) -> None:
-    """Test stopping a specific SFX channel."""
-    audio_system.stop_sfx(0)
-
-    # Verify Channel(0).stop() was called
-    mock_pygame_mixer.Channel.assert_called_once_with(0)
-    mock_pygame_mixer.Channel.return_value.stop.assert_called_once()
-
-
-def test_pause_resume_sfx(
-    audio_system: PygameAudioSystem, mock_pygame_mixer: Any
-) -> None:
-    """Test pausing and resuming all sound effects."""
-    audio_system.pause_sfx()
-    mock_pygame_mixer.pause.assert_called_once()
-
-    audio_system.resume_sfx()
-    mock_pygame_mixer.unpause.assert_called_once()
-
-
-# ========== Spatial Channel Mix Tests ==========
-
-
-def test_set_channel_mix_updates_volume_and_pan(
-    audio_system: PygameAudioSystem,
-    mock_pygame_mixer: Any,
-    mock_audio_clip: AudioClip,
-) -> None:
-    """Test that set_channel_mix pushes attenuation and pan to a playing channel."""
-    mock_pygame_mixer.Channel.return_value.get_busy.return_value = True
-    mock_pygame_mixer.Channel.return_value.get_sound.return_value = (
-        mock_audio_clip.native_handle
+    expected = 0.6 * 0.8 * 0.5
+    assert pygame.mixer.Channel(channel_id).get_volume() == pytest.approx(
+        expected, abs=0.02
     )
+    # D2: the ResourceManager-cached Sound must never have its volume touched.
+    assert audio_clip.native_handle.get_volume() == pytest.approx(1.0)
 
-    channel_id = audio_system.play_sfx(mock_audio_clip, volume=1.0)
+
+def test_channel_stereo_split_is_pure_and_symmetric() -> None:
+    """The pan -> (left, right) maths, tested directly (the applied split is
+    not observable through ``Channel.get_volume()``)."""
+    assert PygameAudioSystem._channel_stereo(1.0, 0.0) == (1.0, 1.0)
+    assert PygameAudioSystem._channel_stereo(1.0, 1.0) == (0.0, 1.0)
+    assert PygameAudioSystem._channel_stereo(1.0, -1.0) == (1.0, 0.0)
+    l_r, r_r = PygameAudioSystem._channel_stereo(0.8, 0.5)
+    l_l, r_l = PygameAudioSystem._channel_stereo(0.8, -0.5)
+    assert (l_r, r_r) == (r_l, l_l)  # mirror image
+    # clamped
+    assert PygameAudioSystem._channel_stereo(1.0, 5.0) == (0.0, 1.0)
+
+
+def test_concurrent_plays_of_one_clip_do_not_share_volume(
+    audio_system: PygameAudioSystem,
+) -> None:
+    """Two spatial plays of the SAME cached clip must not fight over one
+    shared ``Sound.set_volume`` (D2)."""
+    from pyguara.audio.types import SpatialAudioConfig
+    from pyguara.common.types import Vector2
+
+    audio_system.set_spatial_config(
+        SpatialAudioConfig(max_distance=1000, reference_distance=100)
+    )
+    clip = _make_clip(seconds=1.0)
+
+    near = audio_system.play_sfx_at_position(
+        clip, Vector2(0, 0), Vector2(0, 0), volume=1.0
+    )
+    far = audio_system.play_sfx_at_position(
+        clip, Vector2(600, 0), Vector2(0, 0), volume=1.0
+    )
+    assert near is not None and far is not None and near != far
+
+    # The near play is centred, so its channel volume is observable and must
+    # still be full despite the quieter far play that followed.
+    assert pygame.mixer.Channel(near).get_volume() == pytest.approx(1.0, abs=0.02)
+    # And the clip's Sound was never used as the volume knob.
+    assert clip.native_handle.get_volume() == pytest.approx(1.0)
+
+
+def test_recycled_channel_does_not_inherit_previous_pan(
+    audio_system: PygameAudioSystem,
+) -> None:
+    """A centred sound landing on a reused channel resets the stereo split
+    instead of keeping the last sound's hard pan (D3).
+
+    A stale two-argument split leaves ``Channel.get_volume()`` reading 1.0
+    (it ignores stereo separation); the centred play must drive it to its
+    own volume.
+    """
+    from pyguara.audio.types import SpatialAudioConfig
+    from pyguara.common.types import Vector2
+
+    one_channel = PygameAudioSystem(num_channels=1)
+    one_channel.set_spatial_config(SpatialAudioConfig(max_distance=10000))
+    try:
+        one_channel.play_sfx_at_position(
+            _make_clip("left.wav", 0.05),
+            Vector2(-9000, 0),
+            Vector2(0, 0),
+            volume=1.0,
+        )
+        pygame.mixer.Channel(0).stop()
+
+        centred = one_channel.play_sfx(_make_clip("mid.wav", 0.5), volume=0.5)
+        assert centred == 0
+        assert pygame.mixer.Channel(0).get_volume() == pytest.approx(0.5, abs=0.02)
+    finally:
+        pygame.mixer.stop()
+
+
+def test_stop_sfx_stops_and_forgets_the_channel(
+    audio_system: PygameAudioSystem, audio_clip: AudioClip
+) -> None:
+    channel_id = audio_system.play_sfx(audio_clip)
+    assert channel_id is not None
+    assert audio_system.is_channel_active(channel_id)
+
+    audio_system.stop_sfx(channel_id)
+    assert not pygame.mixer.Channel(channel_id).get_busy()
+    assert not audio_system.is_channel_active(channel_id)
+
+
+def test_invalid_clip_returns_none(audio_system: PygameAudioSystem) -> None:
+    class _Broken(AudioClip):
+        @property
+        def duration(self) -> float:
+            return 0.0
+
+        @property
+        def native_handle(self) -> Any:
+            return None
+
+    assert audio_system.play_sfx(_Broken("broken.wav")) is None
+
+
+def test_pause_resume_sfx(audio_system: PygameAudioSystem) -> None:
+    # The dummy SDL driver does not reflect pause() in get_busy(), so assert
+    # the calls route through to the mixer.
+    with (
+        patch("pygame.mixer.pause") as pause,
+        patch("pygame.mixer.unpause") as unpause,
+    ):
+        audio_system.pause_sfx()
+        audio_system.resume_sfx()
+    pause.assert_called_once()
+    unpause.assert_called_once()
+
+
+# ========== is_channel_active ==========
+
+
+def test_is_channel_active_false_for_unknown_channel(
+    audio_system: PygameAudioSystem,
+) -> None:
+    assert audio_system.is_channel_active(5) is False
+
+
+def test_is_channel_active_false_once_sound_finishes(
+    audio_system: PygameAudioSystem,
+) -> None:
+    import time
+
+    channel_id = audio_system.play_sfx(_make_clip(seconds=0.05))
+    assert channel_id is not None
+    assert audio_system.is_channel_active(channel_id)
+
+    time.sleep(0.25)
+    assert audio_system.is_channel_active(channel_id) is False
+
+
+def test_is_channel_active_false_when_channel_reused_by_other_sound(
+    audio_system: PygameAudioSystem,
+) -> None:
+    one = PygameAudioSystem(num_channels=1)
+    try:
+        first = one.play_sfx(_make_clip("first.wav", 2.0))
+        assert first == 0
+        pygame.mixer.Channel(0).stop()
+        # Something unrelated grabs channel 0 directly.
+        pygame.mixer.Channel(0).play(_make_clip("other.wav", 2.0).native_handle)
+        assert one.is_channel_active(0) is False
+    finally:
+        pygame.mixer.stop()
+
+
+# ========== set_channel_mix ==========
+
+
+def test_set_channel_mix_updates_channel_volume(
+    audio_system: PygameAudioSystem, audio_clip: AudioClip
+) -> None:
+    channel_id = audio_system.play_sfx(audio_clip, volume=1.0)
     assert channel_id is not None
 
     audio_system.set_channel_mix(channel_id, attenuation=0.4, pan=0.0)
-
-    # base_volume(1.0) * attenuation(0.4) * bus_volume(1.0) = 0.4
-    mock_audio_clip.native_handle.set_volume.assert_called_with(0.4)
-    # pan=0.0 is centered: full volume on both stereo channels.
-    mock_pygame_mixer.Channel.return_value.set_volume.assert_called_with(1.0, 1.0)
+    assert pygame.mixer.Channel(channel_id).get_volume() == pytest.approx(0.4, abs=0.02)
 
 
 def test_set_channel_mix_ignores_finished_channel(
     audio_system: PygameAudioSystem,
-    mock_pygame_mixer: Any,
-    mock_audio_clip: AudioClip,
 ) -> None:
-    """A channel that finished playing must not receive a stale mix update."""
-    mock_pygame_mixer.Channel.return_value.get_busy.return_value = True
-    channel_id = audio_system.play_sfx(mock_audio_clip, volume=1.0)
+    import time
+
+    channel_id = audio_system.play_sfx(_make_clip(seconds=0.05), volume=1.0)
     assert channel_id is not None
-    mock_audio_clip.native_handle.set_volume.reset_mock()
-
-    mock_pygame_mixer.Channel.return_value.get_busy.return_value = False
+    time.sleep(0.25)
+    # Must not raise, must not resurrect volume on a dead channel.
     audio_system.set_channel_mix(channel_id, attenuation=0.4, pan=0.0)
-
-    mock_audio_clip.native_handle.set_volume.assert_not_called()
+    assert audio_system.is_channel_active(channel_id) is False
 
 
 def test_set_channel_mix_ignores_unknown_channel(
-    audio_system: PygameAudioSystem, mock_pygame_mixer: Any
+    audio_system: PygameAudioSystem,
 ) -> None:
-    """A channel id this system never played must be a silent no-op."""
-    audio_system.set_channel_mix(99, attenuation=0.5, pan=0.5)
+    audio_system.set_channel_mix(99, attenuation=0.5, pan=0.5)  # no raise
 
-    mock_pygame_mixer.Channel.assert_not_called()
+
+# ========== shutdown ==========
+
+
+def test_shutdown_is_idempotent_and_stops_audio() -> None:
+    system = PygameAudioSystem(num_channels=4)
+    system.play_sfx(_make_clip(seconds=1.0), loops=-1)
+
+    system.shutdown()
+    system.shutdown()  # second call is a no-op, must not raise
+
+    # Bring the module mixer back for the remaining tests.
+    pygame.mixer.init(_SAMPLE_RATE, -16, 2, 512)
 
 
 # ========== Music Playback Tests ==========
 
 
-def test_play_music(audio_system: PygameAudioSystem, mock_pygame_mixer: Any) -> None:
-    """Test playing background music."""
+def test_play_music(audio_system: PygameAudioSystem, mock_music: Any) -> None:
     audio_system.play_music("music/bgm.ogg", loop=True, fade_ms=1000)
 
-    # Verify music was loaded and played
-    mock_pygame_mixer.music.load.assert_called_once_with("music/bgm.ogg")
-    mock_pygame_mixer.music.play.assert_called_once_with(loops=-1, fade_ms=1000)
-    mock_pygame_mixer.music.set_volume.assert_called()
+    mock_music.load.assert_called_once_with("music/bgm.ogg")
+    mock_music.play.assert_called_once_with(loops=-1, fade_ms=1000)
+    mock_music.set_volume.assert_called()
 
 
-def test_play_music_no_loop(
-    audio_system: PygameAudioSystem, mock_pygame_mixer: Any
-) -> None:
-    """Test playing non-looping music."""
-    audio_system.play_music("music/theme.mp3", loop=False)
-
-    # Verify loops=0 for non-looping
-    mock_pygame_mixer.music.play.assert_called_once_with(loops=0, fade_ms=1000)
+def test_play_music_no_loop(audio_system: PygameAudioSystem, mock_music: Any) -> None:
+    audio_system.play_music("music/theme.ogg", loop=False)
+    mock_music.play.assert_called_once_with(loops=0, fade_ms=1000)
 
 
-def test_stop_music(audio_system: PygameAudioSystem, mock_pygame_mixer: Any) -> None:
-    """Test stopping music."""
+def test_stop_music(audio_system: PygameAudioSystem, mock_music: Any) -> None:
     audio_system.stop_music(fade_ms=500)
+    mock_music.fadeout.assert_called_once_with(500)
 
-    mock_pygame_mixer.music.fadeout.assert_called_once_with(500)
 
-
-def test_pause_resume_music(
-    audio_system: PygameAudioSystem, mock_pygame_mixer: Any
-) -> None:
-    """Test pausing and resuming music."""
+def test_pause_resume_music(audio_system: PygameAudioSystem, mock_music: Any) -> None:
     audio_system.pause_music()
-    mock_pygame_mixer.music.pause.assert_called_once()
+    mock_music.pause.assert_called_once()
 
     audio_system.resume_music()
-    mock_pygame_mixer.music.unpause.assert_called_once()
+    mock_music.unpause.assert_called_once()
 
 
-def test_is_music_playing(
-    audio_system: PygameAudioSystem, mock_pygame_mixer: Any
-) -> None:
-    """Test checking if music is playing."""
-    # Mock music as not playing
-    mock_pygame_mixer.music.get_busy.return_value = False
+def test_is_music_playing(audio_system: PygameAudioSystem, mock_music: Any) -> None:
+    mock_music.get_busy.return_value = False
     assert not audio_system.is_music_playing()
 
-    # Mock music as playing
-    mock_pygame_mixer.music.get_busy.return_value = True
+    mock_music.get_busy.return_value = True
     assert audio_system.is_music_playing()
 
 
@@ -293,39 +418,27 @@ def test_is_music_playing(
 
 
 def test_audio_manager_initialization(audio_manager: AudioManager) -> None:
-    """Test AudioManager initializes correctly."""
-    assert audio_manager is not None
     assert audio_manager.get_master_volume() == 1.0
     assert audio_manager.get_current_music() is None
 
 
-def test_audio_manager_play_music(
-    audio_manager: AudioManager, mock_pygame_mixer: Any
-) -> None:
-    """Test AudioManager music playback."""
+def test_audio_manager_play_music(audio_manager: AudioManager, mock_music: Any) -> None:
     audio_manager.play_music("music/bgm.ogg")
 
-    # Verify music was played
-    mock_pygame_mixer.music.load.assert_called_once_with("music/bgm.ogg")
-    mock_pygame_mixer.music.play.assert_called_once()
-
-    # Verify current music is tracked
+    mock_music.load.assert_called_once_with("music/bgm.ogg")
+    mock_music.play.assert_called_once()
     assert audio_manager.get_current_music() == "music/bgm.ogg"
 
 
-def test_audio_manager_stop_music(
-    audio_manager: AudioManager, mock_pygame_mixer: Any
-) -> None:
-    """Test AudioManager stops music and clears tracking."""
+def test_audio_manager_stop_music(audio_manager: AudioManager, mock_music: Any) -> None:
     audio_manager.play_music("music/bgm.ogg")
     audio_manager.stop_music()
 
-    mock_pygame_mixer.music.fadeout.assert_called_once()
+    mock_music.fadeout.assert_called_once()
     assert audio_manager.get_current_music() is None
 
 
 def test_audio_manager_volume_control(audio_manager: AudioManager) -> None:
-    """Test AudioManager volume controls."""
     audio_manager.set_master_volume(0.7)
     assert audio_manager.get_master_volume() == 0.7
 
@@ -337,92 +450,63 @@ def test_audio_manager_volume_control(audio_manager: AudioManager) -> None:
 
 
 def test_audio_manager_pause_resume(
-    audio_manager: AudioManager, mock_pygame_mixer: Any
+    audio_manager: AudioManager, mock_music: Any
 ) -> None:
-    """Test AudioManager pause and resume."""
     audio_manager.pause_music()
-    mock_pygame_mixer.music.pause.assert_called_once()
+    mock_music.pause.assert_called_once()
 
     audio_manager.resume_music()
-    mock_pygame_mixer.music.unpause.assert_called_once()
-
-    audio_manager.pause_all_sfx()
-    mock_pygame_mixer.pause.assert_called_once()
-
-    audio_manager.resume_all_sfx()
-    mock_pygame_mixer.unpause.assert_called_once()
+    mock_music.unpause.assert_called_once()
 
 
-def test_audio_manager_cleanup(
-    audio_manager: AudioManager, mock_pygame_mixer: Any
+def test_audio_manager_cleanup_stops_music_and_clears_tracking(
+    audio_manager: AudioManager, mock_music: Any
 ) -> None:
-    """Test AudioManager cleanup."""
     audio_manager.play_music("music/bgm.ogg")
     audio_manager.cleanup()
 
-    # Verify music was stopped
-    mock_pygame_mixer.music.fadeout.assert_called_with(0)
-
-    # Verify tracking was cleared
+    mock_music.fadeout.assert_called_with(0)
     assert audio_manager.get_current_music() is None
 
 
 def test_audio_manager_play_sfx_clip(
-    audio_manager: AudioManager, mock_audio_clip: AudioClip
+    audio_manager: AudioManager, audio_clip: AudioClip
 ) -> None:
-    """Test AudioManager playing SFX clip."""
-    channel_id = audio_manager.play_sfx_clip(mock_audio_clip, volume=0.8)
-
-    # Verify sound was played
-    mock_audio_clip.native_handle.play.assert_called_once()
+    channel_id = audio_manager.play_sfx_clip(audio_clip, volume=0.8)
     assert channel_id is not None
+    assert pygame.mixer.Channel(channel_id).get_sound() is audio_clip.native_handle
 
 
 def test_audio_manager_stop_sfx(
-    audio_manager: AudioManager, mock_pygame_mixer: Any
+    audio_manager: AudioManager, audio_clip: AudioClip
 ) -> None:
-    """Test AudioManager stopping SFX channel."""
-    audio_manager.stop_sfx(0)
+    channel_id = audio_manager.play_sfx_clip(audio_clip, loops=-1)
+    assert channel_id is not None
+    audio_manager.stop_sfx(channel_id)
+    assert not pygame.mixer.Channel(channel_id).get_busy()
 
-    mock_pygame_mixer.Channel.assert_called_once_with(0)
-    mock_pygame_mixer.Channel.return_value.stop.assert_called_once()
 
-
-# ========== Integration Tests ==========
+# ========== Integration ==========
 
 
 def test_full_audio_workflow(
-    audio_manager: AudioManager,
-    mock_audio_clip: AudioClip,
-    mock_pygame_mixer: Any,
+    audio_manager: AudioManager, audio_clip: AudioClip, mock_music: Any
 ) -> None:
-    """Test a complete audio workflow."""
-    # Set volumes
     audio_manager.set_master_volume(0.8)
     audio_manager.set_sfx_volume(0.7)
     audio_manager.set_music_volume(0.5)
 
-    # Play music
     audio_manager.play_music("music/bgm.ogg", loop=True)
-    assert (
-        audio_manager.is_music_playing() or not audio_manager.is_music_playing()
-    )  # Depends on mock
-
-    # Play SFX
-    channel = audio_manager.play_sfx_clip(mock_audio_clip, volume=1.0)
+    channel = audio_manager.play_sfx_clip(audio_clip, volume=1.0)
     assert channel is not None
+    assert pygame.mixer.Channel(channel).get_busy()
 
-    # Pause everything
     audio_manager.pause_music()
     audio_manager.pause_all_sfx()
-
-    # Resume everything
     audio_manager.resume_music()
     audio_manager.resume_all_sfx()
 
-    # Stop music
     audio_manager.stop_music()
     assert audio_manager.get_current_music() is None
 
-    # Cleanup
     audio_manager.cleanup()

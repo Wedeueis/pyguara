@@ -48,9 +48,6 @@ class AudioManager:
         # Track loaded audio clips
         self._loaded_clips: dict[str, AudioClip] = {}
 
-        # Track active sound channels
-        self._active_channels: dict[str, int] = {}
-
         # Current music track
         self._current_music: str | None = None
 
@@ -245,8 +242,12 @@ class AudioManager:
     # ========== Cleanup ==========
 
     def cleanup(self) -> None:
-        """Clean up resources and stop all audio."""
+        """Stop music and drop cached clips.
+
+        Playing sound effects are owned by ``AudioSourceSystem`` and released
+        by its own ``cleanup()``; tearing down the shared mixer device is
+        ``IAudioSystem.shutdown()``, called at application shutdown.
+        """
         self.stop_music(fade_ms=0)
         self._loaded_clips.clear()
-        self._active_channels.clear()
         self._current_music = None
