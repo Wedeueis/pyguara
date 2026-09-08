@@ -36,6 +36,7 @@ nav:
       - Intelligence: ai/intelligence.md
   - Systems:
       - Animation: systems/animation.md
+      - Audio: systems/audio.md
       - Editor Tools: systems/editor.md
       - Input: systems/input.md
       - Resources: systems/resources.md
