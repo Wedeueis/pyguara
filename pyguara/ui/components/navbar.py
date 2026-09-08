@@ -22,10 +22,10 @@ class NavBar(BoxContainer):
             alignment=LayoutAlignment.START,
             spacing=10,
         )
-        # Add background panel manually since BoxContainer doesn't render itself
-        self.background = Panel(
-            Vector2(0, 0), Vector2(width, height), color=self.theme.colors.background
-        )
+        # Add background panel manually since BoxContainer doesn't render
+        # itself. No explicit colour, so the Panel resolves the active theme's
+        # background live at render time.
+        self.background = Panel(Vector2(0, 0), Vector2(width, height))
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the background and then children."""

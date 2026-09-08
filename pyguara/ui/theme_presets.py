@@ -16,8 +16,6 @@ Example:
     >>> set_theme(my_theme)
 """
 
-from dataclasses import dataclass
-
 from pyguara.common.types import Color
 from pyguara.ui.theme import UITheme
 from pyguara.ui.types import (
@@ -199,21 +197,37 @@ def _create_retro_theme() -> UITheme:
     )
 
 
-@dataclass(frozen=True)
 class ThemeConstants:
-    """Container for pre-built theme presets.
+    """Accessor for the pre-built theme presets.
 
-    All themes are immutable. To customize, clone and modify:
-        >>> my_theme = Themes.DARK.clone()
+    Each attribute access returns a **fresh copy** of the preset, so callers
+    cannot corrupt the canonical definition for the rest of the process:
+
+        >>> my_theme = Themes.DARK          # already a private copy
         >>> my_theme.colors.primary = Color(255, 0, 0)
+        >>> Themes.DARK.colors.primary     # unaffected
+        Color(r=70, g=130, b=180, a=255)
+
+    Pass one straight to ``set_theme(Themes.DARK)`` when you want it verbatim.
     """
 
-    DARK = _create_dark_theme()
-    LIGHT = _create_light_theme()
-    HIGH_CONTRAST = _create_high_contrast_theme()
-    CYBERPUNK = _create_cyberpunk_theme()
-    FOREST = _create_forest_theme()
-    RETRO = _create_retro_theme()
+    _FACTORIES = {
+        "DARK": _create_dark_theme,
+        "LIGHT": _create_light_theme,
+        "HIGH_CONTRAST": _create_high_contrast_theme,
+        "CYBERPUNK": _create_cyberpunk_theme,
+        "FOREST": _create_forest_theme,
+        "RETRO": _create_retro_theme,
+    }
+
+    def __getattr__(self, name: str) -> UITheme:
+        """Build and return a fresh instance of the named preset."""
+        try:
+            return self._FACTORIES[name]()
+        except KeyError:
+            raise AttributeError(
+                f"{type(self).__name__!r} has no theme preset {name!r}"
+            ) from None
 
 
 # Singleton instance

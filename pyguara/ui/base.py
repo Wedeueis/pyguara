@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.theme import get_theme
-from pyguara.ui.types import UIAnchor, UIElementState, UIEventType
+from pyguara.ui.types import UIElementState, UIEventType
 
 if TYPE_CHECKING:
     from pyguara.ui.constraints import LayoutConstraints, Padding
+    from pyguara.ui.theme import UITheme
 
 
 class UIElement(ABC):
@@ -20,13 +21,11 @@ class UIElement(ABC):
         self,
         position: Vector2,
         size: Vector2,
-        anchor: UIAnchor = UIAnchor.TOP_LEFT,
         visible: bool = True,
     ) -> None:
         """Initialize the UI element."""
         # Use Engine Types, not Pygame Types
         self.rect = Rect(int(position.x), int(position.y), int(size.x), int(size.y))
-        self.anchor = anchor
         self.visible = visible
         self.enabled = True
 
@@ -38,11 +37,17 @@ class UIElement(ABC):
         self.constraints: LayoutConstraints | None = None
         self.padding: Padding | None = None
 
-        # Theme Integration
-        self.theme = get_theme()
-
         # Callbacks
         self.on_click: Callable[[UIElement], None] | None = None
+
+    @property
+    def theme(self) -> "UITheme":
+        """The active global theme.
+
+        Looked up live on every access rather than captured at construction,
+        so `set_theme()` re-skins elements that already exist.
+        """
+        return get_theme()
 
     @abstractmethod
     def render(self, renderer: UIRenderer) -> None:
@@ -135,20 +140,34 @@ class UIElement(ABC):
         child.parent = self
         self.children.append(child)
 
-    def apply_layout(self) -> None:
-        """Apply layout constraints to this element and its children.
+    def layout(self, available_rect: Rect, renderer: UIRenderer) -> None:
+        """Resolve this element's rect, then its children's, for one frame.
 
-        Applies constraints relative to parent if present.
-        Then recursively applies layout to children.
+        `UIManager` runs this over every root before rendering, and again
+        after a window resize or an explicit `UIManager.invalidate_layout()`.
+        `available_rect` is the space this element may occupy: the screen for
+        a root element, the parent's content rect for a child.
+
+        The default implementation measures the element, applies its
+        `constraints` against `available_rect` if it has any, then lays each
+        visible child out inside this element's content rect (so `padding`
+        finally takes effect). Containers that position their own children --
+        see `BoxContainer` -- override this.
+
+        Args:
+            available_rect: The rectangle this element may lay itself out in.
+            renderer: Passed to `measure()` so text-sized elements report a
+                real size before constraint math reads it.
         """
-        # Apply own constraints if present and has parent
-        if self.constraints and self.parent:
-            self.rect = self.constraints.apply(self.rect, self.parent.rect)
+        self.measure(renderer)
 
-        # Apply layout to children
+        if self.constraints:
+            self.rect = self.constraints.apply(self.rect, available_rect)
+
+        content = self.get_content_rect()
         for child in self.children:
             if child.visible:
-                child.apply_layout()
+                child.layout(content, renderer)
 
     def get_content_rect(self) -> Rect:
         """Get the rectangle for content area (rect minus padding).

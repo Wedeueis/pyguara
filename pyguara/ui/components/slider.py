@@ -17,7 +17,19 @@ class Slider(Widget):
         max_val: float = 1.0,
         step: float = 0.0,
     ) -> None:
-        """Initialize the slider."""
+        """Initialize the slider.
+
+        Raises:
+            ValueError: If `max_val` is not greater than `min_val`, or
+                `width` is not positive -- both leave the slider with no
+                usable range and would divide by zero on interaction.
+        """
+        if max_val <= min_val:
+            raise ValueError(
+                f"Slider max_val ({max_val}) must be greater than min_val ({min_val})"
+            )
+        if width <= 0:
+            raise ValueError(f"Slider width must be positive, got {width}")
         super().__init__(position, Vector2(width, 20))
         self.min_val = min_val
         self.max_val = max_val
