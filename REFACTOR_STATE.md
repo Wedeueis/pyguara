@@ -79,9 +79,64 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/replay` closed 2026-09-08 (branch `refactor/replay-audit`).**
-Next in the queue is Tier 4: `pyguara/dev` (dev-only helpers). Open
+**None — `pyguara/dev` closed 2026-09-08 (branch `refactor/dev-audit`).**
+Next in the queue is Tier 4: `pyguara/cli` (command-line entry points). Open
 `REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/dev` in one slice, ~674 lines (`file_watcher`, `hot_reload`). Like
+`pyguara/editor`, **the whole subsystem had zero integration** — nothing in the
+engine, no game, no non-test file imported `HotReloadManager`,
+`PollingFileWatcher`, `StatefulSystem` or `reload_system_class`. Wayfinder
+ticket 09 had fogged it in 2026: "whether a pre-alpha engine carries live code
+reload is a product-scope question deserving its own deliberate answer." Per the
+user's choice (**split: delete code-reload, wire the watcher**): the
+Python-module reload layer (`hot_reload.py`) is deleted and `PollingFileWatcher`
+is kept and wired to assets.
+
+Probes showed `HotReloadManager` would not have worked as advertised: the class
+promised `StatefulSystem` state preservation but `reload_module()` had **no
+`get_state`/`set_state` path** — that protocol and `reload_system_class()` were a
+separate island with no callers; with the default `auto_reload=True`,
+`importlib.reload()` ran **on the polling thread** (module top-level code
+re-executing off the main thread, no marshalling queue); and `watch_module("x")`
+twice registered a fresh lambda each call, so one edit fired N reloads.
+**`PollingFileWatcher` kept, one defect fixed: `check_now()` held a
+non-reentrant lock across user callbacks**, so a change callback calling
+`watch()` / `unwatch()` / `watched_count` — all natural things to do from one —
+deadlocked the poll thread (probe: `check_now` never returned). It now snapshots
+under the lock and notifies with it released; the poll loop also survives a
+raising callback instead of killing the thread.
+
+New `AssetReloadWatcher` bridges the watcher to `ResourceManager.reload()` — the
+`reload()` primitive the `pyguara/resources` slice built for exactly this. The
+poll thread **queues** a changed asset's cache key; `Application._update()` calls
+`drain()` once per frame **on the main thread**, because `ResourceManager` is not
+safe to mutate under a running frame (the same background-thread → main-thread
+marshalling shape as `queue_event()`). The watch set follows the resource cache
+and is reconciled periodically. Opt-in via
+`Application.enable_asset_hot_reload()`; `SandboxApplication` calls it.
+**BREAKING** (pre-alpha): `pyguara.dev.HotReloadManager` / `StatefulSystem` /
+`reload_system_class` removed. Tests: `test_hot_reload.py` deleted (17,
+all happy-path against stdlib modules — none touched the deadlock, the
+double-reload, the missing state path or the wrong-thread reload); new
+`test_dev.py` (+20 cases, 1893 → 1898) covering the watcher's real behaviour,
+the deadlock and raising-callback regressions, and `AssetReloadWatcher` end to
+end including the queue-then-drain thread split. New `docs/systems/dev.md` (the
+subsystem had no page). See the iteration log entry below.
+
+**Capability gaps (Phase D) → #40** (which already names "hot-reload has a
+`reload()` primitive but nothing watches the filesystem"): detection is
+polling-only (no `inotify` / `FSEvents` / `ReadDirectoryChangesW`), so it lags by
+up to `poll_interval` and coalesces a burst of saves rather than debouncing; the
+watch set follows the resource cache, so an asset not yet loaded is not watched
+(no "watch the whole `assets/` tree" mode); `reload()` still leaves callers
+holding the previous instance with a stale object (re-`load()` to refresh —
+documented, #40). **Product decision recorded:** live Python-code reload is out
+— deleted, not deferred again.
+
+---
+
+### `pyguara/replay` — closed 2026-09-08 (branch `refactor/replay-audit`)
 
 `pyguara/replay` in one slice, ~1,030 lines (`types`, `recorder`, `player`,
 `serializer`), wired via `Application` (`start_recording` / `stop_recording` /
@@ -711,7 +766,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
   `refactor/scripting-audit`)*
 - [x] `pyguara/replay` — deterministic replay *(done — branch
   `refactor/replay-audit`)*
-- [ ] `pyguara/dev` — dev-only helpers
+- [x] `pyguara/dev` — dev-only helpers *(done — branch `refactor/dev-audit`;
+  code reload deleted, `PollingFileWatcher` kept and wired to assets)*
 - [ ] `pyguara/cli` — command line entry points
 - [ ] `pyguara/tools` — atlas/build tooling
 
@@ -721,6 +777,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/dev` | 2026-09-08 | One slice, ~674 lines (`file_watcher`, `hot_reload`). Like `pyguara/editor`, **the whole subsystem had zero integration** — nothing in the engine, no game, no non-test file imported `HotReloadManager` / `PollingFileWatcher` / `StatefulSystem` / `reload_system_class`. Wayfinder ticket 09 fogged it in 2026 ("whether a pre-alpha engine carries live code reload is a product-scope question deserving its own deliberate answer"). Per the user's choice (**split: delete code-reload, wire the watcher**): the Python-module reload layer (`hot_reload.py`) is **deleted** and `PollingFileWatcher` kept + wired to assets. Probes showed `HotReloadManager` wouldn't have worked as advertised: the class promised `StatefulSystem` state preservation but `reload_module()` had **no `get_state`/`set_state` path** (that protocol + `reload_system_class()` were a separate island with no callers); with the default `auto_reload=True`, `importlib.reload()` ran **on the polling thread** (module top-level code off the main thread); `watch_module("x")` twice registered a fresh lambda each call → one edit fired N reloads. **`PollingFileWatcher` kept, one defect fixed: `check_now()` held a non-reentrant lock across user callbacks** — a change callback calling `watch()`/`unwatch()`/`watched_count` deadlocked the poll thread (probe: `check_now` never returned); now snapshots under the lock and notifies with it released, and the poll loop survives a raising callback. New `AssetReloadWatcher` bridges the watcher to `ResourceManager.reload()` (the primitive the `pyguara/resources` slice built for this): the poll thread **queues** a changed asset's cache key; `Application._update()` calls `drain()` once per frame **on the main thread** (`ResourceManager` isn't safe to mutate under a running frame — same shape as `queue_event()`). Opt-in via `Application.enable_asset_hot_reload()`; `SandboxApplication` calls it. **BREAKING** (pre-alpha): `pyguara.dev.HotReloadManager` / `StatefulSystem` / `reload_system_class` removed. Tests: `test_hot_reload.py` deleted (17, all happy-path against stdlib modules — none touched the deadlock, the double-reload, the missing state path or the wrong-thread reload); new `test_dev.py` (+20 cases, 1893 → 1898). New `docs/systems/dev.md` (no page existed). Phase D → **#40** (already names "hot-reload has a `reload()` primitive but nothing watches the filesystem"): polling-only detection (no `inotify`/`FSEvents`/`ReadDirectoryChangesW`, lags by `poll_interval`, coalesces bursts); watch set follows the resource cache (no "watch the whole `assets/` tree" mode); `reload()` still leaves callers holding a stale instance (re-`load()` — documented). **Product decision recorded:** live Python-code reload is out — deleted, not deferred again. |
 | `pyguara/replay` | 2026-09-08 | One slice, ~1,030 lines (`types`, `recorder`, `player`, `serializer`); wired via `Application` + `InputManager` since wayfinder ticket 18. Defects were all "wired to nothing" / "guard returns a wrong answer", each hidden by uniform test setup. **`ReplaySerializer.save()` wrote an unloadable file on its default call** — it appended an extension only when absent, but `if compress or endswith(".gz")` still gzipped, so `save(data, "run.replay")` (default `compress=True`) put a gzip stream in a `.replay` file; `load()` reads it as text, `json.loads` chokes on the magic byte, the blanket `except Exception` swallows it, returns `None` after `save()` returned `True`. Now the format is derived from the extension (explicit wins); `load()` also refuses a `metadata.version` over `SUPPORTED_VERSION` (written, never read — no migration layer). **`get_metadata()` returned `None` for any replay over ~10 KB** — read first 10 KB, sliced at the last `}`, unbalanced JSON for a 400-frame file while the metadata sat in the first ~120 bytes; now parses the file. **Gamepad input was never recorded** — `record_gamepad_button` / `record_gamepad_axis` had zero callers (gamepad flows `GamepadManager` → `_on_gamepad_*`, never touching the recorder), so a controller session recorded empty while `process_replayed_event` carried GAMEPAD branches for events recording never produced; both callbacks now feed it. **Playback dropped pointer position + the raw UI stream** — `process_replayed_event` rebuilt only bound actions, discarding `event.position` and never re-emitting `OnRawKeyEvent` / `OnMouseEvent`; it now re-dispatches the raw key/mouse stream with recorded position + modifiers (`RecordedInputEvent` gained `modifiers`) and replays MOUSE_MOVE. `ReplayRecorder` stamps the installed package version (was `"0.0.0"`) + UTC `recorded_at` (the persistence pair). **User chose maximal on all three forks: playback now re-drives the loop from recorded per-frame `delta_time`** — `Application.run()`, while a replay plays, takes each frame's duration from `ReplayPlayer.peek_delta()` not the wall clock, so fixed-step count, tweens, particles and `WaitForSeconds` reproduce on any machine (cross-cuts the closed `pyguara/application` loop; `SandboxApplication` inherits `run()`). `ReplayPlayer`'s scrubbing surface (`update()` timestamp model, `seek`, `pause`/`resume`, `playback_speed`) kept as supported public API; `advance_frame()`/`update()` now share `_emit_frame()` / `_finish_if_exhausted()`. Tests +22 (1869 → 1891): the old 25 were broad but shallow + uniform (every player test = one fixture through `advance_frame()`; `update()` had zero coverage; every serializer test saved to an extensionless path; nothing recorded/replayed gamepad). New `docs/systems/replay.md` (no page existed). Phase D → **#58** ("replay production layer", sibling of #37/#40/#43/#46/#51/#55): recorded `seed` reseeds nothing on playback (no RNG service — #28); no replay-library API (`list_replays`/`delete`/browse, user-data-dir rooting — the #43 shape); the scrubbing API has no `pyguara/tools` overlay (#53); capture is input+time only (a game reading `time.time()`/filesystem/network directly breaks determinism silently); `record_action()` has a playback branch but no in-repo consumer. Left open: no format migration layer; a length-framed metadata line would let `get_metadata` skip frame bytes. |
 | `pyguara/scripting` | 2026-09-08 | One slice, ~310 lines (`coroutines.py` is the whole subsystem). Unlike `editor` it **is** wired in — bootstrap registers a `CoroutineManager` singleton, `Application._update()` ticks it every frame. Headline: **one scripted sequence that raised took down the frame loop and abandoned every other coroutine.** `Coroutine.update()` caught only `StopIteration`; any other exception from the generator body propagated through `CoroutineManager.update()`'s list comprehension out of `Application._update()`, and the comprehension `self._coroutines = [c for c in self._coroutines if c.update(dt)]` also skipped every coroutine ordered after the raiser and left stale entries on a re-raise. Fixed with the shared `ErrorHandlingStrategy` (as `EventDispatcher`/`DIContainer`): `CoroutineManager(error_strategy=RAISE)` default logs + stops + re-raises; `LOG`/`IGNORE` contain it; under all three the offender is stopped and dropped and siblings still run. **`Coroutine.stop()` abandoned the generator** — `finally`/`with` cleanup in a sequence only ran at GC; now `stop()` calls `generator.close()` (guarded by `gi_running` for the self-stop case). **`CoroutineManager.update()` corrupted its list when a coroutine started/stopped coroutines from inside its own body** (the comprehension iterated the list the body mutated — stopping an earlier sibling skipped a later one; `stop_all()` from a body left survivors); now iterates a frame-start snapshot and reconciles. Recurring shapes: "catch only the happy exception", "mutate the container you're iterating", "cleanup deferred to GC", and uniform test setup — all 30 existing tests built the coroutine from a benign `yield` body; none raised, stopped a sibling, or needed `finally`, which is exactly where the defects were. Tests +12 (1835 → 1847). `docs/systems/scripting.md` rewritten (was 39 lines: omitted `WaitWhile` from its concepts, non-runnable example, documented no wiring / lifecycle / error model / `stop()` semantics). Phase D → **#55** ("scripting production layer", sibling of #37/#40/#43/#46/#51): no scene scoping (a coroutine outlives its scene, no teardown hook), no coroutine tagging/grouping (kill entity → its scripted sequences keep running), no `yield from` result to a parent, no frame-count / fixed-step / scaled-time waits (time-scale is #28's). Left open: `WaitForSeconds` timing is frame-granular — yielding frame uncounted, overshoot discarded, so a long chain of short waits drifts by ~1 frame each (documented; sub-frame precision is not a goal of the variable-rate step). |
 | `pyguara/prefabs` | 2026-09-08 | One slice (`types`, `registry`, `loader`, `factory`; ~1,000 lines). Headline: **a prefab with `children` crashed on every real scene.** `PrefabFactory._create_children` called `parent_entity.get_component_by_name("Transform")` — a method that exists nowhere on `Entity` — so `factory.create()` raised `AttributeError` whenever a `prefab_resolver` was set, which `Scene.resolve_dependencies()` always does. Past the crash, the parent-link step was `for _child in children: pass` — children never attached despite `Transform` having a full `set_parent`/`children` API. **Zero `.prefab` files exist in the repo**, so the file→loader→factory→children path had never run. Per the user's choice (wire it properly, unify): children now instantiate as their own entities parented via `Transform.set_parent(keep_world_transform=False)` — authored position is local to the parent and follows it; `PrefabChild.offset` applies in local space. Dropped the dead loop and the `parent_position` bake (ignored parent rotation/scale). **BREAKING** (pre-alpha): `create()` loses `parent_position`, gains `source_path`. Also: **`_resolve_inheritance` had no cycle guard** (`A extends B extends A` → `RecursionError`) → now raises `ValueError` naming the chain. **`create()` swallowed component construction errors** in a blanket `except Exception`, yielding half-built entities → per the user's choice (fail loud) it now raises; `_instantiate_dataclass` also rejects unknown field keys (a typo used to vanish). **`_convert_value` enum handling was `EnumType[value.upper()]`** — non-SCREAMING_CASE members raised `KeyError` → swallowed → component dropped; now case-insensitive name or raw value, `ValueError` on a miss. **`PrefabInstance.prefab_path` was always the display `name`** (`create_from_path` had the real path and discarded it) → now threaded through, `name` only as the in-memory fallback. **`ComponentRegistry.clear()` wiped `_deserializers`** (losing the built-in `Transform` special-case; `Transform` is not a dataclass so a cleared registry couldn't round-trip it even re-registered) → now re-seeds built-ins. **`PrefabLoader` raised `AttributeError`** on a non-mapping top-level doc despite documenting `ValueError` → now validates. Removed **`PrefabReference`** (exported, used nowhere). Recurring shapes: "declared and wired to nothing" (`children` link-up, `PrefabReference`, `prefab_path`, `PrefabData.version`), "guard that holds a wrong answer" (swallowed errors, enum `.upper()`), uniform test setup (every factory test hand-built `PrefabData` against a `Transform`+`Tag`-only registry; `_create_children` / `create_from_path` / inheritance cycles / round-trip had **zero** coverage; `test_create_warns_on_unknown_component` asserted `... or entity is not None`). Tests +17 (1799 → 1835). New `docs/systems/prefabs.md` (no doc page existed). Phase D → **new issue** (sibling of #37/#40/#43/#46 + UI Phase-D): no spawn tables / weighted pools, `PrefabData.version` dead (no prefab-schema migration), no named variant library, prefab children lack an entity-level ownership/lifetime link (leak on parent destroy — needs an ECS-hierarchy decision), no asset-ref validation at load; `ComponentRegistry` process-global mutable singleton parked as a CC. |
@@ -944,6 +1001,141 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/dev` — CLOSED 2026-09-08 (branch `refactor/dev-audit`)
+
+One slice, ~674 lines: `pyguara/dev/{file_watcher,hot_reload}.py`. Every
+claimed defect reproduced with a probe against the real code before any fix.
+
+**Branch base.** Cut from `main` after `refactor/replay-audit` (PR #57)
+merged. History: `feat(dev)` (188c560) built the subsystem in isolation;
+wayfinder ticket 16 migrated its logging; nothing has wired it since.
+
+**The disposition question, put to the user.** `pyguara/dev` is the
+`pyguara/editor` shape a second time: 674 lines, **zero integration** — no
+engine code, no game, and no non-test file imports `HotReloadManager`,
+`PollingFileWatcher`, `StatefulSystem` or `reload_system_class`. It does run
+in isolation (17 passing tests), unlike editor's never-executed ImGui layer.
+Wayfinder ticket 09 explicitly fogged it: "whether a pre-alpha engine carries
+live code reload is a product-scope question deserving its own deliberate
+answer, not one bundled into dead-code cleanup." This slice is that answer.
+Options offered: (1) split — delete code reload, wire the watcher to assets;
+(2) delete the module entirely; (3) keep standalone, fix all defects. **User
+chose (1).**
+
+**Phase A — probe-reproduced defects in the deleted `hot_reload.py`** (kept
+here because they justify the delete):
+- **State preservation was wired to nothing.** `HotReloadManager`'s docstring:
+  "Can preserve state for systems that implement `StatefulSystem`." But
+  `reload_module()` calls `importlib.reload()` and the reload callbacks — it
+  never touches `get_state`/`set_state`. The `StatefulSystem` protocol and
+  `reload_system_class()` are a separate island with **zero callers**. Probe:
+  reload a module holding a stateful instance → old instance untouched, no
+  re-instantiation, no state migration.
+- **Default config reloads on the wrong thread.** With `auto_reload=True`
+  (the default), `_on_file_changed` — which runs in the `PollingFileWatcher`
+  poll thread — calls `reload_module()` → `importlib.reload()` directly.
+  Probe: the reload callback fired on `Thread-2 (_poll_loop)`, not
+  `MainThread`. Module top-level code re-executes off the main thread while
+  the game loop may be in that module. No marshalling queue in the default
+  path (the engine has `queue_event()` for exactly this).
+- **`watch_module("x")` twice → N reloads per edit.** Each call builds a
+  fresh `lambda p: self._on_file_changed(module_name)`; `if callback not in
+  self._callbacks[abs_path]` never matches a new lambda, so callbacks
+  accumulate. Probe: three `watch_module("json")` → 3 change-callbacks on
+  json's file → 3 reloads per single edit.
+- Dead: `ReloadableModule.classes` (never populated, never read);
+  `watch_package()` eagerly `importlib.import_module`s every `.py` in a
+  package; `_pending_reloads` has a copy/clear race between the poll thread
+  and `reload_all_pending()`.
+
+**Phase A — the one defect fixed in the kept `file_watcher.py`:**
+**`PollingFileWatcher.check_now()` held a non-reentrant `threading.Lock`
+across user callbacks.** A change callback very commonly calls back into the
+watcher — `watched_count` to log, `unwatch()` to stop watching the file it
+just handled, `watch()` to pick up a newly-discovered dependency. Probe: a
+callback calling `watcher.watched_count` from inside `check_now()` →
+`check_now()` never returns, poll thread wedged forever. Fix: `check_now()`
+snapshots `list(self._watched_files.items())` under the lock, then stat's and
+notifies with the lock **released**; `_notify_change` copies the callback
+list under the lock. Also hardened `_poll_loop` to log-and-continue on a
+raising `check_now()` instead of letting the thread die, and fixed two
+`logger.exception(str)` calls to the engine's `logger.exception(exc, msg)`
+signature.
+
+**The wiring — `AssetReloadWatcher`.** New `pyguara/dev/asset_reload.py`
+bridges `PollingFileWatcher` to `ResourceManager.reload()` — the reload
+primitive the `pyguara/resources` slice (F5) built expressly for "a
+file-watching loop". Design:
+- `refresh()` reconciles the watch set with `resource_manager.iter_cached()`
+  — every cached resource whose `path` is a real file is watched; evicted
+  ones are dropped. Called from `start()` and throttled (1 s) inside
+  `drain()`, so assets loaded mid-session are picked up.
+- `_on_file_changed` (poll thread) maps the abspath back to the cache key
+  and **appends it to `_pending`** under a lock. It does not reload.
+- `drain()` (main thread, once per frame) swaps out `_pending`, calls
+  `reload(key)` for each — de-duped, `KeyError` swallowed for an asset
+  unloaded since the change, `ValueError`/`TypeError` logged — and returns
+  the keys reloaded.
+The queue-then-drain split is the point: `ResourceManager` is not safe to
+mutate from under a running frame, so the reload always lands on the loop
+thread. `Application.enable_asset_hot_reload(poll_interval=0.5)` constructs
+and starts it; `_update()` calls `drain()` when set; `shutdown()` stops it.
+`SandboxApplication.__init__` calls `enable_asset_hot_reload()` after tool
+setup. **BREAKING** (pre-alpha): `pyguara.dev` no longer exports
+`HotReloadManager`, `ReloadableModule`, `StatefulSystem`,
+`reload_system_class`; `pyguara.dev.hot_reload` is gone.
+
+**Phase B — test verdict.** `test_hot_reload.py`, 17 tests: the
+`PollingFileWatcher` half (6) was actually sound — real temp files, real
+`check_now()` — and its shape is carried into `test_dev.py`. The
+`HotReloadManager` half was **uniform setup hiding everything**: every test
+watched a *stdlib* module (`os`, `json`), never a project module, never a
+stateful object, never two watchers on one file, never a callback that
+re-enters the watcher. `test_reload_callback` was the only one with a real
+assertion (`"json" in callbacks_called`) and it asserted a no-op reload
+succeeded. `TestReloadSystemClass` (3) tested the standalone helper that has
+no callers — theatre for dead code. The deadlock, the double-reload, the
+missing-state-path and the wrong-thread reload each had **no test** because
+no test ever left the happy path. New `test_dev.py` (20 cases): `WatchedFile`
++ `PollingFileWatcher` real behaviour, **`test_callback_may_call_back_into_
+the_watcher_without_deadlock`** and **`test_poll_loop_survives_a_raising_
+callback`** as regressions, and `AssetReloadWatcher` end to end — queued
+then applied by `drain()`, de-dup, `KeyError` swallowed, watch-set
+reconciliation, idempotent `stop()`, and a full polling-thread run asserting
+the bg thread only *queues* (`pending_count == 1`, resource still the old
+one) until `drain()` runs on the main thread. Built on a real
+`ResourceManager` + `JsonLoader` + real temp `.json` files, not a mock.
+
+**Phase C — docs.** No page ever existed for `pyguara/dev`
+(`HotReloadManager` was documented nowhere; `README` "hot-reloadable config"
+is `pyguara/config`, unrelated). New `docs/systems/dev.md`: what asset
+hot-reload is and is not (no code reload, and why), the enable call, the
+queue-then-drain threading model, the stale-reference caveat inherited from
+`reload()`, `PollingFileWatcher` standalone use, and the Phase D gaps.
+`mkdocs.yml` nav gains "Dev Tools"; `docs/systems/resources.md` now links to
+it instead of describing "a file-watching hot-reload loop" abstractly.
+`mkdocs build --strict` exit 0; `test_docs_api.py` (60) passes.
+
+**Phase D — capability gaps → #40.** #40 already reads "hot-reload has a
+`reload()` primitive but nothing watches the filesystem and stale holders
+keep the old instance" — this slice builds the watcher; the rest of that
+sentence stands. Remaining, folded into #40: polling only (no OS-native file
+events — detection lags by `poll_interval`, a burst of saves is coalesced
+not debounced); the watch set follows the resource cache, so an asset not
+yet loaded is not watched (no "watch `assets/` wholesale" mode); `reload()`
+still leaves a caller that only `acquire()`d — never re-`load()`ed — holding
+the stale instance. **Product decision, recorded so it is not re-litigated:**
+live Python-code reload is **out** — deleted, not fogged a third time. If it
+returns it needs main-thread marshalling, class re-instantiation and scene
+rebuild, i.e. its own effort with a real consumer.
+
+**Verification.** 1898 tests pass (main HEAD 1893 → 1898: +20 in `test_dev.py`,
+−17 from the deleted `test_hot_reload.py`, +2 `test_docs_api.py` cases the new
+page adds). `ruff check .` / `ruff format --check` clean across 376 files;
+`mypy pyguara` clean across 222. Both commits verified standalone in a detached
+worktree (`git worktree add --detach`, `uv sync --all-extras`): `feat` commit
+1896 / 1896, `docs` commit 1898 / 1898.
 
 ### `pyguara/replay` — CLOSED 2026-09-08 (branch `refactor/replay-audit`)
 

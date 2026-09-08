@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- **BREAKING: `pyguara.dev.HotReloadManager`, `StatefulSystem`, and `reload_system_class()` are gone.** The Python-module hot-reload layer was never wired into the game loop, reloaded on a background thread, and could not migrate instance state across a reload. Live code reload is deferred as a product decision. The file watcher (`PollingFileWatcher`) stays, now driving asset hot-reload (below).
+
+### Added
+- **Asset hot-reload.** `Application.enable_asset_hot_reload()` (automatic in `SandboxApplication`) watches every loaded asset's file and re-imports it via `ResourceManager.reload()` when it changes on disk. Changes are detected on a polling thread and applied on the main thread at frame start. New `pyguara.dev.AssetReloadWatcher`; see `docs/systems/dev.md`.
+
 ### Changed
 - **BREAKING: `Color` and `Rect` are no longer `pygame.Color`/`pygame.Rect` subclasses.** They're now plain, backend-agnostic `@dataclass(slots=True)` value types in `pyguara.common.types`, so ModernGL never has to touch pygame to represent color or geometry. Only the pygame backend converts to real pygame types, via new `graphics/backends/pygame/conversions.py` helpers. Existing `Color(r, g, b, a=255)`/`Rect(x, y, width, height)` construction, equality, mutation (`rect.x = 5`), and float-to-int truncation on construction all behave the same as before. `Color` gains HSV round-tripping (`to_hsv()`/`from_hsv()`) and named constants (`Color.WHITE`, `.BLACK`, etc.); `Rect` gains `colliderect()`, `contains()`, and `inflate()`. No deprecation shim -- this is Pre-Alpha, and APIs are still subject to change.
 

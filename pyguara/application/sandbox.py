@@ -42,6 +42,9 @@ class SandboxApplication(Application):
         self.tools_logger.info("Sandbox Tools Initializing...")
         self._initialize_tools()
 
+        # Edit an asset on disk, see it in the running game.
+        self.enable_asset_hot_reload()
+
     def _initialize_tools(self) -> None:
         """Configure the tool manager and register all available tools."""
         self.logger.info("Initializing Developer Tools")

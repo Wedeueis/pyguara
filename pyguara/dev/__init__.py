@@ -1,30 +1,19 @@
-"""Development tools module.
+"""Development tools.
 
-Provides utilities for faster development iteration:
-- Hot-reloading of Python modules
-- File watching
+Asset hot-reload -- watch loaded assets on disk and re-import them live
+during development. See ``docs/systems/dev.md``.
 """
 
+from pyguara.dev.asset_reload import AssetReloadWatcher
 from pyguara.dev.file_watcher import (
     FileChangeEvent,
     PollingFileWatcher,
     WatchedFile,
 )
-from pyguara.dev.hot_reload import (
-    HotReloadManager,
-    ReloadableModule,
-    StatefulSystem,
-    reload_system_class,
-)
 
 __all__ = [
-    # File watcher
+    "AssetReloadWatcher",
     "FileChangeEvent",
     "PollingFileWatcher",
     "WatchedFile",
-    # Hot reload
-    "HotReloadManager",
-    "ReloadableModule",
-    "StatefulSystem",
-    "reload_system_class",
 ]
