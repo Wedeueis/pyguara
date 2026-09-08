@@ -57,6 +57,7 @@ Essential engine features:
 *   **[Input System](systems/input.md)**: Action-based input mapping for Keyboard/Gamepad.
 *   **[Animation](systems/animation.md)**: Powerful tweening and easing system.
 *   **[Scripting](systems/scripting.md)**: Coroutine-based sequential logic.
+*   **[Replay](systems/replay.md)**: Deterministic input recording and playback.
 *   **[Resources](systems/resources.md)**: Caching and type-safe asset loading.
 *   **[Prefabs](systems/prefabs.md)**: Data-driven entity templates with inheritance and child hierarchies.
 *   **[Developer Tools](systems/editor.md)**: In-game debug overlay -- hierarchy, inspector, assets browser.
