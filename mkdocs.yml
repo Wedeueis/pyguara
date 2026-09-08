@@ -37,6 +37,7 @@ nav:
   - Systems:
       - Animation: systems/animation.md
       - Audio: systems/audio.md
+      - Command-Line Tools: systems/cli.md
       - Dev Tools: systems/dev.md
       - Editor Tools: systems/editor.md
       - Input: systems/input.md

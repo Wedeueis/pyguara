@@ -396,5 +396,9 @@ uv run pyguara build games/true_coral/main.py --onefile --output dist/true_coral
 - `--windowed`: Suppresses the OS command shell terminal console on boot (default behavior).
 - `--icon`: Bundles a custom application icon (e.g. `icon.ico` for Windows or `icon.icns` for macOS).
 - `-a`, `--assets`: Explicitly specifies directories containing game assets (textures, music, shaders) to package with the executable.
+- `--dry-run`: Prints the PyInstaller command that would run, without building.
 
-Now you have all the knowledge required to bootstrap, design, script, and publish your own 2D games using the PyGuara game engine! Keep exploring the examples under the `games/` folder to study advanced scripts, spatial audio routing, and ImGui-based editor customization.
+See [Command-Line Tools](../systems/cli.md) for the full option list and for
+`pyguara atlas`, the sprite-atlas packer.
+
+Now you have all the knowledge required to bootstrap, design, script, and publish your own 2D games using the PyGuara game engine! Keep exploring the examples under the `games/` folder to study advanced scripts, spatial audio routing, and the in-engine debug overlays.
