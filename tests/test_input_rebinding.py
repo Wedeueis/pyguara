@@ -232,6 +232,52 @@ class TestRebinding:
         assert "jump" in actions
         assert "attack" in actions
 
+    def test_rebind_unbound_action_onto_free_key(self, binding_manager):
+        """Every other rebind test starts from an already-bound action. An
+        action with no current binding must still bind cleanly to a free key."""
+        result, conflict = binding_manager.rebind(
+            "block", InputDevice.KEYBOARD, 66, InputContext.GAMEPLAY
+        )
+
+        assert result == RebindResult.SUCCESS
+        assert conflict is None
+        assert binding_manager.get_actions(
+            InputDevice.KEYBOARD, 66, InputContext.GAMEPLAY
+        ) == ["block"]
+
+    def test_rebind_swap_across_devices_and_contexts(self, binding_manager):
+        """A SWAP must move every one of the action's existing keys, and only
+        within the given context. Prior coverage only swapped a single
+        same-device key."""
+        binding_manager.bind(InputDevice.KEYBOARD, 32, "jump", InputContext.GAMEPLAY)
+        binding_manager.bind(InputDevice.GAMEPAD, 0, "jump", InputContext.GAMEPLAY)
+        binding_manager.bind(InputDevice.MOUSE, 1, "fire", InputContext.GAMEPLAY)
+        # Same key in another context must be left untouched.
+        binding_manager.bind(InputDevice.MOUSE, 1, "confirm", InputContext.MENU)
+
+        result, _ = binding_manager.rebind(
+            "jump",
+            InputDevice.MOUSE,
+            1,
+            InputContext.GAMEPLAY,
+            resolution=ConflictResolution.SWAP,
+        )
+
+        assert result == RebindResult.SWAPPED
+        assert binding_manager.get_actions(
+            InputDevice.MOUSE, 1, InputContext.GAMEPLAY
+        ) == ["jump"]
+        # "fire" landed on both keys "jump" vacated.
+        fire_keys = binding_manager.get_bindings_for_action(
+            "fire", InputContext.GAMEPLAY
+        )
+        assert (InputDevice.KEYBOARD, 32) in fire_keys
+        assert (InputDevice.GAMEPAD, 0) in fire_keys
+        # The MENU binding on the same physical key is unchanged.
+        assert binding_manager.get_actions(InputDevice.MOUSE, 1, InputContext.MENU) == [
+            "confirm"
+        ]
+
 
 class TestSerialization:
     """Tests for binding import/export."""
@@ -327,6 +373,68 @@ class TestSerialization:
 
         with pytest.raises(ValueError, match="Unsupported"):
             binding_manager.import_bindings(data)
+
+    def test_import_current_version_is_accepted(self, binding_manager):
+        """The boundary the version guard actually tests -- `> FORMAT_VERSION`
+        -- was only ever exercised with 999. The current version must pass."""
+        data = {
+            "version": KeyBindingManager.BINDING_FORMAT_VERSION,
+            "bindings": {"gameplay": {"jump": [{"device": "KEYBOARD", "code": 32}]}},
+        }
+
+        binding_manager.import_bindings(data)
+
+        assert binding_manager.get_actions(
+            InputDevice.KEYBOARD, 32, InputContext.GAMEPLAY
+        ) == ["jump"]
+
+    def test_import_skips_malformed_entries_without_raising(self, binding_manager):
+        """`import_bindings` has warn-and-skip branches for an unknown device,
+        an unknown context and a missing key -- none were covered. A user's
+        hand-edited or version-drifted file must load what it can."""
+        data = {
+            "version": 1,
+            "bindings": {
+                "gameplay": {
+                    "jump": [
+                        {"device": "KEYBOARD", "code": 32},  # good
+                        {"device": "HOLOGRAM", "code": 5},  # unknown device
+                        {"code": 9},  # missing "device"
+                    ]
+                },
+                "nonsense_context": {"x": [{"device": "KEYBOARD", "code": 1}]},
+            },
+        }
+
+        binding_manager.import_bindings(data)  # must not raise
+
+        assert binding_manager.get_actions(
+            InputDevice.KEYBOARD, 32, InputContext.GAMEPLAY
+        ) == ["jump"]
+        assert binding_manager.get_bindings_for_action(
+            "jump", InputContext.GAMEPLAY
+        ) == [(InputDevice.KEYBOARD, 32)]
+
+    def test_export_import_roundtrip_survives_real_json(self, binding_manager):
+        """The existing roundtrip test keeps the dict in memory. Persistence
+        goes through a file, where dict keys become strings and an int `code`
+        must come back an int -- `test_config.py`'s exact blind spot."""
+        import json
+
+        binding_manager.bind(InputDevice.KEYBOARD, 32, "jump", InputContext.GAMEPLAY)
+        binding_manager.bind(InputDevice.GAMEPAD, 0, "confirm", InputContext.UI)
+
+        data = json.loads(json.dumps(binding_manager.export_bindings()))
+
+        restored = KeyBindingManager()
+        restored.import_bindings(data)
+
+        assert restored.get_actions(
+            InputDevice.KEYBOARD, 32, InputContext.GAMEPLAY
+        ) == ["jump"]
+        assert restored.get_actions(InputDevice.GAMEPAD, 0, InputContext.UI) == [
+            "confirm"
+        ]
 
 
 class TestResetToDefaults:

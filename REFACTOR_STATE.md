@@ -22,8 +22,18 @@ rather than fixed in place.
      throwaway probe *before* fixing it. Reading is not enough: every
      significant defect this audit has found looked correct on a read-through
      and was obvious under a probe.
-   - **Phase B** — audit the tests. Look for uniform setup rather than missing
-     coverage; that is what has hidden most bugs here (see the note below).
+   - **Phase B** — audit the tests, and write the verdict into the iteration
+     log. Not "added N tests" — a judgement on what the existing suite is
+     *worth*: which tests are load-bearing, which are theatre. The recurring
+     smells here: **uniform setup** (every test builds the subject the same
+     way — see the note below; this has hidden most bugs), **assertions on
+     private state** (`obj._internal[...]` instead of the public getter, so a
+     refactor breaks the test not the code), **tautological asserts**
+     (`assert x is not None` on something that cannot be None; `assert not
+     raises` as the only check), and **fixtures that mock away the unit under
+     test** (`test_config.py` mocked the filesystem, so no round-trip bug
+     could surface). Then add or rewrite tests to close the gap the verdict
+     names.
    - **Phase C** — audit the docs, and verify the documented API actually
      exists. Three pages have described functions that never existed.
 4. Branch from `main` — see "Branching and Pull Requests" in `CLAUDE.md`.
@@ -167,7 +177,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
-| `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). `input/manager.py` stays a CC-11 / issue #9 offender (raw pygame events) — parked. |
+| `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). Phase B also found the softer test smells — assertions on `_controllers` privates, `assert x is not None` on a list literal, `assert not raises` as the only check — and rewrote them. `input/manager.py` stays a CC-11 / issue #9 offender (raw pygame events) — parked. |
 | `pyguara/physics` | 2026-09-08 | Judged as *game* physics. Four slices: substepping stops ordinary-speed tunnelling (PR #24); characters moved off dynamic bodies onto `CharacterMover`/`CharacterBody` with full parity — knockback, platform riding, crate pushing — on Celeste's integer+remainder model (PR #25); trigger volumes and the entire `Joint` ECS layer were both inert end to end and were rebuilt and tested (PR #27); the close added five spatial queries, body sleeping, kept `substeps` at 4 on benchmark evidence, and froze `PhysicsMaterial`. Recurring shape: "declared and wired to nothing" (`fixed_rotation`, `gravity_scale`, the `return False` collision contract, `Joint`, `TriggerVolume`) and uniform test setup (every test a slow body already at rest). |
 | `pyguara/graphics` | 2026-09-06 | Audited in five slices: window boundary, components, backends, pipeline, assets. Window reported the requested size not the granted one; `Box`/`Circle` were hard-wired to pygame; the pygame stubs had drifted; a zero-height window produced a 450px viewport; nine-patch produced negative source rects. PRs #12, #14, #15, #17, #18. |
 | `pyguara/systems` | 2026-09-06 | Fixed every game system starting up uninitialised (`initialize()` runs before `on_enter()`), an `unregister()` testing truthiness rather than `None`, and silent duplicate registration keys. PR #11. |
@@ -372,11 +382,11 @@ One slice, ~1,500 lines (`manager`, `binding`, `gamepad`, `types`, `events`,
 a probe against the real code before being touched, plus the unreachable
 public surface they hid behind.
 
-**Verification:** 1652 tests pass (up from 1644); `ruff check .` clean;
+**Verification:** 1658 tests pass (up from 1644); `ruff check .` clean;
 `ruff format` clean; `mypy pyguara` clean across 224 files;
-`mkdocs build --strict` clean. Each of the three commits verified in a
+`mkdocs build --strict` clean. The fix commits were each verified in a
 detached worktree (`git worktree add --detach`, `uv sync --extra dev`):
-1649 / 1652 / 1652.
+1649 / 1652.
 
 **F1 — `InputContext` was inert end to end.** `InputManager._context` was
 set to `GAMEPLAY` in `__init__` and there was no public way to change it:
@@ -430,13 +440,47 @@ had no test that could see it; every `rebind` SWAP test pre-bound both
 actions, so the degenerate case returned the wrong result unnoticed.
 Seventh and eighth instances.
 
-**Phase B (+8).** `test_context_switching` migrated to the public API; new:
-a dormant non-active-context binding fires nothing until switched; exactly
-one `InputContextChangedEvent` per real change; SWAP-without-prior-binding
-returns `UNBOUND`; `OnActionEvent`/`GamepadButtonEvent` carry a real
-timestamp; gamepad mid-list unplug parametrised on *which* pad goes, each
-asserting the survivor keeps slot, name and a working button read; reconnect
-reuses the freed slot.
+**Phase B — verdict on the 29 existing tests (+14, 3 rewritten).**
+
+*`test_input_rebinding.py` (18) — the strong file.* All four
+`ConflictResolution` strategies, export/import, roundtrip, reset, all
+through the public `KeyBindingManager` surface. Real gaps, all uniform
+setup: every `rebind` test pre-bound the action being moved (so F3's
+degenerate case was invisible), every SWAP test used one same-device key
+(cross-device / multi-key / cross-context swap untested), the version guard
+was only ever hit with `999` (the `> FORMAT_VERSION` boundary and the
+warn-and-skip branches for a bad device / missing key / unknown context had
+no coverage), and `test_export_import_roundtrip` keeps the dict in memory —
+never through `json`, `test_config.py`'s exact blind spot. Added 5.
+
+*`test_input.py` (11) — mixed.* `test_bound_gamepad_action_fires_from_polled_state`
+is the model: end to end through the real path. But
+`test_input_registration` / `test_keyboard_event_processing` /
+`test_deadzone_filtering` build the manager by assigning
+`manager._registered_actions[...]` and `manager._bindings.bind(...)`
+directly, so the public `register_action()` / `bind_input()` path was
+exercised by exactly one test — and only because a past field-order bug had
+forced it. `test_gamepad_detection` asserted on `manager._controllers`
+rather than the getters. `test_gamepad_manager_initialization` asserted
+`manager is not None` and `get_connected_controllers() is not None` (a list
+literal) — nothing. `test_input_manager_gamepad_integration` asserted only
+"does not raise". Axis tests asserted `abs(value) > 0.0`, pinning none of
+the deadzone rescale. Rewrote the three empty/private ones to assert real
+behaviour (config actually drives the deadzone; getters report the
+controller); added a test pinning the rescale formula
+`(|raw|-dz)/(1-dz)`.
+
+*`tests/integration/test_input_backend.py` (3) — honest but thin.* Headless,
+so `get_joystick_count()` is always 0 and the entire `PygameJoystick`
+wrapper (`get_button`, `get_axis`, `rumble`, `get_instance_id`) is
+**untested** — the issue-#19 shape, a real adapter that is read-audited
+only. Not fixable without hardware in CI; noted here.
+
+*New for the fixes:* `test_context_switching` moved off the private
+`_context`; a dormant non-active-context binding; one
+`InputContextChangedEvent` per real change; `OnActionEvent` /
+`GamepadButtonEvent` timestamps; gamepad mid-list unplug parametrised on
+which pad goes; reconnect reuses the freed slot.
 
 **Phase C.** `docs/systems/input.md` rewritten — it had described contexts
 (no public API), an "SDL2" backend (does not exist), and told game code to

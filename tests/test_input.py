@@ -289,23 +289,33 @@ def test_register_action_deadzone_is_stored_correctly(event_dispatcher: Any) -> 
 # ========== Gamepad Tests ==========
 
 
-def test_gamepad_manager_initialization(event_dispatcher: Any) -> None:
-    """Test that GamepadManager initializes correctly."""
-    config = GamepadConfig(deadzone=0.2, vibration_enabled=True)
-    manager = GamepadManager(event_dispatcher, _StubInputBackend(), config)
+def test_gamepad_manager_applies_its_config(event_dispatcher: Any) -> None:
+    """Was `assert manager is not None` plus a list that cannot be None. The
+    real contract is that the passed GamepadConfig drives deadzone handling:
+    a raw axis below the configured deadzone produces no event."""
+    joystick = _StubJoystick(instance_id=0, name="Pad")
+    config = GamepadConfig(deadzone=0.30)
+    manager = GamepadManager(event_dispatcher, _StubInputBackend([joystick]), config)
 
-    assert manager is not None
-    assert manager.get_connected_controllers() is not None
+    events: list[GamepadAxisEvent] = []
+    event_dispatcher.subscribe(GamepadAxisEvent, events.append)
+
+    joystick.axis_values[GamepadAxis.LEFT_STICK_X.value] = 0.25  # under 0.30
+    manager.update()
+    assert events == []
+
+    joystick.axis_values[GamepadAxis.LEFT_STICK_X.value] = 0.60  # over 0.30
+    manager.update()
+    assert len(events) == 1
 
 
 def test_gamepad_detection(event_dispatcher: Any) -> None:
-    """Test gamepad detection on initialization."""
+    """A controller present at construction is reported by the public API."""
     joystick = _StubJoystick(instance_id=0, name="Test Controller")
     manager = GamepadManager(event_dispatcher, _StubInputBackend([joystick]))
 
-    # Verify controller was detected
-    assert 0 in manager._controllers
-    assert manager._controllers[0].name == "Test Controller"
+    assert manager.get_connected_controllers() == [0]
+    assert manager.get_controller_name(0) == "Test Controller"
     assert manager.is_connected(0)
 
 
@@ -359,6 +369,29 @@ def test_gamepad_axis_with_deadzone(event_dispatcher: Any) -> None:
     assert events[0].controller_id == 0
     # Value should be scaled after deadzone
     assert abs(events[0].value) > 0.0
+
+
+def test_gamepad_axis_rescales_linearly_from_the_deadzone_edge(
+    event_dispatcher: Any,
+) -> None:
+    """Existing axis tests only assert `abs(value) > 0.0`, so a regression that
+    changed the rescale slope would pass. Pin the formula:
+    sign * (|raw| - deadzone) / (1 - deadzone), then * axis_sensitivity."""
+    joystick = _StubJoystick(instance_id=0, name="Pad")
+    config = GamepadConfig(deadzone=0.15, axis_sensitivity=1.0)
+    manager = GamepadManager(event_dispatcher, _StubInputBackend([joystick]), config)
+
+    events: list[GamepadAxisEvent] = []
+    event_dispatcher.subscribe(GamepadAxisEvent, events.append)
+
+    joystick.axis_values[GamepadAxis.LEFT_STICK_X.value] = 0.5
+    manager.update()
+    assert events[-1].value == pytest.approx(0.35 / 0.85)  # (0.5-0.15)/(1-0.15)
+
+    # Full deflection maps to exactly 1.0, negative keeps its sign.
+    joystick.axis_values[GamepadAxis.LEFT_STICK_X.value] = -1.0
+    manager.update()
+    assert events[-1].value == pytest.approx(-1.0)
 
 
 def test_gamepad_multiple_controllers(event_dispatcher: Any) -> None:
@@ -486,18 +519,23 @@ def test_gamepad_rumble_support(event_dispatcher: Any) -> None:
     assert result is True
 
 
-def test_input_manager_gamepad_integration(event_dispatcher: Any) -> None:
-    """Test that InputManager properly integrates GamepadManager."""
-    config = GamepadConfig(deadzone=0.2)
-    manager = InputManager(event_dispatcher, _StubInputBackend(), gamepad_config=config)
-
-    # Verify GamepadManager is initialized
-    assert manager.gamepad is not None
+def test_input_manager_passes_gamepad_config_through(event_dispatcher: Any) -> None:
+    """`InputManager` must hand its `gamepad_config` to the GamepadManager it
+    owns, and drive it from `update()`. The old test only checked the manager
+    was 'not None' and that update() 'did not raise'."""
+    joystick = _StubJoystick(instance_id=0, name="Pad")
+    config = GamepadConfig(deadzone=0.30)
+    manager = InputManager(
+        event_dispatcher, _StubInputBackend([joystick]), gamepad_config=config
+    )
     assert isinstance(manager.gamepad, GamepadManager)
 
-    # Verify update() calls gamepad update
-    # (This is a basic integration test - actual behavior tested in gamepad tests)
-    manager.update()  # Should not raise
+    events: list[GamepadAxisEvent] = []
+    event_dispatcher.subscribe(GamepadAxisEvent, events.append)
+
+    joystick.axis_values[GamepadAxis.LEFT_STICK_X.value] = 0.25  # under the deadzone
+    manager.update()
+    assert events == []
 
 
 def test_bound_gamepad_action_fires_from_polled_state(event_dispatcher: Any) -> None:
