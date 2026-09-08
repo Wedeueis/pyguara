@@ -198,11 +198,12 @@ class ReplayRecorder:
 
         self._current_frame.events.append(event)
 
-    def record_key_down(self, code: int) -> None:
+    def record_key_down(self, code: int, modifiers: list[int] | None = None) -> None:
         """Record a keyboard key press.
 
         Args:
             code: Key code.
+            modifiers: Held modifier key codes at the time of the press.
         """
         self.record_event(
             RecordedInputEvent(
@@ -210,14 +211,16 @@ class ReplayRecorder:
                 device="keyboard",
                 code=code,
                 value=1.0,
+                modifiers=list(modifiers or []),
             )
         )
 
-    def record_key_up(self, code: int) -> None:
+    def record_key_up(self, code: int, modifiers: list[int] | None = None) -> None:
         """Record a keyboard key release.
 
         Args:
             code: Key code.
+            modifiers: Held modifier key codes at the time of the release.
         """
         self.record_event(
             RecordedInputEvent(
@@ -225,15 +228,22 @@ class ReplayRecorder:
                 device="keyboard",
                 code=code,
                 value=0.0,
+                modifiers=list(modifiers or []),
             )
         )
 
-    def record_mouse_down(self, button: int, position: tuple[float, float]) -> None:
+    def record_mouse_down(
+        self,
+        button: int,
+        position: tuple[float, float],
+        modifiers: list[int] | None = None,
+    ) -> None:
         """Record a mouse button press.
 
         Args:
             button: Mouse button code.
             position: Mouse position at time of press.
+            modifiers: Held modifier key codes at the time of the press.
         """
         self.record_event(
             RecordedInputEvent(
@@ -242,15 +252,22 @@ class ReplayRecorder:
                 code=button,
                 value=1.0,
                 position=position,
+                modifiers=list(modifiers or []),
             )
         )
 
-    def record_mouse_up(self, button: int, position: tuple[float, float]) -> None:
+    def record_mouse_up(
+        self,
+        button: int,
+        position: tuple[float, float],
+        modifiers: list[int] | None = None,
+    ) -> None:
         """Record a mouse button release.
 
         Args:
             button: Mouse button code.
             position: Mouse position at time of release.
+            modifiers: Held modifier key codes at the time of the release.
         """
         self.record_event(
             RecordedInputEvent(
@@ -259,6 +276,7 @@ class ReplayRecorder:
                 code=button,
                 value=0.0,
                 position=position,
+                modifiers=list(modifiers or []),
             )
         )
 

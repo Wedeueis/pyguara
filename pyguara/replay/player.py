@@ -210,25 +210,26 @@ class ReplayPlayer:
 
         return []
 
-    def advance_frame(self) -> InputFrame | None:
-        """Advance to the next frame and return its data.
+    def peek_delta(self) -> float | None:
+        """Return the ``delta_time`` of the frame :meth:`advance_frame` will emit next.
+
+        Lets a fixed-cadence host loop (``Application``) step its simulation by
+        the *recorded* frame duration during playback instead of wall-clock time,
+        so anything time-dependent -- the fixed-step accumulator, tweens,
+        ``WaitForSeconds`` -- reproduces.
 
         Returns:
-            The next frame, or None if at end or not playing.
+            The next frame's delta, or None if playback is not running or the
+            replay is exhausted.
         """
         if self._state != ReplayState.PLAYING or not self._data:
             return None
-
         if self._current_frame_index >= len(self._data.frames):
-            # End of replay
-            self._state = ReplayState.IDLE
-            logger.info("Replay playback complete")
             return None
+        return self._data.frames[self._current_frame_index].delta_time
 
-        frame = self._data.frames[self._current_frame_index]
-        self._current_frame_index += 1
-
-        # Dispatch events to handlers
+    def _emit_frame(self, frame: InputFrame) -> None:
+        """Dispatch one frame's events to every registered handler."""
         for event in frame.events:
             for handler in self._event_handlers:
                 try:
@@ -236,57 +237,65 @@ class ReplayPlayer:
                 except Exception as e:
                     logger.error(f"Event handler error: {e}")
 
-        # Check if we've reached the end
-        if self._current_frame_index >= len(self._data.frames):
+    def _finish_if_exhausted(self) -> None:
+        """Drop to IDLE once the last frame has been consumed."""
+        if self._data and self._current_frame_index >= len(self._data.frames):
+            if self._state != ReplayState.IDLE:
+                logger.info("Replay playback complete")
             self._state = ReplayState.IDLE
-            logger.info("Replay playback complete")
 
+    def advance_frame(self) -> InputFrame | None:
+        """Consume exactly one recorded frame and return it.
+
+        The frame-stepping playback model: one call per host frame, paired with
+        :meth:`peek_delta` so the host advances its clock by the recorded delta.
+
+        Returns:
+            The frame consumed, or None if at end or not playing.
+        """
+        if self._state != ReplayState.PLAYING or not self._data:
+            return None
+
+        if self._current_frame_index >= len(self._data.frames):
+            self._finish_if_exhausted()
+            return None
+
+        frame = self._data.frames[self._current_frame_index]
+        self._current_frame_index += 1
+        self._elapsed_time += frame.delta_time
+        self._emit_frame(frame)
+        self._finish_if_exhausted()
         return frame
 
     def update(self, delta_time: float) -> list[InputFrame]:
-        """Update playback based on elapsed time.
+        """Consume every frame whose timestamp has been reached this update.
 
-        This method should be called each game frame. It returns all frames
-        that should be processed based on the elapsed time.
+        The wall-clock playback model, for a host that drives the player from
+        its own variable-rate loop rather than one-frame-at-a-time. Honours
+        :attr:`playback_speed`. Shares event dispatch and end-of-replay handling
+        with :meth:`advance_frame`.
 
         Args:
-            delta_time: Time since last update in seconds.
+            delta_time: Time since the last update, in seconds.
 
         Returns:
-            List of frames to process this update.
+            The frames consumed this update, in order.
         """
         if self._state != ReplayState.PLAYING or not self._data:
             return []
 
-        # Apply playback speed
-        adjusted_dt = delta_time * self._playback_speed
-        self._elapsed_time += adjusted_dt
+        self._elapsed_time += delta_time * self._playback_speed
 
         frames_to_process: list[InputFrame] = []
-
-        # Process all frames up to current time
         while self._current_frame_index < len(self._data.frames):
             frame = self._data.frames[self._current_frame_index]
-
-            if frame.timestamp <= self._elapsed_time:
-                frames_to_process.append(frame)
-                self._current_frame_index += 1
-
-                # Dispatch events
-                for event in frame.events:
-                    for handler in self._event_handlers:
-                        try:
-                            handler(event)
-                        except Exception as e:
-                            logger.error(f"Event handler error: {e}")
-            else:
+            if frame.timestamp > self._elapsed_time:
                 break
+            frames_to_process.append(frame)
+            self._current_frame_index += 1
+            self._emit_frame(frame)
 
-        # Check if replay finished
-        if self._current_frame_index >= len(self._data.frames):
-            self._state = ReplayState.IDLE
-            logger.info("Replay playback complete")
-
+        self._finish_if_exhausted()
         return frames_to_process
 
     def get_current_frame_data(self) -> InputFrame | None:
