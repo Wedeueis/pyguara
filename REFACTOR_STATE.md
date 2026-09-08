@@ -79,9 +79,65 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/editor` closed 2026-09-08 (branch `refactor/editor-audit`).**
-Next in the queue is Tier 4: `pyguara/scripting` (coroutines, script
-hosting). Open `REFACTOR_STATE.md` "How to resume" and take it.
+**None — `pyguara/scripting` closed 2026-09-08 (branch `refactor/scripting-audit`).**
+Next in the queue is Tier 4: `pyguara/replay` (deterministic replay). Open
+`REFACTOR_STATE.md` "How to resume" and take it.
+
+`pyguara/scripting` in one slice, ~310 lines (`coroutines.py` — the whole
+subsystem). Unlike `editor`, it **is** wired in: the bootstrap registers a
+`CoroutineManager` singleton and `Application._update()` ticks it every frame.
+Headline: **one scripted sequence that raised took down the frame loop and
+silently abandoned every other coroutine.** `Coroutine.update()` caught only
+`StopIteration`; any other exception from the generator body propagated through
+`CoroutineManager.update()`'s list comprehension, out of `Application._update()`.
+Worse, the comprehension `self._coroutines = [c for c in self._coroutines if
+c.update(dt)]` (a) skipped every coroutine ordered after the one that raised
+and (b) never rebound the list, so on a re-raise the manager kept stale
+entries. Fixed with the engine's shared `ErrorHandlingStrategy` (as
+`EventDispatcher`/`DIContainer`): `CoroutineManager(error_strategy=RAISE)` by
+default — logs + stops the offender + re-raises; `LOG` / `IGNORE` contain it.
+Under every strategy the offender is stopped and dropped and the siblings
+still run.
+
+Other probe-reproduced defects: **`Coroutine.stop()` abandoned the
+generator** — `finally` blocks and `with` cleanup in a scripted sequence only
+ran at GC, not when the coroutine was stopped; now `stop()` calls
+`generator.close()` (guarded by `gi_running` for the self-stop case, where the
+frame is live on our own stack). **`CoroutineManager.update()` corrupted its
+list when a coroutine started/stopped coroutines from inside its own body** —
+the comprehension iterated the same list the coroutine mutated: stopping an
+earlier sibling skipped a later one, `stop_all()` from a body left survivors
+behind. Now `update()` iterates a frame-start snapshot and reconciles: a
+coroutine stopped mid-frame is skipped, one started mid-frame is carried to
+next frame, a late `stop_all()` is honoured. Recurring shapes: "catch only the
+happy exception" (bare `except StopIteration`), "mutate the container you're
+iterating", "cleanup deferred to GC", and uniform test setup — every one of
+the 30 existing tests built its coroutine from a benign `yield` body; none
+raised, stopped a sibling, or needed `finally` cleanup, which is exactly where
+all three defects lived. Tests +12 (1835 → 1847). `docs/systems/scripting.md`
+rewritten (it was 39 lines, omitted `WaitWhile` from its concept list, had a
+non-runnable example, and documented none of the wiring, lifecycle, error
+model or `stop()` semantics). See the iteration log entry below.
+
+**Capability gaps (Phase D) → #55** ("scripting production layer",
+sibling of #37/#40/#43/#46/#51): the `CoroutineManager` is one app-global
+singleton with **no scene scoping** — a sequence outlives its scene and keeps
+ticking against unloaded entities (there is no scene teardown hook, unlike
+`SystemManager`); **no coroutine tagging/grouping** (stop every coroutine for
+entity X when it despawns — the roguelike "killed enemy still runs its scripted
+attack" case, sibling of the prefab child-lifetime gap #51); **no `yield from`
+result / return value** to a parent sequence (fire-and-forget only, no way to
+learn a sequence's outcome); **no frame-count or fixed-step waits**
+(`WaitForFrames(n)`, `WaitForFixedUpdate`) and no realtime-vs-scaled wait for a
+paused game (time-scale / hit-stop is #28's). **Left open:** `WaitForSeconds`
+timing is frame-granular — the frame that yields the instruction is not
+counted and post-duration overshoot is discarded, so a long chain of short
+waits drifts by up to a frame each (documented; sub-frame precision is
+explicitly not a goal of the variable-rate `_update` step).
+
+---
+
+### `pyguara/editor` — closed 2026-09-08 (branch `refactor/editor-audit`)
 
 `pyguara/editor` in one slice, ~705 lines (`layer`, `drawers`,
 `panels/{hierarchy,inspector,assets}`). Headline: **the entire subsystem
@@ -584,7 +640,8 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 - [x] `pyguara/prefabs` — prefab definition and instantiation *(done)*
 - [x] `pyguara/editor` — deleted (dead ImGui layer); hierarchy + assets
   panels rebuilt as `UIRenderer` tools *(done — branch `refactor/editor-audit`)*
-- [ ] `pyguara/scripting` — coroutines, script hosting
+- [x] `pyguara/scripting` — coroutines, script hosting *(done — branch
+  `refactor/scripting-audit`)*
 - [ ] `pyguara/replay` — deterministic replay
 - [ ] `pyguara/dev` — dev-only helpers
 - [ ] `pyguara/cli` — command line entry points
@@ -596,6 +653,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/scripting` | 2026-09-08 | One slice, ~310 lines (`coroutines.py` is the whole subsystem). Unlike `editor` it **is** wired in — bootstrap registers a `CoroutineManager` singleton, `Application._update()` ticks it every frame. Headline: **one scripted sequence that raised took down the frame loop and abandoned every other coroutine.** `Coroutine.update()` caught only `StopIteration`; any other exception from the generator body propagated through `CoroutineManager.update()`'s list comprehension out of `Application._update()`, and the comprehension `self._coroutines = [c for c in self._coroutines if c.update(dt)]` also skipped every coroutine ordered after the raiser and left stale entries on a re-raise. Fixed with the shared `ErrorHandlingStrategy` (as `EventDispatcher`/`DIContainer`): `CoroutineManager(error_strategy=RAISE)` default logs + stops + re-raises; `LOG`/`IGNORE` contain it; under all three the offender is stopped and dropped and siblings still run. **`Coroutine.stop()` abandoned the generator** — `finally`/`with` cleanup in a sequence only ran at GC; now `stop()` calls `generator.close()` (guarded by `gi_running` for the self-stop case). **`CoroutineManager.update()` corrupted its list when a coroutine started/stopped coroutines from inside its own body** (the comprehension iterated the list the body mutated — stopping an earlier sibling skipped a later one; `stop_all()` from a body left survivors); now iterates a frame-start snapshot and reconciles. Recurring shapes: "catch only the happy exception", "mutate the container you're iterating", "cleanup deferred to GC", and uniform test setup — all 30 existing tests built the coroutine from a benign `yield` body; none raised, stopped a sibling, or needed `finally`, which is exactly where the defects were. Tests +12 (1835 → 1847). `docs/systems/scripting.md` rewritten (was 39 lines: omitted `WaitWhile` from its concepts, non-runnable example, documented no wiring / lifecycle / error model / `stop()` semantics). Phase D → **#55** ("scripting production layer", sibling of #37/#40/#43/#46/#51): no scene scoping (a coroutine outlives its scene, no teardown hook), no coroutine tagging/grouping (kill entity → its scripted sequences keep running), no `yield from` result to a parent, no frame-count / fixed-step / scaled-time waits (time-scale is #28's). Left open: `WaitForSeconds` timing is frame-granular — yielding frame uncounted, overshoot discarded, so a long chain of short waits drifts by ~1 frame each (documented; sub-frame precision is not a goal of the variable-rate step). |
 | `pyguara/prefabs` | 2026-09-08 | One slice (`types`, `registry`, `loader`, `factory`; ~1,000 lines). Headline: **a prefab with `children` crashed on every real scene.** `PrefabFactory._create_children` called `parent_entity.get_component_by_name("Transform")` — a method that exists nowhere on `Entity` — so `factory.create()` raised `AttributeError` whenever a `prefab_resolver` was set, which `Scene.resolve_dependencies()` always does. Past the crash, the parent-link step was `for _child in children: pass` — children never attached despite `Transform` having a full `set_parent`/`children` API. **Zero `.prefab` files exist in the repo**, so the file→loader→factory→children path had never run. Per the user's choice (wire it properly, unify): children now instantiate as their own entities parented via `Transform.set_parent(keep_world_transform=False)` — authored position is local to the parent and follows it; `PrefabChild.offset` applies in local space. Dropped the dead loop and the `parent_position` bake (ignored parent rotation/scale). **BREAKING** (pre-alpha): `create()` loses `parent_position`, gains `source_path`. Also: **`_resolve_inheritance` had no cycle guard** (`A extends B extends A` → `RecursionError`) → now raises `ValueError` naming the chain. **`create()` swallowed component construction errors** in a blanket `except Exception`, yielding half-built entities → per the user's choice (fail loud) it now raises; `_instantiate_dataclass` also rejects unknown field keys (a typo used to vanish). **`_convert_value` enum handling was `EnumType[value.upper()]`** — non-SCREAMING_CASE members raised `KeyError` → swallowed → component dropped; now case-insensitive name or raw value, `ValueError` on a miss. **`PrefabInstance.prefab_path` was always the display `name`** (`create_from_path` had the real path and discarded it) → now threaded through, `name` only as the in-memory fallback. **`ComponentRegistry.clear()` wiped `_deserializers`** (losing the built-in `Transform` special-case; `Transform` is not a dataclass so a cleared registry couldn't round-trip it even re-registered) → now re-seeds built-ins. **`PrefabLoader` raised `AttributeError`** on a non-mapping top-level doc despite documenting `ValueError` → now validates. Removed **`PrefabReference`** (exported, used nowhere). Recurring shapes: "declared and wired to nothing" (`children` link-up, `PrefabReference`, `prefab_path`, `PrefabData.version`), "guard that holds a wrong answer" (swallowed errors, enum `.upper()`), uniform test setup (every factory test hand-built `PrefabData` against a `Transform`+`Tag`-only registry; `_create_children` / `create_from_path` / inheritance cycles / round-trip had **zero** coverage; `test_create_warns_on_unknown_component` asserted `... or entity is not None`). Tests +17 (1799 → 1835). New `docs/systems/prefabs.md` (no doc page existed). Phase D → **new issue** (sibling of #37/#40/#43/#46 + UI Phase-D): no spawn tables / weighted pools, `PrefabData.version` dead (no prefab-schema migration), no named variant library, prefab children lack an entity-level ownership/lifetime link (leak on parent destroy — needs an ECS-hierarchy decision), no asset-ref validation at load; `ComponentRegistry` process-global mutable singleton parked as a CC. |
 | `pyguara/ui` | 2026-09-08 | One slice (`base`, `layout`, `constraints`, `manager`, `theme`, `theme_presets`, `types`, `components/*`; ~1,900 lines). Two "declared and wired to nothing" headliners under 84 green tests. **The constraint layout system never ran** — `UIElement.apply_layout()` had no caller in the repo; `UIManager` had no layout pass; roots couldn't be constrained at all (`apply_layout` needs `self.parent`). Probe: `create_fill_constraints(margin=20)` under an 800×600 parent → child stays `Rect(0,0,10,10)` across three manager frames. So `constraints.py` (314 lines) + `element.padding` + every `create_*_constraints` helper were inert, though documented as "the heart of the UI system's power" with non-runnable examples. Per the user's choice (unify): `apply_layout()` → `UIElement.layout(available_rect, renderer)`; `UIManager` holds a screen `Rect` (seeded by `Application.set_screen_size()`, refreshed via a `WindowResizeEvent` subscription) and runs `layout()` over every root before render, **dirty-gated** (`add_element` / `set_screen_size` / new public `invalidate_layout()` arm it). Roots constrain against the screen; children against the parent's padding-aware content rect. `BoxContainer.layout()` folded into the same pass: resolves its own constraints first, honours `LayoutAlignment.STRETCH` (declared, no branch), skips hidden children in `render()`, recurses. **Theme was snapshotted per element at construction** (`self.theme = get_theme()` in `__init__`) so `set_theme()` re-skinned nothing already built (probe confirmed) — now `UIElement.theme` is a live property; `ProgressBar`/`Canvas`/`NavBar` defer their cached `Color`. **`ThemeConstants` `@dataclass(frozen=True)` decorated nothing** (`fields() == []`) — "All themes are immutable" was false, presets were mutable process-wide singletons; now a `__getattr__` hands back a fresh copy per access. Smaller: `Slider` rejects `max_val <= min_val` / non-positive width at construction; dead `UIElement.anchor` / `Label(anchor=)` param removed. Recurring shapes: "declared and wired to nothing" (`apply_layout`, `STRETCH`, `anchor`, fake `frozen`), "cached snapshot vs live lookup" (theme), uniform test setup (`test_ui_constraints.py`'s 513 lines only ever called `.apply()` on hand-built Rects; theme tests never built a `UIElement`). BREAKING (pre-alpha): `layout()` signature changed; four in-repo games had their now-redundant `container.layout(renderer)` call removed. Tests: new `test_ui_manager_layout.py` + rebuilt `test_ui_layout.py`. Phase D → new issue (sibling of #37/#40/#43/#46): `ShadowScheme`/`BorderScheme.radius`/`hover_overlay`/`press_overlay` consumed by no widget, no focus navigation, no scroll/clip container, no grid layout, no real text-input path (`TEXT_INPUT` declared/never dispatched), manual layout invalidation. |
 | `pyguara/ai` | 2026-09-08 | One slice (`fsm`, `blackboard`, `components`, `ai_system`, `steering`, `steering_system`, `behavior_tree`, `navmesh`, `pathfinding/*`; ~2,100 lines). **`world_to_grid_coords()` used `int()` not `floor`** — a non-zero grid `offset` or any negative local coord resolved to the wrong cell, and the quadrant left of/above the origin collapsed onto row/col 0 (world `(-10,-10)` → grid `(0,0)`, a sign flip). "Formula that returns a wrong answer" → `math.floor`. **`AISystem` passed the bare `Entity` as the BT context**, so `WaitNode` (any `context.dt` reader) fell back to a hardcoded `1/60` and drifted with frame rate — `WaitNode(1.0)` = ~2.1s @30fps, ~3.5s @144fps; the engine's own game hand-rolled its own AI system to dodge this. Fixed with a small `AIContext` (entity+dt+blackboard), passed to `tree.tick()`. **`SteeringSystem` only dispatched `seek/arrive/flee/wander`** — `pursuit`/`evade` (the only moving-target behaviors) were implemented but unreachable, and an unknown `behavior` string produced zero force silently. `behavior` is now a validated `SteeringBehaviorType` enum, all six wired, `SteeringAgent` gained `target_velocity`. **`behavior="arrive"` overshot and orbited the target forever** — system now enforces the arrive speed ramp on velocity and snaps to rest. **Generic `AStarPathfinder` crashed on a priority tie** with non-order-comparable nodes (`Node` is only `Hashable`; ties are common) — added the monotonic tie-break counter (also to `NavMeshPathfinder`). **`NavMesh.remove_polygon()` left dangling ids in other polygons' `neighbors`** — now pruned. FSM `set_initial_state()` / unknown transition targets were silent no-ops — now logged; a second `set_initial_state()` exits the prior state. `NavMeshPathfinder` docstring claimed a funnel algorithm it lacks — corrected. Recurring shapes: "guard/formula returns a wrong answer", "declared and wired to nothing" (`pursuit`/`evade`, `dt` never threaded), "hardcoded dt", uniform test setup (`TestCoordinateConversion` all-positive; **zero** tests for `AISystem`/`SteeringSystem`). Tests +29 (1770 → 1799). Phase D: BT/FSM authoring gaps (no reactive composites, no FSM transition table, no declarative blackboard nodes) → **#46** (sibling of #37/#40/#43); navmesh funnel/partial-portals/generation → parked (flow-field is #28's); steering-vs-physics → parked for the top-down `CharacterMover` slice. Left open: `WaitNode` keeps a named `getattr` dt fallback; the arrive fix is a velocity clamp (`_ARRIVE_STOP_DISTANCE = 1.0`), not a force-model redesign; `NavMeshPolygon.contains_point` has a fragile-but-unreachable `xinters`-before-assignment. |
@@ -636,6 +694,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#46](https://github.com/Wedeueis/pyguara/issues/46) | AI authoring gaps (from the `pyguara/ai` audit, Phase D) — `SequenceNode`/`SelectorNode` have memory with no *reactive* variant, so a front guard `ConditionNode` stops being re-checked once the sequence advances (the "attack while visible, else patrol" pattern silently keeps attacking); `ParallelNode` re-ticks already-completed children; FSM has no transition table / event-driven transitions; every BT leaf is a hand-written closure (no stock `BlackboardCondition` / `SetBlackboard` / `Cooldown` / `RandomSelector`); `_wander_targets` is evicted only on scene exit. Navmesh funnel/portals/generation and steering-vs-physics parked separately (flow-field is #28's) |
 | [#51](https://github.com/Wedeueis/pyguara/issues/51) | Prefab authoring & production layer (from the `pyguara/prefabs` audit, Phase D) — no spawn tables / weighted prefab pools (`create` is one at a time, no selection primitive); `PrefabData.version` declared "for migration support" and read by nothing (no prefab-schema migration, while `persistence` has a `MigrationRegistry`); no named variant library (`overrides` is per-call only); prefab children are linked `Transform`↔`Transform` only — the child entity has no parent-*entity* back-reference or shared lifetime, so despawning an enemy leaks its prefab-attached child entities (needs an ECS-hierarchy decision, cross-cutting with `pyguara/ecs`); no asset-reference validation at load. `ComponentRegistry` process-global mutable singleton parked as a CC |
 | [#53](https://github.com/Wedeueis/pyguara/issues/53) | PyGuara Studio — companion authoring app (from the `pyguara/editor` audit, which deleted a Dear ImGui editor that had never executed and rebuilt its useful parts as `UIRenderer` tools). Level/scene editor, animation editor, agentic authoring harness (grow `tools/agent_view.py`), data-table editors. Needs the build-vs-ImGui architecture decision; the "grow `pyguara/ui`" path is #49's scope. Gated on #49 / #28. In-overlay small items (custom inspector-drawer hook, `TransformGizmo` selection wiring) parked for the `pyguara/tools` slice |
+| [#55](https://github.com/Wedeueis/pyguara/issues/55) | Scripting production layer (from the `pyguara/scripting` audit, Phase D) — `CoroutineManager` is one app-global singleton with no scene scoping (a sequence outlives its scene and ticks against unloaded entities; no teardown hook, unlike `SystemManager`); no coroutine tagging / grouping (kill an entity → its scripted sequences keep running, cross-cutting with #51); no `yield from` result / return value or completion signal to a parent sequence; no frame-count / fixed-step waits (`WaitForFrames`, `WaitForFixedUpdate`) and no scaled-vs-realtime wait for a paused game (time-scale is #28's). `WaitForSeconds` frame-granular drift and missing arg validation left open, documented |
 
 ---
 
@@ -816,6 +875,152 @@ convert to explicit `is None` checks as each subsystem is audited.
 
 ## Iteration Log
 
+### `pyguara/scripting` — CLOSED 2026-09-08 (branch `refactor/scripting-audit`)
+
+One slice, ~310 lines: `pyguara/scripting/coroutines.py` is the entire
+subsystem (`__init__.py` is a re-export). Every defect reproduced with a probe
+against the real code before any fix.
+
+Unlike the `editor` subsystem audited just before it, `scripting` is live in
+every game: `bootstrap.py:277` registers a `CoroutineManager()` singleton and
+`Application._update()` (`application.py:383`) calls `.update(dt)` on it once
+per frame, at display rate.
+
+**Branch base.** Cut from `main`, not from `refactor/editor-audit` (PR #54,
+still open) — the scripting code has no editor dependency. The two branches
+overlap only in `REFACTOR_STATE.md`. Merge #54 first, then rebase this and
+resolve that file (keep both log entries and both queue ticks).
+
+**Verification:** 1847 tests pass (up from 1835; +12 hand-written across three
+new test classes in `test_coroutines.py`). `ruff check .` clean;
+`ruff format --check` clean; `mypy pyguara` clean across 226 files. Commits
+verified in a detached worktree at each SHA.
+
+**F1 — a coroutine that raised crashed the frame loop and abandoned its
+siblings.** `Coroutine.update()`'s generator pump was `try: yielded =
+next(self._generator) ... except StopIteration:` — `StopIteration` was the
+*only* caught exception. Anything else the scripted body raised propagated
+through `CoroutineManager.update()`, whose entire body was
+`self._coroutines = [c for c in self._coroutines if c.update(dt)]`, and on out
+through `Application._update()` → `_tick()` → the main loop. Probe: three
+coroutines registered, the middle one `raise RuntimeError` on its second
+`update`; `manager.update()` propagated the `RuntimeError`, the third
+coroutine never ran that frame (`['a']` logged, not `['a', 'b']`), and because
+the comprehension raised before rebinding, `self._coroutines` kept all three
+stale entries. A nested coroutine raising (probe 5) did the same via the
+recursive `self._nested_coroutine.update(dt)` call. Fix: `CoroutineManager`
+gained `error_strategy: ErrorHandlingStrategy = RAISE` — the same shared enum
+and the same default `EventDispatcher` and `DIContainer` take. `update()` now
+wraps each `coro.update(dt)`; on any `Exception` it stops the offender, then
+`_reraise_coroutine_error()` logs the traceback (`logger.error(..., exc_info=
+True)`) and returns whether to re-raise (`RAISE` yes, `LOG`/`IGNORE` no).
+Under every strategy the offender is stopped and removed and the remaining
+coroutines still run that frame. Post-fix probes: `LOG` → `['a', 'b']` both
+siblings run, `active_count == 2`, no stale entry next frame; `RAISE` → still
+propagates (fail-fast in dev) but the offender is gone and the unreached
+sibling is preserved.
+
+**F2 — `Coroutine.stop()` abandoned the generator; cleanup ran only at GC.**
+`stop()` was `self._is_complete = True; if self._nested_coroutine:
+self._nested_coroutine.stop()`. The generator object was just dropped — any
+`try/finally` or `with` inside the scripted sequence (the natural idiom for
+"close this dialogue box no matter how the sequence ends") did not run its
+cleanup until the generator was garbage-collected. Probe: coroutine with a
+`finally: cleaned.append(...)`, `stop()` called → `cleaned == []`; only
+`gc.collect()` ran it. Fix: `stop()` now calls `self._generator.close()`
+(injects `GeneratorExit` at the suspended `yield`, running `finally` blocks
+now), after a `gi_running` guard — a coroutine that stops *itself* from inside
+its own body has its frame live on our stack, and `close()` on a running
+generator raises `ValueError: generator already executing`; in that case the
+coroutine is flagged complete and dropped next frame, cleanup falls back to
+GC. A generator that swallows `GeneratorExit` and yields again raises
+`RuntimeError` from `close()` — caught and logged. `stop()` is idempotent and
+never raises. `stop_coroutine()` / `stop_all()` inherit the close via the
+`coro.stop()` calls they already made.
+
+**F3 — `CoroutineManager.update()` corrupted its own list under re-entrant
+mutation.** The one-line comprehension iterated `self._coroutines` while a
+coroutine body running inside `c.update(dt)` could `start_coroutine()`,
+`stop_coroutine()` or `stop_all()` on that same list. Probes: (2a) a coroutine
+that calls `stop_coroutine(earlier_sibling)` → the `list.remove()` shifts
+every later element down one and the comprehension's index-based iteration
+skips the next coroutine (`c3` never ran); (2b) a coroutine stopping *itself*
+→ same skip; (2c) `stop_all()` from a body → the comprehension kept iterating
+the now-cleared list from its saved index, then rebound `self._coroutines` to
+whatever it had collected, resurrecting already-stopped coroutines
+(`active_count == 2` right after `stop_all()`). Fix: `update()` iterates a
+`list(self._coroutines)` snapshot taken at frame start, and in a `finally`
+rebuilds the live list from (still-running survivors) + (snapshot entries the
+loop never reached, when `RAISE` aborted it, that are still live) + (coroutines
+started during the pass, absent from the snapshot), dropping any left
+`is_complete` by a late `stop_all()`. A coroutine stopped mid-frame is skipped
+(`coro not in self._coroutines`); one started mid-frame is carried forward and
+first runs the next frame. Post-fix: 2a/2b no longer skip `c3`; 2c leaves
+`active_count == 0`.
+
+**Phase B — test verdict.** `test_coroutines.py` had 30 tests with good
+public-surface discipline (asserts on `active_count` / `active_coroutines` /
+`is_complete`, not privates — no `_coroutines[...]` pokes) and thorough
+happy-path and timing coverage. But the subject was built the same way in
+every single one: a generator whose body is some arrangement of bare `yield` /
+`yield None` / `yield wait_for_seconds(...)` and nothing else. **No test ever
+constructed a coroutine that raised, that stopped another coroutine (or
+itself) from inside its body, or that needed a `finally` block to run** — the
+three exact shapes F1–F3 live in. Same "uniform construction of the subject"
+blind spot this audit keeps finding. Added three classes: `TestGeneratorCleanup`
+(5 — `stop`/`stop_coroutine`/`stop_all` run `finally` now, idempotent stop,
+self-stop doesn't raise), `TestErrorContainment` (4 — `LOG`/`IGNORE` contain +
+siblings run + no stale entry, `RAISE` propagates but state stays consistent,
+nested-coroutine error contained), `TestReentrantMutation` (3 — stopping an
+earlier sibling doesn't skip a later one, a mid-frame `start_coroutine` is
+carried forward not lost, `stop_all()` from a body clears everything). +12.
+
+**Phase C — docs.** `docs/systems/scripting.md` was 39 lines. Wrong/thin, not
+just thin: its concept list named only `WaitForSeconds` and `WaitUntil`
+(`WaitWhile` is a first-class instruction, documented one section lower); its
+only code example imports `wait_for_seconds` then calls `wait_until`
+unimported; and it documented none of the wiring (DI singleton, ticked in
+`_update` at variable rate), the nested-coroutine / `yield` a generator
+feature, the `stop_coroutine`/`stop_all`/`active_count` API, the new error
+model, or `stop()`'s cleanup guarantee. Rewritten around all of that, with the
+frame-granular-timing caveat called out and every code block runnable in
+shape. API cross-checked against the module: all documented names exist and
+are exported.
+
+**Phase D — capability gaps → #55** ("scripting production layer",
+sibling of #37 / #40 / #43 / #46 / #51):
+
+- **No scene scoping.** `CoroutineManager` is one app-global singleton
+  (`bootstrap.py`), and nothing stops its coroutines on a scene transition —
+  there is no per-scene coroutine owner the way `SystemManager` is per-scene.
+  A sequence started in scene A keeps ticking in scene B against entities that
+  no longer exist. Needs a design decision (scene-owned manager vs. tagged
+  coroutines vs. a `stop_all()` scene-exit hook).
+- **No coroutine tagging / grouping.** No "stop every coroutine belonging to
+  entity X" for despawn — a killed enemy's scripted attack pattern keeps
+  running. Cross-cutting with the prefab child-lifetime gap (#51) and an
+  ECS-hierarchy decision.
+- **No `yield from` result / return value.** A parent sequence cannot receive
+  a value from a child sequence, nor learn that a fire-and-forget coroutine
+  failed. `start_coroutine` returns only a stop handle.
+- **No frame-count or fixed-step waits** (`WaitForFrames(n)`,
+  `WaitForFixedUpdate`), and no realtime-vs-scaled wait for a paused game.
+  Time-scale / hit-stop is owned by #28.
+
+**Left open.** `WaitForSeconds` timing is frame-granular: the frame that
+yields the instruction is not counted (the generator only resumes on the
+*next* `update`), and elapsed time past `duration` is discarded rather than
+carried into the following wait. A chain of N short `WaitForSeconds` therefore
+finishes up to N frames late. Probe 4: two `wait_for_seconds(1.0)` back to
+back with 0.6 s frames finished at t = 3.0 s (ideal 2.0). Documented in
+`scripting.md`; not fixed because the coroutine tick is the variable-rate
+`_update` step, which the loop docstring explicitly frees from being
+frame-reproducible, and carrying overshoot forward is a model change (the
+manager would need to thread leftover time through `Coroutine.update`).
+`WaitForSeconds` / `WaitUntil` / `WaitWhile` still take no argument validation
+(negative duration completes immediately; a `nan` duration never completes) —
+low-value, left as-is.
+
 ### `pyguara/editor` — CLOSED 2026-09-08 (branch `refactor/editor-audit`)
 
 Tier 4, ~705 lines (`layer.py`, `drawers.py`, `panels/{hierarchy,inspector,
@@ -941,7 +1146,6 @@ predates the iteration.)
 hierarchy + assets panels. `TransformGizmo` is still unregistered. The
 `Tool` base's throwaway-`EntityManager` fallback (no active scene) is a
 latent footgun for any tool that mutates the world.
-
 
 ### `pyguara/prefabs` — CLOSED 2026-09-08 (branch `refactor/prefabs-audit`)
 

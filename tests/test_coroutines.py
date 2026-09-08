@@ -1,5 +1,8 @@
 """Tests for coroutine scripting system."""
 
+import pytest
+
+from pyguara.errors import ErrorHandlingStrategy
 from pyguara.scripting.coroutines import (
     Coroutine,
     CoroutineManager,
@@ -603,3 +606,260 @@ class TestCoroutineIntegration:
 
         coro.update(0.016)
         assert executed == [1, 2, 3]
+
+
+class TestGeneratorCleanup:
+    """stop() must close the generator so finally-blocks run now, not at GC."""
+
+    def test_stop_runs_finally_block(self):
+        """Stopping a coroutine runs its pending finally immediately."""
+        cleaned = []
+
+        def with_cleanup():
+            try:
+                while True:
+                    yield
+            finally:
+                cleaned.append("clean")
+
+        coro = Coroutine(with_cleanup())
+        coro.update(0.016)
+        assert cleaned == []
+
+        coro.stop()
+        assert cleaned == ["clean"]
+
+    def test_manager_stop_coroutine_runs_finally(self):
+        """CoroutineManager.stop_coroutine closes the generator too."""
+        cleaned = []
+
+        def with_cleanup():
+            try:
+                while True:
+                    yield
+            finally:
+                cleaned.append("clean")
+
+        manager = CoroutineManager()
+        coro = manager.start_coroutine(with_cleanup())
+        manager.update(0.016)
+
+        assert manager.stop_coroutine(coro) is True
+        assert cleaned == ["clean"]
+
+    def test_manager_stop_all_runs_finally(self):
+        """stop_all closes every generator it drops."""
+        cleaned = []
+
+        def with_cleanup(tag):
+            try:
+                while True:
+                    yield
+            finally:
+                cleaned.append(tag)
+
+        manager = CoroutineManager()
+        manager.start_coroutine(with_cleanup("a"))
+        manager.start_coroutine(with_cleanup("b"))
+        manager.update(0.016)
+
+        manager.stop_all()
+        assert sorted(cleaned) == ["a", "b"]
+
+    def test_stop_is_idempotent(self):
+        """Calling stop() twice is harmless and runs cleanup once."""
+        cleaned = []
+
+        def with_cleanup():
+            try:
+                yield
+            finally:
+                cleaned.append(1)
+
+        coro = Coroutine(with_cleanup())
+        coro.update(0.016)
+        coro.stop()
+        coro.stop()
+        assert cleaned == [1]
+        assert coro.is_complete
+
+    def test_stop_from_inside_own_body_does_not_raise(self):
+        """A coroutine stopping itself mid-body must not raise from update()."""
+        manager = CoroutineManager()
+        seen = []
+
+        def suicidal():
+            seen.append("run")
+            manager.stop_all()
+            yield
+
+        manager.start_coroutine(suicidal())
+        manager.update(0.016)  # must not raise "generator already executing"
+
+        assert seen == ["run"]
+        assert manager.active_count == 0
+
+
+class TestErrorContainment:
+    """A raising coroutine must not corrupt the manager or drop its siblings."""
+
+    def _sibling(self, log, tag):
+        def gen():
+            while True:
+                log.append(tag)
+                yield
+
+        return gen()
+
+    def _raiser(self, log):
+        def gen():
+            log.append("raiser")
+            yield
+            raise RuntimeError("scripted logic blew up")
+
+        return gen()
+
+    def test_log_strategy_contains_the_failure(self):
+        """Under LOG, the offender is dropped and every sibling still runs."""
+        log = []
+        manager = CoroutineManager(error_strategy=ErrorHandlingStrategy.LOG)
+        manager.start_coroutine(self._sibling(log, "a"))
+        manager.start_coroutine(self._raiser(log))
+        manager.start_coroutine(self._sibling(log, "b"))
+
+        manager.update(0.016)  # everyone hits their first yield
+        log.clear()
+
+        manager.update(0.016)  # raiser raises; must be swallowed
+
+        assert log == ["a", "b"]  # both siblings ran, in order
+        assert manager.active_count == 2  # raiser gone, siblings kept
+
+        log.clear()
+        manager.update(0.016)
+        assert log == ["a", "b"]  # steady state, no stale/dead entry
+
+    def test_ignore_strategy_contains_the_failure(self):
+        """Under IGNORE the failure is also contained."""
+        log = []
+        manager = CoroutineManager(error_strategy=ErrorHandlingStrategy.IGNORE)
+        manager.start_coroutine(self._raiser(log))
+        manager.start_coroutine(self._sibling(log, "b"))
+
+        manager.update(0.016)
+        manager.update(0.016)
+
+        assert manager.active_count == 1
+        assert "b" in log
+
+    def test_raise_strategy_propagates_but_keeps_state_consistent(self):
+        """Under RAISE (default) it propagates, yet unreached siblings survive."""
+        log = []
+        manager = CoroutineManager()  # default RAISE
+        manager.start_coroutine(self._sibling(log, "a"))
+        manager.start_coroutine(self._raiser(log))
+        manager.start_coroutine(self._sibling(log, "b"))
+
+        manager.update(0.016)
+
+        with pytest.raises(RuntimeError, match="blew up"):
+            manager.update(0.016)
+
+        # The raiser is gone; the sibling the loop never reached is preserved.
+        assert manager.active_count == 2
+        log.clear()
+        manager.update(0.016)
+        assert sorted(log) == ["a", "b"]
+
+    def test_nested_coroutine_error_is_contained(self):
+        """An exception in a nested coroutine is handled by the strategy."""
+        resumed = []
+
+        def inner_bad():
+            yield
+            raise ValueError("inner blew up")
+
+        def outer():
+            yield inner_bad()
+            resumed.append("outer resumed")
+
+        manager = CoroutineManager(error_strategy=ErrorHandlingStrategy.LOG)
+        manager.start_coroutine(outer())
+        manager.update(0.016)
+        manager.update(0.016)
+
+        assert resumed == []  # outer did not resume past the failed child
+        assert manager.active_count == 0
+
+
+class TestReentrantMutation:
+    """Coroutines may start/stop coroutines from inside their own update."""
+
+    def test_stopping_an_earlier_sibling_does_not_skip_a_later_one(self):
+        log = []
+        handles = {}
+
+        def mk(tag):
+            def gen():
+                while True:
+                    log.append(tag)
+                    if tag == "c2":
+                        manager.stop_coroutine(handles["c1"])
+                    yield
+
+            return gen()
+
+        manager = CoroutineManager()
+        for tag in ("c1", "c2", "c3", "c4"):
+            handles[tag] = manager.start_coroutine(mk(tag))
+
+        manager.update(0.016)
+
+        assert log == ["c1", "c2", "c3", "c4"]  # c3 not skipped by the removal
+        assert manager.active_count == 3
+
+    def test_a_coroutine_started_mid_frame_is_carried_forward(self):
+        log = []
+
+        def child():
+            while True:
+                log.append("child")
+                yield
+
+        def parent():
+            log.append("parent")
+            manager.start_coroutine(child())
+            yield
+            log.append("parent-again")
+
+        manager = CoroutineManager()
+        manager.start_coroutine(parent())
+
+        manager.update(0.016)
+        assert log == ["parent"]  # child does not run the frame it is started
+        assert manager.active_count == 2  # child was not lost
+
+        log.clear()
+        manager.update(0.016)
+        assert log == ["parent-again", "child"]
+
+    def test_stop_all_from_inside_a_body_clears_everything(self):
+        log = []
+
+        def mk(tag):
+            def gen():
+                while True:
+                    log.append(tag)
+                    if tag == "c2":
+                        manager.stop_all()
+                    yield
+
+            return gen()
+
+        manager = CoroutineManager()
+        for tag in ("c1", "c2", "c3", "c4"):
+            manager.start_coroutine(mk(tag))
+
+        manager.update(0.016)
+
+        assert manager.active_count == 0

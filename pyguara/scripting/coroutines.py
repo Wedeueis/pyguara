@@ -20,6 +20,11 @@ Example:
 from collections.abc import Callable, Generator
 from typing import Any
 
+from pyguara.errors import ErrorHandlingStrategy
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
+
 
 class WaitInstruction:
     """Base class for yield instructions."""
@@ -179,10 +184,33 @@ class Coroutine:
                 return False
 
     def stop(self) -> None:
-        """Stop the coroutine immediately."""
+        """Stop the coroutine immediately.
+
+        Closes the underlying generator, so any ``finally`` blocks or
+        context managers open inside the scripted sequence run their
+        cleanup now rather than whenever the generator is garbage
+        collected. Idempotent, and never raises: a generator that swallows
+        the injected ``GeneratorExit`` (by yielding again) is reported and
+        left for the garbage collector.
+        """
         self._is_complete = True
         if self._nested_coroutine:
             self._nested_coroutine.stop()
+            self._nested_coroutine = None
+        self._current_instruction = None
+        closer = getattr(self._generator, "close", None)
+        if closer is None:
+            return
+        if getattr(self._generator, "gi_running", False):
+            # stop() called from inside this coroutine's own body: the frame
+            # is live on our stack and cannot be closed now. It is flagged
+            # complete and dropped next frame; its finally-blocks run at GC.
+            return
+        try:
+            closer()
+        except RuntimeError as exc:
+            # generator ignored GeneratorExit and yielded again
+            logger.exception(exc, "Coroutine generator refused to close on stop()")
 
     @property
     def is_complete(self) -> bool:
@@ -195,6 +223,11 @@ class CoroutineManager:
 
     Handles starting, updating, and stopping coroutines.
 
+    A scripted sequence that raises is contained: it is stopped and reported
+    according to ``error_strategy``, and the other coroutines still run this
+    frame. Coroutines may safely start or stop coroutines (including
+    themselves) from inside their own body during ``update()``.
+
     Example:
         >>> manager = CoroutineManager()
         >>> coro = manager.start_coroutine(my_sequence())
@@ -202,9 +235,20 @@ class CoroutineManager:
         >>> manager.update(dt)
     """
 
-    def __init__(self) -> None:
-        """Initialize coroutine manager."""
+    def __init__(
+        self,
+        error_strategy: ErrorHandlingStrategy = ErrorHandlingStrategy.RAISE,
+    ) -> None:
+        """Initialize coroutine manager.
+
+        Args:
+            error_strategy: What to do when a coroutine body raises. ``RAISE``
+                (the default, matching ``EventDispatcher`` and ``DIContainer``)
+                logs the traceback and re-raises after stopping the offender;
+                ``LOG`` logs and carries on; ``IGNORE`` drops it silently.
+        """
         self._coroutines: list[Coroutine] = []
+        self._error_strategy = error_strategy
 
     def start_coroutine(self, generator: Generator[Any, None, None]) -> Coroutine:
         """Start a new coroutine.
@@ -241,13 +285,66 @@ class CoroutineManager:
         self._coroutines.clear()
 
     def update(self, dt: float) -> None:
-        """Update all active coroutines.
+        """Update all active coroutines, dropping the ones that finish.
+
+        Iterates a snapshot taken at frame start, so a coroutine that starts
+        or stops coroutines from inside its own body does not corrupt the
+        pass: a coroutine stopped mid-frame is skipped, and one started
+        mid-frame is carried forward untouched (it first runs next frame).
 
         Args:
             dt: Delta time since last frame
         """
-        # Update all coroutines and remove completed ones
-        self._coroutines = [coro for coro in self._coroutines if coro.update(dt)]
+        snapshot = list(self._coroutines)
+        survivors: list[Coroutine] = []
+        visited = 0
+        try:
+            for coro in snapshot:
+                visited += 1
+                if coro not in self._coroutines:
+                    continue  # stopped mid-frame by an earlier coroutine
+                try:
+                    still_running = coro.update(dt)
+                except Exception:  # noqa: BLE001 - user script; strategy decides
+                    coro.stop()
+                    if self._reraise_coroutine_error(coro):
+                        raise
+                    still_running = False
+                if still_running and coro in self._coroutines:
+                    survivors.append(coro)
+        finally:
+            # Rebuild the live list so it survives a mid-frame re-raise: the
+            # coroutines already kept, then snapshot entries the loop never
+            # reached (RAISE aborted it) that are still live, then any started
+            # during this pass (absent from the snapshot).
+            unvisited = [c for c in snapshot[visited:] if c in self._coroutines]
+            started_this_pass = [c for c in self._coroutines if c not in snapshot]
+            # A late stop_all()/stop_coroutine() from inside a coroutine body
+            # can have flagged an already-kept coroutine complete; drop those.
+            self._coroutines = [
+                c
+                for c in (*survivors, *unvisited, *started_this_pass)
+                if not c.is_complete
+            ]
+
+    def _reraise_coroutine_error(self, coroutine: Coroutine) -> bool:
+        """Report a coroutine that raised; return True if it must propagate.
+
+        Args:
+            coroutine: The coroutine whose body raised (already stopped).
+
+        Returns:
+            True when ``error_strategy`` is ``RAISE`` and the caller should
+            re-raise the active exception, False when it was handled here.
+        """
+        if self._error_strategy is ErrorHandlingStrategy.IGNORE:
+            return False
+        logger.error(
+            "Coroutine raised and was stopped",
+            exc_info=True,
+            active_coroutines=len(self._coroutines),
+        )
+        return self._error_strategy is ErrorHandlingStrategy.RAISE
 
     @property
     def active_count(self) -> int:
