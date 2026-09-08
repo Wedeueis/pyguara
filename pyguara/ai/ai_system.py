@@ -1,6 +1,7 @@
 """Systems for updating AI logic."""
 
 from pyguara.ai.components import AIComponent
+from pyguara.ai.context import AIContext
 from pyguara.ecs.manager import EntityManager
 
 
@@ -24,6 +25,9 @@ class AISystem:
             if ai.fsm:
                 ai.fsm.update(dt)
 
-            # Update Behavior Tree if present
+            # Update Behavior Tree if present. Pass an AIContext, not the bare
+            # entity: WaitNode and any timing node read context.dt, which an
+            # Entity has not got -- they would silently run on a fixed step.
             if ai.behavior_tree:
-                ai.behavior_tree.tick(entity)
+                context = AIContext(entity=entity, dt=dt, blackboard=ai.blackboard)
+                ai.behavior_tree.tick(context)

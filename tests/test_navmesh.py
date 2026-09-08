@@ -273,6 +273,27 @@ class TestNavMesh:
 
         assert navmesh.polygon_count == 0
 
+    def test_remove_polygon_prunes_dangling_neighbor_ids(self):
+        """A removed polygon's id must not linger in its ex-neighbors' lists.
+
+        ``get_neighbors`` is public; a stale id there is one nobody can
+        resolve back to a polygon.
+        """
+        navmesh = NavMesh()
+        for i, x in enumerate((0.0, 100.0, 200.0)):
+            navmesh.add_polygon(create_rectangle_polygon(i, x, 0.0, 100.0, 100.0))
+        navmesh.build_connections()
+        assert navmesh.get_neighbors(1) == [0, 2]
+
+        navmesh.remove_polygon(2)
+
+        assert navmesh.get_neighbors(1) == [0]
+        assert navmesh.get_neighbors(0) == [1]
+        # And every listed neighbor still resolves.
+        for poly_id in (0, 1):
+            for neighbor_id in navmesh.get_neighbors(poly_id):
+                assert navmesh.get_polygon(neighbor_id) is not None
+
     def test_get_polygon(self):
         """Should retrieve polygon by ID."""
         navmesh = NavMesh()

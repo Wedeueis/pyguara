@@ -166,6 +166,11 @@ class NavMesh:
                 for e in self._edges
                 if e.poly1_id != polygon_id and e.poly2_id != polygon_id
             ]
+            # Drop the now-dangling id from every remaining neighbor list, so
+            # get_neighbors() never hands back an id get_polygon() can't resolve.
+            for polygon in self._polygons.values():
+                if polygon_id in polygon.neighbors:
+                    polygon.neighbors.remove(polygon_id)
 
     def get_polygon(self, polygon_id: int) -> NavMeshPolygon | None:
         """Get polygon by ID.
@@ -276,8 +281,9 @@ class NavMesh:
 class NavMeshPathfinder:
     """A* pathfinding on navigation meshes.
 
-    Finds paths through connected polygons and smooths them
-    using the funnel algorithm.
+    Finds a path through connected polygons (A* over the polygon adjacency
+    graph) and returns the polygon centers as waypoints. String-pulling via
+    the funnel algorithm is not yet implemented -- see ``_create_waypoint_path``.
     """
 
     def __init__(self, navmesh: NavMesh):
@@ -328,9 +334,13 @@ class NavMeshPathfinder:
             List of polygon IDs forming path, or None
         """
         import heapq
+        from itertools import count
 
-        # A* on polygon graph
-        open_set = [(0.0, start_id)]
+        # A* on polygon graph. The counter breaks priority ties without ever
+        # comparing polygon ids, keeping the pop order stable and independent
+        # of id values.
+        counter = count()
+        open_set: list[tuple[float, int, int]] = [(0.0, next(counter), start_id)]
         came_from: dict[int, int] = {}
         g_score: dict[int, float] = {start_id: 0.0}
 
@@ -341,7 +351,7 @@ class NavMeshPathfinder:
             return None
 
         while open_set:
-            _, current_id = heapq.heappop(open_set)
+            _, _, current_id = heapq.heappop(open_set)
 
             if current_id == goal_id:
                 # Reconstruct path
@@ -380,7 +390,7 @@ class NavMeshPathfinder:
                     h = (dx * dx + dy * dy) ** 0.5
 
                     f = tentative_g + h
-                    heapq.heappush(open_set, (f, neighbor_id))
+                    heapq.heappush(open_set, (f, next(counter), neighbor_id))
 
         return None
 

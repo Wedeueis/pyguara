@@ -19,6 +19,12 @@ class NodeStatus(Enum):
     RUNNING = auto()
 
 
+# Fallback frame delta for WaitNode when the tick context carries no `dt`.
+# AISystem passes an AIContext with a real dt; this only bites a tree ticked
+# with a bare object, and is deliberately visible rather than a bare literal.
+_WAIT_FALLBACK_DT = 1.0 / 60.0
+
+
 class BehaviorNode(ABC):
     """Base class for all behavior tree nodes."""
 
@@ -128,7 +134,7 @@ class WaitNode(BehaviorNode):
 
     def tick(self, context: Any) -> NodeStatus:
         """Update wait timer."""
-        dt = getattr(context, "dt", 0.016)  # Default to ~60 FPS
+        dt = getattr(context, "dt", _WAIT_FALLBACK_DT)
         self._elapsed += dt
 
         if self._elapsed >= self.duration:

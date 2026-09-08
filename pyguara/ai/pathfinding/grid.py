@@ -219,6 +219,10 @@ def world_to_grid_coords(
     Returns:
         Grid position (x, y).
     """
-    grid_x = int((position.x - offset.x) / cell_size)
-    grid_y = int((position.y - offset.y) / cell_size)
+    # floor, not int(): int() truncates toward zero, so a world point left of
+    # or above the grid origin (negative local coordinate -- common with a
+    # non-zero offset) would land one cell too high and, for -cell_size < d < 0,
+    # collapse onto cell 0 instead of -1.
+    grid_x = math.floor((position.x - offset.x) / cell_size)
+    grid_y = math.floor((position.y - offset.y) / cell_size)
     return (grid_x, grid_y)
