@@ -27,6 +27,7 @@ from games.guara_falcao.systems import (
     CollectibleSystem,
     HazardSystem,
     HealthSystem,
+    PatrolSystem,
     PlayerControlSystem,
 )
 from pyguara.common.components import Transform
@@ -36,14 +37,17 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import ESCAPE, LEFT, RIGHT, SPACE, UP, R
+from pyguara.input.keys import ESCAPE, F1, LEFT, RIGHT, SPACE, UP, R
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
-from pyguara.physics.components import RigidBody
+from pyguara.physics.components import CharacterBody
+from pyguara.physics.debug_draw import ColliderDebugRenderer
 from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.physics.platformer_system import PlatformerSystem
 from pyguara.physics.protocols import IPhysicsEngine
+from pyguara.physics.solid_mover import SolidMover
+from pyguara.physics.solid_system import SolidSystem
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
@@ -128,6 +132,10 @@ class GameScene(Scene):
         # Systems
         self._physics_system: PhysicsSystem | None = None
         self._platformer_system: PlatformerSystem | None = None
+        self._solid_system: SolidSystem | None = None
+        self._patrol_system: PatrolSystem | None = None
+        self._collider_debug: ColliderDebugRenderer | None = None
+        self._show_colliders = False
         self._player_control: PlayerControlSystem | None = None
         self._animation_fsm: AnimationFSMSystem | None = None
         self._camera_follow: CameraFollowSystem | None = None
@@ -177,10 +185,17 @@ class GameScene(Scene):
             gravity=Vector2(physics_config.gravity_x, physics_config.gravity_y),
         )
 
+        solid_mover = SolidMover(
+            self.entity_manager, physics_engine, self.event_dispatcher
+        )
         self._platformer_system = PlatformerSystem(
             entity_manager=self.entity_manager,
             physics_engine=physics_engine,
+            gravity=Vector2(physics_config.gravity_x, physics_config.gravity_y),
+            solid_mover=solid_mover,
         )
+        self._solid_system = SolidSystem(self.entity_manager, solid_mover)
+        self._patrol_system = PatrolSystem(self.entity_manager)
 
         # Initialize game systems
         self._player_control = PlayerControlSystem(
@@ -239,6 +254,7 @@ class GameScene(Scene):
         im.register_action("jump", ActionType.PRESS)
         im.register_action("restart", ActionType.PRESS)
         im.register_action("back", ActionType.PRESS)
+        im.register_action("toggle_colliders", ActionType.PRESS)
 
         im.bind_input(InputDevice.KEYBOARD, LEFT, "move_left")
         im.bind_input(InputDevice.KEYBOARD, RIGHT, "move_right")
@@ -246,6 +262,7 @@ class GameScene(Scene):
         im.bind_input(InputDevice.KEYBOARD, UP, "jump")
         im.bind_input(InputDevice.KEYBOARD, R, "restart")
         im.bind_input(InputDevice.KEYBOARD, ESCAPE, "back")
+        im.bind_input(InputDevice.KEYBOARD, F1, "toggle_colliders")
 
         # Subscribe to action events
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
@@ -266,6 +283,8 @@ class GameScene(Scene):
             self._restart_level()
         elif action == "back" and is_pressed:
             self.container.get(SceneManager).pop_scene()
+        elif action == "toggle_colliders" and is_pressed:
+            self._show_colliders = not self._show_colliders
 
     def _setup_hud(self) -> None:
         """Create HUD elements."""
@@ -273,7 +292,7 @@ class GameScene(Scene):
 
         # Instructions
         instructions = Label(
-            "Arrows/Space: Move & Jump | R: Restart | ESC: Menu",
+            "Arrows/Space: Move & Jump | R: Restart | F1: Colliders | ESC: Menu",
             position=Vector2(20, 560),
         )
         ui_manager.add_element(instructions)
@@ -295,16 +314,19 @@ class GameScene(Scene):
             if player:
                 transform = player.get_component(Transform)
                 health = player.get_component(Health)
-                rigidbody = player.get_component(RigidBody)
+                body = player.get_component(CharacterBody)
                 controller = player.get_component(PlatformerController)
 
                 if transform:
-                    transform.position = spawn
+                    # teleport(), not assignment: a respawn is not motion, and
+                    # interpolating it would draw the player sliding back
+                    # across the level for a frame.
+                    transform.teleport(spawn)
 
-                # Also update physics body position and reset velocity
-                if rigidbody and rigidbody.handle:
-                    rigidbody.handle.position = spawn
-                    rigidbody.handle.velocity = Vector2.zero()
+                # Reset velocity so the fall that killed the player doesn't
+                # carry over into the respawn.
+                if body:
+                    body.velocity = Vector2.zero()
 
                 if health:
                     health.current = health.max_health
@@ -364,11 +386,28 @@ class GameScene(Scene):
         # Reset jump flag after it's been consumed
         self._jump_pressed = False
 
-        # Platformer system must run at fixed rate with physics
+        # 1. Whatever authors a solid's motion (patrol, here) runs first.
+        if self._patrol_system:
+            self._patrol_system.update(fixed_dt)
+
+        # 2. Push those Transform changes into the engine before anything
+        #    queries it this tick -- solids are still ordinary Chipmunk
+        #    kinematic bodies, so raycasts/overlap queries against them
+        #    need to see where they already are.
+        if self._physics_system:
+            self._physics_system.sync_kinematic_transforms()
+
+        # 3. Solids carry/push whatever they touched.
+        if self._solid_system:
+            self._solid_system.update(fixed_dt)
+
+        # 4. The character's own movement, swept by CharacterMover against
+        #    this tick's (already current) geometry.
         if self._platformer_system:
             self._platformer_system.update(fixed_dt)
 
-        # Physics simulation step
+        # 5. Step the simulation, for whatever is still a genuine Chipmunk
+        #    dynamic body -- nothing character-adjacent is, any more.
         if self._physics_system:
             self._physics_system.update(fixed_dt)
 
@@ -510,7 +549,12 @@ class GameScene(Scene):
                 health = player.get_component(Health)
 
                 if transform and sprite:
-                    screen_pos = transform.position - camera_offset
+                    # render_position, not position: drawing the raw fixed-tick
+                    # position makes motion stutter whenever the display rate
+                    # is not locked to the 60Hz physics rate.
+                    screen_pos = (
+                        transform.render_position(self.render_alpha) - camera_offset
+                    )
 
                     # Flash when invincible
                     color = sprite.color
@@ -541,6 +585,11 @@ class GameScene(Scene):
                             8,
                         )
                         world_renderer.draw_rect(indicator_rect, Color(255, 200, 150))
+
+        if self._show_colliders:
+            if self._collider_debug is None:
+                self._collider_debug = ColliderDebugRenderer(self.entity_manager)
+            self._collider_debug.render(world_renderer, camera_offset)
 
         # Render HUD
         self._render_hud(world_renderer)

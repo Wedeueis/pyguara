@@ -83,8 +83,10 @@ class PlatformerController(BaseComponent):
         wall_jump_force_x: Horizontal force for wall jump.
         wall_jump_force_y: Vertical force for wall jump.
 
-        ground_check_distance: Raycast distance for ground detection.
-        wall_check_distance: Raycast distance for wall detection.
+        wall_check_distance: Clearance beyond each side probed for a wall.
+            Ground has no equivalent: `CharacterMover.probe()` checks
+            exactly one pixel below, Celeste's model, not a configurable
+            distance.
 
         current_state: Current movement state (internal).
         is_grounded: Whether character is on ground (internal).
@@ -117,8 +119,7 @@ class PlatformerController(BaseComponent):
     wall_jump_force_y: float = 350.0
 
     # Detection parameters
-    ground_check_distance: float = 5.0  # Raycast length for ground
-    wall_check_distance: float = 5.0  # Raycast length for walls
+    wall_check_distance: float = 5.0  # Clearance beyond each side
 
     # Internal state (managed by PlatformerSystem)
     current_state: PlatformerState = field(default=PlatformerState.AIRBORNE, init=False)

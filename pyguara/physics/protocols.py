@@ -78,6 +78,8 @@ class IPhysicsEngine(Protocol):
         body_type: BodyType,
         position: Vector2,
         mass: float = 1.0,
+        fixed_rotation: bool = False,
+        gravity_scale: float = 1.0,
     ) -> IPhysicsBody:
         """Create and register a new physics body."""
         ...
@@ -95,14 +97,73 @@ class IPhysicsEngine(Protocol):
         material: PhysicsMaterial,
         collision_layer: CollisionLayer,
         is_sensor: bool,
+        one_way: bool = False,
+        one_way_normal: Vector2 | None = None,
     ) -> Any:
-        """Attach a collision shape to a body."""
+        """Attach a collision shape to a body.
+
+        Args:
+            body: The body to attach to.
+            shape_type: Circle, box, segment or polygon.
+            dimensions: Radius, or width and height.
+            offset: Local offset from the body's centre.
+            material: Friction, restitution and density.
+            collision_layer: Category, mask and group filtering.
+            is_sensor: Detect overlaps without blocking.
+            one_way: Solid from one side only.
+            one_way_normal: Which side is solid, in world space. Defaults to
+                `(0, -1)` -- up the screen -- when `one_way` is set.
+
+        Returns:
+            The backend's shape object.
+        """
         ...
 
     def raycast(
-        self, start: Vector2, end: Vector2, mask: int = 0xFFFFFFFF
+        self,
+        start: Vector2,
+        end: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
     ) -> RaycastHit | None:
-        """Cast a ray in the physics world."""
+        """Cast a ray in the physics world.
+
+        Args:
+            start: Ray origin in world space.
+            end: Ray end in world space.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Skip hits on this entity's own body. A character
+                casting to find the ground beneath its feet starts the ray at
+                its own edge and would otherwise detect itself.
+
+        Returns:
+            The nearest hit, or None.
+        """
+        ...
+
+    def overlap_box(
+        self,
+        centre: Vector2,
+        half_extents: Vector2,
+        ignore_entity_id: int | str | None = None,
+    ) -> int | str | None:
+        """Report which entity's solid shape an axis-aligned box overlaps.
+
+        The question a character mover asks before committing a step: "if I
+        were here, would I be inside something, and if so, what?" Knowing
+        *what* -- not just whether -- is what lets a mover recognise a
+        pushable crate rather than merely stopping at it. Sensors do not
+        count -- they are meant to be passed through.
+
+        Args:
+            centre: Box centre in world space.
+            half_extents: Half width and half height.
+            ignore_entity_id: Body to disregard, normally the mover itself.
+
+        Returns:
+            The entity id of the first solid, non-sensor shape found
+            overlapping, or None if the box is clear.
+        """
         ...
 
     def create_joint(

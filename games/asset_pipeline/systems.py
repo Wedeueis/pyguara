@@ -27,7 +27,10 @@ class MovementSystem:
 
             transform.position = Vector2(new_x, new_y)
 
+            # teleport(), not a plain assignment: the renderer interpolates
+            # between ticks, so assigning here would draw the sprite streaking
+            # back across the whole screen on the wrapping frame.
             if transform.position.x > 800:
-                transform.position = Vector2(0, transform.position.y)
+                transform.teleport(Vector2(0, transform.position.y))
             if transform.position.y > 600:
-                transform.position = Vector2(transform.position.x, 0)
+                transform.teleport(Vector2(transform.position.x, 0))

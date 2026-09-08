@@ -23,6 +23,84 @@ from pyguara.physics.types import (
 # the solver cost -- cheap for the body counts a 2D game runs.
 DEFAULT_SUBSTEPS = 4
 
+# Ray queries are swept circles in Chipmunk. Keep the radius small: it
+# widens what the ray can touch, including the caster's own collider.
+RAYCAST_RADIUS = 1.0
+
+# Fraction of any remaining overlap Chipmunk removes per 1/60s. Its own
+# default is 10%, which loses to gravity: a character that lands 9px inside
+# the floor comes out at about 0.04px a tick, so it sits visibly sunk for
+# seconds. 30% clears it in a few frames and leaves a stack of boxes just as
+# steady -- measured, no jitter and no drift at 30% or even 50%.
+DEFAULT_PENETRATION_RECOVERY = 0.3
+
+
+def _one_way_allows_contact(
+    arbiter: pymunk.Arbiter, shape_a: pymunk.Shape, shape_b: pymunk.Shape
+) -> bool:
+    """Decide whether a one-way surface should resist this contact.
+
+    Rejected per step from the pass-through side, rather than switched off
+    once at first contact: a character that jumps up through a platform and
+    lands on it never separates in between, so a one-shot decision would keep
+    letting it fall through the top.
+
+    The test is the contact normal, not the body's velocity. Velocity is zero
+    at the apex of a jump, so a velocity test flips to solid while the
+    character still overlaps the platform and ejects it.
+
+    Args:
+        arbiter: The pymunk arbiter for this contact.
+        shape_a: First shape in the pair.
+        shape_b: Second shape.
+
+    Returns:
+        True to let the contact resolve normally, False to pass through. The
+        caller suppresses the response via `arbiter.process_collision`, which
+        is what pymunk 7 honours -- a callback's return value is ignored.
+    """
+    for shape, sign in ((shape_a, 1.0), (shape_b, -1.0)):
+        solid = getattr(shape, "pyguara_one_way_normal", None)
+        if solid is None:
+            continue
+
+        # The arbiter normal runs from the first shape to the second, so it
+        # already points platform -> other body when the platform is first,
+        # and must be flipped when it is second.
+        normal = arbiter.contact_point_set.normal
+        towards_other_x = normal.x * sign
+        towards_other_y = normal.y * sign
+
+        # Positive means the other body sits on the solid face.
+        if towards_other_x * solid[0] + towards_other_y * solid[1] <= 0:
+            return False
+
+    return True
+
+
+def _scaled_gravity(scale: float) -> Any:
+    """Build a velocity callback applying scaled gravity to one body.
+
+    Chipmunk has no per-body gravity multiplier; the integration callback is
+    the supported place to vary it. Everything else about the default
+    integration -- damping, the mass term -- is left alone.
+
+    Args:
+        scale: Multiplier on world gravity for this body.
+
+    Returns:
+        A callback suitable for `pymunk.Body.velocity_func`.
+    """
+
+    def velocity_func(
+        body: pymunk.Body, gravity: Any, damping: float, dt: float
+    ) -> None:
+        pymunk.Body.update_velocity(
+            body, (gravity[0] * scale, gravity[1] * scale), damping, dt
+        )
+
+    return velocity_func
+
 
 class PymunkBodyAdapter:
     """Wrapper around pymunk.Body to conform to IPhysicsBody."""
@@ -75,10 +153,18 @@ class PymunkBodyAdapter:
 class PymunkEngine:
     """Pymunk backend implementation."""
 
-    def __init__(self, substeps: int = DEFAULT_SUBSTEPS) -> None:
+    def __init__(
+        self,
+        substeps: int = DEFAULT_SUBSTEPS,
+        penetration_recovery: float = DEFAULT_PENETRATION_RECOVERY,
+    ) -> None:
         """Initialize the Pymunk engine wrapper.
 
         Args:
+            penetration_recovery: Fraction of remaining overlap removed per
+                1/60s, between 0 and 1. Chipmunk's own 10% is too weak to
+                beat continuous gravity, leaving a landed character visibly
+                sunk; too high and stacks jitter.
             substeps: How many solver steps one call to `update()` becomes.
                 Chipmunk has no continuous collision detection, so a body
                 moves `velocity * dt` in a straight jump each step and passes
@@ -89,8 +175,17 @@ class PymunkEngine:
         Raises:
             ValueError: If `substeps` is not positive. Zero would step the
                 simulation not at all and negative is meaningless; both are
-                far better caught here than as a frozen world.
+                far better caught here than as a frozen world. Also if
+                `penetration_recovery` is outside (0, 1]: zero never separates
+                overlapping bodies at all.
         """
+        if not 0.0 < penetration_recovery <= 1.0:
+            raise ValueError(
+                f"penetration_recovery must be within (0, 1], got "
+                f"{penetration_recovery}. It is the fraction of overlap "
+                f"removed per 1/60s."
+            )
+        self._penetration_recovery = penetration_recovery
         if substeps <= 0:
             raise ValueError(
                 f"substeps must be positive, got {substeps}. It is the number "
@@ -107,6 +202,8 @@ class PymunkEngine:
         """Initialize the physics space with gravity."""
         self.space = pymunk.Space()
         self.space.gravity = (gravity.x, gravity.y)
+        # Chipmunk expresses this as the error *remaining* after one second.
+        self.space.collision_bias = pow(1.0 - self._penetration_recovery, 60)
 
         # Setup collision handlers if collision system is already registered
         if self._collision_system:
@@ -178,10 +275,17 @@ class PymunkEngine:
         Returns:
             True to process collision, False to ignore.
         """
+        shape_a, shape_b = arbiter.shapes
+
+        if not _one_way_allows_contact(arbiter, shape_a, shape_b):
+            # pymunk 7 ignores the callback's return value; `process_collision`
+            # is what actually suppresses the response.
+            arbiter.process_collision = False
+            return False
+
         if not self._collision_system:
             return True
 
-        shape_a, shape_b = arbiter.shapes
         entity_a = getattr(shape_a.body, "entity_id", None)
         entity_b = getattr(shape_b.body, "entity_id", None)
 
@@ -201,9 +305,18 @@ class PymunkEngine:
         impulse = arbiter.total_impulse.length
         is_sensor = shape_a.sensor or shape_b.sensor
 
-        return self._collision_system.on_collision_begin(  # type: ignore[no-any-return]
+        process = self._collision_system.on_collision_begin(
             str(entity_a), str(entity_b), point, normal, impulse, is_sensor
         )
+
+        # The collision system returns False to mean "report this but do not
+        # resolve it physically" -- how a trigger that is not a sensor is meant
+        # to work. pymunk 7 ignores a callback's return value, so that has to
+        # be expressed through the arbiter or it does nothing at all.
+        if not process:
+            arbiter.process_collision = False
+
+        return bool(process)
 
     def _on_pymunk_persist(
         self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict
@@ -241,9 +354,18 @@ class PymunkEngine:
         impulse = arbiter.total_impulse.length
         is_sensor = shape_a.sensor or shape_b.sensor
 
-        return self._collision_system.on_collision_persist(  # type: ignore[no-any-return]
+        process = self._collision_system.on_collision_persist(
             str(entity_a), str(entity_b), point, normal, impulse, is_sensor
         )
+
+        # The collision system returns False to mean "report this but do not
+        # resolve it physically" -- how a trigger that is not a sensor is meant
+        # to work. pymunk 7 ignores a callback's return value, so that has to
+        # be expressed through the arbiter or it does nothing at all.
+        if not process:
+            arbiter.process_collision = False
+
+        return bool(process)
 
     def _on_pymunk_end(
         self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: dict
@@ -294,8 +416,23 @@ class PymunkEngine:
         body_type: BodyType,
         position: Vector2,
         mass: float = 1.0,
+        fixed_rotation: bool = False,
+        gravity_scale: float = 1.0,
     ) -> IPhysicsBody:
-        """Create and register a new physics body."""
+        """Create and register a new physics body.
+
+        Args:
+            entity_id: Owning entity, stored on the body for collision routing.
+            body_type: Static, kinematic or dynamic.
+            position: World position.
+            mass: Mass for dynamic bodies.
+            fixed_rotation: Stop the body rotating. A character box that can
+                tip over is almost never wanted; this is how you keep one
+                upright without freezing its position.
+            gravity_scale: Multiplier on world gravity for this body alone.
+                0.0 floats, 2.0 falls twice as fast -- the usual way to give
+                a character a floaty jump or a fast fall.
+        """
         if not self.space:
             raise RuntimeError(
                 "Physics engine not initialized. Call initialize(gravity) first."
@@ -317,6 +454,17 @@ class PymunkEngine:
             body = pymunk.Body(body_type=pm_type)
 
         body.position = (position.x, position.y)
+
+        if pm_type == pymunk.Body.DYNAMIC:
+            if fixed_rotation:
+                # Infinite moment of inertia: torque produces no angular
+                # acceleration, so the body cannot be turned. Recorded on the
+                # body as well, because attaching a shape re-derives mass and
+                # moment from its density and would undo this.
+                body.moment = float("inf")
+            body.pyguara_fixed_rotation = fixed_rotation
+            if gravity_scale != 1.0:
+                body.velocity_func = _scaled_gravity(gravity_scale)
 
         # Store entity ID on body for collisions
         body.entity_id = entity_id
@@ -357,8 +505,26 @@ class PymunkEngine:
         material: PhysicsMaterial,
         collision_layer: CollisionLayer,
         is_sensor: bool,
+        one_way: bool = False,
+        one_way_normal: Vector2 | None = None,
     ) -> Any:
-        """Attach a collision shape to a body."""
+        """Attach a collision shape to a body.
+
+        Args:
+            body_handle: The body to attach to.
+            shape_type: Circle, box, segment or polygon.
+            dimensions: Radius, or width and height.
+            offset: Local offset from the body's centre.
+            material: Friction, restitution and density.
+            collision_layer: Category, mask and group filtering.
+            is_sensor: Detect overlaps without blocking.
+            one_way: Solid from one side only.
+            one_way_normal: Which side is solid, in world space. Defaults to
+                `(0, -1)` when `one_way` is set.
+
+        Returns:
+            The pymunk shape, or None if there is no space or shape type.
+        """
         if not self.space:
             return None
 
@@ -393,30 +559,117 @@ class PymunkEngine:
             )
             shape.filter = filter
 
+            # Recorded on the shape so the pre-solve handler can find it: it
+            # sees pymunk shapes, not PyGuara components.
+            if one_way:
+                solid = one_way_normal if one_way_normal is not None else Vector2(0, -1)
+                shape.pyguara_one_way_normal = (solid.x, solid.y)
+
             self.space.add(shape)
+
+            # Setting density makes Chipmunk recompute the body's mass and
+            # moment from its shapes, which silently discards the infinite
+            # moment that fixed_rotation asked for.
+            if getattr(body, "pyguara_fixed_rotation", False):
+                body.moment = float("inf")
+
             return shape
 
     def raycast(
-        self, start: Vector2, end: Vector2, mask: int = 0xFFFFFFFF
+        self,
+        start: Vector2,
+        end: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
     ) -> RaycastHit | None:
-        """Perform a raycast query."""
+        """Perform a raycast query.
+
+        Args:
+            start: Ray origin in world space.
+            end: Ray end in world space.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Skip hits on this entity's own body.
+
+        Returns:
+            The nearest hit that is not excluded, or None.
+        """
         if not self.space:
             return None
 
-        query = self.space.segment_query_first(
-            (start.x, start.y),
-            (end.x, end.y),
-            1.0,  # Radius
-            pymunk.ShapeFilter(mask=mask),
+        shape_filter = pymunk.ShapeFilter(mask=mask)
+
+        if ignore_entity_id is None:
+            query = self.space.segment_query_first(
+                (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
+            )
+            return self._to_hit(query, start)
+
+        # segment_query_first cannot exclude one body, so take every hit and
+        # return the nearest that is not the caster's own. A character casting
+        # for the ground under its feet starts the ray at its own edge, and a
+        # self-hit reads as permanently grounded.
+        hits = self.space.segment_query(
+            (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
+        )
+        for hit in sorted(hits, key=lambda h: h.alpha):
+            if getattr(hit.shape.body, "entity_id", None) != ignore_entity_id:
+                return self._to_hit(hit, start)
+        return None
+
+    @staticmethod
+    def _to_hit(query: Any, start: Vector2) -> RaycastHit | None:
+        """Convert a pymunk query result into a `RaycastHit`.
+
+        Args:
+            query: A pymunk segment query result, or None.
+            start: The ray origin, for computing distance.
+
+        Returns:
+            The hit, or None when the query found nothing.
+        """
+        if not query:
+            return None
+        point = Vector2(query.point.x, query.point.y)
+        return RaycastHit(
+            position=point,
+            normal=Vector2(query.normal.x, query.normal.y),
+            distance=start.distance_to(point),
+            entity_id=getattr(query.shape.body, "entity_id", None),
         )
 
-        if query:
-            return RaycastHit(
-                position=Vector2(query.point.x, query.point.y),
-                normal=Vector2(query.normal.x, query.normal.y),
-                distance=start.distance_to(Vector2(query.point.x, query.point.y)),
-                entity_id=getattr(query.shape.body, "entity_id", None),
-            )
+    def overlap_box(
+        self,
+        centre: Vector2,
+        half_extents: Vector2,
+        ignore_entity_id: int | str | None = None,
+    ) -> int | str | None:
+        """Report which entity's solid shape an axis-aligned box overlaps.
+
+        Args:
+            centre: Box centre in world space.
+            half_extents: Half width and half height.
+            ignore_entity_id: Body to disregard, normally the mover itself.
+
+        Returns:
+            The entity id of the first solid, non-sensor shape found
+            overlapping, or None if the box is clear.
+        """
+        if not self.space:
+            return None
+
+        probe_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+        probe_body.position = (centre.x, centre.y)
+        probe = pymunk.Poly.create_box(
+            probe_body, (half_extents.x * 2, half_extents.y * 2)
+        )
+
+        for hit in self.space.shape_query(probe):
+            if hit.shape is None or hit.shape.sensor:
+                continue
+            entity_id = getattr(hit.shape.body, "entity_id", None)
+            if entity_id == ignore_entity_id:
+                continue
+            return entity_id
         return None
 
     def create_joint(

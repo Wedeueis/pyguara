@@ -313,8 +313,13 @@ def test_interpolated_transform_lerps_by_render_alpha() -> None:
 
 
 def test_non_interpolated_transform_ignores_render_alpha() -> None:
-    """A Transform with interpolate=False (the default) always submits at its
-    raw current position, regardless of render_alpha."""
+    """A Transform with interpolate=False always submits at its raw current
+    position, regardless of render_alpha.
+
+    Interpolation is the default now, so opting out is explicit -- but the
+    opt-out must keep working for transforms driven directly each frame
+    rather than stepped.
+    """
     app = create_headless_application()
     scene = _boot(app)
 
@@ -324,7 +329,7 @@ def test_non_interpolated_transform_ignores_render_alpha() -> None:
     )
 
     entity = scene.entity_manager.create_entity()
-    transform = Transform(position=Vector2(100, 0))
+    transform = Transform(position=Vector2(100, 0), interpolate=False)
     transform.previous_position = Vector2(0, 0)  # would matter if interpolated
     entity.add_component(transform)
     entity.add_component(Sprite(texture=texture, visible=True))
@@ -378,7 +383,7 @@ def test_fixed_update_does_not_snapshot_non_interpolated_transforms() -> None:
     scene = _boot(app)
 
     entity = scene.entity_manager.create_entity()
-    transform = Transform(position=Vector2(5, 5))
+    transform = Transform(position=Vector2(5, 5), interpolate=False)
     transform.previous_position = Vector2(-1, -1)  # sentinel, must stay put
     entity.add_component(transform)
 

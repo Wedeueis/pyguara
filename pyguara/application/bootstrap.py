@@ -301,7 +301,11 @@ def _setup_container(headless: bool = False) -> DIContainer:
     container.register_instance(ResourceManager, res_manager)
 
     # Physics Engine
-    physics_engine = PymunkEngine(substeps=config_manager.config.physics.substeps)
+    physics_config = config_manager.config.physics
+    physics_engine = PymunkEngine(
+        substeps=physics_config.substeps,
+        penetration_recovery=physics_config.penetration_recovery,
+    )
     container.register_instance(IPhysicsEngine, physics_engine)  # type: ignore[type-abstract]
 
     # Collision System (bridges pymunk callbacks to PyGuara events)

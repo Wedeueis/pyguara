@@ -12,16 +12,24 @@ from games.guara_falcao.components import (
     Collectible,
     Hazard,
     Health,
+    PatrolMotion,
     PlatformSprite,
     PlayerState,
     Score,
     ZoneTrigger,
 )
 from pyguara.common.components import Transform
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.components import Collider, RigidBody
+from pyguara.physics.components import (
+    CharacterBody,
+    Collider,
+    MovingSolid,
+    Pushable,
+    RigidBody,
+)
 from pyguara.physics.platformer_controller import PlatformerController
+from pyguara.physics.tilemap import merge_tile_rects
 from pyguara.physics.types import BodyType
 
 # Tile size in pixels
@@ -60,6 +68,9 @@ class LevelBuilder:
             "collectibles": [[8, 14], [12, 12], [18, 10], [25, 14]],
             "checkpoints": [[15, 14]],
             "goal": [38, 14],
+            # Patrols in tile columns between 5 and 10, at row 13.
+            "moving_platform": {"start": [5, 13], "end": [10, 13], "speed": 60.0},
+            "crate": [20, 14],
         }
 
         # Create tilemap (20 rows, 40 columns)
@@ -121,13 +132,21 @@ class LevelBuilder:
         spawn = level_data.get("player_spawn", [4, 14])
         self._spawn_point = Vector2(spawn[0] * TILE_SIZE, spawn[1] * TILE_SIZE)
 
-        # Process tilemap
+        # Process tilemap. Sprites stay per-tile so the grid still reads as a
+        # grid, but collision is built from merged rectangles: a floor made of
+        # separate tile colliders has interior faces between them, and a
+        # walking character's leading corner catches on them and is flung
+        # upward. See pyguara/physics/tilemap.py.
         for y, row in enumerate(tiles):
             for x, tile in enumerate(row):
                 if tile == TILE_SOLID:
-                    self._create_solid_tile(entity_manager, x, y)
+                    self._create_solid_tile_sprite(entity_manager, x, y)
                 elif tile == TILE_HAZARD:
                     self._create_hazard(entity_manager, x, y)
+
+        solid = [[tile == TILE_SOLID for tile in row] for row in tiles]
+        for index, rect in enumerate(merge_tile_rects(solid, TILE_SIZE)):
+            self._create_solid_body(entity_manager, index, rect)
 
         # Create collectibles
         for pos in level_data.get("collectibles", []):
@@ -142,22 +161,112 @@ class LevelBuilder:
         if goal_pos:
             self._create_goal(entity_manager, goal_pos[0], goal_pos[1])
 
+        # Demo content for the CharacterMover switch -- a rideable, patrolling
+        # platform and a crate the player can shove. See
+        # docs/physics/character-movement.md.
+        moving_platform = level_data.get("moving_platform")
+        if moving_platform:
+            self._create_moving_platform(entity_manager, moving_platform)
+        crate_pos = level_data.get("crate")
+        if crate_pos:
+            self._create_crate(entity_manager, crate_pos[0], crate_pos[1])
+
         return self._spawn_point
 
-    def _create_solid_tile(
+    def _create_solid_tile_sprite(
         self, entity_manager: EntityManager, gx: int, gy: int
     ) -> None:
-        """Create a solid tile entity."""
+        """Create the visual for one solid tile. Collision is merged separately.
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            gx: Tile column.
+            gy: Tile row.
+        """
         entity = entity_manager.create_entity(f"tile_{gx}_{gy}")
 
         world_x = gx * TILE_SIZE + TILE_SIZE // 2
         world_y = gy * TILE_SIZE + TILE_SIZE // 2
 
         entity.add_component(Transform(position=Vector2(world_x, world_y)))
-        entity.add_component(RigidBody(body_type=BodyType.STATIC))
-        entity.add_component(Collider(dimensions=[TILE_SIZE, TILE_SIZE]))
         entity.add_component(
             PlatformSprite(color=Color(70, 80, 90), size=Vector2(TILE_SIZE, TILE_SIZE))
+        )
+
+    def _create_solid_body(
+        self, entity_manager: EntityManager, index: int, rect: Rect
+    ) -> None:
+        """Create one static collider covering a merged run of solid tiles.
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            index: Sequence number, for a readable entity id.
+            rect: World-space area to cover.
+        """
+        entity = entity_manager.create_entity(f"solid_{index}")
+
+        entity.add_component(
+            Transform(
+                position=Vector2(rect.x + rect.width / 2, rect.y + rect.height / 2)
+            )
+        )
+        entity.add_component(RigidBody(body_type=BodyType.STATIC))
+        entity.add_component(
+            Collider(dimensions=[float(rect.width), float(rect.height)])
+        )
+
+    def _create_moving_platform(
+        self, entity_manager: EntityManager, spec: dict[str, Any]
+    ) -> None:
+        """Create a rideable platform that patrols between two tile positions.
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            spec: `{"start": [gx, gy], "end": [gx, gy], "speed": px/s}`.
+        """
+        entity = entity_manager.create_entity("moving_platform")
+
+        start = Vector2(
+            *(coord * TILE_SIZE + TILE_SIZE // 2 for coord in spec["start"])
+        )
+        end = Vector2(*(coord * TILE_SIZE + TILE_SIZE // 2 for coord in spec["end"]))
+        dimensions = [TILE_SIZE * 3.0, TILE_SIZE / 2]
+
+        entity.add_component(Transform(position=start))
+        entity.add_component(RigidBody(body_type=BodyType.KINEMATIC))
+        entity.add_component(Collider(dimensions=dimensions))
+        entity.add_component(MovingSolid())
+        entity.add_component(
+            PatrolMotion(start=start, end=end, speed=float(spec.get("speed", 60.0)))
+        )
+        entity.add_component(
+            PlatformSprite(
+                color=Color(150, 110, 200), size=Vector2(dimensions[0], dimensions[1])
+            )
+        )
+
+    def _create_crate(self, entity_manager: EntityManager, gx: int, gy: int) -> None:
+        """Create a crate the player can push (but not carry).
+
+        Args:
+            entity_manager: Manager to create the entity in.
+            gx: Tile column.
+            gy: Tile row.
+        """
+        entity = entity_manager.create_entity(f"crate_{gx}_{gy}")
+
+        world_x = gx * TILE_SIZE + TILE_SIZE // 2
+        world_y = gy * TILE_SIZE + TILE_SIZE // 2
+
+        entity.add_component(Transform(position=Vector2(world_x, world_y)))
+        entity.add_component(RigidBody(body_type=BodyType.KINEMATIC))
+        entity.add_component(Collider(dimensions=[float(TILE_SIZE), float(TILE_SIZE)]))
+        entity.add_component(MovingSolid())
+        entity.add_component(Pushable())
+        entity.add_component(
+            PlatformSprite(
+                color=Color(160, 120, 60), size=Vector2(TILE_SIZE, TILE_SIZE)
+            )
         )
 
     def _create_hazard(self, entity_manager: EntityManager, gx: int, gy: int) -> None:
@@ -247,16 +356,19 @@ class LevelBuilder:
 
         player = entity_manager.create_entity("player")
 
-        # Transform
+        # PhysicsSystem sets interpolate on this when it creates the body.
         player.add_component(Transform(position=spawn_pos))
 
-        # Physics
-        player.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=1.0))
+        # Physics -- CharacterBody, not RigidBody: the player is swept by
+        # CharacterMover, not simulated by Chipmunk. See
+        # docs/physics/character-movement.md.
+        player.add_component(CharacterBody())
         player.add_component(Collider(dimensions=[24, 40]))
 
-        # Platformer controller with game-feel tuning
-        # Note: ground_check_distance must be > half player height (20) to detect ground
-        # from the player's center position
+        # Platformer controller with game-feel tuning.
+        # wall_check_distance is a clearance beyond the character's own
+        # outline, not from its centre. Ground has no equivalent: it's a
+        # one-pixel overlap probe now, not a configurable-length ray.
         player.add_component(
             PlatformerController(
                 move_speed=180.0,
@@ -269,8 +381,7 @@ class LevelBuilder:
                 wall_slide_enabled=False,  # Disabled for now to debug gravity issues
                 wall_slide_speed=60.0,
                 wall_jump_enabled=False,
-                ground_check_distance=25.0,  # Must exceed half player height (20) + margin
-                wall_check_distance=16.0,  # Must exceed half player width (12) + margin
+                wall_check_distance=4.0,  # clearance beyond each side
             )
         )
 

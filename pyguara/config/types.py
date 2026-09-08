@@ -80,6 +80,12 @@ class PhysicsConfig:
     # can stop, at proportional solver cost. 1 disables substepping.
     substeps: int = 4
 
+    # Fraction of any remaining collider overlap resolved per 1/60s.
+    # Chipmunk's own default of 0.1 loses to gravity: a character that lands
+    # inside the floor climbs out at a fraction of a pixel per tick and looks
+    # stuck in the ground for seconds.
+    penetration_recovery: float = 0.3
+
     @property
     def fixed_dt(self) -> float:
         """The fixed timestep in seconds.
