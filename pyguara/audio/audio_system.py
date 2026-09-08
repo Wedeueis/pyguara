@@ -83,6 +83,24 @@ class IAudioSystem(Protocol):
         """
         ...
 
+    def is_channel_active(self, channel: int) -> bool:
+        """
+        Check whether a channel is still playing the sound this system started.
+
+        A one-shot sound finishes on its own with no callback, and channel ids
+        are recycled, so a caller holding an old id cannot tell "still playing"
+        from "finished" from "reused by an unrelated sound". This answers that:
+        True only while the exact sound started on this channel is still
+        playing.
+
+        Args:
+            channel: The channel ID returned by play_sfx/play_sfx_at_position.
+
+        Returns:
+            True if that sound is still playing, False otherwise.
+        """
+        ...
+
     def pause_sfx(self) -> None:
         """Pause all sound effects."""
         ...
@@ -232,5 +250,14 @@ class IAudioSystem(Protocol):
 
         Args:
             position: World position of the listener.
+        """
+        ...
+
+    def shutdown(self) -> None:
+        """
+        Stop all audio and release the underlying device.
+
+        Idempotent: a second call is a no-op. After this, playback methods
+        must not raise but need not produce sound.
         """
         ...

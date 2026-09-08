@@ -3,7 +3,6 @@
 import os
 from collections.abc import Iterator
 from typing import Any
-from unittest.mock import MagicMock
 
 import pygame
 import pytest
@@ -63,22 +62,23 @@ class MockAudioClip(AudioClip):
         return self._native_sound
 
 
-def test_play_sfx_mock(audio_system: PygameAudioSystem) -> None:
-    """Audio system should play sound effects."""
-    # Mock native sound
-    mock_sound = MagicMock()
-    # Mock play to return a Channel object
-    mock_channel = MagicMock()
-    mock_channel.get_id.return_value = 1
-    mock_sound.play.return_value = mock_channel
+def test_play_sfx_real_sound(audio_system: PygameAudioSystem) -> None:
+    """Audio system plays a real Sound on a real channel and tracks its id.
 
-    clip = MockAudioClip("dummy.wav", mock_sound)
+    Uses a real ``pygame.mixer.Sound`` -- ``Channel.play`` rejects anything
+    else, which is how the ``Channel.get_id()``/``Channel.id`` regression hid
+    behind fully-mocked mixers for so long.
+    """
+    frames = int(44100 * 0.5)
+    sound = pygame.mixer.Sound(buffer=b"\x00\x00\x00\x00" * frames)
+    clip = MockAudioClip("dummy.wav", sound)
 
     channel_id = audio_system.play_sfx(clip)
 
-    assert channel_id == 1
-    mock_sound.play.assert_called_once()
-    mock_sound.set_volume.assert_called()
+    assert channel_id is not None
+    assert isinstance(channel_id, int)
+    assert pygame.mixer.Channel(channel_id).get_sound() is sound
+    assert audio_system.is_channel_active(channel_id)
 
 
 def test_play_sfx_invalid(audio_system: PygameAudioSystem) -> None:

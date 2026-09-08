@@ -84,6 +84,32 @@ class SpatialAudioConfig:
     rolloff_factor: float = 1.0
     pan_strength: float = 1.0
 
+    def __post_init__(self) -> None:
+        """Validate the configuration.
+
+        The attenuation and panning maths divide by ``reference_distance`` and
+        ``max_distance`` and assume ``max_distance`` is the outer edge, so a
+        zero or inverted range is not a quiet degradation -- it is a
+        ``ZeroDivisionError`` in ``calculate_pan`` and a hard volume cliff in
+        ``calculate_attenuation``. Reject it at construction instead.
+
+        Raises:
+            ValueError: If the distances or factors are out of range.
+        """
+        if self.reference_distance <= 0.0:
+            raise ValueError(
+                f"reference_distance must be > 0, got {self.reference_distance}"
+            )
+        if self.max_distance <= self.reference_distance:
+            raise ValueError(
+                f"max_distance ({self.max_distance}) must be greater than "
+                f"reference_distance ({self.reference_distance})"
+            )
+        if self.rolloff_factor < 0.0:
+            raise ValueError(f"rolloff_factor must be >= 0, got {self.rolloff_factor}")
+        if self.pan_strength < 0.0:
+            raise ValueError(f"pan_strength must be >= 0, got {self.pan_strength}")
+
     def calculate_attenuation(self, distance: float) -> float:
         """Calculate volume attenuation based on distance.
 

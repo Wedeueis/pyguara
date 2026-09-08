@@ -15,6 +15,7 @@ from pyguara.common.types import Vector2
 from pyguara.log import get_logger
 
 if TYPE_CHECKING:
+    from pyguara.ecs.entity import Entity
     from pyguara.ecs.manager import EntityManager
     from pyguara.resources.manager import ResourceManager
     from pyguara.resources.types import AudioClip
@@ -104,13 +105,34 @@ class AudioSourceSystem:
             if not source:
                 continue
 
+            # Reconcile against reality first. A one-shot sound finishes with
+            # no callback and channel ids get recycled, so without this
+            # `is_playing` stays True forever, the stale id keeps receiving
+            # spatial mix updates meant for whatever now owns that channel,
+            # and the source can never be replayed. A looping sound stays
+            # active until it is explicitly stopped.
+            if (
+                source._channel_id is not None
+                and not source._stop_requested
+                and not self._audio_system.is_channel_active(source._channel_id)
+            ):
+                source._channel_id = None
+                source._is_playing = False
+
             # Handle stop requests
             if source._stop_requested:
                 self._stop_source(source)
                 continue
 
-            # Handle auto-play
-            if source.auto_play and not source._is_playing and not source._channel_id:
+            # Auto-play fires exactly once, the first frame the source is
+            # eligible; `_auto_played` latches so an ended one-shot is not
+            # immediately restarted here.
+            if (
+                source.auto_play
+                and not source._auto_played
+                and source._channel_id is None
+            ):
+                source._auto_played = True
                 source.play()
 
             # Handle play requests
@@ -158,7 +180,7 @@ class AudioSourceSystem:
         for entity, emitter in entities_to_remove_emitter:
             entity.remove_component(type(emitter))
 
-    def _play_source(self, source: AudioSource, entity: object) -> None:
+    def _play_source(self, source: AudioSource, entity: Entity) -> None:
         """Start playing an audio source.
 
         Args:
@@ -178,7 +200,7 @@ class AudioSourceSystem:
         loops = -1 if source.loop else 0
 
         if source.spatial:
-            transform = getattr(entity, "get_component", lambda t: None)(Transform)
+            transform = entity.get_component(Transform)
             if transform:
                 source._channel_id = self._audio_system.play_sfx_at_position(
                     clip,

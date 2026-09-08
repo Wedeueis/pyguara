@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.di.exceptions import ServiceNotFoundException
@@ -77,6 +78,7 @@ class Application:
         self._config_manager = container.get(ConfigManager)
         self._ui_manager = container.get(UIManager)
         self._coroutine_manager = container.get(CoroutineManager)
+        self._audio_system = container.get(IAudioSystem)  # type: ignore[type-abstract]
 
         # Retrieve Renderer
         self._world_renderer = container.get(IRenderer)  # type: ignore[type-abstract]
@@ -461,6 +463,7 @@ class Application:
 
         steps: list[tuple[str, Callable[[], None]]] = [
             ("scene cleanup", self._scene_manager.cleanup),
+            ("audio shutdown", self._audio_system.shutdown),
             ("window close", self._window.close),
         ]
         if self._render_graph is not None:

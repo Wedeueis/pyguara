@@ -162,10 +162,16 @@ class TestAudioSourceSystem:
 
     @pytest.fixture
     def audio_system(self):
-        """Create a mock audio system."""
+        """Create a mock audio system.
+
+        `is_channel_active` defaults to True: unless a test says otherwise the
+        sound is treated as still playing, so the frame-by-frame reconcile in
+        AudioSourceSystem is a no-op.
+        """
         mock = MagicMock()
         mock.play_sfx.return_value = 1  # Return channel ID
         mock.play_sfx_at_position.return_value = 2
+        mock.is_channel_active.return_value = True
         return mock
 
     @pytest.fixture
@@ -467,3 +473,133 @@ class TestAudioSourceSystem:
         assert emitter.played is True
         audio_system.play_sfx.assert_called()  # Non-spatial
         audio_system.play_sfx_at_position.assert_not_called()
+
+    # ---- finished-sound reconciliation (D8) -------------------------------
+
+    def _play_started_source(self, entity_manager, system, **source_kwargs):
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0, 0)))
+        source = AudioSource(clip_path="s.wav", spatial=False, **source_kwargs)
+        entity.add_component(source)
+        source.play()
+        system.update(0.016)
+        return entity, source
+
+    def test_finished_oneshot_is_reconciled(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """When the backend reports the channel is no longer active, the
+        source stops claiming it is playing (a one-shot ends with no
+        callback, so nothing else clears this)."""
+        _, source = self._play_started_source(entity_manager, system)
+        assert source._channel_id is not None and source.is_playing
+
+        audio_system.is_channel_active.return_value = False
+        system.update(0.016)
+
+        assert source._channel_id is None
+        assert source.is_playing is False
+
+    def test_finished_oneshot_no_longer_mixes_the_dead_channel(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """A stale channel id must stop receiving spatial mix updates once
+        the sound has ended -- otherwise it rewrites whatever now owns it."""
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(50, 0)))
+        source = AudioSource(clip_path="s.wav", spatial=True)
+        entity.add_component(source)
+        source.play()
+        system.update(0.016)  # channel 2
+        system.update(0.016)  # spatial mix pushed
+        assert audio_system.set_channel_mix.called
+
+        audio_system.set_channel_mix.reset_mock()
+        audio_system.is_channel_active.return_value = False
+        system.update(0.016)
+        system.update(0.016)
+
+        audio_system.set_channel_mix.assert_not_called()
+
+    def test_finished_oneshot_can_be_replayed(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """After a one-shot ends, calling play() again actually restarts it
+        (the channel id no longer sticks)."""
+        _, source = self._play_started_source(entity_manager, system)
+        audio_system.is_channel_active.return_value = False
+        system.update(0.016)  # reconcile -> cleared
+
+        audio_system.is_channel_active.return_value = True
+        audio_system.play_sfx.reset_mock()
+        source.play()
+        system.update(0.016)
+
+        audio_system.play_sfx.assert_called_once()
+        assert source._channel_id is not None
+
+    def test_looping_source_is_not_reconciled_away(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """A looping source stays active as long as the backend says so."""
+        _, source = self._play_started_source(entity_manager, system, loop=True)
+        for _ in range(5):
+            system.update(0.016)
+        assert source._channel_id is not None
+        assert source.is_playing
+
+    # ---- auto_play latch (exposed by D8's fix) --------------------------
+
+    def test_auto_play_fires_once_not_again_after_the_sound_ends(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """auto_play is 'play on awake', not 'loop': once the one-shot ends
+        and is reconciled, it must not restart on its own."""
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0, 0)))
+        source = AudioSource(clip_path="s.wav", spatial=False, auto_play=True)
+        entity.add_component(source)
+
+        system.update(0.016)
+        assert audio_system.play_sfx.call_count == 1
+
+        audio_system.is_channel_active.return_value = False
+        system.update(0.016)  # reconcile
+        for _ in range(3):
+            system.update(0.016)
+
+        assert audio_system.play_sfx.call_count == 1  # never re-triggered
+
+    def test_failed_load_does_not_retry_every_frame(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """A source whose clip fails to load latches instead of hammering
+        the loader once per frame."""
+        resource_manager.load.side_effect = Exception("missing")
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0, 0)))
+        source = AudioSource(clip_path="nope.wav", spatial=False, auto_play=True)
+        entity.add_component(source)
+
+        for _ in range(5):
+            system.update(0.016)
+
+        assert resource_manager.load.call_count == 1
+
+    def test_channel_id_zero_is_honoured(
+        self, entity_manager, audio_system, resource_manager, system
+    ):
+        """Channel id 0 is a real channel: an auto_play source already on
+        channel 0 is not treated as 'no channel' and re-triggered."""
+        audio_system.play_sfx.return_value = 0
+        entity = entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0, 0)))
+        source = AudioSource(clip_path="s.wav", spatial=False, auto_play=True)
+        entity.add_component(source)
+
+        system.update(0.016)
+        system.update(0.016)
+        system.update(0.016)
+
+        assert source._channel_id == 0
+        assert audio_system.play_sfx.call_count == 1

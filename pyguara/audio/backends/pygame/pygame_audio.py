@@ -1,5 +1,6 @@
 """Pygame implementation of the Audio System with spatial audio and bus support."""
 
+import contextlib
 import math
 
 import pygame
@@ -62,8 +63,13 @@ class PygameAudioSystem:
         self._spatial_config = SpatialAudioConfig()
         self._listener_position = Vector2(0, 0)
 
-        # Channel tracking for priority management
+        # Channel tracking for priority management. `_channel_sounds` mirrors
+        # `_playing_sounds` with the concrete Sound started on each channel, so
+        # a recycled channel id can be told apart from the sound it used to
+        # carry (see `is_channel_active`).
         self._playing_sounds: dict[int, PlayingSoundInfo] = {}
+        self._channel_sounds: dict[int, pygame.mixer.Sound] = {}
+        self._shut_down = False
 
         # Apply initial music volume
         pygame.mixer.music.set_volume(self._get_effective_music_volume())
@@ -138,56 +144,50 @@ class PygameAudioSystem:
         pan: float = 0.0,
     ) -> int | None:
         """Play a sound with all available options."""
+        native_sound = clip.native_handle
+
+        if not (hasattr(native_sound, "set_volume") and hasattr(native_sound, "play")):
+            logger.error("Resource '%s' is not a valid Sound", clip.path)
+            return None
+
+        base_volume = max(0.0, min(1.0, volume))
+
+        # Calculate effective volume through bus hierarchy
+        bus_name = self._bus_manager.get_bus_for_type(bus)
+        bus_volume = self._bus_manager.get_effective_volume(bus_name)
+        effective_volume = base_volume * bus_volume
+
+        # Find available channel or steal one
+        channel = self._get_available_channel(priority)
+        if channel is None:
+            logger.debug("No available channels for sound '%s'", clip.path)
+            return None
+
         try:
-            native_sound = clip.native_handle
-
-            if not (
-                hasattr(native_sound, "set_volume") and hasattr(native_sound, "play")
-            ):
-                logger.error("Resource '%s' is not a valid Sound", clip.path)
-                return None
-
-            # Calculate effective volume through bus hierarchy
-            bus_name = self._bus_manager.get_bus_for_type(bus)
-            bus_volume = self._bus_manager.get_effective_volume(bus_name)
-            effective_volume = volume * bus_volume
-
-            # Find available channel or steal one
-            channel = self._get_available_channel(priority)
-            if channel is None:
-                logger.debug("No available channels for sound '%s'", clip.path)
-                return None
-
-            # Set volume on the sound
-            native_sound.set_volume(effective_volume)
-
-            # Play on specific channel
-            played_channel = native_sound.play(loops=loops)
-            if played_channel is None:
-                return None
-
-            channel_id: int = played_channel.get_id()
-
-            # Apply stereo panning if supported and needed
-            if abs(pan) > 0.01:
-                self._apply_pan(played_channel, pan)
-
-            # Track playing sound
-            self._playing_sounds[channel_id] = PlayingSoundInfo(
-                channel_id=channel_id,
-                clip_path=clip.path,
-                priority=priority,
-                bus=bus,
-                base_volume=volume,
-                position=position,
-                is_spatial=position is not None,
-            )
-
-            return channel_id
-
-        except (AttributeError, Exception) as e:
+            # Loudness and stereo pan go on the CHANNEL, never the Sound: the
+            # Sound object is shared by every concurrent play of the same clip
+            # (ResourceManager caches it), so `sound.set_volume()` for one
+            # spatial instance silently rewrites every other one.
+            channel.play(native_sound, loops=loops)
+            self._set_channel_volume(channel, effective_volume, pan)
+            channel_id: int = channel.id
+        except pygame.error as e:
             logger.error("Error playing sound '%s': %s", clip.path, e, exc_info=True)
             return None
+
+        # Track playing sound
+        self._playing_sounds[channel_id] = PlayingSoundInfo(
+            channel_id=channel_id,
+            clip_path=clip.path,
+            priority=priority,
+            bus=bus,
+            base_volume=base_volume,
+            position=position,
+            is_spatial=position is not None,
+        )
+        self._channel_sounds[channel_id] = native_sound
+
+        return channel_id
 
     def _get_available_channel(
         self, priority: AudioPriority
@@ -228,7 +228,7 @@ class PygameAudioSystem:
 
         # Clean up finished channels
         for channel_id in finished_channels:
-            del self._playing_sounds[channel_id]
+            self._forget_channel(channel_id)
 
         # Return a finished channel if available
         if finished_channels:
@@ -242,7 +242,7 @@ class PygameAudioSystem:
             try:
                 channel = pygame.mixer.Channel(lowest_channel_id)
                 channel.stop()
-                del self._playing_sounds[lowest_channel_id]
+                self._forget_channel(lowest_channel_id)
                 logger.debug(
                     "Stole channel %d from lower priority sound", lowest_channel_id
                 )
@@ -252,57 +252,84 @@ class PygameAudioSystem:
 
         return None
 
-    def _apply_pan(self, channel: pygame.mixer.Channel, pan: float) -> None:
-        """Apply stereo panning to a channel.
+    @staticmethod
+    def _channel_stereo(volume: float, pan: float) -> tuple[float, float]:
+        """Split a mono volume into (left, right) channel gains for a pan.
 
         Args:
-            channel: The pygame channel.
-            pan: Pan value (-1.0 = left, 0.0 = center, 1.0 = right).
-        """
-        # Convert pan to left/right volumes
-        # pan = -1: left = 1.0, right = 0.0
-        # pan = 0: left = 1.0, right = 1.0
-        # pan = 1: left = 0.0, right = 1.0
-        if pan < 0:
-            left = 1.0
-            right = 1.0 + pan  # pan is negative, so this reduces right
-        else:
-            left = 1.0 - pan
-            right = 1.0
+            volume: Mono loudness (0.0 to 1.0).
+            pan: -1.0 = full left, 0.0 = centred, 1.0 = full right.
 
-        channel.set_volume(left, right)
+        Returns:
+            (left, right) gains, each `volume` scaled by that side's share.
+        """
+        pan = max(-1.0, min(1.0, pan))
+        if pan >= 0.0:
+            return volume * (1.0 - pan), volume
+        return volume, volume * (1.0 + pan)
+
+    @classmethod
+    def _set_channel_volume(
+        cls, channel: pygame.mixer.Channel, volume: float, pan: float
+    ) -> None:
+        """Apply loudness + pan to a channel.
+
+        A centred sound uses single-argument ``set_volume``, which also clears
+        any left/right split the channel kept from a previous, panned sound --
+        channels are recycled, so without this a centred sound inherits the
+        last one's hard pan.
+        """
+        if abs(pan) < 1e-3:
+            channel.set_volume(volume)
+        else:
+            left, right = cls._channel_stereo(volume, pan)
+            channel.set_volume(left, right)
+
+    def _forget_channel(self, channel_id: int) -> None:
+        """Drop all tracking for a channel that is no longer ours."""
+        self._playing_sounds.pop(channel_id, None)
+        self._channel_sounds.pop(channel_id, None)
+
+    def is_channel_active(self, channel: int) -> bool:
+        """Return True only while the sound this system started is still playing.
+
+        Reaps the tracking tables as a side effect when the sound has ended or
+        the channel has been recycled by an unrelated one.
+        """
+        expected = self._channel_sounds.get(channel)
+        if expected is not None:
+            try:
+                pg_channel = pygame.mixer.Channel(channel)
+                if pg_channel.get_busy() and pg_channel.get_sound() is expected:
+                    return True
+            except pygame.error:
+                pass
+        self._forget_channel(channel)
+        return False
 
     def set_channel_mix(self, channel: int, attenuation: float, pan: float) -> None:
         """Update volume attenuation and stereo pan for an already-playing channel."""
         info = self._playing_sounds.get(channel)
-        if info is None:
+        if info is None or not self.is_channel_active(channel):
             return
 
-        try:
-            pg_channel = pygame.mixer.Channel(channel)
-            sound = pg_channel.get_sound()
-            if sound is None or not pg_channel.get_busy():
-                return
+        bus_name = self._bus_manager.get_bus_for_type(info.bus)
+        bus_volume = self._bus_manager.get_effective_volume(bus_name)
+        attenuation = max(0.0, min(1.0, attenuation))
+        effective_volume = info.base_volume * attenuation * bus_volume
 
-            bus_name = self._bus_manager.get_bus_for_type(info.bus)
-            bus_volume = self._bus_manager.get_effective_volume(bus_name)
-            effective_volume = info.base_volume * attenuation * bus_volume
-
-            sound.set_volume(effective_volume)
-            self._apply_pan(pg_channel, pan)
-        except pygame.error:
-            pass
+        with contextlib.suppress(pygame.error):
+            self._set_channel_volume(
+                pygame.mixer.Channel(channel), effective_volume, pan
+            )
 
     # ========== Basic SFX Control ==========
 
     def stop_sfx(self, channel: int) -> None:
         """Stop a specific sound effect channel."""
-        try:
+        with contextlib.suppress(pygame.error):
             pygame.mixer.Channel(channel).stop()
-            if channel in self._playing_sounds:
-                del self._playing_sounds[channel]
-        except pygame.error:
-            pass
+        self._forget_channel(channel)
 
     def pause_sfx(self) -> None:
         """Pause all sound effects."""
@@ -431,17 +458,22 @@ class PygameAudioSystem:
 
     def cleanup_finished_channels(self) -> None:
         """Remove tracking for channels that have finished playing."""
-        finished = []
-        for channel_id in self._playing_sounds:
-            try:
-                channel = pygame.mixer.Channel(channel_id)
-                if not channel.get_busy():
-                    finished.append(channel_id)
-            except pygame.error:
-                finished.append(channel_id)
+        for channel_id in list(self._playing_sounds):
+            self.is_channel_active(channel_id)  # reaps as a side effect
 
-        for channel_id in finished:
-            del self._playing_sounds[channel_id]
+    def shutdown(self) -> None:
+        """Stop all audio and release the mixer device. Idempotent."""
+        if self._shut_down:
+            return
+        self._shut_down = True
+        try:
+            pygame.mixer.stop()
+            pygame.mixer.music.stop()
+            pygame.mixer.quit()
+        except pygame.error:
+            logger.debug("pygame.mixer already torn down", exc_info=True)
+        self._playing_sounds.clear()
+        self._channel_sounds.clear()
 
     def get_active_sound_count(self) -> int:
         """Get number of currently playing sounds."""
