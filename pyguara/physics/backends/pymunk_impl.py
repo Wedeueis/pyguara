@@ -78,6 +78,27 @@ def _one_way_allows_contact(
     return True
 
 
+def _sensor_entity_id(
+    shape_a: pymunk.Shape,
+    shape_b: pymunk.Shape,
+    entity_a: Any,
+    entity_b: Any,
+) -> str | None:
+    """Return the entity id owning the sensor shape in this pair, or None.
+
+    The collision system needs the sensor identified, not merely a flag that
+    one exists: the pair arrives in Chipmunk's own order, so "which side is
+    the trigger" is otherwise a coin flip. When both shapes are sensors the
+    first is reported -- two overlapping sensors is a degenerate case the
+    event model does not distinguish anyway.
+    """
+    if shape_a.sensor:
+        return str(entity_a)
+    if shape_b.sensor:
+        return str(entity_b)
+    return None
+
+
 def _scaled_gravity(scale: float) -> Any:
     """Build a velocity callback applying scaled gravity to one body.
 
@@ -303,10 +324,10 @@ class PymunkEngine:
             normal = Vector2(0, 1)
 
         impulse = arbiter.total_impulse.length
-        is_sensor = shape_a.sensor or shape_b.sensor
+        sensor_id = _sensor_entity_id(shape_a, shape_b, entity_a, entity_b)
 
         process = self._collision_system.on_collision_begin(
-            str(entity_a), str(entity_b), point, normal, impulse, is_sensor
+            str(entity_a), str(entity_b), point, normal, impulse, sensor_id
         )
 
         # The collision system returns False to mean "report this but do not
@@ -352,10 +373,10 @@ class PymunkEngine:
             normal = Vector2(0, 1)
 
         impulse = arbiter.total_impulse.length
-        is_sensor = shape_a.sensor or shape_b.sensor
+        sensor_id = _sensor_entity_id(shape_a, shape_b, entity_a, entity_b)
 
         process = self._collision_system.on_collision_persist(
-            str(entity_a), str(entity_b), point, normal, impulse, is_sensor
+            str(entity_a), str(entity_b), point, normal, impulse, sensor_id
         )
 
         # The collision system returns False to mean "report this but do not
@@ -387,9 +408,9 @@ class PymunkEngine:
         if entity_a is None or entity_b is None:
             return
 
-        is_sensor = shape_a.sensor or shape_b.sensor
+        sensor_id = _sensor_entity_id(shape_a, shape_b, entity_a, entity_b)
 
-        self._collision_system.on_collision_end(str(entity_a), str(entity_b), is_sensor)
+        self._collision_system.on_collision_end(str(entity_a), str(entity_b), sensor_id)
 
     def update(self, delta_time: float) -> None:
         """Step the physics simulation forward.
@@ -491,6 +512,13 @@ class PymunkEngine:
             )
 
         body = body_handle._body
+        # Constraints must leave the space before the body they anchor, or
+        # pymunk raises. A JointSystem normally tears its own joints down on
+        # EntityDestroyed, but a body destroyed for any other reason (or in a
+        # different order) would otherwise strand them.
+        for constraint in list(body.constraints):
+            with contextlib.suppress(Exception):
+                self.space.remove(constraint)
         for shape in list(body.shapes):
             self.space.remove(shape)
         self.space.remove(body)

@@ -4,6 +4,11 @@ This module provides joint/constraint components that connect RigidBodies and
 constrain their relative motion. Joints are essential for creating complex
 physical systems like ragdolls, vehicles, rope chains, and mechanical contraptions.
 
+A ``Joint`` is pure data. ``JointSystem`` (``pyguara.physics.joint_system``) is
+what turns it into a live constraint in the backend, once both connected
+entities have a ``RigidBody``; a game that uses joints must create and tick a
+``JointSystem`` alongside its ``PhysicsSystem``.
+
 Usage:
     from pyguara.physics.joints import Joint, create_pin_joint, create_spring_joint
 
@@ -38,9 +43,12 @@ class Joint(BaseComponent):
     A Joint connects this entity's RigidBody to another entity's RigidBody,
     constraining their relative motion according to the joint type.
 
-    The joint is created by the PhysicsSystem when both entities have RigidBody
-    components. The joint will be automatically destroyed when either entity is
-    removed or loses its RigidBody component.
+    ``JointSystem`` creates the backend constraint once both entities have a
+    ``RigidBody`` whose body exists in the engine, retrying on later ticks
+    until then. It destroys the constraint when either entity is removed, or
+    when this ``Joint`` component is removed from its entity. Removing an
+    entity's ``RigidBody`` while keeping the ``Joint`` is not tracked -- drop
+    the ``Joint`` too.
 
     Attributes:
         joint_type: Type of constraint (PIN, DISTANCE, SPRING, SLIDER, GEAR, MOTOR).
@@ -277,7 +285,9 @@ def create_rope_chain(
     """Create a rope/chain made of connected segments.
 
     This is a utility function that creates multiple entities connected by
-    distance or spring joints, forming a flexible rope or rigid chain.
+    spring joints, forming a flexible rope or rigid chain. As with any
+    ``Joint``, the links only become physical once a ``JointSystem`` is
+    ticking the world the segments were created in.
 
     Args:
         entity_manager: EntityManager to create entities in.

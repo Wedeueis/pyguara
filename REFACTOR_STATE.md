@@ -53,15 +53,52 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-`pyguara/physics` — **in progress, branch merged, subsystem not closed.**
+`pyguara/physics` — **in progress, subsystem not closed.**
 `fix/physics-collision-tunnelling` merged to `main` as **PR #25** (its first
 commit went out earlier, alone, as PR #24). Symptom-driven so far: six
 defects found and fixed from reported bad collision behaviour, plus one-way
-platforms, a collider debug overlay, and the character-mover switch. The
-systematic pass over `collision_system`, `trigger_volume`/`trigger_system`
-and `joints` is still outstanding, as are Phase B and C — **cut a fresh
-branch from `main` for that** (the old one is gone; PR #25 deleted it on
-merge).
+platforms, a collider debug overlay, and the character-mover switch.
+
+The systematic pass over `collision_system`, `trigger_volume`/`trigger_system`
+and `joints` is now done on branch `refactor/physics-triggers-joints-audit`:
+trigger volumes and the entire `Joint` layer were both inert end to end and
+are now built and tested (see the iteration log entry below). Phase B for
+those files is done with it.
+
+**To close the subsystem** (one more slice, cut fresh from `main`):
+
+- **Expose the remaining pymunk spatial queries** — `point_query`,
+  `shape_query`/`bb_query`, multi-hit `segment_query`. Only `raycast` and
+  `overlap_box` are exposed; the rest rule out click-picking, explosion
+  radii, melee arcs, piercing shots and "can I fit here". Small backend +
+  `IPhysicsEngine` additions. Dependency for the projectile layer in
+  issue #28.
+- **Body sleeping** — honour `space.sleep_time_threshold`. Every idle body
+  is simulated forever; a room-based game carries a lot of settled props
+  and debris. Small, pymunk-native.
+- **Resolve the `physics.substeps` default** (4 vs 2 — 4 costs ~half a
+  60Hz frame at 200 dynamic bodies).
+- **Phase C** (subsystem docs) and a last read of `materials.py`,
+  `tilemap.py`, `debug_draw.py`.
+
+**Next physics slice, its own build/PR (`CharacterMover`-sized):** a
+**top-down kinematic character controller** — 8-directional collide-and-slide
+with actor-vs-actor soft separation and push-out-of-overlap. The physics
+layer currently serves only platformers; every game the engine targets is
+top-down, and dynamic bodies there hit the same sink/creep/jitter family the
+platformer did, plus crowd stacking. Platformer polish (slope handling,
+variable jump height, corner correction) and `surface_velocity` (conveyors)
+are **parked as low priority** given the genre.
+
+Framework-level work above physics — combat spine, seeded RNG service,
+stat/modifier system, projectile layer, procgen, tilemap, run/meta save
+split, flow-field pathfinding, hit-stop, combat juice, local co-op input —
+is **issue #28 (roguelike core)**, out of scope for the physics audit.
+Prior art: `github.com/Wedeueis/reclaimer_legacy`, an earlier iteration of
+this engine (fused with one game, hence the restart) that already built and
+tested combat, stats, equipment/modules, procgen, GOAP/utility AI and
+projectiles — read its `reclaimer/game/<subsystem>` module before starting
+the matching #28 piece.
 
 **The big decision — move characters off dynamic rigid bodies onto
 `CharacterMover` — is resolved, built, and merged.** Full physical parity
@@ -103,8 +140,11 @@ Ordered roughly by dependency depth: foundations first, leaves last.
     - [x] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting *(active)*
 - [ ] `pyguara/physics` — protocols, pymunk backend, joints, materials
     - [x] Character movement switched to `CharacterMover` (PRs #24, #25)
-    - [ ] `collision_system.py`, `trigger_volume.py`, `trigger_system.py`,
-      `joints.py`; Phase B and C
+    - [x] `collision_system.py`, `trigger_volume.py`, `trigger_system.py`,
+      `joints.py` — triggers + joints rebuilt end to end
+      (branch `refactor/physics-triggers-joints-audit`)
+    - [ ] Phase C (docs) for the subsystem as a whole; final read of
+      `materials.py`, `tilemap.py`, `debug_draw.py`
 - [ ] `pyguara/input` — input manager, rebinding
 - [ ] `pyguara/audio` — audio manager, spatial audio
 - [ ] `pyguara/animation` — tween, easing, FSM
@@ -151,6 +191,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#16](https://github.com/Wedeueis/pyguara/issues/16) | `IFramebuffer`/`IRenderPass` not `runtime_checkable`; `IRenderPass` vs `BaseRenderPass(ABC)` overlap |
 | [#19](https://github.com/Wedeueis/pyguara/issues/19) | ~2,700 lines of GPU-dependent graphics code are read-audited only, with no headless GL coverage |
 | [#23](https://github.com/Wedeueis/pyguara/issues/23) | `camera.rotation` is applied by `Camera2D.world_to_screen` but ignored by the render path; three definitions of world-to-screen disagree |
+| [#28](https://github.com/Wedeueis/pyguara/issues/28) | Roguelike core — framework-level subsystems the target genre needs (combat spine, seeded RNG service, stat/modifier system, projectile layer, procgen, tilemap, run/meta save split, flow-field pathfinding, hit-stop, combat juice, local co-op input) |
 
 ---
 
@@ -322,6 +363,105 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### `pyguara/physics` triggers & joints — awaiting approval (branch `refactor/physics-triggers-joints-audit`)
+
+The systematic pass the earlier physics work deferred: `collision_system.py`,
+`trigger_volume.py`, `trigger_system.py`, `joints.py`. Both remaining feature
+areas turned out to be inert end to end -- full API, docstrings and unit
+tests, connected to nothing. Every defect was reproduced with a probe against
+the real pymunk backend before being touched.
+
+**Verification:** 1608 tests pass (up from 1591); `ruff check .` clean;
+`mypy pyguara` clean across 224 files. Each finding below was confirmed by a
+probe, and each fix by watching a new test fail when reverted.
+
+**F1 -- the entire `Joint` ECS layer did nothing.** `Joint` plus all five
+`create_*_joint()` factories plus `create_rope_chain()` produced components
+that no system consumed: there was no `JointSystem`, and `PhysicsSystem` only
+ever looks at `Transform`+`RigidBody`. `engine.create_joint()` was called
+only by tests. Probe: a pin-jointed body free-fell 1846px in 2s;
+`len(space.constraints) == 0`. `joints.py`'s module and class docstrings both
+stated "The joint is created by the PhysicsSystem when both entities have
+RigidBody components" -- untrue since the sentence was written.
+
+New `pyguara/physics/joint_system.py`. `JointSystem` reads `Joint`
+components, calls `engine.create_joint()` once both entities have a body in
+the engine (retrying on later ticks until then, so it is order-independent
+w.r.t. `PhysicsSystem`), stores the handle on `Joint._joint_handle` and
+mirrors it in an owner-keyed table. It tears the constraint down on
+`EntityDestroyed` for either endpoint, and on `Joint` component removal
+(reconciled each `update()`). Opt-in and ticked by the game after
+`PhysicsSystem.update()`, exactly like `PhysicsSystem` itself -- no
+bootstrap/scene auto-registration, matching the existing convention.
+`PymunkEngine.destroy_body()` now also removes a body's attached constraints
+first, so tearing down a jointed body is self-consistent regardless of which
+system gets there first.
+
+**F2 -- trigger volumes fired with the roles swapped, so `TriggerSystem`
+dropped every event.** `CollisionSystem.on_collision_begin/persist/end` took
+`is_sensor: bool` and unconditionally treated `entity_a` as the trigger and
+`entity_b` as the other body. Chipmunk's `arbiter.shapes` order is arbitrary;
+the probe showed the dynamic body landing as `entity_a` in *both* entity
+creation orders, so `OnTriggerEnter` came out `trigger_entity=<the ball>,
+other_entity=<the zone>`. `TriggerSystem._on_trigger_enter` then looked up the
+ball, found no `TriggerVolume`, and returned -- `entities_inside` never
+populated, `contains_entity()` / `one_shot` / tag filtering all dead. The
+callback contract is now `sensor_entity_id: str | None`: the backend resolves
+which shape is the sensor (it is the only thing that can) and
+`CollisionSystem._order_trigger_pair()` puts it first.
+
+**F3 -- a trigger built the documented way never entered the simulation.**
+`trigger_volume.py`'s own usage example adds `Transform` + `TriggerVolume`
+and nothing else. `TriggerSystem.update()` added a sensor `Collider`, but
+`PhysicsSystem` only registers shapes for entities that also have a
+`RigidBody`, so the sensor shape never reached the space and no event ever
+fired. `TriggerSystem` now also adds a static `RigidBody` when the entity has
+none (a game that needs a moving trigger still supplies its own KINEMATIC
+body). This is why `guara_falcao` never used `TriggerVolume` at all -- its
+`CheckpointSystem` is a hand-rolled `distance < 40px` check over a bespoke
+`ZoneTrigger` component, the workaround you write when the engine's triggers
+don't work.
+
+**Pattern, extended.** "Declared and wired to nothing" -- already flagged in
+the last physics entry for `fixed_rotation`, `gravity_scale` and the
+`return False` collision contract -- now has its two largest instances:
+`Joint` (whole ECS layer) and `TriggerVolume` (end-to-end). Both had unit
+tests that passed because each built its subject in isolation: joints tested
+only via `engine.create_joint()` directly, trigger callbacks tested only with
+the sensor hand-passed as `entity_a`. Uniform setup, fifth and sixth
+instances.
+
+**Tests (+17 net; ~50 changed).** `test_collision_events.py` rewritten for
+the `sensor_entity_id` contract, with a new `TestTriggerRoleOrdering` class
+that passes the sensor as `entity_b` and asserts the event still comes out
+sensor-first. New `tests/integration/test_trigger_volumes_backend.py` drives
+`PymunkEngine`+`CollisionSystem`+`PhysicsSystem`+`TriggerSystem` together --
+parametrised on entity creation order (the thing that used to decide whether
+triggers worked), plus the no-RigidBody case, tag filtering and one-shot. New
+`tests/test_joint_system.py`: pin joint holds, deferred creation, teardown on
+either entity's destruction and on component removal, self-target and missing
+target tolerated, rope chain holds together, `cleanup()`.
+
+**Docs (Phase C, partial).** `docs/physics/simulation.md` gains a Joints
+section and a Trigger-volumes section (the three-system requirement, the
+auto-added bodies); the collision section now states the sensor-ordering
+guarantee. `test_docs_api.py` passes. Full-subsystem Phase C -- a dedicated
+page, and reconciling the scattered `RigidBody` examples -- is still open.
+
+**Deliberately not done:** no demo added (triggers/joints are covered by the
+new integration tests and `guara_falcao` has no natural place for a
+pendulum); `guara_falcao`'s checkpoints left on their hand-rolled path;
+`create_joint`'s GEAR/MOTOR still structural-only (`ratio=1`, `rate=0` -- a
+MOTOR joint would need new `Joint` fields to be useful); `set_collision_system`
+still absent from the `IPhysicsEngine` protocol (works because bootstrap holds
+the concrete `PymunkEngine`).
+
+**Still open for subsystem close:** `physics.substeps` default (4 vs 2, from
+the last entry); `point_query`/`bb_query`/`shape_query`/multi-hit segment
+queries still unexposed; `surface_velocity`, slope handling, variable jump
+height, corner correction, body sleeping still absent (all from the last
+entry's reference comparison).
 
 ### `pyguara/physics` — IN PROGRESS (PRs #24 and #25, branch `fix/physics-collision-tunnelling`, merged)
 

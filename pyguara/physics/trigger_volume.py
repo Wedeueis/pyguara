@@ -4,10 +4,18 @@ Trigger volumes are sensor colliders that track which entities are inside them.
 They're essential for implementing checkpoints, collectibles, damage zones,
 teleporters, and any gameplay mechanic that activates when entities enter an area.
 
+A ``TriggerVolume`` only emits events when three systems are running:
+``PhysicsSystem`` (steps the simulation), ``CollisionSystem`` (routes sensor
+contacts to trigger events) and ``TriggerSystem`` (updates the component
+state, and gives the entity the sensor ``Collider`` plus a static
+``RigidBody`` it needs to enter the simulation at all).
+
 Usage:
     from pyguara.physics.trigger_volume import TriggerVolume
 
-    # Create a checkpoint trigger
+    # Create a checkpoint trigger. No Collider or RigidBody needed --
+    # TriggerSystem adds both. Add your own KINEMATIC RigidBody instead if
+    # the trigger must move with a platform.
     checkpoint = entity_manager.create_entity()
     checkpoint.add_component(Transform(position=Vector2(400, 300)))
     checkpoint.add_component(TriggerVolume(

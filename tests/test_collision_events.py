@@ -1,4 +1,11 @@
-"""Tests for physics collision event system."""
+"""Tests for physics collision event system.
+
+The backend hands ``CollisionSystem`` a contact pair in Chipmunk's own,
+arbitrary order plus ``sensor_entity_id`` -- which of the two owns the sensor
+shape, or None for a solid collision. These tests drive that contract
+directly; ``test_trigger_volumes.py`` covers the end-to-end path through the
+real pymunk backend.
+"""
 
 from pyguara.common.types import Vector2
 from pyguara.events.dispatcher import EventDispatcher
@@ -31,20 +38,15 @@ class TestCollisionSystemBasics:
         collision_system = CollisionSystem(dispatcher)
 
         received_events = []
+        dispatcher.subscribe(OnCollisionBegin, received_events.append)
 
-        def on_collision(event: OnCollisionBegin) -> None:
-            received_events.append(event)
-
-        dispatcher.subscribe(OnCollisionBegin, on_collision)
-
-        # Simulate collision begin
         result = collision_system.on_collision_begin(
             entity_a="entity1",
             entity_b="entity2",
             point=Vector2(100, 200),
             normal=Vector2(0, 1),
             impulse=50.0,
-            is_sensor=False,
+            sensor_entity_id=None,
         )
 
         assert result is True  # Physical collision should return True
@@ -61,20 +63,15 @@ class TestCollisionSystemBasics:
         collision_system = CollisionSystem(dispatcher)
 
         received_events = []
+        dispatcher.subscribe(OnCollisionPersist, received_events.append)
 
-        def on_collision_persist(event: OnCollisionPersist) -> None:
-            received_events.append(event)
-
-        dispatcher.subscribe(OnCollisionPersist, on_collision_persist)
-
-        # Simulate collision persist
         result = collision_system.on_collision_persist(
             entity_a="entity1",
             entity_b="entity2",
             point=Vector2(100, 200),
             normal=Vector2(0, 1),
             impulse=25.0,
-            is_sensor=False,
+            sensor_entity_id=None,
         )
 
         assert result is True
@@ -87,19 +84,12 @@ class TestCollisionSystemBasics:
         collision_system = CollisionSystem(dispatcher)
 
         received_events = []
+        dispatcher.subscribe(OnCollisionEnd, received_events.append)
 
-        def on_collision_end(event: OnCollisionEnd) -> None:
-            received_events.append(event)
-
-        dispatcher.subscribe(OnCollisionEnd, on_collision_end)
-
-        # Start collision first
         collision_system.on_collision_begin(
-            "entity1", "entity2", Vector2.zero(), Vector2(0, 1), 50.0, False
+            "entity1", "entity2", Vector2.zero(), Vector2(0, 1), 50.0, None
         )
-
-        # End collision
-        collision_system.on_collision_end("entity1", "entity2", is_sensor=False)
+        collision_system.on_collision_end("entity1", "entity2", None)
 
         assert len(received_events) == 1
         assert received_events[0].entity_a == "entity1"
@@ -115,19 +105,15 @@ class TestCollisionTracking:
         dispatcher = EventDispatcher()
         collision_system = CollisionSystem(dispatcher)
 
-        # Start collision
         collision_system.on_collision_begin(
-            "entity1", "entity2", Vector2.zero(), Vector2(0, 1), 50.0, False
+            "entity1", "entity2", Vector2.zero(), Vector2(0, 1), 50.0, None
         )
 
         assert collision_system.get_active_collision_count() == 1
         assert collision_system.is_colliding("entity1", "entity2") is True
-        assert (
-            collision_system.is_colliding("entity2", "entity1") is True
-        )  # Order-independent
+        assert collision_system.is_colliding("entity2", "entity1") is True
 
-        # End collision
-        collision_system.on_collision_end("entity1", "entity2", is_sensor=False)
+        collision_system.on_collision_end("entity1", "entity2", None)
 
         assert collision_system.get_active_collision_count() == 0
         assert collision_system.is_colliding("entity1", "entity2") is False
@@ -137,15 +123,14 @@ class TestCollisionTracking:
         dispatcher = EventDispatcher()
         collision_system = CollisionSystem(dispatcher)
 
-        # Start three separate collisions
         collision_system.on_collision_begin(
-            "e1", "e2", Vector2.zero(), Vector2(0, 1), 50.0, False
+            "e1", "e2", Vector2.zero(), Vector2(0, 1), 50.0, None
         )
         collision_system.on_collision_begin(
-            "e2", "e3", Vector2.zero(), Vector2(0, 1), 30.0, False
+            "e2", "e3", Vector2.zero(), Vector2(0, 1), 30.0, None
         )
         collision_system.on_collision_begin(
-            "e1", "e3", Vector2.zero(), Vector2(0, 1), 40.0, False
+            "e1", "e3", Vector2.zero(), Vector2(0, 1), 40.0, None
         )
 
         assert collision_system.get_active_collision_count() == 3
@@ -153,8 +138,7 @@ class TestCollisionTracking:
         assert collision_system.is_colliding("e2", "e3") is True
         assert collision_system.is_colliding("e1", "e3") is True
 
-        # End one collision
-        collision_system.on_collision_end("e1", "e2", is_sensor=False)
+        collision_system.on_collision_end("e1", "e2", None)
 
         assert collision_system.get_active_collision_count() == 2
         assert collision_system.is_colliding("e1", "e2") is False
@@ -165,23 +149,19 @@ class TestCollisionTracking:
         dispatcher = EventDispatcher()
         collision_system = CollisionSystem(dispatcher)
 
-        # Add collisions
         collision_system.on_collision_begin(
-            "e1", "e2", Vector2.zero(), Vector2(0, 1), 50.0, False
+            "e1", "e2", Vector2.zero(), Vector2(0, 1), 50.0, None
         )
         collision_system.on_collision_begin(
-            "e2", "e3", Vector2.zero(), Vector2(0, 1), 30.0, False
+            "e2", "e3", Vector2.zero(), Vector2(0, 1), 30.0, None
         )
-
-        # Add triggers
         collision_system.on_collision_begin(
-            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, "trigger1"
         )
 
         assert collision_system.get_active_collision_count() > 0
         assert collision_system.get_active_trigger_count() > 0
 
-        # Clear state
         collision_system.clear_state()
 
         assert collision_system.get_active_collision_count() == 0
@@ -189,7 +169,7 @@ class TestCollisionTracking:
 
 
 class TestTriggerEvents:
-    """Test trigger/sensor event handling."""
+    """Test trigger/sensor event handling, sensor passed as entity_a."""
 
     def test_trigger_enter_event(self):
         """Sensor collision should dispatch OnTriggerEnter event."""
@@ -197,20 +177,15 @@ class TestTriggerEvents:
         collision_system = CollisionSystem(dispatcher)
 
         received_events = []
+        dispatcher.subscribe(OnTriggerEnter, received_events.append)
 
-        def on_trigger_enter(event: OnTriggerEnter) -> None:
-            received_events.append(event)
-
-        dispatcher.subscribe(OnTriggerEnter, on_trigger_enter)
-
-        # Simulate trigger enter
         result = collision_system.on_collision_begin(
             entity_a="trigger1",
             entity_b="player",
             point=Vector2.zero(),
             normal=Vector2(0, 1),
             impulse=0.0,
-            is_sensor=True,
+            sensor_entity_id="trigger1",
         )
 
         assert result is False  # Sensors should return False
@@ -224,20 +199,13 @@ class TestTriggerEvents:
         collision_system = CollisionSystem(dispatcher)
 
         received_events = []
+        dispatcher.subscribe(OnTriggerStay, received_events.append)
 
-        def on_trigger_stay(event: OnTriggerStay) -> None:
-            received_events.append(event)
-
-        dispatcher.subscribe(OnTriggerStay, on_trigger_stay)
-
-        # Start trigger first
         collision_system.on_collision_begin(
-            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, "trigger1"
         )
-
-        # Trigger persist
         collision_system.on_collision_persist(
-            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, "trigger1"
         )
 
         assert len(received_events) == 1
@@ -250,19 +218,12 @@ class TestTriggerEvents:
         collision_system = CollisionSystem(dispatcher)
 
         received_events = []
+        dispatcher.subscribe(OnTriggerExit, received_events.append)
 
-        def on_trigger_exit(event: OnTriggerExit) -> None:
-            received_events.append(event)
-
-        dispatcher.subscribe(OnTriggerExit, on_trigger_exit)
-
-        # Start trigger
         collision_system.on_collision_begin(
-            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, "trigger1"
         )
-
-        # End trigger
-        collision_system.on_collision_end("trigger1", "player", is_sensor=True)
+        collision_system.on_collision_end("trigger1", "player", "trigger1")
 
         assert len(received_events) == 1
         assert received_events[0].trigger_entity == "trigger1"
@@ -273,16 +234,14 @@ class TestTriggerEvents:
         dispatcher = EventDispatcher()
         collision_system = CollisionSystem(dispatcher)
 
-        # Enter trigger
         collision_system.on_collision_begin(
-            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "trigger1", "player", Vector2.zero(), Vector2(0, 1), 0.0, "trigger1"
         )
 
         assert collision_system.get_active_trigger_count() == 1
         assert collision_system.is_in_trigger("trigger1", "player") is True
 
-        # Exit trigger
-        collision_system.on_collision_end("trigger1", "player", is_sensor=True)
+        collision_system.on_collision_end("trigger1", "player", "trigger1")
 
         assert collision_system.get_active_trigger_count() == 0
         assert collision_system.is_in_trigger("trigger1", "player") is False
@@ -292,24 +251,93 @@ class TestTriggerEvents:
         dispatcher = EventDispatcher()
         collision_system = CollisionSystem(dispatcher)
 
-        # Two entities enter trigger
         collision_system.on_collision_begin(
-            "trigger1", "player1", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "trigger1", "player1", Vector2.zero(), Vector2(0, 1), 0.0, "trigger1"
         )
         collision_system.on_collision_begin(
-            "trigger1", "player2", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "trigger1", "player2", Vector2.zero(), Vector2(0, 1), 0.0, "trigger1"
         )
 
         assert collision_system.get_active_trigger_count() == 2
         assert collision_system.is_in_trigger("trigger1", "player1") is True
         assert collision_system.is_in_trigger("trigger1", "player2") is True
 
-        # One exits
-        collision_system.on_collision_end("trigger1", "player1", is_sensor=True)
+        collision_system.on_collision_end("trigger1", "player1", "trigger1")
 
         assert collision_system.get_active_trigger_count() == 1
         assert collision_system.is_in_trigger("trigger1", "player1") is False
         assert collision_system.is_in_trigger("trigger1", "player2") is True
+
+
+class TestTriggerRoleOrdering:
+    """The sensor must land as ``trigger_entity`` regardless of pair order.
+
+    Chipmunk reports a contact pair in an order the engine does not control,
+    so the sensor arrives as ``entity_a`` on some pairs and ``entity_b`` on
+    others. Before ``sensor_entity_id`` existed, ``CollisionSystem`` assumed
+    ``entity_a`` was always the trigger; the events then came out with
+    ``trigger_entity`` and ``other_entity`` swapped, and ``TriggerSystem``
+    dropped every one whose "trigger" had no ``TriggerVolume``.
+    """
+
+    def test_sensor_as_entity_b_enter(self):
+        """Sensor passed second still becomes the trigger_entity on enter."""
+        dispatcher = EventDispatcher()
+        collision_system = CollisionSystem(dispatcher)
+
+        events = []
+        dispatcher.subscribe(OnTriggerEnter, events.append)
+
+        result = collision_system.on_collision_begin(
+            entity_a="player",
+            entity_b="zone",
+            point=Vector2.zero(),
+            normal=Vector2(0, 1),
+            impulse=0.0,
+            sensor_entity_id="zone",
+        )
+
+        assert result is False
+        assert len(events) == 1
+        assert events[0].trigger_entity == "zone"
+        assert events[0].other_entity == "player"
+
+    def test_sensor_as_entity_b_stay_and_exit(self):
+        """Stay and exit route by the sensor id too, not by pair position."""
+        dispatcher = EventDispatcher()
+        collision_system = CollisionSystem(dispatcher)
+
+        stay, exit_ = [], []
+        dispatcher.subscribe(OnTriggerStay, stay.append)
+        dispatcher.subscribe(OnTriggerExit, exit_.append)
+
+        collision_system.on_collision_begin(
+            "player", "zone", Vector2.zero(), Vector2(0, 1), 0.0, "zone"
+        )
+        collision_system.on_collision_persist(
+            "player", "zone", Vector2.zero(), Vector2(0, 1), 0.0, "zone"
+        )
+        collision_system.on_collision_end("player", "zone", "zone")
+
+        assert [(e.trigger_entity, e.other_entity) for e in stay] == [
+            ("zone", "player")
+        ]
+        assert [(e.trigger_entity, e.other_entity) for e in exit_] == [
+            ("zone", "player")
+        ]
+        assert collision_system.is_in_trigger("zone", "player") is False
+
+    def test_tracking_query_order_matches_event_order(self):
+        """is_in_trigger takes (trigger, other); enter stored it that way."""
+        dispatcher = EventDispatcher()
+        collision_system = CollisionSystem(dispatcher)
+
+        collision_system.on_collision_begin(
+            "player", "zone", Vector2.zero(), Vector2(0, 1), 0.0, "zone"
+        )
+
+        assert collision_system.is_in_trigger("zone", "player") is True
+        assert collision_system.get_active_trigger_count() == 1
 
 
 class TestEventSequences:
@@ -320,27 +348,19 @@ class TestEventSequences:
         dispatcher = EventDispatcher()
         collision_system = CollisionSystem(dispatcher)
 
-        begin_events = []
-        persist_events = []
-        end_events = []
+        begin_events, persist_events, end_events = [], [], []
+        dispatcher.subscribe(OnCollisionBegin, begin_events.append)
+        dispatcher.subscribe(OnCollisionPersist, persist_events.append)
+        dispatcher.subscribe(OnCollisionEnd, end_events.append)
 
-        dispatcher.subscribe(OnCollisionBegin, lambda e: begin_events.append(e))
-        dispatcher.subscribe(OnCollisionPersist, lambda e: persist_events.append(e))
-        dispatcher.subscribe(OnCollisionEnd, lambda e: end_events.append(e))
-
-        # Begin
         collision_system.on_collision_begin(
-            "e1", "e2", Vector2(100, 100), Vector2(0, 1), 50.0, False
+            "e1", "e2", Vector2(100, 100), Vector2(0, 1), 50.0, None
         )
-
-        # Persist (multiple frames)
         for i in range(5):
             collision_system.on_collision_persist(
-                "e1", "e2", Vector2(100, 100), Vector2(0, 1), 30.0 - i, False
+                "e1", "e2", Vector2(100, 100), Vector2(0, 1), 30.0 - i, None
             )
-
-        # End
-        collision_system.on_collision_end("e1", "e2", is_sensor=False)
+        collision_system.on_collision_end("e1", "e2", None)
 
         assert len(begin_events) == 1
         assert len(persist_events) == 5
@@ -351,27 +371,19 @@ class TestEventSequences:
         dispatcher = EventDispatcher()
         collision_system = CollisionSystem(dispatcher)
 
-        enter_events = []
-        stay_events = []
-        exit_events = []
+        enter_events, stay_events, exit_events = [], [], []
+        dispatcher.subscribe(OnTriggerEnter, enter_events.append)
+        dispatcher.subscribe(OnTriggerStay, stay_events.append)
+        dispatcher.subscribe(OnTriggerExit, exit_events.append)
 
-        dispatcher.subscribe(OnTriggerEnter, lambda e: enter_events.append(e))
-        dispatcher.subscribe(OnTriggerStay, lambda e: stay_events.append(e))
-        dispatcher.subscribe(OnTriggerExit, lambda e: exit_events.append(e))
-
-        # Enter
         collision_system.on_collision_begin(
-            "checkpoint", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
+            "checkpoint", "player", Vector2.zero(), Vector2(0, 1), 0.0, "checkpoint"
         )
-
-        # Stay (multiple frames)
         for _i in range(3):
             collision_system.on_collision_persist(
-                "checkpoint", "player", Vector2.zero(), Vector2(0, 1), 0.0, True
+                "checkpoint", "player", Vector2.zero(), Vector2(0, 1), 0.0, "checkpoint"
             )
-
-        # Exit
-        collision_system.on_collision_end("checkpoint", "player", is_sensor=True)
+        collision_system.on_collision_end("checkpoint", "player", "checkpoint")
 
         assert len(enter_events) == 1
         assert len(stay_events) == 3

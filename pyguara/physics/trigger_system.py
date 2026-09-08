@@ -11,9 +11,10 @@ using TriggerVolumes in your game.
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.physics.components import Collider
+from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.events import OnTriggerEnter, OnTriggerExit
 from pyguara.physics.trigger_volume import EntityTags, TriggerVolume
+from pyguara.physics.types import BodyType
 
 
 class TriggerSystem:
@@ -50,16 +51,19 @@ class TriggerSystem:
     def update(self, delta_time: float) -> None:
         """Update trigger volumes.
 
-        Creates sensor Colliders for entities that have TriggerVolume but no Collider.
-        This is called each frame by the application loop.
+        Gives every ``TriggerVolume`` entity the physics setup it needs to
+        actually emit events: a sensor ``Collider`` and, if it has no body of
+        its own, a static ``RigidBody``. This is called each frame by the
+        application loop.
 
         Args:
             delta_time: Time elapsed since last update (unused).
         """
-        # Find entities with TriggerVolume but no Collider
         for entity in self._entity_manager.get_entities_with(TriggerVolume):
             if not entity.has_component(Collider):
                 self._create_trigger_collider(entity)
+            if not entity.has_component(RigidBody):
+                self._create_trigger_body(entity)
 
     def _create_trigger_collider(self, entity: Entity) -> None:
         """Create a sensor Collider for a TriggerVolume entity.
@@ -77,6 +81,20 @@ class TriggerSystem:
         )
 
         entity.add_component(collider)
+
+    def _create_trigger_body(self, entity: Entity) -> None:
+        """Give a bodyless TriggerVolume entity a static RigidBody.
+
+        ``PhysicsSystem`` only registers shapes for entities that have a
+        ``RigidBody``; without one the sensor Collider is never added to the
+        simulation and no trigger event ever fires. A trigger that needs to
+        move (mounted on a platform, say) should carry its own KINEMATIC
+        body -- this only fills in the common stationary case.
+
+        Args:
+            entity: Entity with TriggerVolume but no RigidBody.
+        """
+        entity.add_component(RigidBody(body_type=BodyType.STATIC))
 
     def _on_trigger_enter(self, event: OnTriggerEnter) -> None:
         """Handle entity entering a trigger volume.
