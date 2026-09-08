@@ -31,6 +31,7 @@ nav:
       - Rendering: graphics/rendering.md
   - Physics:
       - Simulation: physics/simulation.md
+      - Spatial Queries: physics/queries.md
   - AI:
       - Intelligence: ai/intelligence.md
   - Systems:

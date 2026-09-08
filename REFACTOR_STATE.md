@@ -53,36 +53,25 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-`pyguara/physics` — **in progress, subsystem not closed.**
-`fix/physics-collision-tunnelling` merged to `main` as **PR #25** (its first
-commit went out earlier, alone, as PR #24). Symptom-driven so far: six
-defects found and fixed from reported bad collision behaviour, plus one-way
-platforms, a collider debug overlay, and the character-mover switch.
+**None — `pyguara/physics` closed 2026-09-08.** Next in the queue is
+`pyguara/input`. Open `REFACTOR_STATE.md` "How to resume" and take it.
 
-The systematic pass over `collision_system`, `trigger_volume`/`trigger_system`
-and `joints` is now done on branch `refactor/physics-triggers-joints-audit`:
-trigger volumes and the entire `Joint` layer were both inert end to end and
-are now built and tested (see the iteration log entry below). Phase B for
-those files is done with it.
+`pyguara/physics` ran over four slices: PR #24 (substepping), PR #25
+(character movement onto `CharacterMover`), PR #27 (triggers + joints, both
+inert end to end), and the closing slice on branch
+`refactor/physics-queries-sleep-close` (spatial queries, body sleeping, the
+`substeps` decision, Phase C). See the iteration log entries below.
 
-**To close the subsystem** (one more slice, cut fresh from `main`):
+**`substeps` resolved: stays 4.** The benchmark put the cost of 4 at
+~0.65 ms/update for 200 dynamic bodies (2.5 ms at 500) — an order of
+magnitude below the "half a frame" this file previously feared — while 4
+stops a body against a 10px wall up to ~900 px/s vs ~400 at 2. Body sleeping
+(new in the closing slice) further cuts the settled-props cost. `substeps=2`
+is documented as the knob for someone running many hundreds of fast bodies.
 
-- **Expose the remaining pymunk spatial queries** — `point_query`,
-  `shape_query`/`bb_query`, multi-hit `segment_query`. Only `raycast` and
-  `overlap_box` are exposed; the rest rule out click-picking, explosion
-  radii, melee arcs, piercing shots and "can I fit here". Small backend +
-  `IPhysicsEngine` additions. Dependency for the projectile layer in
-  issue #28.
-- **Body sleeping** — honour `space.sleep_time_threshold`. Every idle body
-  is simulated forever; a room-based game carries a lot of settled props
-  and debris. Small, pymunk-native.
-- **Resolve the `physics.substeps` default** (4 vs 2 — 4 costs ~half a
-  60Hz frame at 200 dynamic bodies).
-- **Phase C** (subsystem docs) and a last read of `materials.py`,
-  `tilemap.py`, `debug_draw.py`.
-
-**Next physics slice, its own build/PR (`CharacterMover`-sized):** a
-**top-down kinematic character controller** — 8-directional collide-and-slide
+**Next physics slice, its own build/PR (`CharacterMover`-sized), not a
+blocker for anything:** a **top-down kinematic character controller** —
+8-directional collide-and-slide
 with actor-vs-actor soft separation and push-out-of-overlap. The physics
 layer currently serves only platformers; every game the engine targets is
 top-down, and dynamic bodies there hit the same sink/creep/jitter family the
@@ -94,11 +83,14 @@ Framework-level work above physics — combat spine, seeded RNG service,
 stat/modifier system, projectile layer, procgen, tilemap, run/meta save
 split, flow-field pathfinding, hit-stop, combat juice, local co-op input —
 is **issue #28 (roguelike core)**, out of scope for the physics audit.
-Prior art: `github.com/Wedeueis/reclaimer_legacy`, an earlier iteration of
-this engine (fused with one game, hence the restart) that already built and
-tested combat, stats, equipment/modules, procgen, GOAP/utility AI and
-projectiles — read its `reclaimer/game/<subsystem>` module before starting
-the matching #28 piece.
+#28 carries the layering decision: three layers (core / `pyguara/kits/*` /
+game), mechanism in core and world-model vocabulary in an opt-in kit, core
+may not import a kit. Prior art: `github.com/Wedeueis/reclaimer_legacy`, an
+earlier iteration of this engine (fused with one game, hence the restart)
+that already built and tested combat, stats, equipment/modules, procgen,
+GOAP/utility AI and projectiles — mine it **per kit**, reading its
+`reclaimer/game/<subsystem>` for interface shape and tests before starting
+the matching `pyguara/kits/<kit>` piece.
 
 **The big decision — move characters off dynamic rigid bodies onto
 `CharacterMover` — is resolved, built, and merged.** Full physical parity
@@ -138,13 +130,12 @@ Ordered roughly by dependency depth: foundations first, leaves last.
     - [x] 3. Backends — pygame, ModernGL, headless renderers *(active)*
     - [x] 4. Pipeline — graph, passes, framebuffer, viewport, batching *(active)*
     - [x] 5. Assets & effects — spritesheet, ninepatch, materials, vfx, lighting *(active)*
-- [ ] `pyguara/physics` — protocols, pymunk backend, joints, materials
+- [x] `pyguara/physics` — protocols, pymunk backend, joints, materials
     - [x] Character movement switched to `CharacterMover` (PRs #24, #25)
     - [x] `collision_system.py`, `trigger_volume.py`, `trigger_system.py`,
-      `joints.py` — triggers + joints rebuilt end to end
-      (branch `refactor/physics-triggers-joints-audit`)
-    - [ ] Phase C (docs) for the subsystem as a whole; final read of
-      `materials.py`, `tilemap.py`, `debug_draw.py`
+      `joints.py` — triggers + joints rebuilt end to end (PR #27)
+    - [x] Spatial queries, body sleeping, `substeps` decision, Phase C
+      (branch `refactor/physics-queries-sleep-close`)
 - [ ] `pyguara/input` — input manager, rebinding
 - [ ] `pyguara/audio` — audio manager, spatial audio
 - [ ] `pyguara/animation` — tween, easing, FSM
@@ -168,6 +159,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/physics` | 2026-09-08 | Judged as *game* physics. Four slices: substepping stops ordinary-speed tunnelling (PR #24); characters moved off dynamic bodies onto `CharacterMover`/`CharacterBody` with full parity — knockback, platform riding, crate pushing — on Celeste's integer+remainder model (PR #25); trigger volumes and the entire `Joint` ECS layer were both inert end to end and were rebuilt and tested (PR #27); the close added five spatial queries, body sleeping, kept `substeps` at 4 on benchmark evidence, and froze `PhysicsMaterial`. Recurring shape: "declared and wired to nothing" (`fixed_rotation`, `gravity_scale`, the `return False` collision contract, `Joint`, `TriggerVolume`) and uniform test setup (every test a slow body already at rest). |
 | `pyguara/graphics` | 2026-09-06 | Audited in five slices: window boundary, components, backends, pipeline, assets. Window reported the requested size not the granted one; `Box`/`Circle` were hard-wired to pygame; the pygame stubs had drifted; a zero-height window produced a 450px viewport; nine-patch produced negative source rects. PRs #12, #14, #15, #17, #18. |
 | `pyguara/systems` | 2026-09-06 | Fixed every game system starting up uninitialised (`initialize()` runs before `on_enter()`), an `unregister()` testing truthiness rather than `None`, and silent duplicate registration keys. PR #11. |
 | `pyguara/scene` | 2026-09-06 | Fixed `switch_to()` abandoning every stacked scene, unguarded re-entrancy during transitions, and a `pop_scene()` that stranded the scene it returned to. PR #10. |
@@ -364,7 +356,75 @@ convert to explicit `is None` checks as each subsystem is audited.
 
 ## Iteration Log
 
-### `pyguara/physics` triggers & joints — awaiting approval (branch `refactor/physics-triggers-joints-audit`)
+### `pyguara/physics` close — spatial queries, sleeping, substeps, Phase C — CLOSED 2026-09-08 (branch `refactor/physics-queries-sleep-close`)
+
+The fourth and final physics slice. Two capability gaps and a decision, none
+of them a reproduced defect — the audit found them by comparing pymunk's
+surface against what a game can reach. Every query and the sleep behaviour
+was probed against the real backend before code went in.
+
+**Verification:** 1644 tests pass (up from 1608); `ruff check .` clean;
+`ruff format` clean; `mypy pyguara` clean across 224 files. `guara_falcao`
+re-checked through `tools/agent_view.py` — title, gameplay, coins, patrolling
+platform, crate all render and move.
+
+**Q1 — spatial queries.** `raycast` and `overlap_box` were the only queries
+on `IPhysicsEngine`, which ruled out click-picking, explosion radii, melee
+arcs, piercing shots and "roughly what is around here" — and the projectile
+layer in issue #28 names multi-hit queries as a dependency. Added five, all
+in the existing style (`mask` + `ignore_entity_id`, entity ids not handles,
+sensors skipped, an entity reported once): `point_query` (most-enclosed
+first), `overlap_circle`, `overlap_box_all`, `region_query` (broad-phase,
+bounding boxes not shapes), `raycast_all` (near→far). `overlap_box` gained a
+`mask` parameter for parity — its four positional call sites in
+`character_mover`/`platformer_system` now pass `ignore_entity_id` by keyword.
+`set_collision_system` joined the `IPhysicsEngine` protocol (it worked only
+because bootstrap holds the concrete `PymunkEngine`), and a stray
+`# <--- Add this` marker is gone.
+
+**Q2 — body sleeping.** `space.sleep_time_threshold` was left at Chipmunk's
+`inf`, so every settled prop and debris body is simulated forever.
+`PhysicsConfig.sleep_time_threshold` (default 0.5s, 0 disables) now drives
+it. The probe settled a five-box stack and confirmed pymunk 7.2 wakes a body
+on *any* state write — `position`, `velocity`, `rotation`, `apply_force`,
+`apply_impulse` — so no adapter change was needed; a test pins that
+behaviour since `SolidSystem` and manual kinematic moves depend on it. The
+config validator now also rejects a negative threshold and `substeps < 1`,
+which `PymunkEngine` otherwise only caught as a bare `ValueError` at startup.
+
+**Q3 — `substeps` default: stays 4.** This file feared "~half a 60Hz frame at
+200 dynamic bodies". The benchmark (200/500 bodies, settled and churning)
+put substeps=4 at **0.65 ms/update at 200, 2.5 ms at 500** — an order of
+magnitude less. Against a 10px wall, substeps 1/2/4 stop a body up to
+~200/400/900 px/s. The cost of 4 is trivial and the tunnelling headroom
+matters for knockback and explosion-flung props in the target genre; body
+sleeping cuts the settled-props cost further. `substeps=2` is documented as
+the knob for many hundreds of fast bodies. Both why-comments
+(`config/types.py`, `pymunk_impl.py`) rewritten with the real numbers.
+
+**Phase C.** New `docs/physics/queries.md` — all seven read-only queries with
+a "reach for it when" table, the shared rules, and the precise-vs-broad-phase
+distinction. `simulation.md` gains Substepping and Body sleeping subsections,
+a Spatial-queries pointer, and a forward reference from `RigidBody` to
+`CharacterBody`. `test_docs_api.py` passes. Final read of `materials.py`,
+`tilemap.py`, `debug_draw.py`: `tilemap`/`debug_draw` clean; `materials.py`'s
+docstring claimed "All materials are frozen dataclass instances" but
+`PhysicsMaterial` was a plain `@dataclass` — `Materials.ICE.friction = 0.9`
+would have rewritten ice game-wide. Frozen now (nothing mutates a material),
+as a separate `fix:` commit.
+
+**Tests (+36).** New `tests/integration/test_physics_queries.py` (26, one
+class per query, built from moving and multi-shape bodies rather than the
+suite's usual single body at rest — the fifth/sixth instance of that trap);
+sleeping coverage in `test_physics_backend.py`; two validator cases in
+`test_config.py`.
+
+**Left for the next physics slice (its own PR, blocks nothing):** the
+top-down kinematic character controller. `surface_velocity`, slope handling,
+variable jump height and corner correction stay parked as low priority for
+the genre.
+
+### `pyguara/physics` triggers & joints — CLOSED 2026-09-08 (PR #27, branch `refactor/physics-triggers-joints-audit`)
 
 The systematic pass the earlier physics work deferred: `collision_system.py`,
 `trigger_volume.py`, `trigger_system.py`, `joints.py`. Both remaining feature

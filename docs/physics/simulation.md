@@ -5,10 +5,14 @@ PyGuara integrates **Pymunk** (Chipmunk2D) for physics simulation, abstracted be
 ## Components
 
 ### RigidBody
-Represents a physical object.
+Represents a physical object simulated by Chipmunk.
 - **Dynamic**: Affected by forces and gravity.
 - **Static**: Immovable (walls, ground).
 - **Kinematic**: Moved by code but affects dynamic bodies (platforms).
+
+A **player character is the exception** — it should carry a `CharacterBody`,
+not a `RigidBody`. See [Platformer characters](#platformer-characters-charactermover-not-rigidbody)
+below.
 
 ### Collider
 Defines the collision shape and properties.
@@ -22,6 +26,35 @@ The `PhysicsSystem` synchronizes the ECS `Transform` component with the Pymunk b
 - **Pre-Step**: Updates Pymunk bodies if ECS transforms changed (Kinematic/Manual).
 - **Step**: Advances simulation (`dt`).
 - **Post-Step**: Updates ECS transforms from Pymunk bodies (Dynamic).
+
+### Substepping
+
+Chipmunk has no continuous collision detection: in one solver step a body
+moves `velocity × dt` in a straight line and passes through anything thinner
+than that jump. `physics.substeps` (default **4**) splits each tick into that
+many solver steps to shorten the jump — measured against a 10px wall,
+1/2/4 substeps stop a body up to roughly 200/400/900 px/s. Four is cheap
+(~0.65 ms/update at 200 dynamic bodies) and the headroom matters for
+knockback and explosion-flung props; drop it to 2 only when simulating many
+hundreds of fast bodies, and let fast projectiles use `raycast` rather than
+leaning on the solver to catch them.
+
+### Body sleeping
+
+`physics.sleep_time_threshold` (default **0.5 s**) is how long a body must
+hold still before Chipmunk lets it *sleep* — drop out of the solver until
+something disturbs it. Without it (Chipmunk's own default) a room full of
+settled props and debris is simulated forever. A body wakes automatically the
+moment anything writes its state: a `position`, `rotation` or `velocity`
+assignment, an `apply_force` / `apply_impulse`, or a fresh collision. Set the
+threshold to `0` to disable sleeping entirely.
+
+Two consequences worth knowing:
+
+- A body resting on a **kinematic** platform never sleeps — a kinematic body
+  is never idle — so a moving-platform ride keeps its rider awake.
+- Reading a sleeping body's position is fine and cheap; it still appears in
+  every [spatial query](queries.md).
 
 ## Collision Handling
 
@@ -42,6 +75,15 @@ The engine reports a contact pair in Chipmunk's own order and tells
 `CollisionSystem` which side owns the sensor; the trigger events always come
 out with `trigger_entity` set to the sensor's entity and `other_entity` the
 body that entered it, regardless of that order.
+
+## Spatial queries
+
+Collision *events* tell you what is touching what. To ask the world a
+question directly — what did the player click, who is in the blast radius,
+does this space fit — use the read-only queries on `IPhysicsEngine`
+(`raycast`, `raycast_all`, `point_query`, `overlap_box`, `overlap_box_all`,
+`overlap_circle`, `region_query`). They are documented on their own page:
+[Spatial Queries](queries.md).
 
 ## Trigger volumes
 

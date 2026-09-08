@@ -318,6 +318,34 @@ def test_screen_height_and_deadzone_are_validated():
     assert "gamepad_deadzone" in settings
 
 
+def test_a_negative_sleep_time_threshold_is_rejected():
+    """PymunkEngine raises on a negative threshold; the validator should say
+    so with the setting named, not leave it to a bare ValueError on boot."""
+    config = GameConfig()
+    config.physics.sleep_time_threshold = -1.0
+
+    issues = ConfigValidator().validate(config)
+
+    assert any(
+        i.setting == "sleep_time_threshold" and i.severity is ValidationSeverity.ERROR
+        for i in issues
+    )
+
+
+def test_a_zero_substeps_is_reported_as_critical():
+    """PymunkEngine raises on substeps < 1; without validation that surfaces
+    as an unnamed ValueError at startup."""
+    config = GameConfig()
+    config.physics.substeps = 0
+
+    issues = ConfigValidator().validate(config)
+
+    assert any(
+        i.setting == "substeps" and i.severity is ValidationSeverity.CRITICAL
+        for i in issues
+    )
+
+
 def test_a_sound_default_config_produces_no_issues():
     assert ConfigValidator().validate(GameConfig()) == []
 

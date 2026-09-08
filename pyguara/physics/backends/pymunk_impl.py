@@ -6,7 +6,7 @@ from typing import Any
 
 import pymunk
 
-from pyguara.common.types import Vector2
+from pyguara.common.types import Rect, Vector2
 from pyguara.physics.protocols import IPhysicsBody
 from pyguara.physics.types import (
     BodyType,
@@ -18,10 +18,22 @@ from pyguara.physics.types import (
 )
 
 # One 1/60s step lets a body jump velocity/60 pixels; at 600 px/s that is 10
-# pixels, which clears a 10px wall outright. Four substeps put the threshold
-# above the speeds a platformer reaches under normal gravity, at four times
-# the solver cost -- cheap for the body counts a 2D game runs.
+# pixels, which clears a 10px wall outright. Substepping shortens the jump:
+# measured against a 10px wall, substeps 1/2/4 stop a body up to roughly
+# 200/400/900 px/s respectively. Four is kept as the default because the cost
+# is far lower than once feared -- 0.65ms/update at 200 dynamic bodies, 2.5ms
+# at 500, well under a 16.7ms frame -- while the extra headroom matters for
+# knockback and explosion-flung props in a top-down game. Drop to 2 only when
+# simulating many hundreds of fast bodies; fast projectiles should raycast
+# rather than lean on the solver catching them.
 DEFAULT_SUBSTEPS = 4
+
+# Seconds a body must stay still before Chipmunk lets it sleep and stop
+# consuming solver time. inf (Chipmunk's own default) never sleeps anything,
+# so a room full of settled props and debris is simulated forever. Half a
+# second is long enough not to sleep something a slow nudge is still moving.
+# Any direct state write (position, velocity, impulse) wakes a body again.
+DEFAULT_SLEEP_TIME_THRESHOLD = 0.5
 
 # Ray queries are swept circles in Chipmunk. Keep the radius small: it
 # widens what the ray can touch, including the caster's own collider.
@@ -178,6 +190,7 @@ class PymunkEngine:
         self,
         substeps: int = DEFAULT_SUBSTEPS,
         penetration_recovery: float = DEFAULT_PENETRATION_RECOVERY,
+        sleep_time_threshold: float = DEFAULT_SLEEP_TIME_THRESHOLD,
     ) -> None:
         """Initialize the Pymunk engine wrapper.
 
@@ -192,13 +205,17 @@ class PymunkEngine:
                 through anything thinner than that jump. Substepping shortens
                 the jump proportionally: each doubling roughly doubles the
                 speed a thin wall can stop.
+            sleep_time_threshold: Seconds a body must be still before it is
+                allowed to sleep and drop out of the solver. 0 disables
+                sleeping (a body is then simulated forever, however idle).
 
         Raises:
             ValueError: If `substeps` is not positive. Zero would step the
                 simulation not at all and negative is meaningless; both are
                 far better caught here than as a frozen world. Also if
                 `penetration_recovery` is outside (0, 1]: zero never separates
-                overlapping bodies at all.
+                overlapping bodies at all. Also if `sleep_time_threshold` is
+                negative.
         """
         if not 0.0 < penetration_recovery <= 1.0:
             raise ValueError(
@@ -213,6 +230,13 @@ class PymunkEngine:
                 f"of solver steps per update; 1 disables substepping."
             )
         self._substeps = substeps
+        if sleep_time_threshold < 0.0:
+            raise ValueError(
+                f"sleep_time_threshold must be non-negative, got "
+                f"{sleep_time_threshold}. It is seconds of stillness before a "
+                f"body may sleep; 0 disables sleeping."
+            )
+        self._sleep_time_threshold = sleep_time_threshold
         self.space: pymunk.Space | None = None
         # Map entity_id -> PymunkBodyAdapter
         self._bodies: dict[int | str, PymunkBodyAdapter] = {}
@@ -225,6 +249,9 @@ class PymunkEngine:
         self.space.gravity = (gravity.x, gravity.y)
         # Chipmunk expresses this as the error *remaining* after one second.
         self.space.collision_bias = pow(1.0 - self._penetration_recovery, 60)
+        # Chipmunk treats 0 here as "never sleep"; it stores it as inf.
+        if self._sleep_time_threshold > 0.0:
+            self.space.sleep_time_threshold = self._sleep_time_threshold
 
         # Setup collision handlers if collision system is already registered
         if self._collision_system:
@@ -665,10 +692,69 @@ class PymunkEngine:
             entity_id=getattr(query.shape.body, "entity_id", None),
         )
 
+    @staticmethod
+    def _probe_shape(kind: str, *args: Any, mask: int) -> Any:
+        """Build a free-floating probe shape for a `shape_query`.
+
+        The probe body is kinematic and never added to the space; it exists
+        only to give the shape a transform. `pymunk.Circle` / `Poly` keep a
+        Python reference to it, so it lives as long as the shape does.
+
+        Args:
+            kind: "box" (args: centre, half_extents) or "circle" (args:
+                centre, radius).
+            args: Geometry for `kind`, as above.
+            mask: Collision mask baked into the probe's filter so Chipmunk
+                does the category filtering, exactly as `raycast` does.
+
+        Returns:
+            A pymunk shape ready to pass to `space.shape_query`.
+        """
+        body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
+        if kind == "box":
+            centre, half_extents = args
+            body.position = (centre.x, centre.y)
+            shape: pymunk.Shape = pymunk.Poly.create_box(
+                body, (half_extents.x * 2, half_extents.y * 2)
+            )
+        else:  # circle
+            centre, radius = args
+            body.position = (centre.x, centre.y)
+            shape = pymunk.Circle(body, radius)
+        shape.filter = pymunk.ShapeFilter(mask=mask)
+        return shape
+
+    @staticmethod
+    def _solid_ids(shapes: Any, ignore_entity_id: int | str | None) -> list[int | str]:
+        """Entity ids of the non-sensor shapes in a query result.
+
+        Order is preserved and each entity appears once, so a body carrying
+        several shapes is reported a single time.
+
+        Args:
+            shapes: Iterable of pymunk shapes (or None entries, tolerated).
+            ignore_entity_id: Entity to leave out, usually the query source.
+
+        Returns:
+            The distinct owning entity ids, first occurrence order.
+        """
+        seen: set[int | str] = set()
+        ids: list[int | str] = []
+        for shape in shapes:
+            if shape is None or shape.sensor:
+                continue
+            entity_id = getattr(shape.body, "entity_id", None)
+            if entity_id is None or entity_id == ignore_entity_id or entity_id in seen:
+                continue
+            seen.add(entity_id)
+            ids.append(entity_id)
+        return ids
+
     def overlap_box(
         self,
         centre: Vector2,
         half_extents: Vector2,
+        mask: int = 0xFFFFFFFF,
         ignore_entity_id: int | str | None = None,
     ) -> int | str | None:
         """Report which entity's solid shape an axis-aligned box overlaps.
@@ -676,6 +762,7 @@ class PymunkEngine:
         Args:
             centre: Box centre in world space.
             half_extents: Half width and half height.
+            mask: Collision mask; shapes outside it are ignored.
             ignore_entity_id: Body to disregard, normally the mover itself.
 
         Returns:
@@ -685,12 +772,7 @@ class PymunkEngine:
         if not self.space:
             return None
 
-        probe_body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-        probe_body.position = (centre.x, centre.y)
-        probe = pymunk.Poly.create_box(
-            probe_body, (half_extents.x * 2, half_extents.y * 2)
-        )
-
+        probe = self._probe_shape("box", centre, half_extents, mask=mask)
         for hit in self.space.shape_query(probe):
             if hit.shape is None or hit.shape.sensor:
                 continue
@@ -699,6 +781,156 @@ class PymunkEngine:
                 continue
             return entity_id
         return None
+
+    def overlap_box_all(
+        self,
+        centre: Vector2,
+        half_extents: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose solid shape an axis-aligned box overlaps.
+
+        Args:
+            centre: Box centre in world space.
+            half_extents: Half width and half height.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            Distinct entity ids of the solid, non-sensor shapes the box
+            overlaps. Empty when the box is clear.
+        """
+        if not self.space:
+            return []
+        probe = self._probe_shape("box", centre, half_extents, mask=mask)
+        return self._solid_ids(
+            (info.shape for info in self.space.shape_query(probe)), ignore_entity_id
+        )
+
+    def overlap_circle(
+        self,
+        centre: Vector2,
+        radius: float,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose solid shape a circle overlaps.
+
+        Args:
+            centre: Circle centre in world space.
+            radius: Circle radius.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard, normally the source.
+
+        Returns:
+            Distinct entity ids of the solid, non-sensor shapes the circle
+            overlaps. Empty when nothing is in range.
+        """
+        if not self.space:
+            return []
+        probe = self._probe_shape("circle", centre, radius, mask=mask)
+        return self._solid_ids(
+            (info.shape for info in self.space.shape_query(probe)), ignore_entity_id
+        )
+
+    def point_query(
+        self,
+        point: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose solid shape contains a world point.
+
+        Args:
+            point: The world-space point to test.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            Distinct entity ids under the point, most-enclosed first (the
+            shape the point is furthest inside comes first). Empty when the
+            point is in open space.
+        """
+        if not self.space:
+            return []
+        shape_filter = pymunk.ShapeFilter(mask=mask)
+        infos = [
+            info
+            for info in self.space.point_query((point.x, point.y), 0.0, shape_filter)
+            if info.distance <= 0.0
+        ]
+        infos.sort(key=lambda info: info.distance)
+        return self._solid_ids((info.shape for info in infos), ignore_entity_id)
+
+    def region_query(
+        self,
+        bounds: Rect,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[int | str]:
+        """Report every entity whose *bounding box* overlaps a rectangle.
+
+        Broad-phase only -- this compares axis-aligned bounding boxes, not
+        the shapes, so a circle or rotated polygon whose box reaches into
+        `bounds` is reported even when the shape itself does not.
+
+        Args:
+            bounds: World-space rectangle to test against.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            Distinct entity ids whose bounding box overlaps `bounds`. Empty
+            when the rectangle is clear.
+        """
+        if not self.space:
+            return []
+        shape_filter = pymunk.ShapeFilter(mask=mask)
+        # Rect.top is the smaller y (screen space is y-down); pymunk.BB wants
+        # bottom <= top numerically.
+        bb = pymunk.BB(bounds.left, bounds.top, bounds.right, bounds.bottom)
+        return self._solid_ids(self.space.bb_query(bb, shape_filter), ignore_entity_id)
+
+    def raycast_all(
+        self,
+        start: Vector2,
+        end: Vector2,
+        mask: int = 0xFFFFFFFF,
+        ignore_entity_id: int | str | None = None,
+    ) -> list[RaycastHit]:
+        """Cast a ray and return every shape along it, nearest first.
+
+        Args:
+            start: Ray origin in world space.
+            end: Ray end in world space.
+            mask: Collision mask; shapes outside it are ignored.
+            ignore_entity_id: Skip hits on this entity's own body.
+
+        Returns:
+            One `RaycastHit` per entity the segment crosses, ordered by
+            distance from `start`. A multi-shape entity yields its nearest
+            hit only. Empty when the ray hits nothing.
+        """
+        if not self.space:
+            return []
+        shape_filter = pymunk.ShapeFilter(mask=mask)
+        hits = self.space.segment_query(
+            (start.x, start.y), (end.x, end.y), RAYCAST_RADIUS, shape_filter
+        )
+        result: list[RaycastHit] = []
+        seen: set[int | str | None] = set()
+        for hit in sorted(hits, key=lambda h: h.alpha):
+            if hit.shape is None or hit.shape.sensor:
+                continue
+            entity_id = getattr(hit.shape.body, "entity_id", None)
+            if entity_id == ignore_entity_id or entity_id in seen:
+                continue
+            seen.add(entity_id)
+            converted = self._to_hit(hit, start)
+            if converted is not None:
+                result.append(converted)
+        return result
 
     def create_joint(
         self,

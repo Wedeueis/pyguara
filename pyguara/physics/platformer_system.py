@@ -227,11 +227,15 @@ class PlatformerSystem:
         )
 
         controller.on_wall_left = (
-            self._physics_engine.overlap_box(left_centre, probe_half, entity_id)
+            self._physics_engine.overlap_box(
+                left_centre, probe_half, ignore_entity_id=entity_id
+            )
             is not None
         )
         controller.on_wall_right = (
-            self._physics_engine.overlap_box(right_centre, probe_half, entity_id)
+            self._physics_engine.overlap_box(
+                right_centre, probe_half, ignore_entity_id=entity_id
+            )
             is not None
         )
 

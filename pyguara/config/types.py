@@ -76,8 +76,11 @@ class PhysicsConfig:
 
     # Solver steps per physics tick. Chipmunk has no continuous collision
     # detection, so a body jumps velocity/tick pixels and passes through
-    # anything thinner. Each doubling roughly doubles the speed a thin wall
-    # can stop, at proportional solver cost. 1 disables substepping.
+    # anything thinner. Measured against a 10px wall, 1/2/4 substeps stop a
+    # body up to roughly 200/400/900 px/s. 4 is the default: its cost is
+    # small (~0.65ms/update at 200 dynamic bodies, 2.5ms at 500) and the
+    # headroom matters for knockback and explosion-flung props. Drop to 2
+    # only with many hundreds of fast bodies. 1 disables substepping.
     substeps: int = 4
 
     # Fraction of any remaining collider overlap resolved per 1/60s.
@@ -85,6 +88,13 @@ class PhysicsConfig:
     # inside the floor climbs out at a fraction of a pixel per tick and looks
     # stuck in the ground for seconds.
     penetration_recovery: float = 0.3
+
+    # Seconds a body must be still before Chipmunk lets it sleep and stop
+    # consuming solver time. Chipmunk's own default never sleeps anything, so
+    # a room full of settled props and debris is simulated forever. Any
+    # direct state write (position, velocity, impulse) wakes a body. 0
+    # disables sleeping.
+    sleep_time_threshold: float = 0.5
 
     @property
     def fixed_dt(self) -> float:

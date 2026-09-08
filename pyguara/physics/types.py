@@ -68,10 +68,14 @@ class CollisionLayer:
     group: int = 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class PhysicsMaterial:
     """
     Physical properties of a surface.
+
+    Frozen: the presets in `pyguara.physics.materials` are shared instances,
+    and `Materials.ICE.friction = 0.9` must not rewrite ice for the whole
+    game. Build a new one to vary a property.
 
     Args:
         friction: Coefficient of friction (0.0 = slippery, 1.0 = sticky).
