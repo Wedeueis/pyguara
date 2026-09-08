@@ -168,6 +168,29 @@ class OnTriggerExit(TriggerEvent):
 
 
 @dataclass
+class OnActorSquished(Event):
+    """A character was carried or pushed into something with no room to go.
+
+    Fired by `SolidMover` every tick a carry or push leaves an actor still
+    overlapping something other than the solid that moved it. Nothing in
+    the physics layer decides what a squish means -- that's the game's
+    call (damage, death, or nothing at all) -- and nothing here clears the
+    matching `CharacterBody.squished` flag automatically either.
+
+    Attributes:
+        entity_id: The squished character.
+        solid_entity_id: The `MovingSolid` that carried or pushed it.
+        timestamp: Time when the event occurred (seconds since epoch).
+        source: Entity that triggered the event (SolidMover).
+    """
+
+    entity_id: str
+    solid_entity_id: str
+    timestamp: float = 0.0
+    source: Any | None = None
+
+
+@dataclass
 class OnTriggerStay(TriggerEvent):
     """Entity remains inside a trigger volume.
 

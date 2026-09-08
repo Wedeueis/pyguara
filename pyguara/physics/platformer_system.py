@@ -16,13 +16,14 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.physics.character_mover import CharacterMover
-from pyguara.physics.components import CharacterBody, Collider
+from pyguara.physics.components import CharacterBody, Collider, Pushable
 from pyguara.physics.platformer_controller import (
     PlatformerController,
     PlatformerInput,
     PlatformerState,
 )
 from pyguara.physics.protocols import IPhysicsEngine
+from pyguara.physics.solid_mover import SolidMover
 
 # Default half-extents for a character with no Collider -- matches the
 # fallback the old raycast-based system used.
@@ -75,6 +76,7 @@ class PlatformerSystem:
         entity_manager: EntityManager,
         physics_engine: IPhysicsEngine,
         gravity: Vector2 | None = None,
+        solid_mover: SolidMover | None = None,
     ):
         """Initialize the platformer system.
 
@@ -83,11 +85,15 @@ class PlatformerSystem:
             physics_engine: Physics engine for wall-probe overlap queries.
             gravity: Downward acceleration integrated into each character's
                 velocity every tick. Defaults to `(0, 900)`.
+            solid_mover: Shoves a `Pushable` entity a character walks into.
+                Without one, a pushable simply blocks like any other solid
+                -- crates aren't a feature every game needs.
         """
         self._entity_manager = entity_manager
         self._physics_engine = physics_engine
         self._mover = CharacterMover(physics_engine)
         self._gravity = gravity if gravity is not None else Vector2(0, 900)
+        self._solid_mover = solid_mover
 
     def update(self, delta_time: float) -> None:
         """Update all platformer controllers.
@@ -452,12 +458,63 @@ class PlatformerSystem:
             delta_time: Time elapsed since last update.
             entity_id: The character, excluded from overlap tests.
         """
+        origin = transform.position
+        delta = body.velocity * delta_time
         result = self._mover.move(
-            transform.position,
-            half_extents,
-            body.velocity * delta_time,
-            body._remainder,
-            entity_id,
+            origin, half_extents, delta, body._remainder, entity_id
         )
+
+        if self._solid_mover is not None:
+            pushed = False
+            if result.hit_x and self._push_if_pushable(
+                result.blocking_x,
+                Vector2(delta.x - (result.position.x - origin.x), 0),
+                entity_id,
+            ):
+                pushed = True
+            if result.hit_y and self._push_if_pushable(
+                result.blocking_y,
+                Vector2(0, delta.y - (result.position.y - origin.y)),
+                entity_id,
+            ):
+                pushed = True
+            if pushed:
+                # The crate moved out of the way: retry the full move from
+                # scratch rather than patching up the partial result -- one
+                # retry is enough, since a crate itself only moves once per
+                # push and cannot cascade further within this same tick.
+                result = self._mover.move(
+                    origin, half_extents, delta, body._remainder, entity_id
+                )
+
         transform.position = result.position
         body._remainder = result.remainder
+
+    def _push_if_pushable(
+        self,
+        blocking_entity_id: int | str | None,
+        remaining: Vector2,
+        pusher_id: int | str,
+    ) -> bool:
+        """Ask SolidMover to shove whatever blocked a step, if it can be shoved.
+
+        Args:
+            blocking_entity_id: What `CharacterMover` found in the way, or
+                None if nothing did.
+            remaining: How much of this tick's requested motion the block
+                left untravelled on that axis -- how far a push needs to
+                clear it.
+            pusher_id: The character doing the pushing, so `SolidMover`
+                doesn't also react to its own push by shoving that same
+                character back.
+
+        Returns:
+            True if the block was a `Pushable` entity and it moved.
+        """
+        if blocking_entity_id is None or (remaining.x == 0.0 and remaining.y == 0.0):
+            return False
+        entity = self._entity_manager.get_entity(str(blocking_entity_id))
+        if entity is None or not entity.has_component(Pushable):
+            return False
+        assert self._solid_mover is not None  # guarded by the caller
+        return self._solid_mover.try_move(entity, remaining, pusher_id=pusher_id)
