@@ -16,15 +16,16 @@ from pyguara.scene.serializer import SceneSerializer
 
 
 class MockStorageBackend(StorageBackend):
-    """In-memory storage backend for testing."""
+    """In-memory blob store for testing."""
 
     def __init__(self) -> None:
-        self._storage: dict[str, tuple[bytes, dict[str, Any]]] = {}
+        self._storage: dict[str, bytes] = {}
 
-    def save(self, key: str, data: bytes, metadata: dict[str, Any]) -> None:
-        self._storage[key] = (data, metadata)
+    def save(self, key: str, blob: bytes) -> bool:
+        self._storage[key] = blob
+        return True
 
-    def load(self, key: str) -> tuple[bytes, dict[str, Any]] | None:
+    def load(self, key: str) -> bytes | None:
         return self._storage.get(key)
 
     def delete(self, key: str) -> bool:
@@ -33,8 +34,8 @@ class MockStorageBackend(StorageBackend):
             return True
         return False
 
-    def exists(self, key: str) -> bool:
-        return key in self._storage
+    def list_keys(self) -> list[str]:
+        return list(self._storage)
 
 
 class MockScene(Scene):

@@ -43,6 +43,13 @@ class TestMigration:
         with pytest.raises(ValueError, match="must be greater than"):
             Migration(from_version=3, to_version=2, migrate_fn=migrate_fn)
 
+    def test_migration_rejects_non_positive_from_version(self):
+        """A schema version below 1 is not a real version."""
+        with pytest.raises(ValueError, match="from_version must be >= 1"):
+            Migration(from_version=0, to_version=1, migrate_fn=lambda d: d)
+        with pytest.raises(ValueError, match="from_version must be >= 1"):
+            Migration(from_version=-3, to_version=-1, migrate_fn=lambda d: d)
+
     def test_migration_apply(self):
         """Test applying a migration."""
 
@@ -193,6 +200,25 @@ class TestMigrationManager:
         result = manager.migrate(original, from_version=2)
         assert result is original
 
+    def test_manager_rejects_non_positive_current_version(self):
+        """current_version below 1 is meaningless and would make
+        needs_migration() answer nonsense for any real save."""
+        with pytest.raises(ValueError, match="current_version must be >= 1"):
+            MigrationManager(current_version=0)
+        with pytest.raises(ValueError, match="current_version must be >= 1"):
+            MigrationManager(current_version=-1)
+
+    def test_migrate_runs_functions_in_declared_order_on_the_same_dict(self):
+        """Migration functions conventionally mutate-and-return; the chain
+        threads one dict through every step (documented contract)."""
+        manager = MigrationManager(current_version=3)
+        manager.register(Migration(1, 2, lambda d: (d.update(a=1) or d)))
+        manager.register(Migration(2, 3, lambda d: (d.update(b=d["a"] + 1) or d)))
+        original = {"seed": 0}
+        result = manager.migrate(original, from_version=1)
+        assert result == {"seed": 0, "a": 1, "b": 2}
+        assert result is original  # threaded in place, not copied
+
     def test_migrate_future_version(self):
         """Test that future versions raise error."""
         manager = MigrationManager(current_version=2)
@@ -300,3 +326,15 @@ class TestMigrationRegistry:
         registry.register_all(manager)
 
         assert not manager.has_migration_path(1)
+
+    def test_registries_compare_by_identity(self):
+        """Two registries holding equivalent migrations are still distinct
+        objects -- equality must not collapse them."""
+        fn = lambda d: d  # noqa: E731
+        a = MigrationRegistry()
+        b = MigrationRegistry()
+        assert a == a
+        assert a != b
+        a.add(Migration(1, 2, fn))
+        b.add(Migration(1, 2, fn))
+        assert a != b

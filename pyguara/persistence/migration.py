@@ -33,6 +33,10 @@ class Migration:
 
     def __post_init__(self) -> None:
         """Validate migration version ordering."""
+        if self.from_version < 1:
+            raise ValueError(
+                f"Migration from_version must be >= 1, got {self.from_version}"
+            )
         if self.to_version <= self.from_version:
             raise ValueError(
                 f"Migration to_version ({self.to_version}) must be greater than "
@@ -69,8 +73,13 @@ class MigrationManager:
         """Initialize the migration manager.
 
         Args:
-            current_version: The current schema version.
+            current_version: The current schema version. Must be >= 1.
+
+        Raises:
+            ValueError: If ``current_version`` is less than 1.
         """
+        if current_version < 1:
+            raise ValueError(f"current_version must be >= 1, got {current_version}")
         self.current_version = current_version
         self._migrations: dict[int, Migration] = {}  # from_version -> Migration
 
@@ -241,11 +250,14 @@ def migration(
     return decorator
 
 
-@dataclass
+@dataclass(eq=False)
 class MigrationRegistry:
     """Global registry for auto-discovered migrations.
 
     Use this to collect migrations defined across multiple modules.
+
+    Identity-compared: two registries are equal only if they are the same
+    object, never merely because they hold equivalent migrations.
     """
 
     _migrations: list[Migration] = field(default_factory=list)
