@@ -75,8 +75,8 @@ reference count is preserved.
 
 Callers that already hold the **previous** instance keep that stale object —
 `reload()` swaps the cache entry, it does not mutate the old object. Call
-`load()` again after a reload to pick up the new one. This is what a
-file-watching hot-reload loop does.
+`load()` again after a reload to pick up the new one. This is what the
+asset hot-reload loop in [Dev Tools](dev.md) does.
 
 ## `.meta` sidecar import settings
 

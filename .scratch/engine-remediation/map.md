@@ -645,10 +645,15 @@ into one or more tickets as the frontier reaches it.
   pathfinding code left outside the `Graph[Node]`/`AStarPathfinder` design. Doesn't map onto
   it without a real refactor (funnel algorithm, polygon containment) — deliberately kept out
   of that ticket's scope. Worth a dedicated look once that ticket's shape is visible.
-- **Hot-reload integration.** `dev/` (`HotReloadManager`, `PollingFileWatcher`) is fully built
+- **Hot-reload integration.** ~~`dev/` (`HotReloadManager`, `PollingFileWatcher`) is fully built
   and tested but has no integration point in `Application`/`SystemManager`, and no
   player-facing need calls for it. Whether a pre-alpha engine carries live code reload — and
-  where it would hook in if so — is a product-scope question, not a dead-code cleanup call.
+  where it would hook in if so — is a product-scope question, not a dead-code cleanup call.~~
+  **Resolved by the subsystem audit (`pyguara/dev` slice, 2026-09-08).** Code reload
+  (`HotReloadManager`, `StatefulSystem`, `reload_system_class`) deleted — the product answer
+  is "no" for now. `PollingFileWatcher` kept and wired: `AssetReloadWatcher` bridges it to
+  `ResourceManager.reload()`, opt-in via `Application.enable_asset_hot_reload()`, automatic in
+  `SandboxApplication`. See `REFACTOR_STATE.md`.
 - **Dev tools' input consumption.** `TransformGizmo`/`EntityInspector`/`ToolManager`
   parse raw pygame key events directly instead of going through `InputManager`,
   duplicating translation logic. Not ticketable yet: fixing it means either building
