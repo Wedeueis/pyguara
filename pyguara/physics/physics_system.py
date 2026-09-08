@@ -64,6 +64,41 @@ class PhysicsSystem:
             return
         self._pending_teardown.append(rb._body_handle)
 
+    def sync_kinematic_transforms(self) -> None:
+        """
+        Push ECS state into the engine, ahead of anything that queries it.
+
+        Drains pending teardowns, creates bodies for entities new to the
+        engine, and mirrors a kinematic body's position/rotation from its
+        Transform. Split out of `update()` so it can run before systems
+        that query the engine this same tick (`SolidSystem`, a character's
+        ground/wall probes) -- otherwise those queries would see last
+        tick's kinematic positions, since `update()` used to only sync
+        kinematic transforms immediately before stepping the simulation.
+
+        `update()` still calls this itself, so nothing that only calls
+        `update()` needs to change.
+        """
+        # Drain pending teardowns before anything else touches the engine,
+        # so destroyed bodies never participate in this tick.
+        for handle in self._pending_teardown:
+            self._engine.destroy_body(handle)
+        self._pending_teardown.clear()
+
+        for entity in self._entity_manager.get_entities_with(Transform, RigidBody):
+            transform = entity.get_component(Transform)
+            rb = entity.get_component(RigidBody)
+
+            # If the body hasn't been created in the engine yet, create it
+            if rb._body_handle is None:
+                self._create_physics_entity(entity, transform, rb)
+
+            # Sync Transform -> Physics (Kinematic or manual overrides)
+            # If we move a kinematic body in game, we must update physics engine
+            if rb.body_type == BodyType.KINEMATIC and rb._body_handle:
+                rb._body_handle.position = transform.position
+                rb._body_handle.rotation = transform.rotation
+
     def update(self, dt: float) -> None:
         """
         Advance the physics simulation and sync transforms.
@@ -74,44 +109,17 @@ class PhysicsSystem:
         Note:
             P2-013: Refactored to Pull pattern. System queries entities internally.
         """
-        # Drain pending teardowns before stepping, so destroyed bodies never
-        # participate in this step's simulation.
-        for handle in self._pending_teardown:
-            self._engine.destroy_body(handle)
-        self._pending_teardown.clear()
+        self.sync_kinematic_transforms()
 
-        # Query physics entities (Pull pattern)
-        entities = list(self._entity_manager.get_entities_with(Transform, RigidBody))
-
-        # 1. Sync ECS -> Physics Engine
-        for entity in entities:
-            # OPTIMIZATION: Use get_component instead of attribute access
-            transform = entity.get_component(Transform)
-            rb = entity.get_component(RigidBody)
-
-            # If the body hasn't been created in the engine yet, create it
-            # FIX: Check backing field directly
-            if rb._body_handle is None:
-                self._create_physics_entity(entity, transform, rb)
-
-            # Sync Transform -> Physics (Kinematic or manual overrides)
-            # If we move a kinematic body in game, we must update physics engine
-            # FIX: Use backing field
-            if rb.body_type == BodyType.KINEMATIC and rb._body_handle:
-                rb._body_handle.position = transform.position
-                rb._body_handle.rotation = transform.rotation
-
-        # 2. Step the Simulation
-        # FIX: Protocol defines this as 'update', not 'step'
+        # Step the Simulation
         self._engine.update(dt)
 
-        # 3. Sync Physics Engine -> ECS
-        for entity in entities:
+        # Sync Physics Engine -> ECS
+        for entity in self._entity_manager.get_entities_with(Transform, RigidBody):
             transform = entity.get_component(Transform)
             rb = entity.get_component(RigidBody)
 
             # If physics moved the object, update the game transform
-            # FIX: Use backing field
             if rb._body_handle and rb.body_type == BodyType.DYNAMIC:
                 transform.position = rb._body_handle.position
                 transform.rotation = rb._body_handle.rotation
