@@ -53,17 +53,22 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-`pyguara/physics` — **in progress** (PR #24, branch
-`fix/physics-collision-tunnelling`). Symptom-driven so far: six defects
-found and fixed from reported bad collision behaviour, plus one-way
-platforms, a collider debug overlay and a swept character mover. The
+`pyguara/physics` — **in progress** (branch
+`fix/physics-collision-tunnelling`, unmerged; only its first commit went out
+as PR #24). Symptom-driven so far: six defects found and fixed from reported
+bad collision behaviour, plus one-way platforms, a collider debug overlay, a
+swept character mover, and — this iteration — the switch itself. The
 systematic pass over `collision_system`, `trigger_volume`/`trigger_system`
 and `joints` is still outstanding, as are Phase B and C.
 
-**One decision is waiting**, and it is the big one: whether to move
-characters off dynamic rigid bodies onto `CharacterMover`. It is the root of
-the sinking/seam/wall-creep family of bugs. Read
-`docs/physics/character-movement.md` before resuming here.
+**The big decision — move characters off dynamic rigid bodies onto
+`CharacterMover` — is resolved and built.** Full physical parity (knockback,
+platform riding, crate pushing), on Celeste's model. See
+`docs/physics/character-movement.md` for the shape it took; the summary:
+`CharacterBody` replaces `RigidBody` for a character (no engine shape at
+all), `SolidMover`/`SolidSystem` carry and push actors for moving platforms
+and crates, `apply_knockback()` gives `Hazard.knockback_force` something to
+consume. `guara_falcao` has a demo patrolling platform and a pushable crate.
 
 `pyguara/graphics` — all five slices done (PR #22 in review).
 
@@ -378,12 +383,15 @@ checked by reverting it and watching the new test fail.
 - **`overlap_box`** — the first of pymunk's spatial queries beyond `raycast`
   that this engine exposes.
 - **`CharacterMover`** (`physics/character_mover.py`) — swept
-  collide-and-slide. **Built and tested, deliberately not wired in.**
+  collide-and-slide. **Built and tested, deliberately not wired in at the
+  time.** Wired in below.
 
 **Moving platforms already worked.** Measured before building: a kinematic
 platform moving 200px carried its rider 187.6px, the rest being friction
 slip. Undocumented gotcha: a kinematic body is position-synced *from* its
 Transform, so a game moves one by advancing the Transform, not its velocity.
+Superseded below: character riding no longer goes through Chipmunk friction
+at all.
 
 **The open decision — see `docs/physics/character-movement.md`.** Assigning
 velocity to a dynamic body and letting the solver sort out the overlap is
@@ -393,6 +401,39 @@ stops being a physics body, so knockback, platform carrying and crate
 pushing all need re-expressing. That document records the cost and the
 recommendation; it needs a decision on what a character should still be able
 to do physically before the conversion starts.
+
+**Resolved — full parity built, on Celeste's model.** Checked against the
+actual code before deciding: none of the three (knockback, riding, pushing)
+existed as working features — `Hazard.knockback_force` was declared and read
+by nothing, crates weren't implemented in `guara_falcao` at all, moving
+platforms had no system driving them. Decision made: build full parity
+anyway, using Celeste's integer-position-plus-remainder model (Maddy
+Thorson's "Celeste and TowerFall Physics") rather than Chipmunk friction or
+a continuous bisection sweep.
+
+What shipped: `CharacterMover` rewritten to whole-pixel stepping with a
+remainder accumulator (no more `MAX_STEP`/bisection — the last free whole
+pixel is the answer directly), plus a `probe()` primitive that replaced
+ground detection's raycast with a one-pixel overlap test (Celeste's
+`OnGround()`). `CharacterBody` replaces `RigidBody` for a character —
+literally no shape registered with the engine, which makes the ground-ray
+self-detection bug class (defect 3, above) structurally impossible rather
+than guarded against. `SolidMover`/`SolidSystem` (new) carry and push actors
+for `MovingSolid` entities, built on `Solid.MoveHExact`/`MoveVExact` — a
+direct placement plus a squish check, not a swept move, which is what a
+first attempt using a swept carry got wrong for a platform closing in on a
+resting rider (the platform's already-synced destination shape reads as
+overlapping the rider mid-sweep, before it catches up). `Pushable` marks a
+crate; `PlatformerSystem` asks `SolidMover.try_move()` to shove one when
+blocked by it, excluding the pushing character from the reactive
+carry/push pass — without that exclusion a pushed crate immediately shoves
+back at whoever pushed it. `apply_knockback()` overrides velocity and
+suppresses input control for a short window, decaying underneath continuing
+gravity; `guara_falcao`'s `HazardSystem` now calls it.
+`PhysicsSystem.sync_kinematic_transforms()` was split out of `update()` so
+`SolidSystem`/`PlatformerSystem` can query a solid's current-tick position
+before the simulation step runs. `guara_falcao` gets a demo patrolling
+platform and a pushable crate for manual verification.
 
 **Patterns, now four and five instances deep**
 
