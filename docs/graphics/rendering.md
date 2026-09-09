@@ -99,7 +99,12 @@ Effects can be enabled/disabled at runtime via `effect.enabled = False`.
 ## Components
 
 ### Camera2D
-Handles Coordinate Transformation (World Space <-> Screen Space). Supports Zoom, Rotation, and Panning.
+Handles Coordinate Transformation (World Space <-> Screen Space). Supports Zoom
+and Panning. There is one world-to-screen transform (`screen_offset`);
+`world_to_screen` / `screen_to_world` / `get_view_bounds` are conveniences
+built on it and take an optional `viewport` (defaulting to the camera's
+constructed size). Camera rotation is not supported — the render path does not
+rotate.
 
 ### Viewport
 Defines the drawable region on the screen. Used for:

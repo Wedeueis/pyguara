@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from pyguara.common.types import Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.graphics.pipeline.viewport import Viewport
@@ -178,15 +177,15 @@ class LightPass(BaseRenderPass):
             # No camera, can't render lights
             return
 
-        # Calculate viewport offset
-        viewport_center = Vector2(viewport.width / 2, viewport.height / 2)
-        viewport_offset = viewport_center - (self._camera.position * self._camera.zoom)
+        # World-to-screen offset -- the same definition the batcher and the
+        # particle system use, so lit geometry lines up with drawn geometry.
+        screen_offset = self._camera.screen_offset(viewport)
 
         # Get lights in screen space
         lights = self._lighting_system.collect_lights_screen_space(
             self._camera.position,
             self._camera.zoom,
-            viewport_offset + viewport.position,
+            screen_offset,
         )
 
         if not lights:
