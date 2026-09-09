@@ -4,11 +4,13 @@ This file demonstrates how to manually configure the Dependency Injection (DI) c
 """
 
 from pyguara.application.application import Application
+from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.backends.pygame.clock import PygameClock
 from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
 from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
@@ -75,6 +77,7 @@ def configure_game_container() -> DIContainer:
     container.register_instance(UIRenderer, ui_renderer)
 
     # 5. Core Systems
+    container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
     container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
     container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]

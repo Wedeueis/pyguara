@@ -1,6 +1,7 @@
 """Application setup and dependency wiring."""
 
 from pyguara.application.application import Application
+from pyguara.application.clock import Clock, FixedClock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
@@ -254,6 +255,15 @@ def _setup_container(headless: bool = False) -> DIContainer:
             disp_cfg.screen_width, disp_cfg.screen_height
         )
         container.register_instance(RenderGraph, pygame_render_graph)
+
+    # Frame-pacing clock. Headless runs advance by a fixed, reproducible
+    # delta (no wall-clock sleep); the real backends wrap `pygame.time.Clock`.
+    if headless:
+        container.register_instance(Clock, FixedClock())  # type: ignore[type-abstract]
+    else:
+        from pyguara.graphics.backends.pygame.clock import PygameClock
+
+        container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
 
     # 5. Core Subsystems
     container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]

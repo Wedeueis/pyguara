@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
+from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
 from pyguara.dev.asset_reload import AssetReloadWatcher
@@ -108,7 +109,7 @@ class Application:
 
         self._scene_manager.set_container(container)
 
-        self._clock = pygame.time.Clock()
+        self._clock: Clock = container.get(Clock)  # type: ignore[type-abstract]
 
         # Fixed timestep accumulator
         self._accumulator = 0.0

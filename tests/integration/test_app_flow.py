@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pyguara.application.application import Application
+from pyguara.application.clock import Clock, FixedClock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import GameConfig
@@ -59,6 +60,7 @@ def app_container() -> DIContainer:
 
     c.register_instance(InputManager, MagicMock())
     c.register_instance(UIManager, MagicMock())
+    c.register_instance(Clock, FixedClock())  # type: ignore[type-abstract]
     c.register_singleton(SceneManager, SceneManager)
 
     # SystemManager and CoroutineManager (required by Application)
