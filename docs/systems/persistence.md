@@ -46,7 +46,7 @@ backend — laid out as a single-line JSON metadata header, a newline, then
 the payload bytes:
 
 ```
-{"version":"0.4.0","timestamp":"2026-09-08T17:02:37+00:00","data_type":"dict","checksum":"87f0…","save_version":1,"format":"json","compressed":false}
+{"version":"0.5.0","timestamp":"2026-09-08T17:02:37+00:00","data_type":"dict","checksum":"87f0…","save_version":1,"format":"json","compressed":false}
 {
   "level": 3,
   "hp": 100
