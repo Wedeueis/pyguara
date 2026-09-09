@@ -7,14 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
-- **BREAKING: `pyguara.dev.HotReloadManager`, `StatefulSystem`, and `reload_system_class()` are gone.** The Python-module hot-reload layer was never wired into the game loop, reloaded on a background thread, and could not migrate instance state across a reload. Live code reload is deferred as a product decision. The file watcher (`PollingFileWatcher`) stays, now driving asset hot-reload (below).
+## [0.5.0] - 2026-09-09
 
-### Added
-- **Asset hot-reload.** `Application.enable_asset_hot_reload()` (automatic in `SandboxApplication`) watches every loaded asset's file and re-imports it via `ResourceManager.reload()` when it changes on disk. Changes are detected on a polling thread and applied on the main thread at frame start. New `pyguara.dev.AssetReloadWatcher`; see `docs/systems/dev.md`.
+This release is the output of a **systematic subsystem audit** (2026-09-06 →
+2026-09-09): every Tier 1–4 subsystem got a code-and-architecture → tests →
+docs → capability-gap pass, one subsystem at a time. ~50 PRs. Per-subsystem
+detail, including what each pass found and why, is in `REFACTOR_STATE.md`.
+Being Pre-Alpha, breaking changes ship without deprecation shims.
+
+**Closed defect issues:** [#9](https://github.com/Wedeueis/pyguara/issues/9)
+(pygame in the backend-agnostic core), [#23](https://github.com/Wedeueis/pyguara/issues/23)
+(camera rotation ignored by the render path),
+[#30](https://github.com/Wedeueis/pyguara/issues/30) (drifted physics guide
+docs). Dozens of capability gaps found during the audit were opened as tracked
+issues rather than fixed in place — #16, #19, #28, #37, #40, #43, #46, #49,
+#51, #53, #55, #58, #61, #64–#73, #75.
+
+### Removed
+- **BREAKING: pygame is confined to `pyguara/graphics/backends/`, `pyguara/audio/backends/`, `pyguara/input/backends/`.** `application.py`, `input/manager.py`, `pyguara/tools/*` and `sandbox.py` no longer import it. (#9)
+- **BREAKING: `Camera2D.rotation` removed.** It changed what `world_to_screen` reported but the render path never rotated. (#23)
+- **BREAKING: `pyguara.dev.HotReloadManager`, `StatefulSystem`, `reload_system_class()` gone.** The Python-module hot-reload layer was never wired into the loop, ran on a background thread, and could not migrate state. `PollingFileWatcher` stays, now driving asset hot-reload.
+- **BREAKING: the Dear ImGui editor (`pyguara/editor`) deleted** — it had never executed. Its useful parts were rebuilt as `UIRenderer`-drawn tools (see below).
+- Dead parameters and attributes across subsystems (`Collider` `allow_rotation`, `PerformanceMonitor`'s unused `pygame.time.Clock`, and others named in `REFACTOR_STATE.md`).
 
 ### Changed
-- **BREAKING: `Color` and `Rect` are no longer `pygame.Color`/`pygame.Rect` subclasses.** They're now plain, backend-agnostic `@dataclass(slots=True)` value types in `pyguara.common.types`, so ModernGL never has to touch pygame to represent color or geometry. Only the pygame backend converts to real pygame types, via new `graphics/backends/pygame/conversions.py` helpers. Existing `Color(r, g, b, a=255)`/`Rect(x, y, width, height)` construction, equality, mutation (`rect.x = 5`), and float-to-int truncation on construction all behave the same as before. `Color` gains HSV round-tripping (`to_hsv()`/`from_hsv()`) and named constants (`Color.WHITE`, `.BLACK`, etc.); `Rect` gains `colliderect()`, `contains()`, and `inflate()`. No deprecation shim -- this is Pre-Alpha, and APIs are still subject to change.
+- **BREAKING: `Color` and `Rect` are no longer `pygame.Color`/`pygame.Rect` subclasses.** Plain backend-agnostic `@dataclass(slots=True)` value types in `pyguara.common.types`; only the pygame backend converts, via `graphics/backends/pygame/conversions.py`. Construction, equality, mutation and float→int truncation behave as before. `Color` gains `to_hsv()`/`from_hsv()` and named constants; `Rect` gains `colliderect()`, `contains()`, `inflate()`.
+- **BREAKING: `Window.poll_events()` yields engine events**, not raw SDL structs — `QuitEvent`, `KeyDownEvent`, `KeyUpEvent`, `MouseButtonEvent`, `MouseMotionEvent`, `WindowResizeEvent`. `InputManager.process_event()` and every tool consume these. Key codes still pass through as SDL values, so bindings and replays are unchanged. (#9)
+- **BREAKING: `Camera2D.world_to_screen` / `screen_to_world` / `get_view_bounds` take an optional `viewport`** and are now defined in terms of a single `screen_offset(viewport)` transform, shared with the batcher, particle system and light pass. (#23)
+- **BREAKING: character movement is `CharacterMover` / `CharacterBody`**, not hand-rolled kinematic `RigidBody` sync. `PhysicsSystem` uses the pull pattern (queries entities itself).
+- `ErrorHandlingStrategy` hoisted to a single `pyguara.errors` (was defined twice, in `di` and `events`, with incompatible members).
+- Ruff `target-version` → `py312`; `UP`/`B`/`I`/`SIM` rule sets enabled; legacy `typing.Dict`/`Optional[X]` modernized engine-wide.
+- Every subsystem package now exports a curated `__all__`.
+- Frame timing goes through a new `Clock` protocol (below) instead of `pygame.time.Clock` directly.
+
+### Added
+- **`Clock` protocol** (`pyguara.application.clock`) — `FixedClock` for deterministic headless/test runs, `PygameClock` under the backend. Resolved from DI. (#9)
+- **`WindowResizeEvent` now has a publisher** — the window boundary translates SDL `VIDEORESIZE`; it was defined but never dispatched.
+- **Physics: spatial queries** (`raycast_all`, `point_query`, `overlap_box`/`overlap_box_all`, `overlap_circle`, `region_query`), per-body sleeping, configurable solver substeps, and a rebuilt trigger + joint layer (`TriggerVolume`, `EntityTags`, pin/spring/slider joints).
+- **In-engine dev tools** on the engine's own `UIRenderer` (F12 master toggle, F1–F9): performance, entity inspector, event monitor, physics debugger, hierarchy, config inspector, assets browser, shortcuts panel, and an F9 transform gizmo. Tool lifecycle hooks (`Tool.on_removed()`, `ToolManager.unregister_tool()`/`clear()`).
+- **ECS:** `Entity.get_all_components()`, `EntityManager.clear()`, `subscribe_entity_removed()`/`unsubscribe_entity_removed()` (multi-observer), `StrictComponent` (rejects logic methods at class-definition time).
+- **Resources:** `ResourceManager.reload()`, `iter_indexed()`, `iter_cached()`.
+- **Render-pipeline snapshot tests** (Syrupy) recording the backend call stream `RenderSystem.flush()` produces — deterministic, no rasterisation. `tests/integration/test_demos_render.py` asserts each demo draws a non-flat frame.
+- `tools/agent_view.py` — boots a demo headlessly, drives it, writes PNG frames, for agent visual inspection.
+- `pyguara.__version__` (via `importlib.metadata`).
+
+### Fixed
+- **Physics collision tunnelling** — fast bodies passed through thin static geometry; solver substepping added. (#24, #25)
+- **Blank window under vsync** — SDL silently promoted the display to an OpenGL surface that never presented software blits; vsync is dropped with a warning when that happens. (#21)
+- **Batcher counted the viewport origin twice** — invisible at fullscreen, displaced everything under a letterboxed viewport. Batcher and particle system unified on `Camera2D.screen_offset()`. (#22)
+- `Camera2D` accepted zero/negative zoom and then produced coordinates six orders of magnitude out or raised `ZeroDivisionError`; the setter now rejects non-positive values.
+- `ToolManager` double-ran a tool on repeat registration (twice per frame); `PerformanceMonitor` fed a `0.0` FPS sample on any `dt <= 0`, dragging the rolling average.
+- `InputContext` was inert end to end (no setter); gamepad identity was keyed on the pygame device index instead of the SDL instance id, so unplugging a non-last pad flagged the wrong one.
+- `pyguara atlas` silently dropped a sprite on a filename-stem collision and cropped a sprite wider than the atlas; both now raise.
+- **Docs that described APIs which never existed** — `pyguara.log.config.setup_logging`, an entire `pyguara.error` hierarchy, `IPhysicsEngine.get_body`, `Collider(radius=)`, `EntityManager.add_component`. `tests/test_docs_api.py` now guards every `pyguara`-dotted reference under `docs/`. (#30)
+- Roughly sixty smaller correctness fixes across every subsystem — see the `REFACTOR_STATE.md` iteration log.
 
 ## [0.4.0] - 2026-06-03
 

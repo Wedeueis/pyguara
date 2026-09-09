@@ -1,10 +1,13 @@
 [build-system]
-requires = ["hatchling"]
+# Pinned <1.28: hatchling 1.28 emits `Metadata-Version: 2.5`, which the
+# released `twine`/`pkginfo` (6.2.0 / 1.12.x) reject, breaking `twine upload`
+# in the release workflow. Lift once twine ships 2.5 support.
+requires = ["hatchling>=1.27,<1.28"]
 build-backend = "hatchling.build"
 
 [project]
 name = "pyguara"
-version = "0.4.0"
+version = "0.5.0"
 description = "Python game engine featuring a event and data driven archictecture."
 readme = "README.md"
 requires-python = ">=3.12"
