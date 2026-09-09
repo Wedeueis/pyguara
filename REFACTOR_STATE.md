@@ -84,10 +84,15 @@ how the subject is *constructed*, not just what is asserted.
 every Tier 1–4 subsystem has now had its Phase A→D pass. The **Phase D
 backfill** on 2026-09-09 (branch `docs/audit-phase-d-backfill`) closed the
 gap for the twelve subsystems audited before Phase D was formalised — see the
-Iteration Log entry of that name. What remains is the tracked cross-cutting
-work (the GitHub issues below: #9, #16, #19, #23, #28, #30, #37, #40, #43,
-#46, #49, #51, #53, #55, #58, #61, and the Phase D backfill's #64–#73) and the
-open Cross-Cutting Concerns — none of which is a single-subsystem iteration.
+Iteration Log entry of that name. The **cross-cutting concerns sweep** on
+2026-09-09 (branch `chore/cross-cutting-concerns-sweep`) then closed the
+mechanical CCs — CC-3, CC-4, CC-5, CC-7, CC-8, all already whittled to
+near-nothing by the per-subsystem passes — and promoted the one substantial
+survivor, CC-6 (component data-purity / `Transform`), to issue #75. What
+remains is the tracked cross-cutting work (the GitHub issues below: #9, #16,
+#19, #23, #28, #30, #37, #40, #43, #46, #49, #51, #53, #55, #58, #61, #75,
+and the Phase D backfill's #64–#73) — none of which is a single-subsystem
+iteration.
 
 `pyguara/tools` in one slice, ~1,750 lines (`base`, `manager`, `inspector`,
 `tweakable`, `hierarchy`, `assets_browser`, `config_inspector`, `gizmos`,
@@ -1009,6 +1014,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#70](https://github.com/Wedeueis/pyguara/issues/70) | **Phase D backfill — `pyguara/systems`.** `SystemManager` has a raw `priority` int but no fixed-step routing (`update(dt)` only — a `StatusEffectSystem` / `CooldownSystem` wanting deterministic ticks has nowhere to hook; `Scene.fixed_update` isn't routed to systems); no declarative ordering / named phases (INPUT → AI → LOGIC → PHYSICS → POST → RENDER or `run_before` / `run_after`); no per-system runtime enable / disable. Per-system profiling hook folded → #53 |
 | [#71](https://github.com/Wedeueis/pyguara/issues/71) | **Phase D backfill — `pyguara/graphics`.** World `IRenderer` has no `draw_text` (only `UIRenderer` does) — floating combat numbers / damage popups / world-anchored prompts need camera-transformed world-space text; `Camera2D` has shake / zoom / follow but no clamp-to-level-bounds, no multi-target (co-op) framing, no lookahead; no y-sort / sorting groups (`Layer` is a fixed `IntEnum`); `graphics/__init__` exports only nine-patch (CC-8). Batched tilemap renderer and a gameplay screen-effect trigger API parked → #28. Separate from #16 / #19 / #23 |
 | [#72](https://github.com/Wedeueis/pyguara/issues/72) | **Phase D backfill — `pyguara/audio`.** `play_sfx` plays one clip at one volume — no per-play pitch jitter or random pool selection (the same hit / footstep SFX hundreds of times a run buzzes); `play_music` is one track + fade, no crossfade / stems / intensity layers; no ducking; no voice limiting / priority / steal policy (200 deaths in a frame exhausts channels); `stop_sfx` takes a recycled channel int, no opaque instance handle. Bus DSP effects, occlusion / doppler, ref-count `acquire()` parked |
+| [#75](https://github.com/Wedeueis/pyguara/issues/75) | **CC-6 promoted — component data-purity is not enforced.** Nine components across five subsystems set `_allow_methods = True`; `StrictComponent` has no adopters outside tests. Needs an architectural decision: `Transform` (~330 lines of hierarchy/world-cache/coordinate math) → a `TransformSystem` split or a sanctioned exception; does `StrictComponent` become the `BaseComponent` default; a pure-predicate carve-out for the `has_tag`/`can_jump`/`contains_entity` helpers. The logic-bearing offenders (`Animator`, `AnimationStateMachine` → #37; `AudioSource`, `AudioEmitter` → #72) fold into those subsystems' backfill issues |
 | [#73](https://github.com/Wedeueis/pyguara/issues/73) | **Phase D backfill — `pyguara/input`.** No local co-op routing — actions are global, gamepad→player assignment is implicit, no player join / leave flow (this is #28's "local co-op input" line, promoted); no input buffering / leniency (`was_pressed_within(ms)`, buffered-action queue); no hold-vs-tap / double-tap / chord / sequence recognition (`_handle_input` is PRESS / RELEASE / ANALOG only); no rebind-capture helper for a settings screen (→ #49 / #53). Probe candidate: `import_bindings` doesn't coerce `code` to `int`. Accessibility remapping → #67 |
 
 ---
@@ -1070,20 +1076,27 @@ key pre-commit does not recognise, so it had been linting the whole repository
 instead of `pyguara/`.
 *Discovered in:* `ecs`. *Status:* **resolved**.
 
-### CC-3 — Internal ticket ids leak into public docstrings
-Strings like `P1-008` appear in user-facing API docstrings (`EntityManager
+### CC-3 — RESOLVED 2026-09-09 — Internal ticket ids leak into public docstrings
+Strings like `P1-008` appeared in user-facing API docstrings (`EntityManager
 .register_cached_query`, `QueryCache` module header) and in test module
-docstrings. Tracker ids are not documentation. **Fix:** sweep
-`grep -rn "P[0-9]-[0-9]" pyguara/ tests/` once the per-subsystem passes are
-done.
-*Discovered in:* `ecs` (removed there). *Status:* open elsewhere.
+docstrings. Tracker ids are not documentation. The per-subsystem passes
+removed almost all of them as they went; the cross-cutting sweep on 2026-09-09
+cleared the last six — a `P2-013` comment in `physics/physics_system.py` and
+five historical `P#-#` section-marker comments/docstrings across `test_ecs.py`,
+`test_events.py`, `test_physics.py` and `test_render_optimization.py`.
+`grep -rn "P[0-9]-[0-9]" pyguara/ tests/` is now empty.
+*Discovered in:* `ecs`. *Status:* **resolved**.
 
-### CC-4 — Unverifiable benchmark numbers embedded in docstrings
-Hard-coded claims ("~8ms for 10,000 entities", "8x faster") sit in docstrings
-with no benchmark backing them in CI. They are untestable and rot silently.
-**Fix:** move to `.benchmarks/` with an actual `pytest-benchmark` run, and
-reference the benchmark rather than restating a number.
-*Discovered in:* `ecs` (removed there). *Status:* open elsewhere.
+### CC-4 — RESOLVED 2026-09-09 — Unverifiable benchmark numbers embedded in docstrings
+Hard-coded claims ("~8ms for 10,000 entities", "8x faster") sat in docstrings
+with no benchmark backing them in CI — untestable, rot silently. The
+per-subsystem passes removed the "Nx faster" style claims; the cross-cutting
+sweep softened the last one, a `~0.65ms/update at 200 dynamic bodies` figure
+in `config/types.py` explaining the `substeps=4` default, to a qualitative
+statement. **Parked, not blocking:** the `.benchmarks/` directory exists but
+is empty — standing up a `pytest-benchmark` suite in CI is its own task, not
+part of a docstring sweep. Reopen as a perf-infra issue if the need returns.
+*Discovered in:* `ecs`. *Status:* **resolved** (docstring claims gone; benchmark infra parked).
 
 ### CC-5 — `EntityManager` internals reached into from outside the package
 **Removal hook: RESOLVED (2026-09-06).** `_on_entity_removed` was a single
@@ -1103,23 +1116,29 @@ and `SceneSerializer._serialize_entity` migrated off `_components.items()`;
 clearing `_entities`/`_component_index` by hand. `ResourceManager` gained
 `iter_indexed()`/`iter_cached()` for the same reason.
 
-**Still open:** prefab code (`prefabs/factory.py`, `prefabs/registry.py`
-consumers) still reads `_components` directly — fold into the prefabs slice.
+**Prefab reach-through: RESOLVED (2026-09-08, `pyguara/prefabs` audit).** The
+2026-09-09 cross-cutting sweep confirmed no `Entity._components` access
+remains anywhere outside `pyguara/ecs`: `serializer.py` and `tools/inspector.py`
+use `get_all_components()`, and the `_components` names in `prefabs/registry.py`
+are `ComponentRegistry`'s own private name→type map, not the entity's.
 `_on_component_added` is assigned only by `EntityManager` itself (same
 package, acceptable).
-*Discovered in:* `ecs`. *Status:* largely resolved; prefab reach-through remains.
+*Discovered in:* `ecs`. *Status:* **resolved**.
 
-### CC-6 — Component data-purity is advisory, not enforced
+### CC-6 — PROMOTED 2026-09-09 to issue #75 — Component data-purity is advisory, not enforced
 `BaseComponent` only *warns* on logic methods; `StrictComponent` errors but is
-opt-in and, at the time of the `ecs` audit, had no adopters outside tests.
-**Named offender:** `common.Transform` sets `_allow_methods = True` and carries
-the whole parent hierarchy, world-transform caching and coordinate conversion
-(~330 lines). It is the largest violation in the engine and the one a
-`TransformSystem` would have to absorb; every other subsystem touches it, so it
-is deliberately not attempted piecemeal. **Fix:** once `physics`, `ui` and `ai`
-are audited and the true extent is known, migrate the tree to `StrictComponent`
-and consider making it the default.
-*Discovered in:* `ecs`; offender identified in `common`. *Status:* parked.
+opt-in and still has no adopters outside tests. The parked condition ("once
+`physics`, `ui` and `ai` are audited and the true extent is known") is met:
+nine components across five subsystems set `_allow_methods = True` —
+`common.Transform` (~330 lines of hierarchy / world-cache / coordinate math,
+the big one), `graphics` `Animator` / `AnimationStateMachine` (ticking loops
+→ #37), `audio` `AudioSource` / `AudioEmitter` (backend calls → #72), and the
+pure-predicate helpers on `physics` `TriggerVolume` / `EntityTags` /
+`PlatformerController` and `ai` `Navigator`. This needs an architectural
+decision (Transform → `TransformSystem` split vs. sanctioned exception; does
+`StrictComponent` become the default; a pure-query carve-out), not a sweep, so
+it is now **issue #75** rather than a Cross-Cutting Concern.
+*Discovered in:* `ecs`; offender identified in `common`. *Status:* **tracked as #75**.
 
 ### CC-10 — RESOLVED 2026-09-06 — Documentation described APIs that do not exist
 `docs/core/logging.md` documented `pyguara.log.config.setup_logging()` and
@@ -1167,28 +1186,86 @@ and both backends move together. `WindowResizeEvent` is defined and never
 dispatched for the same reason -- nothing detects the resize.
 *Discovered in:* `application`. *Status:* parked until `graphics`.
 
-### CC-8 — Package `__init__.py` files export nothing
-Most subsystem packages have a docstring-only `__init__.py`, so callers reach
+### CC-8 — RESOLVED 2026-09-09 — Package `__init__.py` files export nothing
+Most subsystem packages had a docstring-only `__init__.py`, so callers reached
 into submodules (`from pyguara.events.dispatcher import ...`). Beyond the
 ergonomics, it actively hides import cycles: adding re-exports to
 `events/__init__.py` immediately exposed a latent `log` <-> `events` deadlock
-(fixed in that pass). Every package still lacking exports may be hiding the
-same thing. **Fix:** add a curated `__all__` per package as each is audited,
-and treat any cycle it reveals as a finding rather than a reason to revert.
-*Discovered in:* `events`. *Status:* open.
+(fixed in that pass). Each subsystem audit added a curated `__all__` as it
+went; the 2026-09-09 cross-cutting sweep closed the last two — the root
+`pyguara/__init__.py` (was 0 bytes; now a module docstring, a `__version__`
+via `importlib.metadata`, and `__all__`) and `pyguara/cli/__init__.py`
+(`__all__ = ["main"]`). No new cycle surfaced. `pyguara/tools/__init__.py` had
+already gained `ConfigInspector` in the tools slice.
+*Discovered in:* `events`. *Status:* **resolved**.
 
-### CC-7 — `x or default` used with falsy value types
+### CC-7 — RESOLVED 2026-09-09 — `x or default` used with falsy value types
 `pymunk.Vec2d` defines `__bool__`, so `Vector2(0, 0)` is falsy. `Transform
 .__init__` used `scale or Vector2(1, 1)`, which silently rewrote an explicitly
-requested zero scale to unit scale. Fixed there, but the idiom is common and
-the same trap applies to any zero vector, `Color(0,0,0,0)`, an empty `Rect`, or
-`0.0` defaults. **Fix:** sweep `grep -rn "or Vector2(\\|or Color(" pyguara/` and
-convert to explicit `is None` checks as each subsystem is audited.
-*Discovered in:* `common`. *Status:* open.
+requested zero scale to unit scale. Fixed there; the same trap applies to any
+zero vector, `Color(0,0,0,0)`, an empty `Rect` or a `0.0` default. The
+per-subsystem passes converted these to explicit `is None` checks as they went;
+the 2026-09-09 sweep confirmed `grep -rnE "\bor (Vector2|Color|Rect)\(" pyguara/`
+is now empty. **One latent guard, left as a probe candidate, not fixed here:**
+`Viewport.aspect_ratio` (`graphics/pipeline/viewport.py:55`) returns `0.0` on
+zero height — the "guard that returns a wrong answer" shape — but the property
+has no callers in `pyguara/`, so it is dead surface rather than a live defect.
+*Discovered in:* `common`. *Status:* **resolved** (idiom swept; dead-property guard noted).
 
 ---
 
 ## Iteration Log
+
+### Cross-cutting concerns sweep — CLOSED 2026-09-09 (branch `chore/cross-cutting-concerns-sweep`)
+
+Not a subsystem iteration. With the audit's Phase A→D pass complete for every
+Tier 1–4 subsystem, this closed the open **Cross-Cutting Concerns** that the
+per-subsystem passes had already whittled to near-nothing, and made the call
+on the one that had not shrunk.
+
+**Closed by a one-line-each mechanical sweep:**
+
+- **CC-3** (tracker ids in docstrings) — six survivors removed: a `P2-013`
+  comment in `physics/physics_system.py`, and five `P#-#` section-marker
+  comments / docstrings in `test_ecs.py`, `test_events.py`, `test_physics.py`,
+  `test_render_optimization.py`. `grep -rn "P[0-9]-[0-9]" pyguara/ tests/` is
+  empty.
+- **CC-4** (unverifiable benchmark numbers) — the last one, a
+  `~0.65ms/update at 200 dynamic bodies` figure justifying `substeps=4` in
+  `config/types.py`, softened to a qualitative note. The `.benchmarks/`
+  directory is still empty; standing up a `pytest-benchmark` CI suite is
+  parked as separate perf-infra work.
+- **CC-5** (`EntityManager` internals reached into) — verified fully resolved.
+  No `Entity._components` access remains outside `pyguara/ecs`; the
+  `prefabs/registry.py` `_components` hits are `ComponentRegistry`'s own
+  name→type map. The removal-hook and components-view halves were already
+  closed in the `ecs` and `editor` passes.
+- **CC-7** (`x or <falsy>` idiom) — `grep -rnE "\bor (Vector2|Color|Rect)\("
+  pyguara/` is empty. One dead-but-latent guard noted in the CC block
+  (`Viewport.aspect_ratio` returns `0.0` on zero height; no callers).
+- **CC-8** (`__init__.py` exports nothing) — last two closed: root
+  `pyguara/__init__.py` (was 0 bytes → docstring + `__version__` via
+  `importlib.metadata` + `__all__`) and `pyguara/cli/__init__.py`
+  (`__all__ = ["main"]`). No import cycle surfaced.
+
+**Promoted, not fixed:**
+
+- **CC-6** (component data-purity not enforced) → **issue #75**. The parked
+  condition (physics / ui / ai audited) is now met and the extent is known:
+  nine components across five subsystems carry `_allow_methods = True`, led by
+  `common.Transform` (~330 lines). Closing it means an architectural decision
+  — `TransformSystem` split vs. sanctioned exception, whether `StrictComponent`
+  becomes the `BaseComponent` default, a pure-query carve-out for the
+  `has_tag` / `can_jump` predicate helpers — and the logic-bearing offenders
+  (`Animator`, `AnimationStateMachine` → #37; `AudioSource`, `AudioEmitter`
+  → #72) fold into those subsystems' issues. That is issue-shaped, not
+  sweep-shaped.
+
+**Already tracked, untouched here:** CC-11 is issue #9. CC-1, CC-2, CC-9,
+CC-10 were resolved on 2026-09-06.
+
+Verified in a clean worktree: `pytest` (1929 passed), `ruff check .`,
+`mypy pyguara`. No test changes beyond the comment/docstring edits above.
 
 ### Phase D backfill — twelve pre-Phase-D subsystems — CLOSED 2026-09-09 (branch `docs/audit-phase-d-backfill`)
 
