@@ -32,7 +32,17 @@ Press **F12** to toggle the whole overlay, then a function key per tool.
 | F5 | `HierarchyTool` | List scene entities, click to select |
 | F6 | `ConfigInspector` | Live-edit `GameConfig`, `S` to save |
 | F7 | `AssetsTool` | Browse resources, spawn entities from data |
-| F8 | `ShortcutsPanel` | This table, in-game |
+| F8 | `ShortcutsPanel` | This table, in-game (read live from the `ToolManager`) |
+| F9 | `TransformGizmo` | Position/rotation/scale handles on the selected entity; `Q`/`W`/`E` switch mode |
+
+`ShortcutsPanel` builds its table from `ToolManager.iter_shortcuts()` at
+render time, so it stays in step with whatever `SandboxApplication`
+registered rather than a hand-kept copy.
+
+> **Screen-space only.** `TransformGizmo` and `PhysicsDebugger` currently
+> draw and hit-test using `Transform.position` as a *screen* coordinate --
+> no camera transform. They line up only with the camera at the origin at
+> zoom 1. The world-to-screen unification (issue #23) is the fix.
 
 ## Hierarchy + Inspector
 
@@ -113,9 +123,18 @@ class SpawnCounter(Tool):
 import pygame
 
 app = create_sandbox_application()
-app._tool_manager.register_tool(SpawnCounter(app._container), pygame.K_F9)
+app._tool_manager.register_tool(SpawnCounter(app._container), pygame.K_F10)
 ```
 
-`Tool._entity_manager` resolves the active scene's `EntityManager` fresh on
-every access. Return `True` from `process_event` to stop an event reaching
-the game.
+Registering a name that is already taken **replaces** the old tool (its
+render-order slot and shortcut are dropped first). `ToolManager.unregister_tool(name)`
+removes a tool and calls its `Tool.on_removed()` hook -- override that to
+undo anything `__init__` acquired, such as an `EventDispatcher` subscription
+(`EventMonitor` does). `SandboxApplication.shutdown()` clears every tool this
+way before the engine tears down.
+
+`Tool._entity_manager` resolves the active scene's `EntityManager` on every
+access. **Before the first scene switch there is no world**, so it returns a
+single throwaway empty manager -- fine to read, but a tool that *mutates* the
+world in that window is writing into an orphan no scene will ever see. Return
+`True` from `process_event` to stop an event reaching the game.

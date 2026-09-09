@@ -79,12 +79,94 @@ how the subject is *constructed*, not just what is asserted.
 
 ## Active Subsystem
 
-**None — `pyguara/cli` closed 2026-09-08 (branch `refactor/cli-audit`).**
-Last in the queue is `pyguara/tools` — the in-engine debug-overlay suite
-(inspector, hierarchy, gizmos, event monitor, perf panel; F2/F5/F6/F7), *not*
-"atlas/build tooling" as the old queue label said (that was `pyguara/cli`). It
-also absorbs the `pyguara/editor` audit's parked notes (inspector-drawer hook,
-`TransformGizmo` selection wiring). Open "How to resume" and take it.
+**The subsystem audit is complete.** `pyguara/tools` closed 2026-09-08
+(branch `refactor/tools-audit`) was the last entry in the pending queue —
+every Tier 1–4 subsystem has now had its Phase A→D pass. What remains is the
+tracked cross-cutting work (the GitHub issues below: #9, #16, #19, #23, #28,
+#30, #37, #40, #43, #46, #49, #51, #53, #55, #58, #61) and the open
+Cross-Cutting Concerns — none of which is a single-subsystem iteration.
+
+`pyguara/tools` in one slice, ~1,750 lines (`base`, `manager`, `inspector`,
+`tweakable`, `hierarchy`, `assets_browser`, `config_inspector`, `gizmos`,
+`event_monitor`, `performance`, `debugger`, `shortcuts_panel`), driven by
+`SandboxApplication` (F12 master toggle + F1–F9). No dead subsystem — the
+overlay runs — but the recurring shapes held and `test_tools.py`'s ~40 cases
+were all `MockTool` booleans that constructed the subject one way and asserted
+nothing real.
+
+**`ToolManager` double-ran a tool on a repeat registration.** `register_tool`
+did `self._tools[name] = tool` (deduped) but `self._render_order.append(name)`
+unconditionally, so re-registering a name left a stale duplicate in the render
+list and `update()`/`render()`/`process_event()` each hit the survivor **twice
+per frame** (probe: two `Spy("dup")` → one frame → `updates=2`). The
+`pyguara/systems` "silent duplicate registration keys" shape. `register_tool`
+now drops the old name from `_render_order` and `_shortcuts` first;
+`unregister_tool(name)` / `clear()` were added, both firing a new
+`Tool.on_removed()` hook.
+
+**`PerformanceMonitor` fed a `0.0` FPS sample on any `dt <= 0`.**
+`current_fps = 1.0 / dt if dt > 0 else 0.0` — the tracked "guard that returns
+a wrong answer" pattern verbatim; one `dt==0` frame (first frame, a pause, a
+backwards clock) dragged the 60-sample rolling average from 60 to 40 (probe).
+Now a non-positive `dt` is skipped, not sampled. Dead `pygame.time.Clock()`
+attribute removed.
+
+**`AssetsTool`'s Spawn/Reload buttons rendered "disabled" but still fired.**
+`_button(enabled=…)` only changed colours; `process_event` hit-tested and
+called `_spawn_selected()` regardless (it degraded to a "Load failed" status
+rather than crashing, because `_spawn_selected` wraps `load` in
+`except Exception`). The hit rect is now dropped when the action is disabled —
+and the Spawn gate was corrected to *stay live for a not-yet-loaded path*
+(which might be data) and disable only for a loaded non-`DataResource`.
+
+**Lifecycle pass (user's choice — full in-slice).** `Tool` gained
+`on_removed()`; `EventMonitor` (which `subscribe()`s ×3 in `__init__` and
+never unsubscribed — no teardown existed) now undoes every subscription there,
+and `SandboxApplication.shutdown()` calls `ToolManager.clear()` before the
+engine tears down. `Tool._entity_manager`'s no-scene fallback returned a
+**fresh** empty `EntityManager` on every access (two per frame → two different
+worlds); it is now cached for that window, with the "read-only until a scene
+is active" caveat documented. `ShortcutsPanel` was a hard-coded key table that
+could silently drift from `sandbox.py`; it now reads
+`ToolManager.iter_shortcuts()` live (with `ToolManager` registered in the DI
+container) plus a short static "in-tool keys" block for Q/W/E/TAB/S/ESC.
+
+**`TransformGizmo` wired up (user's choice).** Registered by nothing through
+two prior audits (in `__all__`, instantiated only in tests, **zero**
+coverage). Now registered at F9 in `SandboxApplication`, given a
+`selection_provider` mirroring `EntityInspector` so it follows
+`HierarchyTool.selected_entity` (viewport click-select and ESC-clear stay for
+the no-provider case); `ConfigInspector` — registered at F6 but absent from
+`pyguara/tools/__init__` — was added to the package exports. **Left open /
+parked:** `TransformGizmo` and `PhysicsDebugger` still draw and hit-test with
+`Transform.position` as a *screen* coordinate — no camera transform, aligned
+only at camera origin/zoom 1 — gated on the world-to-screen unification
+(issue #23), now documented on both.
+
+Tests +20 (1909 → 1929): `test_tools.py` gained real lifecycle coverage
+(duplicate-registration runs once not twice, `unregister_tool`/`clear` fire
+`on_removed` and purge all three structures, `iter_shortcuts` order, the
+`_entity_manager` fallback is stable, `PerformanceMonitor` ignores `dt<=0`,
+`EventMonitor.on_removed` detaches); new `test_gizmos.py` (+8, from nothing)
+covers both selection modes, Q/W/E, stale-selection drop and per-mode render;
+`test_assets_tool.py` (+2) pins the disabled buttons as un-clickable.
+`docs/systems/editor.md` updated (F9 row, live `ShortcutsPanel`, the
+`on_removed`/`unregister_tool` lifecycle, the no-scene `_entity_manager`
+caveat, the screen-space limitation).
+
+**Capability gaps (Phase D) → folded into existing issues, no new one.**
+In-overlay authoring gaps — no scroll/clip container so the hierarchy / asset
+/ event lists just truncate (`UIRenderer` has no push/pop clip, shared with
+#49), no custom per-type inspector-drawer hook (a game's own value type always
+renders read-only via `tweakable.py`), no text-field editing (#49), no scene
+save/load button (#53) — belong to **#53** (PyGuara Studio) and **#49** (UI).
+The camera-aware gizmo/debugger is **#23**. `ConfigInspector` edits the
+`GameConfig` object but subsystems cached their config at bootstrap, so most
+edits don't take effect live — a note, not a defect.
+
+---
+
+### `pyguara/cli` — closed 2026-09-08 (branch `refactor/cli-audit`)
 
 `pyguara/cli` in one slice, ~830 lines (`__init__` Click group, `build.py`,
 `atlas_generator.py`), reached only through the `pyguara = pyguara.cli:main`
@@ -847,8 +929,11 @@ Ordered roughly by dependency depth: foundations first, leaves last.
   code reload deleted, `PollingFileWatcher` kept and wired to assets)*
 - [x] `pyguara/cli` — command line entry points *(done — branch
   `refactor/cli-audit`; `pyguara build` / `pyguara atlas`)*
-- [ ] `pyguara/tools` — in-engine debug-overlay suite (inspector, hierarchy,
-  gizmos, event monitor, perf panel); absorbs the `pyguara/editor` parked notes
+- [x] `pyguara/tools` — in-engine debug-overlay suite *(done — branch
+  `refactor/tools-audit`; dup-registration / perf-0-dt / disabled-button
+  fixes, `Tool` lifecycle hook, `TransformGizmo` wired at F9)*
+
+**Queue empty — every Tier 1–4 subsystem has had its Phase A→D pass.**
 
 ---
 
@@ -856,6 +941,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
+| `pyguara/tools` | 2026-09-08 | One slice, ~1,750 lines (`base`, `manager`, `inspector`, `tweakable`, `hierarchy`, `assets_browser`, `config_inspector`, `gizmos`, `event_monitor`, `performance`, `debugger`, `shortcuts_panel`), driven by `SandboxApplication` (F12 + F1–F9). The overlay runs, but `test_tools.py`'s ~40 cases were all `MockTool` booleans. **`ToolManager` double-ran a tool on re-registration** — `_tools[name] = tool` deduped but `_render_order.append(name)` did not, so `update`/`render`/`process_event` hit the survivor twice per frame (the `pyguara/systems` "silent duplicate keys" shape); `register_tool` now purges the old name first, and `unregister_tool`/`clear` were added, firing a new `Tool.on_removed()`. **`PerformanceMonitor` fed a `0.0` FPS sample on `dt <= 0`** (`1.0/dt if dt > 0 else 0.0` — the "guard returns a wrong answer" pattern; one paused frame dragged the rolling average 60→40); non-positive `dt` is now skipped, dead `pygame.time.Clock()` removed. **`AssetsTool`'s greyed Spawn/Reload buttons still fired** — `enabled=` was cosmetic; the hit rect is now dropped when disabled (and the Spawn gate corrected to stay live for a not-yet-loaded path). Lifecycle pass (user's choice, full in-slice): `EventMonitor` now unsubscribes in `on_removed` (it `subscribe()`d ×3 and never had a teardown); `SandboxApplication.shutdown()` calls `ToolManager.clear()`; `Tool._entity_manager`'s no-scene fallback is cached instead of a fresh empty per access; `ShortcutsPanel` reads `ToolManager.iter_shortcuts()` live instead of a hard-coded table. `TransformGizmo` wired up (user's choice): registered at F9, follows `HierarchyTool` via a `selection_provider`, had **zero** prior coverage; `ConfigInspector` added to `pyguara/tools/__init__` exports. Tests +20 (1909 → 1929): real lifecycle coverage in `test_tools.py`, new `test_gizmos.py` (+8 from nothing), `test_assets_tool.py` (+2). `docs/systems/editor.md` updated. **Left open:** `TransformGizmo` + `PhysicsDebugger` draw/hit-test in screen space with no camera transform → **#23**; in-overlay authoring gaps (scroll/clip container, custom inspector-drawer hook, text input, scene save/load button) → **#53** / **#49**; `ConfigInspector` edits don't take live effect (subsystems cache config at bootstrap). No new issue. |
 | `pyguara/cli` | 2026-09-08 | One slice, ~830 lines (`__init__` Click group, `build.py`, `atlas_generator.py`), reached only via the `pyguara = pyguara.cli:main` console script. Both commands work — no dead subsystem — but two real defects hid behind uniform generator-test fixtures (distinct-stem, in-bounds, uniform shape). **The atlas generator silently dropped a sprite on a stem collision** — `load_images` keys regions by `file_path.stem`, so `hero.png` + `hero.jpg` both become `"hero"`; `pack()`'s `regions` dict overwrote the first, but both images were still pasted and counted, so `sprite_count` (3) ≠ `len(regions)` (2) and which survived depended on the height-sort. Same "stem collision" shape as `resources.index_directory` / persistence keys. Per the user's choice (**raise, name the files**): a duplicate stem is now a `ValueError` listing the filenames; `pack()` also rejects duplicate names, making `sprite_count == len(regions)` an invariant. **A sprite wider than the atlas was silently cropped** — `pack()` raised "atlas too small" only on *vertical* overflow; an over-wide sprite was placed at x=0, clipped by `Image.paste`, and kept the full (wrong) width in metadata ("guard that returns a wrong answer"). Now both dimensions guarded. Smaller: `generate()` re-ingested its own output when `-o`/`-m` landed inside `-i` — now excludes the resolved output paths; dead `allow_rotation` param removed; the argparse `main()` for `python -m pyguara.cli.atlas_generator` now **delegates** to the Click command (user's choice — one option surface); `pyguara/cli/__init__` aliased its sub-command imports (they shadowed the `pyguara.cli.build` *module* attribute). `build.py` swept: launches `python -m PyInstaller` not a bare `pyinstaller` on PATH; dead `if result.returncode == 0` after `subprocess.run(check=True)` removed; `--onedir` success message now points at the executable not the bundle dir; `.spec` cleaned alongside `build/`; `\b` help markers fixed (`r"""`→`"""` — `\b` was backslash-b, not `\x08`). Tests +9 (1898 → 1907; 1909 with `test_docs_api` picking up the new page): collision guard, both overflow directions (`test_..._pack_too_large` had passed for the wrong reason — vertical triggers first), the `sprite_count`/`regions` invariant, output-exclusion; onedir args, missing-PyInstaller, CLI asset auto-detection. New `docs/systems/cli.md` (no page existed); `zero_to_hero.md` lost its stale "ImGui-based editor" line. Phase D → **#61** ("asset pipeline production layer", sibling of #37/#40/#43/#46/#49/#51/#55/#58): atlas — no transparent-border trim, square fixed-size output only, errors instead of multi-page, shelf packing only (no MaxRects), flat non-namespaced input, emits none of the graphics layer's spritesheet/nine-patch/pivot/frame metadata; build — no cross-compile, no version stamping, no asset-manifest check, no `pyguara new`/`run`/`doctor` lifecycle. Left open: `original_size` metadata redundant until a trim step exists; a cosmetic `runpy` RuntimeWarning from `python -m` on the submodule. |
 | `pyguara/dev` | 2026-09-08 | One slice, ~674 lines (`file_watcher`, `hot_reload`). Like `pyguara/editor`, **the whole subsystem had zero integration** — nothing in the engine, no game, no non-test file imported `HotReloadManager` / `PollingFileWatcher` / `StatefulSystem` / `reload_system_class`. Wayfinder ticket 09 fogged it in 2026 ("whether a pre-alpha engine carries live code reload is a product-scope question deserving its own deliberate answer"). Per the user's choice (**split: delete code-reload, wire the watcher**): the Python-module reload layer (`hot_reload.py`) is **deleted** and `PollingFileWatcher` kept + wired to assets. Probes showed `HotReloadManager` wouldn't have worked as advertised: the class promised `StatefulSystem` state preservation but `reload_module()` had **no `get_state`/`set_state` path** (that protocol + `reload_system_class()` were a separate island with no callers); with the default `auto_reload=True`, `importlib.reload()` ran **on the polling thread** (module top-level code off the main thread); `watch_module("x")` twice registered a fresh lambda each call → one edit fired N reloads. **`PollingFileWatcher` kept, one defect fixed: `check_now()` held a non-reentrant lock across user callbacks** — a change callback calling `watch()`/`unwatch()`/`watched_count` deadlocked the poll thread (probe: `check_now` never returned); now snapshots under the lock and notifies with it released, and the poll loop survives a raising callback. New `AssetReloadWatcher` bridges the watcher to `ResourceManager.reload()` (the primitive the `pyguara/resources` slice built for this): the poll thread **queues** a changed asset's cache key; `Application._update()` calls `drain()` once per frame **on the main thread** (`ResourceManager` isn't safe to mutate under a running frame — same shape as `queue_event()`). Opt-in via `Application.enable_asset_hot_reload()`; `SandboxApplication` calls it. **BREAKING** (pre-alpha): `pyguara.dev.HotReloadManager` / `StatefulSystem` / `reload_system_class` removed. Tests: `test_hot_reload.py` deleted (17, all happy-path against stdlib modules — none touched the deadlock, the double-reload, the missing state path or the wrong-thread reload); new `test_dev.py` (+20 cases, 1893 → 1898). New `docs/systems/dev.md` (no page existed). Phase D → **#40** (already names "hot-reload has a `reload()` primitive but nothing watches the filesystem"): polling-only detection (no `inotify`/`FSEvents`/`ReadDirectoryChangesW`, lags by `poll_interval`, coalesces bursts); watch set follows the resource cache (no "watch the whole `assets/` tree" mode); `reload()` still leaves callers holding a stale instance (re-`load()` — documented). **Product decision recorded:** live Python-code reload is out — deleted, not deferred again. |
 | `pyguara/replay` | 2026-09-08 | One slice, ~1,030 lines (`types`, `recorder`, `player`, `serializer`); wired via `Application` + `InputManager` since wayfinder ticket 18. Defects were all "wired to nothing" / "guard returns a wrong answer", each hidden by uniform test setup. **`ReplaySerializer.save()` wrote an unloadable file on its default call** — it appended an extension only when absent, but `if compress or endswith(".gz")` still gzipped, so `save(data, "run.replay")` (default `compress=True`) put a gzip stream in a `.replay` file; `load()` reads it as text, `json.loads` chokes on the magic byte, the blanket `except Exception` swallows it, returns `None` after `save()` returned `True`. Now the format is derived from the extension (explicit wins); `load()` also refuses a `metadata.version` over `SUPPORTED_VERSION` (written, never read — no migration layer). **`get_metadata()` returned `None` for any replay over ~10 KB** — read first 10 KB, sliced at the last `}`, unbalanced JSON for a 400-frame file while the metadata sat in the first ~120 bytes; now parses the file. **Gamepad input was never recorded** — `record_gamepad_button` / `record_gamepad_axis` had zero callers (gamepad flows `GamepadManager` → `_on_gamepad_*`, never touching the recorder), so a controller session recorded empty while `process_replayed_event` carried GAMEPAD branches for events recording never produced; both callbacks now feed it. **Playback dropped pointer position + the raw UI stream** — `process_replayed_event` rebuilt only bound actions, discarding `event.position` and never re-emitting `OnRawKeyEvent` / `OnMouseEvent`; it now re-dispatches the raw key/mouse stream with recorded position + modifiers (`RecordedInputEvent` gained `modifiers`) and replays MOUSE_MOVE. `ReplayRecorder` stamps the installed package version (was `"0.0.0"`) + UTC `recorded_at` (the persistence pair). **User chose maximal on all three forks: playback now re-drives the loop from recorded per-frame `delta_time`** — `Application.run()`, while a replay plays, takes each frame's duration from `ReplayPlayer.peek_delta()` not the wall clock, so fixed-step count, tweens, particles and `WaitForSeconds` reproduce on any machine (cross-cuts the closed `pyguara/application` loop; `SandboxApplication` inherits `run()`). `ReplayPlayer`'s scrubbing surface (`update()` timestamp model, `seek`, `pause`/`resume`, `playback_speed`) kept as supported public API; `advance_frame()`/`update()` now share `_emit_frame()` / `_finish_if_exhausted()`. Tests +22 (1869 → 1891): the old 25 were broad but shallow + uniform (every player test = one fixture through `advance_frame()`; `update()` had zero coverage; every serializer test saved to an extensionless path; nothing recorded/replayed gamepad). New `docs/systems/replay.md` (no page existed). Phase D → **#58** ("replay production layer", sibling of #37/#40/#43/#46/#51/#55): recorded `seed` reseeds nothing on playback (no RNG service — #28); no replay-library API (`list_replays`/`delete`/browse, user-data-dir rooting — the #43 shape); the scrubbing API has no `pyguara/tools` overlay (#53); capture is input+time only (a game reading `time.time()`/filesystem/network directly breaks determinism silently); `record_action()` has a playback branch but no in-repo consumer. Left open: no format migration layer; a length-framed metadata line would let `get_metadata` skip frame bytes. |
@@ -899,7 +985,7 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#43](https://github.com/Wedeueis/pyguara/issues/43) | Persistence production layer — the `pyguara/persistence` audit (Phase D) found the subsystem defect-free but thin for a shipped game: no backup / prior-version retention, no save-menu API (`list_saves`, cheap metadata-header read, `delete`/`exists` facade), `FileStorageBackend` rooted at a CWD-relative dir not the OS user-data dir. Envelope `format_version` and run/meta split (#28) noted separately |
 | [#46](https://github.com/Wedeueis/pyguara/issues/46) | AI authoring gaps (from the `pyguara/ai` audit, Phase D) — `SequenceNode`/`SelectorNode` have memory with no *reactive* variant, so a front guard `ConditionNode` stops being re-checked once the sequence advances (the "attack while visible, else patrol" pattern silently keeps attacking); `ParallelNode` re-ticks already-completed children; FSM has no transition table / event-driven transitions; every BT leaf is a hand-written closure (no stock `BlackboardCondition` / `SetBlackboard` / `Cooldown` / `RandomSelector`); `_wander_targets` is evicted only on scene exit. Navmesh funnel/portals/generation and steering-vs-physics parked separately (flow-field is #28's) |
 | [#51](https://github.com/Wedeueis/pyguara/issues/51) | Prefab authoring & production layer (from the `pyguara/prefabs` audit, Phase D) — no spawn tables / weighted prefab pools (`create` is one at a time, no selection primitive); `PrefabData.version` declared "for migration support" and read by nothing (no prefab-schema migration, while `persistence` has a `MigrationRegistry`); no named variant library (`overrides` is per-call only); prefab children are linked `Transform`↔`Transform` only — the child entity has no parent-*entity* back-reference or shared lifetime, so despawning an enemy leaks its prefab-attached child entities (needs an ECS-hierarchy decision, cross-cutting with `pyguara/ecs`); no asset-reference validation at load. `ComponentRegistry` process-global mutable singleton parked as a CC |
-| [#53](https://github.com/Wedeueis/pyguara/issues/53) | PyGuara Studio — companion authoring app (from the `pyguara/editor` audit, which deleted a Dear ImGui editor that had never executed and rebuilt its useful parts as `UIRenderer` tools). Level/scene editor, animation editor, agentic authoring harness (grow `tools/agent_view.py`), data-table editors. Needs the build-vs-ImGui architecture decision; the "grow `pyguara/ui`" path is #49's scope. Gated on #49 / #28. In-overlay small items (custom inspector-drawer hook, `TransformGizmo` selection wiring) parked for the `pyguara/tools` slice |
+| [#53](https://github.com/Wedeueis/pyguara/issues/53) | PyGuara Studio — companion authoring app (from the `pyguara/editor` audit, which deleted a Dear ImGui editor that had never executed and rebuilt its useful parts as `UIRenderer` tools). Level/scene editor, animation editor, agentic authoring harness (grow `tools/agent_view.py`), data-table editors. Needs the build-vs-ImGui architecture decision; the "grow `pyguara/ui`" path is #49's scope. Gated on #49 / #28. The `pyguara/tools` slice wired `TransformGizmo` to the hierarchy selection (F9); still open here: a custom per-type inspector-drawer hook (a game's own value type renders read-only via `tweakable.py`), a scroll/clip container for the overlay lists, and a scene save/load button. The gizmo/debugger camera transform is #23. |
 | [#55](https://github.com/Wedeueis/pyguara/issues/55) | Scripting production layer (from the `pyguara/scripting` audit, Phase D) — `CoroutineManager` is one app-global singleton with no scene scoping (a sequence outlives its scene and ticks against unloaded entities; no teardown hook, unlike `SystemManager`); no coroutine tagging / grouping (kill an entity → its scripted sequences keep running, cross-cutting with #51); no `yield from` result / return value or completion signal to a parent sequence; no frame-count / fixed-step waits (`WaitForFrames`, `WaitForFixedUpdate`) and no scaled-vs-realtime wait for a paused game (time-scale is #28's). `WaitForSeconds` frame-granular drift and missing arg validation left open, documented |
 | [#61](https://github.com/Wedeueis/pyguara/issues/61) | Asset pipeline production layer (from the `pyguara/cli` audit, Phase D) — the `pyguara atlas` packer has no transparent-border trimming (a roguelike's sheets are mostly padding; `original_size` metadata is dead until this lands), square fixed-`--size` output only (no shrink-to-fit / pow-of-two), raises instead of emitting atlas page 2/3/…, shelf packing only (MaxRects/skyline would pack denser; `allow_rotation` was a dead stub, removed), a flat non-recursive non-namespaced input scan (keys are bare filename stems), and emits none of the `pyguara/graphics` spritesheet / nine-patch / pivot / animation-frame metadata; `pyguara build` has no cross-compilation / target selection, no version or build-metadata stamping, no asset-manifest verification before shipping, and no project-lifecycle commands (`pyguara new` scaffold, `pyguara run`, `pyguara doctor`). Sibling of #37/#40/#43/#46/#49/#51/#55/#58 |
 | [#58](https://github.com/Wedeueis/pyguara/issues/58) | Replay production layer (from the `pyguara/replay` audit, Phase D) — recorded `seed` is exposed as `ReplayPlayer.seed` but nothing reseeds a random source on playback (no engine RNG service yet — cross-cut #28; replay should reseed it on `load_replay()`); no replay-library API (`list_replays` / `delete` / browse, the shape #43 names for saves) and `FileStorage`-style user-data-dir rooting; the `ReplayPlayer` scrubbing surface (`seek`, `pause`/`resume`, `playback_speed`, `update()`) has no `pyguara/tools` overlay driving it (scrub bar / step / slow-mo — cross-cut #53); capture is input+time only, so a game reading `time.time()` / the filesystem / the network directly breaks determinism silently; `record_action()` (synthetic AI/script-driven actions) has a playback branch but no in-repo consumer. Left open: format `version` validated but no migration layer; a length-framed metadata line would let `get_metadata` skip the frame bytes |
