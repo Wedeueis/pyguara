@@ -79,6 +79,60 @@ def test_camera_world_to_screen():
     assert screen_pos.x == 600
 
 
+def test_world_to_screen_matches_the_batcher_transform():
+    """One definition: `world_to_screen` is exactly what the batcher applies.
+
+    The batcher does `screen = world * zoom + camera.screen_offset(viewport)`
+    (batch.py). If `world_to_screen` computes anything else, hit-testing
+    against `screen_to_world` silently disagrees with what is drawn -- issue
+    #23. This pins them together for a fullscreen *and* an offset viewport.
+    """
+    camera = Camera2D(800, 600)
+    camera.position = Vector2(120, -40)
+    camera.zoom = 1.5
+
+    for viewport in (
+        Viewport(0, 0, 800, 600),  # fullscreen
+        Viewport(100, 50, 600, 400),  # letterboxed / split-screen
+    ):
+        offset = camera.screen_offset(viewport)
+        for point in (Vector2(0, 0), Vector2(250, 90), Vector2(-30, 400)):
+            expected = point * camera.zoom + offset
+            assert camera.world_to_screen(point, viewport) == expected
+
+
+def test_world_to_screen_round_trips_with_an_explicit_viewport():
+    camera = Camera2D(800, 600)
+    camera.position = Vector2(50, 50)
+    camera.zoom = 2.0
+    viewport = Viewport(100, 50, 600, 400)
+
+    point = Vector2(123, 456)
+    restored = camera.screen_to_world(camera.world_to_screen(point, viewport), viewport)
+
+    assert abs(restored.x - point.x) < 1e-6
+    assert abs(restored.y - point.y) < 1e-6
+
+
+def test_camera_has_no_rotation():
+    """Regression guard for #23: `rotation` was a public attribute the render
+    path ignored, so setting it silently did nothing. It is gone."""
+    camera = Camera2D(800, 600)
+    assert not hasattr(camera, "rotation")
+
+
+def test_get_view_bounds_honours_an_explicit_viewport():
+    camera = Camera2D(800, 600)
+    camera.position = Vector2(0, 0)
+    camera.zoom = 2.0
+
+    bounds = camera.get_view_bounds(Viewport(0, 0, 400, 200))
+
+    # 400x200 viewport at zoom 2 sees 200x100 world units, centred on (0, 0).
+    assert (bounds.width, bounds.height) == (200, 100)
+    assert (bounds.centerx, bounds.centery) == (0, 0)
+
+
 def test_viewport_aspect_ratio():
     # 100x100 window, target 2.0 (should be 100x50)
     vp = Viewport.create_best_fit(100, 100, 2.0)

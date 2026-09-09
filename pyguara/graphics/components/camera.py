@@ -135,14 +135,20 @@ class Camera2D:
     """
     A 2D Camera component that defines the viewable area of the game world.
 
-    It handles Zoom, Rotation, and Panning math. It does NOT render anything;
-    it simply provides the transformation matrices (or equivalent logic) for the renderer.
+    It handles Zoom and Panning math. It does NOT render anything; it simply
+    provides the transformation the renderer applies.
+
+    There is one world-to-screen transform: ``screen * = world * zoom +
+    screen_offset(viewport)``. ``world_to_screen`` / ``screen_to_world`` /
+    ``get_view_bounds`` are conveniences built on that same
+    ``screen_offset``, so the picture on screen and any hit-testing against
+    it cannot disagree. Rotation is deliberately not supported -- the render
+    path never rotated, so a ``rotation`` attribute would have been a silent
+    no-op (see issue #23).
 
     Attributes:
         position (Vector2): The center of the camera in World Coordinates.
-        offset (Vector2): The center of the viewport in Screen Coordinates.
         zoom (float): The scale factor (1.0 = 100%, 2.0 = 200%).
-        rotation (float): The rotation in degrees.
     """
 
     def __init__(self, width: int, height: int):
@@ -150,13 +156,14 @@ class Camera2D:
         Initialize the Camera with a default viewport size.
 
         Args:
-            width (int): The initial width of the target viewport/screen.
-            height (int): The initial height of the target viewport/screen.
+            width (int): Width of the target viewport/screen, used as the
+                fallback viewport for ``world_to_screen`` and friends when no
+                explicit viewport is passed.
+            height (int): Height of the target viewport/screen.
         """
         self.position: Vector2 = Vector2.zero()
-        self.offset: Vector2 = Vector2(width / 2, height / 2)
+        self._default_viewport: Rect = Rect(0, 0, width, height)
         self._zoom: float = 1.0
-        self.rotation: float = 0.0
 
         # Camera effects
         self._shake: CameraShake | None = None
@@ -195,15 +202,16 @@ class Camera2D:
 
     def set_viewport_size(self, width: int, height: int) -> None:
         """
-        Recalculate the screen offset based on new dimensions.
+        Update the fallback viewport used when no explicit one is passed.
 
-        Call this when the window is resized to keep the camera centered.
+        Call this when the window is resized. Render-path callers pass the
+        real viewport to ``screen_offset`` directly and are unaffected.
 
         Args:
             width (int): New width in pixels.
             height (int): New height in pixels.
         """
-        self.offset = Vector2(width / 2, height / 2)
+        self._default_viewport = Rect(0, 0, width, height)
 
     def screen_offset(self, viewport: Rect) -> Vector2:
         """Compute the translation mapping a zoomed world point into a viewport.
@@ -216,10 +224,9 @@ class Camera2D:
         it double-counts that origin, which is what the batcher used to do;
         a fullscreen viewport hid it because its origin is (0, 0).
 
-        Note this deliberately ignores `self.rotation`, because the render
-        path does: neither the batcher nor the particle system rotates. It is
-        therefore *not* equivalent to `world_to_screen`, which does rotate and
-        centres on `self.offset` rather than the viewport.
+        This is the single world-to-screen definition. `world_to_screen`,
+        `screen_to_world` and `get_view_bounds` are all expressed in terms of
+        it, and the batcher / particle system / light pass call it directly.
 
         Args:
             viewport: The region being drawn into.
@@ -229,81 +236,64 @@ class Camera2D:
         """
         return viewport.center_vec - (self.position * self.zoom)
 
-    def world_to_screen(self, world_pos: Vector2) -> Vector2:
+    def world_to_screen(
+        self, world_pos: Vector2, viewport: Rect | None = None
+    ) -> Vector2:
         """
         Transform a point from World Space to Screen Space.
 
-        Formula: (WorldPos - CamPos) * Zoom + ScreenOffset
+        Formula: ``world_pos * zoom + screen_offset(viewport)``.
 
         Args:
             world_pos (Vector2): The coordinate in the game world.
+            viewport (Rect | None): The region being drawn into. Defaults to
+                the camera's fallback viewport (its constructed size at the
+                window origin) -- correct for a fullscreen view; pass the real
+                viewport for a letterboxed or split-screen one.
 
         Returns:
             Vector2: The pixel coordinate on the screen.
         """
-        # 1. Translate world to camera local
-        local_pos = world_pos - self.position
+        vp = viewport if viewport is not None else self._default_viewport
+        return world_pos * self.zoom + self.screen_offset(vp)
 
-        # 2. Scale (Zoom)
-        local_pos = local_pos * self.zoom
-
-        # 3. Rotate (around camera center)
-        if self.rotation != 0:
-            local_pos = local_pos.rotate_degrees(-self.rotation)
-
-        screen_pos = local_pos + self.offset
-
-        # 4. Translate to screen center
-        return screen_pos
-
-    def screen_to_world(self, screen_pos: Vector2) -> Vector2:
+    def screen_to_world(
+        self, screen_pos: Vector2, viewport: Rect | None = None
+    ) -> Vector2:
         """
         Transform a point from Screen Space (e.g., Mouse) to World Space.
 
-        This is the inverse of world_to_screen.
-        Formula: (ScreenPos - ScreenOffset) / Zoom + CamPos
+        The exact inverse of `world_to_screen`:
+        ``(screen_pos - screen_offset(viewport)) / zoom``.
 
         Args:
-            screen_pos (Vector2): The pixel coordinate (e.g., pygame.mouse.get_pos()).
+            screen_pos (Vector2): The pixel coordinate (e.g. the mouse position).
+            viewport (Rect | None): See `world_to_screen`.
 
         Returns:
             Vector2: The coordinate in the game world.
         """
-        # 1. Translate screen to center relative
-        local_pos = screen_pos - self.offset
+        vp = viewport if viewport is not None else self._default_viewport
+        # No zero guard needed: the zoom setter rejects non-positive values.
+        return (screen_pos - self.screen_offset(vp)) * (1.0 / self.zoom)
 
-        # 2. Inverse Rotate
-        if self.rotation != 0:
-            local_pos = local_pos.rotate_degrees(self.rotation)
-
-        # 3. Inverse scale. No zero guard needed: the zoom setter rejects
-        # non-positive values, so this cannot divide by zero.
-        local_pos = local_pos * (1.0 / self.zoom)
-        world_pos = local_pos + self.position
-
-        # 4. Translate back to world
-        return world_pos
-
-    def get_view_bounds(self) -> Rect:
+    def get_view_bounds(self, viewport: Rect | None = None) -> Rect:
         """
         Calculate the visible rectangle of the world in World Coordinates.
 
         Useful for Culling (not rendering objects outside this rect) or
         keeping the player inside bounds.
 
-        Note:
-            This approximation assumes no rotation for the bounding box calculation.
-            If rotation is used, this returns a generic AABB that fits the view.
+        Args:
+            viewport (Rect | None): See `world_to_screen`.
 
         Returns:
             Rect: The rectangle representing the visible world area.
         """
-        # Calculate the size of the view in world units
-        # ScreenSize / Zoom
-        view_width = (self.offset.x * 2) / self.zoom
-        view_height = (self.offset.y * 2) / self.zoom
+        vp = viewport if viewport is not None else self._default_viewport
+        view_width = vp.width / self.zoom
+        view_height = vp.height / self.zoom
 
-        # Top-left corner in world space
         left = self.position.x - (view_width / 2)
         top = self.position.y - (view_height / 2)
 
