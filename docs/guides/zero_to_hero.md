@@ -295,6 +295,11 @@ class PlayerSystem:
 
 For advanced simulation, PyGuara wraps the **Pymunk** rigid body library. Rather than calculating gravity manually, physical objects register `RigidBody` and `Collider` components. The `PhysicsSystem` automatically simulates rigid body calculations and mirrors the resulting coordinates back onto `Transform` components.
 
+> For a **player or NPC**, use `CharacterBody` with `CharacterMover` instead of
+> a dynamic `RigidBody` — it gives crisp, non-bouncy movement with ground and
+> wall detection. See [`docs/physics/character-movement.md`](../physics/character-movement.md).
+> The dynamic-body example below is for props and projectiles.
+
 ### 1. Attaching Physical Components
 ```python
 from pyguara.physics.components import RigidBody, Collider
@@ -303,10 +308,11 @@ from pyguara.physics.types import BodyType, ShapeType
 # Create a dynamic falling circle
 ball = self.entity_manager.create_entity("ball")
 ball.add_component(Transform(position=Vector2(400, 100)))
-# RigidBody declares dynamic mass, friction, and moment parameters
+# RigidBody carries mass and body type; friction/restitution live on the
+# Collider's PhysicsMaterial.
 ball.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=1.0))
-# Collider sets up the geometry bounds for collision resolver
-ball.add_component(Collider(shape_type=ShapeType.CIRCLE, radius=20.0))
+# Collider dimensions are [radius] for a circle, [width, height] for a box.
+ball.add_component(Collider(shape_type=ShapeType.CIRCLE, dimensions=[20.0]))
 ```
 
 ### 2. Managing Static Ground Boundaries
