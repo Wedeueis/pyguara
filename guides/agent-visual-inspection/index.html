@@ -1,0 +1,2048 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../PROJECT_STRUCTURE/">
+      
+      
+        <link rel="next" href="../../core/architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Visual Inspection (agents) - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#seeing-the-engine-run-as-an-agent" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Visual Inspection (agents)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The tool
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The tool">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#driving-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Driving it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-automatically" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run automatically
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-proves-and-what-it-does-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this proves, and what it does not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checking-that-a-window-really-displays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking that a window really displays
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Checking that a window really displays">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-window-coordinates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading window coordinates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-no-window-displays-at-all" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When no window displays at all
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixes-that-do-not-work-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixes that do not work here
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always-run-the-control-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Always run the control first
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-demo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a demo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The tool
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The tool">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#driving-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Driving it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit codes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-automatically" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run automatically
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-proves-and-what-it-does-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this proves, and what it does not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#checking-that-a-window-really-displays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Checking that a window really displays
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Checking that a window really displays">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reading-window-coordinates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading window coordinates
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-no-window-displays-at-all" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When no window displays at all
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fixes-that-do-not-work-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixes that do not work here
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#always-run-the-control-first" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Always run the control first
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-demo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a demo
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="seeing-the-engine-run-as-an-agent">Seeing the engine run, as an agent</h1>
+<p>An agent working on this engine cannot look at a window. This guide covers how
+to see what the engine draws, how to drive it, and — the part that has already
+caught us out once — what that does <strong>not</strong> tell you.</p>
+<h2 id="the-tool">The tool</h2>
+<pre><code class="language-bash">uv run python tools/agent_view.py --list
+uv run python tools/agent_view.py guara_falcao --frames 120 --shot 1 --shot 119
+</code></pre>
+<p>It boots a demo through its real bootstrap, advances it a fixed number of
+frames, saves PNGs, and exits. Headless by default (SDL dummy driver), so it
+needs no display and behaves the same on CI.</p>
+<p>Frames land in <code>.agent-view/</code> (gitignored). Open them with the <code>Read</code> tool.</p>
+<h3 id="driving-it">Driving it</h3>
+<p>Input goes through the real path — <code>pygame.event.post()</code>, drained by the
+window backend's <code>poll_events()</code>, dispatched by <code>InputManager</code> — so it
+exercises the same code a keypress would.</p>
+<pre><code class="language-bash"># press a key on frame 30
+uv run python tools/agent_view.py guara_falcao --press RETURN@30 --shot 45
+
+# click a point on frame 30
+uv run python tools/agent_view.py guara_falcao --click 400,265@30 --shot 80
+
+# sample the run
+uv run python tools/agent_view.py physics_integration --every 30 --frames 120
+</code></pre>
+<p>Clicking <code>400,265</code> on the title screen presses <strong>START GAME</strong> and transitions
+into gameplay — a useful end-to-end check that UI hit-testing, event dispatch
+and scene switching all work.</p>
+<h3 id="exit-codes">Exit codes</h3>
+<table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>Frames captured, at least one had content</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Every captured frame was a single flat colour</td>
+</tr>
+<tr>
+<td>2</td>
+<td>The demo raised; traceback printed</td>
+</tr>
+</tbody>
+</table>
+<p>Blank frames are flagged individually too:</p>
+<pre><code>.agent-view/boot_process_0020.png  BLANK - nothing was drawn
+</code></pre>
+<p>That check exists because a blank frame is the usual way this silently tells
+you nothing. <code>boot_process</code> legitimately draws nothing — it only opens a
+window — so a blank frame there is correct, not a defect. Know what the demo
+is supposed to draw before reading the result.</p>
+<h3 id="run-automatically">Run automatically</h3>
+<p>Two things use this tool without being asked:</p>
+<ul>
+<li><code>tests/integration/test_demos_render.py</code> asserts every demo draws a
+  non-flat frame. It found <code>physics_integration</code> crashing on its first run.</li>
+<li><code>.claude/hooks/graphics_render_check.py</code> — a warn-only <code>PostToolUse</code> hook
+  on edits under <code>pyguara/graphics/</code>. Boots <code>guara_falcao</code> for 20 frames
+  (~0.6s) and reports into the transcript if the frame comes out flat. It
+  never blocks and always exits 0, including when it cannot run at all.</li>
+</ul>
+<h2 id="what-this-proves-and-what-it-does-not">What this proves, and what it does not</h2>
+<p><strong>It proves the render path works.</strong> Entities were queried, sprites submitted,
+batches flushed, UI laid out and drawn. If a frame has the right content, the
+engine drew the right thing.</p>
+<p><strong>It does not prove a window appears on screen.</strong> The tool reads the surface
+the renderer blitted onto. Whether that surface reaches a display is a
+separate question with separate failure modes.</p>
+<p>Those two have already diverged here. With <code>display.vsync</code> enabled, pygame
+silently promoted the display to an <strong>OpenGL</strong> surface, and software blits are
+never presented to an OpenGL surface:</p>
+<pre><code>set_mode((1280, 720), 0, vsync=1)  -&gt;  flags=2          OPENGL=True
+set_mode((1280, 720), 0, vsync=0)  -&gt;  flags=16777216   OPENGL=False
+</code></pre>
+<p>Captures looked perfect. The real window was blank. The capture read the
+surface that still held the pixels; nothing was presenting it.</p>
+<p><strong>So: never report "the demo renders correctly" on the strength of a capture
+alone.</strong> Say "the render path produces the expected frame", which is what you
+actually verified.</p>
+<h2 id="checking-that-a-window-really-displays">Checking that a window really displays</h2>
+<p>This needs a channel outside WSL. Two things that do <strong>not</strong> work here:</p>
+<ul>
+<li><strong><code>ffmpeg -f x11grab</code></strong> — captures black even for a bare pygame window
+  filling the screen red. WSLg composites through Wayland; the XWayland root
+  window does not hold the real pixels.</li>
+<li><strong>Playwright / browser tooling</strong> — irrelevant; this is a native SDL window.</li>
+</ul>
+<p>What does work is a screenshot from the Windows side:</p>
+<pre><code class="language-bash">powershell.exe -NoProfile -Command &quot;
+Add-Type -AssemblyName System.Windows.Forms,System.Drawing;
+\$b = [System.Windows.Forms.SystemInformation]::VirtualScreen;
+\$bmp = New-Object System.Drawing.Bitmap \$b.Width, \$b.Height;
+\$g = [System.Drawing.Graphics]::FromImage(\$bmp);
+\$g.CopyFromScreen(\$b.X, \$b.Y, 0, 0, \$bmp.Size);
+\$bmp.Save(\&quot;\$env:TEMP\shot.png\&quot;, [System.Drawing.Imaging.ImageFormat]::Png);
+\$g.Dispose(); \$bmp.Dispose()&quot;
+</code></pre>
+<p>Dispose the <code>Graphics</code> and give <code>Save</code> an explicit format: without both, it
+throws <code>ExternalException</code> and writes nothing while still printing whatever
+you echoed after it.</p>
+<p>Read it back from <code>/mnt/c/Users/&lt;windows-user&gt;/AppData/Local/Temp/shot.png</code>.
+The Windows account name is often <strong>not</strong> your WSL username — ask for it
+rather than guessing:</p>
+<pre><code class="language-bash">powershell.exe -NoProfile -Command &quot;\$env:TEMP&quot;
+</code></pre>
+<h3 id="reading-window-coordinates">Reading window coordinates</h3>
+<p>Two traps, both of which have already cost an hour here.</p>
+<p><strong>The virtual screen origin is not (0,0).</strong> With a monitor to the left of the
+primary, it is negative. A window Windows reports at <code>(528,208)</code> is at bitmap
+pixel <code>(528 - originX, 208 - originY)</code> in the screenshot — with an origin of
+<code>(-2560,0)</code>, that is <code>(3088,208)</code>, i.e. the <em>other</em> monitor. Print the origin
+alongside the rect, and convert, before concluding a window is missing:</p>
+<pre><code class="language-bash">powershell.exe -NoProfile -Command &quot;
+\$b = [System.Windows.Forms.SystemInformation]::VirtualScreen;
+Write-Output \&quot;origin=(\$(\$b.X),\$(\$b.Y)) size=\$(\$b.Width)x\$(\$b.Height)\&quot;&quot;
+</code></pre>
+<p><strong><code>SetForegroundWindow</code> will not raise a window over a fullscreen app</strong> when
+called from a background process; Windows refuses the foreground change and
+returns without error. Use <code>SetWindowPos</code> with <code>HWND_TOPMOST</code> (<code>-1</code>) to move
+the window somewhere empty and pin it, then <code>HWND_NOTOPMOST</code> (<code>-2</code>) to
+release it afterwards.</p>
+<p>Also beware stale windows: a window belonging to an already-exited process can
+linger in the enumeration at <code>(-32000,-32000)</code> with a tiny size, which is
+Windows' canonical position for a minimised window. Confirm the process is
+alive before believing anything you read about its window.</p>
+<p>WSLg windows are hosted by <code>msrdc</code>:</p>
+<pre><code class="language-bash">powershell.exe -NoProfile -Command &quot;
+Get-Process msrdc | Where-Object {\$_.MainWindowTitle -ne ''} |
+  Select-Object MainWindowTitle&quot;
+</code></pre>
+<h3 id="when-no-window-displays-at-all">When no window displays at all</h3>
+<p>A title prefixed <code>[WARN:COPY MODE]</code> means WSLg fell back to copying surfaces
+over RDP instead of redirecting them. Windows then register normally — app
+list, taskbar icon, a real rect, <code>IsWindowVisible</code> true — while their pixels
+never reach the Windows compositor. Everything you can query says the window
+is fine; it simply never paints.</p>
+<p>The cause is in <code>/mnt/wslg/weston.log</code>, at WSLg startup:</p>
+<pre><code>rdp_allocate_shared_memory: Failed to open
+  &quot;/mnt/shared_memory/{...}&quot; with error: Input/output error
+RDP backend: use_gfxredir = 0
+</code></pre>
+<p>Check those two lines first:</p>
+<pre><code class="language-bash">grep -n &quot;use_gfxredir\|rdp_allocate_shared_memory&quot; /mnt/wslg/weston.log
+</code></pre>
+<p><code>use_gfxredir = 0</code> is the fault. <code>use_gfxredir = 1</code> and no allocation failure
+means the graphics path is healthy and the problem is elsewhere.</p>
+<p><strong>The fix is to restart WSL</strong> — from Windows, not from inside the distro:</p>
+<pre><code>wsl --shutdown
+</code></pre>
+<p>then reopen the terminal. The shared-memory device is created by the Windows
+host when the VM starts, so nothing inside Ubuntu can repair it. If it
+survives a restart, <code>wsl --update</code> and shut down again.</p>
+<p>Confirmed here: before, every window (including <code>xmessage</code>, with no SDL in it
+at all) failed to paint; after, <code>use_gfxredir = 1</code>, titles lost the prefix,
+and both a bare pygame window and <code>guara_falcao</code> displayed correctly.</p>
+<p>Note this clears <code>/tmp</code>, so anything scratch you left there is gone.
+<code>.agent-view/</code> lives in the repo root and survives.</p>
+<h3 id="fixes-that-do-not-work-here">Fixes that do not work here</h3>
+<p>Forcing the SDL drivers is the suggestion this comes up against most often:</p>
+<pre><code class="language-python">os.environ[&quot;SDL_VIDEODRIVER&quot;] = &quot;x11&quot;       # already the default
+os.environ[&quot;SDL_RENDER_DRIVER&quot;] = &quot;software&quot;  # nothing to configure
+</code></pre>
+<p>Tested, with a bare pygame window and no PyGuara in it: the window is
+created, X11 lists it, <code>msrdc</code> lists it, and it still does not appear on the
+Windows desktop. Neither variable can help —</p>
+<ul>
+<li>pygame already resolves to <code>x11</code> here (<code>pygame.display.get_driver()</code>), so
+  the first line changes nothing.</li>
+<li><code>SDL_RENDER_DRIVER</code> configures SDL's <code>SDL_Renderer</code> API. This codebase
+  never creates one — the window is a plain <code>set_mode</code> surface — so the
+  second line configures a subsystem that is not in use.</li>
+</ul>
+<p>When these were tried, the actual fault was WSLg's graphics redirection being
+off (see "When no window displays at all" above). No environment variable
+inside the distro can reach that; the SDL driver was never the problem.</p>
+<h3 id="always-run-the-control-first">Always run the control first</h3>
+<p>Before concluding anything about the engine, run a window with <strong>no PyGuara in
+it at all</strong>:</p>
+<pre><code class="language-python">import time, pygame
+pygame.init()
+s = pygame.display.set_mode((800, 600))
+pygame.display.set_caption(&quot;CONTROL&quot;)
+t = time.time()
+while time.time() - t &lt; 20:
+    pygame.event.pump(); s.fill((220, 40, 40)); pygame.display.flip(); time.sleep(0.016)
+</code></pre>
+<p>If that red window does not appear, the engine cannot appear either, and the
+problem is the environment. Skipping this control cost an hour of blaming the
+engine for a WSLg display fault.</p>
+<h2 id="adding-a-demo">Adding a demo</h2>
+<p>Add one line to <code>DEMOS</code> in <code>tools/agent_view.py</code>:</p>
+<pre><code class="language-python">&quot;my_demo&quot;: (&quot;games.my_demo.bootstrap&quot;, &quot;games.my_demo.scenes&quot;, &quot;MyScene&quot;),
+</code></pre>
+<p>The registry is explicit rather than discovered, so a broken demo names itself
+instead of failing during discovery.</p>
+<h2 id="related">Related</h2>
+<ul>
+<li><code>games/validate_demos.py</code> — boots four capstone demos for 30 frames each and
+  reports pass/fail. Faster than this tool when you only need "does it crash".</li>
+<li>Issue #19 — GPU-dependent graphics code (framebuffers, passes, materials,
+  effects) has no headless coverage. This tool exercises the pygame path only.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

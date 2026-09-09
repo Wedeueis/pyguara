@@ -1,0 +1,2421 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../ONBOARDING/">
+      
+      
+        <link rel="next" href="../Archictecture%20%26%20Style%20Guide/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Zero to Hero Tutorial - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#zero-to-hero-making-your-first-pyguara-game" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Zero to Hero Tutorial
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tutorial-roadmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🗺️ Tutorial Roadmap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-1-the-boot-sequence-gamesboot_process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🛠️ Part 1: The Boot Sequence (games/boot_process)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛠️ Part 1: The Boot Sequence (games/boot_process)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-entry-point-mainpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Entry Point (main.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-bootstrap-wiring-bootstrappy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Bootstrap Wiring (bootstrap.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-2-the-ecs-mindset-gamesecs_mental_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧩 Part 2: The ECS Mindset (games/ecs_mental_model)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🧩 Part 2: The ECS Mindset (games/ecs_mental_model)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-defining-components-componentspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Defining Components (components.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-creating-a-system-systemspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Creating a System (systems.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-assembling-the-scene-scenespy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Assembling the Scene (scenes.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-3-input-mapping-events-gamesinput_events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎮 Part 3: Input Mapping &amp; Events (games/input_events)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🎮 Part 3: Input Mapping &amp; Events (games/input_events)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-registering-action-bindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Registering Action Bindings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-translating-inputs-to-events-systemspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Translating Inputs to Events (systems.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-handling-gameplay-events-in-playersystem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Handling Gameplay Events in PlayerSystem
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-4-physical-simulation-gamesphysics_integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🏃 Part 4: Physical Simulation (games/physics_integration)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏃 Part 4: Physical Simulation (games/physics_integration)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-attaching-physical-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Attaching Physical Components
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-managing-static-ground-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Managing Static Ground Boundaries
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-5-ui-scene-graphs-layouts-gamesui_scene_graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🖥️ Part 5: UI Scene Graphs &amp; Layouts (games/ui_scene_graph)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🖥️ Part 5: UI Scene Graphs &amp; Layouts (games/ui_scene_graph)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-building-responsive-buttons-and-panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Building responsive buttons and panels
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-6-standalone-compilation-pyguara-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📦 Part 6: Standalone Compilation (pyguara build)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📦 Part 6: Standalone Compilation (pyguara build)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-to-compile-your-game" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to Compile Your Game
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-options-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build Options Reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tutorial-roadmap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🗺️ Tutorial Roadmap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-1-the-boot-sequence-gamesboot_process" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🛠️ Part 1: The Boot Sequence (games/boot_process)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🛠️ Part 1: The Boot Sequence (games/boot_process)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-entry-point-mainpy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Entry Point (main.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-bootstrap-wiring-bootstrappy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The Bootstrap Wiring (bootstrap.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-2-the-ecs-mindset-gamesecs_mental_model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🧩 Part 2: The ECS Mindset (games/ecs_mental_model)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🧩 Part 2: The ECS Mindset (games/ecs_mental_model)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-defining-components-componentspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Defining Components (components.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-creating-a-system-systemspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Creating a System (systems.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-assembling-the-scene-scenespy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Assembling the Scene (scenes.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-3-input-mapping-events-gamesinput_events" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🎮 Part 3: Input Mapping &amp; Events (games/input_events)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🎮 Part 3: Input Mapping &amp; Events (games/input_events)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-registering-action-bindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Registering Action Bindings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-translating-inputs-to-events-systemspy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Translating Inputs to Events (systems.py)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-handling-gameplay-events-in-playersystem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Handling Gameplay Events in PlayerSystem
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-4-physical-simulation-gamesphysics_integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🏃 Part 4: Physical Simulation (games/physics_integration)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🏃 Part 4: Physical Simulation (games/physics_integration)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-attaching-physical-components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Attaching Physical Components
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-managing-static-ground-boundaries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Managing Static Ground Boundaries
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-5-ui-scene-graphs-layouts-gamesui_scene_graph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        🖥️ Part 5: UI Scene Graphs &amp; Layouts (games/ui_scene_graph)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="🖥️ Part 5: UI Scene Graphs &amp; Layouts (games/ui_scene_graph)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-building-responsive-buttons-and-panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Building responsive buttons and panels
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#part-6-standalone-compilation-pyguara-build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        📦 Part 6: Standalone Compilation (pyguara build)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="📦 Part 6: Standalone Compilation (pyguara build)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-to-compile-your-game" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to Compile Your Game
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build-options-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build Options Reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="zero-to-hero-making-your-first-pyguara-game">Zero to Hero: Making your First PyGuara Game</h1>
+<p>Welcome to the <strong>Zero to Hero</strong> tutorial series for the <strong>PyGuara Game Engine</strong>! This guide takes you step-by-step through the structure and concepts of PyGuara by utilizing the five educational modules located under the <code>games/</code> folder of the repository.</p>
+<p>By the end of this guide, you will understand how the engine boots up, how to design code around the Entity-Component-System (ECS) mindset, how to hook up input maps and handle events, how to integrate physical simulation via Pymunk, how to construct constraint-based UI scene graphs, and finally, how to compile and distribute your game as a standalone binary.</p>
+<hr />
+<h2 id="tutorial-roadmap">🗺️ Tutorial Roadmap</h2>
+<p>The tutorial is structured into six progressive modules:
+1. <strong>The Boot Sequence</strong> (<code>games/boot_process</code>): Initializing the engine, Dependency Injection, and starting your first Scene.
+2. <strong>The ECS Mindset</strong> (<code>games/ecs_mental_model</code>): Composing game objects using pure data components and executing logic with Systems.
+3. <strong>Input Mapping &amp; Events</strong> (<code>games/input_events</code>): Binding keyboard controls to logical actions and using the event queue for decoupled communication.
+4. <strong>Physical Simulation</strong> (<code>games/physics_integration</code>): Adding rigid bodies, colliders, and collision listeners.
+5. <strong>UI &amp; Scene graphs</strong> (<code>games/ui_scene_graph</code>): Organizing menu layouts, panels, and responsive widgets.
+6. <strong>Standalone Compilation</strong>: Building and packaging the final game executable using <code>pyguara build</code>.</p>
+<hr />
+<h2 id="part-1-the-boot-sequence-gamesboot_process">🛠️ Part 1: The Boot Sequence (<code>games/boot_process</code>)</h2>
+<p>Before we can render characters or handle physics, we must initialize the engine. In PyGuara, this is done using <strong>Dependency Injection (DI)</strong> and a <strong>bootstrap configuration</strong> file.</p>
+<p>The entry point of any PyGuara game performs the following core steps:
+1. Configures logging.
+2. Bootstraps the DI container.
+3. Retrieves the global <code>Application</code> instance from the container.
+4. Initializes the starting <code>Scene</code>.
+5. Runs the game loop.</p>
+<h3 id="the-entry-point-mainpy">The Entry Point (<code>main.py</code>)</h3>
+<pre><code class="language-python">import logging
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
+from games.boot_process.bootstrap import configure_game_container
+from games.boot_process.scenes import BootScene
+
+def main():
+    # 1. Configure logging
+    logging.basicConfig(level=logging.INFO)
+
+    # 2. Bootstrap Dependency Injection
+    container = configure_game_container()
+
+    # 3. Resolve the Application
+    app = container.get(Application)
+
+    # 4. Create the starting scene
+    event_dispatcher = container.get(EventDispatcher)
+    start_scene = BootScene(event_dispatcher)
+
+    # 5. Run the Game Loop
+    app.run(starting_scene=start_scene)
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</code></pre>
+<h3 id="the-bootstrap-wiring-bootstrappy">The Bootstrap Wiring (<code>bootstrap.py</code>)</h3>
+<p>Inside <code>bootstrap.py</code>, we instantiate the central <code>DIContainer</code> and register our managers, window backends, and renderers. Because PyGuara is completely decoupled, we can register any concrete implementation that conforms to our protocols (e.g., <code>IRenderer</code> or <code>UIRenderer</code>):</p>
+<pre><code class="language-python">from pyguara.di.container import DIContainer
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.config.manager import ConfigManager
+from pyguara.graphics.window import Window, WindowConfig
+from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
+from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.input.manager import InputManager
+from pyguara.scene.manager import SceneManager
+from pyguara.resources.manager import ResourceManager
+from pyguara.ui.manager import UIManager
+from pyguara.systems.manager import SystemManager
+from pyguara.scripting.coroutines import CoroutineManager
+from pyguara.application.application import Application
+
+def configure_game_container() -&gt; DIContainer:
+    container = DIContainer()
+    container.register_instance(DIContainer, container)
+
+    # Event System (The Backbone)
+    event_dispatcher = EventDispatcher()
+    container.register_instance(EventDispatcher, event_dispatcher)
+
+    # Central Config
+    config_manager = ConfigManager(event_dispatcher)
+    config_manager.load()
+    container.register_instance(ConfigManager, config_manager)
+
+    # Window &amp; Graphics Configuration
+    win_config = WindowConfig(title=&quot;Module 1: Boot Process&quot;, screen_width=800, screen_height=600)
+    window_backend = PygameWindow()
+    window = Window(win_config, window_backend)
+    window.create()
+    container.register_instance(Window, window)
+
+    # Renderer implementations conform to IRenderer &amp; UIRenderer protocols
+    renderer = PygameBackend(window.native_handle)
+    container.register_instance(IRenderer, renderer)
+
+    ui_renderer = PygameUIRenderer(window.native_handle)
+    container.register_instance(UIRenderer, ui_renderer)
+
+    # Core Systems registered as Singletons
+    container.register_singleton(InputManager, InputManager)
+    container.register_singleton(SceneManager, SceneManager)
+    container.register_singleton(ResourceManager, ResourceManager)
+    container.register_singleton(UIManager, UIManager)
+    container.register_singleton(SystemManager, SystemManager)
+    container.register_singleton(CoroutineManager, CoroutineManager)
+    container.register_singleton(Application, Application)
+
+    return container
+</code></pre>
+<hr />
+<h2 id="part-2-the-ecs-mindset-gamesecs_mental_model">🧩 Part 2: The ECS Mindset (<code>games/ecs_mental_model</code>)</h2>
+<p>Instead of writing classic Object-Oriented inheritance trees (like a <code>Player</code> class that inherits from <code>PhysicsObject</code> which inherits from <code>GameObject</code>), PyGuara leverages a strict <strong>Entity-Component-System (ECS)</strong> composition architecture.</p>
+<ul>
+<li><strong>Entity</strong>: A lightweight ID container (simply an identification number).</li>
+<li><strong>Component</strong>: Pure data container with no logic whatsoever. Inherits from <code>Component</code> and uses <code>__slots__</code> for cache/RAM optimization.</li>
+<li><strong>System</strong>: Pure logic execution. Systems query entities containing specific components and manipulate their data.</li>
+</ul>
+<h3 id="1-defining-components-componentspy">1. Defining Components (<code>components.py</code>)</h3>
+<pre><code class="language-python">from dataclasses import dataclass
+from pyguara.ecs.component import Component
+from pyguara.common.types import Vector2, Color
+
+@dataclass
+class Transform(Component):
+    __slots__ = (&quot;position&quot;,)
+    position: Vector2
+
+@dataclass
+class Sprite(Component):
+    __slots__ = (&quot;color&quot;, &quot;size&quot;)
+    color: Color
+    size: Vector2
+</code></pre>
+<h3 id="2-creating-a-system-systemspy">2. Creating a System (<code>systems.py</code>)</h3>
+<p>To process movement logic, we create a <code>MovementSystem</code>. In its constructor, we register our query to enable high-performance $O(1)$ query caching:</p>
+<pre><code class="language-python">from pyguara.ecs.manager import EntityManager
+from pyguara.common.types import Vector2
+from games.ecs_mental_model.components import Transform
+
+class MovementSystem:
+    def __init__(self, entity_manager: EntityManager):
+        self._em = entity_manager
+        # Speed up lookups from O(N) to O(1) by caching this query
+        self._em.register_cached_query(Transform)
+
+    def update(self, dt: float) -&gt; None:
+        # Loop through entities possessing the Transform component
+        for entity in self._em.get_entities_with_cached(Transform):
+            transform = entity.get_component(Transform)
+
+            # Update coordinate state (diagonal movement at 100 px/sec)
+            speed = 100.0
+            new_x = transform.position.x + speed * dt
+            new_y = transform.position.y + speed * dt
+
+            # Wrap around boundaries
+            if new_x &gt; 800: new_x = 0
+            if new_y &gt; 600: new_y = 0
+
+            transform.position = Vector2(new_x, new_y)
+</code></pre>
+<h3 id="3-assembling-the-scene-scenespy">3. Assembling the Scene (<code>scenes.py</code>)</h3>
+<p>In the scene's <code>on_enter</code> method, we register the system, spawn an entity, and attach components to it:</p>
+<pre><code class="language-python">from pyguara.scene.base import Scene
+from pyguara.common.types import Vector2, Color, Rect
+from games.ecs_mental_model.components import Transform, Sprite
+from games.ecs_mental_model.systems import MovementSystem
+
+class ECSScene(Scene):
+    def on_enter(self) -&gt; None:
+        self.movement_system = MovementSystem(self.entity_manager)
+
+        # Spawn our visual entity
+        hero = self.entity_manager.create_entity(&quot;hero&quot;)
+        hero.add_component(Transform(position=Vector2(100, 100)))
+        hero.add_component(Sprite(color=Color(255, 0, 0), size=Vector2(50, 50)))
+
+    def update(self, dt: float) -&gt; None:
+        self.movement_system.update(dt)
+
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -&gt; None:
+        world_renderer.clear(Color(30, 30, 30))
+
+        # Custom immediate rendering loop (Usually handled by RenderSystem)
+        for entity in self.entity_manager.get_entities_with(Transform, Sprite):
+            transform = entity.get_component(Transform)
+            sprite = entity.get_component(Sprite)
+
+            rect = Rect(transform.position.x, transform.position.y, sprite.size.x, sprite.size.y)
+            world_renderer.draw_rect(rect, sprite.color)
+</code></pre>
+<hr />
+<h2 id="part-3-input-mapping-events-gamesinput_events">🎮 Part 3: Input Mapping &amp; Events (<code>games/input_events</code>)</h2>
+<p>PyGuara decouples player input from the engine loop using semantic action bindings and a pub/sub event dispatcher.</p>
+<ol>
+<li><strong>InputManager</strong>: Maps keyboard, mouse, or gamepad inputs (e.g. <code>SPACE</code>) to virtual actions (e.g. <code>"jump"</code>).</li>
+<li><strong>EventDispatcher</strong>: Broadcasts event payloads across systems. Systems can subscribe to actions without holding references to windows or input devices.</li>
+</ol>
+<h3 id="1-registering-action-bindings">1. Registering Action Bindings</h3>
+<p>Inside your scene's <code>on_enter</code>:</p>
+<pre><code class="language-python">from pyguara.input.manager import InputManager
+from pyguara.input.types import InputDevice, ActionType
+from pyguara.input.keys import SPACE
+
+input_manager = self.container.get(InputManager)
+# Register a digital action &quot;jump&quot; that triggers on PRESS
+input_manager.register_action(&quot;jump&quot;, ActionType.PRESS)
+# Bind keyboard SPACE key to trigger &quot;jump&quot;
+input_manager.bind_input(InputDevice.KEYBOARD, SPACE, &quot;jump&quot;)
+</code></pre>
+<h3 id="2-translating-inputs-to-events-systemspy">2. Translating Inputs to Events (<code>systems.py</code>)</h3>
+<p>We create an <code>InputBridgeSystem</code> that intercepts input mappings and dispatches game-specific actions (like a <code>JumpEvent</code>):</p>
+<pre><code class="language-python">from pyguara.events.dispatcher import EventDispatcher
+from pyguara.input.events import OnActionEvent
+from games.input_events.events import JumpEvent
+
+class InputBridgeSystem:
+    def __init__(self, dispatcher: EventDispatcher, player_id: str):
+        self._dispatcher = dispatcher
+        self._player_id = player_id
+        # Subscribe to standard engine action events
+        self._dispatcher.subscribe(OnActionEvent, self.on_action)
+
+    def on_action(self, event: OnActionEvent) -&gt; None:
+        # Check if the &quot;jump&quot; key action has been triggered
+        if event.action_name == &quot;jump&quot; and event.value &gt; 0.5:
+            # Broadcast our gameplay-specific event
+            self._dispatcher.dispatch(JumpEvent(self._player_id, force=400.0))
+</code></pre>
+<h3 id="3-handling-gameplay-events-in-playersystem">3. Handling Gameplay Events in PlayerSystem</h3>
+<p>The <code>PlayerSystem</code> listens for <code>JumpEvent</code> and applies gravity:</p>
+<pre><code class="language-python">class PlayerSystem:
+    def __init__(self, entity_manager: EntityManager, dispatcher: EventDispatcher):
+        self._em = entity_manager
+        dispatcher.subscribe(JumpEvent, self.on_jump)
+
+    def on_jump(self, event: JumpEvent) -&gt; None:
+        entity = self._em.get_entity(event.entity_id)
+        if entity and entity.has_component(Velocity):
+            vel = entity.get_component(Velocity)
+            # Instantly apply upward force (negative Y is up in 2D coordinate system)
+            vel.value = Vector2(vel.value.x, -event.force)
+
+    def update(self, dt: float) -&gt; None:
+        gravity = 800.0
+        floor_y = 500.0
+
+        for entity in self._em.get_entities_with(Transform, Velocity):
+            trans = entity.get_component(Transform)
+            vel = entity.get_component(Velocity)
+
+            # Apply gravity acceleration to velocity
+            vel.value = Vector2(vel.value.x, vel.value.y + gravity * dt)
+            # Update coordinate position
+            trans.position = trans.position + (vel.value * dt)
+
+            # Simple ground alignment check
+            if trans.position.y &gt; floor_y:
+                trans.position = Vector2(trans.position.x, floor_y)
+                vel.value = Vector2(vel.value.x, 0)
+</code></pre>
+<hr />
+<h2 id="part-4-physical-simulation-gamesphysics_integration">🏃 Part 4: Physical Simulation (<code>games/physics_integration</code>)</h2>
+<p>For advanced simulation, PyGuara wraps the <strong>Pymunk</strong> rigid body library. Rather than calculating gravity manually, physical objects register <code>RigidBody</code> and <code>Collider</code> components. The <code>PhysicsSystem</code> automatically simulates rigid body calculations and mirrors the resulting coordinates back onto <code>Transform</code> components.</p>
+<blockquote>
+<p>For a <strong>player or NPC</strong>, use <code>CharacterBody</code> with <code>CharacterMover</code> instead of
+a dynamic <code>RigidBody</code> — it gives crisp, non-bouncy movement with ground and
+wall detection. See <a href="../../physics/character-movement/"><code>docs/physics/character-movement.md</code></a>.
+The dynamic-body example below is for props and projectiles.</p>
+</blockquote>
+<h3 id="1-attaching-physical-components">1. Attaching Physical Components</h3>
+<pre><code class="language-python">from pyguara.physics.components import RigidBody, Collider
+from pyguara.physics.types import BodyType, ShapeType
+
+# Create a dynamic falling circle
+ball = self.entity_manager.create_entity(&quot;ball&quot;)
+ball.add_component(Transform(position=Vector2(400, 100)))
+# RigidBody carries mass and body type; friction/restitution live on the
+# Collider's PhysicsMaterial.
+ball.add_component(RigidBody(body_type=BodyType.DYNAMIC, mass=1.0))
+# Collider dimensions are [radius] for a circle, [width, height] for a box.
+ball.add_component(Collider(shape_type=ShapeType.CIRCLE, dimensions=[20.0]))
+</code></pre>
+<h3 id="2-managing-static-ground-boundaries">2. Managing Static Ground Boundaries</h3>
+<p>Static physics boundaries prevent entities from falling into the void:</p>
+<pre><code class="language-python">ground = self.entity_manager.create_entity(&quot;ground&quot;)
+ground.add_component(Transform(position=Vector2(400, 500)))
+# Static body does not move under gravity or collisions
+ground.add_component(RigidBody(body_type=BodyType.STATIC))
+# Box collider bounds
+ground.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[800, 40]))
+</code></pre>
+<hr />
+<h2 id="part-5-ui-scene-graphs-layouts-gamesui_scene_graph">🖥️ Part 5: UI Scene Graphs &amp; Layouts (<code>games/ui_scene_graph</code>)</h2>
+<p>Creating buttons, health bars, and overlay dialogs requires a layout-agnostic framework to handle resolution adjustments automatically. PyGuara provides a constraint-based UI layout system.</p>
+<h3 id="1-building-responsive-buttons-and-panels">1. Building responsive buttons and panels</h3>
+<p>You instantiate UI widgets, attach declarative <code>LayoutConstraints</code>, and add
+the roots to the <code>UIManager</code>. The manager runs a layout pass over every root
+before it draws (and again after a window resize), so a constrained element's
+<code>position</code>/<code>size</code> are placeholders -- the constraints decide the final rect.</p>
+<pre><code class="language-python">from pyguara.common.types import Vector2
+from pyguara.ui.manager import UIManager
+from pyguara.ui.components import Panel, Button
+from pyguara.ui.constraints import LayoutConstraints
+from pyguara.ui.types import UIAnchor
+
+# 1. Grab UIManager from DI Container
+ui_manager = self.container.get(UIManager)
+
+# 2. A panel covering the centre 50% x 60% of the screen.
+#    position/size are placeholders; the constraint wins.
+panel = Panel(Vector2(0, 0), Vector2(10, 10))
+panel.constraints = LayoutConstraints(
+    anchor=UIAnchor.CENTER,
+    width_percent=0.5,
+    height_percent=0.6,
+)
+ui_manager.add_element(panel)
+
+# 3. A button centred inside the panel's content rect.
+button = Button(&quot;Start Game&quot;, Vector2(0, 0))
+button.constraints = LayoutConstraints(
+    anchor=UIAnchor.CENTER,
+    width_percent=0.3,
+    height_percent=0.1,
+)
+
+def on_click(btn: Button):
+    print(&quot;Transitioning to main level scene...&quot;)
+    # Scene transition command (via SceneManager)
+
+button.on_click = on_click
+panel.add_child(button)
+</code></pre>
+<blockquote>
+<p>If you mutate something a layout depends on after the first frame -- a
+label's text, an element's <code>visible</code> flag -- call
+<code>ui_manager.invalidate_layout()</code> so the next render re-runs the pass.</p>
+</blockquote>
+<hr />
+<h2 id="part-6-standalone-compilation-pyguara-build">📦 Part 6: Standalone Compilation (<code>pyguara build</code>)</h2>
+<p>Once your game is complete, you will want to share it with players without requiring them to install Python or Pip. PyGuara provides a packaging utility built directly into its Command Line Interface.</p>
+<h3 id="how-to-compile-your-game">How to Compile Your Game</h3>
+<p>The <code>pyguara build</code> command compiles your entry script, copies all associated assets (like images, sound clips, and configurations), resolves external dynamic libraries, and outputs a ready-to-run folder.</p>
+<pre><code class="language-bash"># Basic directory-based build
+uv run pyguara build games/guara_falcao/main.py --output dist/guara_falcao
+
+# Compact single-executable build
+uv run pyguara build games/true_coral/main.py --onefile --output dist/true_coral
+</code></pre>
+<h3 id="build-options-reference">Build Options Reference</h3>
+<ul>
+<li><code>-o</code>, <code>--output</code>: Specifies the destination directory for the package (default: <code>dist/</code>).</li>
+<li><code>-n</code>, <code>--name</code>: Changes the final binary name (defaults to the entry script's filename).</li>
+<li><code>--onefile</code>: Merges all resources and Python script libraries into a single file executable.</li>
+<li><code>--windowed</code>: Suppresses the OS command shell terminal console on boot (default behavior).</li>
+<li><code>--icon</code>: Bundles a custom application icon (e.g. <code>icon.ico</code> for Windows or <code>icon.icns</code> for macOS).</li>
+<li><code>-a</code>, <code>--assets</code>: Explicitly specifies directories containing game assets (textures, music, shaders) to package with the executable.</li>
+<li><code>--dry-run</code>: Prints the PyInstaller command that would run, without building.</li>
+</ul>
+<p>See <a href="../../systems/cli/">Command-Line Tools</a> for the full option list and for
+<code>pyguara atlas</code>, the sprite-atlas packer.</p>
+<p>Now you have all the knowledge required to bootstrap, design, script, and publish your own 2D games using the PyGuara game engine! Keep exploring the examples under the <code>games/</code> folder to study advanced scripts, spatial audio routing, and the in-engine debug overlays.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
