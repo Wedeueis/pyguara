@@ -18,6 +18,8 @@ import click
 from pyguara.cli.atlas_generator import atlas as atlas_command
 from pyguara.cli.build import build as build_command
 
+__all__ = ["main"]
+
 
 @click.group()
 @click.version_option(package_name="pyguara")

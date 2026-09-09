@@ -107,7 +107,7 @@ class PhysicsSystem:
             dt: Delta time in seconds.
 
         Note:
-            P2-013: Refactored to Pull pattern. System queries entities internally.
+            Uses the Pull pattern: the system queries entities internally.
         """
         self.sync_kinematic_transforms()
 

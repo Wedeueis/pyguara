@@ -1,4 +1,4 @@
-"""Tests for P2-001: RenderSystem hot-loop optimization."""
+"""Tests for RenderSystem hot-loop optimization."""
 
 import dis
 
@@ -155,7 +155,7 @@ def test_all_renderables_implement_protocol():
 def test_render_submission_performance(benchmark):
     """Benchmark render submission with direct attribute access.
 
-    This test verifies that P2-001 optimization (removing getattr) provides
+    This test verifies that removing getattr from the hot loop provides
     fast submission performance. Expected: < 1ms for 100 sprites.
     """
     import pygame

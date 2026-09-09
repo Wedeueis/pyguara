@@ -124,15 +124,14 @@ def test_snake_case_conversion() -> None:
     assert Entity._get_snake_name(AIController) == "ai_controller"
 
 
-# ==================== Component Removal Tests (P0-001) ====================
+# ==================== Component Removal Tests ====================
 
 
 def test_component_removal_updates_index() -> None:
     """Ensure removing a component updates manager's inverted index.
 
-    This is the core test for P0-001. Previously, removing a component
-    would leave stale entries in the index, causing queries to return
-    entities without the component.
+    Previously, removing a component would leave stale entries in the index,
+    causing queries to return entities without the component.
     """
     manager = EntityManager()
     e1 = manager.create_entity()
@@ -281,7 +280,7 @@ def test_query_after_removal_returns_correct_components() -> None:
     assert combo_entities[0] == e2
 
 
-# ==================== Strict Component Typing Tests (P2-006) ====================
+# ==================== Strict Component Typing Tests ====================
 
 
 def test_data_only_component_no_warning() -> None:

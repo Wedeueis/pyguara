@@ -78,9 +78,9 @@ class PhysicsConfig:
     # detection, so a body jumps velocity/tick pixels and passes through
     # anything thinner. Measured against a 10px wall, 1/2/4 substeps stop a
     # body up to roughly 200/400/900 px/s. 4 is the default: its cost is
-    # small (~0.65ms/update at 200 dynamic bodies, 2.5ms at 500) and the
-    # headroom matters for knockback and explosion-flung props. Drop to 2
-    # only with many hundreds of fast bodies. 1 disables substepping.
+    # modest at the body counts a roguelike scene reaches, and the headroom
+    # matters for knockback and explosion-flung props. Drop to 2 only with
+    # many hundreds of fast bodies. 1 disables substepping.
     substeps: int = 4
 
     # Fraction of any remaining collider overlap resolved per 1/60s.
