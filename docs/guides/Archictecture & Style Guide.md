@@ -134,42 +134,42 @@ class Transform(BaseComponent):
 
     # NO METHODS (data only)
     # Logic goes in Systems, not Components
+
+
+@dataclass
+class Velocity(BaseComponent):
+    """Linear velocity in units per second."""
+    value: Vector2 = Vector2(0, 0)
 ```
 
 ### 3.2. System Definition
 
 ```python
 from pyguara.ecs.manager import EntityManager
-from pyguara.common.components import Transform
-from pyguara.physics.components import RigidBody
 
-class PhysicsSystem:
-    """Synchronizes physics engine with ECS transform components.
+class MovementSystem:
+    """Integrates each entity's velocity into its Transform every frame.
 
-    Runs during the physics update phase, before rendering.
+    A system is stateless: it owns no game data, only references to the
+    services it queries. All state lives in the components it reads
+    (`Transform` and `Velocity` from 3.1).
     """
 
-    def __init__(self, entity_manager: EntityManager, physics_engine: IPhysicsEngine):
+    def __init__(self, entity_manager: EntityManager):
         self._entities = entity_manager
-        self._physics = physics_engine
 
     def update(self, dt: float) -> None:
-        """Update all physics-enabled entities."""
-        for entity in self._entities.get_entities_with(Transform, RigidBody):
+        for entity in self._entities.get_entities_with(Transform, Velocity):
             transform = entity.get_component(Transform)
-            rigidbody = entity.get_component(RigidBody)
-
-            # Sync physics -> ECS (for dynamic bodies)
-            if rigidbody.body_type == BodyType.DYNAMIC:
-                physics_body = self._physics.get_body(entity.id)
-                transform.position = physics_body.position
-                transform.rotation = physics_body.rotation
-            # Sync ECS -> physics (for kinematic bodies)
-            else:
-                physics_body = self._physics.get_body(entity.id)
-                physics_body.position = transform.position
-                physics_body.rotation = transform.rotation
+            velocity = entity.get_component(Velocity)
+            transform.position += velocity.value * dt
 ```
+
+For simulated rigid bodies, do not hand-roll this: add `RigidBody` /
+`Collider` components and let the engine's `PhysicsSystem` own the
+Transform↔body sync. For player and NPC movement, use `CharacterBody` with
+`CharacterMover`. See `docs/physics/simulation.md` and
+`docs/physics/character-movement.md`.
 
 ### 3.3. Service Registration
 
@@ -186,10 +186,14 @@ def _setup_container() -> DIContainer:
     container.register_transient(ParticleEmitter, ParticleEmitter)
 
     # Scoped: Shared within a scene/scope
-    container.register_scoped(PhysicsSystem, PhysicsSystem)
+    container.register_scoped(SceneResources, SceneResources)
 
     return container
 ```
+
+Bootstrap registers the core services (see `pyguara/application/bootstrap.py`).
+Gameplay systems such as `PhysicsSystem` are not registered here — a scene
+constructs the ones it needs and ticks them itself.
 
 ### 3.4. Event Definition and Usage
 

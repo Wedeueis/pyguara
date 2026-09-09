@@ -148,7 +148,7 @@ To add a new feature (e.g., "Stamina") to your game, follow this strict flow:
 | **State** | Store state in `Components`. | Store state in `System` classes (Systems should be stateless logic processors). |
 | **Testing** | Write tests in `tests/` mocking the DI Container. | Test logic by running the game manually. |
 | **Assets** | Load assets via `ResourceManager`. | Hardcode file paths (e.g., `"C:/Users/..."`). |
-| **Physics** | Use `PhysicsSystem` for movement. | Manually update `transform.position` for physics objects. |
+| **Physics** | Use `RigidBody` + `PhysicsSystem` for simulated bodies, and `CharacterBody` + `CharacterMover` for characters. | Manually update `transform.position` for physics objects. |
 
 ## 5. Testing Architecture
 

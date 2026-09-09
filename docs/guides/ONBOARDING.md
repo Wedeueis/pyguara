@@ -102,9 +102,9 @@ Before diving into individual systems, it's crucial to understand the three core
     ```python
     # In your GameplayScene's on_enter method
     player_entity = self.entity_manager.create_entity()
-    self.entity_manager.add_component(player_entity, Transform(position=Vector2(100, 100)))
-    self.entity_manager.add_component(player_entity, PlayerInput())
-    self.entity_manager.add_component(player_entity, Sprite(texture=...))
+    player_entity.add_component(Transform(position=Vector2(100, 100)))
+    player_entity.add_component(PlayerInput())
+    player_entity.add_component(Sprite(texture=...))
     ```
 
 ---
@@ -133,8 +133,8 @@ Before diving into individual systems, it's crucial to understand the three core
     # In a scene's on_enter method
     texture = self.resource_manager.load("sprites/my_sprite.png", Texture)
     my_entity = self.entity_manager.create_entity()
-    self.entity_manager.add_component(my_entity, Transform(position=Vector2(50, 50)))
-    self.entity_manager.add_component(my_entity, Sprite(texture=texture, layer=10))
+    my_entity.add_component(Transform(position=Vector2(50, 50)))
+    my_entity.add_component(Sprite(texture=texture, layer=10))
     ```
 
 ---
@@ -147,17 +147,28 @@ Before diving into individual systems, it's crucial to understand the three core
     *   **PhysicsSystem**: The ECS system that synchronizes data between the game world (`Transform` components) and the physics world (`Pymunk.Body`).
     *   **CollisionSystem**: Receives callbacks from the backend and dispatches high-level `OnCollisionBegin`, `OnTriggerEnter`, etc., events.
 *   **Features:**
-    *   Static, Kinematic, and Dynamic rigid bodies.
-    *   Circle and Box colliders.
+    *   Static, Kinematic, and Dynamic rigid bodies, with per-body sleeping.
+    *   Circle and Box colliders; one-way (pass-through) platforms.
     *   Physics materials (friction, restitution).
     *   Triggers (non-solid colliders).
     *   A rich set of joints (Pin, Spring, Slider).
-    *   Raycasting.
+    *   Spatial queries: `raycast` / `raycast_all`, `point_query`,
+        `overlap_box` / `overlap_box_all`, `overlap_circle`, `region_query`.
+    *   `CharacterMover` / `CharacterBody` for kinematic character control
+        (see `docs/physics/character-movement.md`).
 *   **How to Use:**
     1.  Add a `RigidBody` component to an entity to give it physics properties.
     2.  Add a `Collider` component to give it a physical shape.
     3.  The `PhysicsSystem` will automatically create the body in the Pymunk world.
     4.  For dynamic bodies, the `PhysicsSystem` will update the entity's `Transform` component each frame based on the simulation.
+    5.  For a player or NPC, prefer `CharacterBody` driven by `CharacterMover`
+        instead of a dynamic `RigidBody` — it gives responsive, non-bouncy
+        movement with ground/wall probes. See
+        `docs/physics/character-movement.md`.
+
+    `PhysicsSystem` is not registered by `bootstrap.py`; a scene creates it
+    and calls `PhysicsSystem.update()` (or routes it through the
+    `SystemManager`) itself.
 
     ```python
     from pyguara.physics.components import RigidBody, Collider
@@ -165,9 +176,9 @@ Before diving into individual systems, it's crucial to understand the three core
 
     # Create a dynamic, falling box
     box = self.entity_manager.create_entity()
-    self.entity_manager.add_component(box, Transform())
-    self.entity_manager.add_component(box, RigidBody(body_type=BodyType.DYNAMIC))
-    self.entity_manager.add_component(box, Collider(shape_type=ShapeType.BOX, dimensions=[32, 32]))
+    box.add_component(Transform())
+    box.add_component(RigidBody(body_type=BodyType.DYNAMIC))
+    box.add_component(Collider(shape_type=ShapeType.BOX, dimensions=[32, 32]))
     ```
 
 ---
