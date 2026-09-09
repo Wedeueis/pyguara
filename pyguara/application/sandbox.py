@@ -14,6 +14,7 @@ from pyguara.tools.assets_browser import AssetsTool
 from pyguara.tools.config_inspector import ConfigInspector
 from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.event_monitor import EventMonitor
+from pyguara.tools.gizmos import TransformGizmo
 from pyguara.tools.hierarchy import HierarchyTool
 from pyguara.tools.inspector import EntityInspector
 from pyguara.tools.manager import ToolManager
@@ -50,13 +51,16 @@ class SandboxApplication(Application):
         self.logger.info("Initializing Developer Tools")
 
         self._tool_manager = ToolManager(self._container)
+        # Registered so tools (e.g. ShortcutsPanel) can read the live shortcut
+        # map instead of hard-coding a copy that drifts.
+        self._container.register_instance(ToolManager, self._tool_manager)
 
         # 1. Performance Monitor (F1) - FPS and Stats
         perf_monitor = PerformanceMonitor(self._container)
         self._tool_manager.register_tool(perf_monitor, pygame.K_F1)
 
         # 2. Hierarchy (F5) - entity list + selection. Built before the
-        #    inspector, which follows its selection.
+        #    inspector and gizmo, which both follow its selection.
         hierarchy = HierarchyTool(self._container)
         self._tool_manager.register_tool(hierarchy, pygame.K_F5)
 
@@ -65,6 +69,13 @@ class SandboxApplication(Application):
             self._container, selection_provider=lambda: hierarchy.selected_entity
         )
         self._tool_manager.register_tool(inspector, pygame.K_F2)
+
+        # 3b. Transform Gizmo (F9) - visual handles for the selected entity.
+        #     Q/W/E switch translate/rotate/scale. Follows the Hierarchy.
+        gizmo = TransformGizmo(
+            self._container, selection_provider=lambda: hierarchy.selected_entity
+        )
+        self._tool_manager.register_tool(gizmo, pygame.K_F9)
 
         # 4. Event Monitor (F3) - Log Viewer
         event_mon = EventMonitor(self._container)
@@ -90,6 +101,16 @@ class SandboxApplication(Application):
         self._tool_manager.toggle_global_visibility()
 
         self.logger.info("Tools loaded. Press F8 for help")
+
+    def shutdown(self) -> None:
+        """Tear tools down before the engine, then shut the engine down.
+
+        `EventMonitor` and any custom tool that subscribed to the dispatcher
+        must let go of it while it is still alive.
+        """
+        if self._tool_manager is not None:
+            self._tool_manager.clear()
+        super().shutdown()
 
     def _process_input(self, frame_time: float) -> None:
         """Process input events, prioritizing developer tools."""

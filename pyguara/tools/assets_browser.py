@@ -146,11 +146,18 @@ class AssetsTool(Tool):
         cached = dict(self._resources.iter_cached())
         resource = cached.get(path)
         is_data = isinstance(resource, DataResource)
+        is_loaded = resource is not None
+        # Spawn is for data files; a not-yet-loaded path might be one (we find
+        # out on click), so it is only *disabled* when the loaded resource is
+        # definitively not a DataResource.
+        can_spawn = is_data or not is_loaded
 
-        self._spawn_rect = _button(renderer, "Spawn into Scene", x, y, enabled=is_data)
-        self._reload_rect = _button(
-            renderer, "Reload", x + 160, y, enabled=resource is not None
-        )
+        # Draw both buttons every frame, but only keep the hit rect for the
+        # one that is actually enabled -- a greyed-out button must not act.
+        spawn_rect = _button(renderer, "Spawn into Scene", x, y, enabled=can_spawn)
+        reload_rect = _button(renderer, "Reload", x + 160, y, enabled=is_loaded)
+        self._spawn_rect = spawn_rect if can_spawn else None
+        self._reload_rect = reload_rect if is_loaded else None
         y += 28
 
         if is_data:

@@ -2,8 +2,6 @@
 
 from collections import deque
 
-import pygame
-
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
@@ -23,20 +21,21 @@ class PerformanceMonitor(Tool):
             container: The DI container.
         """
         super().__init__("performance_monitor", container)
-        self._clock = pygame.time.Clock()
         self._fps_history: deque[float] = deque(maxlen=60)
         self._avg_fps = 0.0
 
     def update(self, dt: float) -> None:
-        """Calculate FPS statistics.
+        """Fold this frame's duration into the rolling FPS average.
 
         Args:
-            dt: Delta time.
+            dt: Delta time in seconds.
         """
-        # Note: In a real app, you'd get the actual clock from the container
-        # This is just an estimation for the tool's update cycle
-        current_fps = 1.0 / dt if dt > 0 else 0.0
-        self._fps_history.append(current_fps)
+        # A non-positive dt (first frame, a pause, a clock that went
+        # backwards) has no meaningful FPS -- skip it rather than feeding a
+        # 0.0 sample that would drag the average down for a full second.
+        if dt <= 0:
+            return
+        self._fps_history.append(1.0 / dt)
         self._avg_fps = sum(self._fps_history) / len(self._fps_history)
 
     def render(self, renderer: UIRenderer) -> None:

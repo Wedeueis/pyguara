@@ -124,6 +124,51 @@ def test_spawn_without_an_active_scene_reports_and_returns_none(tmp_path) -> Non
     app.shutdown()
 
 
+def test_reload_button_is_not_clickable_when_resource_is_not_loaded(tmp_path) -> None:
+    """An indexed-but-unloaded path: Reload is greyed AND has no hit rect,
+    so clicking where it draws does nothing (the 'enabled' flag used to be
+    cosmetic only)."""
+    app, _ = _app_with_scene()
+    path = _write_goblin(tmp_path)
+    from pyguara.resources.manager import ResourceManager
+
+    app._container.get(ResourceManager).index_directory(str(tmp_path))
+    tool = AssetsTool(app._container)
+    tool._selected_path = path
+    tool.render(_renderer())
+
+    assert tool._reload_rect is None  # not loaded -> no Reload
+    assert tool._spawn_rect is not None  # might be data -> Spawn stays live
+    app.shutdown()
+
+
+def test_spawn_button_is_not_clickable_for_a_loaded_non_data_resource(
+    tmp_path,
+) -> None:
+    app, _ = _app_with_scene()
+    tool = AssetsTool(app._container)
+    tool._selected_path = "/some/sprite.png"
+
+    class _FakeTexture:
+        native_handle = object()
+
+    tool._resources.iter_cached = lambda: iter(  # type: ignore[method-assign]
+        [("/some/sprite.png", _FakeTexture())]
+    )
+    tool.render(_renderer())
+
+    assert tool._spawn_rect is None  # loaded and not a DataResource -> dead
+    assert tool._reload_rect is not None  # loaded -> Reload is fine
+
+    # And a click where the (now absent) Spawn button drew is a no-op.
+    event = MagicMock()
+    event.type = pygame.MOUSEBUTTONDOWN
+    event.button = 1
+    event.pos = (tool._panel_rect.x + 20, tool._panel_rect.y + 400)
+    assert tool.process_event(event) is False
+    app.shutdown()
+
+
 def test_clicking_a_row_selects_it(tmp_path) -> None:
     app, _ = _app_with_scene()
     (tmp_path / "goblin.json").write_text("{}")
