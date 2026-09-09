@@ -88,11 +88,16 @@ Iteration Log entry of that name. The **cross-cutting concerns sweep** on
 2026-09-09 (branch `chore/cross-cutting-concerns-sweep`) then closed the
 mechanical CCs — CC-3, CC-4, CC-5, CC-7, CC-8, all already whittled to
 near-nothing by the per-subsystem passes — and promoted the one substantial
-survivor, CC-6 (component data-purity / `Transform`), to issue #75. What
-remains is the tracked cross-cutting work (the GitHub issues below: #9, #16,
-#19, #23, #28, #30, #37, #40, #43, #46, #49, #51, #53, #55, #58, #61, #75,
-and the Phase D backfill's #64–#73) — none of which is a single-subsystem
-iteration.
+survivor, CC-6 (component data-purity / `Transform`), to issue #75. The
+**defect issues** — the three tracked GitHub issues that were bugs rather than
+capability gaps: #9 (pygame in the core), #23 (camera rotation), #30 (guide
+docs drift) — were then all closed on 2026-09-09 (PRs #77–#80); see the
+Iteration Log entry "Defect issues #9 / #23 / #30".
+
+What remains is capability-and-architecture work, all GitHub issues: #16, #19,
+#28, #37, #40, #43, #46, #49, #51, #53, #55, #58, #61, #75, and the Phase D
+backfill's #64–#73 — none of which is a single-subsystem iteration, and none a
+known bug.
 
 `pyguara/tools` in one slice, ~1,750 lines (`base`, `manager`, `inspector`,
 `tweakable`, `hierarchy`, `assets_browser`, `config_inspector`, `gizmos`,
@@ -149,7 +154,10 @@ the no-provider case); `ConfigInspector` — registered at F6 but absent from
 parked:** `TransformGizmo` and `PhysicsDebugger` still draw and hit-test with
 `Transform.position` as a *screen* coordinate — no camera transform, aligned
 only at camera origin/zoom 1 — gated on the world-to-screen unification
-(issue #23), now documented on both.
+(issue #23), now documented on both. *(Update 2026-09-09: #23 is resolved —
+`screen_offset` is now the one transform — but it only unified the existing
+copies; making the gizmo/debugger camera-aware is still an open follow-up,
+now #53's scope.)*
 
 Tests +20 (1909 → 1929): `test_tools.py` gained real lifecycle coverage
 (duplicate-registration runs once not twice, `unregister_tool`/`clear` fire
@@ -969,7 +977,7 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 | `pyguara/resources` | 2026-09-08 | One slice (`manager`, `meta`, `loader`, `types`, `data`, `data_loader`; hot reload lives downstream in `pyguara/dev`). No headline crash — better shape than recent subsystems — but the recurring shapes held. **Reference counting was internally inconsistent and wired to nothing**: `load()` auto-incremented on every call incl. cache hits, `release()` auto-unloaded at 0, so `unload_unused()` could never evict anything in use and a released resource was already gone — dead. No engine caller of acquire/release/unload/unload_unused; `AudioManager` `load()`s per play → count climbs forever. `Resource._ref_count` was a *third* dead counter. Reworked (user: "fix the model + add reload()"): `load()` is a pure cache-get → unpinned (0); `acquire()`/`release()` pin; `unload_unused()` now sweeps. `index_directory()` **silently resolved a stem collision to the last file walked** — now the ambiguous bare stem is dropped with a warning, full-name keys always win. `MetaLoader` **cached parsed meta by path with no invalidation** (stale after a disk change — wrong under hot reload) and the path-only key **swallowed the `expected_type` mismatch warning** after the first call — now mtime-pinned + re-read + `invalidate()`, check runs every call. `DataResource` docstring claimed "hot-reloaded by the ResourceManager" with **no reload API** — added `ResourceManager.reload()` (re-run loader, re-read `.meta`, swap in place, keep count). The **`.meta` import pipeline was ~70% scaffolding** (`AudioMeta`/`SpritesheetMeta` had no consumer, GL loader hardcoded `LINEAR`) — wired end to end (user: "wire it up in this slice"): `Resource.import_meta` carries the resolved sidecar; `GLTextureLoader` honours `filter` (default flips to `NEAREST`, matching the pygame path); audio backend applies `AudioMeta.volume_db` as a per-asset channel gain; `SpriteSheet` gained `margin`/`spacing` (previously meaningless) + `slice_from_meta`. Recurring shapes: "declared and wired to nothing" (the whole ref-count half; `AudioMeta`; `_ref_count`) and uniform test setup (`test_resources.py` asserted on `_reference_counts`/`_cache`/`_path_index` privates and hand-poked an impossible state into `test_unload_unused`; every `test_meta.py` test used a fresh `MetaLoader()`). Tests +21. Left open: `AudioMeta.loop_*`/`normalize`/`load_mode`, `TextureMeta.mipmaps`/`wrap_*` still unconsumed (need streaming/DSP/GL-state — authoring-layer gap, sibling of #37); audio should `acquire()` its clips under the new model (small `pyguara/audio` follow-up, no behaviour change today); no lock on the cache dicts (no concurrent caller, parked CC). |
 | `pyguara/animation` | 2026-09-08 | One slice, both halves (`pyguara/animation` tween+easing, plus the sprite-animation FSM in `pyguara/graphics` only surveyed during the graphics audit). **`Tween` accepted only `float` scalars / `tuple`s**: `Tween(0, 100, 1.0)`, a `list`, mixed int/float, or a `Color` constructed fine then crashed on first `update()` with a bare `AssertionError` (`_interpolate` used `assert isinstance(x, float)` as validation, stripped under `-O`). `Tween` was a value-equality `@dataclass`, so `TweenManager.remove(b)` removed an equal-but-different `a` — now `@dataclass(eq=False)`. `Animator.update()` advanced ≤1 frame per call (`if`, not `while`) so a lag spike dropped frames and drifted behind forever while `_current_time` grew unbounded — now O(1) catch-up. `AnimationStateMachine` re-fired `on_complete` + the transition check every frame a non-looping clip sat finished (callback storm for any terminal state) — fixed with a `_completion_handled` latch reset on transition. `AnimationClip` gained `__post_init__` validation (`frame_rate<=0` → `ZeroDivisionError`, `frames=[]` → `IndexError`). `TransitionCondition.IMMEDIATE` was declared but `_check_transitions()` had no branch — now honoured (fires on entry). `Scene.update_animations()` removed: its docstring told games to call it from `scene.update()`, but `AnimationSystem` has been auto-registered on the scene's `SystemManager` since wayfinder ticket 24, so following the docs double-updated every animation; it had no real callers. Recurring shapes: "assert as runtime validation", "identity vs value" (the gamepad-index shape), "one advance per frame" (the audio/application shape), the `on_complete` retrigger storm (audio F5), "no `__post_init__`" (audio F6 / physics config), "declared and wired to nothing" (`IMMEDIATE`), and uniform test setup — every tween test used float `0.0→100.0`, every FSM test stepped `dt == 1/frame_rate` exactly and stopped updating on the completion frame. Left open: a single huge `dt` still resolves only one loop boundary per `Tween.update()` (catches up over later frames, documented); `Color` tweening unsupported (documented); `_allow_methods = True` on both FSM components stays CC-6. |
 | `pyguara/audio` | 2026-09-08 | One slice. **SFX playback was dead end to end**: the pygame backend called `Channel.get_id()` (pygame-ce has `Channel.id`), so every real `play_sfx`/`play_sfx_at_position` raised, was swallowed by `except (AttributeError, Exception)`, and returned `None` while the sound played on untracked — hidden because all 107 audio tests `patch("pygame.mixer")` wholesale. Loudness/pan were set on the ResourceManager-shared `Sound` not the channel, so concurrent plays of one clip corrupted each other and recycled channels kept the last sound's hard pan. `AudioSourceSystem` never detected a finished one-shot — `is_playing` lied forever, a source could not be replayed, and stale channel ids kept receiving spatial mix updates meant for whatever reused the channel; fixed with a new `IAudioSystem.is_channel_active()` reconciled each frame, plus an `_auto_played` latch (auto_play is "on awake", not loop — the fix exposed a retrigger storm). `SpatialAudioConfig` gained `__post_init__` validation (0 → `ZeroDivisionError` in `calculate_pan`; inverted range → attenuation cliff). Added `IAudioSystem.shutdown()` (idempotent `pygame.mixer.quit()`), wired into `Application.shutdown()`. Recurring shapes: "mock away the unit under test" (the whole `test_audio.py`) and "declared and wired to nothing" (`AudioManager._active_channels`, removed). Left open: bus/master volume changes don't re-mix already-playing non-spatial SFX (mixer limitation, documented). |
-| `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). Phase B also found the softer test smells — assertions on `_controllers` privates, `assert x is not None` on a list literal, `assert not raises` as the only check — and rewrote them. `input/manager.py` stays a CC-11 / issue #9 offender (raw pygame events) — parked. |
+| `pyguara/input` | 2026-09-08 | One slice. `InputContext` was inert end to end — `InputManager._context` was pinned to `GAMEPLAY` with no setter, so three of four contexts and the `context=` arg on `bind_input()` could never fire; `test_context_switching` only passed by poking the private attr. Gamepad identity was the pygame device index, not the SDL instance id, so unplugging a non-last pad flagged the wrong one and kept a stale handle. `rebind(SWAP)` returned `SWAPPED` when the action had no prior key and it had really just unbound the other; `RebindResult.CONFLICT` was unreachable (ERROR raises). `OnAction`/`OnRawKey`/`OnMouse` events were frozen at `timestamp=0.0` — the idiom the `events` audit already killed. Recurring shapes again: "declared and wired to nothing" (contexts, the whole rebind/serialize surface has no `InputManager` entry point — added `bindings`) and uniform test setup (every gamepad test unplugged only the last pad; every swap test pre-bound both actions). Phase B also found the softer test smells — assertions on `_controllers` privates, `assert x is not None` on a list literal, `assert not raises` as the only check — and rewrote them. `input/manager.py` was a CC-11 / issue #9 offender (raw pygame events) — resolved 2026-09-09, PR #80: it now consumes engine events. |
 | `pyguara/physics` | 2026-09-08 | Judged as *game* physics. Four slices: substepping stops ordinary-speed tunnelling (PR #24); characters moved off dynamic bodies onto `CharacterMover`/`CharacterBody` with full parity — knockback, platform riding, crate pushing — on Celeste's integer+remainder model (PR #25); trigger volumes and the entire `Joint` ECS layer were both inert end to end and were rebuilt and tested (PR #27); the close added five spatial queries, body sleeping, kept `substeps` at 4 on benchmark evidence, and froze `PhysicsMaterial`. Recurring shape: "declared and wired to nothing" (`fixed_rotation`, `gravity_scale`, the `return False` collision contract, `Joint`, `TriggerVolume`) and uniform test setup (every test a slow body already at rest). |
 | `pyguara/graphics` | 2026-09-06 | Audited in five slices: window boundary, components, backends, pipeline, assets. Window reported the requested size not the granted one; `Box`/`Circle` were hard-wired to pygame; the pygame stubs had drifted; a zero-height window produced a 450px viewport; nine-patch produced negative source rects. PRs #12, #14, #15, #17, #18. |
 | `pyguara/systems` | 2026-09-06 | Fixed every game system starting up uninitialised (`initialize()` runs before `on_enter()`), an `unregister()` testing truthiness rather than `None`, and silent duplicate registration keys. PR #11. |
@@ -986,16 +994,17 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ## Tracked as GitHub issues
 
-Concerns that outgrew this file, or that need a decision rather than a fix:
+Concerns that outgrew this file, or that need a decision rather than a fix.
+Resolved rows are kept for history and marked **✅**.
 
 | Issue | Subject |
 | --- | --- |
-| [#9](https://github.com/Wedeueis/pyguara/issues/9) | pygame reaches into the backend-agnostic core (CC-11) — nine non-backend files across five subsystems |
+| [#9](https://github.com/Wedeueis/pyguara/issues/9) | **✅ RESOLVED 2026-09-09 (PRs #79, #80).** pygame reached into the backend-agnostic core (CC-11) — nine non-backend files across five subsystems. Fixed in two slices: a `Clock` protocol for loop timing (#79), then SDL→engine event translation at `Window.poll_events()` so `application`, `input` and `tools` consume engine events (`QuitEvent`/`KeyDownEvent`/…); pygame is now confined to `backends/`. `WindowResizeEvent` gained its missing publisher. |
 | [#16](https://github.com/Wedeueis/pyguara/issues/16) | `IFramebuffer`/`IRenderPass` not `runtime_checkable`; `IRenderPass` vs `BaseRenderPass(ABC)` overlap |
 | [#19](https://github.com/Wedeueis/pyguara/issues/19) | ~2,700 lines of GPU-dependent graphics code are read-audited only, with no headless GL coverage |
-| [#23](https://github.com/Wedeueis/pyguara/issues/23) | `camera.rotation` is applied by `Camera2D.world_to_screen` but ignored by the render path; three definitions of world-to-screen disagree |
+| [#23](https://github.com/Wedeueis/pyguara/issues/23) | **✅ RESOLVED 2026-09-09 (PR #78).** `camera.rotation` was applied by `Camera2D.world_to_screen` but ignored by the render path; four copies of world-to-screen disagreed (two on the centre). Per option 2: removed `Camera2D.rotation` (zero setters, zero production callers), made `screen_offset(viewport)` the single definition that `world_to_screen` / `screen_to_world` / `get_view_bounds` and `light_pass` all route through. |
 | [#28](https://github.com/Wedeueis/pyguara/issues/28) | Roguelike core — framework-level subsystems the target genre needs (combat spine, seeded RNG service, stat/modifier system, projectile layer, procgen, tilemap, run/meta save split, flow-field pathfinding, hit-stop, combat juice, local co-op input) |
-| [#30](https://github.com/Wedeueis/pyguara/issues/30) | `docs/guides/*` physics references have drifted (pre-`CharacterMover`; style guide calls a nonexistent `get_body`) — a `docs/guides` pass, out of scope for the physics subsystem slice |
+| [#30](https://github.com/Wedeueis/pyguara/issues/30) | **✅ RESOLVED 2026-09-09 (PR #77).** `docs/guides/*` physics references had drifted (pre-`CharacterMover`; style guide called a nonexistent `get_body`; `zero_to_hero` used `Collider(radius=)`; `ONBOARDING` used `EntityManager.add_component`). Guide samples corrected and pointed at `CharacterBody`/`CharacterMover`. Filename typo (`Archictecture`) and a doc-fence smoke check left as follow-ups. |
 | [#37](https://github.com/Wedeueis/pyguara/issues/37) | Animation authoring layer — the `pyguara/animation` audit found the primitives correct but barely wired to the ECS/game layer: no tween↔ECS integration, no sequences/timelines, no directional (8-way) animation, no animation frame events, no `Color` tween, no `Animator.playback_speed`. Time-scale/hit-stop is owned by #28 |
 | [#40](https://github.com/Wedeueis/pyguara/issues/40) | Resources capability gaps (from the `pyguara/resources` audit) — no async / batch / `preload` loading (every load blocks the main thread), hot-reload has a `reload()` primitive but nothing watches the filesystem and stale holders keep the old instance, no path/context on a missing-or-broken file, no asset dependency graph |
 | [#43](https://github.com/Wedeueis/pyguara/issues/43) | Persistence production layer — the `pyguara/persistence` audit (Phase D) found the subsystem defect-free but thin for a shipped game: no backup / prior-version retention, no save-menu API (`list_saves`, cheap metadata-header read, `delete`/`exists` facade), `FileStorageBackend` rooted at a CWD-relative dir not the OS user-data dir. Envelope `format_version` and run/meta split (#28) noted separately |
@@ -1045,7 +1054,8 @@ not missing coverage. Every existing viewport test used a fullscreen
 viewport, exactly as every query-cache test used `create_entity()` and every
 config test mocked the filesystem.
 
-**Left open:** issue #23, camera rotation.
+**Left open:** issue #23, camera rotation. *(Resolved 2026-09-09, PR #78:
+`Camera2D.rotation` removed and the transform unified on `screen_offset`.)*
 
 ## Cross-Cutting Concerns
 
@@ -1170,8 +1180,13 @@ engine and so cannot cycle. `di/types.py` and `events/types.py` re-export it, so
 existing import paths keep working. `di.RAISE == events.RAISE` is now True.
 *Discovered in:* `di`. *Status:* **resolved**.
 
-### CC-11 — pygame reaches into the backend-agnostic core
-**Tracked as GitHub issue #9.**
+### CC-11 — RESOLVED 2026-09-09 (PRs #79, #80) — pygame reached into the backend-agnostic core
+**Was GitHub issue #9.** Fixed exactly as the note below anticipated:
+`Window.poll_events()` now yields engine events (a translator in
+`backends/pygame/events.py`), and a `Clock` protocol joined the composition
+root (`FixedClock` headless, `PygameClock` otherwise). `application`, `input`
+and `pyguara/tools/*` no longer import pygame; `WindowResizeEvent` finally has
+a publisher. pygame lives only under `backends/`.
 CLAUDE.md states the engine is backend-agnostic and that code should never
 import pygame directly, but `Application` uses `pygame.time.Clock` for all
 frame timing, compares against `pygame.QUIT`, calls `pygame.event.pump()` and
@@ -1184,7 +1199,7 @@ rather than raw SDL ones, and a `Clock` protocol would have to join the
 graphics protocols. **Fix:** take it with the `graphics` audit, so the protocol
 and both backends move together. `WindowResizeEvent` is defined and never
 dispatched for the same reason -- nothing detects the resize.
-*Discovered in:* `application`. *Status:* parked until `graphics`.
+*Discovered in:* `application`. *Status:* **resolved** (see the heading).
 
 ### CC-8 — RESOLVED 2026-09-09 — Package `__init__.py` files export nothing
 Most subsystem packages had a docstring-only `__init__.py`, so callers reached
@@ -1215,6 +1230,55 @@ has no callers in `pyguara/`, so it is dead surface rather than a live defect.
 ---
 
 ## Iteration Log
+
+### Defect issues #9 / #23 / #30 — CLOSED 2026-09-09
+
+Not subsystem iterations. With the audit complete, this pass cleared the
+tracked GitHub issues that were **bugs rather than capability gaps** — the
+whole "known defect" backlog. All merged 2026-09-09; each branch cut from
+`main`.
+
+- **#30 → PR #77** (`docs/guides-physics-drift`). The guide-level docs had
+  drifted off the current physics API: `Architecture & Style Guide` used a
+  fictional `self._physics.get_body()` and claimed `PhysicsSystem` is
+  bootstrap-registered; `ONBOARDING` used `EntityManager.add_component`
+  (it's on `Entity`); `zero_to_hero` used `Collider(radius=)` (no such
+  kwarg). Samples corrected and pointed at `CharacterBody`/`CharacterMover`.
+  The `Archictecture` filename typo and a doc-fence smoke check are noted as
+  follow-ups.
+
+- **#23 → PR #78** (`fix/camera-rotation-unify-world-to-screen`).
+  `Camera2D.rotation` changed what `world_to_screen` reported but nothing in
+  the render path rotated, and four inline copies of the world-to-screen
+  formula disagreed (two on the centre — `self.offset` vs
+  `viewport.center_vec`). Per the issue's option 2: `rotation` removed (zero
+  setters, zero production callers), `screen_offset(viewport)` made the one
+  definition that `world_to_screen` / `screen_to_world` / `get_view_bounds`
+  and `light_pass` all route through. New tests pin `world_to_screen` to the
+  exact batcher formula. Making the gizmo/debugger camera-aware is a
+  *separate* follow-up (now #53), not part of this.
+
+- **#9 → PRs #79 + #80** (CC-11). Two slices:
+  - **#79** (`refactor/decouple-pygame-from-core`) — a `Clock` protocol
+    (`tick(fps) -> ms`). `FixedClock` (no pygame, no sleep) for headless and
+    tests; `PygameClock` under `backends/pygame/`. Registered in bootstrap
+    and the nine `games/*/bootstrap.py` roots; `Application` resolves it.
+  - **#80** (`refactor/engine-event-translation`) — `Window.poll_events()`
+    now returns engine events, not SDL structs. A translator in
+    `backends/pygame/events.py` maps `QUIT`/`KEYDOWN`/`KEYUP`/`MOUSEBUTTON*`/
+    `MOUSEMOTION`/`VIDEORESIZE`; both real window backends call it, headless
+    already returned `[]`. `application.py` drops `import pygame`, the
+    `event.pump()` primer and the `pygame.QUIT` check; `InputManager`,
+    `ToolManager`, the six event-handling tools and `sandbox.py` consume
+    engine events and use `pyguara.input.keys` constants. Key codes still
+    pass through as SDL values, so bindings and replays are byte-identical.
+    **`WindowResizeEvent` finally has a publisher.** `tests/test_engine_events.py`
+    (new) covers the translator and guards `keys.*` against pygame-ce drift.
+
+Suite 1929 → 1962 (+33). CC-11 in "Cross-Cutting Concerns" updated to
+resolved; the "Tracked as GitHub issues" table marks #9/#23/#30 **✅**.
+**No known defect remains in the tracker** — everything still open is
+capability or architecture work.
 
 ### Cross-cutting concerns sweep — CLOSED 2026-09-09 (branch `chore/cross-cutting-concerns-sweep`)
 
@@ -2951,7 +3015,8 @@ added a curated `__all__` to `pyguara/input` (CC-8).
 `process_event()` consumes raw pygame key/mouse events and `KMOD_*`
 constants — a CC-11 / issue #9 offender, parked with the rest of that
 cross-cutting concern (the fix is `Window.poll_events()` yielding engine
-events). `_handle_input` silently does nothing for an `ANALOG` action bound
+events). *(Resolved 2026-09-09, PR #80: that is exactly what happened —
+`process_event` now takes engine events, no `pygame` import.)* `_handle_input` silently does nothing for an `ANALOG` action bound
 to a digital key, or a `PRESS`/`RELEASE` action bound to an axis — documented
 in the new page rather than changed. `import_bindings` does not coerce
 `code` to `int`, so a hand-edited string code binds but never matches a
