@@ -5,6 +5,7 @@ and entity selection highlighting.
 """
 
 import math
+from collections.abc import Callable
 from enum import Enum, auto
 from typing import Any
 
@@ -48,17 +49,38 @@ class TransformGizmo(Tool):
     - Selection bounding box
 
     Toggle modes with Q (translate), W (rotate), E (scale).
-    Click entities to select them.
+
+    Selection has two modes, matching `EntityInspector`:
+
+    - **Provided**: pass `selection_provider` (the sandbox wires it to
+      `HierarchyTool.selected_entity`) and the gizmo follows that entity;
+      clicking the viewport and pressing ESC do nothing.
+    - **Click** (no provider): click an entity to select it, ESC to clear.
+
+    .. note::
+       Drawing and hit-testing currently treat ``Transform.position`` as a
+       *screen* coordinate -- there is no camera transform, so the gizmo is
+       only aligned when the camera sits at the origin at zoom 1. Fixing this
+       is gated on the world-to-screen unification (issue #23); the same
+       caveat applies to ``PhysicsDebugger``.
     """
 
-    def __init__(self, container: DIContainer) -> None:
+    def __init__(
+        self,
+        container: DIContainer,
+        selection_provider: Callable[[], Entity | None] | None = None,
+    ) -> None:
         """Initialize the transform gizmo.
 
         Args:
             container: DI Container for resolving dependencies.
+            selection_provider: Optional callable returning the entity to
+                manipulate. When given, viewport click-select and ESC-clear
+                are disabled and the gizmo follows this selection.
         """
         super().__init__("transform_gizmo", container)
 
+        self._selection_provider = selection_provider
         self._selected_entity: Entity | None = None
         self._mode = GizmoMode.TRANSLATE
 
@@ -117,12 +139,15 @@ class TransformGizmo(Tool):
         return None
 
     def update(self, dt: float) -> None:
-        """Update gizmo state.
+        """Refresh the selection and drop it if it is no longer valid.
 
         Args:
             dt: Delta time in seconds.
         """
-        # Validate selection still exists
+        if self._selection_provider is not None:
+            self._selected_entity = self._selection_provider()
+
+        # Validate selection still exists and still has a Transform
         if self._selected_entity is not None:
             try:
                 if not self._selected_entity.has_component(Transform):
@@ -299,6 +324,8 @@ class TransformGizmo(Tool):
         if not hasattr(event, "type"):
             return False
 
+        provided = self._selection_provider is not None
+
         # Mode switching with Q, W, E keys
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_q:
@@ -310,12 +337,13 @@ class TransformGizmo(Tool):
             elif event.key == pygame.K_e:
                 self._mode = GizmoMode.SCALE
                 return True
-            elif event.key == pygame.K_ESCAPE:
+            elif event.key == pygame.K_ESCAPE and not provided:
                 self._selected_entity = None
                 return True
 
-        # Entity selection on mouse click
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        # Entity selection on mouse click -- only when this gizmo owns the
+        # selection (no external provider driving it).
+        if not provided and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_pos = Vector2(event.pos[0], event.pos[1])
             self.select_at_position(mouse_pos)
             # Don't consume - let the click propagate

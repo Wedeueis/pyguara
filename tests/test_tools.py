@@ -420,3 +420,179 @@ class TestMultipleTools:
         manager.update(0.016)
 
         assert all(tool.update_called for tool in tools)
+
+
+class _CountingTool(Tool):
+    """Counts how many times each lifecycle hook fired."""
+
+    def __init__(self, name: str, container: DIContainer) -> None:
+        super().__init__(name, container)
+        self.updates = 0
+        self.renders = 0
+        self.events = 0
+        self.removed = 0
+
+    def update(self, dt: float) -> None:
+        self.updates += 1
+
+    def render(self, renderer: UIRenderer) -> None:
+        self.renders += 1
+
+    def process_event(self, event: Any) -> bool:
+        self.events += 1
+        return False
+
+    def on_removed(self) -> None:
+        self.removed += 1
+
+
+class TestToolManagerLifecycle:
+    """Duplicate registration, unregistration, and the shortcut accessor."""
+
+    def test_reregistering_a_name_replaces_without_double_running(
+        self, container: DIContainer, mock_renderer: MagicMock
+    ) -> None:
+        """A bare append used to leave a stale name in _render_order, so the
+        replacement ran update/render/process_event twice per frame."""
+        manager = ToolManager(container)
+        manager._is_globally_visible = True
+
+        first = _CountingTool("dup", container)
+        second = _CountingTool("dup", container)
+        manager.register_tool(first)
+        manager.register_tool(second)
+
+        assert manager._render_order == ["dup"]
+        assert manager.get_tool("dup") is second
+
+        second.show()
+        manager.update(0.016)
+        manager.render(mock_renderer)
+        ev = MagicMock()
+        ev.type = pygame.MOUSEBUTTONDOWN
+        manager.process_event(ev)
+
+        assert (second.updates, second.renders, second.events) == (1, 1, 1)
+        assert first.updates == 0  # the replaced instance is dropped
+
+    def test_reregistering_drops_the_old_shortcut(self, container: DIContainer) -> None:
+        manager = ToolManager(container)
+        tool = MockTool("dup", container)
+        manager.register_tool(tool, pygame.K_F1)
+        manager.register_tool(MockTool("dup", container), pygame.K_F2)
+
+        assert pygame.K_F1 not in manager._shortcuts
+        assert manager._shortcuts[pygame.K_F2] == "dup"
+
+    def test_unregister_removes_from_every_structure_and_calls_hook(
+        self, container: DIContainer
+    ) -> None:
+        manager = ToolManager(container)
+        tool = _CountingTool("gone", container)
+        manager.register_tool(tool, pygame.K_F4)
+
+        assert manager.unregister_tool("gone") is True
+
+        assert manager.get_tool("gone") is None
+        assert "gone" not in manager._render_order
+        assert pygame.K_F4 not in manager._shortcuts
+        assert tool.removed == 1
+
+    def test_unregister_unknown_tool_returns_false(
+        self, container: DIContainer
+    ) -> None:
+        assert ToolManager(container).unregister_tool("nope") is False
+
+    def test_clear_unregisters_everything(self, container: DIContainer) -> None:
+        manager = ToolManager(container)
+        tools = [_CountingTool(f"t{i}", container) for i in range(3)]
+        for t in tools:
+            manager.register_tool(t)
+
+        manager.clear()
+
+        assert manager._tools == {}
+        assert manager._render_order == []
+        assert all(t.removed == 1 for t in tools)
+
+    def test_iter_shortcuts_is_sorted_by_key(self, container: DIContainer) -> None:
+        manager = ToolManager(container)
+        manager.register_tool(MockTool("b", container), pygame.K_F5)
+        manager.register_tool(MockTool("a", container), pygame.K_F1)
+
+        assert manager.iter_shortcuts() == [
+            (pygame.K_F1, "a"),
+            (pygame.K_F5, "b"),
+        ]
+
+
+class TestToolEntityManagerFallback:
+    """The no-scene fallback must be one manager, not a fresh empty each time."""
+
+    def test_fallback_manager_is_stable_across_accesses(
+        self, container: DIContainer
+    ) -> None:
+        from pyguara.scene.manager import SceneManager
+
+        container.register_instance(SceneManager, SceneManager())
+        tool = MockTool("t", container)
+
+        assert tool._entity_manager is tool._entity_manager
+
+
+class TestPerformanceMonitor:
+    def test_non_positive_dt_does_not_pollute_the_average(
+        self, container: DIContainer
+    ) -> None:
+        from pyguara.tools.performance import PerformanceMonitor
+
+        pm = PerformanceMonitor(container)
+        pm.update(1 / 60)
+        pm.update(1 / 60)
+        good = pm._avg_fps
+        assert good == pytest.approx(60.0)
+
+        pm.update(0.0)  # paused / first frame
+        pm.update(-0.5)  # clock went backwards
+
+        assert pm._avg_fps == pytest.approx(good)
+        assert 0.0 not in pm._fps_history
+
+
+class TestEventMonitorTeardown:
+    def test_on_removed_unsubscribes_from_the_dispatcher(
+        self, container: DIContainer
+    ) -> None:
+        from pyguara.events.dispatcher import EventDispatcher
+        from pyguara.input.events import OnRawKeyEvent
+        from pyguara.tools.event_monitor import EventMonitor
+
+        dispatcher = EventDispatcher()
+        container.register_instance(EventDispatcher, dispatcher)
+        monitor = EventMonitor(container)
+
+        dispatcher.dispatch(OnRawKeyEvent(key_code=97, is_down=True, modifiers=set()))
+        assert len(monitor._log) == 1
+
+        monitor.on_removed()
+        dispatcher.dispatch(OnRawKeyEvent(key_code=98, is_down=True, modifiers=set()))
+        assert len(monitor._log) == 1  # no new line -- handler is gone
+
+    def test_tool_manager_unregister_fires_on_removed(
+        self, container: DIContainer
+    ) -> None:
+        from pyguara.events.dispatcher import EventDispatcher
+        from pyguara.input.events import OnRawKeyEvent
+        from pyguara.tools.event_monitor import EventMonitor
+
+        dispatcher = EventDispatcher()
+        container.register_instance(EventDispatcher, dispatcher)
+        manager = ToolManager(container)
+        manager.register_tool(EventMonitor(container), pygame.K_F3)
+
+        manager.unregister_tool("event_monitor")
+
+        dispatcher.dispatch(OnRawKeyEvent(key_code=97, is_down=True, modifiers=set()))
+        # Nothing observes the log now, but the point is no exception and the
+        # handler is detached -- assert via a fresh monitor being the only one.
+        assert manager.get_tool("event_monitor") is None

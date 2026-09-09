@@ -35,14 +35,23 @@ class ToolManager:
     def register_tool(self, tool: Tool, shortcut_key: int | None = None) -> None:
         """Register a new tool with the manager.
 
+        Registering a name that is already taken *replaces* the old tool: its
+        render-order slot and any shortcut it held are dropped first, so the
+        replacement is not run twice per frame (a bare ``append`` used to
+        leave a stale duplicate in the render order).
+
         Args:
             tool: The tool instance to register.
             shortcut_key: Optional pygame key code to toggle this tool.
         """
+        if tool.name in self._tools:
+            logger.debug("Replacing already-registered tool '%s'", tool.name)
+            self._forget(tool.name)
+
         self._tools[tool.name] = tool
         self._render_order.append(tool.name)
 
-        if shortcut_key:
+        if shortcut_key is not None:
             self._shortcuts[shortcut_key] = tool.name
 
         # By default, tools start hidden until the global toggle (F12) is active
@@ -50,6 +59,44 @@ class ToolManager:
         tool.hide()
 
         logger.debug("Registered tool '%s' (Key: %s)", tool.name, shortcut_key)
+
+    def unregister_tool(self, name: str) -> bool:
+        """Remove a tool, calling its :meth:`Tool.on_removed` hook.
+
+        Drops the tool from the registry, the render order and any shortcut
+        binding. Returns ``True`` if a tool by that name was found.
+        """
+        tool = self._tools.get(name)
+        if tool is None:
+            return False
+        self._forget(name)
+        tool.on_removed()
+        logger.debug("Unregistered tool '%s'", name)
+        return True
+
+    def _forget(self, name: str) -> None:
+        """Drop every reference to ``name`` from the manager's own bookkeeping.
+
+        Does not touch the tool object itself (no ``on_removed`` call) -- that
+        is ``unregister_tool``'s job; a replacing ``register_tool`` keeps the
+        old instance alive on purpose.
+        """
+        self._tools.pop(name, None)
+        self._render_order = [n for n in self._render_order if n != name]
+        self._shortcuts = {k: v for k, v in self._shortcuts.items() if v != name}
+
+    def iter_shortcuts(self) -> list[tuple[int, str]]:
+        """Return the ``(key_code, tool_name)`` bindings, in key order."""
+        return sorted(self._shortcuts.items())
+
+    def clear(self) -> None:
+        """Unregister every tool, firing each one's ``on_removed`` hook.
+
+        Used on application shutdown so tools that subscribed to the event
+        dispatcher let go of it before it is torn down.
+        """
+        for name in list(self._tools):
+            self.unregister_tool(name)
 
     def get_tool(self, name: str) -> Tool | None:
         """Retrieve a registered tool by name.

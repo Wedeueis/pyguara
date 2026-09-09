@@ -2,6 +2,7 @@
 
 import time
 from collections import deque
+from typing import Any
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
@@ -24,13 +25,26 @@ class EventMonitor(Tool):
         self._log: deque[str] = deque(maxlen=20)
         self._panel_rect = Rect(10, 600, 400, 200)
 
-        # Subscribe to interesting events
+        # Subscribe to interesting events. The (type, handler) pairs are kept
+        # so on_removed() can undo every one -- an EventMonitor that is
+        # unregistered must stop receiving events, not keep appending to a
+        # log nobody renders. (MouseMotion omitted to avoid spamming.)
+        self._subscriptions: list[tuple[type, Any]] = [
+            (OnRawKeyEvent, self._on_key_down),
+            (OnActionEvent, self._on_action),
+            (QuitEvent, self._on_quit),
+        ]
         self._dispatcher.subscribe(
             OnRawKeyEvent, self._on_key_down, filter_func=lambda e: e.is_down
         )
         self._dispatcher.subscribe(OnActionEvent, self._on_action)
         self._dispatcher.subscribe(QuitEvent, self._on_quit)
-        # We omit MouseMotion to avoid spamming the log, or we could sample it
+
+    def on_removed(self) -> None:
+        """Drop every dispatcher subscription this monitor made."""
+        for event_type, handler in self._subscriptions:
+            self._dispatcher.unsubscribe(event_type, handler)
+        self._subscriptions.clear()
 
     def _log_msg(self, category: str, msg: str) -> None:
         """Add a formatted message to the log.
