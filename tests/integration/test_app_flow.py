@@ -1,5 +1,5 @@
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -118,8 +118,7 @@ def test_app_lifecycle_run_once(app_container: DIContainer) -> None:
     app._clock.tick.side_effect = stop_app
 
     # ACT
-    with patch("pygame.event.pump"):
-        app.run(scene)
+    app.run(scene)
 
     # ASSERT
     assert scene.enter_called
@@ -279,18 +278,14 @@ def test_quit_event_is_dispatched_when_the_window_closes(
 ) -> None:
     """QuitEvent had no publisher, so tools/event_monitor.py was subscribed to
     something that could never fire."""
-    import pygame
-
     from pyguara.events.lifecycle import QuitEvent
 
     dispatcher = app_container.get(EventDispatcher)
     seen = []
     dispatcher.subscribe(QuitEvent, lambda e: seen.append(e))
 
-    quit_event = MagicMock()
-    quit_event.type = pygame.QUIT
     window = app_container.get(Window)
-    window.poll_events.return_value = [quit_event]
+    window.poll_events.return_value = [QuitEvent()]
 
     app = Application(app_container)
     app.run(MockScene("s", dispatcher))
@@ -300,17 +295,38 @@ def test_quit_event_is_dispatched_when_the_window_closes(
 
 
 def test_a_quit_event_stops_the_loop(app_container: DIContainer) -> None:
-    import pygame
+    from pyguara.events.lifecycle import QuitEvent
 
-    quit_event = MagicMock()
-    quit_event.type = pygame.QUIT
     window = app_container.get(Window)
-    window.poll_events.return_value = [quit_event]
+    window.poll_events.return_value = [QuitEvent()]
 
     app = Application(app_container)
     app.run(MockScene("s", app_container.get(EventDispatcher)))
 
     assert not app._is_running
+
+
+def test_a_window_resize_event_is_published(app_container: DIContainer) -> None:
+    """`WindowResizeEvent` had no publisher before #9; the loop now forwards
+    the one the window backend translates from SDL."""
+    from pyguara.events.lifecycle import QuitEvent
+    from pyguara.events.window import WindowResizeEvent
+
+    dispatcher = app_container.get(EventDispatcher)
+    seen: list[WindowResizeEvent] = []
+    dispatcher.subscribe(WindowResizeEvent, seen.append)
+
+    window = app_container.get(Window)
+    # One resize this frame, then quit so the loop unwinds.
+    window.poll_events.return_value = [
+        WindowResizeEvent(width=1024, height=768),
+        QuitEvent(),
+    ]
+
+    app = Application(app_container)
+    app.run(MockScene("s", dispatcher))
+
+    assert [(e.width, e.height) for e in seen] == [(1024, 768)]
 
 
 # -- Fixed timestep --

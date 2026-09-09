@@ -8,11 +8,8 @@ regardless of frame rate variations.
 
 from __future__ import annotations
 
-import contextlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING
-
-import pygame
 
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
@@ -22,6 +19,7 @@ from pyguara.di.container import DIContainer
 from pyguara.di.exceptions import ServiceNotFoundException
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.lifecycle import ApplicationStartEvent, QuitEvent
+from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
@@ -190,13 +188,6 @@ class Application:
         )
 
         self._event_dispatcher.dispatch(ApplicationStartEvent(source=self))
-
-        # Force an initial event pump to show the window immediately. No-op
-        # (raises pygame.error) under a backend that never initializes SDL's
-        # video subsystem at all, e.g. the headless test backend -- which has
-        # no window to show in the first place.
-        with contextlib.suppress(pygame.error):
-            pygame.event.pump()
 
         try:
             while self._is_running and self._window.is_open:
@@ -377,15 +368,21 @@ class Application:
         """
         self._begin_replay_frame(frame_time)
 
-        # This call is CRITICAL. It keeps the OS window responsive.
+        # poll_events() pumps the OS event queue (keeping the window
+        # responsive) and hands back engine events, never raw SDL structs.
         for event in self._window.poll_events():
-            if hasattr(event, "type") and event.type == pygame.QUIT:
+            if isinstance(event, QuitEvent):
                 self._is_running = False
-                # Publish the close request so game code and tools can react
-                # before shutdown() runs. QuitEvent had no publisher at all,
-                # which left tools/event_monitor.py subscribed to something
-                # that could never fire.
+                # Re-publish with this app as the source so game code and
+                # tools can react before shutdown() runs.
                 self._event_dispatcher.dispatch(QuitEvent(source=self))
+                continue
+
+            if isinstance(event, WindowResizeEvent):
+                # The window boundary is the only place a resize is detected;
+                # nothing else could give WindowResizeEvent a publisher.
+                self._event_dispatcher.dispatch(event)
+                continue
 
             # While a replay drives the game, real input is swallowed rather
             # than dispatched, so both runs see exactly the same events.

@@ -2,12 +2,11 @@
 
 from typing import Any
 
-import pygame
-
 from pyguara.common.components import Tag
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
+from pyguara.events.input import MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.tools.base import Tool
 
@@ -104,7 +103,7 @@ class HierarchyTool(Tool):
         Args:
             event: Pygame event.
         """
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        if isinstance(event, MouseButtonEvent) and event.is_down and event.button == 1:
             mx, my = event.pos
             for rect, entity_id in self._rows:
                 if (

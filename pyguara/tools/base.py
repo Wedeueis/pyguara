@@ -97,13 +97,14 @@ class Tool(ABC):
         ...
 
     def process_event(self, event: Any) -> bool:
-        """Process a raw input event.
+        """Process one engine input event.
 
         Override this to intercept inputs (e.g., stopping a click from
         reaching the game world).
 
         Args:
-            event: The raw event (e.g., pygame.event.Event).
+            event: An engine input event (`pyguara.events.input` /
+                `pyguara.events.lifecycle`), never a raw SDL struct.
 
         Returns:
             True if the event was consumed by the tool, False otherwise.

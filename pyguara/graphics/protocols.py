@@ -280,19 +280,14 @@ class IWindowBackend(Protocol):
         ...
 
     def poll_events(self) -> Iterable[Any]:
-        """Poll system events and hand them on for interpretation.
+        """Pump the OS event queue and return this frame's engine events.
 
         Returns:
-            Backend-native event objects, opaque to the engine.
-
-        Note:
-            These are the backend's own event objects -- SDL events under
-            pygame -- so every consumer has to know the backend's constants to
-            read them. That is why `Application` and `InputManager` still
-            import pygame despite the engine being nominally backend-agnostic.
-            Translating here, into engine events, is tracked as issue #9; it
-            spans graphics, input and application, so it is not something this
-            protocol can fix alone.
+            Engine events from `pyguara.events` -- `QuitEvent`, `KeyDownEvent`,
+            `KeyUpEvent`, `MouseButtonEvent`, `MouseMotionEvent`,
+            `WindowResizeEvent`. The backend owns the translation from its
+            native events (SDL, under pygame); nothing above this boundary
+            reads a backend constant (issue #9).
         """
         ...
 

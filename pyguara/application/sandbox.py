@@ -6,10 +6,11 @@ with the developer tool suite (Inspector, Debugger, Profiler, etc.).
 It is intended for use during development and testing phases.
 """
 
-import pygame
-
 from pyguara.application.application import Application
 from pyguara.di.container import DIContainer
+from pyguara.events.lifecycle import QuitEvent
+from pyguara.events.window import WindowResizeEvent
+from pyguara.input import keys
 from pyguara.tools.assets_browser import AssetsTool
 from pyguara.tools.config_inspector import ConfigInspector
 from pyguara.tools.debugger import PhysicsDebugger
@@ -57,45 +58,45 @@ class SandboxApplication(Application):
 
         # 1. Performance Monitor (F1) - FPS and Stats
         perf_monitor = PerformanceMonitor(self._container)
-        self._tool_manager.register_tool(perf_monitor, pygame.K_F1)
+        self._tool_manager.register_tool(perf_monitor, keys.F1)
 
         # 2. Hierarchy (F5) - entity list + selection. Built before the
         #    inspector and gizmo, which both follow its selection.
         hierarchy = HierarchyTool(self._container)
-        self._tool_manager.register_tool(hierarchy, pygame.K_F5)
+        self._tool_manager.register_tool(hierarchy, keys.F5)
 
         # 3. Entity Inspector (F2) - inspects whatever the Hierarchy selects.
         inspector = EntityInspector(
             self._container, selection_provider=lambda: hierarchy.selected_entity
         )
-        self._tool_manager.register_tool(inspector, pygame.K_F2)
+        self._tool_manager.register_tool(inspector, keys.F2)
 
         # 3b. Transform Gizmo (F9) - visual handles for the selected entity.
         #     Q/W/E switch translate/rotate/scale. Follows the Hierarchy.
         gizmo = TransformGizmo(
             self._container, selection_provider=lambda: hierarchy.selected_entity
         )
-        self._tool_manager.register_tool(gizmo, pygame.K_F9)
+        self._tool_manager.register_tool(gizmo, keys.F9)
 
         # 4. Event Monitor (F3) - Log Viewer
         event_mon = EventMonitor(self._container)
-        self._tool_manager.register_tool(event_mon, pygame.K_F3)
+        self._tool_manager.register_tool(event_mon, keys.F3)
 
         # 5. Physics Debugger (F4) - Collision Wireframes
         debugger = PhysicsDebugger(self._container)
-        self._tool_manager.register_tool(debugger, pygame.K_F4)
+        self._tool_manager.register_tool(debugger, keys.F4)
 
         # 6. Config Inspector (F6) - Live GameConfig Editor
         config_inspector = ConfigInspector(self._container)
-        self._tool_manager.register_tool(config_inspector, pygame.K_F6)
+        self._tool_manager.register_tool(config_inspector, keys.F6)
 
         # 7. Assets Browser (F7) - resource list + spawn from data
         assets = AssetsTool(self._container)
-        self._tool_manager.register_tool(assets, pygame.K_F7)
+        self._tool_manager.register_tool(assets, keys.F7)
 
         # 8. Shortcuts Panel (F8) - Help Overlay
         shortcuts = ShortcutsPanel(self._container)
-        self._tool_manager.register_tool(shortcuts, pygame.K_F8)
+        self._tool_manager.register_tool(shortcuts, keys.F8)
 
         # Enable global visibility by default in Sandbox mode
         self._tool_manager.toggle_global_visibility()
@@ -117,9 +118,15 @@ class SandboxApplication(Application):
         self._begin_replay_frame(frame_time)
 
         for event in self._window.poll_events():
-            # 1. Update Internal State (Quit, etc.)
-            if hasattr(event, "type") and event.type == pygame.QUIT:
+            # 1. Update Internal State (Quit, resize)
+            if isinstance(event, QuitEvent):
                 self._is_running = False
+                self._event_dispatcher.dispatch(QuitEvent(source=self))
+                continue
+
+            if isinstance(event, WindowResizeEvent):
+                self._event_dispatcher.dispatch(event)
+                continue
 
             # 2. Tool Manager (High Priority)
             if self._tool_manager and self._tool_manager.process_event(event):

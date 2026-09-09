@@ -2,12 +2,11 @@
 
 from typing import Any
 
-import pygame
-
 from pyguara.common.components import ResourceLink
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
+from pyguara.events.input import MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.log import get_logger
 from pyguara.prefabs.registry import ComponentRegistry
@@ -186,7 +185,9 @@ class AssetsTool(Tool):
         Args:
             event: Pygame event.
         """
-        if not (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1):
+        if not (
+            isinstance(event, MouseButtonEvent) and event.is_down and event.button == 1
+        ):
             return False
 
         mx, my = event.pos

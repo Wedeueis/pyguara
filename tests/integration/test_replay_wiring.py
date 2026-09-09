@@ -13,7 +13,6 @@ Deliberately left unmarked, like `test_bootstrap_smoke.py`, so it runs under
 """
 
 import os
-from types import SimpleNamespace
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -27,10 +26,12 @@ from pyguara.application.bootstrap import create_application
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
+from pyguara.events.input import KeyDownEvent, KeyUpEvent
+from pyguara.input import keys as key_codes
 from pyguara.input.events import OnActionEvent
 from pyguara.input.types import ActionType, InputContext, InputDevice
 
-MOVE_KEY = pygame.K_d
+MOVE_KEY = key_codes.D
 MOVE_STEP = 10.0
 FIXED_DT = 1.0 / 60.0
 NUM_FRAMES = 10
@@ -40,21 +41,21 @@ NUM_FRAMES = 10
 SCRIPTED_PRESSES = {0: [MOVE_KEY], 4: [MOVE_KEY], 7: [MOVE_KEY]}
 
 
-def _key_event(key: int, down: bool) -> SimpleNamespace:
-    return SimpleNamespace(type=pygame.KEYDOWN if down else pygame.KEYUP, key=key)
+def _key_event(key: int, down: bool) -> KeyDownEvent | KeyUpEvent:
+    return KeyDownEvent(key_code=key) if down else KeyUpEvent(key_code=key)
 
 
-def _scripted_frames() -> list[list[SimpleNamespace]]:
-    """Build a fixed schedule of pygame-shaped key events, one list per frame."""
-    frames: list[list[SimpleNamespace]] = [[] for _ in range(NUM_FRAMES)]
-    for frame_id, keys in SCRIPTED_PRESSES.items():
-        for key in keys:
+def _scripted_frames() -> list[list[object]]:
+    """Build a fixed schedule of engine key events, one list per frame."""
+    frames: list[list[object]] = [[] for _ in range(NUM_FRAMES)]
+    for frame_id, codes in SCRIPTED_PRESSES.items():
+        for key in codes:
             frames[frame_id].append(_key_event(key, down=True))
             frames[frame_id + 1].append(_key_event(key, down=False))
     return frames
 
 
-def _make_poll_events(frames: list[list[SimpleNamespace]]):
+def _make_poll_events(frames: list[list[object]]):
     iterator = iter(frames)
     return lambda: next(iterator, [])
 

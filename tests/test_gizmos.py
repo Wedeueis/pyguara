@@ -18,7 +18,9 @@ import pytest
 from pyguara.application.bootstrap import create_headless_application
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
+from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.scene.base import Scene
 from pyguara.tools.gizmos import GizmoMode, TransformGizmo
 
@@ -50,11 +52,8 @@ def app_scene():
     app.shutdown()
 
 
-def _key(code: int) -> MagicMock:
-    ev = MagicMock()
-    ev.type = pygame.KEYDOWN
-    ev.key = code
-    return ev
+def _key(code: int) -> KeyDownEvent:
+    return KeyDownEvent(key_code=code)
 
 
 def _entity_with_transform(scene, x=0.0, y=0.0):
@@ -69,11 +68,11 @@ class TestModeSwitching:
         gizmo = TransformGizmo(app._container)
 
         assert gizmo.mode is GizmoMode.TRANSLATE
-        assert gizmo.process_event(_key(pygame.K_w)) is True
+        assert gizmo.process_event(_key(keys.W)) is True
         assert gizmo.mode is GizmoMode.ROTATE
-        assert gizmo.process_event(_key(pygame.K_e)) is True
+        assert gizmo.process_event(_key(keys.E)) is True
         assert gizmo.mode is GizmoMode.SCALE
-        assert gizmo.process_event(_key(pygame.K_q)) is True
+        assert gizmo.process_event(_key(keys.Q)) is True
         assert gizmo.mode is GizmoMode.TRANSLATE
 
 
@@ -85,10 +84,7 @@ class TestClickSelectionMode:
         entity = _entity_with_transform(scene, 100, 100)
         gizmo = TransformGizmo(app._container)
 
-        click = MagicMock()
-        click.type = pygame.MOUSEBUTTONDOWN
-        click.button = 1
-        click.pos = (100, 100)
+        click = MouseButtonEvent(button=1, x=100, y=100, is_down=True)
         gizmo.process_event(click)
 
         assert gizmo.selected_entity is entity
@@ -98,7 +94,7 @@ class TestClickSelectionMode:
         gizmo = TransformGizmo(app._container)
         gizmo.selected_entity = _entity_with_transform(scene)
 
-        assert gizmo.process_event(_key(pygame.K_ESCAPE)) is True
+        assert gizmo.process_event(_key(keys.ESCAPE)) is True
         assert gizmo.selected_entity is None
 
 
@@ -125,14 +121,11 @@ class TestProvidedSelectionMode:
         gizmo.update(0.016)
 
         # ESC must not clear a provider-driven selection
-        assert gizmo.process_event(_key(pygame.K_ESCAPE)) is False
+        assert gizmo.process_event(_key(keys.ESCAPE)) is False
         assert gizmo.selected_entity is entity
 
         # A viewport click must not hijack selection
-        click = MagicMock()
-        click.type = pygame.MOUSEBUTTONDOWN
-        click.button = 1
-        click.pos = (50, 50)
+        click = MouseButtonEvent(button=1, x=50, y=50, is_down=True)
         gizmo.process_event(click)
         assert gizmo.selected_entity is entity
 
