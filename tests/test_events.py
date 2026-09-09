@@ -222,7 +222,7 @@ def test_error_message_includes_context():
     assert "Test error" in error_msg
 
 
-# P1-009: Event Queue Safety Tests
+# Event Queue Safety Tests
 
 
 def test_process_queue_max_events_limit():

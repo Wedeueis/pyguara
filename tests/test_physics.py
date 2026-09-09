@@ -42,7 +42,7 @@ def test_entity_registration(event_dispatcher):
     rb = e.add_component(RigidBody(body_type=BodyType.DYNAMIC))
     e.add_component(Collider(shape_type=ShapeType.CIRCLE, dimensions=[10]))
 
-    # Update - P2-013: Pull pattern
+    # Update - Pull pattern
     sys.update(0.1)
 
     # Verify Body Creation
@@ -74,7 +74,7 @@ def test_simulation_sync_dynamic(event_dispatcher):
     rb = e.add_component(RigidBody(body_type=BodyType.DYNAMIC))
     rb._body_handle = mock_body  # Inject mock handle to skip creation
 
-    # P2-013: Pull pattern
+    # Pull pattern
     sys.update(0.1)
 
     assert trans.position == Vector2(50, 50)
@@ -96,7 +96,7 @@ def test_simulation_sync_kinematic(event_dispatcher):
     rb = e.add_component(RigidBody(body_type=BodyType.KINEMATIC))
     rb._body_handle = mock_body
 
-    # P2-013: Pull pattern
+    # Pull pattern
     sys.update(0.1)
 
     # Physics body should have moved to match ECS
