@@ -81,10 +81,13 @@ how the subject is *constructed*, not just what is asserted.
 
 **The subsystem audit is complete.** `pyguara/tools` closed 2026-09-08
 (branch `refactor/tools-audit`) was the last entry in the pending queue —
-every Tier 1–4 subsystem has now had its Phase A→D pass. What remains is the
-tracked cross-cutting work (the GitHub issues below: #9, #16, #19, #23, #28,
-#30, #37, #40, #43, #46, #49, #51, #53, #55, #58, #61) and the open
-Cross-Cutting Concerns — none of which is a single-subsystem iteration.
+every Tier 1–4 subsystem has now had its Phase A→D pass. The **Phase D
+backfill** on 2026-09-09 (branch `docs/audit-phase-d-backfill`) closed the
+gap for the twelve subsystems audited before Phase D was formalised — see the
+Iteration Log entry of that name. What remains is the tracked cross-cutting
+work (the GitHub issues below: #9, #16, #19, #23, #28, #30, #37, #40, #43,
+#46, #49, #51, #53, #55, #58, #61, and the Phase D backfill's #64–#73) and the
+open Cross-Cutting Concerns — none of which is a single-subsystem iteration.
 
 `pyguara/tools` in one slice, ~1,750 lines (`base`, `manager`, `inspector`,
 `tweakable`, `hierarchy`, `assets_browser`, `config_inspector`, `gizmos`,
@@ -939,6 +942,14 @@ Ordered roughly by dependency depth: foundations first, leaves last.
 
 ## Completed Subsystems
 
+> **Phase D backfill (2026-09-09).** The twelve subsystems that closed before
+> Phase D existed — `common`, `log`, `events`, `di`, `ecs`, `config`,
+> `application`, `scene`, `systems`, `graphics` (all 2026-09-06), plus `audio`
+> and `input` — had a retroactive capability-gap pass. No code changed; it
+> produced issues **#64–#73** (`events` + `di` + `scene` share #65) plus
+> comments on #28 and #53. See the "Phase D backfill" entry at the top of the
+> Iteration Log for the per-subsystem gap table.
+
 | Subsystem | Closed | Summary |
 | --- | --- | --- |
 | `pyguara/tools` | 2026-09-08 | One slice, ~1,750 lines (`base`, `manager`, `inspector`, `tweakable`, `hierarchy`, `assets_browser`, `config_inspector`, `gizmos`, `event_monitor`, `performance`, `debugger`, `shortcuts_panel`), driven by `SandboxApplication` (F12 + F1–F9). The overlay runs, but `test_tools.py`'s ~40 cases were all `MockTool` booleans. **`ToolManager` double-ran a tool on re-registration** — `_tools[name] = tool` deduped but `_render_order.append(name)` did not, so `update`/`render`/`process_event` hit the survivor twice per frame (the `pyguara/systems` "silent duplicate keys" shape); `register_tool` now purges the old name first, and `unregister_tool`/`clear` were added, firing a new `Tool.on_removed()`. **`PerformanceMonitor` fed a `0.0` FPS sample on `dt <= 0`** (`1.0/dt if dt > 0 else 0.0` — the "guard returns a wrong answer" pattern; one paused frame dragged the rolling average 60→40); non-positive `dt` is now skipped, dead `pygame.time.Clock()` removed. **`AssetsTool`'s greyed Spawn/Reload buttons still fired** — `enabled=` was cosmetic; the hit rect is now dropped when disabled (and the Spawn gate corrected to stay live for a not-yet-loaded path). Lifecycle pass (user's choice, full in-slice): `EventMonitor` now unsubscribes in `on_removed` (it `subscribe()`d ×3 and never had a teardown); `SandboxApplication.shutdown()` calls `ToolManager.clear()`; `Tool._entity_manager`'s no-scene fallback is cached instead of a fresh empty per access; `ShortcutsPanel` reads `ToolManager.iter_shortcuts()` live instead of a hard-coded table. `TransformGizmo` wired up (user's choice): registered at F9, follows `HierarchyTool` via a `selection_provider`, had **zero** prior coverage; `ConfigInspector` added to `pyguara/tools/__init__` exports. Tests +20 (1909 → 1929): real lifecycle coverage in `test_tools.py`, new `test_gizmos.py` (+8 from nothing), `test_assets_tool.py` (+2). `docs/systems/editor.md` updated. **Left open:** `TransformGizmo` + `PhysicsDebugger` draw/hit-test in screen space with no camera transform → **#23**; in-overlay authoring gaps (scroll/clip container, custom inspector-drawer hook, text input, scene save/load button) → **#53** / **#49**; `ConfigInspector` edits don't take live effect (subsystems cache config at bootstrap). No new issue. |
@@ -989,6 +1000,16 @@ Concerns that outgrew this file, or that need a decision rather than a fix:
 | [#55](https://github.com/Wedeueis/pyguara/issues/55) | Scripting production layer (from the `pyguara/scripting` audit, Phase D) — `CoroutineManager` is one app-global singleton with no scene scoping (a sequence outlives its scene and ticks against unloaded entities; no teardown hook, unlike `SystemManager`); no coroutine tagging / grouping (kill an entity → its scripted sequences keep running, cross-cutting with #51); no `yield from` result / return value or completion signal to a parent sequence; no frame-count / fixed-step waits (`WaitForFrames`, `WaitForFixedUpdate`) and no scaled-vs-realtime wait for a paused game (time-scale is #28's). `WaitForSeconds` frame-granular drift and missing arg validation left open, documented |
 | [#61](https://github.com/Wedeueis/pyguara/issues/61) | Asset pipeline production layer (from the `pyguara/cli` audit, Phase D) — the `pyguara atlas` packer has no transparent-border trimming (a roguelike's sheets are mostly padding; `original_size` metadata is dead until this lands), square fixed-`--size` output only (no shrink-to-fit / pow-of-two), raises instead of emitting atlas page 2/3/…, shelf packing only (MaxRects/skyline would pack denser; `allow_rotation` was a dead stub, removed), a flat non-recursive non-namespaced input scan (keys are bare filename stems), and emits none of the `pyguara/graphics` spritesheet / nine-patch / pivot / animation-frame metadata; `pyguara build` has no cross-compilation / target selection, no version or build-metadata stamping, no asset-manifest verification before shipping, and no project-lifecycle commands (`pyguara new` scaffold, `pyguara run`, `pyguara doctor`). Sibling of #37/#40/#43/#46/#49/#51/#55/#58 |
 | [#58](https://github.com/Wedeueis/pyguara/issues/58) | Replay production layer (from the `pyguara/replay` audit, Phase D) — recorded `seed` is exposed as `ReplayPlayer.seed` but nothing reseeds a random source on playback (no engine RNG service yet — cross-cut #28; replay should reseed it on `load_replay()`); no replay-library API (`list_replays` / `delete` / browse, the shape #43 names for saves) and `FileStorage`-style user-data-dir rooting; the `ReplayPlayer` scrubbing surface (`seek`, `pause`/`resume`, `playback_speed`, `update()`) has no `pyguara/tools` overlay driving it (scrub bar / step / slow-mo — cross-cut #53); capture is input+time only, so a game reading `time.time()` / the filesystem / the network directly breaks determinism silently; `record_action()` (synthetic AI/script-driven actions) has a playback branch but no in-repo consumer. Left open: format `version` validated but no migration layer; a length-framed metadata line would let `get_metadata` skip the frame bytes |
+| [#64](https://github.com/Wedeueis/pyguara/issues/64) | **Phase D backfill — `pyguara/common`.** No grid / tile-coordinate primitive (cell coord, pixel↔cell, Chebyshev / Manhattan, Bresenham / supercover, 4/8-neighbourhood — `ai/pathfinding`'s private `world_to_grid_coords` wants to be a shared tested primitive); `Vector2` game-math helpers missing (`clamp_magnitude`, `move_towards`, `reflect`, `project`, `angle_to`, `perpendicular` — `steering.py` / `CharacterMover` / camera reimplement subsets); `Color` helpers missing (`with_alpha`, `darken`/`lighten`, `blend`, ramp sampling); `Rect` lost `pygame.Rect` staples (`clip`, `union`, `move`, `clamp`, `fit`). RNG value type parked → #28 / #58, `common` recorded as its home |
+| [#65](https://github.com/Wedeueis/pyguara/issues/65) | **Phase D backfill — `pyguara/events` + `pyguara/di` + `pyguara/scene` (shared: lifecycle scoping).** `DIScope` / `SCOPED` implemented and tested but nothing opens a scope — no per-scene or per-run services (run RNG, run loot tables); `EventDispatcher` has no owner-keyed `subscribe(..., owner=)` / `clear_subscribers(owner)`, so a forgotten unsubscribe leaks and double-fires after a scene reload; `Scene` has `resolve_dependencies()` but no symmetric `on_teardown()` registry; no `dispatch_after(seconds)` / `subscribe_once`. Cross-links #55. Keyed DI registrations, `Provider[T]`, category subscription parked |
+| [#66](https://github.com/Wedeueis/pyguara/issues/66) | **Phase D backfill — `pyguara/ecs`.** No entity-level hierarchy + cascade destroy (only `Transform` has a parent link; despawning a parent leaks child entities — **this is the "ECS-hierarchy decision" #51 and #55 defer to**); no bulk spawn / entity pooling (`create_entity` one at a time + per-entity index update — a bullet wave / procgen dump pays it each); query is all-of only (no `without` / `any_of` / optional); no component-change events (only entity-removed is observable); no `enabled` flag on an entity / component. Singleton components parked |
+| [#67](https://github.com/Wedeueis/pyguara/issues/67) | **Phase D backfill — `pyguara/config`.** `GameConfig` is a closed dataclass — a game can't register its own `BalanceConfig` (HP curves, drop tables) and reuse the load / merge / env-override / validation machinery, so it writes a parallel JSON loader; no layered config (defaults → user → per-run) or runtime profiles (difficulty, accessibility, run modifiers). Live re-application (subsystems cache config at bootstrap) and keybinding-persistence unification parked |
+| [#68](https://github.com/Wedeueis/pyguara/issues/68) | **Phase D backfill — `pyguara/application`.** No loop pause and no global `time_scale` — `run()` ticks `_fixed_update` / `_update` unconditionally. The single enabling primitive for hit-stop + slow-mo (#28), a pause menu that still renders / ticks UI, freeze-on-level-up, and scripting's scaled / realtime waits (#55 P3, "gated on #28's time-scale"). Headless "run N seeds" mode and a crash-time autosave flush parked; the spiral-of-death cap is already correct |
+| [#69](https://github.com/Wedeueis/pyguara/issues/69) | **Phase D backfill — `pyguara/scene`.** No scene that persists across `switch_to` — the stack + `pause_below` gives pause-over-gameplay, but `switch_to` unwinds the whole stack, so a run-wide HUD / minimap / status overlay is torn down and re-pushed every floor and loses its state; no named parallel layers. Probe candidate: `SceneSerializer.load_scene` swallows real deserialize errors under a blanket `except Exception` (`serializer.py:79`). Run-state serialization and tilemap-to-scene parked → #28 / #43 |
+| [#70](https://github.com/Wedeueis/pyguara/issues/70) | **Phase D backfill — `pyguara/systems`.** `SystemManager` has a raw `priority` int but no fixed-step routing (`update(dt)` only — a `StatusEffectSystem` / `CooldownSystem` wanting deterministic ticks has nowhere to hook; `Scene.fixed_update` isn't routed to systems); no declarative ordering / named phases (INPUT → AI → LOGIC → PHYSICS → POST → RENDER or `run_before` / `run_after`); no per-system runtime enable / disable. Per-system profiling hook folded → #53 |
+| [#71](https://github.com/Wedeueis/pyguara/issues/71) | **Phase D backfill — `pyguara/graphics`.** World `IRenderer` has no `draw_text` (only `UIRenderer` does) — floating combat numbers / damage popups / world-anchored prompts need camera-transformed world-space text; `Camera2D` has shake / zoom / follow but no clamp-to-level-bounds, no multi-target (co-op) framing, no lookahead; no y-sort / sorting groups (`Layer` is a fixed `IntEnum`); `graphics/__init__` exports only nine-patch (CC-8). Batched tilemap renderer and a gameplay screen-effect trigger API parked → #28. Separate from #16 / #19 / #23 |
+| [#72](https://github.com/Wedeueis/pyguara/issues/72) | **Phase D backfill — `pyguara/audio`.** `play_sfx` plays one clip at one volume — no per-play pitch jitter or random pool selection (the same hit / footstep SFX hundreds of times a run buzzes); `play_music` is one track + fade, no crossfade / stems / intensity layers; no ducking; no voice limiting / priority / steal policy (200 deaths in a frame exhausts channels); `stop_sfx` takes a recycled channel int, no opaque instance handle. Bus DSP effects, occlusion / doppler, ref-count `acquire()` parked |
+| [#73](https://github.com/Wedeueis/pyguara/issues/73) | **Phase D backfill — `pyguara/input`.** No local co-op routing — actions are global, gamepad→player assignment is implicit, no player join / leave flow (this is #28's "local co-op input" line, promoted); no input buffering / leniency (`was_pressed_within(ms)`, buffered-action queue); no hold-vs-tap / double-tap / chord / sequence recognition (`_handle_input` is PRESS / RELEASE / ANALOG only); no rebind-capture helper for a settings screen (→ #49 / #53). Probe candidate: `import_bindings` doesn't coerce `code` to `int`. Accessibility remapping → #67 |
 
 ---
 
@@ -1168,6 +1189,56 @@ convert to explicit `is None` checks as each subsystem is audited.
 ---
 
 ## Iteration Log
+
+### Phase D backfill — twelve pre-Phase-D subsystems — CLOSED 2026-09-09 (branch `docs/audit-phase-d-backfill`)
+
+Phase D (the forward-looking capability-gap pass) was formalised at
+`pyguara/physics`. Twelve subsystems closed before it existed and never got
+one: the ten in the **2026-09-06** batch (`common`, `log`, `events`, `di`,
+`ecs`, `config`, `application`, `scene`, `systems`, `graphics`) plus `audio`
+and `input`, which closed just after `physics` but before the phase was
+labelled — their gaps had only been folded loosely into #28. This iteration
+runs Phase D over all twelve. **No code changed** — it is analysis, ten new
+GitHub issues, and this log. Each gap was checked against the actual public
+surface, not just the earlier writeups.
+
+**Method note.** Every one of the twelve is already closed and merged, so
+nothing was *in-slice*. Each gap is therefore *new issue*, *folded* into an
+existing issue, or *parked*. Following the established one-issue-per-subsystem
+pattern (#37 / #40 / #43 / #46 / #49 / #51 / #55 / #58 / #61), the pass opened
+**#64–#73** (`events` + `di` + `scene` share one, #65, because their single
+gap is one lifecycle-scoping decision). Genre-mechanic items routed to **#28**
+(comment) and two tooling items to **#53** (comment).
+
+| Subsystem | New issue | Headline gap(s) | Parked |
+| --- | --- | --- | --- |
+| `common` | **#64** | no grid / tile primitive (cell coord, Bresenham, Chebyshev, neighbourhoods — `ai/pathfinding`'s private `world_to_grid_coords` wants to be shared); `Vector2` / `Color` / `Rect` game-math + `pygame.Rect` staples lost on the port | RNG value type → #28 / #58 (home = `common`) |
+| `log` | — (→ #53) | no runtime ring-buffer sink for an in-game console; no per-`LogCategory` runtime level | JSON/telemetry handler; crash-bundle |
+| `events` | **#65** (shared) | no owner-keyed / auto-teardown subscriptions (forgotten unsubscribe leaks + double-fires after reload); no `dispatch_after` / `subscribe_once` | category / wildcard subscription; shared event vocabulary → #28 |
+| `di` | **#65** (shared) | `DIScope` / `SCOPED` implemented + tested but **never wired** — no per-scene / per-run services | keyed registrations, multi-binding, `Provider[T]` |
+| `ecs` | **#66** | no entity-level hierarchy + cascade destroy (**the "ECS-hierarchy decision" #51 / #55 defer to**); no bulk spawn / pooling; all-of queries only; no component-change events; no `enabled` flag | singleton / resource components |
+| `config` | **#67** | `GameConfig` closed — no game-registered sections reusing the load / merge / env / validate machinery; no layered profiles (difficulty, accessibility, run modifiers) | live re-application (bootstrap-cached); keybinding unification |
+| `application` | **#68** | no loop pause and no global `time_scale` — the enabling primitive for hit-stop / slow-mo (#28), a still-rendering pause, and scripting's scaled waits (#55) | headless "run N seeds"; crash-time autosave → #43 |
+| `scene` | **#69** | no scene that survives `switch_to` — a run-wide HUD / minimap is re-pushed and loses state every floor; no named layers. Probe: `SceneSerializer` blanket `except` at `serializer.py:79` swallows deserialize errors | run-state serialization → #28 / #43; tilemap-to-scene → #28 |
+| `systems` | **#70** | `SystemManager` has a raw priority int but no fixed-step routing, no phases / `run_before`, no per-system enable | per-system profiling hook → #53 |
+| `graphics` | **#71** | world `IRenderer` has no `draw_text` (damage numbers); camera has no room-clamp / co-op framing / lookahead; no y-sort groups; `__init__` exports only nine-patch (CC-8) | batched tilemap renderer → #28; gameplay screen-effect API → #28; separate from #16 / #19 / #23 |
+| `audio` | **#72** | `play_sfx` is one clip / one volume — no pitch jitter or random pool (machine-gun buzz); `play_music` is one track — no crossfade / stems / layers; no ducking; no voice limiting / priority; recycled channel int, no instance handle | bus DSP effects; occlusion / doppler; ref-count `acquire()` |
+| `input` | **#73** | no local co-op routing (global actions, implicit pad→player, no join / leave — this is #28's "local co-op input", promoted); no input buffering / leniency; no hold-vs-tap / double-tap / chord; no rebind-capture helper → #49 / #53. Probe: `import_bindings` doesn't coerce `code` to `int` | accessibility remapping → #67 |
+
+**Cross-links recorded.** #28 gained a comment tying the RNG-service /
+tilemap-renderer / combat-juice (world text + screen-FX + hit-stop) /
+local-co-op / run-meta-split lines to #64 / #71 / #68 / #73 / #65 / #69.
+#53 gained a comment for the `log` console sink and the per-system profiling
+hook.
+
+**Two probe candidates surfaced** (correctness, not capability — deferred to a
+future pass, not fixed here): `SceneSerializer.load_scene`'s blanket
+`except Exception` fallback (`pyguara/scene/serializer.py:79`) hides real
+deserialize failures; `InputManager.import_bindings` stores `code` as a string
+so a hand-edited binding never matches a lookup.
+
+**Verification:** none required — no code, no test, no doc-page change.
+`REFACTOR_STATE.md` and the ten issue bodies only.
 
 ### `pyguara/dev` — CLOSED 2026-09-08 (branch `refactor/dev-audit`)
 
