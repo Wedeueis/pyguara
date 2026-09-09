@@ -1,10 +1,9 @@
-from types import SimpleNamespace
 from typing import Any
 
-# We need to mock pygame constants since we mocked the module
-import pygame
 import pytest
 
+from pyguara.events.input import KeyDownEvent
+from pyguara.input import keys
 from pyguara.input.events import (
     GamepadAxisEvent,
     GamepadButtonEvent,
@@ -22,12 +21,6 @@ from pyguara.input.types import (
     InputContext,
     InputDevice,
 )
-
-pygame.KEYDOWN = 1
-pygame.KEYUP = 2
-pygame.MOUSEBUTTONDOWN = 3
-pygame.MOUSEBUTTONUP = 4
-pygame.K_SPACE = 32
 
 
 class _StubJoystick:
@@ -113,12 +106,12 @@ def test_input_registration(event_dispatcher: Any) -> None:
 
     # Bind Space -> Jump
     manager._bindings.bind(
-        InputDevice.KEYBOARD, pygame.K_SPACE, "jump", InputContext.GAMEPLAY
+        InputDevice.KEYBOARD, keys.SPACE, "jump", InputContext.GAMEPLAY
     )
 
     # Verify internal state
     actions = manager._bindings.get_actions(
-        InputDevice.KEYBOARD, pygame.K_SPACE, InputContext.GAMEPLAY
+        InputDevice.KEYBOARD, keys.SPACE, InputContext.GAMEPLAY
     )
     assert "jump" in actions
 
@@ -129,7 +122,7 @@ def test_keyboard_event_processing(event_dispatcher: Any) -> None:
     # Register "jump"
     action = InputAction("jump", ActionType.PRESS)
     manager._registered_actions["jump"] = action
-    manager._bindings.bind(InputDevice.KEYBOARD, pygame.K_SPACE, "jump")
+    manager._bindings.bind(InputDevice.KEYBOARD, keys.SPACE, "jump")
 
     # Spy on events
     events = []
@@ -137,7 +130,7 @@ def test_keyboard_event_processing(event_dispatcher: Any) -> None:
 
     # Simulate KeyDown
 
-    mock_event = SimpleNamespace(type=pygame.KEYDOWN, key=pygame.K_SPACE)
+    mock_event = KeyDownEvent(key_code=keys.SPACE)
 
     manager.process_event(mock_event)
 
@@ -153,17 +146,13 @@ def test_context_switching(event_dispatcher: Any) -> None:
     manager.register_action("jump", ActionType.PRESS)
     manager.register_action("select", ActionType.PRESS)
 
-    manager.bind_input(
-        InputDevice.KEYBOARD, pygame.K_SPACE, "jump", InputContext.GAMEPLAY
-    )
-    manager.bind_input(
-        InputDevice.KEYBOARD, pygame.K_SPACE, "select", InputContext.MENU
-    )
+    manager.bind_input(InputDevice.KEYBOARD, keys.SPACE, "jump", InputContext.GAMEPLAY)
+    manager.bind_input(InputDevice.KEYBOARD, keys.SPACE, "select", InputContext.MENU)
 
     events = []
     event_dispatcher.subscribe(OnActionEvent, lambda e: events.append(e.action_name))
 
-    mock_event = SimpleNamespace(type=pygame.KEYDOWN, key=pygame.K_SPACE)
+    mock_event = KeyDownEvent(key_code=keys.SPACE)
 
     # Default is GAMEPLAY
     assert manager.context is InputContext.GAMEPLAY
@@ -184,11 +173,11 @@ def test_non_gameplay_binding_is_dead_until_context_switched(
     context is made active -- the regression that motivated exposing the API."""
     manager = InputManager(event_dispatcher, _StubInputBackend())
     manager.register_action("confirm", ActionType.PRESS)
-    manager.bind_input(InputDevice.KEYBOARD, pygame.K_SPACE, "confirm", InputContext.UI)
+    manager.bind_input(InputDevice.KEYBOARD, keys.SPACE, "confirm", InputContext.UI)
 
     fired: list[str] = []
     event_dispatcher.subscribe(OnActionEvent, lambda e: fired.append(e.action_name))
-    key_down = SimpleNamespace(type=pygame.KEYDOWN, key=pygame.K_SPACE)
+    key_down = KeyDownEvent(key_code=keys.SPACE)
 
     manager.process_event(key_down)
     assert fired == []  # GAMEPLAY is active; the UI binding is dormant
@@ -245,13 +234,13 @@ def test_dispatched_input_events_carry_a_real_timestamp(event_dispatcher: Any) -
 
     manager = InputManager(event_dispatcher, _StubInputBackend())
     manager.register_action("jump", ActionType.PRESS)
-    manager.bind_input(InputDevice.KEYBOARD, pygame.K_SPACE, "jump")
+    manager.bind_input(InputDevice.KEYBOARD, keys.SPACE, "jump")
 
     events: list[OnActionEvent] = []
     event_dispatcher.subscribe(OnActionEvent, events.append)
 
     before = time.time()
-    manager.process_event(SimpleNamespace(type=pygame.KEYDOWN, key=pygame.K_SPACE))
+    manager.process_event(KeyDownEvent(key_code=keys.SPACE))
 
     assert len(events) == 1
     assert before <= events[0].timestamp <= time.time()

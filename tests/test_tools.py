@@ -3,11 +3,12 @@
 from typing import Any
 from unittest.mock import MagicMock, create_autospec
 
-import pygame
 import pytest
 
 from pyguara.di.container import DIContainer
+from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.tools.base import Tool
 from pyguara.tools.manager import ToolManager
 
@@ -136,10 +137,10 @@ class TestToolManager:
         manager = ToolManager(container)
         tool = MockTool("test_tool", container)
 
-        manager.register_tool(tool, shortcut_key=pygame.K_F1)
+        manager.register_tool(tool, shortcut_key=keys.F1)
 
-        assert pygame.K_F1 in manager._shortcuts
-        assert manager._shortcuts[pygame.K_F1] == "test_tool"
+        assert keys.F1 in manager._shortcuts
+        assert manager._shortcuts[keys.F1] == "test_tool"
 
     def test_registered_tool_starts_hidden(self, container: DIContainer) -> None:
         """Registered tools start hidden by default."""
@@ -251,9 +252,7 @@ class TestToolManagerEvents:
     def test_f12_toggles_global_visibility(self, container: DIContainer) -> None:
         """F12 key toggles global visibility."""
         manager = ToolManager(container)
-        event = MagicMock()
-        event.type = pygame.KEYDOWN
-        event.key = pygame.K_F12
+        event = KeyDownEvent(key_code=keys.F12)
 
         assert manager._is_globally_visible is False
 
@@ -268,12 +267,10 @@ class TestToolManagerEvents:
         """Shortcut key toggles tool when overlay is visible."""
         manager = ToolManager(container)
         tool = MockTool("test_tool", container)
-        manager.register_tool(tool, shortcut_key=pygame.K_F1)
+        manager.register_tool(tool, shortcut_key=keys.F1)
         manager._is_globally_visible = True
 
-        event = MagicMock()
-        event.type = pygame.KEYDOWN
-        event.key = pygame.K_F1
+        event = KeyDownEvent(key_code=keys.F1)
 
         # Tool starts hidden after registration
         assert tool.is_visible is False
@@ -289,12 +286,10 @@ class TestToolManagerEvents:
         """Shortcut keys are ignored when global overlay is hidden."""
         manager = ToolManager(container)
         tool = MockTool("test_tool", container)
-        manager.register_tool(tool, shortcut_key=pygame.K_F1)
+        manager.register_tool(tool, shortcut_key=keys.F1)
         manager._is_globally_visible = False
 
-        event = MagicMock()
-        event.type = pygame.KEYDOWN
-        event.key = pygame.K_F1
+        event = KeyDownEvent(key_code=keys.F1)
 
         result = manager.process_event(event)
 
@@ -316,8 +311,7 @@ class TestToolManagerEvents:
         tool1.show()
         tool2.show()
 
-        event = MagicMock()
-        event.type = pygame.MOUSEBUTTONDOWN
+        event = MouseButtonEvent(button=1, x=0, y=0, is_down=True)
 
         result = manager.process_event(event)
 
@@ -337,8 +331,7 @@ class TestToolManagerEvents:
         tool.show()
         tool._is_active = False
 
-        event = MagicMock()
-        event.type = pygame.MOUSEBUTTONDOWN
+        event = MouseButtonEvent(button=1, x=0, y=0, is_down=True)
 
         result = manager.process_event(event)
 
@@ -401,13 +394,13 @@ class TestMultipleTools:
         tool2 = MockTool("inspector", container)
         tool3 = MockTool("events", container)
 
-        manager.register_tool(tool1, pygame.K_F1)
-        manager.register_tool(tool2, pygame.K_F2)
-        manager.register_tool(tool3, pygame.K_F3)
+        manager.register_tool(tool1, keys.F1)
+        manager.register_tool(tool2, keys.F2)
+        manager.register_tool(tool3, keys.F3)
 
-        assert manager._shortcuts[pygame.K_F1] == "perf"
-        assert manager._shortcuts[pygame.K_F2] == "inspector"
-        assert manager._shortcuts[pygame.K_F3] == "events"
+        assert manager._shortcuts[keys.F1] == "perf"
+        assert manager._shortcuts[keys.F2] == "inspector"
+        assert manager._shortcuts[keys.F3] == "events"
 
     def test_update_multiple_tools(self, container: DIContainer) -> None:
         """Update is called on all active tools."""
@@ -468,8 +461,7 @@ class TestToolManagerLifecycle:
         second.show()
         manager.update(0.016)
         manager.render(mock_renderer)
-        ev = MagicMock()
-        ev.type = pygame.MOUSEBUTTONDOWN
+        ev = MouseButtonEvent(button=1, x=0, y=0, is_down=True)
         manager.process_event(ev)
 
         assert (second.updates, second.renders, second.events) == (1, 1, 1)
@@ -478,24 +470,24 @@ class TestToolManagerLifecycle:
     def test_reregistering_drops_the_old_shortcut(self, container: DIContainer) -> None:
         manager = ToolManager(container)
         tool = MockTool("dup", container)
-        manager.register_tool(tool, pygame.K_F1)
-        manager.register_tool(MockTool("dup", container), pygame.K_F2)
+        manager.register_tool(tool, keys.F1)
+        manager.register_tool(MockTool("dup", container), keys.F2)
 
-        assert pygame.K_F1 not in manager._shortcuts
-        assert manager._shortcuts[pygame.K_F2] == "dup"
+        assert keys.F1 not in manager._shortcuts
+        assert manager._shortcuts[keys.F2] == "dup"
 
     def test_unregister_removes_from_every_structure_and_calls_hook(
         self, container: DIContainer
     ) -> None:
         manager = ToolManager(container)
         tool = _CountingTool("gone", container)
-        manager.register_tool(tool, pygame.K_F4)
+        manager.register_tool(tool, keys.F4)
 
         assert manager.unregister_tool("gone") is True
 
         assert manager.get_tool("gone") is None
         assert "gone" not in manager._render_order
-        assert pygame.K_F4 not in manager._shortcuts
+        assert keys.F4 not in manager._shortcuts
         assert tool.removed == 1
 
     def test_unregister_unknown_tool_returns_false(
@@ -517,12 +509,12 @@ class TestToolManagerLifecycle:
 
     def test_iter_shortcuts_is_sorted_by_key(self, container: DIContainer) -> None:
         manager = ToolManager(container)
-        manager.register_tool(MockTool("b", container), pygame.K_F5)
-        manager.register_tool(MockTool("a", container), pygame.K_F1)
+        manager.register_tool(MockTool("b", container), keys.F5)
+        manager.register_tool(MockTool("a", container), keys.F1)
 
         assert manager.iter_shortcuts() == [
-            (pygame.K_F1, "a"),
-            (pygame.K_F5, "b"),
+            (keys.F1, "a"),
+            (keys.F5, "b"),
         ]
 
 
@@ -588,7 +580,7 @@ class TestEventMonitorTeardown:
         dispatcher = EventDispatcher()
         container.register_instance(EventDispatcher, dispatcher)
         manager = ToolManager(container)
-        manager.register_tool(EventMonitor(container), pygame.K_F3)
+        manager.register_tool(EventMonitor(container), keys.F3)
 
         manager.unregister_tool("event_monitor")
 

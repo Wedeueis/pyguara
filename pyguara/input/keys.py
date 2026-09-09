@@ -103,3 +103,18 @@ COMMA = 44
 PERIOD = 46
 SLASH = 47
 TILDE = 96
+
+
+# Reverse lookup: key code -> the constant's own name (e.g. 1073741882 -> "F1").
+# Built from this module so it never drifts from the constants above. Used by
+# the shortcuts panel instead of `pygame.key.name()`.
+_NAMES: dict[int, str] = {
+    value: name
+    for name, value in list(globals().items())
+    if name.isupper() and not name.startswith("_") and isinstance(value, int)
+}
+
+
+def key_name(code: int) -> str:
+    """Return a display name for a key code, e.g. ``"F1"`` or ``"KEY_1073742000"``."""
+    return _NAMES.get(code, f"KEY_{code}")

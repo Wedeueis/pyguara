@@ -19,7 +19,9 @@ from pyguara.application.bootstrap import create_headless_application
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.config.manager import ConfigManager
+from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.scene.base import Scene
 from pyguara.tools.config_inspector import ConfigInspector
@@ -46,10 +48,7 @@ def _quit_pygame():
 
 
 def _click_at(tool, x: int, y: int) -> bool:
-    event = MagicMock()
-    event.type = pygame.MOUSEBUTTONDOWN
-    event.button = 1
-    event.pos = (x, y)
+    event = MouseButtonEvent(button=1, x=x, y=y, is_down=True)
     return tool.process_event(event)
 
 
@@ -145,9 +144,7 @@ class TestEntityInspectorSelectionProvider:
         assert inspector._selected_entity is b
 
         # TAB is ignored in provided mode.
-        tab = MagicMock()
-        tab.type = pygame.KEYDOWN
-        tab.key = pygame.K_TAB
+        tab = KeyDownEvent(key_code=keys.TAB)
         assert inspector.process_event(tab) is False
 
         picked[0] = a
@@ -197,9 +194,7 @@ class TestConfigInspectorEditing:
 
         assert config_manager.config.audio.master_volume == original + 1.0
 
-        save_event = MagicMock()
-        save_event.type = pygame.KEYDOWN
-        save_event.key = pygame.K_s
+        save_event = KeyDownEvent(key_code=keys.S)
         assert inspector.process_event(save_event) is True
 
         assert config_manager._file_path.exists()

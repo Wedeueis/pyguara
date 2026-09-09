@@ -1,10 +1,9 @@
 """Keyboard shortcuts reference panel."""
 
-import pygame
-
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input.keys import key_name
 from pyguara.tools.base import Tool
 from pyguara.tools.manager import ToolManager
 
@@ -50,7 +49,7 @@ class ShortcutsPanel(Tool):
         if self._manager is None:
             return rows
         for key_code, tool_name in self._manager.iter_shortcuts():
-            label = pygame.key.name(key_code).upper()
+            label = key_name(key_code).upper()
             rows.append((label, tool_name.replace("_", " ").title()))
         return rows
 

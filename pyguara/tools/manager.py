@@ -2,10 +2,10 @@
 
 from typing import Any
 
-import pygame
-
 from pyguara.di.container import DIContainer
+from pyguara.events.input import KeyDownEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.log import get_logger
 from pyguara.tools.base import Tool
 
@@ -142,20 +142,20 @@ class ToolManager:
         debug panel shouldn't fire a gun in the game).
 
         Args:
-            event: The raw input event.
+            event: An engine input event (see `events/input.py`).
 
         Returns:
             True if the event was consumed, False otherwise.
         """
-        if event.type == pygame.KEYDOWN:
+        if isinstance(event, KeyDownEvent):
             # F12: Toggle Master Switch
-            if event.key == pygame.K_F12:
+            if event.key_code == keys.F12:
                 self.toggle_global_visibility()
                 return True
 
             # Tool Specific Toggles (Only if master switch is ON)
-            if self._is_globally_visible and event.key in self._shortcuts:
-                tool_name = self._shortcuts[event.key]
+            if self._is_globally_visible and event.key_code in self._shortcuts:
+                tool_name = self._shortcuts[event.key_code]
                 if tool := self._tools.get(tool_name):
                     tool.toggle()
                     logger.debug("Toggled tool '%s': %s", tool_name, tool.is_visible)

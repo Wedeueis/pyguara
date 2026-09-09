@@ -59,12 +59,13 @@ class Window:
         self._backend.present()
 
     def poll_events(self) -> Iterable[Any]:
-        """Drain the OS event queue.
+        """Pump the OS event queue and return this frame's engine events.
 
         Returns:
-            Backend-native event objects. See `IWindowBackend.poll_events` and
-            issue #9: these are not yet engine events, which is why callers
-            still compare against pygame constants.
+            Engine events (`pyguara.events.input` / `.lifecycle` / `.window`) --
+            `QuitEvent`, `KeyDownEvent`, `KeyUpEvent`, `MouseButtonEvent`,
+            `MouseMotionEvent`, `WindowResizeEvent`. The backend translates its
+            native events into these (issue #9), so no caller touches SDL.
         """
         return self._backend.poll_events()
 

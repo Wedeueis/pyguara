@@ -2,9 +2,13 @@
 
 from typing import Any
 
-import pygame
-
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.input import (
+    KeyDownEvent,
+    KeyUpEvent,
+    MouseButtonEvent,
+    MouseMotionEvent,
+)
 from pyguara.input.binding import KeyBindingManager
 from pyguara.input.events import (
     GamepadAxisEvent,
@@ -262,12 +266,18 @@ class InputManager:
         self._bindings.bind(device, code, action, context)
 
     def process_event(self, event: Any) -> None:
-        """Ingest raw Pygame events."""
+        """Ingest one engine input event from the window backend.
+
+        Accepts `KeyDownEvent` / `KeyUpEvent` / `MouseButtonEvent` /
+        `MouseMotionEvent`; anything else is ignored. The backend has already
+        translated SDL into these (see `graphics/backends/pygame/events.py`),
+        so this method -- and everything downstream -- is pygame-free.
+        """
         # --- Keyboard ---
-        if event.type in (pygame.KEYDOWN, pygame.KEYUP):
-            is_down = event.type == pygame.KEYDOWN
-            modifiers = self._current_modifiers()
-            self._handle_input(InputDevice.KEYBOARD, event.key, is_down=is_down)
+        if isinstance(event, (KeyDownEvent, KeyUpEvent)):
+            is_down = isinstance(event, KeyDownEvent)
+            modifiers = set(event.modifiers)
+            self._handle_input(InputDevice.KEYBOARD, event.key_code, is_down=is_down)
 
             if self._recorder is not None and self._recorder.is_recording:
                 record_key = (
@@ -275,39 +285,41 @@ class InputManager:
                     if is_down
                     else self._recorder.record_key_up
                 )
-                record_key(event.key, sorted(modifiers))
+                record_key(event.key_code, sorted(modifiers))
 
             # Dispatch raw key event for UI system
             raw_key_event = OnRawKeyEvent(
-                key_code=event.key, is_down=is_down, modifiers=modifiers, source=self
+                key_code=event.key_code,
+                is_down=is_down,
+                modifiers=modifiers,
+                source=self,
             )
             self._dispatcher.dispatch(raw_key_event)
 
         # --- Mouse Buttons ---
-        elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP):
-            is_down = event.type == pygame.MOUSEBUTTONDOWN
-            self._handle_input(InputDevice.MOUSE, event.button, is_down=is_down)
+        elif isinstance(event, MouseButtonEvent):
+            self._handle_input(InputDevice.MOUSE, event.button, is_down=event.is_down)
 
             if self._recorder is not None and self._recorder.is_recording:
                 record_mouse = (
                     self._recorder.record_mouse_down
-                    if is_down
+                    if event.is_down
                     else self._recorder.record_mouse_up
                 )
-                record_mouse(event.button, event.pos, sorted(self._current_modifiers()))
+                record_mouse(event.button, event.pos, sorted(event.modifiers))
 
             # Dispatch mouse event for UI system
             mouse_event = OnMouseEvent(
                 position=event.pos,
                 button=event.button,
-                is_down=is_down,
+                is_down=event.is_down,
                 is_motion=False,
                 source=self,
             )
             self._dispatcher.dispatch(mouse_event)
 
         # --- Mouse Motion ---
-        elif event.type == pygame.MOUSEMOTION:
+        elif isinstance(event, MouseMotionEvent):
             if self._recorder is not None and self._recorder.is_recording:
                 self._recorder.record_mouse_move(event.pos)
 
@@ -320,27 +332,11 @@ class InputManager:
             )
             self._dispatcher.dispatch(mouse_event)
 
-        # Gamepad input isn't read from pygame events at all: GamepadManager
+        # Gamepad input isn't read from window events at all: GamepadManager
         # polls device/button/axis state directly (see update(), called once
         # per frame from Application.run() before poll_events()), and its
         # GamepadButtonEvent/GamepadAxisEvent drive bound Actions via
         # _on_gamepad_button()/_on_gamepad_axis() above.
-
-    @staticmethod
-    def _current_modifiers() -> set[int]:
-        """Return the held shift/ctrl/alt flags, empty if SDL video is down."""
-        modifiers: set[int] = set()
-        try:
-            mods = pygame.key.get_mods()
-        except pygame.error:
-            return modifiers
-        if mods & pygame.KMOD_SHIFT:
-            modifiers.add(pygame.KMOD_SHIFT)
-        if mods & pygame.KMOD_CTRL:
-            modifiers.add(pygame.KMOD_CTRL)
-        if mods & pygame.KMOD_ALT:
-            modifiers.add(pygame.KMOD_ALT)
-        return modifiers
 
     def _handle_input(self, device: InputDevice, code: int, is_down: bool) -> None:
         """Handle binary inputs (Buttons/Keys)."""

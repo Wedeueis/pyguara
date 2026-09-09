@@ -1,13 +1,14 @@
 """Pygame implementation of the Window Backend."""
 
 from collections.abc import Iterable
-from typing import Any, cast
+from typing import Any
 
 import pygame
 
 from pyguara.common.types import Color
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.backends.pygame.conversions import to_pygame_color
+from pyguara.graphics.backends.pygame.events import translate_events
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -120,18 +121,18 @@ class PygameWindow:
             self._screen.fill(to_pygame_color(fill_color))
 
     def poll_events(self) -> Iterable[Any]:
-        """Fetch pygame events and handle internal window state."""
+        """Pump SDL and return engine events (see `pygame.events`)."""
         if not self._is_open:
             return []
 
-        events = pygame.event.get()
+        raw_events = pygame.event.get()
 
         # Check for quit event internally to update state
-        for event in events:
+        for event in raw_events:
             if event.type == pygame.QUIT:
                 self._is_open = False
 
-        return cast(Iterable[Any], events)
+        return translate_events(raw_events)
 
     def get_screen(self) -> Any:
         """Return the native OS window."""

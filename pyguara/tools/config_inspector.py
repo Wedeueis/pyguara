@@ -2,12 +2,12 @@
 
 from typing import Any
 
-import pygame
-
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
+from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.tools.base import Tool
 from pyguara.tools.tweakable import (
     TweakableLeaf,
@@ -98,12 +98,12 @@ class ConfigInspector(Tool):
         Args:
             event: Pygame event.
         """
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_s:
+        if isinstance(event, KeyDownEvent) and event.key_code == keys.S:
             if self._config_manager.save():
                 self._saved_flash_timer = 1.5
             return True
 
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        if isinstance(event, MouseButtonEvent) and event.is_down and event.button == 1:
             mx, my = event.pos
             for rect, leaf in self._tweakable_rows:
                 if (

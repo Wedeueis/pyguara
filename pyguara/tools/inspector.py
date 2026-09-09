@@ -3,13 +3,13 @@
 from collections.abc import Callable
 from typing import Any
 
-import pygame
-
 from pyguara.common.components import Tag
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
+from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.tools.base import Tool
 from pyguara.tools.tweakable import (
     TweakableLeaf,
@@ -186,19 +186,19 @@ class EntityInspector(Tool):
         """Handle cycling selection and clicks on editable field rows.
 
         Args:
-            event: Pygame event.
+            event: An engine input event.
         """
         if (
             self._selection_provider is None
-            and event.type == pygame.KEYDOWN
-            and event.key == pygame.K_TAB
+            and isinstance(event, KeyDownEvent)
+            and event.key_code == keys.TAB
         ):
             count = sum(1 for _ in self._entity_manager.get_all_entities())
             if count > 0:
                 self._selected_index = (self._selected_index + 1) % count
                 return True
 
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        if isinstance(event, MouseButtonEvent) and event.is_down and event.button == 1:
             mx, my = event.pos
             for rect, leaf in self._tweakable_rows:
                 if (

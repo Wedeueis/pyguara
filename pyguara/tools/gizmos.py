@@ -9,13 +9,13 @@ from collections.abc import Callable
 from enum import Enum, auto
 from typing import Any
 
-import pygame  # Only for event handling key constants
-
 from pyguara.common.components import Transform
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.entity import Entity
+from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.tools.base import Tool
 
 
@@ -316,34 +316,36 @@ class TransformGizmo(Tool):
         """Process input events for gizmo interaction.
 
         Args:
-            event: Raw pygame event.
+            event: An engine input event.
 
         Returns:
             True if the event was consumed, False otherwise.
         """
-        if not hasattr(event, "type"):
-            return False
-
         provided = self._selection_provider is not None
 
         # Mode switching with Q, W, E keys
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_q:
+        if isinstance(event, KeyDownEvent):
+            if event.key_code == keys.Q:
                 self._mode = GizmoMode.TRANSLATE
                 return True
-            elif event.key == pygame.K_w:
+            elif event.key_code == keys.W:
                 self._mode = GizmoMode.ROTATE
                 return True
-            elif event.key == pygame.K_e:
+            elif event.key_code == keys.E:
                 self._mode = GizmoMode.SCALE
                 return True
-            elif event.key == pygame.K_ESCAPE and not provided:
+            elif event.key_code == keys.ESCAPE and not provided:
                 self._selected_entity = None
                 return True
 
         # Entity selection on mouse click -- only when this gizmo owns the
         # selection (no external provider driving it).
-        if not provided and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        if (
+            not provided
+            and isinstance(event, MouseButtonEvent)
+            and event.is_down
+            and event.button == 1
+        ):
             mouse_pos = Vector2(event.pos[0], event.pos[1])
             self.select_at_position(mouse_pos)
             # Don't consume - let the click propagate

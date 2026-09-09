@@ -16,6 +16,7 @@ import pytest
 
 from pyguara.application.bootstrap import create_headless_application
 from pyguara.common.components import Tag
+from pyguara.events.input import MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.scene.base import Scene
 from pyguara.tools.hierarchy import HierarchyTool
@@ -45,10 +46,7 @@ def _renderer() -> MagicMock:
 
 
 def _click(tool: HierarchyTool, x: int, y: int) -> bool:
-    event = MagicMock()
-    event.type = pygame.MOUSEBUTTONDOWN
-    event.button = 1
-    event.pos = (x, y)
+    event = MouseButtonEvent(button=1, x=x, y=y, is_down=True)
     return tool.process_event(event)
 
 

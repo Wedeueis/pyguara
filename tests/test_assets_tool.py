@@ -18,6 +18,7 @@ import pytest
 
 from pyguara.application.bootstrap import create_headless_application
 from pyguara.common.components import ResourceLink, Tag, Transform
+from pyguara.events.input import MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.scene.base import Scene
 from pyguara.tools.assets_browser import AssetsTool
@@ -161,10 +162,9 @@ def test_spawn_button_is_not_clickable_for_a_loaded_non_data_resource(
     assert tool._reload_rect is not None  # loaded -> Reload is fine
 
     # And a click where the (now absent) Spawn button drew is a no-op.
-    event = MagicMock()
-    event.type = pygame.MOUSEBUTTONDOWN
-    event.button = 1
-    event.pos = (tool._panel_rect.x + 20, tool._panel_rect.y + 400)
+    event = MouseButtonEvent(
+        button=1, x=tool._panel_rect.x + 20, y=tool._panel_rect.y + 400, is_down=True
+    )
     assert tool.process_event(event) is False
     app.shutdown()
 
@@ -179,10 +179,7 @@ def test_clicking_a_row_selects_it(tmp_path) -> None:
     tool.render(_renderer())
     rect, path = tool._rows[0]
 
-    event = MagicMock()
-    event.type = pygame.MOUSEBUTTONDOWN
-    event.button = 1
-    event.pos = (rect.x + 2, rect.y + 2)
+    event = MouseButtonEvent(button=1, x=rect.x + 2, y=rect.y + 2, is_down=True)
 
     assert tool.process_event(event) is True
     assert tool._selected_path == path
