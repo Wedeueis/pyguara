@@ -139,6 +139,12 @@ def _setup_container(headless: bool = False) -> DIContainer:
     container.register_instance(RandomService, rng_service)
     logger.debug(f"RandomService initialized (root_seed={rng_service.root_seed}).")
 
+    # 3.6 Non-physics spatial index
+    from pyguara.common.spatial import SpatialHash
+
+    container.register_instance(SpatialHash, SpatialHash())
+    logger.debug("SpatialHash initialized.")
+
     # 4. Window System
     # Extract settings from loaded config
     disp_cfg = config_manager.config.display
