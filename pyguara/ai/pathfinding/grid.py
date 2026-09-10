@@ -3,10 +3,18 @@
 import math
 from collections.abc import Iterator
 
+from pyguara.common.grid import Cell
+from pyguara.common.grid import cell_to_world as _cell_to_world
+from pyguara.common.grid import chebyshev_distance as _chebyshev_distance
+from pyguara.common.grid import line as _line
+from pyguara.common.grid import manhattan_distance as _manhattan_distance
+from pyguara.common.grid import neighbors4 as _neighbors4
+from pyguara.common.grid import neighbors8 as _neighbors8
+from pyguara.common.grid import world_to_cell as _world_to_cell
 from pyguara.common.types import Vector2
 
 # GridNode is just an (x, y) tuple for efficiency
-GridNode = tuple[int, int]
+GridNode = Cell
 
 
 class GridGraph:
@@ -41,16 +49,11 @@ class GridGraph:
         matching the deleted `GridMap`'s behavior -- an out-of-bounds
         flanking cell blocks the diagonal too, not just an actual wall.
         """
+        candidates = _neighbors8(node) if self.allow_diagonal else _neighbors4(node)
+
         x, y = node
-        # Standard 4 directions
-        dirs = [(1, 0), (0, 1), (-1, 0), (0, -1)]
-
-        if self.allow_diagonal:
-            # Add diagonals
-            dirs.extend([(1, 1), (1, -1), (-1, 1), (-1, -1)])
-
-        for dx, dy in dirs:
-            next_node = (x + dx, y + dy)
+        for next_node in candidates:
+            dx, dy = next_node[0] - x, next_node[1] - y
             if not (self.in_bounds(next_node) and self.is_passable(next_node)):
                 continue
 
@@ -79,7 +82,7 @@ class ManhattanDistance:
 
     def estimate(self, current: GridNode, goal: GridNode) -> float:
         """Estimate the Manhattan distance."""
-        return abs(current[0] - goal[0]) + abs(current[1] - goal[1])
+        return _manhattan_distance(current, goal)
 
 
 class EuclideanDistance:
@@ -95,9 +98,7 @@ class DiagonalDistance:
 
     def estimate(self, current: GridNode, goal: GridNode) -> float:
         """Estimate the Chebyshev distance."""
-        dx = abs(current[0] - goal[0])
-        dy = abs(current[1] - goal[1])
-        return max(dx, dy)
+        return _chebyshev_distance(current, goal)
 
 
 class OctileDistance:
@@ -157,31 +158,7 @@ def _has_line_of_sight(start: GridNode, end: GridNode, graph: GridGraph) -> bool
     Returns:
         True if line of sight is clear.
     """
-    x0, y0 = start
-    x1, y1 = end
-
-    dx = abs(x1 - x0)
-    dy = abs(y1 - y0)
-
-    sx = 1 if x0 < x1 else -1
-    sy = 1 if y0 < y1 else -1
-
-    err = dx - dy
-
-    while True:
-        if not graph.is_passable((x0, y0)):
-            return False
-
-        if (x0, y0) == (x1, y1):
-            return True
-
-        e2 = 2 * err
-        if e2 > -dy:
-            err -= dy
-            x0 += sx
-        if e2 < dx:
-            err += dx
-            y0 += sy
+    return all(graph.is_passable(cell) for cell in _line(start, end))
 
 
 def path_to_world_coords(
@@ -197,13 +174,7 @@ def path_to_world_coords(
     Returns:
         Path in world coordinates (cell centers).
     """
-    world_path = []
-    for x, y in path:
-        # Center of cell
-        world_x = x * cell_size + cell_size / 2 + offset.x
-        world_y = y * cell_size + cell_size / 2 + offset.y
-        world_path.append(Vector2(world_x, world_y))
-    return world_path
+    return [_cell_to_world(cell, cell_size, offset) for cell in path]
 
 
 def world_to_grid_coords(
@@ -219,10 +190,4 @@ def world_to_grid_coords(
     Returns:
         Grid position (x, y).
     """
-    # floor, not int(): int() truncates toward zero, so a world point left of
-    # or above the grid origin (negative local coordinate -- common with a
-    # non-zero offset) would land one cell too high and, for -cell_size < d < 0,
-    # collapse onto cell 0 instead of -1.
-    grid_x = math.floor((position.x - offset.x) / cell_size)
-    grid_y = math.floor((position.y - offset.y) / cell_size)
-    return (grid_x, grid_y)
+    return _world_to_cell(position, cell_size, offset)
