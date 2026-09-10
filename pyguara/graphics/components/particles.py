@@ -11,10 +11,10 @@ ensuring smooth frame rates even when emitting hundreds of particles per second.
 
 from __future__ import annotations
 
-import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
@@ -91,13 +91,15 @@ class ParticleSystem:
     and batching (Render) of thousands of small entities.
     """
 
-    def __init__(self, capacity: int = 1000):
+    def __init__(self, capacity: int = 1000, rng: RandomStream | None = None):
         """
         Initialize the particle pool.
 
         Args:
             capacity (int): Maximum number of concurrent particles.
                             Higher numbers use more RAM but allow denser effects.
+            rng (RandomStream | None): Random stream driving per-particle
+                spread/speed/rotation. Defaults to a fresh, unseeded stream.
         """
         # Pre-allocate the pool to avoid runtime instantiation
         self._pool = [
@@ -106,6 +108,7 @@ class ParticleSystem:
         self._capacity = capacity
         # Pointer to the next available slot (Simple Ring Buffer or Search)
         self._next_index = 0
+        self._rng = rng if rng is not None else RandomStream()
 
     def emit(
         self,
@@ -157,9 +160,11 @@ class ParticleSystem:
                 p.life_total = life
 
                 # Random Velocity Calculation
-                angle = random.uniform(0, spread)
+                angle = self._rng.uniform(0, spread)
                 direction = Vector2.right().rotate_degrees(angle)
-                random_velocity = direction * random.uniform(speed * 0.5, speed * 1.5)
+                random_velocity = direction * self._rng.uniform(
+                    speed * 0.5, speed * 1.5
+                )
                 p.velocity = random_velocity
 
                 # Physics
@@ -167,7 +172,7 @@ class ParticleSystem:
                 p.damping = damping
 
                 # Visual effects
-                p.rotation = random.uniform(0, 360)  # Random initial rotation
+                p.rotation = self._rng.uniform(0, 360)  # Random initial rotation
                 p.angular_velocity = angular_velocity
                 p.scale = Vector2(scale.x, scale.y)
                 p.scale_velocity = scale_velocity

@@ -1,11 +1,15 @@
 """Steering behaviors for autonomous movement."""
 
 import math
-import random
 from typing import cast
 
 from pyguara.common.components import Transform
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Vector2
+
+_DEFAULT_RNG = RandomStream()
+"""Shared fallback stream, used when a caller passes no `rng` -- mirrors the
+pre-`RandomStream` behavior of all call sites sharing one global source."""
 
 
 class SteeringBehavior:
@@ -32,6 +36,7 @@ class SteeringBehavior:
         max_speed: float,
         current_velocity: Vector2,
         panic_distance: float = 200.0,
+        rng: RandomStream | None = None,
     ) -> Vector2:
         """
         Calculate steering force to flee from a threat.
@@ -42,7 +47,10 @@ class SteeringBehavior:
             max_speed: Max movement speed.
             current_velocity: Current entity velocity.
             panic_distance: Only flee if within this distance.
+            rng: Random stream for the degenerate on-top-of-threat case.
+                Defaults to a shared, unseeded stream.
         """
+        rng = rng or _DEFAULT_RNG
         direction = transform.position - threat
         distance = direction.length
 
@@ -51,7 +59,7 @@ class SteeringBehavior:
 
         if distance < 0.001:
             # If on top of threat, flee in random direction
-            angle = random.uniform(0, 2 * math.pi)
+            angle = rng.uniform(0, 2 * math.pi)
             direction = Vector2(math.cos(angle), math.sin(angle))
         else:
             direction = cast(Vector2, direction.normalized())
@@ -101,6 +109,7 @@ class SteeringBehavior:
         wander_distance: float = 80.0,
         wander_jitter: float = 20.0,
         wander_target: Vector2 | None = None,
+        rng: RandomStream | None = None,
     ) -> tuple[Vector2, Vector2]:
         """
         Calculate steering force for random wandering behavior.
@@ -116,21 +125,24 @@ class SteeringBehavior:
             wander_distance: How far ahead the wander circle is projected.
             wander_jitter: Amount of random displacement per frame.
             wander_target: Previous wander target on circle (or None to create).
+            rng: Random stream driving the wander jitter. Defaults to a
+                shared, unseeded stream.
 
         Returns:
             Tuple of (steering_force, new_wander_target) for state persistence.
         """
+        rng = rng or _DEFAULT_RNG
         # Initialize or jitter the wander target
         if wander_target is None:
-            angle = random.uniform(0, 2 * math.pi)
+            angle = rng.uniform(0, 2 * math.pi)
             wander_target = Vector2(
                 math.cos(angle) * wander_radius, math.sin(angle) * wander_radius
             )
         else:
             # Add random jitter
             jitter = Vector2(
-                random.uniform(-1, 1) * wander_jitter,
-                random.uniform(-1, 1) * wander_jitter,
+                rng.uniform(-1, 1) * wander_jitter,
+                rng.uniform(-1, 1) * wander_jitter,
             )
             wander_target = wander_target + jitter
             # Re-project onto circle
@@ -204,6 +216,7 @@ class SteeringBehavior:
         max_speed: float,
         current_velocity: Vector2,
         panic_distance: float = 200.0,
+        rng: RandomStream | None = None,
     ) -> Vector2:
         """
         Calculate steering force to evade a moving threat.
@@ -215,6 +228,7 @@ class SteeringBehavior:
             max_speed: Max movement speed.
             current_velocity: Current entity velocity.
             panic_distance: Only evade if within this distance.
+            rng: Forwarded to `flee()`'s degenerate on-top-of-threat case.
         """
         to_threat = threat_position - transform.position
         distance = to_threat.length
@@ -233,5 +247,10 @@ class SteeringBehavior:
         future_position = threat_position + threat_velocity * look_ahead_time
 
         return SteeringBehavior.flee(
-            transform, future_position, max_speed, current_velocity, panic_distance * 2
+            transform,
+            future_position,
+            max_speed,
+            current_velocity,
+            panic_distance * 2,
+            rng,
         )
