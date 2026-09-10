@@ -10,9 +10,9 @@ of "viewing" from the logic of "drawing".
 from __future__ import annotations
 
 import math
-import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Rect, Vector2
 
 # ===== Camera Effects Data Structures =====
@@ -28,12 +28,15 @@ class CameraShake:
         magnitude (float): Maximum shake offset in pixels.
         frequency (float): Shake oscillation speed.
         elapsed (float): Time elapsed since shake started.
+        rng (RandomStream): Random stream driving the shake angle. Defaults
+            to a fresh, unseeded stream per shake instance.
     """
 
     duration: float
     magnitude: float
     frequency: float = 20.0
     elapsed: float = 0.0
+    rng: RandomStream = field(default_factory=RandomStream)
 
     def update(self, dt: float) -> Vector2:
         """
@@ -55,7 +58,7 @@ class CameraShake:
         current_magnitude = self.magnitude * (1.0 - progress)
 
         # Random offset based on frequency
-        angle = random.uniform(0, 360)
+        angle = self.rng.uniform(0, 360)
         offset_x = math.cos(math.radians(angle)) * current_magnitude
         offset_y = math.sin(math.radians(angle)) * current_magnitude
 

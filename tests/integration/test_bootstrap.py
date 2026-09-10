@@ -17,7 +17,9 @@ os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 from games.boot_process.scenes import BootScene
 from pyguara.application.bootstrap import _setup_container, create_application
+from pyguara.config.manager import ConfigManager
 from pyguara.prefabs.registry import ComponentRegistry
+from pyguara.random.service import RandomService
 
 
 @pytest.fixture
@@ -36,6 +38,32 @@ def test_component_registry_is_registered_once_with_core_components():
 
     assert len(registry.list_components()) == 18
     assert registry.get("Transform") is not None
+
+
+@pytest.mark.integration
+def test_random_service_is_registered_and_resolvable():
+    container = _setup_container()
+
+    service = container.get(RandomService)
+
+    assert isinstance(service.stream("x").random(), float)
+
+
+@pytest.mark.integration
+def test_random_service_root_seed_comes_from_config(monkeypatch):
+    """`debug.rng_seed` in the loaded config must reach `RandomService`."""
+    original_load = ConfigManager.load
+
+    def load_with_fixed_seed(self, file_path=None):
+        result = original_load(self, file_path)
+        self.config.debug.rng_seed = 12345
+        return result
+
+    monkeypatch.setattr(ConfigManager, "load", load_with_fixed_seed)
+
+    container = _setup_container()
+
+    assert container.get(RandomService).root_seed == 12345
 
 
 @pytest.mark.integration

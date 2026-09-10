@@ -135,6 +135,12 @@ class DebugConfig:
     show_colliders: bool = False
     show_fps: bool = False
 
+    # Determinism
+    rng_seed: int | None = None
+    """Root seed for `RandomService`. `None` mints an unpredictable seed
+    each run (today's default); set a fixed int for reproducible runs,
+    tests, or replays."""
+
 
 @dataclass
 class GameConfig:

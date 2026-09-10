@@ -132,6 +132,13 @@ def _setup_container(headless: bool = False) -> DIContainer:
 
     logger.debug("Core instances registered in DI Container.")
 
+    # 3.5 Deterministic RNG Service
+    from pyguara.random.service import RandomService
+
+    rng_service = RandomService(root_seed=debug_cfg.rng_seed)
+    container.register_instance(RandomService, rng_service)
+    logger.debug(f"RandomService initialized (root_seed={rng_service.root_seed}).")
+
     # 4. Window System
     # Extract settings from loaded config
     disp_cfg = config_manager.config.display
