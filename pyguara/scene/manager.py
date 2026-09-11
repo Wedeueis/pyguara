@@ -460,15 +460,19 @@ class SceneManager:
         return True
 
     def _exit_scene(self, scene: Scene) -> None:
-        """Run a scene's exit hook and guarantee its SystemManager is cleaned up.
+        """Run a scene's exit hook and guarantee its resources are torn down.
 
-        Calls `scene.system_manager.cleanup()` directly rather than relying on
-        `scene.on_exit()` to do it: existing scenes already override
-        `on_exit()` without calling `super()`, so a base-class default there
-        wouldn't reliably fire.
+        Calls `scene.system_manager.cleanup()` and disposes `scene.scope`
+        directly rather than relying on `scene.on_exit()` to do it: existing
+        scenes already override `on_exit()` without calling `super()`, so a
+        base-class default there wouldn't reliably fire. `scope.dispose()`
+        runs last, after `on_exit()`, so scoped services are still resolvable
+        during a scene's own exit-time cleanup.
         """
         scene.on_exit()
         scene.system_manager.cleanup()
+        if scene.scope is not None:
+            scene.scope.dispose()
 
     def _pause_scene(self, scene: Scene) -> None:
         """Run a scene's pause hook and guarantee its SystemManager is disabled.
