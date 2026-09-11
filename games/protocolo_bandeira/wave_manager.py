@@ -1,14 +1,23 @@
 """Protocolo Bandeira - Wave Manager.
 
-Spawns enemies in waves with scaling difficulty.
+Spawns enemies in waves with scaling difficulty, on top of
+`kits.spawn.SpawnDirector` -- this module owns only the game-specific
+policy `SpawnDirector` deliberately stays agnostic to: how many enemies
+per wave, what type/health mix, and where they appear on the arena's
+edge. Pacing (how fast entries release) is the kit's `Wave.interval`;
+this game never uses `SpawnDirector`'s budget gate (every entry costs
+0.0), since it never had a budget concept of its own -- only a fixed
+enemy count per wave and a release interval.
 """
 
-import random
+from collections.abc import Callable
 
 from games.protocolo_bandeira.events import WaveCompleteEvent, WaveStartEvent
 from games.protocolo_bandeira.pooling import EnemyPool
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Vector2
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.kits.spawn import SpawnDirector, SpawnEntry, Wave
 
 
 class WaveManager:
@@ -26,28 +35,31 @@ class WaveManager:
 
     # Spawn timing
     SPAWN_DELAY = 0.5  # Seconds between enemy spawns
-    WAVE_DELAY = 3.0  # Seconds between waves
 
-    def __init__(self, enemy_pool: EnemyPool, event_dispatcher: EventDispatcher):
+    def __init__(
+        self,
+        enemy_pool: EnemyPool,
+        event_dispatcher: EventDispatcher,
+        rng: RandomStream | None = None,
+    ):
         """Initialize the wave manager.
 
         Args:
             enemy_pool: Pool for enemy entities
             event_dispatcher: Event dispatcher for wave events
+            rng: Seeded stream driving composition rolls and spawn-edge
+                placement. Defaults to a fresh, unseeded stream.
         """
         self._pool = enemy_pool
         self._dispatcher = event_dispatcher
+        self._rng = rng if rng is not None else RandomStream()
+        self._director = SpawnDirector(budget=0.0, regen_rate=0.0, max_budget=0.0)
 
         # Wave state
         self._current_wave = 0
-        self._enemies_to_spawn = 0
         self._enemies_alive = 0
-        self._spawn_timer = 0.0
-        self._wave_timer = 0.0
-        self._is_wave_active = False
-
-        # Spawn queue
-        self._spawn_queue: list[tuple[str, int]] = []
+        self._pending_in_wave = 0
+        self._last_player_position = Vector2.zero()
 
     def start_wave(self, wave_number: int) -> None:
         """Start a new wave.
@@ -56,8 +68,7 @@ class WaveManager:
             wave_number: The wave number (1-indexed)
         """
         self._current_wave = wave_number
-        self._is_wave_active = True
-        self._wave_timer = 0.0
+        self._enemies_alive = 0
 
         # Calculate enemies for this wave
         total_enemies = min(
@@ -65,15 +76,36 @@ class WaveManager:
             self.MAX_ENEMIES,
         )
 
-        # Determine enemy composition based on wave
-        self._spawn_queue = self._generate_enemy_composition(wave_number, total_enemies)
-        self._enemies_to_spawn = len(self._spawn_queue)
-        self._enemies_alive = 0
-        self._spawn_timer = 0.0
+        composition = self._generate_enemy_composition(wave_number, total_enemies)
+        entries = [
+            SpawnEntry(factory=self._make_spawn_factory(enemy_type, health), cost=0.0)
+            for enemy_type, health in composition
+        ]
+        self._pending_in_wave = len(entries)
+        self._director.queue_wave(Wave(entries=entries, interval=self.SPAWN_DELAY))
 
         self._dispatcher.dispatch(
             WaveStartEvent(wave_number=wave_number, enemy_count=total_enemies)
         )
+
+    def _make_spawn_factory(self, enemy_type: str, health: int) -> Callable[[], None]:
+        """Build the zero-argument factory one `SpawnEntry` releases.
+
+        Reads `self._last_player_position` at release time (set by the
+        most recent `update()` call), not at queue time -- entries release
+        over several ticks, and the spawn-edge choice should track where
+        the player actually is when each one fires, same as before this
+        went through `SpawnDirector`.
+        """
+
+        def factory() -> None:
+            self._pending_in_wave = max(0, self._pending_in_wave - 1)
+            spawn_pos = self._get_spawn_position(self._last_player_position)
+            entity = self._pool.spawn_enemy(spawn_pos, enemy_type, health)
+            if entity:
+                self._enemies_alive += 1
+
+        return factory
 
     def _generate_enemy_composition(
         self, wave: int, total: int
@@ -98,7 +130,7 @@ class WaveManager:
         base_health = 1 + wave // 3
 
         for _ in range(total):
-            roll = random.random()
+            roll = self._rng.random()
             if roll < chaser_chance:
                 enemy_type = "chaser"
                 health = base_health
@@ -120,30 +152,15 @@ class WaveManager:
             dt: Delta time
             player_position: Current player position (for spawn placement)
         """
-        if not self._is_wave_active:
-            return
-
-        self._spawn_timer += dt
-
-        # Spawn enemies from queue
-        if self._spawn_queue and self._spawn_timer >= self.SPAWN_DELAY:
-            self._spawn_timer = 0.0
-            enemy_type, health = self._spawn_queue.pop(0)
-
-            # Get spawn position away from player
-            spawn_pos = self._get_spawn_position(player_position)
-
-            entity = self._pool.spawn_enemy(spawn_pos, enemy_type, health)
-            if entity:
-                self._enemies_alive += 1
+        self._last_player_position = player_position
+        self._director.update(dt)
 
     def on_enemy_killed(self) -> None:
         """Handle enemy kill notification."""
         self._enemies_alive = max(0, self._enemies_alive - 1)
 
         # Check for wave completion
-        if self._enemies_alive == 0 and len(self._spawn_queue) == 0:
-            self._is_wave_active = False
+        if self._enemies_alive == 0 and self._director.is_idle:
             self._dispatcher.dispatch(WaveCompleteEvent(wave_number=self._current_wave))
 
     def _get_spawn_position(self, player_pos: Vector2) -> Vector2:
@@ -156,20 +173,22 @@ class WaveManager:
             Spawn position outside the visible area
         """
         # Choose a random edge
-        edge = random.choice(["top", "bottom", "left", "right"])
+        edge = self._rng.choice(["top", "bottom", "left", "right"])
 
+        x: float
+        y: float
         if edge == "top":
-            x = random.uniform(0, self.ARENA_WIDTH)
+            x = self._rng.uniform(0, self.ARENA_WIDTH)
             y = -self.SPAWN_MARGIN
         elif edge == "bottom":
-            x = random.uniform(0, self.ARENA_WIDTH)
+            x = self._rng.uniform(0, self.ARENA_WIDTH)
             y = self.ARENA_HEIGHT + self.SPAWN_MARGIN
         elif edge == "left":
             x = -self.SPAWN_MARGIN
-            y = random.uniform(0, self.ARENA_HEIGHT)
+            y = self._rng.uniform(0, self.ARENA_HEIGHT)
         else:  # right
             x = self.ARENA_WIDTH + self.SPAWN_MARGIN
-            y = random.uniform(0, self.ARENA_HEIGHT)
+            y = self._rng.uniform(0, self.ARENA_HEIGHT)
 
         return Vector2(x, y)
 
@@ -181,9 +200,9 @@ class WaveManager:
     @property
     def is_wave_active(self) -> bool:
         """Check if a wave is currently active."""
-        return self._is_wave_active
+        return not self._director.is_idle or self._enemies_alive > 0
 
     @property
     def enemies_remaining(self) -> int:
-        """Get total remaining enemies (alive + to spawn)."""
-        return self._enemies_alive + len(self._spawn_queue)
+        """Get total remaining enemies (alive + not yet released)."""
+        return self._enemies_alive + self._pending_in_wave
