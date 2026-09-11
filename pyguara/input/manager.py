@@ -10,6 +10,7 @@ from pyguara.events.input import (
     MouseMotionEvent,
 )
 from pyguara.input.binding import KeyBindingManager
+from pyguara.input.coop import PlayerRouter
 from pyguara.input.events import (
     GamepadAxisEvent,
     GamepadButtonEvent,
@@ -49,6 +50,7 @@ class InputManager:
         dispatcher: EventDispatcher,
         input_backend: IInputBackend,
         gamepad_config: GamepadConfig | None = None,
+        player_router: PlayerRouter | None = None,
     ) -> None:
         """Initialize input manager and bindings.
 
@@ -57,10 +59,18 @@ class InputManager:
             input_backend: Backend for joystick subsystem access, shared with
                 the owned `GamepadManager`.
             gamepad_config: Optional gamepad configuration (deadzone, vibration, etc.).
+            player_router: Local co-op routing. When given, every dispatched
+                `OnActionEvent` is stamped with the player its source device
+                resolves to, and input from a device the router has no
+                assignment for is dropped rather than dispatched -- an
+                unassigned second gamepad does nothing until it joins.
+                Without one (the default), everything dispatches as player 0,
+                exactly like before this existed.
         """
         self._dispatcher = dispatcher
         self._bindings = KeyBindingManager()
         self._input_backend = input_backend
+        self._player_router = player_router
 
         self._context = InputContext.GAMEPLAY
         self._registered_actions: dict[str, InputAction] = {}
@@ -207,7 +217,18 @@ class InputManager:
         elif event.event_type == InputEventType.GAMEPAD_AXIS:
             self._handle_axis(event.code, event.value)
         elif event.event_type == InputEventType.ACTION and event.action is not None:
-            self._dispatch_action(event.action, event.value)
+            # A recorded synthetic action (ReplayRecorder.record_action())
+            # was never tied to a physical device even at record time, so
+            # there is nothing to resolve a player from -- dispatch directly
+            # as player 0 rather than routing through _dispatch_action().
+            self._dispatcher.dispatch(
+                OnActionEvent(
+                    action_name=event.action,
+                    context=self._context.value,
+                    value=event.value,
+                    source=self,
+                )
+            )
 
     def update(self) -> None:
         """Update input state. Call this once per frame before processing events.
@@ -223,14 +244,19 @@ class InputManager:
     def _on_gamepad_button(self, event: GamepadButtonEvent) -> None:
         """Translate a GamepadManager button-state change into bound Actions."""
         self._handle_input(
-            InputDevice.GAMEPAD, event.button.value, is_down=event.is_pressed
+            InputDevice.GAMEPAD,
+            event.button.value,
+            is_down=event.is_pressed,
+            controller_id=event.controller_id,
         )
         if self._recorder is not None and self._recorder.is_recording:
             self._recorder.record_gamepad_button(event.button.value, event.is_pressed)
 
     def _on_gamepad_axis(self, event: GamepadAxisEvent) -> None:
         """Translate a GamepadManager axis-state change into bound Actions."""
-        self._handle_axis(event.axis.value, event.value)
+        self._handle_axis(
+            event.axis.value, event.value, controller_id=event.controller_id
+        )
         if self._recorder is not None and self._recorder.is_recording:
             self._recorder.record_gamepad_axis(event.axis.value, event.value)
 
@@ -338,7 +364,13 @@ class InputManager:
         # GamepadButtonEvent/GamepadAxisEvent drive bound Actions via
         # _on_gamepad_button()/_on_gamepad_axis() above.
 
-    def _handle_input(self, device: InputDevice, code: int, is_down: bool) -> None:
+    def _handle_input(
+        self,
+        device: InputDevice,
+        code: int,
+        is_down: bool,
+        controller_id: int | None = None,
+    ) -> None:
         """Handle binary inputs (Buttons/Keys)."""
         actions = self._bindings.get_actions(device, code, self._context)
 
@@ -365,9 +397,11 @@ class InputManager:
                 should_dispatch = True
 
             if should_dispatch:
-                self._dispatch_action(action_name, value)
+                self._dispatch_action(action_name, value, device, controller_id)
 
-    def _handle_axis(self, axis_index: int, value: float) -> None:
+    def _handle_axis(
+        self, axis_index: int, value: float, controller_id: int | None = None
+    ) -> None:
         """Handle analog inputs (Sticks)."""
         # Note: 'code' for axis is just the axis index (0=LeftX, 1=LeftY, etc.)
         actions = self._bindings.get_actions(
@@ -385,11 +419,36 @@ class InputManager:
 
             # Only dispatch if it's an Analog action or crosses threshold
             if action_def.action_type == ActionType.ANALOG:
-                self._dispatch_action(action_name, value)
+                self._dispatch_action(
+                    action_name, value, InputDevice.GAMEPAD, controller_id
+                )
 
-    def _dispatch_action(self, name: str, value: float) -> None:
-        """Emit the high-level semantic event."""
+    def _dispatch_action(
+        self,
+        name: str,
+        value: float,
+        device: InputDevice,
+        controller_id: int | None,
+    ) -> None:
+        """Resolve the source device to a player and emit the semantic event.
+
+        With no `PlayerRouter` configured, every action dispatches as player
+        0 -- today's behavior, unchanged. With one, a device it has no
+        assignment for is dropped here rather than dispatched: an
+        unassigned second gamepad does nothing until it joins.
+        """
+        player = 0
+        if self._player_router is not None:
+            resolved = self._player_router.player_for(device, controller_id)
+            if resolved is None:
+                return
+            player = resolved
+
         event = OnActionEvent(
-            action_name=name, context=self._context.value, value=value, source=self
+            action_name=name,
+            context=self._context.value,
+            value=value,
+            player=player,
+            source=self,
         )
         self._dispatcher.dispatch(event)

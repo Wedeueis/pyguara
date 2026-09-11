@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pyguara.events.protocols import Event
-from pyguara.input.types import GamepadAxis, GamepadButton
+from pyguara.input.types import GamepadAxis, GamepadButton, InputDevice
 
 # `timestamp` uses `default_factory=time.time` rather than a `0.0` default:
 # the engine's other event dataclasses (`pyguara/events/*.py`) settled on this
@@ -20,6 +20,7 @@ class OnActionEvent(Event):
     action_name: str
     context: str
     value: float = 1.0  # 1.0 for press, 0.0 for release, or analog value
+    player: int = 0  # Which local player produced this; see PlayerRouter.
     timestamp: float = field(default_factory=time.time)
     source: Any = None
 
@@ -81,5 +82,56 @@ class GamepadAxisEvent(Event):
     axis: GamepadAxis
     value: float  # -1.0 to 1.0 for sticks, 0.0 to 1.0 for triggers
     previous_value: float = 0.0
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class GamepadDisconnectedEvent(Event):
+    """Fired when a previously-connected gamepad's device disappears.
+
+    `GamepadManager` already detected hot-unplug internally (it frees the
+    controller's slot so it can be reused) but never told anyone; this is
+    what lets `PlayerRouter` free the player slot a disconnected controller
+    held, matching how the analogous join flow already fires
+    `PlayerJoinedEvent`.
+    """
+
+    controller_id: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class PlayerJoinedEvent(Event):
+    """Fired by `PlayerRouter` when a device is newly assigned to a player.
+
+    Fires for `PlayerRouter.assign()` (explicit, e.g. keyboard at startup)
+    and for a gamepad's own join-button press (dynamic co-op join) alike --
+    both are "this device now drives this player", just triggered
+    differently.
+    """
+
+    player: int
+    device: InputDevice
+    controller_id: int | None
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class PlayerLeftEvent(Event):
+    """Fired by `PlayerRouter` when an assigned device stops driving a player.
+
+    Currently only fires from a gamepad's `GamepadDisconnectedEvent` --
+    there is no "explicit leave" gesture (a leave-combo, say) yet, only
+    unplugging. `PlayerRouter.assign()` reassigning a device does not fire
+    this for whatever player it previously held; only a real device
+    disconnect does.
+    """
+
+    player: int
+    device: InputDevice
+    controller_id: int | None
     timestamp: float = field(default_factory=time.time)
     source: Any = None

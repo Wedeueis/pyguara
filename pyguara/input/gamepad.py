@@ -3,7 +3,11 @@
 import contextlib
 
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.input.events import GamepadAxisEvent, GamepadButtonEvent
+from pyguara.input.events import (
+    GamepadAxisEvent,
+    GamepadButtonEvent,
+    GamepadDisconnectedEvent,
+)
 from pyguara.input.protocols import IInputBackend, IJoystick
 from pyguara.input.types import (
     GamepadAxis,
@@ -156,6 +160,9 @@ class GamepadManager:
                 self._instance_ids.get(controller_id, -1),
             )
             del self._controllers[controller_id]
+            self._event_dispatcher.dispatch(
+                GamepadDisconnectedEvent(controller_id=controller_id, source=self)
+            )
 
         if controller_id in self._joysticks:
             with contextlib.suppress(Exception):
