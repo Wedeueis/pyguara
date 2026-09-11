@@ -56,6 +56,10 @@ class Geometry:
         self.scale: Vector2 = Vector2(1, 1)
         self._dirty = True
         self.material: Any = None
+        # Renderable's draw-time tint -- distinct from a subclass's own fill
+        # colour (e.g. Box's `self._color`, baked into the rasterised
+        # texture itself). Opaque white multiplies to a no-op.
+        self.color: Color = Color(255, 255, 255, 255)
 
     @property
     def position(self) -> Vector2:

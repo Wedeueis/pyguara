@@ -51,6 +51,7 @@ class RenderSystem:
             rotation=item.rotation,
             scale=item.scale,
             material=item.material,
+            color=item.color,
         )
         self._queue.push(cmd)
 

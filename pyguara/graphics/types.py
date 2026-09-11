@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import TYPE_CHECKING
 
-from pyguara.common.types import Vector2
+from pyguara.common.types import Color, Vector2
 from pyguara.resources.types import Texture
 
 if TYPE_CHECKING:
@@ -49,6 +49,7 @@ class RenderCommand:
     rotation: float = 0.0
     scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
     material: Material | None = None
+    color: Color = field(default_factory=lambda: Color(255, 255, 255, 255))
 
     @property
     def material_id(self) -> int:
@@ -76,6 +77,12 @@ class RenderBatch:
     rotations: list[float] = field(default_factory=list)
     scales: list[tuple[float, float]] = field(default_factory=list)
     transforms_enabled: bool = False
+
+    # Optional per-instance tint (only used when colors_enabled=True). RGBA
+    # tuples, not Color instances, to keep the hot path free of per-instance
+    # dataclass overhead -- same reasoning as `destinations` staying tuples.
+    colors: list[tuple[int, int, int, int]] = field(default_factory=list)
+    colors_enabled: bool = False
 
     # Optional material for custom shaders/uniforms
     material: Material | None = None

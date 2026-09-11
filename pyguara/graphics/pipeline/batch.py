@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pyguara.common.types import Vector2
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.types import RenderBatch, RenderCommand
 
 if TYPE_CHECKING:
     from pyguara.graphics.materials.material import Material
+
+_OPAQUE_WHITE = Color(255, 255, 255, 255)
 
 
 class Batcher:
@@ -35,9 +37,10 @@ class Batcher:
     ) -> list[RenderBatch]:
         """Group compatible commands into batches to minimize draw calls.
 
-        Creates batches with transform data when rotation/scale are non-default.
-        Enables backends to use fast path for simple sprites and transform path
-        for rotated/scaled sprites.
+        Creates batches with transform data when rotation/scale are non-default,
+        and with tint data when any command's color isn't opaque white. Enables
+        backends to use a fast path for simple sprites and a slower per-instance
+        path only for the batches that actually need transforms and/or tinting.
 
         Commands are batched by (texture, material_id) combination.
         """
@@ -53,7 +56,9 @@ class Batcher:
         current_dests: list[tuple[float, float]] = []
         current_rotations: list[float] = []
         current_scales: list[tuple[float, float]] = []
+        current_colors: list[tuple[int, int, int, int]] = []
         has_transforms = False
+        has_colors = False
 
         # Optimization: Pre-calculate viewport offset once for the frame.
         # screen_pos = (world * zoom) + offset
@@ -72,6 +77,8 @@ class Batcher:
                         rotations=current_rotations if has_transforms else [],
                         scales=current_scales if has_transforms else [],
                         transforms_enabled=has_transforms,
+                        colors=current_colors if has_colors else [],
+                        colors_enabled=has_colors,
                         material=current_material,
                     )
                     batches.append(batch)
@@ -83,19 +90,24 @@ class Batcher:
                 current_dests = []
                 current_rotations = []
                 current_scales = []
+                current_colors = []
                 has_transforms = False
+                has_colors = False
 
             # Transform to Screen Space HERE (CPU) so the Backend just draws
             screen_pos = (cmd.world_position * zoom) + offset
             current_dests.append((screen_pos.x, screen_pos.y))
 
-            # Always collect transform data (we'll discard it later if not needed)
+            # Always collect transform/color data (discarded later if not needed)
             current_rotations.append(cmd.rotation)
             current_scales.append((cmd.scale.x, cmd.scale.y))
+            current_colors.append((cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a))
 
-            # Check if this command has non-default transforms
+            # Check if this command has non-default transforms/tint
             if cmd.rotation != 0.0 or cmd.scale != Vector2(1, 1):
                 has_transforms = True
+            if cmd.color != _OPAQUE_WHITE:
+                has_colors = True
 
         # Append the final batch
         if current_dests:
@@ -105,6 +117,8 @@ class Batcher:
                 rotations=current_rotations if has_transforms else [],
                 scales=current_scales if has_transforms else [],
                 transforms_enabled=has_transforms,
+                colors=current_colors if has_colors else [],
+                colors_enabled=has_colors,
                 material=current_material,
             )
             batches.append(batch)
