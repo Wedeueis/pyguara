@@ -113,6 +113,12 @@ class Application:
         self._accumulator = 0.0
         self._fixed_dt = 0.0  # set for real in run(), from config
 
+        # Global time-scale and pause. Freely settable by game code at any
+        # point; see _effective_time_scale() for how they combine, and
+        # run()'s docstring for how they interact with fixed_dt and replay.
+        self.time_scale: float = 1.0
+        self.paused: bool = False
+
         # Replay recording/playback (mutually exclusive; see start_recording()/
         # load_replay()). Idle by default: near-zero overhead when neither is active.
         self._replay_serializer = ReplaySerializer()
@@ -160,6 +166,16 @@ class Application:
         the recording instead, so a replay reproduces time-dependent state on
         any machine.
 
+        `self.time_scale`/`self.paused` (see `_effective_time_scale()`) scale
+        that measured duration before it reaches the accumulator and
+        `_update()` -- not `fixed_dt` itself, which stays constant so physics
+        step size and stability are unaffected; slow-mo means fewer fixed
+        steps per real second, not smaller ones. Ignored entirely while a
+        replay drives the game: `recorded_dt` already fixes exactly how much
+        simulated time -- and therefore how many fixed steps -- the original
+        recording session spent on that frame, and scaling it here would
+        reproduce a different physics simulation than what was recorded.
+
         Dispatches `ApplicationStartEvent` before the first frame, and always
         calls `shutdown()` on the way out.
 
@@ -204,7 +220,9 @@ class Application:
                 # fixed-step count, tweens, particles and WaitForSeconds
                 # reproduce. clock.tick() above still throttles rendering to the
                 # display rate.
+                is_replay_driven = False
                 if self._replay_player is not None and self._replay_player.is_playing:
+                    is_replay_driven = True
                     recorded_dt = self._replay_player.peek_delta()
                     if recorded_dt is not None:
                         frame_time = recorded_dt
@@ -226,8 +244,16 @@ class Application:
                     max_time_ms=self._event_queue_time_budget_ms
                 )
 
-                # 4. Accumulate time and run fixed updates
-                self._accumulator += frame_time
+                # 4. Accumulate time and run fixed updates. time_scale/paused
+                # are ignored while a replay drives the game -- see run()'s
+                # docstring for why scaling recorded_dt would desync physics
+                # from what was actually recorded.
+                simulated_time = (
+                    frame_time
+                    if is_replay_driven
+                    else frame_time * self._effective_time_scale()
+                )
+                self._accumulator += simulated_time
 
                 while self._accumulator >= fixed_dt:
                     # Fixed-rate update (physics, game logic)
@@ -235,7 +261,7 @@ class Application:
                     self._accumulator -= fixed_dt
 
                 # 5. Variable-rate update (UI, animations that should be smooth)
-                self._update(frame_time)
+                self._update(simulated_time)
 
                 # 6. Render at display framerate, interpolating between the
                 # last two fixed steps.
@@ -390,6 +416,20 @@ class Application:
                 self._input_manager.process_event(event)
 
         self._end_replay_frame(frame_time)
+
+    def _effective_time_scale(self) -> float:
+        """Return the scale actually applied to this frame's simulated time.
+
+        `paused` takes priority over `time_scale` rather than the two being
+        multiplied together: a game that sets `time_scale = 0.3` for a boss's
+        slow-mo phase and then also pauses (menu opened on top) gets that 0.3
+        back automatically on unpause, without having to save and restore it
+        around the pause itself.
+
+        Returns:
+            0.0 if `self.paused`, otherwise `self.time_scale`.
+        """
+        return 0.0 if self.paused else self.time_scale
 
     def _fixed_update(self, fixed_dt: float) -> None:
         """Advance physics and deterministic game logic by one fixed step.
