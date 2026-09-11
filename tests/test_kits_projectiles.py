@@ -87,6 +87,27 @@ def test_recycled_slot_is_available_for_a_new_spawn(event_dispatcher: Any) -> No
     assert active[0].position == Vector2(5, 5)
 
 
+# ========== get_active ==========
+
+
+def test_get_active_is_empty_for_a_fresh_system(event_dispatcher: Any) -> None:
+    system, _, _ = _system(event_dispatcher)
+
+    assert system.get_active() == []
+
+
+def test_get_active_returns_only_active_projectiles(event_dispatcher: Any) -> None:
+    system, _, _ = _system(event_dispatcher)
+    system.spawn(None, Vector2(1, 2), Vector2(0, 0), life=10.0)
+    system.spawn(None, Vector2(3, 4), Vector2(0, 0), life=0.1)
+
+    system.update(0.2)  # expires the second one
+
+    active = system.get_active()
+    assert len(active) == 1
+    assert active[0].position == Vector2(1, 2)
+
+
 # ========== movement / expiry ==========
 
 
