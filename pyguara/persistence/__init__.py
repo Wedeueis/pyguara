@@ -17,6 +17,7 @@ from pyguara.persistence.migration import (
     migration,
     register_migration,
 )
+from pyguara.persistence.multi_scope import MultiScopePersistence, SaveProfile
 from pyguara.persistence.types import SaveMetadata, SerializationFormat, StorageBackend
 
 __all__ = [
@@ -24,8 +25,10 @@ __all__ = [
     "MigrationError",
     "MigrationManager",
     "MigrationRegistry",
+    "MultiScopePersistence",
     "PersistenceManager",
     "SaveMetadata",
+    "SaveProfile",
     "SerializationFormat",
     "StorageBackend",
     "get_global_registry",
