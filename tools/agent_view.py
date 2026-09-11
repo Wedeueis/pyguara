@@ -98,6 +98,11 @@ DEMOS: dict[str, tuple[str, str, str]] = {
         "games.ui_scene_graph.scenes",
         "MenuScene",
     ),
+    "vinagre_matilha": (
+        "games.vinagre_matilha.bootstrap",
+        "games.vinagre_matilha.scenes",
+        "MenuScene",
+    ),
 }
 
 

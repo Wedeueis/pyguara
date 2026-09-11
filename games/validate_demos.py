@@ -28,8 +28,18 @@ from games.protocolo_bandeira.bootstrap import configure_game_container as pb_bo
 from games.protocolo_bandeira.scenes import ArenaScene as PBArenaScene
 from games.true_coral.bootstrap import configure_game_container as tc_bootstrap
 from games.true_coral.scenes import GameScene as TCGameScene
+from games.vinagre_matilha.bootstrap import configure_game_container as vm_bootstrap
+from games.vinagre_matilha.level_builder import STAGE_1
+from games.vinagre_matilha.scenes import GameScene as VMGameScene
 from pyguara.application.application import Application
 from pyguara.events.dispatcher import EventDispatcher
+
+
+def _vm_game_scene(event_dispatcher: EventDispatcher) -> VMGameScene:
+    """`GameScene` needs a `StageConfig`; `validate_game()` calls with just
+    the dispatcher, so pin it to Stage 1 for the smoke check.
+    """
+    return VMGameScene(event_dispatcher, STAGE_1)
 
 
 def validate_game(name: str, configure_container_fn, scene_class) -> bool:
@@ -109,6 +119,13 @@ def main() -> None:
         name="Asset Pipeline",
         configure_container_fn=ap_bootstrap,
         scene_class=APAssetScene,
+    )
+
+    # 5. Squad Tactics (Vinagre: Matilha)
+    results["Vinagre: Matilha (Squad Tactics)"] = validate_game(
+        name="Vinagre: Matilha",
+        configure_container_fn=vm_bootstrap,
+        scene_class=_vm_game_scene,
     )
 
     # Print Summary Table
