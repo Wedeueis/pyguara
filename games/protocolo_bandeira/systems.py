@@ -8,12 +8,10 @@ import math
 from games.protocolo_bandeira.ai_behaviors import get_behavior_for_type
 from games.protocolo_bandeira.components import (
     AIContext,
-    Bullet,
     EnemyAI,
+    EnemyType,
     EntityTeam,
-    Health,
     Movement,
-    Poolable,
     Score,
     Weapon,
 )
@@ -23,13 +21,17 @@ from games.protocolo_bandeira.events import (
     PlayerDamagedEvent,
     PlayerDeathEvent,
 )
-from games.protocolo_bandeira.pooling import BulletPool, EnemyPool
+from games.protocolo_bandeira.pooling import EnemyPool
 from pyguara.ai.behavior_tree import BehaviorTree
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
+from pyguara.ecs.pool import Poolable
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.kits.action_combat import DamageDealt, Health, apply_damage
+from pyguara.kits.projectiles import ProjectileSystem
+from pyguara.kits.stats import DamageType
 
 
 class PlayerControlSystem:
@@ -97,70 +99,26 @@ class PlayerControlSystem:
         return None
 
 
-class BulletSystem:
-    """Updates bullet positions and handles lifetime."""
-
-    def __init__(self, entity_manager: EntityManager, bullet_pool: BulletPool):
-        """Initialize the system."""
-        self._em = entity_manager
-        self._pool = bullet_pool
-        self._to_release = []
-
-    def update(self, dt: float) -> None:
-        """Update all active bullets."""
-        self._to_release.clear()
-
-        for entity in self._pool.get_active():
-            bullet = entity.get_component(Bullet)
-            transform = entity.get_component(Transform)
-            poolable = entity.get_component(Poolable)
-
-            if not bullet or not transform or not poolable:
-                continue
-
-            if not bullet.active:
-                continue
-
-            # Update position
-            transform.position = transform.position + bullet.velocity * dt
-
-            # Update lifetime
-            bullet.lifetime -= dt
-
-            # Check bounds and lifetime
-            pos = transform.position
-            if (
-                bullet.lifetime <= 0
-                or pos.x < -50
-                or pos.x > 850
-                or pos.y < -50
-                or pos.y > 650
-            ):
-                self._to_release.append(entity)
-
-        # Release expired bullets
-        for entity in self._to_release:
-            bullet = entity.get_component(Bullet)
-            if bullet:
-                bullet.active = False
-            self._pool.release(entity)
-
-
 class EnemyAISystem:
     """Updates enemy AI using behavior trees."""
+
+    SHOOTER_BULLET_SPEED = 300.0
+    SHOOTER_BULLET_DAMAGE = 1.0
+    SHOOTER_BULLET_LIFE = 3.0
+    SHOOTER_BULLET_HIT_RADIUS = 15.0
 
     def __init__(
         self,
         entity_manager: EntityManager,
         event_dispatcher: EventDispatcher,
         enemy_pool: EnemyPool,
-        bullet_pool: BulletPool,
+        projectile_system: ProjectileSystem,
     ):
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
         self._enemy_pool = enemy_pool
-        self._bullet_pool = bullet_pool
+        self._projectile_system = projectile_system
 
         # Behavior trees per enemy type (cached)
         self._behavior_trees: dict[str, BehaviorTree] = {}
@@ -234,20 +192,22 @@ class EnemyAISystem:
         self, entity: Entity, ai: EnemyAI, transform: Transform
     ) -> None:
         """Perform enemy attack."""
-        from games.protocolo_bandeira.components import EnemyType
-
         if ai.enemy_type == EnemyType.SHOOTER:
-            # Fire bullet at player
+            # Fire a projectile at the player
             if self._player_position:
                 direction = self._player_position - transform.position
                 if direction.magnitude > 0:
                     direction = direction.normalize()
-                    self._bullet_pool.fire_bullet(
+                    self._projectile_system.spawn(
+                        None,
                         transform.position,
-                        direction,
-                        300.0,
-                        EntityTeam.ENEMY,
-                        damage=1,
+                        direction * self.SHOOTER_BULLET_SPEED,
+                        damage=self.SHOOTER_BULLET_DAMAGE,
+                        damage_type=DamageType.PHYSICAL,
+                        life=self.SHOOTER_BULLET_LIFE,
+                        hit_radius=self.SHOOTER_BULLET_HIT_RADIUS,
+                        team="enemy",
+                        attacker=entity.id,
                     )
         elif ai.enemy_type == EnemyType.BOMBER:
             # Bomber will be destroyed when colliding, handled in collision system
@@ -256,26 +216,36 @@ class EnemyAISystem:
 
 
 class CollisionSystem:
-    """Handles collision detection and resolution."""
+    """Handles enemy-vs-player melee contact, and reacts to any DamageDealt.
 
-    BULLET_HIT_RADIUS = 15.0
+    Bullet-vs-target collision is `ProjectileSystem`'s own job (spatial-hash
+    query + `apply_damage()`, #114) -- this system only detects the contact
+    `kits/projectiles`/`kits/action_combat` have no vocabulary for (an enemy
+    standing on the player). Both paths converge on the same `DamageDealt`
+    event, so `_on_damage_dealt()` is the single place that reacts to a
+    kill or a player death, regardless of what dealt the damage.
+    """
+
     ENEMY_HIT_RADIUS = 20.0
     PLAYER_HIT_RADIUS = 15.0
+    PLAYER_INVINCIBILITY_DURATION = 1.0
+    BOMBER_DAMAGE = 2.0
+    MELEE_DAMAGE = 1.0
 
     def __init__(
         self,
         entity_manager: EntityManager,
         event_dispatcher: EventDispatcher,
-        bullet_pool: BulletPool,
         enemy_pool: EnemyPool,
     ):
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
-        self._bullet_pool = bullet_pool
         self._enemy_pool = enemy_pool
         self._player: Entity | None = None
         self._wave_manager = None  # Set externally
+
+        self._dispatcher.subscribe(DamageDealt, self._on_damage_dealt)
 
     def set_player(self, player: Entity) -> None:
         """Set the player entity."""
@@ -286,82 +256,8 @@ class CollisionSystem:
         self._wave_manager = manager
 
     def update(self, dt: float) -> None:
-        """Check for collisions."""
-        self._check_bullet_collisions()
+        """Check for melee-range enemy/player contact."""
         self._check_enemy_player_collisions()
-
-    def _check_bullet_collisions(self) -> None:
-        """Check bullet vs entity collisions."""
-        bullets_to_release = []
-        enemies_to_release = []
-
-        for bullet_entity in self._bullet_pool.get_active():
-            bullet = bullet_entity.get_component(Bullet)
-            bullet_transform = bullet_entity.get_component(Transform)
-
-            if not bullet or not bullet_transform or not bullet.active:
-                continue
-
-            # Check against enemies (player bullets)
-            if bullet.owner_team == EntityTeam.PLAYER:
-                for enemy_entity in self._enemy_pool.get_active():
-                    enemy_poolable = enemy_entity.get_component(Poolable)
-                    if not enemy_poolable or not enemy_poolable.is_active:
-                        continue
-
-                    enemy_transform = enemy_entity.get_component(Transform)
-                    enemy_health = enemy_entity.get_component(Health)
-
-                    if not enemy_transform or not enemy_health:
-                        continue
-
-                    distance = bullet_transform.position.distance_to(
-                        enemy_transform.position
-                    )
-
-                    if distance < self.BULLET_HIT_RADIUS + self.ENEMY_HIT_RADIUS:
-                        # Hit!
-                        bullets_to_release.append(bullet_entity)
-                        alive = enemy_health.take_damage(bullet.damage)
-
-                        if not alive:
-                            enemies_to_release.append(enemy_entity)
-                            self._dispatcher.dispatch(
-                                EnemyKilledEvent(
-                                    position=enemy_transform.position, points=100
-                                )
-                            )
-
-                            # Notify wave manager
-                            if self._wave_manager:
-                                self._wave_manager.on_enemy_killed()
-
-                        break  # Bullet can only hit one target
-
-            # Check against player (enemy bullets)
-            elif bullet.owner_team == EntityTeam.ENEMY and self._player:
-                player_transform = self._player.get_component(Transform)
-                player_health = self._player.get_component(Health)
-
-                if player_transform and player_health:
-                    distance = bullet_transform.position.distance_to(
-                        player_transform.position
-                    )
-
-                    if distance < self.BULLET_HIT_RADIUS + self.PLAYER_HIT_RADIUS:
-                        bullets_to_release.append(bullet_entity)
-                        self._damage_player(player_health, bullet.damage)
-
-        # Release bullets
-        for entity in bullets_to_release:
-            bullet = entity.get_component(Bullet)
-            if bullet:
-                bullet.active = False
-            self._bullet_pool.release(entity)
-
-        # Release enemies
-        for entity in enemies_to_release:
-            self._enemy_pool.release(entity)
 
     def _check_enemy_player_collisions(self) -> None:
         """Check enemy vs player collisions (melee)."""
@@ -374,7 +270,7 @@ class CollisionSystem:
         if not player_transform or not player_health:
             return
 
-        enemies_to_release = []
+        bombers_to_release = []
 
         for enemy_entity in self._enemy_pool.get_active():
             enemy_poolable = enemy_entity.get_component(Poolable)
@@ -390,13 +286,12 @@ class CollisionSystem:
             distance = player_transform.position.distance_to(enemy_transform.position)
 
             if distance < self.PLAYER_HIT_RADIUS + self.ENEMY_HIT_RADIUS:
-                from games.protocolo_bandeira.components import EnemyType
-
-                # Melee damage
                 if enemy_ai and enemy_ai.enemy_type == EnemyType.BOMBER:
-                    # Bomber explodes
-                    self._damage_player(player_health, 2)
-                    enemies_to_release.append(enemy_entity)
+                    # Bomber explodes -- it dies unconditionally on contact,
+                    # not via apply_damage() against its own Health, same as
+                    # before this went through kits/action_combat.
+                    self._damage_player(player_health, self.BOMBER_DAMAGE)
+                    bombers_to_release.append(enemy_entity)
 
                     self._dispatcher.dispatch(
                         EnemyKilledEvent(position=enemy_transform.position, points=50)
@@ -405,46 +300,80 @@ class CollisionSystem:
                         self._wave_manager.on_enemy_killed()
                 else:
                     # Regular melee
-                    self._damage_player(player_health, 1)
+                    self._damage_player(player_health, self.MELEE_DAMAGE)
 
-        for entity in enemies_to_release:
+        for entity in bombers_to_release:
             self._enemy_pool.release(entity)
 
-    def _damage_player(self, health: Health, damage: int) -> None:
-        """Apply damage to player."""
-        if health.invincible_time > 0:
+    def _damage_player(self, health: Health, damage: float) -> None:
+        """Apply melee/bomber damage to the player through the combat pipeline."""
+        if not self._player:
             return
-
-        alive = health.take_damage(damage)
-        health.invincible_time = 1.0
-
-        self._dispatcher.dispatch(
-            PlayerDamagedEvent(damage=damage, remaining_health=health.current)
+        apply_damage(
+            self._dispatcher,
+            self._player.id,
+            health,
+            damage,
+            DamageType.TRUE,  # Never mitigated, same as before this kit existed.
+            invincibility_duration=self.PLAYER_INVINCIBILITY_DURATION,
         )
 
-        if not alive:
-            score = self._player.get_component(Score) if self._player else None
+    def _on_damage_dealt(self, event: DamageDealt) -> None:
+        """React to any hit -- bullet or melee -- once apply_damage() lands it."""
+        target = self._em.get_entity(event.target)
+        if target is None:
+            return
+
+        if self._player and event.target == self._player.id:
+            if event.amount > 0:
+                health = target.get_component(Health)
+                self._dispatcher.dispatch(
+                    PlayerDamagedEvent(
+                        damage=int(event.amount),
+                        remaining_health=int(health.current) if health else 0,
+                    )
+                )
+            if event.killed:
+                score = self._player.get_component(Score)
+                self._dispatcher.dispatch(
+                    PlayerDeathEvent(
+                        final_score=score.value if score else 0,
+                        total_kills=score.kills if score else 0,
+                    )
+                )
+            return
+
+        if event.killed and target.has_component(EnemyAI):
+            enemy_transform = target.get_component(Transform)
             self._dispatcher.dispatch(
-                PlayerDeathEvent(
-                    final_score=score.value if score else 0,
-                    total_kills=score.kills if score else 0,
+                EnemyKilledEvent(
+                    position=enemy_transform.position
+                    if enemy_transform
+                    else Vector2.zero(),
+                    points=100,
                 )
             )
+            self._enemy_pool.release(target)
+            if self._wave_manager:
+                self._wave_manager.on_enemy_killed()
 
 
 class WeaponSystem:
     """Handles weapon firing."""
 
+    BULLET_LIFE = 3.0
+    BULLET_HIT_RADIUS = 15.0
+
     def __init__(
         self,
         entity_manager: EntityManager,
         event_dispatcher: EventDispatcher,
-        bullet_pool: BulletPool,
+        projectile_system: ProjectileSystem,
     ):
         """Initialize the system."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
-        self._bullet_pool = bullet_pool
+        self._projectile_system = projectile_system
         self._player: Entity | None = None
 
     def set_player(self, player: Entity) -> None:
@@ -459,7 +388,11 @@ class WeaponSystem:
             direction: Fire direction (normalized)
 
         Returns:
-            True if bullet was fired
+            True if the weapon was off cooldown and fired. Unlike the
+            pooled-entity bullets this replaced, `ProjectileSystem.spawn()`
+            has no way to report pool exhaustion, so a full pool (unlikely
+            at this game's bullet counts) still resets the cooldown and
+            dispatches `BulletFiredEvent` even though nothing rendered.
         """
         if not self._player:
             return False
@@ -468,28 +401,27 @@ class WeaponSystem:
         if not weapon or not weapon.can_fire():
             return False
 
-        # Fire bullet
-        entity = self._bullet_pool.fire_bullet(
+        self._projectile_system.spawn(
+            None,
             position,
-            direction,
-            weapon.bullet_speed,
-            EntityTeam.PLAYER,
-            weapon.bullet_damage,
+            direction * weapon.bullet_speed,
+            damage=float(weapon.bullet_damage),
+            damage_type=DamageType.PHYSICAL,
+            life=self.BULLET_LIFE,
+            hit_radius=self.BULLET_HIT_RADIUS,
+            team="player",
+            attacker=self._player.id,
         )
-
-        if entity:
-            weapon.fire()
-            self._dispatcher.dispatch(
-                BulletFiredEvent(
-                    position=position,
-                    direction=direction,
-                    team=EntityTeam.PLAYER,
-                    damage=weapon.bullet_damage,
-                )
+        weapon.fire()
+        self._dispatcher.dispatch(
+            BulletFiredEvent(
+                position=position,
+                direction=direction,
+                team=EntityTeam.PLAYER,
+                damage=weapon.bullet_damage,
             )
-            return True
-
-        return False
+        )
+        return True
 
 
 class ScoreSystem:
