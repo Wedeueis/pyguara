@@ -14,12 +14,24 @@ logger = get_logger(__name__)
 
 @dataclass
 class AnimationClip:
-    """Data for a single animation state (e.g., 'walk_down')."""
+    """Data for a single animation state (e.g., 'walk_down').
+
+    Attributes:
+        frame_events: 0-based frame index -> event name(s) fired when
+            `Animator.update()` lands on (or catches up through) that
+            frame. Consumed by `AnimationSystem`, which turns each fired
+            name into an `AnimationFrameEvent` -- the mechanism
+            `kits/action_combat`'s `ActiveFrameWindow` uses to toggle a
+            Hitbox's active frames without its own timer. Not fired for
+            frame 0 by `play()`'s initial-frame application; only by
+            `update()`-driven frame transitions.
+    """
 
     name: str
     frames: list[Texture]
     frame_rate: float = 10.0  # Frames per second
     loop: bool = True
+    frame_events: dict[int, tuple[str, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Reject clips that cannot be played (empty, or non-positive rate)."""
@@ -88,39 +100,57 @@ class Animator(BaseComponent):
         # Apply first frame immediately
         self._apply_frame()
 
-    def update(self, dt: float) -> None:
+    def update(self, dt: float) -> list[str]:
         """Advance the animation timer.
 
         Catches up all whole frames owed for ``dt`` in one call, so a lag
         spike or a host running slower than the clip's ``frame_rate`` does not
         silently drop frames or fall permanently behind.
+
+        Returns:
+            Every `AnimationClip.frame_events` name attached to a frame
+            crossed this call, oldest first -- every frame in between on a
+            multi-frame catch-up, not just the one landed on, so a hit
+            window can't be skipped by a lag spike.
         """
         if not self._playing or not self._current_clip:
-            return
+            return []
 
         self._current_time += dt
 
         # Duration of a single frame; frame_rate is > 0 (AnimationClip validates).
         seconds_per_frame = 1.0 / self._current_clip.frame_rate
         if self._current_time < seconds_per_frame:
-            return
+            return []
 
         frames_advanced = int(self._current_time / seconds_per_frame)
         self._current_time -= frames_advanced * seconds_per_frame
 
         total_frames = len(self._current_clip.frames)
-        raw_index = self._current_frame_index + frames_advanced
+        previous_index = self._current_frame_index
+        raw_index = previous_index + frames_advanced
 
         if raw_index < total_frames:
             self._current_frame_index = raw_index
+            crossed = range(previous_index + 1, raw_index + 1)
         elif self._current_clip.loop:
             self._current_frame_index = raw_index % total_frames
+            crossed = range(previous_index + 1, raw_index + 1)
         else:
             self._current_frame_index = total_frames - 1
             self._current_time = 0.0
             self._playing = False  # Stop at end
+            crossed = range(previous_index + 1, total_frames)
+
+        frame_events = self._current_clip.frame_events
+        fired = [
+            name
+            for index in crossed
+            for name in frame_events.get(index % total_frames, ())
+        ]
 
         self._apply_frame()
+        return fired
 
     def _apply_frame(self) -> None:
         """Update the visual Sprite component with the current texture."""
@@ -295,18 +325,22 @@ class AnimationStateMachine(BaseComponent):
 
         return True
 
-    def update(self, dt: float) -> None:
+    def update(self, dt: float) -> list[str]:
         """
         Update the state machine and check for transitions.
 
         Args:
             dt (float): Delta time in seconds.
+
+        Returns:
+            Frame-event names fired by the animator this call -- see
+            `Animator.update()`.
         """
         # Update the animator
-        self._animator.update(dt)
+        fired = self._animator.update(dt)
 
         if not self._current_state:
-            return
+            return fired
 
         # Fire the completion callback once, on the frame the clip finishes.
         if self._animator.is_finished and not self._completion_handled:
@@ -317,6 +351,8 @@ class AnimationStateMachine(BaseComponent):
         # Check for automatic transitions every frame (IMMEDIATE fires as soon
         # as the state is entered; ANIMATION_END only once the clip finishes).
         self._check_transitions()
+
+        return fired
 
     def _check_transitions(self) -> None:
         """Check if any transitions should trigger based on current conditions."""

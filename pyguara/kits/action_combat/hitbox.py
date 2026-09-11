@@ -4,8 +4,10 @@ A `Hitbox` entity also carries a `pyguara.physics.trigger_volume.TriggerVolume`
 -- `Hitbox` is combat metadata riding alongside it, not a replacement for its
 sensor-collider/entities-tracking machinery, which `TriggerSystem` already
 builds and maintains. "Active frames" is just toggling that TriggerVolume's
-own `active` field; nothing here adds a separate timer for it -- a game (or,
-once it exists, an animation frame-event) flips it directly.
+own `active` field; nothing here adds a separate timer for it -- a game
+flips it directly, or `active_frame.ActiveFrameWindow` +
+`active_frame_system.ActiveFrameSystem` flip it from an animation frame
+event instead.
 """
 
 from __future__ import annotations

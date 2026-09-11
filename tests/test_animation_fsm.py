@@ -2,6 +2,7 @@
 
 import pytest
 
+from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.animation_system import AnimationSystem
 from pyguara.graphics.components.animation import (
     AnimationClip,
@@ -514,7 +515,7 @@ def test_animation_system_updates_animator():
     entity = entity_manager.create_entity()
     entity.add_component(animator)
 
-    AnimationSystem(entity_manager).update(0.1)
+    AnimationSystem(entity_manager, EventDispatcher()).update(0.1)
 
     # One frame period elapsed -> the driven sprite shows the next frame.
     assert sprite.texture is frames[1]
@@ -539,7 +540,7 @@ def test_animation_system_updates_state_machine():
     entity = entity_manager.create_entity()
     entity.add_component(fsm)
 
-    AnimationSystem(entity_manager).update(0.1)
+    AnimationSystem(entity_manager, EventDispatcher()).update(0.1)
 
     assert sprite.texture is frames[1]
 
@@ -563,7 +564,146 @@ def test_animation_system_prioritizes_state_machine():
     entity.add_component(animator)
     entity.add_component(fsm)
 
-    AnimationSystem(entity_manager).update(0.1)
+    AnimationSystem(entity_manager, EventDispatcher()).update(0.1)
 
     # Frame 1, not frame 2: the entity's Animator is not also updated directly.
     assert sprite.texture is frames[1]
+
+
+# ===== Frame events =====
+
+
+def test_landing_on_a_frame_fires_its_events():
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"f{i}") for i in range(4)]
+    animator.add_clip(
+        AnimationClip(
+            "attack",
+            frames,
+            frame_rate=10.0,
+            frame_events={2: ("swing_start",)},
+        )
+    )
+    animator.play("attack")
+
+    assert animator.update(0.1) == []  # frame 1, no event there
+    assert animator.update(0.1) == ["swing_start"]  # frame 2
+
+
+def test_a_multi_frame_catch_up_fires_every_crossed_frames_events():
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"f{i}") for i in range(5)]
+    animator.add_clip(
+        AnimationClip(
+            "attack",
+            frames,
+            frame_rate=10.0,
+            frame_events={1: ("wind_up",), 2: ("swing_start",), 3: ("swing_end",)},
+        )
+    )
+    animator.play("attack")
+
+    # One big dt jumps straight from frame 0 to frame 3 -- every frame
+    # events in between still fire, in order, not just the landed-on frame.
+    # (0.34, not 0.3: 0.3 / 0.1 rounds to 2.999...96 in binary floating
+    # point and would truncate one frame short.)
+    assert animator.update(0.34) == ["wind_up", "swing_start", "swing_end"]
+
+
+def test_a_frame_with_no_events_fires_nothing():
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"f{i}") for i in range(3)]
+    animator.add_clip(AnimationClip("idle", frames, frame_rate=10.0))
+    animator.play("idle")
+
+    assert animator.update(0.1) == []
+
+
+def test_looping_wraps_and_still_fires_the_wrapped_frames_events():
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"f{i}") for i in range(3)]
+    animator.add_clip(
+        AnimationClip(
+            "loop",
+            frames,
+            frame_rate=10.0,
+            loop=True,
+            frame_events={0: ("cycle_start",)},
+        )
+    )
+    animator.play("loop")
+
+    animator.update(0.1)  # frame 1
+    assert animator.update(0.2) == ["cycle_start"]  # frame 2 then wraps to 0
+
+
+def test_a_non_looping_clip_still_fires_its_final_frames_events():
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"f{i}") for i in range(3)]
+    animator.add_clip(
+        AnimationClip(
+            "attack",
+            frames,
+            frame_rate=10.0,
+            loop=False,
+            frame_events={2: ("hit_confirm",)},
+        )
+    )
+    animator.play("attack")
+
+    # A big dt would overshoot frame 2 without clamping -- the clip stops
+    # at the last frame instead, and that frame's events still fire.
+    assert animator.update(1.0) == ["hit_confirm"]
+
+
+def test_frame_events_flow_through_the_state_machine():
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    fsm = AnimationStateMachine(sprite, animator)
+    frames = [MockTexture(f"f{i}") for i in range(3)]
+    fsm.add_state(
+        AnimationState(
+            "attack",
+            AnimationClip(
+                "attack", frames, frame_rate=10.0, frame_events={1: ("hit",)}
+            ),
+        )
+    )
+    fsm.set_default_state("attack")
+
+    assert fsm.update(0.1) == ["hit"]
+
+
+def test_animation_system_dispatches_an_animation_frame_event():
+    from pyguara.ecs.manager import EntityManager
+    from pyguara.graphics.events import AnimationFrameEvent
+
+    sprite = Sprite(MockTexture())
+    animator = Animator(sprite)
+    frames = [MockTexture(f"f{i}") for i in range(3)]
+    animator.add_clip(
+        AnimationClip(
+            "attack", frames, frame_rate=10.0, frame_events={1: ("swing_start",)}
+        )
+    )
+    animator.play("attack")
+
+    entity_manager = EntityManager()
+    entity = entity_manager.create_entity()
+    entity.add_component(animator)
+
+    dispatcher = EventDispatcher()
+    received: list[AnimationFrameEvent] = []
+    dispatcher.subscribe(AnimationFrameEvent, received.append)
+
+    AnimationSystem(entity_manager, dispatcher).update(0.1)
+
+    assert len(received) == 1
+    assert received[0].entity_id == entity.id
+    assert received[0].name == "swing_start"
+    assert received[0].clip_name == "attack"

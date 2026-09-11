@@ -109,7 +109,7 @@ class Scene(ABC):
             system_type=AudioSourceSystem,
         )
         self.system_manager.register(
-            AnimationSystem(self.entity_manager),
+            AnimationSystem(self.entity_manager, self.event_dispatcher),
             priority=300,
             system_type=AnimationSystem,
         )
