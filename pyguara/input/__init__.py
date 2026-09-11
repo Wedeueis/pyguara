@@ -6,13 +6,17 @@ semantic Actions, with runtime rebinding and per-context bindings.
 """
 
 from pyguara.input.binding import BindingKey, KeyBindingManager
+from pyguara.input.coop import PlayerRouter
 from pyguara.input.events import (
     GamepadAxisEvent,
     GamepadButtonEvent,
+    GamepadDisconnectedEvent,
     InputContextChangedEvent,
     OnActionEvent,
     OnMouseEvent,
     OnRawKeyEvent,
+    PlayerJoinedEvent,
+    PlayerLeftEvent,
 )
 from pyguara.input.gamepad import GamepadManager
 from pyguara.input.manager import InputManager
@@ -41,6 +45,7 @@ __all__ = [
     "GamepadButton",
     "GamepadButtonEvent",
     "GamepadConfig",
+    "GamepadDisconnectedEvent",
     "GamepadManager",
     "GamepadState",
     "IInputBackend",
@@ -54,5 +59,8 @@ __all__ = [
     "OnActionEvent",
     "OnMouseEvent",
     "OnRawKeyEvent",
+    "PlayerJoinedEvent",
+    "PlayerLeftEvent",
+    "PlayerRouter",
     "RebindResult",
 ]
