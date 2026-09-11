@@ -1,51 +1,61 @@
 """True Coral - Game Events.
 
-Custom events for puzzle game logic.
+Custom events for snake game logic. Every event carries `timestamp`/
+`source` so it structurally satisfies `pyguara.events.protocols.Event` --
+`protocolo_bandeira` shipped without these and every dispatch()/subscribe()
+call site was quietly type-incorrect until a follow-up fix (#128).
 """
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+from pyguara.common.grid import Cell
 
 
 @dataclass
-class BlockMoveEvent:
-    """Fired when a block moves from one grid cell to another."""
+class FoodEatenEvent:
+    """Fired when the snake's head lands on a food cell."""
+
+    food_type: str
+    cell: Cell
+    points: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class SnakeDiedEvent:
+    """Fired when the snake hits a wall or itself and loses a life."""
+
+    cause: str  # "wall" or "self"
+    lives_remaining: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class GameOverEvent:
+    """Fired when the snake's lives reach zero."""
+
+    final_score: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class StarEffectStarted:
+    """Fired when `StarEffect` is applied -- the cue to start the rain overlay."""
 
     entity_id: str
-    from_pos: tuple[int, int]
-    to_pos: tuple[int, int]
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
 
 
 @dataclass
-class PlayerMoveEvent:
-    """Fired when the player attempts to move."""
+class StarEffectEnded:
+    """Fired when `StarEffect` expires -- the cue to stop the rain overlay."""
 
-    direction: tuple[int, int]  # (dx, dy)
-
-
-@dataclass
-class LevelCompleteEvent:
-    """Fired when all crates are on goals."""
-
-    level_index: int
-    total_moves: int
-
-
-@dataclass
-class UndoEvent:
-    """Fired when player requests undo."""
-
-    pass
-
-
-@dataclass
-class RestartLevelEvent:
-    """Fired when player requests level restart."""
-
-    pass
-
-
-@dataclass
-class NextLevelEvent:
-    """Fired to advance to the next level."""
-
-    pass
+    entity_id: str
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None

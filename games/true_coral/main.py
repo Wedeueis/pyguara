@@ -1,10 +1,11 @@
 """True Coral - Entry Point.
 
-A Sokoban-style puzzle game demonstrating:
-- Grid-based movement
-- Tween animations
-- Coroutines for sequences
-- Undo functionality
+A snake game demonstrating:
+- kits/trail for the growing/shrinking body
+- kits/action_combat for lives + invincibility
+- kits/stats + kits/effects for the star power-up's temporary speed boost
+- kits/loot for what a food cell turns out to be
+- kits/spawn for keeping the board topped up with food
 """
 
 import logging
