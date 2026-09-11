@@ -160,3 +160,64 @@ def test_render_batch_transform_path(renderer: PygameBackend) -> None:
     )
 
     renderer.render_batch(batch)
+
+
+def test_render_batch_color_path(renderer: PygameBackend) -> None:
+    """Backend should handle tint-path batch rendering."""
+    surf = pygame.Surface((32, 32))
+    texture = MockTexture("dummy_path", surf)
+
+    batch = RenderBatch(
+        texture=texture,
+        destinations=[(0, 0), (100, 100)],
+        colors=[(255, 0, 0, 255), (0, 255, 0, 128)],
+        colors_enabled=True,
+    )
+
+    renderer.render_batch(batch)
+
+
+def test_render_batch_tint_multiplies_the_actual_pixels(
+    renderer: PygameBackend,
+) -> None:
+    """A red tint on a white texture must land as red pixels, not just execute."""
+    surf = pygame.Surface((10, 10), pygame.SRCALPHA)
+    surf.fill((255, 255, 255, 255))
+    texture = MockTexture("dummy_path", surf)
+
+    renderer.clear(Color(0, 0, 0))
+    batch = RenderBatch(
+        texture=texture,
+        destinations=[(0, 0)],
+        colors=[(255, 0, 0, 255)],
+        colors_enabled=True,
+    )
+    renderer.render_batch(batch)
+
+    assert renderer._screen.get_at((5, 5)) == (255, 0, 0, 255)
+
+
+def test_tinting_does_not_permanently_mutate_the_cached_texture(
+    renderer: PygameBackend,
+) -> None:
+    """Tinting must copy the surface, never `.fill()` the cached original."""
+    surf = pygame.Surface((10, 10), pygame.SRCALPHA)
+    surf.fill((255, 255, 255, 255))
+    texture = MockTexture("dummy_path", surf)
+
+    renderer.render_batch(
+        RenderBatch(
+            texture=texture,
+            destinations=[(0, 0)],
+            colors=[(255, 0, 0, 255)],
+            colors_enabled=True,
+        )
+    )
+
+    assert surf.get_at((5, 5)) == (255, 255, 255, 255)
+
+    renderer.clear(Color(0, 0, 0))
+    renderer.render_batch(
+        RenderBatch(texture=texture, destinations=[(0, 0)], transforms_enabled=False)
+    )
+    assert renderer._screen.get_at((5, 5)) == (255, 255, 255, 255)

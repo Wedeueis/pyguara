@@ -58,11 +58,13 @@ def test_sprite_implements_renderable():
     assert hasattr(sprite, "z_index")
     assert hasattr(sprite, "rotation")
     assert hasattr(sprite, "scale")
+    assert hasattr(sprite, "color")
 
     # Verify default values
     assert sprite.position == Vector2.zero()
     assert sprite.rotation == 0.0
     assert sprite.scale == Vector2(1, 1)
+    assert sprite.color == Color(255, 255, 255, 255)
 
     # Verify they can be set
     sprite.position = Vector2(100, 200)
@@ -99,6 +101,16 @@ def test_geometry_has_rotation_and_scale():
 
     assert hasattr(circle, "rotation")
     assert hasattr(circle, "scale")
+
+
+def test_geometry_has_a_draw_time_tint_distinct_from_its_fill_color():
+    """Geometry's Renderable `color` (draw-time tint) is separate from the
+    fill colour baked into its rasterised texture -- opaque white by
+    default, so an untinted shape draws exactly as its fill colour."""
+    box = Box(100, 100, Color(255, 0, 0), HeadlessTextureFactory())
+
+    assert hasattr(box, "color")
+    assert box.color == Color(255, 255, 255, 255)
 
 
 def test_render_system_submit_no_getattr():
@@ -140,6 +152,7 @@ def test_all_renderables_implement_protocol():
         assert hasattr(renderable, "z_index")
         assert hasattr(renderable, "rotation")
         assert hasattr(renderable, "scale")
+        assert hasattr(renderable, "color")
 
         # Verify they're accessible (no exceptions)
         _ = renderable.texture

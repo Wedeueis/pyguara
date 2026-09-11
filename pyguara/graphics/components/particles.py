@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from pyguara.common.random import RandomStream
-from pyguara.common.types import Vector2
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.protocols import IRenderer
@@ -24,6 +24,23 @@ from pyguara.resources.types import Texture
 
 if TYPE_CHECKING:
     pass
+
+_OPAQUE_WHITE = (255, 255, 255, 255)
+
+
+def _particle_color(p: Particle) -> tuple[int, int, int, int]:
+    """Return the particle's current tint, lerped from color_start to color_end.
+
+    Opaque white (a no-op tint) if this particle has no color animation
+    set -- `emit()`'s default, so a particle spawned without `color_start`/
+    `color_end` renders exactly as before this existed.
+    """
+    if p.color_start is None or p.color_end is None:
+        return _OPAQUE_WHITE
+    t = 0.0 if p.life_total <= 0 else 1.0 - (p.life / p.life_total)
+    t = max(0.0, min(1.0, t))
+    blended = Color(*p.color_start).lerp(Color(*p.color_end), t)
+    return (blended.r, blended.g, blended.b, blended.a)
 
 
 @dataclass
@@ -285,6 +302,8 @@ class ParticleSystem:
             viewport = Viewport(0, 0, backend.width, backend.height)
 
         batches: dict[Texture, list[tuple[float, float]]] = {}
+        colors: dict[Texture, list[tuple[int, int, int, int]]] = {}
+        has_color: dict[Texture, bool] = {}
         zoom = camera.zoom
 
         offset_vec = camera.screen_offset(viewport)
@@ -294,14 +313,27 @@ class ParticleSystem:
             if p.active and p.texture:
                 if p.texture not in batches:
                     batches[p.texture] = []
+                    colors[p.texture] = []
+                    has_color[p.texture] = False
 
                 screen_x = (p.position.x * zoom) + offset_x
                 screen_y = (p.position.y * zoom) + offset_y
 
                 batches[p.texture].append((screen_x, screen_y))
 
+                rgba = _particle_color(p)
+                colors[p.texture].append(rgba)
+                if rgba != _OPAQUE_WHITE:
+                    has_color[p.texture] = True
+
         for texture, destinations in batches.items():
-            batch = RenderBatch(texture, destinations)
+            enabled = has_color[texture]
+            batch = RenderBatch(
+                texture,
+                destinations,
+                colors=colors[texture] if enabled else [],
+                colors_enabled=enabled,
+            )
             backend.render_batch(batch)
 
 

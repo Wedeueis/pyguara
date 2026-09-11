@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from pyguara.common.types import Vector2
+from pyguara.common.types import Color, Vector2
 from pyguara.ecs.component import BaseComponent
 from pyguara.resources.types import Texture
 
@@ -41,6 +41,11 @@ class Sprite(BaseComponent):
 
     # Optional material for custom shaders/effects (None = default sprite shader)
     material: Any = None  # Type: Optional["Material"]
+
+    # Multiplied into the texture at draw time. Opaque white (the default)
+    # draws unmodified; a backend only pays for per-instance tinting once a
+    # batch contains something else -- see RenderBatch.colors_enabled.
+    color: Color = field(default_factory=lambda: Color(255, 255, 255, 255))
 
     def __post_init__(self) -> None:
         """Initialize the BaseComponent portion (entity backref)."""

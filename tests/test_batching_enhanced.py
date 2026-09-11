@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyguara.common.types import Vector2
+from pyguara.common.types import Color, Vector2
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.batch import Batcher
 from pyguara.graphics.pipeline.viewport import Viewport
@@ -170,6 +170,92 @@ def test_batch_mixed_transforms():
     assert batch.scales[0] == (1.0, 1.0)
     assert batch.scales[1] == (1.0, 1.0)
     assert batch.scales[2] == (2.0, 2.0)
+
+
+def test_batch_with_opaque_white_stays_on_the_fast_path():
+    """Every command at the default color should not enable colors_enabled."""
+    batcher = Batcher()
+    camera = Camera2D(800, 600)
+    viewport = Viewport.create_fullscreen(800, 600)
+
+    texture = MockTexture("test")
+    commands = [
+        RenderCommand(
+            texture=texture,
+            world_position=Vector2(i * 10, 0),
+            layer=0,
+            z_index=0,
+            color=Color(255, 255, 255, 255),
+        )
+        for i in range(5)
+    ]
+
+    batches = batcher.create_batches(commands, camera, viewport)
+
+    assert len(batches) == 1
+    batch = batches[0]
+    assert not batch.colors_enabled
+    assert len(batch.colors) == 0
+
+
+def test_batch_with_a_tinted_command_enables_colors():
+    """One non-default color in the batch switches the whole batch to the tint path."""
+    batcher = Batcher()
+    camera = Camera2D(800, 600)
+    viewport = Viewport.create_fullscreen(800, 600)
+
+    texture = MockTexture("test")
+    commands = [
+        RenderCommand(
+            texture=texture,
+            world_position=Vector2(0, 0),
+            layer=0,
+            z_index=0,
+        ),
+        RenderCommand(
+            texture=texture,
+            world_position=Vector2(10, 0),
+            layer=0,
+            z_index=0,
+            color=Color(255, 0, 0, 128),
+        ),
+    ]
+
+    batches = batcher.create_batches(commands, camera, viewport)
+
+    assert len(batches) == 1
+    batch = batches[0]
+    assert batch.colors_enabled
+    assert batch.colors == [(255, 255, 255, 255), (255, 0, 0, 128)]
+
+
+def test_a_tinted_command_does_not_break_the_batch():
+    """Unlike texture/material, differing colors stay in one batch."""
+    batcher = Batcher()
+    camera = Camera2D(800, 600)
+    viewport = Viewport.create_fullscreen(800, 600)
+
+    texture = MockTexture("test")
+    commands = [
+        RenderCommand(
+            texture=texture,
+            world_position=Vector2(0, 0),
+            layer=0,
+            z_index=0,
+            color=Color(255, 0, 0, 255),
+        ),
+        RenderCommand(
+            texture=texture,
+            world_position=Vector2(10, 0),
+            layer=0,
+            z_index=0,
+            color=Color(0, 255, 0, 255),
+        ),
+    ]
+
+    batches = batcher.create_batches(commands, camera, viewport)
+
+    assert len(batches) == 1
 
 
 def test_multiple_textures_create_separate_batches():
@@ -378,3 +464,80 @@ def test_particles_land_where_their_sprites_do(x, y, width, height):
     system.render(CaptureBackend(), camera, viewport)
 
     assert recorded == sprite_destination.destinations
+
+
+class _ColorCaptureBackend:
+    """Records every `render_batch()` call's colors and colors_enabled flag."""
+
+    width = 800
+    height = 600
+
+    def __init__(self):
+        self.batches = []
+
+    def render_batch(self, batch):
+        self.batches.append(batch)
+
+
+def test_a_particle_with_no_color_animation_stays_on_the_fast_path():
+    from pyguara.graphics.components.particles import ParticleSystem
+
+    system = ParticleSystem(capacity=1)
+    texture = MockTexture("smoke")
+    system.emit(texture, Vector2(0, 0), count=1, speed=0.0)
+
+    backend = _ColorCaptureBackend()
+    system.render(backend, Camera2D(800, 600))
+
+    assert len(backend.batches) == 1
+    assert backend.batches[0].colors_enabled is False
+    assert backend.batches[0].colors == []
+
+
+def test_a_freshly_spawned_particles_color_matches_color_start():
+    from pyguara.graphics.components.particles import ParticleSystem
+
+    system = ParticleSystem(capacity=1)
+    texture = MockTexture("spark")
+    system.emit(
+        texture,
+        Vector2(0, 0),
+        count=1,
+        speed=0.0,
+        life=1.0,
+        color_start=(255, 0, 0, 255),
+        color_end=(0, 0, 255, 0),
+    )
+
+    backend = _ColorCaptureBackend()
+    system.render(backend, Camera2D(800, 600))
+
+    assert backend.batches[0].colors_enabled is True
+    assert backend.batches[0].colors == [(255, 0, 0, 255)]
+
+
+def test_a_particles_color_lerps_toward_color_end_as_it_ages():
+    from pyguara.graphics.components.particles import ParticleSystem
+
+    system = ParticleSystem(capacity=1)
+    texture = MockTexture("spark")
+    system.emit(
+        texture,
+        Vector2(0, 0),
+        count=1,
+        speed=0.0,
+        life=1.0,
+        color_start=(255, 0, 0, 255),
+        color_end=(0, 0, 255, 0),
+    )
+
+    system.update(0.5)  # halfway through its life
+
+    backend = _ColorCaptureBackend()
+    system.render(backend, Camera2D(800, 600))
+
+    r, g, b, a = backend.batches[0].colors[0]
+    assert r == 127 or r == 128  # halfway between 255 and 0
+    assert g == 0
+    assert b == 127 or b == 128
+    assert a == 127 or a == 128  # halfway between 255 and 0 -- fading out

@@ -119,6 +119,20 @@ class Renderable(Protocol):
         """
         ...
 
+    @property
+    def color(self) -> Color:
+        """
+        Tint multiplied into the texture at draw time.
+
+        `Color(255, 255, 255, 255)` (the default every implementer uses)
+        draws the texture unmodified -- a backend only needs to touch its
+        per-instance tint path once a batch contains something else.
+
+        Returns:
+            Color: The tint colour.
+        """
+        ...
+
 
 @runtime_checkable
 class IRenderer(Protocol):

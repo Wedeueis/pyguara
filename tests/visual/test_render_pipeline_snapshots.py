@@ -70,6 +70,7 @@ class Sprite:
         z_index: float,
         rotation: float = 0.0,
         scale: Vector2 | None = None,
+        color: Color | None = None,
     ) -> None:
         """Create a renderable at a world position on a layer."""
         self.texture = texture
@@ -79,6 +80,7 @@ class Sprite:
         self.rotation = rotation
         self.scale = scale if scale is not None else Vector2(1, 1)
         self.material = None
+        self.color = color if color is not None else Color(255, 255, 255, 255)
 
 
 def _f(value: float) -> str:
@@ -177,6 +179,9 @@ class RecordingRenderer:
             rotations = ", ".join(_f(r) for r in batch.rotations)
             scales = ", ".join(f"({_f(x)},{_f(y)})" for x, y in batch.scales)
             line += f" rot=[{rotations}] scale=[{scales}]"
+        if batch.colors_enabled:
+            colors = ", ".join(str(c) for c in batch.colors)
+            line += f" colors=[{colors}]"
         self.calls.append(line)
 
 
@@ -266,6 +271,15 @@ def test_rotation_and_scale_switch_the_batch_to_the_transform_path(snapshot) -> 
     sprites = [
         Sprite(HERO, Vector2(0, 0), Layer.ENTITIES, 0, rotation=45.0),
         Sprite(HERO, Vector2(64, 0), Layer.ENTITIES, 1, scale=Vector2(2, 0.5)),
+    ]
+    assert render(sprites) == snapshot
+
+
+def test_a_tinted_sprite_switches_the_batch_to_the_color_path(snapshot) -> None:
+    """A non-white sprite carries its tint through to the batch."""
+    sprites = [
+        Sprite(HERO, Vector2(0, 0), Layer.ENTITIES, 0),
+        Sprite(HERO, Vector2(64, 0), Layer.ENTITIES, 1, color=Color(255, 0, 0, 128)),
     ]
     assert render(sprites) == snapshot
 

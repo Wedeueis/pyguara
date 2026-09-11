@@ -8,6 +8,15 @@
     'end_frame',
   ])
 # ---
+# name: test_a_tinted_sprite_switches_the_batch_to_the_color_path
+  list([
+    'set_viewport x=0 y=0 w=800 h=600',
+    'clear rgba=(0,0,0,255)',
+    'begin_frame',
+    'render_batch hero.png n=2 transforms=off dest=[(400.000,300.000), (464.000,300.000)] colors=[(255, 255, 255, 255), (255, 0, 0, 128)]',
+    'end_frame',
+  ])
+# ---
 # name: test_an_empty_frame_still_sets_up_and_tears_down
   list([
     'set_viewport x=0 y=0 w=800 h=600',

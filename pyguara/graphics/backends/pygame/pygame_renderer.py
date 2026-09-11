@@ -68,20 +68,23 @@ class PygameBackend:
         """Optimized method to draw many instances of the same texture.
 
         Supports two modes:
-        - Fast path: No transforms, uses pygame.Surface.blits for C-level performance
-        - Transform path: Rotation/scale enabled, transforms each sprite individually
+        - Fast path: No transforms or tint, uses pygame.Surface.blits for
+          C-level performance
+        - Per-instance path: Rotation/scale and/or tint enabled, each
+          sprite is transformed/tinted individually
         """
         texture = batch.texture.native_handle
 
-        if not batch.transforms_enabled:
-            # FAST PATH: Simple blits without transforms
+        if not batch.transforms_enabled and not batch.colors_enabled:
+            # FAST PATH: Simple blits without transforms or tint
             blit_sequence = ((texture, dest) for dest in batch.destinations)
             self._screen.blits(blit_sequence, doreturn=0)
-        else:
-            # TRANSFORM PATH: Apply rotation and/or scale per sprite
-            for i, dest in enumerate(batch.destinations):
-                surf = texture
+            return
 
+        for i, dest in enumerate(batch.destinations):
+            surf = texture
+
+            if batch.transforms_enabled:
                 # Apply rotation if needed
                 if i < len(batch.rotations) and batch.rotations[i] != 0.0:
                     surf = pygame.transform.rotate(surf, -batch.rotations[i])
@@ -94,8 +97,23 @@ class PygameBackend:
                         new_height = int(surf.get_height() * scale_y)
                         surf = pygame.transform.scale(surf, (new_width, new_height))
 
-                # Draw the transformed sprite
-                self._screen.blit(surf, dest)
+            if batch.colors_enabled and i < len(batch.colors):
+                rgba = batch.colors[i]
+                if rgba != (255, 255, 255, 255):
+                    # Copy first: `surf` may still be the cached original
+                    # texture surface here (no transform ran above), and
+                    # `.fill()` mutates in place -- tinting it directly
+                    # would permanently discolor every future draw of this
+                    # texture. Uses the full RGBA tuple, not RGB-only like
+                    # ui_renderer.py's tint: a sprite/particle tint's alpha
+                    # (e.g. a particle fading to alpha=0) is meant to fade
+                    # the sprite out, where the UI helper's tint never did.
+                    tinted = surf.copy()
+                    tinted.fill(rgba, special_flags=pygame.BLEND_RGBA_MULT)
+                    surf = tinted
+
+            # Draw the transformed/tinted sprite
+            self._screen.blit(surf, dest)
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
         """Draw a rectangle primitive."""
