@@ -7,6 +7,7 @@ coordinate conversion.
 
 from pyguara.ai.pathfinding.astar import AStarPathfinder
 from pyguara.ai.pathfinding.core import Graph, Heuristic, Node
+from pyguara.ai.pathfinding.flow_field import dijkstra_map, flow_field
 from pyguara.ai.pathfinding.grid import (
     DiagonalDistance,
     EuclideanDistance,
@@ -33,4 +34,6 @@ __all__ = [
     "smooth_path",
     "path_to_world_coords",
     "world_to_grid_coords",
+    "dijkstra_map",
+    "flow_field",
 ]

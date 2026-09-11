@@ -45,6 +45,8 @@ from pyguara.ai.pathfinding import (
     GridGraph,
     ManhattanDistance,
     OctileDistance,
+    dijkstra_map,
+    flow_field,
     path_to_world_coords,
     smooth_path,
     world_to_grid_coords,
@@ -94,6 +96,8 @@ __all__ = [
     "smooth_path",
     "path_to_world_coords",
     "world_to_grid_coords",
+    "dijkstra_map",
+    "flow_field",
     # Navmesh
     "NavMesh",
     "NavMeshPolygon",
