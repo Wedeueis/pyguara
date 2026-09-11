@@ -68,3 +68,40 @@ class RandomStream:
         place of tuples) as well as the raw tuple `get_state()` returns.
         """
         self._rng.setstate(_retuple(state))
+
+
+def weighted_choice(rng: RandomStream, choices: Sequence[tuple[T, float]]) -> T:
+    """Pick one item from `choices`, weighted by each entry's own weight.
+
+    Originated in `kits/loot` (drop tables); moved here once `kits/procgen`
+    needed the same primitive for Wave Function Collapse's per-cell state
+    pick -- a generic RNG utility, not a loot-specific one.
+
+    Args:
+        rng: Seeded stream driving the roll.
+        choices: `(item, weight)` pairs. Weights need not sum to 1 -- each
+            item's odds are its own weight over the total. A weight of 0
+            is never picked (in practice; only an exact floating-point
+            boundary hit could select it, which does not happen).
+
+    Returns:
+        One item from `choices`.
+
+    Raises:
+        ValueError: If `choices` is empty, or every weight is 0 or less.
+    """
+    if not choices:
+        raise ValueError("weighted_choice: choices must not be empty")
+
+    total = sum(weight for _, weight in choices)
+    if total <= 0:
+        raise ValueError("weighted_choice: total weight must be positive")
+
+    roll = rng.uniform(0, total)
+    cumulative = 0.0
+    for item, weight in choices:
+        cumulative += weight
+        if roll <= cumulative:
+            return item
+
+    return choices[-1][0]  # Floating-point fallback; should be unreachable.

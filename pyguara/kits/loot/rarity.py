@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pyguara.common.random import RandomStream
-from pyguara.kits.loot.weighted_choice import weighted_choice
+from pyguara.common.random import RandomStream, weighted_choice
 
 
 class Rarity(Enum):
