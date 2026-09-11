@@ -1,166 +1,28 @@
-"""Protocolo Bandeira - Object Pooling.
+"""Protocolo Bandeira - Enemy Pooling.
 
-Pre-allocates entities to avoid garbage collection during gameplay.
+Pre-allocates enemy entities to avoid garbage collection during gameplay,
+on top of `pyguara.ecs.pool.EntityPool` -- this module owns only the
+enemy-specific factory (which components an enemy carries, how
+`spawn_enemy()` configures one per `EnemyType`). Bullets no longer pool
+ECS entities at all; they're `kits.projectiles.Projectile`s instead.
 """
 
-from collections.abc import Callable
-
 from games.protocolo_bandeira.components import (
-    Bullet,
-    EntityTeam,
-    Poolable,
+    EnemyAI,
+    EnemyType,
+    Movement,
     ShooterSprite,
 )
 from pyguara.common.components import Transform
 from pyguara.common.types import Color, Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
+from pyguara.ecs.pool import EntityPool, Poolable
+from pyguara.kits.action_combat import Health, Hurtbox
+from pyguara.spatial import SpatialTracked
 
 
-class ObjectPool:
-    """Generic object pool for entities."""
-
-    def __init__(
-        self,
-        entity_manager: EntityManager,
-        pool_name: str,
-        initial_size: int,
-        factory: Callable[[EntityManager, int], Entity],
-    ):
-        """Initialize the pool.
-
-        Args:
-            entity_manager: The entity manager
-            pool_name: Name of this pool
-            initial_size: Number of entities to pre-allocate
-            factory: Function to create new entities
-        """
-        self._em = entity_manager
-        self._pool_name = pool_name
-        self._factory = factory
-
-        # Pool storage
-        self._available: list[Entity] = []
-        self._active: list[Entity] = []
-
-        # Pre-allocate
-        for i in range(initial_size):
-            entity = self._factory(self._em, i)
-            poolable = entity.get_component(Poolable)
-            if poolable:
-                poolable.pool_name = pool_name
-                poolable.is_active = False
-            self._available.append(entity)
-
-    def acquire(self) -> Entity | None:
-        """Get an entity from the pool.
-
-        Returns:
-            An available entity, or None if pool is exhausted
-        """
-        if not self._available:
-            # Pool exhausted - could expand here
-            return None
-
-        entity = self._available.pop()
-        poolable = entity.get_component(Poolable)
-        if poolable:
-            poolable.is_active = True
-        self._active.append(entity)
-        return entity
-
-    def release(self, entity: Entity) -> None:
-        """Return an entity to the pool."""
-        if entity in self._active:
-            self._active.remove(entity)
-
-        poolable = entity.get_component(Poolable)
-        if poolable:
-            poolable.is_active = False
-
-        self._available.append(entity)
-
-    def get_active(self) -> list[Entity]:
-        """Get all active entities."""
-        return self._active.copy()
-
-    @property
-    def available_count(self) -> int:
-        """Number of available entities."""
-        return len(self._available)
-
-    @property
-    def active_count(self) -> int:
-        """Number of active entities."""
-        return len(self._active)
-
-
-class BulletPool(ObjectPool):
-    """Specialized pool for bullet entities."""
-
-    def __init__(self, entity_manager: EntityManager, size: int = 500):
-        """Initialize the bullet pool."""
-        super().__init__(entity_manager, "bullets", size, self._create_bullet)
-
-    def _create_bullet(self, em: EntityManager, index: int) -> Entity:
-        """Create a bullet entity for the pool."""
-        entity = em.create_entity(f"bullet_{index}")
-
-        entity.add_component(Transform(position=Vector2(-1000, -1000)))  # Off-screen
-        entity.add_component(
-            Bullet(
-                damage=1,
-                owner_team=EntityTeam.NEUTRAL,
-                velocity=Vector2.zero(),
-                lifetime=3.0,
-                active=False,
-            )
-        )
-        entity.add_component(Poolable(pool_name="bullets", is_active=False))
-        entity.add_component(
-            ShooterSprite(color=Color(255, 255, 100), size=4.0, shape="circle")
-        )
-
-        return entity
-
-    def fire_bullet(
-        self,
-        position: Vector2,
-        direction: Vector2,
-        speed: float,
-        team: EntityTeam,
-        damage: int = 1,
-    ) -> Entity | None:
-        """Fire a bullet from the pool."""
-        entity = self.acquire()
-        if not entity:
-            return None
-
-        transform = entity.get_component(Transform)
-        bullet = entity.get_component(Bullet)
-        sprite = entity.get_component(ShooterSprite)
-
-        if transform:
-            transform.position = position
-
-        if bullet:
-            bullet.velocity = direction * speed
-            bullet.owner_team = team
-            bullet.damage = damage
-            bullet.lifetime = 3.0
-            bullet.active = True
-
-        # Color based on team
-        if sprite:
-            if team == EntityTeam.PLAYER:
-                sprite.color = Color(100, 200, 255)
-            else:
-                sprite.color = Color(255, 100, 100)
-
-        return entity
-
-
-class EnemyPool(ObjectPool):
+class EnemyPool(EntityPool):
     """Specialized pool for enemy entities."""
 
     def __init__(self, entity_manager: EntityManager, size: int = 100):
@@ -169,13 +31,6 @@ class EnemyPool(ObjectPool):
 
     def _create_enemy(self, em: EntityManager, index: int) -> Entity:
         """Create an enemy entity for the pool."""
-        from games.protocolo_bandeira.components import (
-            EnemyAI,
-            EnemyType,
-            Health,
-            Movement,
-        )
-
         entity = em.create_entity(f"enemy_{index}")
 
         entity.add_component(Transform(position=Vector2(-1000, -1000)))
@@ -187,9 +42,11 @@ class EnemyPool(ObjectPool):
                 move_speed=80.0,
             )
         )
-        entity.add_component(Health(current=1, max_health=1))
+        entity.add_component(Health(current=1.0, max_health=1.0))
+        entity.add_component(Hurtbox(team="enemy"))
+        entity.add_component(SpatialTracked())
         entity.add_component(Movement(speed=80.0))
-        entity.add_component(Poolable(pool_name="enemies", is_active=False))
+        entity.add_component(Poolable())
         entity.add_component(
             ShooterSprite(color=Color(200, 50, 50), size=15.0, shape="triangle")
         )
@@ -200,11 +57,9 @@ class EnemyPool(ObjectPool):
         self,
         position: Vector2,
         enemy_type: str = "chaser",
-        health: int = 1,
+        health: float = 1.0,
     ) -> Entity | None:
         """Spawn an enemy from the pool."""
-        from games.protocolo_bandeira.components import EnemyAI, EnemyType, Health
-
         entity = self.acquire()
         if not entity:
             return None
@@ -242,6 +97,7 @@ class EnemyPool(ObjectPool):
         if health_comp:
             health_comp.current = health
             health_comp.max_health = health
+            health_comp.invincible_timer = 0.0
 
         if sprite:
             # Color based on type

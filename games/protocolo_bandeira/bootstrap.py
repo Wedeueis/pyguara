@@ -7,6 +7,7 @@ from pyguara.application.application import Application
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.common.spatial import SpatialHash
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
@@ -78,6 +79,10 @@ def configure_game_container() -> DIContainer:
     container.register_singleton(UIManager, UIManager)
     container.register_singleton(SystemManager, SystemManager)
     container.register_singleton(CoroutineManager, CoroutineManager)
+
+    # Non-physics spatial queries -- kits/projectiles' bullet-vs-target hit
+    # check queries this instead of a per-frame brute-force distance loop.
+    container.register_instance(SpatialHash, SpatialHash())
 
     # Application
     container.register_singleton(Application, Application)

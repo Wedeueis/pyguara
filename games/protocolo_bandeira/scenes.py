@@ -7,10 +7,7 @@ import math
 import sys
 
 from games.protocolo_bandeira.components import (
-    Bullet,
-    Health,
     Movement,
-    Poolable,
     Score,
     ShooterSprite,
     Weapon,
@@ -19,9 +16,8 @@ from games.protocolo_bandeira.events import (
     PlayerDeathEvent,
     WaveCompleteEvent,
 )
-from games.protocolo_bandeira.pooling import BulletPool, EnemyPool
+from games.protocolo_bandeira.pooling import EnemyPool
 from games.protocolo_bandeira.systems import (
-    BulletSystem,
     CollisionSystem,
     EnemyAISystem,
     PlayerControlSystem,
@@ -30,16 +26,21 @@ from games.protocolo_bandeira.systems import (
 )
 from games.protocolo_bandeira.wave_manager import WaveManager
 from pyguara.common.components import Transform
+from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.ecs.pool import Poolable
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, SPACE, UP, A, D, S, W
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
+from pyguara.kits.action_combat import Health, HealthSystem, Hurtbox
+from pyguara.kits.projectiles import ProjectileSystem
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
+from pyguara.spatial import SpatialIndexSystem, SpatialTracked
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.text import Label
 from pyguara.ui.layout import BoxContainer
@@ -118,12 +119,17 @@ class ArenaScene(Scene):
         super().__init__("ArenaScene", event_dispatcher)
 
         # Pools
-        self._bullet_pool: BulletPool | None = None
         self._enemy_pool: EnemyPool | None = None
+
+        # Non-physics spatial index, shared by SpatialIndexSystem and
+        # ProjectileSystem's hit-check.
+        self._spatial_index: SpatialHash | None = None
 
         # Systems
         self._player_control: PlayerControlSystem | None = None
-        self._bullet_system: BulletSystem | None = None
+        self._spatial_index_system: SpatialIndexSystem | None = None
+        self._projectile_system: ProjectileSystem | None = None
+        self._health_system: HealthSystem | None = None
         self._enemy_ai: EnemyAISystem | None = None
         self._collision_system: CollisionSystem | None = None
         self._weapon_system: WeaponSystem | None = None
@@ -161,28 +167,38 @@ class ArenaScene(Scene):
         self._setup_input()
 
         # Create pools
-        self._bullet_pool = BulletPool(self.entity_manager, size=500)
         self._enemy_pool = EnemyPool(self.entity_manager, size=100)
+
+        # Spatial index + the systems that read/write it
+        self._spatial_index = self.container.get(SpatialHash)
+        self._spatial_index_system = SpatialIndexSystem(
+            self.entity_manager, self._spatial_index, self.event_dispatcher
+        )
+        self._projectile_system = ProjectileSystem(
+            self.entity_manager,
+            self.event_dispatcher,
+            self._spatial_index,
+            capacity=500,
+        )
 
         # Create systems
         self._player_control = PlayerControlSystem(self.entity_manager)
-        self._bullet_system = BulletSystem(self.entity_manager, self._bullet_pool)
+        self._health_system = HealthSystem(self.entity_manager)
         self._enemy_ai = EnemyAISystem(
             self.entity_manager,
             self.event_dispatcher,
             self._enemy_pool,
-            self._bullet_pool,
+            self._projectile_system,
         )
         self._collision_system = CollisionSystem(
             self.entity_manager,
             self.event_dispatcher,
-            self._bullet_pool,
             self._enemy_pool,
         )
         self._weapon_system = WeaponSystem(
             self.entity_manager,
             self.event_dispatcher,
-            self._bullet_pool,
+            self._projectile_system,
         )
         self._score_system = ScoreSystem(self.entity_manager, self.event_dispatcher)
 
@@ -263,7 +279,9 @@ class ArenaScene(Scene):
                 bullet_damage=1,
             )
         )
-        player.add_component(Health(current=5, max_health=5))
+        player.add_component(Health(current=5.0, max_health=5.0))
+        player.add_component(Hurtbox(team="player"))
+        player.add_component(SpatialTracked())
         player.add_component(Score())
         player.add_component(
             ShooterSprite(color=Color(100, 200, 255), size=15.0, shape="triangle")
@@ -366,11 +384,16 @@ class ArenaScene(Scene):
                 if self._weapon_system:
                     self._weapon_system.fire(player_pos, aim_dir)
 
-        if self._bullet_system:
-            self._bullet_system.update(dt)
-
         if self._enemy_ai:
             self._enemy_ai.update(dt)
+
+        # Reindex before the projectile hit-check reads it, so a bullet
+        # checks this tick's enemy/player positions, not last tick's.
+        if self._spatial_index_system:
+            self._spatial_index_system.update(dt)
+
+        if self._projectile_system:
+            self._projectile_system.update(dt)
 
         if self._collision_system:
             self._collision_system.update(dt)
@@ -384,13 +407,8 @@ class ArenaScene(Scene):
             )
             self._wave_manager.update(dt, player_pos)
 
-        # Update health timers
-        if self._player_id:
-            player = self.entity_manager.get_entity(self._player_id)
-            if player:
-                health = player.get_component(Health)
-                if health and health.invincible_time > 0:
-                    health.invincible_time -= dt
+        if self._health_system:
+            self._health_system.update(dt)
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Render the game."""
@@ -403,17 +421,25 @@ class ArenaScene(Scene):
         world_renderer.draw_rect(Rect(0, 0, 5, 600), border_color)
         world_renderer.draw_rect(Rect(795, 0, 5, 600), border_color)
 
-        # Draw bullets
-        if self._bullet_pool:
-            for entity in self._bullet_pool.get_active():
-                bullet = entity.get_component(Bullet)
-                transform = entity.get_component(Transform)
-                sprite = entity.get_component(ShooterSprite)
-
-                if not bullet or not bullet.active or not transform or not sprite:
-                    continue
-
-                self._draw_shape(world_renderer, transform.position, sprite)
+        # Draw bullets -- pooled Projectiles, not entities, so there's no
+        # ShooterSprite to read; get_active() + a team->color lookup here
+        # is this game's own rendering, same as before this went through
+        # kits/projectiles.
+        if self._projectile_system:
+            for projectile in self._projectile_system.get_active():
+                color = (
+                    Color(100, 200, 255)
+                    if projectile.team == "player"
+                    else Color(255, 100, 100)
+                )
+                size = 4.0
+                rect = Rect(
+                    projectile.position.x - size,
+                    projectile.position.y - size,
+                    size * 2,
+                    size * 2,
+                )
+                world_renderer.draw_rect(rect, color)
 
         # Draw enemies
         if self._enemy_pool:
@@ -442,8 +468,8 @@ class ArenaScene(Scene):
                 if transform and sprite:
                     # Flash when invincible
                     color = sprite.color
-                    if health and health.invincible_time > 0:
-                        if int(health.invincible_time * 10) % 2 == 0:
+                    if health and health.invincible_timer > 0:
+                        if int(health.invincible_timer * 10) % 2 == 0:
                             color = Color(255, 255, 255)
 
                     # Draw player with direction indicator

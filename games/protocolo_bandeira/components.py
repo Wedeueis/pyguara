@@ -50,21 +50,6 @@ class Weapon(BaseComponent):
 
 
 @dataclass
-class Bullet(BaseComponent):
-    """Bullet projectile data."""
-
-    damage: int = 1
-    owner_team: EntityTeam = EntityTeam.PLAYER
-    velocity: Vector2 = field(default_factory=Vector2.zero)
-    lifetime: float = 3.0  # Seconds before despawn
-    active: bool = True
-
-    def __post_init__(self) -> None:
-        """Initialize the component."""
-        super().__init__()
-
-
-@dataclass
 class EnemyAI(BaseComponent):
     """AI configuration for enemies."""
 
@@ -85,44 +70,12 @@ class EnemyAI(BaseComponent):
 
 
 @dataclass
-class Health(BaseComponent):
-    """Entity health."""
-
-    current: int = 3
-    max_health: int = 3
-    invincible_time: float = 0.0
-
-    def __post_init__(self) -> None:
-        """Initialize the component."""
-        super().__init__()
-
-    def take_damage(self, amount: int = 1) -> bool:
-        """Take damage. Returns True if still alive."""
-        if self.invincible_time > 0:
-            return True
-        self.current = max(0, self.current - amount)
-        return self.current > 0
-
-
-@dataclass
 class Movement(BaseComponent):
     """Movement data for entities."""
 
     velocity: Vector2 = field(default_factory=Vector2.zero)
     speed: float = 200.0
     facing_angle: float = 0.0  # Radians
-
-    def __post_init__(self) -> None:
-        """Initialize the component."""
-        super().__init__()
-
-
-@dataclass
-class Poolable(BaseComponent):
-    """Marker for pooled entities."""
-
-    pool_name: str = "default"
-    is_active: bool = False
 
     def __post_init__(self) -> None:
         """Initialize the component."""
