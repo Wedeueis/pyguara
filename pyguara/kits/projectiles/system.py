@@ -169,6 +169,15 @@ class ProjectileSystem:
             projectile.active = False
             return
 
+    def get_active(self) -> list[Projectile]:
+        """Every currently active projectile.
+
+        `render()` covers the common texture-batched case; a caller doing
+        its own rendering (primitive shapes, no texture assets, a debug
+        overlay) reads this list directly instead.
+        """
+        return [projectile for projectile in self._pool if projectile.active]
+
     def render(
         self, backend: IRenderer, camera: Camera2D, viewport: Viewport | None = None
     ) -> None:
