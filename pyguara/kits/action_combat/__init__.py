@@ -8,9 +8,11 @@ damage-event *type* as the dependency, not Hitbox/Hurtbox).
 `Hitbox`/`Hurtbox`/`HitboxSystem` are the collision-detection half, built
 on `pyguara.physics.trigger_volume.TriggerVolume` (a `Hitbox` entity also
 carries one) rather than new sensor/collision machinery. "Active frames"
-is just toggling that `TriggerVolume`'s own `active` field -- a game (or,
-once it exists, an animation frame-event system) flips it directly, no
-separate timer here. `Hurtbox` has no shape of its own -- overlap is
+is just toggling that `TriggerVolume`'s own `active` field -- a game
+flips it directly, or, on an entity that opts in with
+`ActiveFrameWindow`, `ActiveFrameSystem` flips it from
+`pyguara.graphics.events.AnimationFrameEvent` instead -- no separate
+timer either way. `Hurtbox` has no shape of its own -- overlap is
 detected against the target's existing solid `Collider`, since a second,
 independently-shaped sensor would hit `pymunk_impl.py`'s documented
 sensor-vs-sensor degenerate case.
@@ -20,6 +22,8 @@ shape here is one genre-specific flavor an RTS or turn-based game
 wouldn't want.
 """
 
+from pyguara.kits.action_combat.active_frame import ActiveFrameWindow
+from pyguara.kits.action_combat.active_frame_system import ActiveFrameSystem
 from pyguara.kits.action_combat.damage import (
     ARMOR_STAT,
     RESISTANCE_STAT,
@@ -35,6 +39,8 @@ from pyguara.kits.action_combat.system import HealthSystem
 __all__ = [
     "ARMOR_STAT",
     "RESISTANCE_STAT",
+    "ActiveFrameSystem",
+    "ActiveFrameWindow",
     "DamageDealt",
     "Health",
     "HealthSystem",
