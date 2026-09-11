@@ -369,6 +369,17 @@ class ArenaScene(Scene):
         if move_dir.magnitude > 0:
             move_dir = move_dir.normalize()
             aim_dir = move_dir  # Aim in movement direction
+        elif self._player_id:
+            # Standing still: keep aiming the way the player was last
+            # facing (Movement.facing_angle persists across frames)
+            # instead of leaving aim_dir at zero, which silently blocked
+            # firing while stationary.
+            player = self.entity_manager.get_entity(self._player_id)
+            movement = player.get_component(Movement) if player else None
+            if movement:
+                aim_dir = Vector2(
+                    math.cos(movement.facing_angle), math.sin(movement.facing_angle)
+                )
 
         # Update systems
         if self._player_control:
