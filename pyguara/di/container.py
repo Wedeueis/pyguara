@@ -66,6 +66,7 @@ class DIContainer:
         self._singletons: dict[type[Any], Any] = {}
         self._lock = threading.RLock()
         self._error_strategy = error_strategy
+        self._run_scope: DIScope | None = None
 
         # Thread-local, not shared: this tracks one in-flight resolution chain.
         # A single shared list made concurrent resolutions see each other's
@@ -206,6 +207,47 @@ class DIContainer:
             A new scope. Use it as a context manager so it disposes.
         """
         return DIScope(self)
+
+    @property
+    def run_scope(self) -> DIScope | None:
+        """The active run scope, or None outside of one.
+
+        A run spans multiple scenes -- floor transitions in a roguelike,
+        say -- so it is not tied to any single `Scene`'s lifetime the way
+        `Scene.scope` is. Every scene already holds `self.container`, so
+        scene code reaches the current run's scope as
+        `self.container.run_scope` with no extra plumbing.
+        """
+        return self._run_scope
+
+    def begin_run_scope(self) -> DIScope:
+        """Open a new run scope, disposing the previous one if any.
+
+        A game calls this when a run starts (a new roguelike descent, a new
+        campaign) so `SCOPED` services registered for run-lifetime data --
+        a per-run RNG stream, per-run loot tables -- get fresh instances.
+        Disposing the previous scope first means a run scope is never
+        silently abandoned by starting another one without ending the last.
+
+        Returns:
+            The newly opened scope, also available afterwards as
+            `self.run_scope`.
+        """
+        if self._run_scope is not None:
+            self._run_scope.dispose()
+        self._run_scope = self.create_scope()
+        return self._run_scope
+
+    def end_run_scope(self) -> None:
+        """Dispose the active run scope, if any. A no-op otherwise.
+
+        Call this when a run ends -- permadeath, victory, or returning to
+        the main menu -- so run-scoped services are torn down deterministically
+        rather than waiting for the next `begin_run_scope()` to displace them.
+        """
+        if self._run_scope is not None:
+            self._run_scope.dispose()
+            self._run_scope = None
 
     def _register_service(
         self,

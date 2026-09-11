@@ -446,6 +446,65 @@ def test_disposed_flag_is_observable(container) -> None:
     assert scope.disposed is True
 
 
+# -- Run scope --
+
+
+def test_run_scope_is_none_before_a_run_begins(container) -> None:
+    assert container.run_scope is None
+
+
+def test_begin_run_scope_opens_and_returns_the_scope(container) -> None:
+    scope = container.begin_run_scope()
+
+    assert scope is container.run_scope
+    assert scope.disposed is False
+
+
+def test_begin_run_scope_disposes_the_previous_one(container) -> None:
+    first = container.begin_run_scope()
+
+    second = container.begin_run_scope()
+
+    assert first.disposed is True
+    assert second.disposed is False
+    assert container.run_scope is second
+
+
+def test_end_run_scope_disposes_and_clears_it(container) -> None:
+    scope = container.begin_run_scope()
+
+    container.end_run_scope()
+
+    assert scope.disposed is True
+    assert container.run_scope is None
+
+
+def test_end_run_scope_without_a_run_is_a_noop(container) -> None:
+    container.end_run_scope()  # must not raise
+
+    assert container.run_scope is None
+
+
+def test_run_scope_resolves_scoped_services(container) -> None:
+    container.register_scoped(DisposableService, DisposableService)
+
+    scope = container.begin_run_scope()
+    service = scope.get(DisposableService)
+
+    assert scope.get(DisposableService) is service
+
+
+def test_ending_a_run_disposes_its_scoped_services(container) -> None:
+    container.register_scoped(DisposableService, DisposableService)
+
+    scope = container.begin_run_scope()
+    service = scope.get(DisposableService)
+
+    container.end_run_scope()
+
+    assert service.disposed is True
+
+
 # -- Re-registration --
 
 

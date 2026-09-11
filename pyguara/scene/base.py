@@ -7,7 +7,7 @@ from pyguara.ai.steering_system import SteeringSystem
 from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.common.components import Transform
-from pyguara.di.container import DIContainer  # Import Container
+from pyguara.di.container import DIContainer, DIScope  # Import Container
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
@@ -61,6 +61,12 @@ class Scene(ABC):
         # New: Application will set this before on_enter
         self.container: DIContainer | None = None
 
+        # Built in resolve_dependencies(): one DIScope per scene instance,
+        # disposed by SceneManager._exit_scene() when this scene exits. For
+        # a scope spanning multiple scenes -- a roguelike run outliving its
+        # floor transitions -- see DIContainer.run_scope instead.
+        self.scope: DIScope | None = None
+
         # Set by SceneManager.render() immediately before this scene's own
         # render() runs each frame. 1.0 = fully at the current fixed step --
         # a sane default before the first real render() call.
@@ -70,13 +76,16 @@ class Scene(ABC):
         """
         Call by the Application/SceneManager to inject the container.
 
-        Builds this scene's engine systems, camera, render system, and
-        prefab factory -- all live by the time this returns, before
-        `on_enter()` runs. Override this if you want to grab additional
-        services immediately; call `super().resolve_dependencies(container)`
-        first so the engine defaults are in place.
+        Builds this scene's engine systems, camera, render system, prefab
+        factory, and DI scope (`self.scope`, for resolving `SCOPED`
+        registrations tied to this scene's lifetime) -- all live by the time
+        this returns, before `on_enter()` runs. Override this if you want to
+        grab additional services immediately; call
+        `super().resolve_dependencies(container)` first so the engine
+        defaults are in place.
         """
         self.container = container
+        self.scope = container.create_scope()
 
         # EntityManager stays decoupled from the event system; this scene
         # subscribes to its removals and republishes them as EntityDestroyed.
