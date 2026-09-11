@@ -12,9 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from pyguara.common.random import RandomStream
+from pyguara.common.random import RandomStream, weighted_choice
 from pyguara.kits.loot.rarity import Rarity
-from pyguara.kits.loot.weighted_choice import weighted_choice
 
 
 @dataclass
