@@ -19,8 +19,13 @@ from games.guara_falcao.components import (
     ZoneTrigger,
 )
 from pyguara.common.components import Transform
+from pyguara.common.modifiers import ModifiableValue
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
+from pyguara.kits.effects import EffectContainer
+from pyguara.kits.loot import LootEntry, LootTable, roll_loot
+from pyguara.kits.stats import StatBlock
 from pyguara.physics.components import (
     CharacterBody,
     Collider,
@@ -45,16 +50,48 @@ TILE_CHECKPOINT = 5
 TILE_HAZARD = 6
 TILE_GOAL = 7
 
+# What a collectible tile actually turns out to be. Coin is by far the most
+# common; health and power (previously declared on Collectible but never
+# placed by this level, since every collectible was hardcoded to "coin")
+# are rarer finds.
+_COLLECTIBLE_LOOT_TABLE = LootTable(
+    entries=[
+        LootEntry(payload="coin", weight=70.0),
+        LootEntry(payload="health", weight=20.0),
+        LootEntry(payload="power", weight=10.0),
+    ]
+)
+
+# Player move_speed's starting base, before any kits/effects modifier.
+# PlatformerController.move_speed is synced from this stat every tick
+# (see games.guara_falcao.systems.PlayerStatsSystem) -- kept equal to the
+# controller's own initial value below so the first tick's sync is a no-op.
+PLAYER_BASE_MOVE_SPEED = 180.0
+
+_COLLECTIBLE_COLORS = {
+    "coin": Color(255, 220, 50),  # Gold
+    "health": Color(255, 90, 110),  # Red-pink, matches the health bar
+    "power": Color(90, 200, 255),  # Cyan, matches the speed-boost trail
+}
+
 
 class LevelBuilder:
     """Builds level entities from tilemap data."""
 
-    def __init__(self, levels_dir: Path | None = None):
-        """Initialize the level builder."""
+    def __init__(self, levels_dir: Path | None = None, rng: RandomStream | None = None):
+        """Initialize the level builder.
+
+        Args:
+            levels_dir: Where level JSON files live. Defaults to this
+                package's bundled `assets/levels`.
+            rng: Seeded stream driving collectible-type rolls. Defaults to
+                a fresh, unseeded stream.
+        """
         if levels_dir is None:
             levels_dir = Path(__file__).parent / "assets" / "levels"
         self._levels_dir = levels_dir
         self._spawn_point = Vector2(100, 300)
+        self._rng = rng if rng is not None else RandomStream()
 
     def create_default_level(self) -> dict[str, Any]:
         """Create a default level layout."""
@@ -289,16 +326,21 @@ class LevelBuilder:
     def _create_collectible(
         self, entity_manager: EntityManager, gx: int, gy: int
     ) -> None:
-        """Create a coin collectible."""
-        entity = entity_manager.create_entity(f"coin_{gx}_{gy}")
+        """Create a collectible, its type rolled from `_COLLECTIBLE_LOOT_TABLE`."""
+        entry = roll_loot(self._rng, _COLLECTIBLE_LOOT_TABLE)
+        collect_type = entry.payload if entry is not None else "coin"
+
+        entity = entity_manager.create_entity(f"collectible_{gx}_{gy}")
 
         world_x = gx * TILE_SIZE + TILE_SIZE // 2
         world_y = gy * TILE_SIZE + TILE_SIZE // 2
 
         entity.add_component(Transform(position=Vector2(world_x, world_y)))
-        entity.add_component(Collectible(value=1, collect_type="coin"))
+        entity.add_component(Collectible(value=1, collect_type=collect_type))
         entity.add_component(
-            CharacterSprite(color=Color(255, 220, 50), size=Vector2(16, 16))
+            CharacterSprite(
+                color=_COLLECTIBLE_COLORS[collect_type], size=Vector2(16, 16)
+            )
         )
 
     def _create_checkpoint(
@@ -371,7 +413,7 @@ class LevelBuilder:
         # one-pixel overlap probe now, not a configurable-length ray.
         player.add_component(
             PlatformerController(
-                move_speed=180.0,
+                move_speed=PLAYER_BASE_MOVE_SPEED,
                 jump_force=350.0,
                 max_fall_speed=450.0,
                 acceleration=0.2,
@@ -390,6 +432,16 @@ class LevelBuilder:
         player.add_component(Health(current=3, max_health=3))
         player.add_component(Score())
         player.add_component(CameraTarget(look_ahead=40.0, vertical_offset=-20.0))
+
+        # kits/stats + kits/effects: move_speed lives here so the "power"
+        # collectible's temporary boost (games.guara_falcao.systems.SpeedBoostEffect)
+        # has something to modify without reaching into PlatformerController
+        # directly. PlayerStatsSystem syncs the computed value onto the
+        # controller each tick.
+        player.add_component(
+            StatBlock(stats={"move_speed": ModifiableValue(PLAYER_BASE_MOVE_SPEED)})
+        )
+        player.add_component(EffectContainer())
 
         # Visual
         player.add_component(

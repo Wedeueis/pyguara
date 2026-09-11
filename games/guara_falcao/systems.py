@@ -23,11 +23,14 @@ from games.guara_falcao.events import (
     PlayerLandedEvent,
 )
 from pyguara.common.components import Transform
+from pyguara.common.modifiers import Modifier, ModifierType
 from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D, CameraFollowConstraints
+from pyguara.kits.effects import Effect, EffectContainer, StackingRule, add_effect
+from pyguara.kits.stats import StatBlock, get_stat
 from pyguara.physics.components import CharacterBody
 from pyguara.physics.platformer_controller import (
     PlatformerController,
@@ -35,6 +38,65 @@ from pyguara.physics.platformer_controller import (
     PlatformerState,
 )
 from pyguara.physics.platformer_system import apply_knockback
+
+MOVE_SPEED_STAT = "move_speed"
+
+
+class SpeedBoostEffect(Effect):
+    """The "power" collectible's temporary move-speed buff.
+
+    Adds a percent-add modifier to the player's `"move_speed"` stat on
+    apply, removes it (tagged with this effect's own `key`) on expiry --
+    picking up another "power" while one is active extends the duration
+    instead of stacking the magnitude (see its `StackingRule.REFRESH` use
+    in `CollectibleSystem`).
+    """
+
+    BOOST_PERCENT = 0.5
+    DURATION = 5.0
+
+    def __init__(self, stat_block: StatBlock) -> None:
+        """Bind this effect to the stat block it will modify.
+
+        Args:
+            stat_block: Must already have a `"move_speed"` entry --
+                raises `KeyError` on `on_apply()` otherwise.
+        """
+        super().__init__(key="speed_boost", duration=self.DURATION)
+        self._stat_block = stat_block
+
+    def on_apply(self, entity_id: str, dispatcher: EventDispatcher) -> None:
+        """Add the percent-add speed modifier."""
+        self._stat_block.stats[MOVE_SPEED_STAT].add_modifier(
+            Modifier(self.BOOST_PERCENT, ModifierType.PERCENT_ADD, source=self.key)
+        )
+
+    def on_remove(self, entity_id: str, dispatcher: EventDispatcher) -> None:
+        """Remove the speed modifier this effect added."""
+        self._stat_block.stats[MOVE_SPEED_STAT].remove_source(self.key)
+
+
+class PlayerStatsSystem:
+    """Syncs the player's `"move_speed"` stat onto `PlatformerController`.
+
+    `kits/stats` has no vocabulary of its own for what a stat *means* --
+    this is the one line of this game's own policy that connects the
+    generic `StatBlock` to `PlatformerController.move_speed`, the field
+    `PlatformerSystem` actually reads every physics tick.
+    """
+
+    def __init__(self, entity_manager: EntityManager) -> None:
+        """Store the entity source."""
+        self._em = entity_manager
+
+    def update(self, dt: float) -> None:
+        """Recompute `move_speed` for every entity with both components."""
+        for entity in self._em.get_entities_with(StatBlock, PlatformerController):
+            stats = entity.get_component(StatBlock)
+            controller = entity.get_component(PlatformerController)
+            controller.move_speed = get_stat(
+                stats, MOVE_SPEED_STAT, default=controller.move_speed
+            )
 
 
 class PlayerControlSystem:
@@ -252,13 +314,23 @@ class CollectibleSystem:
         for _entity, collectible in to_collect:
             collectible.collected = True
 
-            if score:
-                if collectible.collect_type == "coin":
-                    score.add_coins(collectible.value)
-                elif collectible.collect_type == "health":
-                    health = self._player.get_component(Health)
-                    if health:
-                        health.heal(collectible.value)
+            if collectible.collect_type == "coin" and score:
+                score.add_coins(collectible.value)
+            elif collectible.collect_type == "health":
+                health = self._player.get_component(Health)
+                if health:
+                    health.heal(collectible.value)
+            elif collectible.collect_type == "power":
+                stat_block = self._player.get_component(StatBlock)
+                effect_container = self._player.get_component(EffectContainer)
+                if stat_block and effect_container:
+                    add_effect(
+                        self._dispatcher,
+                        self._player.id,
+                        effect_container,
+                        SpeedBoostEffect(stat_block),
+                        stacking=StackingRule.REFRESH,
+                    )
 
             self._dispatcher.dispatch(
                 CollectiblePickedEvent(
