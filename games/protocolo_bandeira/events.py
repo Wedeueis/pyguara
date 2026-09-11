@@ -3,7 +3,9 @@
 Custom events for shooter game logic.
 """
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from typing import Any
 
 from games.protocolo_bandeira.components import EntityTeam
 from pyguara.common.types import Vector2
@@ -17,6 +19,8 @@ class BulletFiredEvent:
     direction: Vector2
     team: EntityTeam
     damage: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
 
 
 @dataclass
@@ -25,6 +29,8 @@ class EnemyKilledEvent:
 
     position: Vector2
     points: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
 
 
 @dataclass
@@ -33,6 +39,8 @@ class PlayerDamagedEvent:
 
     damage: int
     remaining_health: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
 
 
 @dataclass
@@ -41,6 +49,8 @@ class PlayerDeathEvent:
 
     final_score: int
     total_kills: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
 
 
 @dataclass
@@ -49,6 +59,8 @@ class WaveStartEvent:
 
     wave_number: int
     enemy_count: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
 
 
 @dataclass
@@ -56,6 +68,8 @@ class WaveCompleteEvent:
     """Fired when all enemies in a wave are defeated."""
 
     wave_number: int
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
 
 
 @dataclass
@@ -64,3 +78,5 @@ class SpawnEnemyEvent:
 
     position: Vector2
     enemy_type: str
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
