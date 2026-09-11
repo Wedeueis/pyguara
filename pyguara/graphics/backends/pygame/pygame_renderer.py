@@ -17,6 +17,9 @@ class PygameBackend:
     def __init__(self, window_surface: pygame.Surface):
         """Initialize the backend with a target surface."""
         self._screen = window_surface
+        self._font_cache: dict[int, pygame.font.Font] = {}
+        if not pygame.font.get_init():
+            pygame.font.init()
 
     @property
     def width(self) -> int:
@@ -123,6 +126,22 @@ class PygameBackend:
             (end.x, end.y),
             width,
         )
+
+    def _get_font(self, size: int) -> pygame.font.Font:
+        """Retrieve or create a font of the given size."""
+        if size not in self._font_cache:
+            self._font_cache[size] = pygame.font.SysFont("arial", size)
+        return self._font_cache[size]
+
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        """Draw a text string, in screen space (see `IRenderer.draw_text`)."""
+        if not text:
+            return
+        font = self._get_font(size)
+        surf = font.render(text, True, to_pygame_color(color))
+        self._screen.blit(surf, (int(position.x), int(position.y)))
 
     def present(self) -> None:
         """Swap display buffers."""

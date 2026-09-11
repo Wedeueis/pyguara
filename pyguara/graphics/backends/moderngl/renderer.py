@@ -4,9 +4,11 @@ import math
 from pathlib import Path
 
 import numpy as np
+import pygame
 
 import moderngl
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.graphics.backends.moderngl.texture import GLTextureFactory
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 
@@ -56,6 +58,15 @@ class ModernGLRenderer:
         self._ctx = ctx
         self._width = width
         self._height = height
+
+        # CPU-rasterized text: rendered via pygame.font, uploaded as an
+        # ephemeral GL texture per draw_text() call and released immediately
+        # after -- see draw_text() for why this doesn't use a persistent
+        # glyph atlas or a shader-based text pipeline.
+        if not pygame.font.get_init():
+            pygame.font.init()
+        self._font_cache: dict[int, pygame.font.Font] = {}
+        self._texture_factory = GLTextureFactory(ctx)
 
         # Compile shaders and create program
         self._program = self._create_shader_program()
@@ -370,6 +381,43 @@ class ModernGLRenderer:
 
         # Draw single instance
         self._vao.render(moderngl.TRIANGLE_STRIP, instances=1)
+
+    def _get_font(self, size: int) -> pygame.font.Font:
+        """Retrieve or create a font of the given size."""
+        if size not in self._font_cache:
+            self._font_cache[size] = pygame.font.SysFont("arial", size)
+        return self._font_cache[size]
+
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        """Draw a text string, in screen space (see `IRenderer.draw_text`).
+
+        No persistent glyph atlas: this rasterizes the whole string on the
+        CPU via `pygame.font` (as `UIRenderer`'s ModernGL implementation
+        already does for UI text), uploads it as one ephemeral GL texture,
+        draws it through the same single-instance path `draw_texture()`
+        uses, then releases the texture immediately -- an ordinary
+        `draw_texture()` call keeps its texture alive for reuse across
+        frames, but a fresh piece of text has nothing to reuse anyway.
+        Fine for occasional world-space text (damage numbers, prompts);
+        a hot path drawing many strings a frame would want a real atlas.
+        """
+        if not text:
+            return
+
+        font = self._get_font(size)
+        rgba = (color.r, color.g, color.b, color.a)
+        surf = font.render(text, True, rgba)
+
+        data = pygame.image.tobytes(surf, "RGBA", False)
+        gl_texture = self._texture_factory.create_from_bytes(
+            "<draw_text>", data, surf.get_width(), surf.get_height()
+        )
+        try:
+            self.draw_texture(gl_texture, position)
+        finally:
+            gl_texture.release()
 
     def render_batch(self, batch: RenderBatch) -> None:
         """Optimized method to draw many instances of the same texture.

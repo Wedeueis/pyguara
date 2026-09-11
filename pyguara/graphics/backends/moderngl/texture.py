@@ -72,7 +72,7 @@ class GLTextureFactory:
 
     def create_from_bytes(
         self, path: str, data: bytes, width: int, height: int
-    ) -> Texture:
+    ) -> GLTexture:
         """Create a GLTexture from raw RGBA pixel data.
 
         Note: The data should be in standard top-to-bottom row order.

@@ -78,6 +78,36 @@ def test_set_viewport_clips_to_the_engine_rect(renderer: PygameBackend) -> None:
     assert renderer._screen.get_at((50, 50)) == (255, 255, 255, 255)
 
 
+def test_draw_text_draws_something(renderer: PygameBackend) -> None:
+    """draw_text() must actually put pixels on the surface, not just avoid
+    raising -- some pixel in the text's area differs from the clear color."""
+    renderer.clear(Color(0, 0, 0))
+    renderer.draw_text("Hi", Vector2(10, 10), Color(255, 255, 255), size=24)
+
+    region = [
+        renderer._screen.get_at((x, y)) for x in range(10, 40) for y in range(10, 34)
+    ]
+    assert any(pixel != (0, 0, 0, 255) for pixel in region)
+
+
+def test_draw_text_empty_string_is_a_noop(renderer: PygameBackend) -> None:
+    renderer.clear(Color(10, 20, 30))
+    renderer.draw_text("", Vector2(10, 10), Color(255, 255, 255))
+
+    assert renderer._screen.get_at((10, 10)) == (10, 20, 30, 255)
+
+
+def test_draw_text_reuses_a_cached_font_for_the_same_size(
+    renderer: PygameBackend,
+) -> None:
+    renderer.draw_text("a", Vector2(0, 0), Color(255, 255, 255), size=20)
+    first_font = renderer._font_cache[20]
+
+    renderer.draw_text("b", Vector2(0, 0), Color(255, 255, 255), size=20)
+
+    assert renderer._font_cache[20] is first_font
+
+
 class MockTexture(Texture):
     def __init__(self, path: str, surface: pygame.Surface):
         super().__init__(path)

@@ -24,6 +24,16 @@ from pyguara.application.bootstrap import (
     create_headless_application,
     create_headless_sandbox_application,
 )
+from pyguara.common.types import Color, Vector2
+from pyguara.graphics.backends.headless_renderer import HeadlessBackend
+
+
+def test_draw_text_is_a_noop_that_does_not_raise() -> None:
+    """#71's world-space text primitive, added to IRenderer, must not break
+    the headless backend's no-op contract."""
+    backend = HeadlessBackend(width=800, height=600)
+
+    backend.draw_text("Hi", Vector2(10, 10), Color(255, 255, 255))
 
 
 def _run_for_n_frames(app: Application, frames: int) -> int:

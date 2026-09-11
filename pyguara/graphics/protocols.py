@@ -236,6 +236,28 @@ class IRenderer(Protocol):
         """
         ...
 
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        """
+        Draw a text string, like the other primitives, in screen space.
+
+        "World-space" text (a floating damage number, a "press E" prompt
+        tracking an entity) is the caller's responsibility, exactly as it
+        already is for `draw_rect`/`draw_circle`/`draw_line`: convert the
+        world position through the camera to a screen position first (see
+        `physics/debug_draw.py` for the established pattern), then call this
+        with that screen position. This method itself has no camera
+        knowledge.
+
+        Args:
+            text (str): The string to draw. A no-op for an empty string.
+            position (Vector2): Top-left of the text, in screen space.
+            color (Color): Text color.
+            size (int): Font size in pixels.
+        """
+        ...
+
     def present(self) -> None:
         """
         Swap the buffers and display the rendered frame to the user.
