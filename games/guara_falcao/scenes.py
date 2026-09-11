@@ -29,6 +29,7 @@ from games.guara_falcao.systems import (
     HealthSystem,
     PatrolSystem,
     PlayerControlSystem,
+    PlayerStatsSystem,
 )
 from pyguara.common.components import Transform
 from pyguara.common.types import Color, Rect, Vector2
@@ -40,6 +41,7 @@ from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, F1, LEFT, RIGHT, SPACE, UP, R
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
+from pyguara.kits.effects import EffectSystem
 from pyguara.physics.components import CharacterBody
 from pyguara.physics.debug_draw import ColliderDebugRenderer
 from pyguara.physics.physics_system import PhysicsSystem
@@ -142,6 +144,8 @@ class GameScene(Scene):
         self._checkpoint_system: CheckpointSystem | None = None
         self._health_system: HealthSystem | None = None
         self._hazard_system: HazardSystem | None = None
+        self._effect_system: EffectSystem | None = None
+        self._player_stats_system: PlayerStatsSystem | None = None
 
         # Game state
         self._camera: Camera2D | None = None
@@ -210,6 +214,8 @@ class GameScene(Scene):
         )
         self._health_system = HealthSystem(self.entity_manager, self.event_dispatcher)
         self._hazard_system = HazardSystem(self.entity_manager, self.event_dispatcher)
+        self._effect_system = EffectSystem(self.entity_manager, self.event_dispatcher)
+        self._player_stats_system = PlayerStatsSystem(self.entity_manager)
 
         # Setup camera
         self._camera = Camera2D(800, 600)
@@ -437,6 +443,12 @@ class GameScene(Scene):
 
         if self._hazard_system:
             self._hazard_system.update(dt)
+
+        if self._effect_system:
+            self._effect_system.update(dt)
+
+        if self._player_stats_system:
+            self._player_stats_system.update(dt)
 
         if self._coroutine_manager:
             self._coroutine_manager.update(dt)
