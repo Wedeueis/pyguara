@@ -1,6 +1,6 @@
 """True Coral - Bootstrap.
 
-Configures the DI container for the puzzle game.
+Configures the DI container for the snake game.
 """
 
 from pyguara.application.application import Application
@@ -50,7 +50,7 @@ def configure_game_container() -> DIContainer:
 
     # Window & Graphics
     win_config = WindowConfig(
-        title="True Coral - A Sokoban Puzzle",
+        title="True Coral - cocar the coral snake",
         screen_width=800,
         screen_height=600,
     )

@@ -1,46 +1,36 @@
 """True Coral - ECS Components.
 
-Pure data containers for the puzzle game.
+Pure data containers for the snake game. The body itself is
+`pyguara.kits.trail.Trail`; everything here is what that kit
+deliberately has no vocabulary for.
 """
 
-from dataclasses import dataclass, field
-from enum import Enum, auto
+from dataclasses import dataclass
 
-from pyguara.common.types import Color, Vector2
+from pyguara.common.grid import Cell
 from pyguara.ecs.component import BaseComponent
 
 
-class BlockType(Enum):
-    """Types of blocks in the puzzle."""
-
-    PLAYER = auto()
-    CRATE = auto()
-    WALL = auto()
-    GOAL = auto()
-    FLOOR = auto()
-
-
 @dataclass
-class GridPosition(BaseComponent):
-    """Integer grid coordinates for puzzle entities."""
+class MoveState(BaseComponent):
+    """The snake's current heading and its tick-based movement clock.
 
-    x: int = 0
-    y: int = 0
+    Attributes:
+        direction: Current heading, a unit grid offset (e.g. `(1, 0)` for
+            east). Never `(0, 0)`.
+        pending_direction: The next heading queued by input, applied on
+            the next tick -- buffered rather than applied immediately so
+            two key presses within one tick can't reverse the snake into
+            itself (a 180-degree turn is rejected when it's *applied*,
+            using the direction actually in effect that tick).
+        move_timer: Seconds accumulated since the last grid step. A tick
+            fires (possibly several, on a big `dt`) whenever this reaches
+            the current move interval.
+    """
 
-    def __post_init__(self) -> None:
-        """Initialize the component."""
-        super().__init__()
-
-    def to_tuple(self) -> tuple[int, int]:
-        """Return position as tuple."""
-        return (self.x, self.y)
-
-
-@dataclass
-class Block(BaseComponent):
-    """Block type marker component."""
-
-    block_type: BlockType = BlockType.FLOOR
+    direction: Cell = (1, 0)
+    pending_direction: Cell | None = None
+    move_timer: float = 0.0
 
     def __post_init__(self) -> None:
         """Initialize the component."""
@@ -48,8 +38,19 @@ class Block(BaseComponent):
 
 
 @dataclass
-class Pushable(BaseComponent):
-    """Marker for entities that can be pushed (crates)."""
+class Food(BaseComponent):
+    """One piece of food sitting on the grid.
+
+    Attributes:
+        food_type: `"larva"`, `"beetle"`, or `"star"` -- `roll_loot()`'s
+            payload from `FOOD_LOOT_TABLE`. Opaque to the loot kit itself;
+            this game decides what each name means (growth, points,
+            whether it triggers `StarEffect`).
+        cell: Where this food sits.
+    """
+
+    food_type: str = "larva"
+    cell: Cell = (0, 0)
 
     def __post_init__(self) -> None:
         """Initialize the component."""
@@ -57,66 +58,10 @@ class Pushable(BaseComponent):
 
 
 @dataclass
-class MoveHistory(BaseComponent):
-    """Stores move history for undo functionality."""
+class Score(BaseComponent):
+    """Player score tracking."""
 
-    history: list[tuple[int, int, int, int]] = field(default_factory=list)
-    # Each entry: (player_from_x, player_from_y, crate_from_x, crate_from_y)
-    # If no crate moved, crate coords are -1, -1
-
-    def __post_init__(self) -> None:
-        """Initialize the component."""
-        super().__init__()
-
-    def push(
-        self, player_from: tuple[int, int], crate_from: tuple[int, int] = (-1, -1)
-    ) -> None:
-        """Record a move."""
-        self.history.append(
-            (player_from[0], player_from[1], crate_from[0], crate_from[1])
-        )
-
-    def pop(self) -> tuple[tuple[int, int], tuple[int, int]] | None:
-        """Retrieve and remove the last move."""
-        if not self.history:
-            return None
-        entry = self.history.pop()
-        return ((entry[0], entry[1]), (entry[2], entry[3]))
-
-
-@dataclass
-class Moving(BaseComponent):
-    """Marker for entities currently being animated."""
-
-    from_pos: Vector2 = field(default_factory=Vector2.zero)
-    to_pos: Vector2 = field(default_factory=Vector2.zero)
-    progress: float = 0.0
-
-    def __post_init__(self) -> None:
-        """Initialize the component."""
-        super().__init__()
-
-
-@dataclass
-class LevelState(BaseComponent):
-    """Stores the current level state."""
-
-    level_index: int = 0
-    total_moves: int = 0
-    is_complete: bool = False
-
-    def __post_init__(self) -> None:
-        """Initialize the component."""
-        super().__init__()
-
-
-@dataclass
-class GridSprite(BaseComponent):
-    """Visual representation for grid entities."""
-
-    color: Color = field(default_factory=lambda: Color(255, 255, 255))
-    size: Vector2 = field(default_factory=lambda: Vector2(48, 48))
-    is_floor: bool = False
+    value: int = 0
 
     def __post_init__(self) -> None:
         """Initialize the component."""

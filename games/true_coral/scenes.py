@@ -1,43 +1,63 @@
 """True Coral - Game Scenes.
 
-Menu and gameplay scenes for the puzzle game.
+Menu, arena, and game-over scenes for the snake game.
 """
 
 import sys
 
-from games.true_coral.components import (
-    Block,
-    BlockType,
-    GridSprite,
-    LevelState,
-)
-from games.true_coral.events import (
-    LevelCompleteEvent,
-    NextLevelEvent,
-    RestartLevelEvent,
-)
-from games.true_coral.level_loader import LevelLoader
-from games.true_coral.systems import (
-    CELL_SIZE,
-    BlockMoveSystem,
-    GridSystem,
-    InputSystem,
-)
-from pyguara.common.components import Transform
+from games.true_coral.components import Food, MoveState, Score
+from games.true_coral.events import GameOverEvent, StarEffectEnded, StarEffectStarted
+from games.true_coral.food_director import FoodDirector
+from games.true_coral.systems import BASE_MOVE_RATE, MOVE_RATE_STAT, SnakeMovementSystem
+from pyguara.common.modifiers import ModifiableValue
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.ecs.entity import Entity
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP, R, Z
+from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
+from pyguara.kits.action_combat import Health, HealthSystem
+from pyguara.kits.effects import EffectContainer, EffectSystem
+from pyguara.kits.stats import StatBlock
+from pyguara.kits.trail import Trail, contains, reset
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
-from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.text import Label
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.manager import UIManager
+
+GRID_WIDTH = 20
+GRID_HEIGHT = 15
+CELL_SIZE = 32
+GRID_OFFSET_X = (800 - GRID_WIDTH * CELL_SIZE) // 2
+GRID_OFFSET_Y = (600 - GRID_HEIGHT * CELL_SIZE) // 2
+
+STARTING_LIVES = 3.0
+SNAKE_START_LENGTH = 3
+
+# Coral snake banding: two segments of each colour before cycling, matching
+# the reference art's red/black/cream rings.
+_BAND_COLORS = [Color(230, 60, 30), Color(20, 20, 25), Color(245, 235, 210)]
+_HEAD_COLOR = Color(250, 210, 60)
+
+_FOOD_COLORS = {
+    "larva": Color(240, 235, 210),
+    "beetle": Color(210, 40, 30),
+    "star": Color(255, 230, 90),
+}
+
+
+def grid_to_world(cell: tuple[int, int]) -> Vector2:
+    """Convert a grid cell to the centre of its screen-space square."""
+    x, y = cell
+    return Vector2(
+        GRID_OFFSET_X + x * CELL_SIZE + CELL_SIZE / 2,
+        GRID_OFFSET_Y + y * CELL_SIZE + CELL_SIZE / 2,
+    )
 
 
 class MenuScene(Scene):
@@ -53,17 +73,14 @@ class MenuScene(Scene):
         ui_manager = self.container.get(UIManager)
         ui_manager._root_elements.clear()
 
-        # Title
-        title = Label("TRUE CORAL", position=Vector2(280, 100))
+        title = Label("TRUE CORAL", position=Vector2(300, 100))
         ui_manager.add_element(title)
 
-        # Subtitle
-        subtitle = Label("A Sokoban Puzzle", position=Vector2(300, 140))
+        subtitle = Label("cocar the coral snake", position=Vector2(300, 140))
         ui_manager.add_element(subtitle)
 
-        # Button container
         container = BoxContainer(
-            position=Vector2(300, 220), size=Vector2(200, 200), spacing=15
+            position=Vector2(300, 240), size=Vector2(200, 200), spacing=15
         )
 
         btn_start = Button("START GAME", position=Vector2(0, 0), size=Vector2(200, 50))
@@ -101,56 +118,87 @@ class MenuScene(Scene):
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Render the scene."""
-        world_renderer.clear(Color(30, 40, 50))
+        world_renderer.clear(Color(15, 20, 18))
 
 
 class GameScene(Scene):
-    """Main gameplay scene for True Coral."""
+    """Main gameplay arena for True Coral."""
+
+    RAIN_SPAWN_RATE = 40.0  # New drops per second while the star is active
+    RAIN_FALL_SPEED = 260.0
 
     def __init__(self, event_dispatcher: EventDispatcher):
         """Initialize the game scene."""
         super().__init__("GameScene", event_dispatcher)
-        self._grid_system: GridSystem | None = None
-        self._move_system: BlockMoveSystem | None = None
-        self._input_system: InputSystem | None = None
-        self._level_loader: LevelLoader | None = None
-        self._coroutine_manager: CoroutineManager | None = None
-        self._show_complete_ui = False
+        self._movement_system: SnakeMovementSystem | None = None
+        self._health_system: HealthSystem | None = None
+        self._effect_system: EffectSystem | None = None
+        self._food_director: FoodDirector | None = None
         self._input_manager: InputManager | None = None
+        self._snake: Entity | None = None
+        self._is_game_over = False
+        self._rain_active = False
+        self._rain_drops: list[list[float]] = []  # [x, y] pairs
+        self._rng = RandomStream()
 
     def on_enter(self) -> None:
-        """Initialize game systems and load first level."""
+        """Initialize game systems and the snake."""
         print("True Coral - Game Started")
 
-        # Get managers
         ui_manager = self.container.get(UIManager)
         ui_manager._root_elements.clear()
 
         self._input_manager = self.container.get(InputManager)
-        self._coroutine_manager = self.container.get(CoroutineManager)
-
-        # Setup input bindings
         self._setup_input()
 
-        # Initialize systems
-        self._grid_system = GridSystem(self.entity_manager, self.event_dispatcher)
-        self._move_system = BlockMoveSystem(self.entity_manager, self.event_dispatcher)
-        self._input_system = InputSystem(self.event_dispatcher)
+        self._snake = self._create_snake()
+        trail = self._snake.get_component(Trail)
 
-        # Initialize level loader
-        self._level_loader = LevelLoader()
-        self._level_loader.discover_levels()
+        self._food_director = FoodDirector(
+            self.entity_manager,
+            GRID_WIDTH,
+            GRID_HEIGHT,
+            is_cell_free=lambda cell: not contains(trail, cell),
+            rng=self._rng,
+        )
 
-        # Register events
-        self.event_dispatcher.subscribe(LevelCompleteEvent, self._on_level_complete)
-        self.event_dispatcher.subscribe(RestartLevelEvent, self._on_restart_level)
-        self.event_dispatcher.subscribe(NextLevelEvent, self._on_next_level)
+        self._movement_system = SnakeMovementSystem(
+            self.entity_manager,
+            self.event_dispatcher,
+            self._food_director,
+            GRID_WIDTH,
+            GRID_HEIGHT,
+        )
+        self._movement_system.set_snake(self._snake)
 
-        # Load first level
-        self._load_current_level()
+        self._health_system = HealthSystem(self.entity_manager)
+        self._effect_system = EffectSystem(self.entity_manager, self.event_dispatcher)
 
-        # Setup HUD
+        self.event_dispatcher.subscribe(GameOverEvent, self._on_game_over)
+        self.event_dispatcher.subscribe(StarEffectStarted, self._on_star_started)
+        self.event_dispatcher.subscribe(StarEffectEnded, self._on_star_ended)
+
         self._setup_hud()
+
+    def _create_snake(self) -> Entity:
+        """Create the snake entity at the arena's centre."""
+        entity = self.entity_manager.create_entity("snake")
+        cx, cy = GRID_WIDTH // 2, GRID_HEIGHT // 2
+
+        entity.add_component(Trail())
+        reset(
+            entity.get_component(Trail),
+            [(cx - i, cy) for i in range(SNAKE_START_LENGTH)],
+        )
+        entity.add_component(MoveState(direction=(1, 0)))
+        entity.add_component(Health(current=STARTING_LIVES, max_health=STARTING_LIVES))
+        entity.add_component(
+            StatBlock(stats={MOVE_RATE_STAT: ModifiableValue(BASE_MOVE_RATE)})
+        )
+        entity.add_component(EffectContainer())
+        entity.add_component(Score())
+
+        return entity
 
     def _setup_input(self) -> None:
         """Configure input bindings."""
@@ -158,130 +206,69 @@ class GameScene(Scene):
         if not im:
             return
 
-        # Movement actions
         im.register_action("move_up", ActionType.PRESS)
         im.register_action("move_down", ActionType.PRESS)
         im.register_action("move_left", ActionType.PRESS)
         im.register_action("move_right", ActionType.PRESS)
-        im.register_action("undo", ActionType.PRESS)
-        im.register_action("restart", ActionType.PRESS)
         im.register_action("back", ActionType.PRESS)
 
         im.bind_input(InputDevice.KEYBOARD, UP, "move_up")
         im.bind_input(InputDevice.KEYBOARD, DOWN, "move_down")
         im.bind_input(InputDevice.KEYBOARD, LEFT, "move_left")
         im.bind_input(InputDevice.KEYBOARD, RIGHT, "move_right")
-        im.bind_input(InputDevice.KEYBOARD, Z, "undo")
-        im.bind_input(InputDevice.KEYBOARD, R, "restart")
         im.bind_input(InputDevice.KEYBOARD, ESCAPE, "back")
 
-        # Subscribe to action events
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
 
     def _on_action(self, event: OnActionEvent) -> None:
         """Handle input action events."""
-        # Only react to press events (value > 0)
         if event.value <= 0:
             return
 
         action = event.action_name
-
-        # Back action always works (even during level complete)
         if action == "back":
             self.container.get(SceneManager).pop_scene()
             return
 
-        # Block gameplay input during level complete or if systems not ready
-        if self._show_complete_ui or not self._input_system:
+        if self._is_game_over or not self._movement_system:
             return
 
-        if action == "move_up":
-            self._input_system.handle_move((0, -1))
-        elif action == "move_down":
-            self._input_system.handle_move((0, 1))
-        elif action == "move_left":
-            self._input_system.handle_move((-1, 0))
-        elif action == "move_right":
-            self._input_system.handle_move((1, 0))
-        elif action == "undo":
-            self._input_system.handle_undo()
-        elif action == "restart":
-            self.event_dispatcher.dispatch(RestartLevelEvent())
+        direction = {
+            "move_up": (0, -1),
+            "move_down": (0, 1),
+            "move_left": (-1, 0),
+            "move_right": (1, 0),
+        }.get(action)
+        if direction is not None:
+            self._movement_system.queue_direction(direction)
 
     def _setup_hud(self) -> None:
         """Create HUD elements."""
         ui_manager = self.container.get(UIManager)
 
-        # Level name
-        level_name = self._level_loader.get_level_name() if self._level_loader else ""
-        label = Label(f"Level: {level_name}", position=Vector2(20, 20))
-        ui_manager.add_element(label)
-
-        # Instructions
         instructions = Label(
-            "Arrows: Move | Z: Undo | R: Restart | ESC: Menu",
-            position=Vector2(20, 560),
+            "Arrows: Move | ESC: Menu",
+            position=Vector2(20, 570),
         )
         ui_manager.add_element(instructions)
 
-    def _load_current_level(self) -> None:
-        """Load the current level."""
-        # Clear entities (except level_state which will be recreated)
-        entity_ids = [e.id for e in self.entity_manager.get_all_entities()]
-        for eid in entity_ids:
-            self.entity_manager.remove_entity(eid)
-        self._show_complete_ui = False
+    def _on_star_started(self, event: StarEffectStarted) -> None:
+        """Start the rain overlay."""
+        self._rain_active = True
 
-        if self._level_loader:
-            self._level_loader.load_level(self.entity_manager)
+    def _on_star_ended(self, event: StarEffectEnded) -> None:
+        """Stop spawning new rain -- existing drops finish falling on their own."""
+        self._rain_active = False
 
-        if self._grid_system:
-            self._grid_system.rebuild_grid()
-
-    def _on_level_complete(self, event: LevelCompleteEvent) -> None:
-        """Handle level completion."""
-        print(f"Level {event.level_index + 1} complete in {event.total_moves} moves!")
-        self._show_complete_ui = True
-
-        # Show completion UI after a short delay
-        if self._coroutine_manager:
-            self._coroutine_manager.start_coroutine(self._show_completion_sequence())
-
-    def _show_completion_sequence(self):
-        """Coroutine to show completion message."""
-        yield wait_for_seconds(0.5)
-
-        ui_manager = self.container.get(UIManager)
-
-        # Completion overlay
-        label = Label("LEVEL COMPLETE!", position=Vector2(280, 250))
-        ui_manager.add_element(label)
-
-        yield wait_for_seconds(1.0)
-
-        # Check for next level
-        if self._level_loader and self._level_loader.next_level():
-            self.event_dispatcher.dispatch(NextLevelEvent())
-        else:
-            # All levels complete
-            label2 = Label("ALL LEVELS COMPLETE!", position=Vector2(260, 290))
-            ui_manager.add_element(label2)
-
-    def _on_restart_level(self, event: RestartLevelEvent) -> None:
-        """Handle level restart."""
-        self._load_current_level()
-        self._refresh_hud()
-
-    def _on_next_level(self, event: NextLevelEvent) -> None:
-        """Handle next level transition."""
-        self._load_current_level()
-        self._refresh_hud()
-
-    def _refresh_hud(self) -> None:
-        """Refresh HUD after level change."""
-        ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
-        self._setup_hud()
+    def _on_game_over(self, event: GameOverEvent) -> None:
+        """Handle the snake running out of lives."""
+        self._is_game_over = True
+        scene_manager = self.container.get(SceneManager)
+        game_over_scene = GameOverScene(
+            self.event_dispatcher, final_score=event.final_score
+        )
+        scene_manager.register(game_over_scene)
+        scene_manager.switch_to("GameOverScene")
 
     def on_exit(self) -> None:
         """Cleanup."""
@@ -289,100 +276,179 @@ class GameScene(Scene):
 
     def update(self, dt: float) -> None:
         """Update game logic."""
-        # Update input cooldowns
-        if self._input_system:
-            self._input_system.update(dt)
+        if self._is_game_over:
+            return
 
-        # Update systems
-        if self._move_system:
-            self._move_system.update(dt)
+        if self._movement_system:
+            self._movement_system.update(dt)
 
-        # Update coroutines
-        if self._coroutine_manager:
-            self._coroutine_manager.update(dt)
+        if self._food_director:
+            self._food_director.update(dt)
+
+        if self._effect_system:
+            self._effect_system.update(dt)
+
+        if self._health_system:
+            self._health_system.update(dt)
+
+        self._update_rain(dt)
+
+    def _update_rain(self, dt: float) -> None:
+        """Advance falling rain drops, spawning new ones while the star is active."""
+        if self._rain_active:
+            to_spawn = self.RAIN_SPAWN_RATE * dt
+            while to_spawn >= 1.0:
+                to_spawn -= 1.0
+                x = self._rng.uniform(
+                    GRID_OFFSET_X, GRID_OFFSET_X + GRID_WIDTH * CELL_SIZE
+                )
+                self._rain_drops.append([x, float(GRID_OFFSET_Y)])
+
+        for drop in self._rain_drops:
+            drop[1] += self.RAIN_FALL_SPEED * dt
+
+        bottom = GRID_OFFSET_Y + GRID_HEIGHT * CELL_SIZE
+        self._rain_drops = [d for d in self._rain_drops if d[1] < bottom]
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Render the game."""
-        world_renderer.clear(Color(25, 30, 35))
+        world_renderer.clear(Color(10, 14, 12))
 
-        # Render floor tiles first (lower z-order)
-        for entity in self.entity_manager.get_entities_with(Transform, GridSprite):
-            sprite = entity.get_component(GridSprite)
-            if not sprite.is_floor:
-                continue
+        arena = Rect(
+            GRID_OFFSET_X,
+            GRID_OFFSET_Y,
+            GRID_WIDTH * CELL_SIZE,
+            GRID_HEIGHT * CELL_SIZE,
+        )
+        world_renderer.draw_rect(arena, Color(20, 28, 24))
 
-            transform = entity.get_component(Transform)
-            block = entity.get_component(Block)
+        self._render_food(world_renderer)
+        self._render_snake(world_renderer)
+        self._render_rain(world_renderer)
+        self._render_hud(world_renderer)
 
-            # Draw floor/goal as filled rect
-            size = CELL_SIZE - 4
-            rect = Rect(
-                transform.position.x - size // 2,
-                transform.position.y - size // 2,
-                size,
-                size,
-            )
+    def _render_food(self, world_renderer: IRenderer) -> None:
+        for entity in self.entity_manager.get_entities_with(Food):
+            food = entity.get_component(Food)
+            center = grid_to_world(food.cell)
+            color = _FOOD_COLORS.get(food.food_type, Color(255, 255, 255))
+            radius = CELL_SIZE * (0.3 if food.food_type == "larva" else 0.38)
+            world_renderer.draw_circle(center, radius, color)
 
-            # Goals have a special marker
-            if block and block.block_type == BlockType.GOAL:
-                # Draw goal marker (X pattern or different color)
-                world_renderer.draw_rect(rect, sprite.color)
-                # Draw inner marker
-                inner_size = size // 3
-                inner_rect = Rect(
-                    transform.position.x - inner_size // 2,
-                    transform.position.y - inner_size // 2,
-                    inner_size,
-                    inner_size,
+            if food.food_type == "star":
+                arm = CELL_SIZE * 0.5
+                world_renderer.draw_line(
+                    center - Vector2(arm, 0), center + Vector2(arm, 0), color, width=2
                 )
-                world_renderer.draw_rect(inner_rect, Color(150, 220, 150))
+                world_renderer.draw_line(
+                    center - Vector2(0, arm), center + Vector2(0, arm), color, width=2
+                )
+
+    def _render_snake(self, world_renderer: IRenderer) -> None:
+        if not self._snake:
+            return
+
+        trail = self._snake.get_component(Trail)
+        health = self._snake.get_component(Health)
+        flashing = health.is_invincible and int(health.invincible_timer * 8) % 2 == 0
+
+        for index, cell in enumerate(trail.positions):
+            center = grid_to_world(cell)
+            if index == 0:
+                color = Color(255, 255, 255) if flashing else _HEAD_COLOR
+                radius = CELL_SIZE * 0.42
             else:
-                world_renderer.draw_rect(rect, sprite.color)
+                color = _BAND_COLORS[(index // 2) % len(_BAND_COLORS)]
+                if flashing:
+                    color = Color(255, 255, 255)
+                radius = CELL_SIZE * 0.38
+            world_renderer.draw_circle(center, radius, color)
 
-        # Render blocks (walls, crates, player)
-        for entity in self.entity_manager.get_entities_with(Transform, GridSprite):
-            sprite = entity.get_component(GridSprite)
-            if sprite.is_floor:
-                continue
+        if len(trail.positions) > 0:
+            head_center = grid_to_world(trail.head)
+            dx, dy = self._snake.get_component(MoveState).direction
+            eye_offset = Vector2(dy, -dx) * (CELL_SIZE * 0.18)
+            forward = Vector2(dx, dy) * (CELL_SIZE * 0.15)
+            for sign in (1, -1):
+                eye_pos = head_center + forward + eye_offset * sign
+                world_renderer.draw_circle(eye_pos, CELL_SIZE * 0.06, Color(10, 10, 10))
 
-            transform = entity.get_component(Transform)
-            block = entity.get_component(Block)
+    def _render_rain(self, world_renderer: IRenderer) -> None:
+        color = Color(150, 220, 255, 180)
+        for x, y in self._rain_drops:
+            world_renderer.draw_line(Vector2(x, y), Vector2(x, y + 10), color, width=2)
 
-            size = CELL_SIZE - 4
-            if block and block.block_type == BlockType.PLAYER:
-                size = CELL_SIZE - 8  # Slightly smaller player
+    def _render_hud(self, world_renderer: IRenderer) -> None:
+        if not self._snake:
+            return
 
-            rect = Rect(
-                transform.position.x - size // 2,
-                transform.position.y - size // 2,
-                size,
-                size,
-            )
-            world_renderer.draw_rect(rect, sprite.color)
+        score = self._snake.get_component(Score)
+        health = self._snake.get_component(Health)
 
-            # Draw highlights/shadows for depth
-            if block and block.block_type in (BlockType.CRATE, BlockType.PLAYER):
-                # Top highlight
-                highlight_rect = Rect(
-                    transform.position.x - size // 2 + 2,
-                    transform.position.y - size // 2 + 2,
-                    size - 4,
-                    4,
-                )
-                highlight_color = Color(
-                    min(255, sprite.color.r + 40),
-                    min(255, sprite.color.g + 40),
-                    min(255, sprite.color.b + 40),
-                )
-                world_renderer.draw_rect(highlight_rect, highlight_color)
+        world_renderer.draw_text(
+            f"Score: {score.value}", Vector2(20, 20), Color(255, 255, 255)
+        )
+        world_renderer.draw_text(
+            f"Lives: {int(health.current)}", Vector2(20, 44), Color(255, 120, 110)
+        )
+        if health.is_invincible:
+            world_renderer.draw_text("IMMORTAL", Vector2(700, 20), Color(255, 230, 90))
 
-        # Render move counter
-        level_state = None
-        for entity in self.entity_manager.get_entities_with(LevelState):
-            level_state = entity.get_component(LevelState)
-            break
 
-        if level_state:
-            # This would ideally use proper text rendering
-            # For now we use the UI system
-            pass
+class GameOverScene(Scene):
+    """Game over screen."""
+
+    def __init__(self, event_dispatcher: EventDispatcher, final_score: int = 0):
+        """Initialize the game over scene."""
+        super().__init__("GameOverScene", event_dispatcher)
+        self._final_score = final_score
+
+    def on_enter(self) -> None:
+        """Create game over UI."""
+        print(f"Game Over! Score: {self._final_score}")
+        ui_manager = self.container.get(UIManager)
+        ui_manager._root_elements.clear()
+
+        title = Label("GAME OVER", position=Vector2(320, 150))
+        ui_manager.add_element(title)
+
+        score_label = Label(f"Score: {self._final_score}", position=Vector2(330, 220))
+        ui_manager.add_element(score_label)
+
+        container = BoxContainer(
+            position=Vector2(300, 300), size=Vector2(200, 150), spacing=15
+        )
+
+        btn_retry = Button("RETRY", position=Vector2(0, 0), size=Vector2(200, 50))
+        btn_retry.on_click = self._on_retry_click
+        container.add_child(btn_retry)
+
+        btn_menu = Button("MENU", position=Vector2(0, 0), size=Vector2(200, 50))
+        btn_menu.on_click = self._on_menu_click
+        container.add_child(btn_menu)
+
+        ui_manager.add_element(container)
+
+    def _on_retry_click(self, el) -> None:
+        """Retry the game."""
+        scene_manager = self.container.get(SceneManager)
+        game_scene = GameScene(self.event_dispatcher)
+        scene_manager.register(game_scene)
+        scene_manager.switch_to("GameScene")
+
+    def _on_menu_click(self, el) -> None:
+        """Return to menu."""
+        scene_manager = self.container.get(SceneManager)
+        scene_manager.pop_scene()
+
+    def on_exit(self) -> None:
+        """Cleanup."""
+        pass
+
+    def update(self, dt: float) -> None:
+        """Update logic."""
+        pass
+
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
+        """Render the scene."""
+        world_renderer.clear(Color(20, 25, 35))

@@ -44,6 +44,6 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ## Future Capstone Projects
 
-* **True Coral** (Puzzle)
+* **True Coral** (Snake)
 * **Guará & Falcão** (Platformer)
 * **Protocolo Bandeira** (Shooter)

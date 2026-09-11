@@ -1,396 +1,245 @@
 """True Coral - Game Systems.
 
-Logic processors for the puzzle game.
+Logic processors for the snake game.
 """
 
-from games.true_coral.components import (
-    Block,
-    BlockType,
-    GridPosition,
-    LevelState,
-    MoveHistory,
-    Moving,
-    Pushable,
-)
+from games.true_coral.components import Food, MoveState, Score
 from games.true_coral.events import (
-    BlockMoveEvent,
-    LevelCompleteEvent,
-    PlayerMoveEvent,
-    UndoEvent,
+    FoodEatenEvent,
+    GameOverEvent,
+    SnakeDiedEvent,
+    StarEffectEnded,
+    StarEffectStarted,
 )
-from pyguara.animation.easing import EasingType
-from pyguara.animation.tween import Tween, TweenManager
-from pyguara.common.components import Transform
-from pyguara.common.types import Vector2
+from games.true_coral.food_director import FoodDirector
+from pyguara.common.grid import Cell
+from pyguara.common.modifiers import Modifier, ModifierType
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.kits.action_combat import Health, apply_damage
+from pyguara.kits.effects import Effect, EffectContainer, StackingRule, add_effect
+from pyguara.kits.stats import DamageType, StatBlock, get_stat
+from pyguara.kits.trail import Trail, advance, grow, overlaps_self, reset
 
-# Grid constants
-CELL_SIZE = 50
-GRID_OFFSET_X = 150
-GRID_OFFSET_Y = 100
+MOVE_RATE_STAT = "move_rate"
+BASE_MOVE_RATE = 4.0  # Moves per second
 
-
-def grid_to_world(gx: int, gy: int) -> Vector2:
-    """Convert grid coordinates to world coordinates."""
-    return Vector2(
-        GRID_OFFSET_X + gx * CELL_SIZE + CELL_SIZE // 2,
-        GRID_OFFSET_Y + gy * CELL_SIZE + CELL_SIZE // 2,
-    )
-
-
-def world_to_grid(wx: float, wy: float) -> tuple[int, int]:
-    """Convert world coordinates to grid coordinates."""
-    gx = int((wx - GRID_OFFSET_X) // CELL_SIZE)
-    gy = int((wy - GRID_OFFSET_Y) // CELL_SIZE)
-    return (gx, gy)
+# (growth segments, points) per food type.
+_FOOD_VALUE = {
+    "larva": (1, 10),
+    "beetle": (2, 30),
+    "star": (1, 50),
+}
 
 
-class GridSystem:
-    """Manages grid state and validates moves."""
+class StarEffect(Effect):
+    """The star's temporary speed boost + immortality (`makes it rain`).
+
+    Doubles `move_rate` and grants invincibility for its duration; the
+    scene reacts to `StarEffectStarted`/`StarEffectEnded` to start and
+    stop the rain overlay -- this effect knows nothing about rendering,
+    only the core event dispatch it's already coupled through.
+    """
+
+    MOVE_RATE_BOOST_PERCENT = 1.0  # +100% = double speed
+    DURATION = 6.0
+
+    def __init__(self, stat_block: StatBlock, health: Health) -> None:
+        """Bind this effect to the stats/health it will modify.
+
+        Args:
+            stat_block: Must already have a `MOVE_RATE_STAT` entry.
+            health: Whose `invincible_timer` this extends.
+        """
+        super().__init__(key="star", duration=self.DURATION)
+        self._stat_block = stat_block
+        self._health = health
+
+    def on_apply(self, entity_id: str, dispatcher: EventDispatcher) -> None:
+        """Boost move_rate, grant invincibility, and announce the rain cue."""
+        self._stat_block.stats[MOVE_RATE_STAT].add_modifier(
+            Modifier(self.MOVE_RATE_BOOST_PERCENT, ModifierType.PERCENT_ADD, self.key)
+        )
+        self._health.invincible_timer = max(
+            self._health.invincible_timer, self.DURATION
+        )
+        dispatcher.dispatch(StarEffectStarted(entity_id=entity_id))
+
+    def on_remove(self, entity_id: str, dispatcher: EventDispatcher) -> None:
+        """Remove the speed boost and announce the rain should stop."""
+        self._stat_block.stats[MOVE_RATE_STAT].remove_source(self.key)
+        dispatcher.dispatch(StarEffectEnded(entity_id=entity_id))
+
+
+class SnakeMovementSystem:
+    """Ticks the snake forward on its own clock, independent of frame rate.
+
+    One grid step per `1 / move_rate` seconds (`move_rate` read fresh from
+    `StatBlock` every tick, so `StarEffect`'s boost takes effect
+    immediately). A big `dt` catches up multiple steps in one call, same
+    reasoning as `Animator.update()`'s multi-frame catch-up.
+    """
+
+    RESPAWN_LENGTH = 3
+    RESPAWN_INVINCIBILITY = 1.5
 
     def __init__(
-        self, entity_manager: EntityManager, event_dispatcher: EventDispatcher
-    ):
-        """Initialize the grid system."""
+        self,
+        entity_manager: EntityManager,
+        event_dispatcher: EventDispatcher,
+        food_director: FoodDirector,
+        grid_width: int,
+        grid_height: int,
+    ) -> None:
+        """Store collaborators; `set_snake()` is still required before `update()`."""
         self._em = entity_manager
         self._dispatcher = event_dispatcher
+        self._food_director = food_director
+        self._grid_width = grid_width
+        self._grid_height = grid_height
+        self._snake: Entity | None = None
 
-        # Grid state: maps (x, y) -> set of entity IDs at that position
-        self._grid: dict[tuple[int, int], set[str]] = {}
+    def set_snake(self, snake: Entity) -> None:
+        """Set the snake entity this system drives."""
+        self._snake = snake
 
-        # Cache entity references
-        self._player: Entity | None = None
-        self._move_history: MoveHistory | None = None
-        self._level_state: LevelState | None = None
-
-        # Register event handlers
-        self._dispatcher.subscribe(PlayerMoveEvent, self._on_player_move)
-        self._dispatcher.subscribe(UndoEvent, self._on_undo)
-
-    def rebuild_grid(self) -> None:
-        """Rebuild the grid index from entities."""
-        self._grid.clear()
-        self._player = None
-
-        for entity in self._em.get_entities_with(GridPosition):
-            grid_pos = entity.get_component(GridPosition)
-            pos_key = grid_pos.to_tuple()
-
-            if pos_key not in self._grid:
-                self._grid[pos_key] = set()
-            self._grid[pos_key].add(entity.id)
-
-            # Cache player reference
-            block = entity.get_component(Block)
-            if block and block.block_type == BlockType.PLAYER:
-                self._player = entity
-                self._move_history = entity.get_component(MoveHistory)
-
-        # Find level state entity
-        for entity in self._em.get_entities_with(LevelState):
-            self._level_state = entity.get_component(LevelState)
-            break
-
-    def get_entities_at(self, x: int, y: int) -> set[str]:
-        """Get all entity IDs at a grid position."""
-        return self._grid.get((x, y), set())
-
-    def is_walkable(self, x: int, y: int) -> bool:
-        """Check if a position is walkable (no walls)."""
-        entities = self.get_entities_at(x, y)
-        for eid in entities:
-            entity = self._em.get_entity(eid)
-            if entity:
-                block = entity.get_component(Block)
-                if block and block.block_type == BlockType.WALL:
-                    return False
-        return True
-
-    def get_pushable_at(self, x: int, y: int) -> Entity | None:
-        """Get a pushable entity at position, if any."""
-        entities = self.get_entities_at(x, y)
-        for eid in entities:
-            entity = self._em.get_entity(eid)
-            if entity and entity.has_component(Pushable):
-                return entity
-        return None
-
-    def move_entity(self, entity: Entity, new_x: int, new_y: int) -> None:
-        """Update an entity's grid position."""
-        grid_pos = entity.get_component(GridPosition)
-        if not grid_pos:
+    def queue_direction(self, direction: Cell) -> None:
+        """Buffer the next heading, applied (if not a reversal) on the next tick."""
+        if not self._snake:
             return
-
-        old_key = grid_pos.to_tuple()
-        new_key = (new_x, new_y)
-
-        # Update grid index
-        if old_key in self._grid and entity.id in self._grid[old_key]:
-            self._grid[old_key].remove(entity.id)
-
-        if new_key not in self._grid:
-            self._grid[new_key] = set()
-        self._grid[new_key].add(entity.id)
-
-        # Update component
-        grid_pos.x = new_x
-        grid_pos.y = new_y
-
-    def _on_player_move(self, event: PlayerMoveEvent) -> None:
-        """Handle player move request."""
-        if not self._player or self._is_animating():
-            return
-
-        player_grid = self._player.get_component(GridPosition)
-        if not player_grid:
-            return
-
-        dx, dy = event.direction
-        new_x = player_grid.x + dx
-        new_y = player_grid.y + dy
-
-        # Check if destination has a wall
-        if not self.is_walkable(new_x, new_y):
-            return
-
-        # Check for pushable
-        pushable = self.get_pushable_at(new_x, new_y)
-        crate_from = (-1, -1)
-
-        if pushable:
-            # Try to push the crate
-            push_x = new_x + dx
-            push_y = new_y + dy
-
-            # Can we push?
-            if not self.is_walkable(push_x, push_y):
-                return
-            if self.get_pushable_at(push_x, push_y):
-                return  # Can't push crate into another crate
-
-            # Record crate position before move
-            crate_grid = pushable.get_component(GridPosition)
-            if crate_grid:
-                crate_from = (crate_grid.x, crate_grid.y)
-
-            # Move crate
-            self.move_entity(pushable, push_x, push_y)
-            self._dispatcher.dispatch(
-                BlockMoveEvent(
-                    entity_id=pushable.id,
-                    from_pos=(new_x, new_y),
-                    to_pos=(push_x, push_y),
-                )
-            )
-
-        # Record move for undo
-        player_from = (player_grid.x, player_grid.y)
-        if self._move_history:
-            self._move_history.push(player_from, crate_from)
-
-        # Move player
-        self.move_entity(self._player, new_x, new_y)
-        self._dispatcher.dispatch(
-            BlockMoveEvent(
-                entity_id=self._player.id,
-                from_pos=player_from,
-                to_pos=(new_x, new_y),
-            )
-        )
-
-        # Update move count
-        if self._level_state:
-            self._level_state.total_moves += 1
-
-        # Check win condition
-        self._check_win_condition()
-
-    def _on_undo(self, event: UndoEvent) -> None:
-        """Handle undo request."""
-        if not self._player or not self._move_history or self._is_animating():
-            return
-
-        last_move = self._move_history.pop()
-        if not last_move:
-            return
-
-        player_from, crate_from = last_move
-        player_grid = self._player.get_component(GridPosition)
-        if not player_grid:
-            return
-
-        # Find crate that was pushed (if any)
-        if crate_from != (-1, -1):
-            # Player moved from player_from to current position
-            # Crate moved from crate_from to player's current position (before undo)
-            # So crate is now at player's current position
-            crate = self.get_pushable_at(player_grid.x, player_grid.y)
-            # Actually, crate would be at player_from + direction
-            # This is tricky - let's find the crate in direction from player
-            dx = player_grid.x - player_from[0]
-            dy = player_grid.y - player_from[1]
-            crate_current_x = player_grid.x + dx
-            crate_current_y = player_grid.y + dy
-            crate = self.get_pushable_at(crate_current_x, crate_current_y)
-
-            if crate:
-                self.move_entity(crate, crate_from[0], crate_from[1])
-                self._dispatcher.dispatch(
-                    BlockMoveEvent(
-                        entity_id=crate.id,
-                        from_pos=(crate_current_x, crate_current_y),
-                        to_pos=crate_from,
-                    )
-                )
-
-        # Move player back
-        current_pos = (player_grid.x, player_grid.y)
-        self.move_entity(self._player, player_from[0], player_from[1])
-        self._dispatcher.dispatch(
-            BlockMoveEvent(
-                entity_id=self._player.id,
-                from_pos=current_pos,
-                to_pos=player_from,
-            )
-        )
-
-        if self._level_state:
-            self._level_state.total_moves = max(0, self._level_state.total_moves - 1)
-
-    def _is_animating(self) -> bool:
-        """Check if any entity is currently animating."""
-        for _entity in self._em.get_entities_with(Moving):
-            return True
-        return False
-
-    def _check_win_condition(self) -> None:
-        """Check if all crates are on goals."""
-        goals = set()
-        crates = set()
-
-        for entity in self._em.get_entities_with(GridPosition, Block):
-            block = entity.get_component(Block)
-            grid_pos = entity.get_component(GridPosition)
-
-            if block.block_type == BlockType.GOAL:
-                goals.add(grid_pos.to_tuple())
-            elif block.block_type == BlockType.CRATE:
-                crates.add(grid_pos.to_tuple())
-
-        # Win if all goals have crates
-        if goals and crates and goals == crates:
-            if self._level_state and not self._level_state.is_complete:
-                self._level_state.is_complete = True
-                self._dispatcher.dispatch(
-                    LevelCompleteEvent(
-                        level_index=self._level_state.level_index,
-                        total_moves=self._level_state.total_moves,
-                    )
-                )
-
-
-class BlockMoveSystem:
-    """Animates block movements using tweens."""
-
-    MOVE_DURATION = 0.12  # Seconds per move animation
-
-    def __init__(
-        self, entity_manager: EntityManager, event_dispatcher: EventDispatcher
-    ):
-        """Initialize the block move system."""
-        self._em = entity_manager
-        self._dispatcher = event_dispatcher
-        self._tween_manager = TweenManager()
-
-        # Map entity ID to active tween
-        self._active_tweens: dict[str, Tween] = {}
-
-        # Register event handlers
-        self._dispatcher.subscribe(BlockMoveEvent, self._on_block_move)
+        self._snake.get_component(MoveState).pending_direction = direction
 
     def update(self, dt: float) -> None:
-        """Update all active tweens."""
-        self._tween_manager.update(dt)
+        """Advance the snake's own movement clock, taking 0+ grid steps."""
+        if not self._snake:
+            return
 
-        # Update entity transforms based on tween progress
-        entities_to_remove = []
+        move_state = self._snake.get_component(MoveState)
+        trail = self._snake.get_component(Trail)
+        stats = self._snake.get_component(StatBlock)
+        health = self._snake.get_component(Health)
 
-        for entity_id, tween in self._active_tweens.items():
-            entity = self._em.get_entity(entity_id)
-            if not entity:
-                entities_to_remove.append(entity_id)
+        move_rate = get_stat(stats, MOVE_RATE_STAT, default=BASE_MOVE_RATE)
+        move_interval = 1.0 / move_rate if move_rate > 0 else float("inf")
+
+        move_state.move_timer += dt
+        while move_state.move_timer >= move_interval:
+            move_state.move_timer -= move_interval
+            self._step(move_state, trail, health)
+
+    def _step(self, move_state: MoveState, trail: Trail, health: Health) -> None:
+        if move_state.pending_direction is not None:
+            dx, dy = move_state.pending_direction
+            cx, cy = move_state.direction
+            if (dx, dy) != (-cx, -cy):  # reject a 180-degree reversal
+                move_state.direction = move_state.pending_direction
+            move_state.pending_direction = None
+
+        dx, dy = move_state.direction
+        hx, hy = trail.head
+        new_head = (hx + dx, hy + dy)
+
+        in_bounds = (
+            0 <= new_head[0] < self._grid_width and 0 <= new_head[1] < self._grid_height
+        )
+        if not in_bounds:
+            # The arena boundary always blocks movement, invincible or not
+            # -- there's nowhere beyond it to go. Not invincible: a real hit.
+            if not health.is_invincible:
+                self._handle_death(trail, health, "wall")
+            return
+
+        advance(trail, new_head)
+        if overlaps_self(trail) and not health.is_invincible:
+            self._handle_death(trail, health, "self")
+            return
+        # Invincible and overlapping self: the advance already happened --
+        # the snake passes through its own tail harmlessly, same spirit as
+        # a Mario star letting you run through enemies.
+
+        self._check_food(new_head)
+
+    def _check_food(self, cell: Cell) -> None:
+        for entity in self._em.get_entities_with(Food):
+            food = entity.get_component(Food)
+            if food.cell != cell:
                 continue
-
-            transform = entity.get_component(Transform)
-            moving = entity.get_component(Moving)
-
-            if transform and moving:
-                # Get interpolated position from tween
-                value = tween.current_value
-                if isinstance(value, tuple):
-                    transform.position = Vector2(value[0], value[1])
-
-            # Check if complete
-            if tween.is_complete:
-                entities_to_remove.append(entity_id)
-                # Snap to final position and remove Moving component
-                if moving:
-                    transform.position = moving.to_pos
-                    entity.remove_component(Moving)
-
-        for entity_id in entities_to_remove:
-            if entity_id in self._active_tweens:
-                del self._active_tweens[entity_id]
-
-    def _on_block_move(self, event: BlockMoveEvent) -> None:
-        """Handle block move event by creating animation."""
-        entity = self._em.get_entity(event.entity_id)
-        if not entity:
+            self._consume_food(entity, food)
             return
 
-        from_world = grid_to_world(event.from_pos[0], event.from_pos[1])
-        to_world = grid_to_world(event.to_pos[0], event.to_pos[1])
+    def _consume_food(self, entity: Entity, food: Food) -> None:
+        if not self._snake:
+            return
 
-        # Add Moving component
-        moving = Moving(from_pos=from_world, to_pos=to_world, progress=0.0)
-        if entity.has_component(Moving):
-            entity.remove_component(Moving)
-        entity.add_component(moving)
+        growth, points = _FOOD_VALUE[food.food_type]
+        trail = self._snake.get_component(Trail)
+        grow(trail, growth)
 
-        # Create tween
-        tween = Tween(
-            start_value=(from_world.x, from_world.y),
-            end_value=(to_world.x, to_world.y),
-            duration=self.MOVE_DURATION,
-            easing=EasingType.EASE_OUT_QUAD,
+        score = self._snake.get_component(Score)
+        if score:
+            score.value += points
+
+        self._food_director.on_food_eaten(food.cell)
+        self._em.remove_entity(entity.id)
+
+        self._dispatcher.dispatch(
+            FoodEatenEvent(food_type=food.food_type, cell=food.cell, points=points)
         )
-        tween.start()
 
-        self._tween_manager.add(tween)
-        self._active_tweens[event.entity_id] = tween
+        if food.food_type == "star":
+            self._apply_star()
 
+    def _apply_star(self) -> None:
+        if not self._snake:
+            return
 
-class InputSystem:
-    """Processes input and dispatches movement events."""
+        health = self._snake.get_component(Health)
+        stats = self._snake.get_component(StatBlock)
+        effects = self._snake.get_component(EffectContainer)
 
-    def __init__(self, event_dispatcher: EventDispatcher):
-        """Initialize the input system."""
-        self._dispatcher = event_dispatcher
-        self._move_cooldown = 0.0
+        health.current = min(health.max_health, health.current + 1)  # An extra life.
 
-    def update(self, dt: float) -> None:
-        """Update cooldown."""
-        if self._move_cooldown > 0:
-            self._move_cooldown -= dt
+        add_effect(
+            self._dispatcher,
+            self._snake.id,
+            effects,
+            StarEffect(stats, health),
+            stacking=StackingRule.REFRESH,
+        )
 
-    def handle_move(self, direction: tuple[int, int]) -> None:
-        """Request player movement in a direction."""
-        if self._move_cooldown <= 0:
-            self._dispatcher.dispatch(PlayerMoveEvent(direction=direction))
-            self._move_cooldown = 0.15  # Prevent rapid-fire moves
+    def _handle_death(self, trail: Trail, health: Health, cause: str) -> None:
+        if not self._snake:
+            return
 
-    def handle_undo(self) -> None:
-        """Request undo."""
-        self._dispatcher.dispatch(UndoEvent())
+        apply_damage(
+            self._dispatcher,
+            self._snake.id,
+            health,
+            1.0,
+            DamageType.TRUE,
+            invincibility_duration=self.RESPAWN_INVINCIBILITY,
+        )
+        self._dispatcher.dispatch(
+            SnakeDiedEvent(cause=cause, lives_remaining=int(health.current))
+        )
+
+        if health.is_alive:
+            self._respawn(trail)
+        else:
+            score = self._snake.get_component(Score)
+            self._dispatcher.dispatch(
+                GameOverEvent(final_score=score.value if score else 0)
+            )
+
+    def _respawn(self, trail: Trail) -> None:
+        if not self._snake:
+            return
+
+        cx, cy = self._grid_width // 2, self._grid_height // 2
+        reset(trail, [(cx - i, cy) for i in range(self.RESPAWN_LENGTH)])
+
+        move_state = self._snake.get_component(MoveState)
+        move_state.direction = (1, 0)
+        move_state.pending_direction = None
+        move_state.move_timer = 0.0
