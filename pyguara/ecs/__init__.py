@@ -7,6 +7,8 @@ Public surface:
 - `BaseComponent`: reference implementation; warns on logic methods.
 - `StrictComponent`: rejects logic methods at class-definition time.
 - `EntityManager`: registration, lifecycle and querying for one world.
+- `EntityPool`/`Poolable`: acquire/release pooling for entities that spawn
+  and despawn at high frequency, without per-spawn allocation or GC churn.
 """
 
 from pyguara.ecs.component import (
@@ -17,6 +19,7 @@ from pyguara.ecs.component import (
 )
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
+from pyguara.ecs.pool import EntityPool, Poolable
 
 __all__ = [
     "ALLOWED_METHODS",
@@ -24,5 +27,7 @@ __all__ = [
     "Component",
     "Entity",
     "EntityManager",
+    "EntityPool",
+    "Poolable",
     "StrictComponent",
 ]
