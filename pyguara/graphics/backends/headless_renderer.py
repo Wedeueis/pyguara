@@ -189,6 +189,12 @@ class HeadlessBackend:
         """
         ...
 
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        """No-op: discard the draw call."""
+        ...
+
     def present(self) -> None:
         """
         Swap the buffers and display the rendered frame to the user.

@@ -231,6 +231,63 @@ def test_draw_rect_grows_bucket_buffer_when_capacity_exceeded(
     assert rect_vao.render.call_args.kwargs["instances"] == original_capacity + 1
 
 
+# -- ModernGL world-space text (#71) --
+
+
+def test_draw_text_uploads_a_texture_and_draws_it(mock_ctx: MagicMock) -> None:
+    """draw_text() rasterizes via pygame.font, uploads the result as a GL
+    texture, and draws it through the same single-instance path
+    draw_texture() uses."""
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    renderer.draw_text("Hi", Vector2(10, 10), Color(255, 255, 255))
+
+    mock_ctx.texture.assert_called_once()
+    renderer._vao.render.assert_called()
+
+
+def test_draw_text_releases_the_ephemeral_texture_after_drawing(
+    mock_ctx: MagicMock,
+) -> None:
+    """The uploaded texture is a one-off for this call, not cached for
+    reuse -- it must be released immediately, unlike a loaded asset
+    texture, which stays alive across frames."""
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    # `mock_ctx.texture`'s side_effect (see the `mock_ctx` fixture) returns a
+    # fresh MagicMock per call, so `.return_value` is a distinct, unused mock
+    # -- capture the one draw_text() actually gets back instead.
+    created_gl_texture = MagicMock()
+    mock_ctx.texture.side_effect = lambda *a, **k: created_gl_texture
+
+    renderer.draw_text("Hi", Vector2(10, 10), Color(255, 255, 255))
+
+    created_gl_texture.release.assert_called_once()
+
+
+def test_draw_text_empty_string_is_a_noop(mock_ctx: MagicMock) -> None:
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    renderer.draw_text("", Vector2(10, 10), Color(255, 255, 255))
+
+    mock_ctx.texture.assert_not_called()
+
+
+def test_draw_text_reuses_a_cached_font_for_the_same_size(mock_ctx: MagicMock) -> None:
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    renderer.draw_text("a", Vector2(0, 0), Color(255, 255, 255), size=20)
+    first_font = renderer._font_cache[20]
+
+    renderer.draw_text("b", Vector2(0, 0), Color(255, 255, 255), size=20)
+
+    assert renderer._font_cache[20] is first_font
+
+
 def test_pygame_backend_draw_rect_untouched() -> None:
     """PygameBackend's own draw_rect/circle/line are a separate immediate-mode
     path and must not be affected by the ModernGL shape shader."""
