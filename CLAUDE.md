@@ -345,3 +345,30 @@ An earlier effort, tracked via the `/wayfinder` skill:
 
 48 of its 49 tickets are resolved. Do not start here unless a task explicitly
 refers to it; the subsystem audit above is where active work happens.
+
+## Agent skills
+
+Per-repo configuration for the engineering skills (`/triage`, `/to-tickets`,
+`/to-spec`, `/wayfinder`, `/improve-codebase-architecture` and friends). Edit
+the files under `docs/agents/` directly; they are the source of truth.
+
+### Issue tracker
+
+Issues and PRDs live as **GitHub issues** in `Wedeueis/pyguara`, driven through
+the `gh` CLI. See `docs/agents/issue-tracker.md` -- which also records that
+`.scratch/engine-remediation/` is the completed wayfinder effort's own home, and
+that new wayfinder runs use GitHub instead.
+
+### Triage labels
+
+The five canonical triage roles, each label string equal to its name:
+`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`.
+Only `wontfix` exists on the repo today; the other four are created on first
+use. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context -- one `CONTEXT.md` and `docs/adr/` at the repo root. Neither
+exists yet, and that is fine: `/domain-modeling` creates them lazily when terms
+or decisions actually get resolved, rather than upfront. See
+`docs/agents/domain.md`.
