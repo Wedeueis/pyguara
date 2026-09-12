@@ -85,8 +85,20 @@ def _rect_to_cells(rect: Rect, cell_size: float) -> list[Cell]:
     ]
 
 
-def build_stage(entity_manager: EntityManager, config: StageConfig) -> LevelHandles:
-    """Create every entity for `config` and return the handles to wire up."""
+def build_graph(config: StageConfig) -> tuple[GridGraph, list[Cell]]:
+    """Build `config`'s `GridGraph` (walls, water weights, the log's cells).
+
+    Split out of `build_stage()` so a level's connectivity -- can the pack
+    actually reach the jaguar and the corner zone, is the log's corridor
+    genuinely sealed until the plate opens it -- can be asserted directly in
+    tests, without spinning up an `EntityManager` and every entity.
+
+    Returns:
+        The graph, and the log's cells separately (also duplicated onto
+        `LogGate.cells` for the entity `build_stage()` creates, but a test
+        checking pre/post-open connectivity needs them before any entity
+        exists).
+    """
     graph = GridGraph(config.grid_width, config.grid_height, allow_diagonal=True)
 
     for rect in config.wall_rects:
@@ -95,10 +107,20 @@ def build_stage(entity_manager: EntityManager, config: StageConfig) -> LevelHand
         for cell in _rect_to_cells(rect, CELL_SIZE):
             graph.weights[cell] = WATER_WEIGHT
 
-    log_id: str | None = None
+    log_cells: list[Cell] = []
     if config.log_rect is not None:
         log_cells = _rect_to_cells(config.log_rect, CELL_SIZE)
         graph.walls.update(log_cells)
+
+    return graph, log_cells
+
+
+def build_stage(entity_manager: EntityManager, config: StageConfig) -> LevelHandles:
+    """Create every entity for `config` and return the handles to wire up."""
+    graph, log_cells = build_graph(config)
+
+    log_id: str | None = None
+    if config.log_rect is not None:
         log_id = _create_log(entity_manager, config.log_rect, log_cells)
 
     flow_field = FlowFieldService(graph)
@@ -231,6 +253,20 @@ def _create_log(entity_manager: EntityManager, rect: Rect, cells: list[Cell]) ->
 
 
 # ========== Stage configs ==========
+#
+# Every stage is a single east-west riverbed corridor, walled off top and
+# bottom -- not an open field. An early build left stages wall-less, and
+# headless playtesting caught the failure mode directly: with nowhere it
+# *couldn't* go, a fleeing jaguar would dodge north/south around flanking
+# dogs and wander back past its own spawn instead of ever reaching the
+# corner zone. Confining vertical movement to one corridor band means the
+# only way left to flee, once the pack blocks the west, is east -- straight
+# into the dead end the grid's own boundary already forms at the corridor's
+# far end. No separate "trap" geometry is needed; the corner zone is just
+# the corridor's last few columns.
+
+# Shared corridor band, in cells: rows 6-13 (8 cells tall) for the two
+# 30-wide stages, rows 6-9 (4 cells tall) for the narrower tutorial.
 
 STAGE_1 = StageConfig(
     name="Sandbar Drill",
@@ -238,9 +274,13 @@ STAGE_1 = StageConfig(
     grid_height=16,
     pack_size=4,
     dog_spawn=Vector2(120, 256),
-    jaguar_spawn=Vector2(600, 256),
-    corner_zone=Rect(680, 200, 80, 112),
+    jaguar_spawn=Vector2(450, 256),
+    corner_zone=Rect(672, 192, 96, 128),  # corridor's last 3 columns
     required_capture_dogs=2,
+    wall_rects=[
+        Rect(0, 0, 768, 192),  # north bank
+        Rect(0, 320, 768, 192),  # south bank
+    ],
 )
 
 STAGE_2 = StageConfig(
@@ -249,10 +289,17 @@ STAGE_2 = StageConfig(
     grid_height=20,
     pack_size=7,
     dog_spawn=Vector2(80, 320),
-    jaguar_spawn=Vector2(820, 320),
-    corner_zone=Rect(860, 260, 80, 120),
+    jaguar_spawn=Vector2(520, 320),  # between the two crossings
+    corner_zone=Rect(832, 192, 128, 256),  # corridor's last 4 columns
     required_capture_dogs=3,
-    water_zones=[Rect(360, 0, 96, 640), Rect(600, 0, 64, 640)],
+    wall_rects=[
+        Rect(0, 0, 960, 192),  # north bank
+        Rect(0, 448, 960, 192),  # south bank
+    ],
+    water_zones=[
+        Rect(320, 192, 96, 256),  # first braid, west of the jaguar's spawn
+        Rect(576, 192, 64, 256),  # second braid, between it and the pocket
+    ],
 )
 
 STAGE_3 = StageConfig(
@@ -261,13 +308,23 @@ STAGE_3 = StageConfig(
     grid_height=20,
     pack_size=12,
     dog_spawn=Vector2(80, 320),
-    jaguar_spawn=Vector2(500, 320),
-    corner_zone=Rect(880, 260, 64, 120),
+    jaguar_spawn=Vector2(500, 320),  # before the alcove and the log
+    corner_zone=Rect(832, 192, 128, 256),  # corridor's last 4 columns
     required_capture_dogs=5,
-    water_zones=[Rect(320, 0, 80, 640)],
-    log_rect=Rect(700, 288, 32, 64),
-    plate_rect=Rect(620, 480, 96, 96),
+    wall_rects=[
+        Rect(0, 0, 960, 192),  # north bank, unbroken
+        Rect(0, 448, 512, 192),  # south bank, west of the plate alcove
+        Rect(640, 448, 320, 192),  # south bank, east of the plate alcove
+    ],
+    water_zones=[Rect(320, 192, 96, 256)],
+    # The alcove is simply the gap the two south-bank segments leave open
+    # (x512-640) -- no separate room wall needed, it's bounded by them on
+    # both sides and by the grid's own edge below.
+    plate_rect=Rect(512, 480, 128, 128),
     plate_required=4,
+    # A full-height column sealing the corridor outright until the plate
+    # opens it -- not a bypassable obstacle at the corridor's edge.
+    log_rect=Rect(672, 192, 32, 256),
 )
 
 STAGES = [STAGE_1, STAGE_2, STAGE_3]

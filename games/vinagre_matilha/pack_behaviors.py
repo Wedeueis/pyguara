@@ -39,6 +39,15 @@ _REINFORCE_THREAT_DISTANCE = 250.0
 
 _NEIGHBOR_COUNT_KEY = "pack_neighbor_count"
 
+# Written each tick by FlankerAssignmentSystem when a stage has an unopened
+# PressurePlate: the world position to press it, and which dog ids are this
+# tick's designated plate-runners. Not part of `pyguara.kits.pack` -- the
+# plate/log mechanic itself is demo-specific (games/vinagre_matilha/
+# components.py), so its blackboard vocabulary lives here alongside it,
+# the same way PressurePlate/LogGate aren't in the generic pack kit either.
+PLATE_POSITION_KEY = "vinagre_plate_position"
+PLATE_ASSIGNEES_KEY = "vinagre_plate_assignees"
+
 
 def _agent(context: AIContext) -> FlockingAgent:
     return context.entity.get_component(FlockingAgent)
@@ -71,6 +80,19 @@ def is_flanking_target(context: AIContext) -> bool:
     return flanker_vector_for(context.blackboard, context.entity.id) is not None
 
 
+def is_needed_at_plate(context: AIContext) -> bool:
+    """Whether `FlankerAssignmentSystem` picked this dog to press the plate.
+
+    Checked ahead of the player's Scatter/Pincer/Distract command: solving
+    the plate puzzle is pack-autonomous (there's no fourth player command
+    for it), and takes priority over combat maneuvering until the required
+    count opens the gate -- after which `PressurePlateSystem` marks it
+    `opened` and no dog is assigned here again.
+    """
+    assignees = context.blackboard.get(PLATE_ASSIGNEES_KEY, frozenset())
+    return context.entity.id in assignees
+
+
 # ========== Actions ==========
 
 
@@ -92,6 +114,17 @@ def check_and_call_reinforcements(context: AIContext) -> NodeStatus:
     if neighbor_count < _ISOLATION_THRESHOLD and distance < _REINFORCE_THREAT_DISTANCE:
         request_reinforcements(context.blackboard)
     return NodeStatus.FAILURE
+
+
+def go_to_plate(context: AIContext) -> NodeStatus:
+    """Steer toward the pressure plate this dog was assigned to press."""
+    target = context.blackboard.get(PLATE_POSITION_KEY)
+    if target is None:
+        return NodeStatus.FAILURE
+    agent = _agent(context)
+    agent.seek_target = target
+    agent.seek_weight = 1.3
+    return NodeStatus.SUCCESS
 
 
 def circle_prey(context: AIContext) -> NodeStatus:
@@ -157,6 +190,13 @@ def build_pack_tree() -> BehaviorTree:
     return BehaviorTree(
         root=SelectorNode(
             [
+                SequenceNode(
+                    [
+                        ConditionNode(is_needed_at_plate, name="NeededAtPlate"),
+                        ActionNode(go_to_plate, name="GoToPlate"),
+                    ],
+                    name="PlateSequence",
+                ),
                 ActionNode(check_and_call_reinforcements, name="CheckReinforcements"),
                 SequenceNode(
                     [

@@ -21,6 +21,7 @@ from games.vinagre_matilha.components import (
 )
 from games.vinagre_matilha.events import GateOpenedEvent, JaguarCorneredEvent
 from games.vinagre_matilha.level_builder import CELL_SIZE
+from games.vinagre_matilha.pack_behaviors import PLATE_ASSIGNEES_KEY, PLATE_POSITION_KEY
 from pyguara.ai.blackboard import Blackboard
 from pyguara.ai.flocking_system import FlockingAgent
 from pyguara.ai.pathfinding.flow_field_service import FlowFieldService
@@ -105,6 +106,8 @@ class FlankerAssignmentSystem:
             )
         self._blackboard.set(_NEIGHBOR_COUNT_KEY, counts)
 
+        self._assign_plate_runners(flankers)
+
         # CallReinforcements' observable effect: an isolated, threatened dog
         # calls the pack to tighten formation for a moment (higher cohesion
         # and separation), rather than spawning anything new.
@@ -133,6 +136,39 @@ class FlankerAssignmentSystem:
                 math.cos(angle) * _ENCIRCLE_RADIUS, math.sin(angle) * _ENCIRCLE_RADIUS
             )
             assign_flanker_vector(self._blackboard, dog.id, point)
+
+    def _assign_plate_runners(self, flankers: list[Entity]) -> None:
+        """Route the nearest `required_count` flankers to any unopened
+        pressure plate, ahead of whatever command the player has issued.
+
+        Without this, nothing ever routes a dog to a plate at all: the
+        Pincer/Scatter/Distract leaves only ever steer relative to the
+        jaguar, so a stage with a plate puzzle would sit unsolved forever
+        no matter how long the pack chased the jaguar around it -- caught
+        by headless playtesting on Stage 3, not by a numbers-only pass.
+        """
+        for plate_entity in self._em.get_entities_with(TriggerVolume, PressurePlate):
+            plate = plate_entity.get_component(PressurePlate)
+            if plate.opened:
+                continue
+            plate_pos = plate_entity.get_component(Transform).position
+            self._blackboard.set(PLATE_POSITION_KEY, plate_pos)
+
+            nearest = sorted(
+                flankers,
+                key=lambda dog: (
+                    dog.get_component(Transform).position - plate_pos
+                ).length,
+            )[: plate.required_count]
+            self._blackboard.set(
+                PLATE_ASSIGNEES_KEY, frozenset(dog.id for dog in nearest)
+            )
+            return  # only one plate per stage in practice; first one wins
+
+        # No unopened plate this tick (none exists, or it's already open):
+        # nobody is assigned, so every flanker's PlateSequence leaf fails
+        # and falls through to the normal command behavior.
+        self._blackboard.set(PLATE_ASSIGNEES_KEY, frozenset())
 
 
 class VanguardControlSystem:
@@ -264,7 +300,15 @@ class JaguarAISystem:
 
 
 class CurrentZoneSystem:
-    """Damps the velocity of anything without `WebbedFeet` inside a `CurrentZone`."""
+    """Damps the velocity of anything without `WebbedFeet` inside a `CurrentZone`.
+
+    `CurrentZone.damping` is a per-*second* retention rate (see its
+    docstring for the bug this avoids); applying it directly as a per-tick
+    multiplier would crush velocity almost to zero within a couple of
+    frames regardless of the configured value, since it compounds every
+    physics tick. `damping ** dt` converts the per-second rate to whatever
+    this tick's fraction of a second actually is.
+    """
 
     def __init__(self, entity_manager: EntityManager) -> None:
         self._em = entity_manager
@@ -272,17 +316,17 @@ class CurrentZoneSystem:
     def update(self, dt: float) -> None:
         for zone in self._em.get_entities_with(TriggerVolume, CurrentZone):
             trigger = zone.get_component(TriggerVolume)
-            damping = zone.get_component(CurrentZone).damping
+            factor = zone.get_component(CurrentZone).damping ** dt
             for entity_id in trigger.entities_inside:
                 entity = self._em.get_entity(entity_id)
                 if entity is None or entity.has_component(WebbedFeet):
                     continue
                 if entity.has_component(JaguarState):
                     jaguar_state = entity.get_component(JaguarState)
-                    jaguar_state.velocity = jaguar_state.velocity * damping
+                    jaguar_state.velocity = jaguar_state.velocity * factor
                 elif entity.has_component(FlockingAgent):
                     flocking_agent = entity.get_component(FlockingAgent)
-                    flocking_agent.velocity = flocking_agent.velocity * damping
+                    flocking_agent.velocity = flocking_agent.velocity * factor
 
 
 class PressurePlateSystem:

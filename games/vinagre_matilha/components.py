@@ -76,9 +76,15 @@ class CurrentZone(StrictComponent):
     """Marks a `TriggerVolume` entity as a water-current zone.
 
     Attributes:
-        damping: Multiplies the velocity of any entity inside that lacks
-            `WebbedFeet`, once per tick -- 0.35 means "lose 65% of your
-            speed every tick you're still in the current."
+        damping: Fraction of speed an entity without `WebbedFeet` retains
+            after one full *second* in the current -- 0.35 means "35% of
+            your speed survives a second of swimming against it." Framed as
+            a per-second rate rather than a flat per-tick multiplier so the
+            effect reads the same regardless of frame rate: applying 0.35
+            directly once per ~1/60s physics tick (an earlier build's bug,
+            caught by playtesting) crushes velocity to near zero within a
+            couple of frames -- a wall, not a current -- because a per-tick
+            multiplier compounds 60 times a second.
     """
 
     damping: float = 0.35

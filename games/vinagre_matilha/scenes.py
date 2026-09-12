@@ -51,6 +51,7 @@ WINDOW_WIDTH = 960
 WINDOW_HEIGHT = 640
 
 _COLOR_BACKGROUND = Color(46, 58, 35)
+_COLOR_WALL = Color(30, 38, 22)
 _COLOR_WATER = Color(60, 110, 140, 160)
 _COLOR_LOG = Color(90, 60, 30)
 _COLOR_PLATE_CLOSED = Color(120, 100, 60)
@@ -294,6 +295,9 @@ class GameScene(Scene):
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Draw the stage as tinted primitives -- placeholder art, real subsystems."""
         world_renderer.clear(_COLOR_BACKGROUND)
+
+        for rect in self._stage.wall_rects:
+            world_renderer.draw_rect(rect, _COLOR_WALL)
 
         for rect in self._stage.water_zones:
             world_renderer.draw_rect(rect, _COLOR_WATER)
