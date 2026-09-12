@@ -24,7 +24,7 @@ from games.protocolo_bandeira.events import (
 from games.protocolo_bandeira.pooling import EnemyPool
 from pyguara.ai.behavior_tree import BehaviorTree
 from pyguara.common.components import Transform
-from pyguara.common.types import Vector2
+from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.ecs.pool import Poolable
@@ -39,9 +39,17 @@ class PlayerControlSystem:
 
     ARENA_PADDING = 30  # Keep player inside arena
 
-    def __init__(self, entity_manager: EntityManager):
-        """Initialize the system."""
+    def __init__(self, entity_manager: EntityManager, arena: Rect):
+        """Initialize the system.
+
+        Args:
+            entity_manager: The scene's world.
+            arena: The play area the player is confined to. Passed in
+                rather than assumed, so the window can be resized without
+                the player walking through the HUD.
+        """
         self._em = entity_manager
+        self._arena = arena
         self._player: Entity | None = None
 
     def set_player(self, player: Entity) -> None:
@@ -76,9 +84,10 @@ class PlayerControlSystem:
         new_pos = transform.position + movement.velocity * dt
 
         # Clamp to arena bounds
+        pad = self.ARENA_PADDING
         new_pos = Vector2(
-            max(self.ARENA_PADDING, min(800 - self.ARENA_PADDING, new_pos.x)),
-            max(self.ARENA_PADDING, min(600 - self.ARENA_PADDING, new_pos.y)),
+            max(self._arena.left + pad, min(self._arena.right - pad, new_pos.x)),
+            max(self._arena.top + pad, min(self._arena.bottom - pad, new_pos.y)),
         )
         transform.position = new_pos
 
@@ -107,15 +116,23 @@ class EnemyAISystem:
     SHOOTER_BULLET_LIFE = 3.0
     SHOOTER_BULLET_HIT_RADIUS = 15.0
 
+    # How far outside the arena an enemy may stand. Enemies spawn off the
+    # field and walk in, so clamping them to the arena itself would snap
+    # each one to the edge the instant it appeared -- and the spawn
+    # telegraph would be pointing at a creature that was already inside.
+    ROAM_MARGIN = 130
+
     def __init__(
         self,
         entity_manager: EntityManager,
         event_dispatcher: EventDispatcher,
         enemy_pool: EnemyPool,
         projectile_system: ProjectileSystem,
+        arena: Rect,
     ):
         """Initialize the system."""
         self._em = entity_manager
+        self._arena = arena
         self._dispatcher = event_dispatcher
         self._enemy_pool = enemy_pool
         self._projectile_system = projectile_system
@@ -174,10 +191,17 @@ class EnemyAISystem:
                     movement.velocity = context.move_direction * ai.move_speed
                     transform.position = transform.position + movement.velocity * dt
 
-                    # Keep in arena
+                    # Keep within reach of the arena
+                    margin = self.ROAM_MARGIN
                     transform.position = Vector2(
-                        max(20, min(780, transform.position.x)),
-                        max(20, min(580, transform.position.y)),
+                        max(
+                            self._arena.left - margin,
+                            min(self._arena.right + margin, transform.position.x),
+                        ),
+                        max(
+                            self._arena.top - margin,
+                            min(self._arena.bottom + margin, transform.position.y),
+                        ),
                     )
 
             # Handle attack
