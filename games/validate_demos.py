@@ -26,8 +26,6 @@ from games.guara_falcao.bootstrap import configure_game_container as gf_bootstra
 from games.guara_falcao.scenes import GameScene as GFGameScene
 from games.protocolo_bandeira.bootstrap import configure_game_container as pb_bootstrap
 from games.protocolo_bandeira.scenes import ArenaScene as PBArenaScene
-from games.true_coral.bootstrap import configure_game_container as tc_bootstrap
-from games.true_coral.scenes import GameScene as TCGameScene
 from games.vinagre_matilha.bootstrap import configure_game_container as vm_bootstrap
 from games.vinagre_matilha.level_builder import STAGE_1
 from games.vinagre_matilha.scenes import GameScene as VMGameScene
@@ -109,12 +107,13 @@ def main() -> None:
         scene_class=PBArenaScene,
     )
 
-    # 3. Puzzle Game (True Coral)
-    results["True Coral (Puzzle)"] = validate_game(
-        name="True Coral", configure_container_fn=tc_bootstrap, scene_class=TCGameScene
-    )
+    # True Coral is not booted here. Like mourisco_ressonancia it runs on
+    # the ModernGL backend, and SDL's `dummy` video driver -- set at the
+    # top of this file -- provides no OpenGL at all, so the demo cannot
+    # create its context. Smoke it with:
+    #     uv run python tools/agent_view.py true_coral --gl --frames 30
 
-    # 4. Asset Pipeline Module (Flyweight Loader / .meta files)
+    # 3. Asset Pipeline Module (Flyweight Loader / .meta files)
     results["Asset Pipeline (Module 3)"] = validate_game(
         name="Asset Pipeline",
         configure_container_fn=ap_bootstrap,
