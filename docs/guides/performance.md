@@ -74,23 +74,28 @@ on how many candidates it returns, not on how much is stored.
 
 ### `EntityPool` — draining a full pool, milliseconds
 
-| Pool size | Release newest-first | Release oldest-first |
-| ---: | ---: | ---: |
-| 500 | 2.26 | 0.10 |
-| 1000 | 8.67 | 0.23 |
-| 2000 | 33.62 | 0.53 |
-| 3000 | 74.18 | 1.05 |
+| Pool size | Newest-first | Oldest-first | Newest-first, before the fix |
+| ---: | ---: | ---: | ---: |
+| 500 | 0.10 | 0.10 | 2.26 |
+| 1000 | 0.19 | 0.19 | 8.67 |
+| 2000 | 0.39 | 0.40 | 33.62 |
+| 3000 | 0.59 | 0.61 | 74.18 |
 
-**This is a defect, and the fast column is an accident.** `release()` does an
-`in` scan followed by a `list.remove()`, both linear from index 0. Releasing
-oldest-first finds its match immediately and the removal is a C-level memmove;
-releasing newest-first scans the whole list with Python-level equality every
-time. Anything other than strictly-oldest-first order is quadratic.
+Linear, and **independent of release order** — the two columns agree to within
+noise at every size.
 
-Draining 3000 pooled entities therefore costs four and a half frames. The pool
-exists specifically to support high-frequency spawn and despawn, so this
-contradicts its own contract. `tests/performance/test_perf_ecs.py` carries an
-expected-failure guard that will flip to passing when it is fixed.
+They did not always. When the active set was a list, `release()` did an `in`
+scan followed by a `list.remove()`, both linear from index 0, so cost depended
+entirely on the order entities came back. Oldest-first found its match at index
+0 and removed it with a C-level memmove — fast, and an accident. Newest-first
+scanned the whole list every time, which made draining a pool quadratic in its
+size: 74 ms at 3000, four and a half frames, from a structure whose entire
+purpose is high-frequency spawn and despawn.
+
+The active set is now a dict keyed on entity id. At 3000 entities that is **55×
+faster** in the worst order, and faster than the old *best* order too, since a
+dict insert beats a list memmove. `test_pool_churn_is_linear` measures
+newest-first specifically, because it was the order that fell over.
 
 ---
 

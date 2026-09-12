@@ -107,3 +107,78 @@ def test_a_factory_that_forgets_poolable_raises() -> None:
 
     with pytest.raises(KeyError):
         EntityPool(EntityManager(), "test", size=1, factory=bad_factory)
+
+
+def test_get_active_is_in_acquisition_order() -> None:
+    """The documented order, which `games/` iterates every frame.
+
+    Pinned because the active set is a dict keyed on entity id: dicts
+    preserve insertion order, but nothing about "keyed on id" makes that
+    obvious to a reader, and a switch to any unordered structure would
+    break callers silently rather than loudly.
+    """
+    pool = EntityPool(EntityManager(), "test", size=4, factory=_factory)
+
+    acquired = [pool.acquire() for _ in range(4)]
+
+    assert pool.get_active() == acquired
+
+
+def test_get_active_keeps_its_order_after_a_release_in_the_middle() -> None:
+    pool = EntityPool(EntityManager(), "test", size=4, factory=_factory)
+    acquired = [pool.acquire() for _ in range(4)]
+    middle = acquired[1]
+    assert middle is not None
+
+    pool.release(middle)
+
+    assert pool.get_active() == [acquired[0], acquired[2], acquired[3]]
+
+
+def test_entities_can_be_released_in_any_order() -> None:
+    """Release cost and correctness are both order-independent.
+
+    Before the active set became a dict, `release()` did two linear scans
+    from index 0, so releasing newest-first cost 70x what oldest-first did
+    at a pool of 3000. Correctness never depended on order; performance
+    entirely did. This pins the correctness half -- the cost half is
+    `tests/performance/test_perf_ecs.py`.
+    """
+    pool = EntityPool(EntityManager(), "test", size=5, factory=_factory)
+    acquired = [pool.acquire() for _ in range(5)]
+
+    for entity in (acquired[3], acquired[0], acquired[4], acquired[1], acquired[2]):
+        assert entity is not None
+        pool.release(entity)
+
+    assert pool.active_count == 0
+    assert pool.available_count == 5
+    assert pool.get_active() == []
+
+
+def test_releasing_another_pools_entity_is_a_noop_even_when_ids_collide() -> None:
+    """Two pools sharing a manager can hold entities with the same id.
+
+    `EntityManager.create_entity` does not reject a duplicate id, and a
+    factory that names entities positionally -- `pooled_0`, `pooled_1`,
+    as this file's own `_factory` does -- gives every pool over the same
+    manager an identically-named set. So an id alone cannot identify which
+    pool an entity belongs to, which is why `release()` compares the
+    stored object rather than trusting the key.
+    """
+    manager = EntityManager()
+    pool_a = EntityPool(manager, "a", size=1, factory=_factory)
+    pool_b = EntityPool(manager, "b", size=1, factory=_factory)
+
+    mine = pool_a.acquire()
+    theirs = pool_b.acquire()
+    assert mine is not None and theirs is not None
+    assert mine.id == theirs.id, "the collision this test exists for"
+
+    pool_a.release(theirs)
+
+    # B's entity stayed put, and A did not take it.
+    assert pool_b.active_count == 1
+    assert pool_a.active_count == 1
+    assert pool_a.available_count == 0
+    assert theirs.get_component(Poolable).is_active is True
