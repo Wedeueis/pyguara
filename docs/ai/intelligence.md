@@ -82,3 +82,21 @@ For simpler logic, use the FSM system.
 ## 📝 Blackboard
 
 The **Blackboard** pattern allows different AI systems (or nodes in a BT) to share data (e.g., "TargetPosition", "AlertLevel") without tight coupling.
+
+## Measured ceiling
+
+`FlockingSystem` has been benchmarked — see
+[Measured Limits](../guides/performance.md) for the full table.
+
+**Roughly 300 boids fit in a 60 Hz frame**, and fewer when they bunch up. Two
+things follow from the measurements:
+
+- **Density is an independent variable.** A flocking tick is O(n·k) — n agents
+  each visiting k neighbours — so a flock converging on one point costs far
+  more than the same flock spread out: 3,000 agents cost 178 ms scattered and
+  664 ms clumped. A horde running at a player is the clumped case.
+- **The spatial hash is not the bottleneck.** Rebuilding it for 3,000 agents
+  takes 3.2 ms of a 178 ms tick, under 2%, which supports the full per-tick
+  rebuild `FlockingSystem` deliberately does. The cost is per-neighbour entity
+  and component re-lookup, iterating the neighbour list once per steering
+  behaviour, and `Vector2` allocation.

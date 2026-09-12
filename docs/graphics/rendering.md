@@ -188,3 +188,21 @@ The UI system (`pyguara.ui`) is immediate-mode friendly but retains state via an
 
 ## Integration
 The UI is rendered via the `UIRenderer` protocol, allowing it to sit on top of the main game render pass.
+
+## Measured ceiling
+
+The render path has been benchmarked; the figures live in
+[Measured Limits](../guides/performance.md). Two results are worth knowing
+before optimising anything here:
+
+- **At scale the bottleneck is the CPU, not the GPU.** A 20,000-sprite batch
+  costs about 13 ms end to end on the ModernGL backend, and essentially all of
+  it is the Python loop that packs the instance array. The draw call is
+  negligible at every size tested.
+- **`Batcher.create_batches` costs more than the draw does** — roughly 53 ms
+  for the same 20,000 sprites, about four times the GL path. Texture switching
+  adds about 50% on top.
+
+`RenderQueue.sort` is linear and cheap (2.9 ms at 8,000 commands), so its
+per-command lambda is not worth chasing. There is no visibility culling; the
+page records what that costs so the trade can be argued from a number.
