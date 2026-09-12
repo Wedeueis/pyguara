@@ -36,41 +36,61 @@ measures the neighbours instead of the code.
 
 ### `FlockingSystem.update` — milliseconds per tick
 
-| Agents | Uniform density | Clumped |
-| ---: | ---: | ---: |
-| 250 | 12.3 | — |
-| 500 | 26.0 | 29.9 |
-| 1000 | 53.7 | 92.4 |
-| 2000 | 112.3 | 323.6 |
-| 3000 | 177.6 | 664.1 |
+Steering can be spread across ticks with `FlockingSystem(..., groups=N)`: one
+group re-decides its heading each tick while **every** agent still integrates
+its position, so motion stays smooth and only the decision rate drops to 60/N Hz.
 
-**Defensible scale: roughly 300 boids at 60 Hz**, and fewer if they bunch up.
+| Agents | g=1 | g=2 | g=3 | g=4 | g=1, before |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1000 | 16.0 | 9.6 | 7.4 | 6.2 | 53.7 |
+| 1500 | 24.9 | 14.8 | 11.4 | 9.7 | — |
+| 2000 | 34.3 | 20.5 | 15.6 | 13.2 | 112.3 |
+| 2500 | 44.7 | 26.2 | 19.8 | 17.7 | — |
+| 3000 | 53.5 | 32.0 | 24.9 | 21.1 | 177.6 |
 
-Two things matter more than the headline number. First, a flocking tick is
-O(n·k) — n agents each visiting k neighbours — so **density is an independent
-variable**. The "uniform" column holds agents-per-cell constant as n grows,
-which isolates the n term; the "clumped" column packs everything into a fixed
-area, so k grows with n too. Clumping is not a pathological case, it is a horde
-converging on a player.
+**Defensible scale: roughly 1000 fully-simulated boids at 60 Hz, or 2000 with
+steering at 20 Hz** (`groups=3`). Before the optimisation pass it was about 300.
 
-Second, the cost is *not* the spatial hash. Rebuilding the hash for 3000 agents
-takes 3.2 ms of a 177.6 ms tick — under 2%. The full rebuild that
-`FlockingSystem` does every tick is defended in its docstring on correctness
-grounds, and the measurement supports keeping it. The time goes on
-per-neighbour entity and component re-lookup, on iterating the neighbour list
-once per steering behaviour, and on `Vector2` allocation.
+**3000 fully-simulated boids at 60 Hz is not reachable**, and staggering does
+not get there — at `groups=4` it is still 21 ms. Staggering does not scale as
+1/N either, because a share of every tick cannot be staggered: the spatial hash
+is rebuilt, components are resolved, and every agent integrates, whatever group
+it is in. That floor is what stops `groups=8` being interesting.
+
+Clumped density costs more, and is not a pathological case — it is a horde
+converging on a player. At 3000 agents: 161.9 ms clumped against 53.5 uniform,
+down from 664.1 and 177.6 respectively.
+
+Two things matter more than the headline number.
+
+First, a flocking tick is O(n·k) — n agents each visiting k neighbours — so
+**density is an independent variable**. The uniform figures hold agents-per-cell
+constant as n grows, isolating the n term; the clumped ones pack everything into
+a fixed area, so k grows with n too.
+
+Second, the cost was never the spatial hash. Rebuilding it for 3000 agents takes
+3.1 ms, and the full per-tick rebuild `FlockingSystem` does is defended in its
+docstring on correctness grounds — an incrementally maintained hash can
+accumulate a stale entry for a despawned entity. The measurement supports
+keeping it. Where the time actually went, in the order the optimisation pass
+found it: `Vector2` arithmetic in the inner loop (the largest, and the one
+nobody predicts), then per-neighbour entity and component re-lookup, then
+iterating the neighbour list once per steering behaviour.
 
 ### `SpatialHash`
 
-| Keys | Rebuild (ms) | Query cost (µs/query) |
-| ---: | ---: | ---: |
-| 1000 | 1.12 | 11.0 |
-| 3000 | 3.20 | 11.2 |
-| 10000 | 11.84 | 10.8 |
+| Keys | Rebuild (ms) | Query (µs/query) | Query, before |
+| ---: | ---: | ---: | ---: |
+| 1000 | 1.08 | 5.0 | 11.0 |
+| 3000 | 3.08 | 5.2 | 11.2 |
+| 10000 | 11.73 | 5.1 | 10.8 |
 
 Rebuild is linear. Query cost is **flat in the number of keys held**, which is
 the property that makes it an index rather than a list — a query's cost depends
-on how many candidates it returns, not on how much is stored.
+on how many candidates it returns, not on how much is stored. The constant
+halved when `_candidates` stopped allocating a set per query to deduplicate keys
+that cannot be duplicated: `insert` discards a key from its old cell before
+adding it to the new one, so a key lives in exactly one cell.
 
 ### `EntityPool` — draining a full pool, milliseconds
 
@@ -107,9 +127,9 @@ These are the portable figures, and the surprise is where the time goes.
 
 | Sprites | One texture | Transformed | Tinted |
 | ---: | ---: | ---: | ---: |
-| 1000 | 2.43 | 2.21 | 2.50 |
-| 5000 | 13.69 | 12.39 | 13.73 |
-| 20000 | 53.82 | 49.10 | 53.50 |
+| 1000 | 2.25 | 2.23 | 2.50 |
+| 5000 | 11.88 | 11.86 | 13.73 |
+| 20000 | 49.39 | 48.99 | 53.50 |
 
 **The CPU batcher is the bottleneck at scale, not the GPU.** At 20000 sprites it
 costs 53.8 ms — more than three times the entire GL path for the same batch. This

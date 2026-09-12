@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Color
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.types import RenderBatch, RenderCommand
@@ -103,8 +103,12 @@ class Batcher:
             current_scales.append((cmd.scale.x, cmd.scale.y))
             current_colors.append((cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a))
 
-            # Check if this command has non-default transforms/tint
-            if cmd.rotation != 0.0 or cmd.scale != Vector2(1, 1):
+            # Check if this command has non-default transforms/tint.
+            # Compared componentwise rather than against a `Vector2(1, 1)`:
+            # building one here allocates a vector per command per frame,
+            # to be thrown away immediately. `_OPAQUE_WHITE` on the next
+            # line was already hoisted for the same reason.
+            if cmd.rotation != 0.0 or cmd.scale.x != 1.0 or cmd.scale.y != 1.0:
                 has_transforms = True
             if cmd.color != _OPAQUE_WHITE:
                 has_colors = True

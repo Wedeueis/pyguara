@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from collections.abc import Iterator
 from typing import Generic, TypeVar
 
 from pyguara.common.types import Rect, Vector2
@@ -92,37 +93,65 @@ class SpatialHash(Generic[K]):  # noqa: UP046 -- mypy is pinned to python_versio
     def query_radius(
         self, center: Vector2, radius: float, mask: int = _FULL_MASK
     ) -> list[K]:
-        """Every key within `radius` of `center`, confirmed by exact distance."""
-        bounds = Rect(
-            int(math.floor(center.x - radius)),
-            int(math.floor(center.y - radius)),
-            int(math.ceil(radius * 2)),
-            int(math.ceil(radius * 2)),
-        )
-        return [
-            key
-            for key in self._candidates(bounds)
-            if self._masks[key] & mask
-            and center.distance_to(self._positions[key]) <= radius
-        ]
+        """Every key within `radius` of `center`, confirmed by exact distance.
+
+        The cell range is derived straight from `center +/- radius` rather
+        than by building a `Rect` and asking `_cell_of` about its corners,
+        and the distance test is squared, so a query costs no `Rect`, no
+        `Vector2` and no `sqrt` per candidate.
+        """
+        cell_size = self._cell_size
+        min_cx = math.floor((center.x - radius) / cell_size)
+        max_cx = math.floor((center.x + radius) / cell_size)
+        min_cy = math.floor((center.y - radius) / cell_size)
+        max_cy = math.floor((center.y + radius) / cell_size)
+
+        x, y = center.x, center.y
+        radius_sq = radius * radius
+        positions = self._positions
+        masks = self._masks
+
+        found: list[K] = []
+        for key in self._candidates(min_cx, max_cx, min_cy, max_cy):
+            if not masks[key] & mask:
+                continue
+            position = positions[key]
+            offset_x = position.x - x
+            offset_y = position.y - y
+            if offset_x * offset_x + offset_y * offset_y <= radius_sq:
+                found.append(key)
+        return found
 
     def query_rect(self, bounds: Rect, mask: int = _FULL_MASK) -> list[K]:
         """Every key whose position lies inside `bounds`."""
+        min_cell = self._cell_of(Vector2(bounds.left, bounds.top))
+        max_cell = self._cell_of(Vector2(bounds.right, bounds.bottom))
         return [
             key
-            for key in self._candidates(bounds)
+            for key in self._candidates(
+                min_cell[0], max_cell[0], min_cell[1], max_cell[1]
+            )
             if self._masks[key] & mask and bounds.contains_point(self._positions[key])
         ]
 
-    def _candidates(self, bounds: Rect) -> set[K]:
-        """Union of every cell `bounds` touches."""
-        min_cell = self._cell_of(Vector2(bounds.left, bounds.top))
-        max_cell = self._cell_of(Vector2(bounds.right, bounds.bottom))
-        found: set[K] = set()
-        for cx in range(min_cell[0], max_cell[0] + 1):
-            for cy in range(min_cell[1], max_cell[1] + 1):
-                found.update(self._cells.get((cx, cy), ()))
-        return found
+    def _candidates(
+        self, min_cx: int, max_cx: int, min_cy: int, max_cy: int
+    ) -> Iterator[K]:
+        """Yield every key in the cells spanning the given cell range.
+
+        A generator rather than a set union, and that is safe rather than
+        merely faster: `insert` discards a key from its old cell before
+        adding it to the new one, so a key lives in exactly one cell and
+        the union had nothing to deduplicate. It was paying for a set
+        allocation, plus an `update` per touched cell, to remove
+        duplicates that cannot occur.
+        """
+        cells = self._cells
+        for cx in range(min_cx, max_cx + 1):
+            for cy in range(min_cy, max_cy + 1):
+                cell = cells.get((cx, cy))
+                if cell is not None:
+                    yield from cell
 
     def _discard_from_cell(self, key: K, position: Vector2) -> None:
         cell = self._cell_of(position)

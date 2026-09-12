@@ -88,15 +88,19 @@ The **Blackboard** pattern allows different AI systems (or nodes in a BT) to sha
 `FlockingSystem` has been benchmarked — see
 [Measured Limits](../guides/performance.md) for the full table.
 
-**Roughly 300 boids fit in a 60 Hz frame**, and fewer when they bunch up. Two
-things follow from the measurements:
+**Roughly 1,000 fully-simulated boids fit in a 60 Hz frame**, or about 2,000
+with steering staggered to 20 Hz. Three things follow from the measurements:
 
 - **Density is an independent variable.** A flocking tick is O(n·k) — n agents
   each visiting k neighbours — so a flock converging on one point costs far
-  more than the same flock spread out: 3,000 agents cost 178 ms scattered and
-  664 ms clumped. A horde running at a player is the clumped case.
-- **The spatial hash is not the bottleneck.** Rebuilding it for 3,000 agents
-  takes 3.2 ms of a 178 ms tick, under 2%, which supports the full per-tick
-  rebuild `FlockingSystem` deliberately does. The cost is per-neighbour entity
-  and component re-lookup, iterating the neighbour list once per steering
-  behaviour, and `Vector2` allocation.
+  more than the same flock spread out: 3,000 agents cost 53 ms scattered and
+  162 ms clumped. A horde running at a player is the clumped case.
+- **Steering can be spread across ticks.** `FlockingSystem(..., groups=N)`
+  re-decides one group's heading per tick while every agent keeps integrating
+  its position, so nothing stutters and only the decision rate drops. It does
+  not scale as 1/N — the hash rebuild and the integration are paid every tick
+  whatever group an agent is in.
+- **The spatial hash was never the bottleneck.** Rebuilding it for 3,000 agents
+  takes 3.1 ms, which supports the full per-tick rebuild `FlockingSystem`
+  deliberately does. The cost that dominated was `Vector2` arithmetic in the
+  inner loop, ahead of per-neighbour entity and component re-lookup.
