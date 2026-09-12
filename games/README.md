@@ -44,7 +44,6 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ## Future Capstone Projects
 
-* **True Coral** (Snake)
 * **Guará & Falcão** (Platformer)
 * **Protocolo Bandeira** (Shooter)
 ## Capstone Projects
@@ -64,3 +63,16 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Look at it headlessly:** `uv run python tools/agent_view.py mourisco_ressonancia --gl`
   (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
 * **Spec:** [`project/demos/mourisco_ressonancia_GDD.md`](../project/demos/mourisco_ressonancia_GDD.md)
+
+### [true_coral](./true_coral) — True Coral
+* **Genre:** Snake, on a rain-soaked forest floor at night.
+* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+  (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`),
+  the engine's `StormEffect` shader driving rain and forked lightning, an HDR
+  light map, `kits/trail` for the body, `kits/action_combat` for lives,
+  `kits/stats` + `kits/effects` for the star's speed boost, `kits/loot` and
+  `kits/spawn` for the prey.
+* **Run:** `uv run python games/true_coral/main.py`
+* **Look at it headlessly:** `uv run python tools/agent_view.py true_coral --gl`
+  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Spec:** [`project/demos/true_coral_GDD.md`](../project/demos/true_coral_GDD.md)
