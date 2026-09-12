@@ -216,3 +216,81 @@ class TestVsyncDoesNotBlankTheWindow:
         finally:
             pygame.display.quit()
             pygame.quit()
+
+
+class TestModernGLVsyncFallback:
+    """A driver without OpenGL vsync must not stop the game from starting.
+
+    `vsync=1` is a hard request, not a hint: SDL raises outright where the
+    driver cannot honour it (WSLg's Mesa/D3D12 does exactly this), which
+    took the whole application down before it could open a window. The
+    pygame backend already degrades gracefully in the analogous case; this
+    pins the same behaviour for the GL one.
+    """
+
+    def _config(self, vsync: bool):
+        from pyguara.config.types import WindowConfig
+
+        return WindowConfig(title="t", screen_width=64, screen_height=48, vsync=vsync)
+
+    def test_it_retries_without_vsync_and_opens(self, monkeypatch) -> None:
+        import pygame
+
+        from pyguara.graphics.backends.moderngl import window as gl_window
+
+        calls: list[int] = []
+
+        def fake_set_mode(size, flags, vsync=0):
+            calls.append(vsync)
+            if vsync:
+                raise pygame.error("regular vsync for OpenGL not available")
+            return object()
+
+        monkeypatch.setattr(gl_window.pygame.display, "init", lambda: None)
+        monkeypatch.setattr(
+            gl_window.pygame.display, "gl_set_attribute", lambda *a: None
+        )
+        monkeypatch.setattr(gl_window.pygame.display, "set_mode", fake_set_mode)
+        monkeypatch.setattr(gl_window.pygame.display, "set_caption", lambda *a: None)
+        monkeypatch.setattr(
+            gl_window.moderngl, "create_context", lambda: _FakeContext()
+        )
+
+        backend = gl_window.PygameGLWindow()
+        assert backend.open(self._config(vsync=True)) is True
+        assert calls == [1, 0]  # asked for vsync, then retried without
+
+    def test_a_failure_with_vsync_off_is_not_swallowed(self, monkeypatch) -> None:
+        """Only the vsync request is worth retrying -- a real failure to
+        create a window must still surface."""
+        import pygame
+        import pytest
+
+        from pyguara.graphics.backends.moderngl import window as gl_window
+
+        def always_fails(size, flags, vsync=0):
+            raise pygame.error("no video device")
+
+        monkeypatch.setattr(gl_window.pygame.display, "init", lambda: None)
+        monkeypatch.setattr(
+            gl_window.pygame.display, "gl_set_attribute", lambda *a: None
+        )
+        monkeypatch.setattr(gl_window.pygame.display, "set_mode", always_fails)
+
+        backend = gl_window.PygameGLWindow()
+        with pytest.raises(pygame.error, match="no video device"):
+            backend.open(self._config(vsync=False))
+
+
+class _FakeContext:
+    """Minimal stand-in for a ModernGL context."""
+
+    BLEND = 1
+    SRC_ALPHA = 2
+    ONE_MINUS_SRC_ALPHA = 3
+
+    def __init__(self) -> None:
+        self.blend_func = None
+
+    def enable(self, _flag) -> None:
+        pass

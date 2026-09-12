@@ -9,6 +9,9 @@ import moderngl
 from pyguara.common.types import Color
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.backends.pygame.events import translate_events
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class PygameGLWindow:
@@ -72,12 +75,26 @@ class PygameGLWindow:
         if config.fullscreen:
             flags |= pygame.FULLSCREEN
 
-        # Create the window
-        self._screen = pygame.display.set_mode(
-            (config.screen_width, config.screen_height),
-            flags,
-            vsync=1 if config.vsync else 0,
-        )
+        # Create the window.
+        #
+        # `vsync=1` is a hard request, not a hint: SDL raises "regular
+        # vsync for OpenGL not available" outright where the driver cannot
+        # provide it, and the whole game fails to start. That is the case
+        # on WSLg (Mesa/D3D12), among others. A missing frame-rate cap is
+        # not worth refusing to open a window over, so fall back and say
+        # so rather than dying.
+        size = (config.screen_width, config.screen_height)
+        try:
+            self._screen = pygame.display.set_mode(
+                size, flags, vsync=1 if config.vsync else 0
+            )
+        except pygame.error:
+            if not config.vsync:
+                raise
+            logger.warning(
+                "OpenGL vsync unavailable on this driver; opening without it."
+            )
+            self._screen = pygame.display.set_mode(size, flags, vsync=0)
         pygame.display.set_caption(config.title)
 
         # Create ModernGL context from the current OpenGL context
