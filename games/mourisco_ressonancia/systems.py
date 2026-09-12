@@ -18,7 +18,7 @@ from pyguara.kits.echolocation import ActivePulse, RevealMemory
 
 GRAVITY = 1750.0
 MOVE_SPEED = 205.0
-JUMP_SPEED = 560.0
+JUMP_SPEED = 620.0
 MAX_FALL = 900.0
 COYOTE_TIME = 0.09
 PLAYER_HALF = Vector2(11.0, 9.0)

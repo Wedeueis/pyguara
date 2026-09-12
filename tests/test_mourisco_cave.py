@@ -15,8 +15,15 @@ from games.mourisco_ressonancia.cave import (
     generate_cave,
     march,
     parse_cave,
+    seal_untraversable,
+    traversable_cells,
 )
+from pyguara.common.grid import Cell
 from pyguara.common.types import Vector2
+
+
+def _cell_of(position: Vector2) -> Cell:
+    return (int(position.x // TILE), int(position.y // TILE))
 
 
 def _open_room(width: int = 10, height: int = 10) -> CaveLayout:
@@ -166,25 +173,87 @@ class TestGeneratedCave:
     def test_the_exit_is_reachable_from_the_spawn(self) -> None:
         """A cave you cannot finish is not a level."""
         layout = parse_cave(generate_cave())
-        start = (
-            int(layout.player_spawn.x // TILE),
-            int(layout.player_spawn.y // TILE),
-        )
-        goal = (
-            int(layout.exit_position.x // TILE),
-            int(layout.exit_position.y // TILE),
+        assert _cell_of(layout.exit_position) in traversable_cells(
+            layout, _cell_of(layout.player_spawn)
         )
 
-        seen = {start}
-        frontier = [start]
-        while frontier:
-            x, y = frontier.pop()
-            if (x, y) == goal:
-                break
-            for neighbour in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
-                if neighbour in seen or layout.is_solid(neighbour):
-                    continue
-                seen.add(neighbour)
-                frontier.append(neighbour)
+    def test_no_open_cell_is_a_softlock(self) -> None:
+        """Regression: falling into a shaft deeper than a jump trapped the
+        player for good.
 
-        assert goal in seen
+        The original check was a plain flood fill through open cells,
+        which passes happily for a pit -- you *can* reach it, by falling
+        in. What matters is whether you can get out again, so every open
+        cell must be both reachable from spawn and able to return there.
+        """
+        layout = parse_cave(generate_cave())
+        reachable = traversable_cells(layout, _cell_of(layout.player_spawn))
+        open_cells = {
+            (x, y)
+            for y in range(layout.height)
+            for x in range(layout.width)
+            if not layout.is_solid((x, y))
+        }
+        assert open_cells - reachable == set()
+
+    def test_creatures_are_placed_in_traversable_air(self) -> None:
+        layout = parse_cave(generate_cave())
+        reachable = traversable_cells(layout, _cell_of(layout.player_spawn))
+        for spawn in layout.bat_roosts + layout.spider_perches:
+            assert _cell_of(spawn) in reachable
+
+    def test_the_player_starts_on_solid_ground(self) -> None:
+        """Spawning mid-air drops the player before they can see anything."""
+        layout = parse_cave(generate_cave())
+        x, y = _cell_of(layout.player_spawn)
+        assert layout.is_solid((x, y + 1))
+
+
+class TestTraversability:
+    """The movement model the generator prunes against."""
+
+    def test_a_pit_deeper_than_a_jump_is_not_traversable(self) -> None:
+        # A 6-deep shaft: reachable by falling, impossible to climb out.
+        rows = [
+            "#########",
+            "#.......#",
+            "#######.#",
+            "#######.#",
+            "#######.#",
+            "#######.#",
+            "#######.#",
+            "#########",
+        ]
+        layout = parse_cave(rows)
+        reachable = traversable_cells(layout, (1, 1))
+        assert (7, 6) not in reachable, "the pit floor must not count as traversable"
+
+    def test_a_step_within_jump_range_is_traversable(self) -> None:
+        rows = [
+            "#######",
+            "#.....#",
+            "#.###.#",
+            "#.###.#",
+            "#.....#",
+            "#######",
+        ]
+        layout = parse_cave(rows)
+        reachable = traversable_cells(layout, (1, 1))
+        assert (5, 4) in reachable
+
+    def test_sealing_fills_the_unescapable_pit(self) -> None:
+        rows = [
+            "#########",
+            "#.......#",
+            "#######.#",
+            "#######.#",
+            "#######.#",
+            "#######.#",
+            "#######.#",
+            "#########",
+        ]
+        sealed = seal_untraversable(rows, (1, 1))
+        layout = parse_cave(sealed)
+        assert layout.is_solid((7, 6))
+        # The corridor the player actually walks is untouched.
+        assert not layout.is_solid((1, 1))
