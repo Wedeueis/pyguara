@@ -42,8 +42,15 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # Headless by default: surface capture works identically under the dummy
 # driver, needs no display, and is deterministic on CI. --windowed overrides.
+#
+# `dummy` has no OpenGL at all ("OpenGL support is either not configured in
+# SDL or not available in current SDL video driver"), so a ModernGL-backed
+# demo cannot even create its context under it. `offscreen` does provide a
+# real GL context headlessly, so --gl selects that instead; capture then has
+# to read the GL framebuffer rather than a pygame surface (see `_capture`).
 if "--windowed" not in sys.argv:
-    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    _headless_driver = "offscreen" if "--gl" in sys.argv else "dummy"
+    os.environ.setdefault("SDL_VIDEODRIVER", _headless_driver)
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame  # noqa: E402  (must follow the driver selection above)
@@ -98,6 +105,11 @@ DEMOS: dict[str, tuple[str, str, str]] = {
         "games.ui_scene_graph.scenes",
         "MenuScene",
     ),
+    "mourisco_ressonancia": (
+        "games.mourisco_ressonancia.bootstrap",
+        "games.mourisco_ressonancia.scenes",
+        "CaveScene",
+    ),
     "vinagre_matilha": (
         "games.vinagre_matilha.bootstrap",
         "games.vinagre_matilha.scenes",
@@ -150,11 +162,75 @@ def resolve_key(name: str) -> int:
     Raises:
         SystemExit: If no such key exists.
     """
-    candidate = name if name.startswith("K_") else f"K_{name.upper()}"
-    code = getattr(pygame, candidate, None)
-    if not isinstance(code, int):
-        raise SystemExit(f"--press: unknown key {name!r} (tried pygame.{candidate})")
-    return code
+    # pygame spells letter keys lowercase (`K_s`) and named keys uppercase
+    # (`K_SPACE`), so try both rather than forcing one and rejecting half
+    # the keyboard.
+    candidates = (
+        [name] if name.startswith("K_") else [f"K_{name.lower()}", f"K_{name.upper()}"]
+    )
+    for candidate in candidates:
+        code = getattr(pygame, candidate, None)
+        if isinstance(code, int):
+            return code
+    tried = ", ".join(f"pygame.{c}" for c in candidates)
+    raise SystemExit(f"--press: unknown key {name!r} (tried {tried})")
+
+
+def _window_type() -> type:
+    """Return the `Window` type, imported late to keep driver setup first."""
+    from pyguara.graphics.window import Window
+
+    return Window
+
+
+def _render_graph(container: object) -> object | None:
+    """Return the demo's `RenderGraph`, if it runs on the ModernGL backend.
+
+    The graph is the handle to everything GL here: its own context (making
+    one fresh fails, since `moderngl.create_context()` detects through GLX
+    and SDL's offscreen driver provides EGL) and, more importantly, the
+    offscreen framebuffer the final pass blits from.
+    """
+    try:
+        from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
+        from pyguara.graphics.pipeline.graph import RenderGraph
+
+        graph = container.get(RenderGraph)  # type: ignore[attr-defined]
+    except Exception:
+        return None
+    if isinstance(graph, PygameRenderGraph):
+        return None
+    return graph
+
+
+def _capture(graph: object | None) -> pygame.Surface | None:
+    """Return the frame just rendered, from whichever backend drew it.
+
+    The pygame backends draw into the display surface, so reading it back
+    is the whole job. A ModernGL backend does not: under an `OPENGL`
+    display, `get_surface()` hands back a surface the GPU never touched.
+
+    For GL, read the offscreen framebuffer the final pass blits from
+    rather than the default one. The default framebuffer is only valid
+    between drawing and the buffer swap -- reading it after `present()`
+    returns an undefined back buffer (a blank capture), and reading it
+    before blocked outright under the offscreen driver. The FBO has
+    neither problem and holds exactly the composed frame.
+    """
+    surface = pygame.display.get_surface()
+    if graph is None:
+        return surface
+
+    final_pass = graph.get_pass("final")  # type: ignore[attr-defined]
+    name = getattr(final_pass, "input_fbo_name", "world")
+    fbo = graph.fbo_manager.get(name)  # type: ignore[attr-defined]
+    if fbo is None:
+        return surface
+
+    size = (fbo.width, fbo.height)
+    frame = pygame.image.frombuffer(fbo.fbo.read(components=3), size, "RGB")
+    # GL's origin is bottom-left, pygame's is top-left.
+    return pygame.transform.flip(frame, False, True)
 
 
 def is_blank(surface: pygame.Surface) -> bool:
@@ -204,6 +280,7 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     container = configure()
     app = container.get(Application)
+    graph = _render_graph(container)
 
     tick = 0
     saved: list[tuple[Path, bool]] = []
@@ -228,11 +305,11 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
         original_render()
 
         if tick in script.shots:
-            surface = pygame.display.get_surface()
-            if surface is not None:
+            captured = _capture(graph)
+            if captured is not None:
                 path = out_dir / f"{demo}_{tick:04d}.png"
-                pygame.image.save(surface, str(path))
-                saved.append((path, is_blank(surface)))
+                pygame.image.save(captured, str(path))
+                saved.append((path, is_blank(captured)))
 
         if tick >= script.frames:
             app._is_running = False
@@ -322,6 +399,12 @@ def main(argv: list[str] | None = None) -> int:
         "--windowed",
         action="store_true",
         help="use a real window instead of the dummy driver",
+    )
+    parser.add_argument(
+        "--gl",
+        action="store_true",
+        help="headless OpenGL: use SDL's offscreen driver (dummy has no GL) "
+        "and capture the GL framebuffer. Required for ModernGL demos.",
     )
     args = parser.parse_args(argv)
 
