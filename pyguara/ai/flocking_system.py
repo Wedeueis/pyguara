@@ -219,7 +219,11 @@ class FlockingSystem:
         >>> system_manager.register(FlockingSystem(entity_manager), priority=150)
     """
 
-    def __init__(self, entity_manager: EntityManager, cell_size: float = 64.0) -> None:
+    def __init__(
+        self,
+        entity_manager: EntityManager,
+        cell_size: float = 64.0,
+    ) -> None:
         """Initialize the flocking system.
 
         Args:
@@ -229,6 +233,11 @@ class FlockingSystem:
         """
         self._entity_manager = entity_manager
         self._cell_size = cell_size
+        # Registered here, at system construction, which is what the API
+        # asks for: the cache is maintained incrementally as components
+        # come and go, so it only pays off for a query that runs every
+        # frame. This one does.
+        entity_manager.register_cached_query(FlockingAgent, Transform)
 
     @staticmethod
     def _neighbors_of(
@@ -283,7 +292,7 @@ class FlockingSystem:
             dt: Delta time in seconds.
         """
         entities = list(
-            self._entity_manager.get_entities_with(FlockingAgent, Transform)
+            self._entity_manager.get_entities_with_cached(FlockingAgent, Transform)
         )
         if not entities:
             return
