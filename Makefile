@@ -1,6 +1,6 @@
 # Makefile for Pyguara
 
-.PHONY: help install test test-unit test-integration test-performance benchmark coverage coverage-check lint format format-check type-check clean clean-all docs-build docs-serve run version ci pre-commit-install build
+.PHONY: help install test test-unit test-integration test-performance perf-guard benchmark coverage coverage-check lint format format-check type-check clean clean-all docs-build docs-serve run version ci pre-commit-install build
 
 # --- Default ---
 help:  ## Show this help message
@@ -32,20 +32,23 @@ test:  ## Run standard tests (skips slow/perf)
 test-unit:  ## Run fast unit tests
 	uv run pytest tests/ -m "not slow and not integration"
 
+perf-guard:  ## Run the complexity-class guards (cheap; no wall-clock asserts)
+	uv run pytest -m "performance and not slow" --no-cov
+
 test-integration:  ## Run integration tests
 	uv run pytest tests/integration/
 
-test-performance:  ## Run performance analysis
+test-performance:  ## Run every performance test, guards and full sweeps
 	uv run pytest -m performance --no-cov
 
-benchmark:  ## Run benchmarks
-	uv run pytest -m performance --benchmark-only --benchmark-sort=mean
+benchmark:  ## Run the full sweep (feeds docs/guides/performance.md)
+	uv run pytest -m performance --benchmark-only --benchmark-sort=name --no-cov
 
 coverage:  ## Generate coverage report
-	uv run pytest --cov=pyguara --cov-report=html --cov-report=term
+	uv run pytest -m "not performance" --cov=pyguara --cov-report=html --cov-report=term
 
 coverage-check:  ## Fail if coverage is below 60%
-	uv run pytest --cov=pyguara --cov-report=term --cov-report=xml --cov-fail-under=60
+	uv run pytest -m "not performance" --cov=pyguara --cov-report=term --cov-report=xml --cov-fail-under=60
 
 # --- Code Quality ---
 lint:  ## Check code style
@@ -81,4 +84,4 @@ clean-all: clean ## Clean everything (including venv and logs)
 	@echo "Deep clean complete."
 
 # --- CI Pipeline ---
-ci: format-check lint type-check test-unit coverage-check build ## Run full local CI pipeline
+ci: format-check lint type-check test-unit perf-guard coverage-check build ## Run full local CI pipeline
