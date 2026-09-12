@@ -223,6 +223,7 @@ class FlockingSystem:
         self,
         entity_manager: EntityManager,
         cell_size: float = 64.0,
+        groups: int = 1,
     ) -> None:
         """Initialize the flocking system.
 
@@ -230,6 +231,12 @@ class FlockingSystem:
             entity_manager: The entity manager to query for flocking agents.
             cell_size: `SpatialHash` bucket size; pick something close to
                 the typical `neighbor_radius`.
+            groups: How many ticks to spread steering across. 1 (the
+                default) steers every agent every tick. Higher values
+                round-robin: each tick recomputes one group's steering
+                while *every* agent still integrates its position, so
+                motion stays smooth and only the decision rate drops.
+                Values below 1 are clamped to 1.
         """
         self._entity_manager = entity_manager
         self._cell_size = cell_size
@@ -238,6 +245,8 @@ class FlockingSystem:
         # come and go, so it only pays off for a query that runs every
         # frame. This one does.
         entity_manager.register_cached_query(FlockingAgent, Transform)
+        self._groups = max(1, groups)
+        self._tick = 0
 
     @staticmethod
     def _neighbors_of(
@@ -308,10 +317,23 @@ class FlockingSystem:
         for slot, transform in enumerate(transforms):
             spatial_hash.insert(slot, transform.position)
 
+        groups = self._groups
+        steering_group = self._tick % groups
+        self._tick += 1
+        # One group's worth of accumulated acceleration, so a staggered
+        # agent turns at the same rate as an unstaggered one instead of
+        # `groups` times slower.
+        steering_dt = dt * groups
+
         for slot, agent in enumerate(agents):
             if not agent.enabled:
                 continue
             transform = transforms[slot]
+
+            if groups > 1 and slot % groups != steering_group:
+                # Not this agent's tick to think. It still moves.
+                transform.position = transform.position + agent.velocity * dt
+                continue
 
             position = transform.position
             force = flock_force(
@@ -334,7 +356,7 @@ class FlockingSystem:
                 force = cast(Vector2, force.normalized() * agent.max_force)
 
             acceleration = force * (1.0 / agent.mass)
-            new_velocity = agent.velocity + acceleration * dt
+            new_velocity = agent.velocity + acceleration * steering_dt
             if new_velocity.length > agent.max_speed:
                 new_velocity = cast(
                     Vector2, new_velocity.normalized() * agent.max_speed

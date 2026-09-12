@@ -302,3 +302,112 @@ class TestFusedForceMatchesTheSeparateBehaviours:
             (Vector2(-50, 20), Vector2(-1, 0)),
         ]
         self._assert_matches(Vector2(0, 0), agent, neighbors)
+
+
+class TestStaggeredSteering:
+    """`groups` spreads steering across ticks without stopping motion.
+
+    The trade is decision *rate*, not movement: every agent integrates its
+    position every tick regardless, so a staggered flock looks the same
+    and simply commits to a heading for a few frames longer.
+
+    Every assertion here is deliberately order-independent -- "how many
+    agents steered", never "which ones". `get_entities_with_cached` yields
+    from a set of uuid4 ids, so processing order varies between runs, and
+    flocking is Gauss-Seidel: an agent steering later in a tick sees the
+    already-moved positions of those ahead of it. A test that named
+    particular agents would pass or fail on the hash of a uuid.
+    """
+
+    @staticmethod
+    def _flock(manager: EntityManager, count: int) -> list:
+        """Build a deliberately asymmetric flock.
+
+        Even spacing with identical velocities makes the middle agent's
+        forces cancel exactly, so it steers to a zero force and its
+        velocity does not change -- correct behaviour that would read as
+        "this agent did not steer". Distinct positions and velocities give
+        every agent a non-zero alignment term whatever the order.
+        """
+        offsets = [(0.0, 0.0), (17.0, 3.0), (31.0, -11.0), (44.0, 8.0)]
+        velocities = [(5.0, 0.0), (0.0, 5.0), (-3.0, 2.0), (2.0, -4.0)]
+        entities = []
+        for index in range(count):
+            x, y = offsets[index % len(offsets)]
+            vx, vy = velocities[index % len(velocities)]
+            entity = manager.create_entity()
+            entity.add_component(Transform(position=Vector2(x, y)))
+            entity.add_component(
+                FlockingAgent(velocity=Vector2(vx, vy), seek_weight=0.0)
+            )
+            entities.append(entity)
+        return entities
+
+    @staticmethod
+    def _steered_count(entities: list, before: list) -> int:
+        """How many agents' velocities changed."""
+        return sum(
+            entity.get_component(FlockingAgent).velocity != previous
+            for entity, previous in zip(entities, before, strict=True)
+        )
+
+    def test_the_default_steers_every_agent_every_tick(self) -> None:
+        manager = EntityManager()
+        entities = self._flock(manager, 4)
+        before = [e.get_component(FlockingAgent).velocity for e in entities]
+
+        FlockingSystem(manager).update(1 / 60)
+
+        assert self._steered_count(entities, before) == 4
+
+    def test_every_agent_still_moves_on_a_tick_it_does_not_steer(self) -> None:
+        """The property that makes staggering invisible."""
+        manager = EntityManager()
+        entities = self._flock(manager, 4)
+        before = [e.get_component(Transform).position for e in entities]
+
+        FlockingSystem(manager, groups=4).update(1 / 60)
+
+        after = [e.get_component(Transform).position for e in entities]
+        assert all(a != b for a, b in zip(after, before, strict=True))
+
+    def test_only_one_group_steers_per_tick(self) -> None:
+        manager = EntityManager()
+        entities = self._flock(manager, 4)
+        before = [e.get_component(FlockingAgent).velocity for e in entities]
+
+        FlockingSystem(manager, groups=4).update(1 / 60)
+
+        assert self._steered_count(entities, before) == 1
+
+    def test_every_agent_steers_within_one_full_round(self) -> None:
+        manager = EntityManager()
+        entities = self._flock(manager, 4)
+        system = FlockingSystem(manager, groups=4)
+        before = [e.get_component(FlockingAgent).velocity for e in entities]
+
+        for _ in range(4):
+            system.update(1 / 60)
+
+        assert self._steered_count(entities, before) == 4
+
+    @pytest.mark.parametrize("groups", [0, -3])
+    def test_a_nonsense_group_count_is_clamped_to_one(self, groups: int) -> None:
+        """Zero would make `slot % groups` raise; negatives are meaningless."""
+        manager = EntityManager()
+        entities = self._flock(manager, 4)
+        before = [e.get_component(FlockingAgent).velocity for e in entities]
+
+        FlockingSystem(manager, groups=groups).update(1 / 60)
+
+        assert self._steered_count(entities, before) == 4
+
+    def test_a_disabled_agent_neither_steers_nor_moves(self) -> None:
+        manager = EntityManager()
+        entities = self._flock(manager, 3)
+        entities[0].get_component(FlockingAgent).enabled = False
+        before = entities[0].get_component(Transform).position
+
+        FlockingSystem(manager, groups=2).update(1 / 60)
+
+        assert entities[0].get_component(Transform).position == before

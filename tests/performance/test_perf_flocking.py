@@ -93,3 +93,20 @@ def test_sweep_flocking_clumped(benchmark, count: int) -> None:
     """Report ms/tick with the whole flock inside one small area."""
     _, system = build_flock(count, spread=1200.0)
     benchmark.pedantic(lambda: system.update(DT), rounds=5, iterations=1)
+
+
+@pytest.mark.performance
+@pytest.mark.slow
+@pytest.mark.parametrize("groups", [1, 2, 3, 4])
+def test_sweep_flocking_staggered(benchmark, groups: int) -> None:
+    """Report ms/tick at 3000 agents with steering spread across `groups` ticks.
+
+    Every agent still integrates its position every tick; only the
+    steering decision is round-robined. This is the knob that decides
+    whether a crowd of this size fits in a frame at all, so its cost
+    curve is worth publishing next to the un-staggered one.
+    """
+    count = 3000
+    _, system = build_flock(count, spread=uniform_spread_for(count))
+    system._groups = groups  # noqa: SLF001 - the ctor arg, set post-build
+    benchmark.pedantic(lambda: system.update(DT), rounds=5, iterations=1)
