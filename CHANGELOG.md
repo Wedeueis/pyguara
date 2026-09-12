@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`StormEffect`**: a post-process effect drawing procedural rain and forked lightning over a finished frame (`pyguara/graphics/vfx/effects/storm.py`, `shaders/storm.frag`). The shader owns the appearance; the caller drives `rain`, `flash` and `bolt`, so one strike can light the scene, shake the camera and fire a thunderclap on the same frame.
+
+### Fixed
+- **Lights were displaced by a whole camera position.** `LightingSystem.collect_lights_screen_space()` subtracted the camera position from every light, on top of the `screen_offset` that already has it subtracted out. With a camera centred on its viewport this threw the entire light map off the left of the frame, so nothing was lit and only the ambient clear survived — a scene with lighting enabled looked identical to one without. The transform is now `Camera2D`'s single `world * zoom + screen_offset` definition, and the method no longer takes `camera_position`. (Same double-subtraction `PulsePass` documented for itself.)
+
+### Changed
+- **True Coral rebuilt on the ModernGL backend**, with a lit forest floor, bloom, a vignette, and the new storm shader; the arena interpolates the snake between grid cells instead of snapping. It is the second GL-only demo, so like `mourisco_ressonancia` it is excluded from the dummy-driver demo tests and covered by `tools/agent_view.py true_coral --gl`.
+
 ## [0.5.0] - 2026-09-09
 
 This release is the output of a **systematic subsystem audit** (2026-09-06 →

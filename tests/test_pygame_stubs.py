@@ -100,10 +100,7 @@ class TestStubBehaviour:
         system = PygameLightingSystem(MagicMock())
 
         assert system.lights == []
-        assert (
-            system.collect_lights_screen_space(Vector2.zero(), 1.0, Vector2.zero())
-            == []
-        )
+        assert system.collect_lights_screen_space(1.0, Vector2.zero()) == []
 
     def test_the_lighting_stub_reports_full_ambient(self) -> None:
         """The pygame backend renders everything fully lit, so ambient has to

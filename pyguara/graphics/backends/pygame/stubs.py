@@ -63,14 +63,12 @@ class PygameLightingSystem:
 
     def collect_lights_screen_space(
         self,
-        camera_position: Vector2,
         camera_zoom: float,
         viewport_offset: Vector2,
     ) -> list[Any]:
         """Return no lights: this backend renders everything fully lit.
 
         Args:
-            camera_position: Camera world position (unused).
             camera_zoom: Camera zoom factor (unused).
             viewport_offset: Viewport offset in screen space (unused).
 
