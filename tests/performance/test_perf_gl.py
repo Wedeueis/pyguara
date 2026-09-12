@@ -131,8 +131,13 @@ def renderer(gl_ctx):
 
 @pytest.mark.parametrize("count", [1000, 5000, 20000])
 def test_sweep_render_batch_end_to_end(benchmark, gl_ctx, renderer, count: int) -> None:
-    """Report the whole instanced draw: pack, upload, and one draw call."""
-    batch = _batch(_GLTexture(gl_ctx), count, transformed=False)
+    """Report the whole instanced draw: pack, upload, and one draw call.
+
+    Uses the transform path, matching the pack benchmarks below, so that
+    the pack figure is legitimately a *component* of this one rather than
+    a number from a different code path that happens to sit beside it.
+    """
+    batch = _batch(_GLTexture(gl_ctx), count, transformed=True)
 
     def frame() -> None:
         renderer.render_batch(batch)

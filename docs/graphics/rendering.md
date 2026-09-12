@@ -196,12 +196,12 @@ The render path has been benchmarked; the figures live in
 before optimising anything here:
 
 - **At scale the bottleneck is the CPU, not the GPU.** A 20,000-sprite batch
-  costs about 13 ms end to end on the ModernGL backend, and essentially all of
-  it is the Python loop that packs the instance array. The draw call is
-  negligible at every size tested.
+  costs about 16 ms end to end on the ModernGL backend, and four fifths of that
+  is the Python loop that packs the instance array. The pack's share grows with
+  sprite count -- 42% at 1,000, 81% at 20,000.
 - **`Batcher.create_batches` costs more than the draw does** — roughly 53 ms
-  for the same 20,000 sprites, about four times the GL path. Texture switching
-  adds about 50% on top.
+  for the same 20,000 sprites, more than three times the GL path. Texture
+  switching adds about 50% on top.
 
 `RenderQueue.sort` is linear and cheap (2.9 ms at 8,000 commands), so its
 per-command lambda is not worth chasing. There is no visibility culling; the

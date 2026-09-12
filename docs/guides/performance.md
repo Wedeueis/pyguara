@@ -107,7 +107,7 @@ These are the portable figures, and the surprise is where the time goes.
 | 20000 | 53.82 | 49.10 | 53.50 |
 
 **The CPU batcher is the bottleneck at scale, not the GPU.** At 20000 sprites it
-costs 53.8 ms — roughly four times the entire GL path for the same batch. This
+costs 53.8 ms — more than three times the entire GL path for the same batch. This
 had never been measured: the pre-existing benchmark ran 1000 commands and
 asserted nothing about time.
 
@@ -144,18 +144,22 @@ between Python and GPU work is itself informative.
 
 ### Instanced sprite draw — milliseconds
 
-| Sprites | End-to-end | …of which: instance pack (row loop) |
-| ---: | ---: | ---: |
-| 1000 | 1.59 | 0.63 |
-| 5000 | 4.23 | 3.22 |
-| 20000 | 13.13 | 13.38 |
+All on the transform path, so the pack column is genuinely a *component* of
+the end-to-end column rather than a figure from a different code path.
 
-**At 20000 sprites the draw is essentially all Python.** The pack loop — filling
-a numpy array one row at a time — accounts for the entire end-to-end figure
-within measurement noise. The GPU work is negligible.
+| Sprites | End-to-end | …of which: instance pack (row loop) | Pack share |
+| ---: | ---: | ---: | ---: |
+| 1000 | 1.53 | 0.65 | 42% |
+| 5000 | 5.09 | 3.44 | 68% |
+| 20000 | 16.00 | 12.98 | **81%** |
 
-Packing the same data with numpy column writes instead of a row loop: 0.41 ms at
-1000, 1.97 ms at 5000, **8.53 ms at 20000** — about 1.6× faster, and the gap
+**The Python pack loop dominates, and its share grows with count.** Filling the
+instance array one row at a time accounts for four fifths of an entire
+20,000-sprite draw; the GPU work and the upload together are the remaining
+fifth. Anything done to speed this path up should be aimed at the pack.
+
+Packing the same data with numpy column writes instead of a row loop: 0.40 ms at
+1000, 2.00 ms at 5000, **8.20 ms at 20000** — about 1.6× faster, and the gap
 widens with count.
 
 ### Instance layout width
@@ -164,12 +168,15 @@ Packing and uploading 20000 instances, 7 floats each versus 11:
 
 | Floats per instance | Time |
 | ---: | ---: |
-| 7 (today) | 10.11 ms |
-| 11 (with a per-instance tint) | 10.35 ms |
+| 7 (today) | 9.75 ms |
+| 11 (with a per-instance tint) | 9.46 ms |
 
-**A 2.2% difference.** Widening the sprite instance layout to carry a per-vertex
-tint costs almost nothing, which makes carrying it unconditionally cheaper than
-maintaining a second shader program for untinted batches.
+**Indistinguishable from noise** — across runs the two swap places, so the real
+difference is under a few percent. Widening the sprite instance layout to carry
+a per-instance tint therefore costs effectively nothing, which makes carrying it
+unconditionally cheaper than maintaining a second shader program for untinted
+batches. Broadcasting a constant into four extra columns is free once the pack
+is vectorised; the bytes uploaded are 320 KB per frame at 20,000 sprites.
 
 ---
 
@@ -177,7 +184,7 @@ maintaining a second shader program for untinted batches.
 
 `tests/performance/` runs in two tiers, and they exist for different reasons.
 
-**Guards** (`-m "performance and not slow"`, ~1.7 s) assert a **complexity
+**Guards** (`-m "performance and not slow"`, ~3 s) assert a **complexity
 class**, never a wall-clock time. Each measures the same operation at N and at a
 multiple of N in the same process, and asserts the ratio between them. That
 cancels machine speed out entirely, which is what makes them safe on a shared CI

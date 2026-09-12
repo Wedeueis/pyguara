@@ -24,11 +24,11 @@ class ModernGLRenderer:
 
     On what "high-performance" means here, measured rather than assumed
     (see `docs/guides/performance.md`): a 20,000-sprite batch costs about
-    13 ms end to end, and **essentially all of it is the Python loop that
-    packs the instance array**, not the GPU. The draw call itself is
-    negligible at every size tested. So the useful lever on this path is
-    CPU-side packing, and the bottleneck above it is `Batcher`, which
-    costs roughly four times as much for the same batch.
+    16 ms end to end, and **four fifths of that is the Python loop that
+    packs the instance array**, not the GPU -- a share that grows with
+    sprite count. So the useful lever on this path is CPU-side packing,
+    and the bottleneck above it is `Batcher`, which costs roughly three
+    times as much again for the same batch.
 
     The coordinate system matches Pygame:
     - Origin at top-left (0, 0)
