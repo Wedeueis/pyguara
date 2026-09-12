@@ -3,15 +3,16 @@
 This module provides post-processing infrastructure:
 - PostProcessEffect: Base class for screen-space effects
 - PostProcessStack: Manager for chaining effects
-- Effects: Bloom, Vignette, and more
+- Effects: Bloom, Storm, Vignette, and more
 """
 
-from pyguara.graphics.vfx.effects import BloomEffect, VignetteEffect
+from pyguara.graphics.vfx.effects import BloomEffect, StormEffect, VignetteEffect
 from pyguara.graphics.vfx.post_process import PostProcessEffect, PostProcessStack
 
 __all__ = [
     "PostProcessEffect",
     "PostProcessStack",
     "BloomEffect",
+    "StormEffect",
     "VignetteEffect",
 ]
