@@ -45,7 +45,7 @@ These modules correspond to the "Tutorial Series Roadmap".
 ## Future Capstone Projects
 
 * **Guará & Falcão** (Platformer)
-* **Protocolo Bandeira** (Shooter)
+
 ## Capstone Projects
 
 ### [vinagre_matilha](./vinagre_matilha) — Vinagre: Matilha
@@ -63,6 +63,18 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Look at it headlessly:** `uv run python tools/agent_view.py mourisco_ressonancia --gl`
   (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
 * **Spec:** [`project/demos/mourisco_ressonancia_GDD.md`](../project/demos/mourisco_ressonancia_GDD.md)
+
+### [protocolo_bandeira](./protocolo_bandeira) — Protocolo Bandeira
+* **Genre:** Twin-stick wave arena. A giant anteater holds a cerrado clearing against a swarm.
+* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+  (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`), the
+  engine's `HeatHazeEffect` shader for the afternoon shimmer and its dust, an
+  HDR light map, `Sparks`/`Shaker`/`FloatingText`/`ScreenFlash` for the
+  feedback layer, hit-stop, behaviour-tree enemy AI, `kits/projectiles`,
+  `kits/action_combat`, `kits/spawn` and `ecs/pool` for the waves.
+* **Run:** `uv run python games/protocolo_bandeira/main.py`
+* **Look at it headlessly:** `uv run python tools/agent_view.py protocolo_bandeira --gl`
+  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
 
 ### [true_coral](./true_coral) — True Coral
 * **Genre:** Snake, on a rain-soaked forest floor at night.
