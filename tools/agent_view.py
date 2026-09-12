@@ -162,11 +162,18 @@ def resolve_key(name: str) -> int:
     Raises:
         SystemExit: If no such key exists.
     """
-    candidate = name if name.startswith("K_") else f"K_{name.upper()}"
-    code = getattr(pygame, candidate, None)
-    if not isinstance(code, int):
-        raise SystemExit(f"--press: unknown key {name!r} (tried pygame.{candidate})")
-    return code
+    # pygame spells letter keys lowercase (`K_s`) and named keys uppercase
+    # (`K_SPACE`), so try both rather than forcing one and rejecting half
+    # the keyboard.
+    candidates = (
+        [name] if name.startswith("K_") else [f"K_{name.lower()}", f"K_{name.upper()}"]
+    )
+    for candidate in candidates:
+        code = getattr(pygame, candidate, None)
+        if isinstance(code, int):
+            return code
+    tried = ", ".join(f"pygame.{c}" for c in candidates)
+    raise SystemExit(f"--press: unknown key {name!r} (tried {tried})")
 
 
 def _window_type() -> type:

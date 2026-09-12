@@ -410,12 +410,28 @@ class ModernGLRenderer:
         rgba = (color.r, color.g, color.b, color.a)
         surf = font.render(text, True, rgba)
 
-        data = pygame.image.tobytes(surf, "RGBA", False)
+        # Flipped on the way out: `GLTextureFactory.create_from_bytes()`
+        # flips what it is given (for GL's bottom-left origin), so handing
+        # it a surface in pygame's natural top-down order leaves the glyphs
+        # upside down on screen. Every other upload path in this backend
+        # pre-flips for the same reason -- see `loaders.py` and
+        # `ui_renderer.py`. This path had simply never been run.
+        data = pygame.image.tobytes(surf, "RGBA", True)
         gl_texture = self._texture_factory.create_from_bytes(
             "<draw_text>", data, surf.get_width(), surf.get_height()
         )
         try:
-            self.draw_texture(gl_texture, position)
+            # `draw_texture()` centres its quad on the position, but
+            # `draw_text()` is anchored top-left -- that is what the pygame
+            # backend does and what callers expect, so shift by half the
+            # rendered size to match. Without this, text drawn near an edge
+            # is half off-screen, and the two backends disagree about what
+            # the same coordinates mean.
+            centred = Vector2(
+                position.x + surf.get_width() / 2.0,
+                position.y + surf.get_height() / 2.0,
+            )
+            self.draw_texture(gl_texture, centred)
         finally:
             gl_texture.release()
 
