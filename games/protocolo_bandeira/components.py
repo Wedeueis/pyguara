@@ -124,6 +124,13 @@ class AIContext:
     dt: float
     is_alerted: bool = False
 
+    # Copied off the enemy's own `EnemyAI` each tick. The condition nodes
+    # used to hardcode 300/150 instead, which meant every per-type range
+    # configured in `EnemyPool.spawn_enemy` was silently ignored -- a
+    # shooter's 400 and a bomber's 350 both behaved as 300.
+    detection_range: float = 300.0
+    attack_range: float = 150.0
+
     def in_detection_range(self, detection_range: float) -> bool:
         """Check if player is in detection range."""
         return (

@@ -21,13 +21,13 @@ from pyguara.common.types import Vector2
 
 
 def is_player_detected(context: AIContext) -> bool:
-    """Check if player is within detection range."""
-    return context.player_position is not None and context.distance_to_player < 300
+    """Check if player is within this enemy's own detection range."""
+    return context.in_detection_range(context.detection_range)
 
 
 def is_in_attack_range(context: AIContext) -> bool:
-    """Check if player is within attack range."""
-    return context.player_position is not None and context.distance_to_player < 150
+    """Check if player is within this enemy's own attack range."""
+    return context.in_attack_range(context.attack_range)
 
 
 def is_alerted(context: AIContext) -> bool:

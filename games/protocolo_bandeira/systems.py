@@ -154,6 +154,8 @@ class EnemyAISystem:
                 distance_to_player=distance,
                 dt=dt,
                 is_alerted=ai.is_alerted,
+                detection_range=ai.detection_range,
+                attack_range=ai.attack_range,
             )
 
             # Initialize behavior tree for this enemy if needed
