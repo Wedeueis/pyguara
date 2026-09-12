@@ -1,14 +1,17 @@
 """Vinagre: Matilha - Game Components.
 
 Everything genre-generic already lives in core (`pyguara.ai.flocking_system.
-FlockingAgent`, `pyguara.ai.components.AIComponent`) or in the pack kit
-(`pyguara.kits.pack`). What's left here is specific to this one demo: the
-webbed-feet/current-zone/pressure-plate mechanics and the jaguar's tuning.
+FlockingAgent`, `pyguara.ai.components.AIComponent`) or in a kit
+(`pyguara.kits.pack` for coordination, `pyguara.kits.action_combat` for
+`Health`/`apply_damage`). What's left here is specific to this one demo:
+the webbed-feet/current/plate mechanics, and the two creatures' own combat
+state.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum, auto
 
 from pyguara.common.grid import Cell
 from pyguara.common.types import Vector2
@@ -36,8 +39,58 @@ class WebbedFeet(StrictComponent):
 
 
 @dataclass(slots=True)
+class DogState(StrictComponent):
+    """Per-dog combat and presentation state.
+
+    Attributes:
+        bite_cooldown: Seconds until this dog can bite again.
+        downed_timer: Seconds remaining knocked out of the fight. A downed
+            dog neither bites nor steers; `PackRecoverySystem` counts it
+            down faster when packmates are close, so the pack literally
+            rallies its own.
+        facing: Last non-zero movement direction, for drawing which way the
+            dog points. Rendering only.
+        bite_flash: Seconds remaining on the lunge animation. Rendering
+            only.
+        knockback: Residual velocity from a jaguar swipe, decayed by
+            `PackCombatSystem` and added on top of steering.
+    """
+
+    bite_cooldown: float = 0.0
+    downed_timer: float = 0.0
+    facing: Vector2 = field(default_factory=lambda: Vector2(1, 0))
+    bite_flash: float = 0.0
+    knockback: Vector2 = field(default_factory=lambda: Vector2(0, 0))
+
+    @property
+    def is_downed(self) -> bool:
+        """Whether this dog is currently out of the fight."""
+        return self.downed_timer > 0.0
+
+    def __post_init__(self) -> None:
+        """Initialise the StrictComponent state the dataclass __init__ skips."""
+        StrictComponent.__init__(self)
+
+
+class JaguarPhase(Enum):
+    """What the jaguar is doing right now.
+
+    The loop the whole fight is built on: it flees while it can, and when
+    the pack crowds it, it plants and telegraphs a swipe (`WINDUP`) before
+    actually swinging (`SWIPE`) -- that wind-up is the player's cue to call
+    Scatter. Whiffing leaves it in `RECOVER`, where the pack bites at
+    bonus damage. Read the tell, dodge, punish.
+    """
+
+    STALK = auto()
+    WINDUP = auto()
+    SWIPE = auto()
+    RECOVER = auto()
+
+
+@dataclass(slots=True)
 class JaguarState(StrictComponent):
-    """Tuning and runtime state for the fleeing predator.
+    """Tuning, movement, and attack state for the jaguar.
 
     `JaguarAISystem` calls `SteeringBehavior.flee()` directly rather than
     going through a `SteeringAgent`/`SteeringSystem` -- that dispatch has no
@@ -52,19 +105,35 @@ class JaguarState(StrictComponent):
         max_speed: Base flee speed, before any current-zone damping.
         max_force: Maximum steering force (turn speed/acceleration).
         panic_distance: How close a dog must be before the jaguar reacts.
-        cornered: Set by `JaguarAISystem` once escape routes are cut off.
-            Read by the scene to trigger the stage-clear sequence.
-        previous_position: Written by `JaguarAISystem` before it moves the
-            jaguar each tick; used to revert an illegal move into a wall
-            cell. `None` until the first tick.
+        cornered: Set once escape routes are cut off. Read by the scene to
+            trigger the stage-clear sequence.
+        previous_position: Written before the jaguar moves each tick; used
+            to revert an illegal move into a wall cell.
+        phase: Current attack-loop phase. See `JaguarPhase`.
+        phase_timer: Seconds remaining in `phase`.
+        swipe_cooldown: Seconds until it may wind up another swipe.
+        swipe_direction: Locked in at `WINDUP`, used by `SWIPE`'s arc.
+        facing: Last heading, for drawing. Rendering only.
+        hurt_flash: Seconds remaining on the damage flash. Rendering only.
     """
 
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
-    max_speed: float = 140.0
-    max_force: float = 600.0
-    panic_distance: float = 220.0
+    # Deliberately slower than a dog (158 -> see `_create_dog`): a pack
+    # hunts by running its prey down, so prey that simply outruns every
+    # dog forever makes the whole demo unwinnable -- which is exactly what
+    # an earlier build did at 165 against the pack's 158.
+    max_speed: float = 132.0
+    max_force: float = 700.0
+    panic_distance: float = 260.0
     cornered: bool = False
     previous_position: Vector2 | None = None
+
+    phase: JaguarPhase = JaguarPhase.STALK
+    phase_timer: float = 0.0
+    swipe_cooldown: float = 0.0
+    swipe_direction: Vector2 = field(default_factory=lambda: Vector2(1, 0))
+    facing: Vector2 = field(default_factory=lambda: Vector2(1, 0))
+    hurt_flash: float = 0.0
 
     def __post_init__(self) -> None:
         """Initialise the StrictComponent state the dataclass __init__ skips."""
@@ -85,9 +154,13 @@ class CurrentZone(StrictComponent):
             caught by playtesting) crushes velocity to near zero within a
             couple of frames -- a wall, not a current -- because a per-tick
             multiplier compounds 60 times a second.
+        flow: World-space drift the current pushes non-webbed entities
+            along, pixels/second. What makes a channel a *current* and not
+            just mud.
     """
 
-    damping: float = 0.35
+    damping: float = 0.55
+    flow: Vector2 = field(default_factory=lambda: Vector2(0, 40))
 
     def __post_init__(self) -> None:
         """Initialise the StrictComponent state the dataclass __init__ skips."""

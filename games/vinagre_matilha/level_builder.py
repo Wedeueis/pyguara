@@ -8,10 +8,12 @@ derived from one shared source of truth so they can never drift apart.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from games.vinagre_matilha.components import (
     CurrentZone,
+    DogState,
     JaguarState,
     LogGate,
     PressurePlate,
@@ -27,12 +29,14 @@ from pyguara.common.components import Transform
 from pyguara.common.grid import Cell, world_to_cell
 from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.manager import EntityManager
+from pyguara.kits.action_combat import Health
 from pyguara.kits.pack import PackMember, PackRole
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.trigger_volume import TriggerVolume
 from pyguara.physics.types import BodyType, ShapeType
 
 CELL_SIZE = 32.0
+_GOLDEN_ANGLE = 2.399963229728653  # radians; pi * (3 - sqrt(5))
 DOG_COLLIDER_RADIUS = 8.0
 VANGUARD_COLLIDER_RADIUS = 10.0
 JAGUAR_COLLIDER_RADIUS = 14.0
@@ -41,9 +45,10 @@ WATER_WEIGHT = 2.5
 
 @dataclass
 class StageConfig:
-    """Everything about one stage's layout and win condition."""
+    """Everything about one stage's layout, cast, and win/lose thresholds."""
 
     name: str
+    briefing: str
     grid_width: int
     grid_height: int
     pack_size: int  # includes the vanguard
@@ -51,11 +56,25 @@ class StageConfig:
     jaguar_spawn: Vector2
     corner_zone: Rect
     required_capture_dogs: int
+    jaguar_health: float
+    pack_break_threshold: int
+    corridor_top: int
+    corridor_height: int
     water_zones: list[Rect] = field(default_factory=list)
     wall_rects: list[Rect] = field(default_factory=list)
     plate_rect: Rect | None = None
     plate_required: int = 0
     log_rect: Rect | None = None
+
+    @property
+    def world_width(self) -> int:
+        """Playfield width in pixels."""
+        return int(self.grid_width * CELL_SIZE)
+
+    @property
+    def world_height(self) -> int:
+        """Playfield height in pixels."""
+        return int(self.grid_height * CELL_SIZE)
 
 
 @dataclass
@@ -126,7 +145,9 @@ def build_stage(entity_manager: EntityManager, config: StageConfig) -> LevelHand
     flow_field = FlowFieldService(graph)
     blackboard = Blackboard()
 
-    jaguar_id = _create_jaguar(entity_manager, config.jaguar_spawn)
+    jaguar_id = _create_jaguar(
+        entity_manager, config.jaguar_spawn, config.jaguar_health
+    )
 
     vanguard_id = _create_dog(
         entity_manager, config.dog_spawn, PackRole.VANGUARD, "vanguard"
@@ -134,7 +155,13 @@ def build_stage(entity_manager: EntityManager, config: StageConfig) -> LevelHand
 
     dog_ids = [vanguard_id]
     for i in range(config.pack_size - 1):
-        offset = Vector2((i % 4) * 24.0 - 36.0, (i // 4) * 24.0 + 24.0)
+        # Phyllotaxis (golden-angle) spread: an evenly distributed cluster
+        # for *any* pack size. A previous row-major grid put every dog of
+        # a four-strong pack on the same row, so the flankers spawned --
+        # and stayed -- in a single overlapping line.
+        angle = i * _GOLDEN_ANGLE
+        radius = 20.0 + 10.0 * math.sqrt(i)
+        offset = Vector2(math.cos(angle) * radius, math.sin(angle) * radius)
         dog_id = _create_dog(
             entity_manager,
             config.dog_spawn + offset,
@@ -177,6 +204,7 @@ def _create_dog(
     entity = entity_manager.create_entity()
     entity.add_component(Transform(position=position))
     entity.add_component(PackMember(role=role, dog_id=entity.id))
+    entity.add_component(DogState())
     entity.add_component(WebbedFeet())
     entity.add_component(RigidBody(body_type=BodyType.KINEMATIC, fixed_rotation=True))
     entity.add_component(
@@ -187,9 +215,13 @@ def _create_dog(
         assert blackboard is not None
         entity.add_component(
             FlockingAgent(
-                max_speed=150.0,
-                neighbor_radius=90.0,
-                separation_radius=28.0,
+                max_speed=158.0,
+                neighbor_radius=110.0,
+                # Wide enough that a pack converging on one target spreads
+                # into a ring instead of queueing into a single-file line
+                # behind it, which is what a tighter radius produced.
+                separation_radius=46.0,
+                separation_weight=2.1,
             )
         )
         entity.add_component(
@@ -199,10 +231,13 @@ def _create_dog(
     return entity.id
 
 
-def _create_jaguar(entity_manager: EntityManager, position: Vector2) -> str:
+def _create_jaguar(
+    entity_manager: EntityManager, position: Vector2, health: float
+) -> str:
     entity = entity_manager.create_entity()
     entity.add_component(Transform(position=position))
     entity.add_component(JaguarState())
+    entity.add_component(Health(current=health, max_health=health))
     entity.add_component(RigidBody(body_type=BodyType.KINEMATIC, fixed_rotation=True))
     entity.add_component(
         Collider(shape_type=ShapeType.CIRCLE, dimensions=[JAGUAR_COLLIDER_RADIUS])
@@ -265,66 +300,90 @@ def _create_log(entity_manager: EntityManager, rect: Rect, cells: list[Cell]) ->
 # far end. No separate "trap" geometry is needed; the corner zone is just
 # the corridor's last few columns.
 
-# Shared corridor band, in cells: rows 6-13 (8 cells tall) for the two
-# 30-wide stages, rows 6-9 (4 cells tall) for the narrower tutorial.
+# Every stage is 30x20 cells, exactly filling the 960x640 window, with a
+# corridor band of rows 5-14 (y 160-480). That band is deliberately tall:
+# dodging a telegraphed swipe needs somewhere to dodge *to*, and a pack of
+# twelve needs room to actually flank rather than queue up single file.
+
+_CORRIDOR_TOP = 160
+_CORRIDOR_HEIGHT = 320
+_NORTH_BANK = Rect(0, 0, 960, _CORRIDOR_TOP)
+_SOUTH_BANK = Rect(0, 480, 960, 160)
+# Rock wall capping the bend, so the jaguar is stopped a body-length short
+# of the window edge instead of ending the fight half off-screen.
+_EAST_WALL = Rect(896, _CORRIDOR_TOP, 64, _CORRIDOR_HEIGHT)
+_POCKET = Rect(768, _CORRIDOR_TOP, 128, _CORRIDOR_HEIGHT)
 
 STAGE_1 = StageConfig(
     name="Sandbar Drill",
-    grid_width=24,
-    grid_height=16,
+    briefing="Drive the jaguar east. Bite when close -- Scatter when it winds up.",
+    grid_width=30,
+    grid_height=20,
     pack_size=4,
-    dog_spawn=Vector2(120, 256),
-    jaguar_spawn=Vector2(450, 256),
-    corner_zone=Rect(672, 192, 96, 128),  # corridor's last 3 columns
+    dog_spawn=Vector2(96, 320),
+    jaguar_spawn=Vector2(560, 320),
+    corner_zone=_POCKET,
     required_capture_dogs=2,
-    wall_rects=[
-        Rect(0, 0, 768, 192),  # north bank
-        Rect(0, 320, 768, 192),  # south bank
-    ],
+    jaguar_health=120.0,
+    # The tutorial only breaks if the *whole* pack is down at once: a
+    # first-time player is still learning to read the wind-up, and losing
+    # three seconds in teaches nothing.
+    pack_break_threshold=4,
+    corridor_top=_CORRIDOR_TOP,
+    corridor_height=_CORRIDOR_HEIGHT,
+    wall_rects=[_NORTH_BANK, _SOUTH_BANK, _EAST_WALL],
 )
 
 STAGE_2 = StageConfig(
     name="Braided Channel",
+    briefing="Currents slow the jaguar, not your webbed pack. Use them.",
     grid_width=30,
     grid_height=20,
     pack_size=7,
-    dog_spawn=Vector2(80, 320),
+    dog_spawn=Vector2(96, 320),
     jaguar_spawn=Vector2(520, 320),  # between the two crossings
-    corner_zone=Rect(832, 192, 128, 256),  # corridor's last 4 columns
+    corner_zone=_POCKET,
     required_capture_dogs=3,
-    wall_rects=[
-        Rect(0, 0, 960, 192),  # north bank
-        Rect(0, 448, 960, 192),  # south bank
-    ],
+    jaguar_health=170.0,
+    pack_break_threshold=4,
+    corridor_top=_CORRIDOR_TOP,
+    corridor_height=_CORRIDOR_HEIGHT,
+    wall_rects=[_NORTH_BANK, _SOUTH_BANK, _EAST_WALL],
     water_zones=[
-        Rect(320, 192, 96, 256),  # first braid, west of the jaguar's spawn
-        Rect(576, 192, 64, 256),  # second braid, between it and the pocket
+        Rect(320, _CORRIDOR_TOP, 96, _CORRIDOR_HEIGHT),  # first braid
+        Rect(608, _CORRIDOR_TOP, 64, _CORRIDOR_HEIGHT),  # second braid
     ],
 )
 
 STAGE_3 = StageConfig(
     name="Jaguar's Bend",
+    briefing="Four of the pack must hold the plate to drop the log. Split them.",
     grid_width=30,
     grid_height=20,
     pack_size=12,
-    dog_spawn=Vector2(80, 320),
-    jaguar_spawn=Vector2(500, 320),  # before the alcove and the log
-    corner_zone=Rect(832, 192, 128, 256),  # corridor's last 4 columns
+    dog_spawn=Vector2(96, 320),
+    jaguar_spawn=Vector2(460, 320),  # before the alcove and the log
+    corner_zone=_POCKET,
     required_capture_dogs=5,
+    jaguar_health=260.0,
+    pack_break_threshold=6,
+    corridor_top=_CORRIDOR_TOP,
+    corridor_height=_CORRIDOR_HEIGHT,
     wall_rects=[
-        Rect(0, 0, 960, 192),  # north bank, unbroken
-        Rect(0, 448, 512, 192),  # south bank, west of the plate alcove
-        Rect(640, 448, 320, 192),  # south bank, east of the plate alcove
+        _NORTH_BANK,
+        Rect(0, 480, 512, 160),  # south bank, west of the plate alcove
+        Rect(640, 480, 320, 160),  # south bank, east of the plate alcove
+        _EAST_WALL,
     ],
-    water_zones=[Rect(320, 192, 96, 256)],
+    water_zones=[Rect(320, _CORRIDOR_TOP, 96, _CORRIDOR_HEIGHT)],
     # The alcove is simply the gap the two south-bank segments leave open
     # (x512-640) -- no separate room wall needed, it's bounded by them on
     # both sides and by the grid's own edge below.
-    plate_rect=Rect(512, 480, 128, 128),
+    plate_rect=Rect(516, 500, 120, 120),
     plate_required=4,
     # A full-height column sealing the corridor outright until the plate
     # opens it -- not a bypassable obstacle at the corridor's edge.
-    log_rect=Rect(672, 192, 32, 256),
+    log_rect=Rect(736, _CORRIDOR_TOP, 32, _CORRIDOR_HEIGHT),
 )
 
 STAGES = [STAGE_1, STAGE_2, STAGE_3]

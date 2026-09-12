@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from games.vinagre_matilha.components import (
     CurrentZone,
+    DogState,
     JaguarState,
     LogGate,
     PressurePlate,
@@ -50,7 +51,16 @@ def _flanker(em: EntityManager, pos: Vector2, **agent_kwargs) -> Entity:
     entity = em.create_entity()
     entity.add_component(Transform(position=pos))
     entity.add_component(PackMember(role=PackRole.FLANKER, dog_id=entity.id))
+    entity.add_component(DogState())
     entity.add_component(FlockingAgent(**agent_kwargs))
+    return entity
+
+
+def _vanguard(em: EntityManager, pos: Vector2) -> Entity:
+    entity = em.create_entity()
+    entity.add_component(Transform(position=pos))
+    entity.add_component(PackMember(role=PackRole.VANGUARD, dog_id=entity.id))
+    entity.add_component(DogState())
     return entity
 
 
@@ -177,8 +187,7 @@ class TestFlankerAssignmentSystem:
 class TestVanguardControlSystem:
     def test_moves_in_the_set_direction(self) -> None:
         em = EntityManager()
-        vanguard = em.create_entity()
-        vanguard.add_component(Transform(position=Vector2(100, 100)))
+        vanguard = _vanguard(em, Vector2(100, 100))
         graph = GridGraph(20, 20)
         system = VanguardControlSystem(em, graph, vanguard.id, speed=100.0)
 
@@ -189,8 +198,7 @@ class TestVanguardControlSystem:
 
     def test_is_blocked_by_a_wall_cell(self) -> None:
         em = EntityManager()
-        vanguard = em.create_entity()
-        vanguard.add_component(Transform(position=Vector2(100, 100)))
+        vanguard = _vanguard(em, Vector2(100, 100))
         graph = GridGraph(20, 20)
         # Wall off everything east of the vanguard's starting cell.
         for x in range(4, 20):

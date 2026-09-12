@@ -14,6 +14,8 @@ from typing import cast
 
 from games.vinagre_matilha.components import (
     CurrentZone,
+    DogState,
+    JaguarPhase,
     JaguarState,
     LogGate,
     PressurePlate,
@@ -43,7 +45,13 @@ from pyguara.kits.pack import (
 )
 from pyguara.physics.trigger_volume import TriggerVolume
 
-_ENCIRCLE_RADIUS = 90.0
+# Must sit inside `combat.BITE_RANGE`, or Pincer becomes strictly worse
+# than issuing no order at all: an earlier build ringed the pack at 90px
+# around a jaguar they could only bite at 34px, so the "attack" command
+# politely held formation just out of reach and dealt no damage for the
+# entire fight. Dog-to-dog spacing comes from `separation_radius`, not
+# from this, so a tight ring still spreads around the target's perimeter.
+_ENCIRCLE_RADIUS = 30.0
 _CAPTURE_RADIUS = 80.0
 _CORNERED_SUSTAIN_SECONDS = 1.0
 _NEIGHBOR_COUNT_KEY = "pack_neighbor_count"
@@ -197,10 +205,15 @@ class VanguardControlSystem:
         entity = self._em.get_entity(self._vanguard_id)
         if entity is None:
             return
+        state = entity.get_component(DogState)
+        if state.is_downed:
+            return
+
         transform = entity.get_component(Transform)
         direction = self.move_direction
         if direction.length > 0.001:
             direction = cast(Vector2, direction.normalized())
+            state.facing = direction
         delta = direction * self._speed * dt
 
         candidate = Vector2(transform.position.x + delta.x, transform.position.y)
@@ -249,8 +262,27 @@ class JaguarAISystem:
         state = jaguar.get_component(JaguarState)
         state.previous_position = transform.position
 
-        dogs = list(self._em.get_entities_with(PackMember, Transform))
-        if dogs:
+        # It plants its feet to swing: a swipe you could simply outrun
+        # would make the wind-up tell pointless. Cornered, it stops running
+        # altogether and makes a stand -- which is what finally lets the
+        # pack land sustained damage, so the pocket has a gameplay purpose
+        # beyond being a marked rectangle.
+        planted = state.phase in (JaguarPhase.WINDUP, JaguarPhase.SWIPE)
+        # Inside the pocket it is trapped and must make a stand, whether or
+        # not enough dogs have closed yet. Gating this on the sustained
+        # capture count instead meant the pocket rarely slowed it at all --
+        # it simply ran back out past the pack, and the fight never got a
+        # climax. The capture count still drives the `cornered` flag below,
+        # which is what the HUD and the win-adjacent feedback read.
+        in_pocket = self._corner_zone.contains_point(transform.position)
+        speed_scale = 0.0 if planted else (0.3 if in_pocket else 1.0)
+
+        dogs = [
+            dog
+            for dog in self._em.get_entities_with(PackMember, DogState, Transform)
+            if not dog.get_component(DogState).is_downed
+        ]
+        if dogs and speed_scale > 0.0:
             nearest = min(
                 dogs,
                 key=lambda dog: (
@@ -260,19 +292,23 @@ class JaguarAISystem:
             force = SteeringBehavior.flee(
                 transform,
                 nearest.get_component(Transform).position,
-                state.max_speed,
+                state.max_speed * speed_scale,
                 state.velocity,
                 panic_distance=state.panic_distance,
             )
             if force.length > state.max_force:
                 force = cast(Vector2, force.normalized() * state.max_force)
             new_velocity = state.velocity + force * dt
-            if new_velocity.length > state.max_speed:
-                new_velocity = cast(
-                    Vector2, new_velocity.normalized() * state.max_speed
-                )
+            max_speed = state.max_speed * speed_scale
+            if new_velocity.length > max_speed:
+                new_velocity = cast(Vector2, new_velocity.normalized() * max_speed)
             state.velocity = new_velocity
             transform.position = transform.position + state.velocity * dt
+            if state.velocity.length > 8.0:
+                state.facing = cast(Vector2, state.velocity.normalized())
+        elif planted:
+            state.velocity = Vector2(0, 0)
+            state.facing = state.swipe_direction
 
         cell = world_to_cell(transform.position, CELL_SIZE)
         if not _walkable(self._graph, cell):
@@ -316,7 +352,8 @@ class CurrentZoneSystem:
     def update(self, dt: float) -> None:
         for zone in self._em.get_entities_with(TriggerVolume, CurrentZone):
             trigger = zone.get_component(TriggerVolume)
-            factor = zone.get_component(CurrentZone).damping ** dt
+            current = zone.get_component(CurrentZone)
+            factor = current.damping**dt
             for entity_id in trigger.entities_inside:
                 entity = self._em.get_entity(entity_id)
                 if entity is None or entity.has_component(WebbedFeet):
@@ -324,9 +361,36 @@ class CurrentZoneSystem:
                 if entity.has_component(JaguarState):
                     jaguar_state = entity.get_component(JaguarState)
                     jaguar_state.velocity = jaguar_state.velocity * factor
+                    # Pushed downstream as well as slowed: a current the
+                    # webbed-footed pack shrugs off should visibly cost the
+                    # jaguar ground, not merely speed.
+                    transform = entity.get_component(Transform)
+                    transform.position = transform.position + current.flow * dt
                 elif entity.has_component(FlockingAgent):
                     flocking_agent = entity.get_component(FlockingAgent)
                     flocking_agent.velocity = flocking_agent.velocity * factor
+
+
+class PackMotionSystem:
+    """Keeps each dog's steering enablement and facing in sync with its state.
+
+    A downed dog has its `FlockingAgent` switched off outright rather than
+    merely ignored: leaving it enabled would keep it contributing cohesion
+    and separation forces to its packmates while lying unconscious, so the
+    flock would still clump around a dog that is, as far as the fight is
+    concerned, not there.
+    """
+
+    def __init__(self, entity_manager: EntityManager) -> None:
+        self._em = entity_manager
+
+    def update(self, dt: float) -> None:
+        for entity in self._em.get_entities_with(DogState, FlockingAgent):
+            state = entity.get_component(DogState)
+            agent = entity.get_component(FlockingAgent)
+            agent.enabled = not state.is_downed
+            if not state.is_downed and agent.velocity.length > 8.0:
+                state.facing = cast(Vector2, agent.velocity.normalized())
 
 
 class PressurePlateSystem:
