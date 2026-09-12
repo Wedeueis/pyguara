@@ -216,12 +216,22 @@ class VanguardControlSystem:
             state.facing = direction
         delta = direction * self._speed * dt
 
+        # From *inside* a wall cell, every candidate step is also inside a
+        # wall, so the usual "only step onto walkable ground" rule refuses
+        # the very move that would escape -- the player is sealed in for
+        # good. `PackContainmentSystem` should stop that happening at all,
+        # but if something does strand the alpha in a bank, let it walk
+        # out rather than leaving the run unplayable.
+        stranded = not _walkable(
+            self._graph, world_to_cell(transform.position, CELL_SIZE)
+        )
+
         candidate = Vector2(transform.position.x + delta.x, transform.position.y)
-        if _walkable(self._graph, world_to_cell(candidate, CELL_SIZE)):
+        if stranded or _walkable(self._graph, world_to_cell(candidate, CELL_SIZE)):
             transform.position = candidate
 
         candidate = Vector2(transform.position.x, transform.position.y + delta.y)
-        if _walkable(self._graph, world_to_cell(candidate, CELL_SIZE)):
+        if stranded or _walkable(self._graph, world_to_cell(candidate, CELL_SIZE)):
             transform.position = candidate
 
 
@@ -391,6 +401,43 @@ class PackMotionSystem:
             agent.enabled = not state.is_downed
             if not state.is_downed and agent.velocity.length > 8.0:
                 state.facing = cast(Vector2, agent.velocity.normalized())
+
+
+class PackContainmentSystem:
+    """Keeps every dog inside the walkable corridor.
+
+    Two things move a dog without consulting the grid at all: `FlockingSystem`
+    (core, and rightly grid-agnostic) and a jaguar swipe's knockback. Either
+    can park a dog inside a bank -- and being inside a wall cell is
+    *unrecoverable* on its own, because from in there every candidate step
+    is also inside a wall, so movement systems refuse all of them and the
+    dog is sealed in permanently. That stranded the player's own alpha on
+    any swipe that threw it into the bank.
+
+    So: record the last legitimately walkable position each tick, and put
+    a dog that has ended up in a bank back on it, killing the momentum that
+    carried it there. Registered after combat so it catches knockback in
+    the same tick that applies it, rather than a frame later.
+    """
+
+    def __init__(self, entity_manager: EntityManager, graph: GridGraph) -> None:
+        self._em = entity_manager
+        self._graph = graph
+
+    def update(self, dt: float) -> None:
+        for entity in self._em.get_entities_with(DogState, Transform):
+            state = entity.get_component(DogState)
+            transform = entity.get_component(Transform)
+
+            if _walkable(self._graph, world_to_cell(transform.position, CELL_SIZE)):
+                state.last_safe_position = transform.position
+                continue
+
+            if state.last_safe_position is not None:
+                transform.position = state.last_safe_position
+            state.knockback = Vector2(0, 0)
+            if entity.has_component(FlockingAgent):
+                entity.get_component(FlockingAgent).velocity = Vector2(0, 0)
 
 
 class PressurePlateSystem:

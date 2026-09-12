@@ -54,6 +54,11 @@ class DogState(StrictComponent):
             only.
         knockback: Residual velocity from a jaguar swipe, decayed by
             `PackCombatSystem` and added on top of steering.
+        last_safe_position: The last position this dog occupied that was
+            actually inside the walkable corridor. `PackContainmentSystem`
+            records it each tick and restores it if the dog ends up inside
+            a bank -- see that system for why being *in* a wall is
+            unrecoverable without it.
     """
 
     bite_cooldown: float = 0.0
@@ -61,6 +66,7 @@ class DogState(StrictComponent):
     facing: Vector2 = field(default_factory=lambda: Vector2(1, 0))
     bite_flash: float = 0.0
     knockback: Vector2 = field(default_factory=lambda: Vector2(0, 0))
+    last_safe_position: Vector2 | None = None
 
     @property
     def is_downed(self) -> bool:
