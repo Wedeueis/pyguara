@@ -1,13 +1,19 @@
 """Visual effects system for PyGuara.
 
-This module provides post-processing infrastructure:
-- PostProcessEffect: Base class for screen-space effects
-- PostProcessStack: Manager for chaining effects
-- Effects: Bloom, Storm, Vignette, and more
+Two layers live here:
+
+- **Post-processing** -- `PostProcessEffect` and `PostProcessStack`, plus
+  the shipped screen-space effects (bloom, storm, vignette). These
+  transform the finished frame.
+- **Feedback** -- `Sparks` and `Shaker`, the small pooled primitives a
+  game reaches for when something is hit. These are composed into a scene
+  rather than resolved from DI, the same way `ParticleSystem` is.
 """
 
 from pyguara.graphics.vfx.effects import BloomEffect, StormEffect, VignetteEffect
 from pyguara.graphics.vfx.post_process import PostProcessEffect, PostProcessStack
+from pyguara.graphics.vfx.shake import Shaker
+from pyguara.graphics.vfx.sparks import Sparks
 
 __all__ = [
     "PostProcessEffect",
@@ -15,4 +21,6 @@ __all__ = [
     "BloomEffect",
     "StormEffect",
     "VignetteEffect",
+    "Sparks",
+    "Shaker",
 ]
