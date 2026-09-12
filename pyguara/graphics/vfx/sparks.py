@@ -1,16 +1,22 @@
-"""True Coral - the feedback layer: sparks and screen shake.
+"""Coloured shape particles: sparks, embers, splashes, debris.
 
-Both are pooled, screen-space and deliberately small. The engine ships
-`ParticleSystem`, which is the right tool when particles are textured
-sprites; these are not. Under the ModernGL backend the sprite path carries
-no per-instance tint, so a textured particle can only ever be white, while
-the shape path (`draw_circle`/`draw_line`) takes a colour per primitive and
-batches them into one instanced draw call per shape type anyway. Coloured
-embers are the entire point of an eat burst, so these go through shapes.
+A pool of short-lived primitives drawn through `IRenderer.draw_circle` and
+`draw_line` rather than as textured sprites.
 
-Shake is the engine's `CameraShake` maths, driven directly rather than
-through a camera: this demo draws in screen space, so the offset is added
-to what it draws rather than to a camera position.
+`ParticleSystem` is the right tool when particles *are* sprites. These are
+not, and the distinction is forced by the backend: under ModernGL the
+sprite path carries no per-instance tint, so a textured particle can only
+ever be white, while the shape path takes a colour per primitive and
+batches each shape type into one instanced draw call anyway. Anything
+whose whole point is its colour -- an ember, a blood spray, a rain splash
+-- therefore goes through shapes.
+
+Typical use, composed into a scene rather than resolved from DI::
+
+    sparks = Sparks()
+    sparks.burst(position, Color(255, 180, 60), count=14, streak=True)
+    sparks.update(dt)
+    sparks.render(renderer, offset=shake_offset)
 """
 
 from __future__ import annotations
@@ -20,7 +26,6 @@ from dataclasses import dataclass, field
 
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
-from pyguara.graphics.components.camera import CameraShake
 from pyguara.graphics.protocols import IRenderer
 
 
@@ -173,56 +178,3 @@ class Sparks:
                 return spark
             if self._next == start:
                 return None
-
-
-class Shaker:
-    """Several overlapping camera shakes, summed into one offset."""
-
-    def __init__(self, rng: RandomStream | None = None) -> None:
-        """Start still.
-
-        Args:
-            rng: Random stream driving shake direction, shared by every
-                shake this adds.
-        """
-        self._shakes: list[CameraShake] = []
-        self._rng = rng if rng is not None else RandomStream()
-        self._offset = Vector2.zero()
-
-    @property
-    def offset(self) -> Vector2:
-        """The current shake offset, in pixels."""
-        return self._offset
-
-    def add(self, magnitude: float, duration: float = 0.25) -> None:
-        """Start another shake on top of whatever is already running.
-
-        Args:
-            magnitude: Peak offset in pixels; decays linearly to zero.
-            duration: Seconds the shake lasts.
-        """
-        if magnitude <= 0.0:
-            return
-        self._shakes.append(
-            CameraShake(duration=duration, magnitude=magnitude, rng=self._rng)
-        )
-
-    def update(self, dt: float) -> Vector2:
-        """Advance every live shake and return their combined offset.
-
-        Args:
-            dt: Seconds since the last frame.
-
-        Returns:
-            The offset to add to everything drawn this frame.
-        """
-        total = Vector2.zero()
-        still_running = []
-        for shake in self._shakes:
-            offset = shake.update(dt)
-            if shake.elapsed < shake.duration:
-                still_running.append(shake)
-                total = total + offset
-        self._shakes = still_running
-        self._offset = total
-        return total

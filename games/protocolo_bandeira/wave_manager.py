@@ -11,27 +11,40 @@ enemy count per wave and a release interval.
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from games.protocolo_bandeira.events import WaveCompleteEvent, WaveStartEvent
 from games.protocolo_bandeira.pooling import EnemyPool
 from pyguara.common.random import RandomStream
-from pyguara.common.types import Vector2
+from pyguara.common.types import Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.kits.spawn import SpawnDirector, SpawnEntry, Wave
+
+
+@dataclass(slots=True)
+class _PendingSpawn:
+    """A telegraphed spawn: a ring on the ground counting down to an enemy."""
+
+    position: Vector2
+    remaining: float
+    enemy_type: str
+    health: float
 
 
 class WaveManager:
     """Manages enemy wave spawning with difficulty scaling."""
 
-    # Arena bounds
-    ARENA_WIDTH = 800
-    ARENA_HEIGHT = 600
-    SPAWN_MARGIN = 100  # Spawn outside visible area
+    SPAWN_MARGIN = 70  # Spawn just off the field, and walk in
+
+    # How long a spawn is telegraphed on the ground before the enemy
+    # arrives. Enemies come in from off-screen, so without a ring to
+    # watch, the first thing the player learns about a bomber is the hit.
+    WARNING_LEAD = 0.7
 
     # Wave configuration
-    BASE_ENEMIES = 3
-    ENEMIES_PER_WAVE = 2
-    MAX_ENEMIES = 20
+    BASE_ENEMIES = 5
+    ENEMIES_PER_WAVE = 3
+    MAX_ENEMIES = 24
 
     # Spawn timing
     SPAWN_DELAY = 0.5  # Seconds between enemy spawns
@@ -40,6 +53,7 @@ class WaveManager:
         self,
         enemy_pool: EnemyPool,
         event_dispatcher: EventDispatcher,
+        arena: Rect,
         rng: RandomStream | None = None,
     ):
         """Initialize the wave manager.
@@ -47,9 +61,13 @@ class WaveManager:
         Args:
             enemy_pool: Pool for enemy entities
             event_dispatcher: Event dispatcher for wave events
+            arena: The play area. Spawns are placed just outside its
+                edges, so an enemy walks onto the field rather than
+                appearing on it.
             rng: Seeded stream driving composition rolls and spawn-edge
                 placement. Defaults to a fresh, unseeded stream.
         """
+        self._arena = arena
         self._pool = enemy_pool
         self._dispatcher = event_dispatcher
         self._rng = rng if rng is not None else RandomStream()
@@ -59,7 +77,9 @@ class WaveManager:
         self._current_wave = 0
         self._enemies_alive = 0
         self._pending_in_wave = 0
+        self._wave_size = 0
         self._last_player_position = Vector2.zero()
+        self._warnings: list[_PendingSpawn] = []
 
     def start_wave(self, wave_number: int) -> None:
         """Start a new wave.
@@ -82,6 +102,7 @@ class WaveManager:
             for enemy_type, health in composition
         ]
         self._pending_in_wave = len(entries)
+        self._wave_size = len(entries)
         self._director.queue_wave(Wave(entries=entries, interval=self.SPAWN_DELAY))
 
         self._dispatcher.dispatch(
@@ -101,9 +122,17 @@ class WaveManager:
         def factory() -> None:
             self._pending_in_wave = max(0, self._pending_in_wave - 1)
             spawn_pos = self._get_spawn_position(self._last_player_position)
-            entity = self._pool.spawn_enemy(spawn_pos, enemy_type, health)
-            if entity:
-                self._enemies_alive += 1
+            # Ring the ground first and spawn when the ring closes, so the
+            # player is looking at the right patch of dirt before anything
+            # is standing on it.
+            self._warnings.append(
+                _PendingSpawn(
+                    position=spawn_pos,
+                    remaining=self.WARNING_LEAD,
+                    enemy_type=enemy_type,
+                    health=float(health),
+                )
+            )
 
         return factory
 
@@ -154,13 +183,49 @@ class WaveManager:
         """
         self._last_player_position = player_position
         self._director.update(dt)
+        self._release_telegraphed(dt)
+
+    def _release_telegraphed(self, dt: float) -> None:
+        """Count the warning rings down and spawn the ones that close."""
+        still_pending = []
+        for warning in self._warnings:
+            warning.remaining -= dt
+            if warning.remaining > 0.0:
+                still_pending.append(warning)
+                continue
+            if self._pool.spawn_enemy(
+                warning.position, warning.enemy_type, warning.health
+            ):
+                self._enemies_alive += 1
+        self._warnings = still_pending
+
+    @property
+    def warnings(self) -> list[tuple[Vector2, float]]:
+        """`(position, progress)` per telegraphed spawn, for the renderer.
+
+        Progress runs 0.0 when the ring appears to 1.0 as it closes.
+        """
+        return [
+            (
+                warning.position,
+                1.0 - max(0.0, warning.remaining) / self.WARNING_LEAD,
+            )
+            for warning in self._warnings
+        ]
+
+    @property
+    def wave_fraction(self) -> float:
+        """Fraction of this wave still to be dealt with, for the HUD meter."""
+        if self._wave_size <= 0:
+            return 0.0
+        return min(1.0, self.enemies_remaining / self._wave_size)
 
     def on_enemy_killed(self) -> None:
         """Handle enemy kill notification."""
         self._enemies_alive = max(0, self._enemies_alive - 1)
 
         # Check for wave completion
-        if self._enemies_alive == 0 and self._director.is_idle:
+        if self._enemies_alive == 0 and self._director.is_idle and not self._warnings:
             self._dispatcher.dispatch(WaveCompleteEvent(wave_number=self._current_wave))
 
     def _get_spawn_position(self, player_pos: Vector2) -> Vector2:
@@ -174,21 +239,22 @@ class WaveManager:
         """
         # Choose a random edge
         edge = self._rng.choice(["top", "bottom", "left", "right"])
+        arena = self._arena
 
         x: float
         y: float
         if edge == "top":
-            x = self._rng.uniform(0, self.ARENA_WIDTH)
-            y = -self.SPAWN_MARGIN
+            x = self._rng.uniform(arena.left, arena.right)
+            y = arena.top - self.SPAWN_MARGIN
         elif edge == "bottom":
-            x = self._rng.uniform(0, self.ARENA_WIDTH)
-            y = self.ARENA_HEIGHT + self.SPAWN_MARGIN
+            x = self._rng.uniform(arena.left, arena.right)
+            y = arena.bottom + self.SPAWN_MARGIN
         elif edge == "left":
-            x = -self.SPAWN_MARGIN
-            y = self._rng.uniform(0, self.ARENA_HEIGHT)
+            x = arena.left - self.SPAWN_MARGIN
+            y = self._rng.uniform(arena.top, arena.bottom)
         else:  # right
-            x = self.ARENA_WIDTH + self.SPAWN_MARGIN
-            y = self._rng.uniform(0, self.ARENA_HEIGHT)
+            x = arena.right + self.SPAWN_MARGIN
+            y = self._rng.uniform(arena.top, arena.bottom)
 
         return Vector2(x, y)
 
@@ -200,9 +266,13 @@ class WaveManager:
     @property
     def is_wave_active(self) -> bool:
         """Check if a wave is currently active."""
-        return not self._director.is_idle or self._enemies_alive > 0
+        return (
+            not self._director.is_idle
+            or self._enemies_alive > 0
+            or bool(self._warnings)
+        )
 
     @property
     def enemies_remaining(self) -> int:
         """Get total remaining enemies (alive + not yet released)."""
-        return self._enemies_alive + self._pending_in_wave
+        return self._enemies_alive + self._pending_in_wave + len(self._warnings)

@@ -1,8 +1,12 @@
 """Headless Validation Suite for PyGuara Demo Games.
 
-Boots all three demo games and the asset pipeline module under headless
-SDL dummy drivers to verify that all systems and resource managers function
-without runtime crashes or regressions.
+Boots the demo games that run on the pygame backend, plus the asset
+pipeline module, under headless SDL dummy drivers, to verify that all
+systems and resource managers function without runtime crashes or
+regressions.
+
+The ModernGL demos are deliberately absent -- see `main()` for why, and
+for how to smoke them instead.
 """
 
 import logging
@@ -24,8 +28,6 @@ from games.asset_pipeline.scenes import AssetScene as APAssetScene
 # Import bootstrap configurations
 from games.guara_falcao.bootstrap import configure_game_container as gf_bootstrap
 from games.guara_falcao.scenes import GameScene as GFGameScene
-from games.protocolo_bandeira.bootstrap import configure_game_container as pb_bootstrap
-from games.protocolo_bandeira.scenes import ArenaScene as PBArenaScene
 from games.vinagre_matilha.bootstrap import configure_game_container as vm_bootstrap
 from games.vinagre_matilha.level_builder import STAGE_1
 from games.vinagre_matilha.scenes import GameScene as VMGameScene
@@ -100,18 +102,12 @@ def main() -> None:
         scene_class=GFGameScene,
     )
 
-    # 2. Twin-Stick Shooter (Protocolo Bandeira)
-    results["Protocolo Bandeira (Shooter)"] = validate_game(
-        name="Protocolo Bandeira",
-        configure_container_fn=pb_bootstrap,
-        scene_class=PBArenaScene,
-    )
-
-    # True Coral is not booted here. Like mourisco_ressonancia it runs on
-    # the ModernGL backend, and SDL's `dummy` video driver -- set at the
-    # top of this file -- provides no OpenGL at all, so the demo cannot
-    # create its context. Smoke it with:
-    #     uv run python tools/agent_view.py true_coral --gl --frames 30
+    # Protocolo Bandeira, true_coral and mourisco_ressonancia are not
+    # booted here. All three run on the ModernGL backend, and SDL's
+    # `dummy` video driver -- set at the top of this file -- provides no
+    # OpenGL at all, so none of them can create a context. Smoke them
+    # with, e.g.:
+    #     uv run python tools/agent_view.py protocolo_bandeira --gl --frames 30
 
     # 3. Asset Pipeline Module (Flyweight Loader / .meta files)
     results["Asset Pipeline (Module 3)"] = validate_game(

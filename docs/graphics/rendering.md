@@ -96,6 +96,39 @@ stack.add_effect(VignetteEffect(ctx, radius=0.7, softness=0.4))
 
 Effects can be enabled/disabled at runtime via `effect.enabled = False`.
 
+Order matters, and is the caller's to choose. Bloom generally runs first, so it
+bleeds the scene's own hot colours rather than whatever a later effect drew over
+them; a vignette generally runs last, because it is a lens rather than a light.
+
+Shipped effects:
+
+| Effect | What it does |
+| --- | --- |
+| `BloomEffect` | Bleeds a halo out of anything past a brightness threshold. |
+| `HeatHazeEffect` | Refracts the frame with rising hot air, with dust drifting through it. `gust()` kicks up a cloud that settles on its own. |
+| `StormEffect` | Procedural rain, sheet lightning and forked bolts. |
+| `VignetteEffect` | Darkens the edges of the frame. |
+
+Each of these owns only how the effect *looks*. What the weather or the heat is
+*doing* stays with the caller — which is what lets a game tie a strike, a camera
+shake and a thunderclap to the same frame.
+
+### Feedback primitives
+
+`pyguara.graphics.vfx` also holds the two small pooled things a game reaches for
+when something is hit. Both are composed into a scene rather than resolved from
+DI, the same way `ParticleSystem` is:
+
+- **`Sparks`** — a bounded pool of coloured shape particles (`draw_circle` /
+  `draw_line`). `ParticleSystem` is the right tool when particles *are* sprites;
+  these are not, and the distinction is forced by the backend, since ModernGL's
+  sprite path carries no per-instance tint while its shape path takes a colour
+  per primitive.
+- **`Shaker`** — several overlapping `CameraShake` impulses summed into one
+  pixel offset, so a second impact adds to the first rather than cutting it
+  short. The result is a plain offset: a world-space scene adds it to the camera
+  position, a screen-space one adds it to what it draws.
+
 ## Components
 
 ### Camera2D

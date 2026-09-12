@@ -37,7 +37,7 @@ class EnemyPool(EntityPool):
         entity.add_component(
             EnemyAI(
                 enemy_type=EnemyType.CHASER,
-                detection_range=300.0,
+                detection_range=1400.0,
                 attack_range=50.0,
                 move_speed=80.0,
             )
@@ -74,22 +74,26 @@ class EnemyPool(EntityPool):
 
         if ai:
             # Configure based on enemy type
+            # Detection reaches across the whole arena: these are wave
+            # spawns, released off the field and expected to come for the
+            # player. A short radius leaves them wandering the margin they
+            # spawned in, never entering the fight.
             if enemy_type == "shooter":
                 ai.enemy_type = EnemyType.SHOOTER
-                ai.detection_range = 400.0
-                ai.attack_range = 250.0
-                ai.move_speed = 60.0
+                ai.detection_range = 1400.0
+                ai.attack_range = 320.0
+                ai.move_speed = 70.0
                 ai.attack_cooldown = 1.5
             elif enemy_type == "bomber":
                 ai.enemy_type = EnemyType.BOMBER
-                ai.detection_range = 350.0
+                ai.detection_range = 1400.0
                 ai.attack_range = 30.0
-                ai.move_speed = 120.0
+                ai.move_speed = 135.0
             else:  # chaser
                 ai.enemy_type = EnemyType.CHASER
-                ai.detection_range = 300.0
+                ai.detection_range = 1400.0
                 ai.attack_range = 40.0
-                ai.move_speed = 90.0
+                ai.move_speed = 105.0
 
             ai.is_alerted = False
             ai.current_cooldown = 0.0

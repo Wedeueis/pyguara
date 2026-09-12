@@ -14,7 +14,6 @@ than copied into three scenes.
 from __future__ import annotations
 
 from games.true_coral.bootstrap import attach_lighting
-from games.true_coral.juice import Shaker, Sparks
 from games.true_coral.render import Backdrop, draw_ground, draw_litter, draw_owl
 from games.true_coral.storm import StormDirector
 from pyguara.common.components import Transform
@@ -29,6 +28,8 @@ from pyguara.graphics.lighting.light_system import LightingSystem
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer
 from pyguara.graphics.vfx.effects.storm import StormEffect
+from pyguara.graphics.vfx.shake import Shaker
+from pyguara.graphics.vfx.sparks import Sparks
 
 # The base exposure everything is multiplied by. Low enough that the leaf
 # litter is a texture rather than a subject, high enough that the arena

@@ -8,12 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`HeatHazeEffect`**: a post-process effect refracting the frame with rising hot air and drifting dust (`pyguara/graphics/vfx/effects/heat_haze.py`, `shaders/heat_haze.frag`). Same split as `StormEffect` — the shader owns the appearance, the caller drives `haze`, `dust` and `wind`, and `gust()` kicks up a cloud that settles on its own, so an explosion can raise dust on the frame it goes off.
+- **`Sparks` and `Shaker` promoted into the engine** (`pyguara/graphics/vfx/sparks.py`, `shake.py`), out of True Coral where they were written. `Sparks` is a bounded pool of coloured shape particles — the tool for particles that are *not* sprites, which ModernGL forces the distinction on since its sprite path carries no per-instance tint. `Shaker` sums overlapping `CameraShake` impulses into one offset, so a second impact adds to the first instead of cutting it short.
 - **`StormEffect`**: a post-process effect drawing procedural rain and forked lightning over a finished frame (`pyguara/graphics/vfx/effects/storm.py`, `shaders/storm.frag`). The shader owns the appearance; the caller drives `rain`, `flash` and `bolt`, so one strike can light the scene, shake the camera and fire a thunderclap on the same frame.
 
 ### Fixed
+- **Protocolo Bandeira's enemy AI ignored every range it was configured with.** `is_player_detected()` and `is_in_attack_range()` hardcoded 300 and 150, so the per-type `detection_range`/`attack_range` the enemy pool set (a shooter's 400, a bomber's 350) never had any effect. Both now read the enemy's own ranges, carried on `AIContext`.
 - **Lights were displaced by a whole camera position.** `LightingSystem.collect_lights_screen_space()` subtracted the camera position from every light, on top of the `screen_offset` that already has it subtracted out. With a camera centred on its viewport this threw the entire light map off the left of the frame, so nothing was lit and only the ambient clear survived — a scene with lighting enabled looked identical to one without. The transform is now `Camera2D`'s single `world * zoom + screen_offset` definition, and the method no longer takes `camera_position`. (Same double-subtraction `PulsePass` documented for itself.)
 
 ### Changed
+- **Protocolo Bandeira rebuilt on the ModernGL backend** as a cerrado wave arena: a lit clearing, procedural art for the anteater and the swarm, tracers and bloom, the new heat-haze shader, an arcade HUD, and a feedback layer (sparks, screen shake, hit-stop, damage numbers, screen flash, spawn telegraphs) hung entirely off events the combat systems already dispatched. It is the third GL-only demo, so like `mourisco_ressonancia` and `true_coral` it is excluded from the dummy-driver demo tests and from `games/validate_demos.py`, and covered by `tools/agent_view.py protocolo_bandeira --gl`.
 - **True Coral rebuilt on the ModernGL backend**, with a lit forest floor, bloom, a vignette, and the new storm shader; the arena interpolates the snake between grid cells instead of snapping. It is the second GL-only demo, so like `mourisco_ressonancia` it is excluded from the dummy-driver demo tests and covered by `tools/agent_view.py true_coral --gl`.
 
 ## [0.5.0] - 2026-09-09
