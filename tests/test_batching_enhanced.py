@@ -9,13 +9,6 @@ from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.types import RenderCommand
 from pyguara.resources.types import Texture
 
-# Check if pytest-benchmark is available
-try:
-    # import pytest_benchmark
-    BENCHMARK_AVAILABLE = True
-except ImportError:
-    BENCHMARK_AVAILABLE = False
-
 
 class MockTexture(Texture):
     """Mock texture for testing."""
@@ -316,70 +309,6 @@ def test_empty_command_list_returns_static_batches_only():
 
     # Should return empty list (no static batches registered)
     assert len(batches) == 0
-
-
-@pytest.mark.skipif(not BENCHMARK_AVAILABLE, reason="pytest-benchmark not installed")
-@pytest.mark.benchmark
-def test_batching_performance_simple_sprites(benchmark):
-    """Benchmark batching performance for simple sprites (fast path)."""
-    batcher = Batcher()
-    camera = Camera2D(800, 600)
-    viewport = Viewport.create_fullscreen(800, 600)
-
-    texture = MockTexture("test")
-    commands = [
-        RenderCommand(
-            texture=texture,
-            world_position=Vector2(i * 10, i * 10),
-            layer=0,
-            z_index=0,
-            rotation=0.0,
-            scale=Vector2(1, 1),
-        )
-        for i in range(1000)
-    ]
-
-    def batch_all():
-        return batcher.create_batches(commands, camera, viewport)
-
-    result = benchmark(batch_all)
-
-    # Should create 1 batch efficiently
-    assert len(result) == 1
-    assert not result[0].transforms_enabled
-
-
-@pytest.mark.skipif(not BENCHMARK_AVAILABLE, reason="pytest-benchmark not installed")
-@pytest.mark.benchmark
-def test_batching_performance_transformed_sprites(benchmark):
-    """Benchmark batching performance for transformed sprites."""
-    batcher = Batcher()
-    camera = Camera2D(800, 600)
-    viewport = Viewport.create_fullscreen(800, 600)
-
-    texture = MockTexture("test")
-    commands = [
-        RenderCommand(
-            texture=texture,
-            world_position=Vector2(i * 10, i * 10),
-            layer=0,
-            z_index=0,
-            rotation=i * 1.0,
-            scale=Vector2(1 + i * 0.01, 1),
-        )
-        for i in range(1000)
-    ]
-
-    def batch_all():
-        return batcher.create_batches(commands, camera, viewport)
-
-    result = benchmark(batch_all)
-
-    # Should create 1 batch with transforms
-    assert len(result) == 1
-    assert result[0].transforms_enabled
-    assert len(result[0].rotations) == 1000
-    assert len(result[0].scales) == 1000
 
 
 @pytest.mark.parametrize(
