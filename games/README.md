@@ -47,3 +47,5 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **True Coral** (Snake)
 * **Guará & Falcão** (Platformer)
 * **Protocolo Bandeira** (Shooter)
+* **Vinagre: Matilha** (Real-Time Squad Tactics) — spec: [`project/demos/vinagre_matilha_GDD.md`](../project/demos/vinagre_matilha_GDD.md)
+* **Mourisco: Ressonância** (Stealth Action-Exploration) — spec: [`project/demos/mourisco_ressonancia_GDD.md`](../project/demos/mourisco_ressonancia_GDD.md)

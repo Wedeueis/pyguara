@@ -254,3 +254,108 @@ class SteeringBehavior:
             panic_distance * 2,
             rng,
         )
+
+    @staticmethod
+    def cohesion(
+        transform: Transform,
+        neighbor_positions: list[Vector2],
+        max_speed: float,
+        current_velocity: Vector2,
+    ) -> Vector2:
+        """
+        Calculate steering force toward the average position of nearby flockmates.
+
+        Args:
+            transform: Entity transform.
+            neighbor_positions: Positions of nearby flock members (self excluded).
+            max_speed: Max movement speed.
+            current_velocity: Current entity velocity.
+
+        Returns:
+            A `seek` toward the flock's center of mass, or zero if there are
+            no neighbors.
+        """
+        if not neighbor_positions:
+            return Vector2(0, 0)
+        center = sum(neighbor_positions, Vector2(0, 0)) * (
+            1.0 / len(neighbor_positions)
+        )
+        return SteeringBehavior.seek(transform, center, max_speed, current_velocity)
+
+    @staticmethod
+    def alignment(
+        neighbor_velocities: list[Vector2],
+        max_speed: float,
+        current_velocity: Vector2,
+    ) -> Vector2:
+        """
+        Calculate steering force to match the average heading of nearby flockmates.
+
+        Args:
+            neighbor_velocities: Velocities of nearby flock members (self excluded).
+            max_speed: Max movement speed.
+            current_velocity: Current entity velocity.
+
+        Returns:
+            The difference toward the flock's average velocity (clamped to
+            `max_speed`), or zero if there are no neighbors.
+        """
+        if not neighbor_velocities:
+            return Vector2(0, 0)
+        average = sum(neighbor_velocities, Vector2(0, 0)) * (
+            1.0 / len(neighbor_velocities)
+        )
+        if average.length > max_speed:
+            average = cast(Vector2, average.normalized() * max_speed)
+        return average - current_velocity
+
+    @staticmethod
+    def separation(
+        transform: Transform,
+        neighbor_positions: list[Vector2],
+        separation_radius: float,
+        max_speed: float,
+    ) -> Vector2:
+        """
+        Calculate steering force pushing away from nearby flockmates.
+
+        Each neighbor within `separation_radius` contributes a push
+        proportional to how close it is -- a neighbor right on top of the
+        agent pushes hardest, one at the radius boundary barely at all.
+        This is what keeps a tight flock from visibly overlapping/jittering
+        when combined with `cohesion`.
+
+        Args:
+            transform: Entity transform.
+            neighbor_positions: Positions of nearby flock members (self excluded).
+            separation_radius: Distance within which neighbors start pushing.
+            max_speed: Max movement speed; clamps the summed push force so a
+                dense cluster doesn't produce an unbounded spike.
+
+        Returns:
+            Sum of weighted push-away vectors (clamped to `max_speed`), or
+            zero if no neighbor is close enough to matter.
+        """
+        # Each contribution is scaled to max_speed (full strength at zero
+        # distance, tapering to zero at the radius boundary) so separation
+        # sits on the same force scale as `cohesion`/`alignment` (both
+        # bounded by max_speed) -- otherwise cohesion's seek-scaled pull
+        # dwarfs an unscaled separation push and the flock collapses onto
+        # itself instead of settling at a comfortable distance.
+        push = Vector2(0, 0)
+        for position in neighbor_positions:
+            offset = transform.position - position
+            distance = offset.length
+            if distance >= separation_radius:
+                continue
+            if distance < 0.001:
+                # Coincident agents: push in a fixed, stable direction rather
+                # than dividing by zero.
+                push = push + Vector2(1, 0) * max_speed
+                continue
+            weight = 1.0 - (distance / separation_radius)
+            push = push + cast(Vector2, offset.normalized() * (weight * max_speed))
+
+        if push.length > max_speed:
+            push = cast(Vector2, push.normalized() * max_speed)
+        return push
