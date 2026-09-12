@@ -22,6 +22,7 @@ from games.vinagre_matilha.systems import (
     CurrentZoneSystem,
     FlankerAssignmentSystem,
     JaguarAISystem,
+    PackContainmentSystem,
     PressurePlateSystem,
     VanguardControlSystem,
 )
@@ -210,6 +211,26 @@ class TestVanguardControlSystem:
         system.update(1.0)
 
         assert vanguard.get_component(Transform).position.x < 128  # cell 4's edge
+
+    def test_a_stranded_vanguard_can_still_walk_out_of_a_wall(self) -> None:
+        """Regression: knocked into a bank, the player could not move at all.
+
+        From inside a wall cell every candidate step is *also* inside a
+        wall, so the ordinary "only step onto walkable ground" rule refused
+        the very move that would escape -- the run became unplayable.
+        """
+        em = EntityManager()
+        vanguard = _vanguard(em, Vector2(100, 100))
+        graph = GridGraph(20, 20)
+        for x in range(20):  # the whole top band is bank, vanguard inside it
+            for y in range(0, 5):
+                graph.walls.add((x, y))
+        system = VanguardControlSystem(em, graph, vanguard.id, speed=100.0)
+
+        system.move_direction = Vector2(0, 1)  # walk south, out of the bank
+        system.update(1.0)
+
+        assert vanguard.get_component(Transform).position.y > 100
 
     def test_does_nothing_for_a_missing_entity(self) -> None:
         em = EntityManager()
@@ -463,3 +484,66 @@ class TestPressurePlateSystem:
         system.update(1 / 60)
 
         assert len(events) == 1
+
+
+# ========== PackContainmentSystem ==========
+
+
+class TestPackContainmentSystem:
+    """Nothing may leave the walkable corridor and get stuck there.
+
+    `FlockingSystem` and swipe knockback both move dogs without consulting
+    the grid, and a dog inside a wall cell cannot move at all afterwards --
+    every candidate step from in there is also a wall.
+    """
+
+    def _graph_with_bank(self) -> GridGraph:
+        graph = GridGraph(20, 20)
+        for x in range(20):
+            for y in range(0, 5):  # north bank
+                graph.walls.add((x, y))
+        return graph
+
+    def test_records_a_walkable_position_as_safe(self) -> None:
+        em = EntityManager()
+        dog = _vanguard(em, Vector2(200, 300))
+        system = PackContainmentSystem(em, self._graph_with_bank())
+
+        system.update(1 / 60)
+
+        assert dog.get_component(DogState).last_safe_position == Vector2(200, 300)
+
+    def test_puts_a_dog_knocked_into_the_bank_back_on_safe_ground(self) -> None:
+        em = EntityManager()
+        dog = _vanguard(em, Vector2(200, 300))
+        system = PackContainmentSystem(em, self._graph_with_bank())
+        system.update(1 / 60)  # records (200, 300) as safe
+
+        dog.get_component(Transform).position = Vector2(200, 40)  # into the bank
+        dog.get_component(DogState).knockback = Vector2(0, -400)
+        system.update(1 / 60)
+
+        assert dog.get_component(Transform).position == Vector2(200, 300)
+        assert dog.get_component(DogState).knockback == Vector2(0, 0)
+
+    def test_zeroes_a_flocking_agents_velocity_on_recovery(self) -> None:
+        em = EntityManager()
+        dog = _flanker(em, Vector2(200, 300), velocity=Vector2(0, -200))
+        system = PackContainmentSystem(em, self._graph_with_bank())
+        system.update(1 / 60)
+
+        dog.get_component(Transform).position = Vector2(200, 40)
+        system.update(1 / 60)
+
+        assert dog.get_component(FlockingAgent).velocity == Vector2(0, 0)
+
+    def test_leaves_a_dog_alone_while_it_stays_in_the_corridor(self) -> None:
+        em = EntityManager()
+        dog = _vanguard(em, Vector2(200, 300))
+        system = PackContainmentSystem(em, self._graph_with_bank())
+
+        system.update(1 / 60)
+        dog.get_component(Transform).position = Vector2(260, 340)
+        system.update(1 / 60)
+
+        assert dog.get_component(Transform).position == Vector2(260, 340)

@@ -36,6 +36,7 @@ from games.vinagre_matilha.systems import (
     CurrentZoneSystem,
     FlankerAssignmentSystem,
     JaguarAISystem,
+    PackContainmentSystem,
     PackMotionSystem,
     PressurePlateSystem,
     VanguardControlSystem,
@@ -91,6 +92,9 @@ _PRIORITY_PRESSURE_PLATE = 245
 _PRIORITY_JAGUAR_COMBAT = 260
 _PRIORITY_PACK_COMBAT = 265
 _PRIORITY_PACK_RECOVERY = 270
+# After combat, so a swipe's knockback is contained in the same tick it is
+# applied rather than one frame later.
+_PRIORITY_PACK_CONTAINMENT = 272
 _PRIORITY_HEALTH = 275
 
 
@@ -285,6 +289,10 @@ class GameScene(Scene):
         )
         register(
             PackRecoverySystem(self.entity_manager), priority=_PRIORITY_PACK_RECOVERY
+        )
+        register(
+            PackContainmentSystem(self.entity_manager, self._level.graph),
+            priority=_PRIORITY_PACK_CONTAINMENT,
         )
         register(HealthSystem(self.entity_manager), priority=_PRIORITY_HEALTH)
 
