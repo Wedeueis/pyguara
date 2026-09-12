@@ -72,35 +72,53 @@ def generate_cave(seed: int = 31337) -> list[str]:
 
     rows = ["".join(row) for row in grid]
 
-    # Spawn on the left of the trunk, exit on the right, both placed on
-    # the first open cell found so neither can end up buried in rock.
-    def first_open(column: int) -> int:
-        candidates = [r for r in range(CAVE_HEIGHT) if rows[r][column] == "."]
-        return candidates[len(candidates) // 2] if candidates else CAVE_HEIGHT // 2
+    # Spawn on the left of the trunk, on the first cell with floor under
+    # it so the player starts standing rather than mid-fall.
+    spawn_x = 4
+    spawn_y = next(
+        (
+            y
+            for y in range(CAVE_HEIGHT - 2, 0, -1)
+            if rows[y][spawn_x] == "." and rows[y + 1][spawn_x] == "#"
+        ),
+        CAVE_HEIGHT // 2,
+    )
+    spawn = (spawn_x, spawn_y)
 
-    spawn_x, exit_x = 4, CAVE_WIDTH - 5
-    spawn_y, exit_y = first_open(spawn_x), first_open(exit_x)
-    grid[spawn_y][spawn_x] = "P"
-    grid[exit_y][exit_x] = "E"
+    # Seal anything the player could fall into and not climb out of. Done
+    # before placing the exit or any creature, so nothing can be stranded
+    # in a pocket that is about to be filled in.
+    rows = seal_untraversable(rows, spawn)
+    layout = parse_cave(rows)
+    reachable = traversable_cells(layout, spawn)
 
-    # Creatures, scattered through open air away from the spawn.
+    # The exit goes at the furthest reachable point, which both guarantees
+    # it is escapable and makes the goal the deepest part of the cave
+    # rather than an arbitrary coordinate.
+    goal = max(reachable, key=lambda cell: (cell[0] - spawn_x) ** 2 + cell[1] ** 2)
+
+    grid = [list(row) for row in rows]
+    grid[spawn[1]][spawn[0]] = "P"
+    grid[goal[1]][goal[0]] = "E"
+
+    # Creatures, in reachable air well away from the spawn so the opening
+    # seconds are not an ambush.
+    candidates = sorted(
+        cell
+        for cell in reachable
+        if abs(cell[0] - spawn_x) > 10 and cell not in (spawn, goal)
+    )
     placed = 0
     attempts = 0
-    while placed < 9 and attempts < 500:
+    while placed < 9 and attempts < 400 and candidates:
         attempts += 1
-        x = int(rng.uniform(8, CAVE_WIDTH - 3))
-        y = int(rng.uniform(3, CAVE_HEIGHT - 3))
-        if grid[y][x] != ".":
+        cell = candidates[int(rng.uniform(0, len(candidates)))]
+        if grid[cell[1]][cell[0]] != ".":
             continue
-        if abs(x - spawn_x) < 8:
-            continue
-        grid[y][x] = "s" if placed % 3 == 2 else "b"
+        grid[cell[1]][cell[0]] = "s" if placed % 3 == 2 else "b"
         placed += 1
 
     return ["".join(row) for row in grid]
-
-
-CAVERN = generate_cave()
 
 
 @dataclass
@@ -173,6 +191,106 @@ def exposed_faces(layout: CaveLayout) -> list[tuple[Cell, Rect]]:
         if any(not layout.is_solid(n) for n in neighbours):
             faces.append((cell, layout.tile_rect(cell)))
     return faces
+
+
+# How many tiles the player can gain in one jump. Derived from
+# `systems.JUMP_SPEED` / `GRAVITY` (about 3.4 tiles) and rounded *down*:
+# a level that assumes the absolute apex is a level that softlocks on a
+# missed input.
+JUMP_TILES = 3
+
+
+def _moves_from(layout: CaveLayout, cell: Cell) -> list[Cell]:
+    """Cells reachable from `cell` by one platformer move.
+
+    A deliberately conservative model of `PlayerController`: walk or steer
+    sideways through open air, fall, and -- only when standing on solid
+    ground -- jump straight up through open air. It ignores the fine
+    detail of the arc, which is what makes it safe to build levels on: it
+    never claims a move the player cannot actually make.
+    """
+    x, y = cell
+    moves: list[Cell] = []
+
+    for neighbour in ((x - 1, y), (x + 1, y)):
+        if not layout.is_solid(neighbour):
+            moves.append(neighbour)
+
+    if not layout.is_solid((x, y + 1)):
+        moves.append((x, y + 1))
+    else:
+        # Standing on something, so a jump is available.
+        for height in range(1, JUMP_TILES + 1):
+            above = (x, y - height)
+            if layout.is_solid(above):
+                break
+            moves.append(above)
+
+    return moves
+
+
+def traversable_cells(layout: CaveLayout, start: Cell) -> set[Cell]:
+    """Open cells the player can reach from `start` *and* get back from.
+
+    Plain reachability is not enough, and assuming it is caused a real
+    softlock: a shaft deeper than a jump is perfectly reachable -- you
+    fall in -- and is a dead end the run never recovers from. Keeping only
+    the cells that can also return means every open cell is somewhere the
+    player can leave again.
+    """
+    forward: dict[Cell, list[Cell]] = {}
+    open_cells = [
+        (x, y)
+        for y in range(layout.height)
+        for x in range(layout.width)
+        if not layout.is_solid((x, y))
+    ]
+    for cell in open_cells:
+        forward[cell] = _moves_from(layout, cell)
+
+    backward: dict[Cell, list[Cell]] = {cell: [] for cell in open_cells}
+    for cell, targets in forward.items():
+        for target in targets:
+            if target in backward:
+                backward[target].append(cell)
+
+    def _flood(graph: dict[Cell, list[Cell]]) -> set[Cell]:
+        seen = {start}
+        stack = [start]
+        while stack:
+            for nxt in graph.get(stack.pop(), ()):
+                if nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        return seen
+
+    if start not in forward:
+        return set()
+    return _flood(forward) & _flood(backward)
+
+
+def seal_untraversable(rows: list[str], start: Cell) -> list[str]:
+    """Fill in every open cell the player could not reach or could not leave.
+
+    Repeated to a fixed point, because filling a cell changes the answer:
+    new rock is new floor, which can put a previously unreachable ledge
+    within jumping range.
+    """
+    for _pass in range(6):
+        layout = parse_cave(rows)
+        keep = traversable_cells(layout, start)
+        grid = [list(row) for row in rows]
+        changed = False
+        for y in range(layout.height):
+            for x in range(layout.width):
+                if layout.is_solid((x, y)) or (x, y) in keep:
+                    continue
+                grid[y][x] = "#"
+                changed = True
+        rows = ["".join(row) for row in grid]
+        if not changed:
+            break
+    return rows
 
 
 def march(
@@ -286,3 +404,7 @@ def cave_formations(layout: CaveLayout, seed: int = 20260912) -> list[Formation]
             )
 
     return formations
+
+
+# Built at import time, after every helper it depends on is defined.
+CAVERN = generate_cave()
