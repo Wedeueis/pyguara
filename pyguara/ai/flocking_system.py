@@ -193,12 +193,14 @@ class FlockingSystem:
         self._entity_manager = entity_manager
         self._cell_size = cell_size
 
+    @staticmethod
     def _neighbors_of(
-        self,
-        entity_id: str,
+        index: int,
         position: Vector2,
         agent: FlockingAgent,
-        spatial_hash: SpatialHash[str],
+        spatial_hash: SpatialHash[int],
+        transforms: list[Transform],
+        agents: list[FlockingAgent],
     ) -> Iterable[tuple[Vector2, Vector2]]:
         """Yield `(position, velocity)` for each flockmate in range.
 
@@ -206,25 +208,36 @@ class FlockingSystem:
         lists that each get iterated again downstream -- which is the
         allocation `flock_force` exists to avoid.
 
+        The hash is keyed on a position in `transforms`/`agents`, not on an
+        entity id, so resolving a neighbour is two list subscripts instead
+        of a manager lookup plus two component lookups. That is the single
+        largest cost in a flocking tick at scale.
+
+        Both reads are deliberately *live* rather than snapshotted. The
+        pre-existing behaviour is Gauss-Seidel: the hash is built from
+        start-of-tick positions, but an agent steering later in the tick
+        sees the already-moved positions of the agents ahead of it.
+        Snapshotting into flat float arrays would quietly convert that to
+        Jacobi and change how a flock settles, which is not a change a
+        performance commit should be making.
+
         Args:
-            entity_id: The steering agent, excluded from its own neighbours.
+            index: The steering agent's own slot, excluded from its neighbours.
             position: Its world position, the query centre.
             agent: Read for `neighbor_radius`.
-            spatial_hash: This tick's index.
+            spatial_hash: This tick's index, keyed by slot.
+            transforms: This tick's `Transform` components, by slot.
+            agents: This tick's `FlockingAgent` components, by slot.
 
         Yields:
             One `(position, velocity)` pair per flockmate.
         """
-        for neighbor_id in spatial_hash.query_radius(position, agent.neighbor_radius):
-            if neighbor_id == entity_id:
+        for slot in spatial_hash.query_radius(position, agent.neighbor_radius):
+            if slot == index:
                 continue
-            neighbor = self._entity_manager.get_entity(neighbor_id)
-            if neighbor is None:
-                continue
-            yield (
-                neighbor.get_component(Transform).position,
-                neighbor.get_component(FlockingAgent).velocity,
-            )
+            # No None check: slots index lists built from this tick's live
+            # entities, so unlike an id lookup they cannot miss.
+            yield transforms[slot].position, agents[slot].velocity
 
     def update(self, dt: float) -> None:
         """Update all flocking agents.
@@ -238,21 +251,29 @@ class FlockingSystem:
         if not entities:
             return
 
-        spatial_hash: SpatialHash[str] = SpatialHash(cell_size=self._cell_size)
-        for entity in entities:
-            spatial_hash.insert(entity.id, entity.get_component(Transform).position)
+        # Resolve every component once, into parallel lists indexed by slot.
+        # Everything downstream addresses a flockmate by slot, so the only
+        # component lookups in a tick are these -- one per agent, rather
+        # than two per *neighbour* per agent.
+        agents = [entity.get_component(FlockingAgent) for entity in entities]
+        transforms = [entity.get_component(Transform) for entity in entities]
 
-        for entity in entities:
-            agent = entity.get_component(FlockingAgent)
+        spatial_hash: SpatialHash[int] = SpatialHash(cell_size=self._cell_size)
+        for slot, transform in enumerate(transforms):
+            spatial_hash.insert(slot, transform.position)
+
+        for slot, agent in enumerate(agents):
             if not agent.enabled:
                 continue
-            transform = entity.get_component(Transform)
+            transform = transforms[slot]
 
             position = transform.position
             force = flock_force(
                 position,
                 agent,
-                self._neighbors_of(entity.id, position, agent, spatial_hash),
+                self._neighbors_of(
+                    slot, position, agent, spatial_hash, transforms, agents
+                ),
             )
             if agent.seek_weight and agent.seek_target is not None:
                 force = (
