@@ -96,6 +96,23 @@ stack.add_effect(VignetteEffect(ctx, radius=0.7, softness=0.4))
 
 Effects can be enabled/disabled at runtime via `effect.enabled = False`.
 
+Order matters, and is the caller's to choose. Bloom generally runs first, so it
+bleeds the scene's own hot colours rather than whatever a later effect drew over
+them; a vignette generally runs last, because it is a lens rather than a light.
+
+Shipped effects:
+
+| Effect | What it does |
+| --- | --- |
+| `BloomEffect` | Bleeds a halo out of anything past a brightness threshold. |
+| `HeatHazeEffect` | Refracts the frame with rising hot air, with dust drifting through it. `gust()` kicks up a cloud that settles on its own. |
+| `StormEffect` | Procedural rain, sheet lightning and forked bolts. |
+| `VignetteEffect` | Darkens the edges of the frame. |
+
+Each of these owns only how the effect *looks*. What the weather or the heat is
+*doing* stays with the caller — which is what lets a game tie a strike, a camera
+shake and a thunderclap to the same frame.
+
 ### Feedback primitives
 
 `pyguara.graphics.vfx` also holds the two small pooled things a game reaches for
@@ -111,66 +128,6 @@ DI, the same way `ParticleSystem` is:
   pixel offset, so a second impact adds to the first rather than cutting it
   short. The result is a plain offset: a world-space scene adds it to the camera
   position, a screen-space one adds it to what it draws.
-
-## Components
-
-### Camera2D
-Handles Coordinate Transformation (World Space <-> Screen Space). Supports Zoom
-and Panning. There is one world-to-screen transform (`screen_offset`);
-`world_to_screen` / `screen_to_world` / `get_view_bounds` are conveniences
-built on it and take an optional `viewport` (defaulting to the camera's
-constructed size). Camera rotation is not supported — the render path does not
-rotate.
-
-### Viewport
-Defines the drawable region on the screen. Used for:
-- Split-screen multiplayer.
-- Minimaps.
-- Aspect ratio enforcement (Letterboxing).
-
-### Geometry
-Procedural shapes (`Box`, `Circle`) that lazy-generate their textures. This allows them to be batched alongside standard sprites.
-
-## Backends
-
-The engine uses the `IRenderer` protocol, allowing for different implementations:
-
-- **ModernGLRenderer** (Recommended): GPU-accelerated OpenGL 3.3+ with hardware instancing. Supports all advanced features (lighting, post-processing).
-- **PygameBackend**: CPU-based `pygame-ce` rendering. Uses stub implementations for advanced features (renders fully lit, no post-processing).
-- **HeadlessBackend**: Discards draw calls. Useful for CI/CD and server-side simulation.
-
-### Graceful Degradation
-
-When using Pygame backend, advanced graphics features gracefully degrade:
-
-| Feature | ModernGL | Pygame |
-|---------|----------|--------|
-| Sprite rendering | Hardware instanced | Software blitting |
-| Lighting | Dynamic light maps | Fully lit (no shadows) |
-| Post-processing | Bloom, vignette, etc. | Pass-through (no effects) |
-| Materials | Custom shaders | Default only |
-
-Game code using these features runs unchanged on Pygame - stubs accept the API calls but skip the GPU operations.
-
----
-
-# UI System
-
-The UI system (`pyguara.ui`) is immediate-mode friendly but retains state via an Object-Oriented widget tree.
-
-## Architecture
-- **UIManager**: Routes input events (`OnMouseEvent`) to widgets, and runs a
-  layout pass over every root before rendering -- applying `LayoutConstraints`
-  and container stacking -- re-run on window resize or `invalidate_layout()`.
-- **UIElement**: Base class for all widgets (`Button`, `Panel`, `Label`).
-- **Layouts**: `LayoutConstraints` position/size an element against its parent
-  (anchor, margin, percentage); `BoxContainer` stacks children
-  vertically/horizontally with alignment.
-- **Theme**: a global `UITheme` (`get_theme()`/`set_theme()`) controls colors
-  and spacing; elements read it live, so a swap re-skins existing widgets.
-
-## Integration
-The UI is rendered via the `UIRenderer` protocol, allowing it to sit on top of the main game render pass.
 
 ## Components
 
