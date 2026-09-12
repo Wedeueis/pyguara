@@ -128,16 +128,23 @@ class LightingSystem:
 
     def collect_lights_screen_space(
         self,
-        camera_position: Vector2,
         camera_zoom: float,
         viewport_offset: Vector2,
     ) -> list[LightData]:
         """Get lights with positions transformed to screen space.
 
+        The transform is `Camera2D`'s single world-to-screen definition:
+        `world * zoom + screen_offset`. This used to subtract the camera
+        position here as well, on top of the `screen_offset` that already
+        has it subtracted out -- so every light was displaced by a whole
+        camera position, which on a centred camera threw the entire light
+        map off the left of the frame. `PulsePass` hit and documented the
+        same double-subtraction; this is the other half of it.
+
         Args:
-            camera_position: Camera world position.
             camera_zoom: Camera zoom factor.
-            viewport_offset: Viewport offset in screen space.
+            viewport_offset: The camera's `screen_offset(viewport)` -- the
+                translation that already accounts for camera position.
 
         Returns:
             List of LightData with screen-space positions.
@@ -145,10 +152,7 @@ class LightingSystem:
         screen_lights: list[LightData] = []
 
         for light in self._lights:
-            # Transform world position to screen space
-            screen_pos = (
-                light.position - camera_position
-            ) * camera_zoom + viewport_offset
+            screen_pos = light.position * camera_zoom + viewport_offset
 
             screen_light = LightData(
                 position=screen_pos,

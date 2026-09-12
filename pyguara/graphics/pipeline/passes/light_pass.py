@@ -183,7 +183,6 @@ class LightPass(BaseRenderPass):
 
         # Get lights in screen space
         lights = self._lighting_system.collect_lights_screen_space(
-            self._camera.position,
             self._camera.zoom,
             screen_offset,
         )
