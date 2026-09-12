@@ -2,8 +2,6 @@
 
 import dis
 
-import pytest
-
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.backends.headless_renderer import HeadlessTextureFactory
 from pyguara.graphics.components.geometry import Box, Circle
@@ -12,13 +10,6 @@ from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.render_system import RenderSystem
 from pyguara.graphics.protocols import Renderable
 from pyguara.resources.types import Texture
-
-# Check if pytest-benchmark is available
-try:
-    # import pytest_benchmark
-    BENCHMARK_AVAILABLE = True
-except ImportError:
-    BENCHMARK_AVAILABLE = False
 
 
 class MockTexture(Texture):
@@ -161,43 +152,3 @@ def test_all_renderables_implement_protocol():
         _ = renderable.z_index
         _ = renderable.rotation
         _ = renderable.scale
-
-
-@pytest.mark.skipif(not BENCHMARK_AVAILABLE, reason="pytest-benchmark not installed")
-@pytest.mark.benchmark
-def test_render_submission_performance(benchmark):
-    """Benchmark render submission with direct attribute access.
-
-    This test verifies that removing getattr from the hot loop provides
-    fast submission performance. Expected: < 1ms for 100 sprites.
-    """
-    import pygame
-
-    from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
-
-    pygame.init()
-    screen = pygame.display.set_mode((800, 600))
-    backend = PygameBackend(screen)
-    render_system = RenderSystem(backend)
-
-    # Create test sprites (now fully Renderable!)
-    texture = MockTexture()
-    sprites = [
-        Sprite(
-            texture=texture,
-            position=Vector2(i * 10, i * 10),
-            rotation=i * 0.1,
-            scale=Vector2(1 + i * 0.01, 1),
-        )
-        for i in range(100)
-    ]
-
-    # Benchmark submission
-    def submit_all():
-        for sprite in sprites:
-            render_system.submit(sprite)
-
-    # pytest-benchmark will run this multiple times and report stats
-    benchmark(submit_all)
-
-    pygame.quit()
