@@ -12,6 +12,7 @@ An entity can carry both components (e.g. the jaguar uses plain
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -73,6 +74,98 @@ class FlockingAgent(StrictComponent):
         StrictComponent.__init__(self)
 
 
+def flock_force(
+    position: Vector2,
+    agent: FlockingAgent,
+    neighbors: Iterable[tuple[Vector2, Vector2]],
+) -> Vector2:
+    """Sum cohesion, alignment and separation in a single pass.
+
+    Equivalent to calling `SteeringBehavior.cohesion`, `.alignment` and
+    `.separation` and summing the weighted results -- `test_ai_flocking.py`
+    asserts that equivalence directly, because it is the whole safety net
+    for this function existing at all.
+
+    It exists because the three behaviours each want a different reduction
+    over the *same* neighbour list: cohesion needs the mean position,
+    alignment the mean velocity, separation a distance-weighted push. Run
+    separately that is three iterations plus two `sum(..., Vector2(0, 0))`
+    allocations, on top of the pass that collected the neighbours. Fused,
+    it is one.
+
+    `seek` is deliberately not folded in: it takes a caller-supplied
+    target rather than anything about the neighbourhood, so it costs one
+    call per agent regardless and reads better left where it is.
+
+    Args:
+        position: The steering agent's own world position.
+        agent: The agent, read for its radii, weights and velocity.
+        neighbors: `(position, velocity)` per flockmate, self excluded.
+
+    Returns:
+        The weighted sum of the three neighbourhood forces.
+    """
+    max_speed = agent.max_speed
+    separation_radius = agent.separation_radius
+    want_cohesion = agent.cohesion_weight != 0.0
+    want_alignment = agent.alignment_weight != 0.0
+    want_separation = agent.separation_weight != 0.0
+
+    count = 0
+    position_sum = Vector2(0, 0)
+    velocity_sum = Vector2(0, 0)
+    separation_push = Vector2(0, 0)
+
+    for neighbor_position, neighbor_velocity in neighbors:
+        count += 1
+        if want_cohesion:
+            position_sum = position_sum + neighbor_position
+        if want_alignment:
+            velocity_sum = velocity_sum + neighbor_velocity
+        if not want_separation:
+            continue
+
+        offset = position - neighbor_position
+        distance = offset.length
+        if distance >= separation_radius:
+            continue
+        if distance < 0.001:
+            # Coincident agents: push in a fixed, stable direction rather
+            # than dividing by zero.
+            separation_push = separation_push + Vector2(1, 0) * max_speed
+            continue
+        weight = 1.0 - (distance / separation_radius)
+        separation_push = separation_push + cast(
+            Vector2, offset.normalized() * (weight * max_speed)
+        )
+
+    if count == 0:
+        return Vector2(0, 0)
+
+    force = Vector2(0, 0)
+    inverse_count = 1.0 / count
+
+    if want_cohesion:
+        centre = position_sum * inverse_count
+        direction = centre - position
+        if direction.length >= 0.001:
+            desired = cast(Vector2, direction.normalized() * max_speed)
+            force = force + (desired - agent.velocity) * agent.cohesion_weight
+
+    if want_alignment:
+        average = velocity_sum * inverse_count
+        if average.length > max_speed:
+            average = cast(Vector2, average.normalized() * max_speed)
+        force = force + (average - agent.velocity) * agent.alignment_weight
+
+    if want_separation:
+        if separation_push.length > max_speed:
+            separation_push = cast(Vector2, separation_push.normalized() * max_speed)
+        force = force + separation_push * agent.separation_weight
+
+    return force
+
+
 class FlockingSystem:
     """Ticks every `FlockingAgent` toward its neighbors, each frame.
 
@@ -100,6 +193,39 @@ class FlockingSystem:
         self._entity_manager = entity_manager
         self._cell_size = cell_size
 
+    def _neighbors_of(
+        self,
+        entity_id: str,
+        position: Vector2,
+        agent: FlockingAgent,
+        spatial_hash: SpatialHash[str],
+    ) -> Iterable[tuple[Vector2, Vector2]]:
+        """Yield `(position, velocity)` for each flockmate in range.
+
+        A generator, so the neighbourhood is never materialised as two
+        lists that each get iterated again downstream -- which is the
+        allocation `flock_force` exists to avoid.
+
+        Args:
+            entity_id: The steering agent, excluded from its own neighbours.
+            position: Its world position, the query centre.
+            agent: Read for `neighbor_radius`.
+            spatial_hash: This tick's index.
+
+        Yields:
+            One `(position, velocity)` pair per flockmate.
+        """
+        for neighbor_id in spatial_hash.query_radius(position, agent.neighbor_radius):
+            if neighbor_id == entity_id:
+                continue
+            neighbor = self._entity_manager.get_entity(neighbor_id)
+            if neighbor is None:
+                continue
+            yield (
+                neighbor.get_component(Transform).position,
+                neighbor.get_component(FlockingAgent).velocity,
+            )
+
     def update(self, dt: float) -> None:
         """Update all flocking agents.
 
@@ -122,48 +248,12 @@ class FlockingSystem:
                 continue
             transform = entity.get_component(Transform)
 
-            neighbor_positions: list[Vector2] = []
-            neighbor_velocities: list[Vector2] = []
-            for neighbor_id in spatial_hash.query_radius(
-                transform.position, agent.neighbor_radius
-            ):
-                if neighbor_id == entity.id:
-                    continue
-                neighbor = self._entity_manager.get_entity(neighbor_id)
-                if neighbor is None:
-                    continue
-                neighbor_agent = neighbor.get_component(FlockingAgent)
-                neighbor_positions.append(neighbor.get_component(Transform).position)
-                neighbor_velocities.append(neighbor_agent.velocity)
-
-            force = Vector2(0, 0)
-            if agent.cohesion_weight:
-                force = (
-                    force
-                    + SteeringBehavior.cohesion(
-                        transform, neighbor_positions, agent.max_speed, agent.velocity
-                    )
-                    * agent.cohesion_weight
-                )
-            if agent.alignment_weight:
-                force = (
-                    force
-                    + SteeringBehavior.alignment(
-                        neighbor_velocities, agent.max_speed, agent.velocity
-                    )
-                    * agent.alignment_weight
-                )
-            if agent.separation_weight:
-                force = (
-                    force
-                    + SteeringBehavior.separation(
-                        transform,
-                        neighbor_positions,
-                        agent.separation_radius,
-                        agent.max_speed,
-                    )
-                    * agent.separation_weight
-                )
+            position = transform.position
+            force = flock_force(
+                position,
+                agent,
+                self._neighbors_of(entity.id, position, agent, spatial_hash),
+            )
             if agent.seek_weight and agent.seek_target is not None:
                 force = (
                     force
