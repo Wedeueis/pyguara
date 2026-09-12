@@ -6,24 +6,21 @@ whose release cost grows with how much of it is in use does not deliver
 that, and the largest pool anywhere else in the suite is size 4, which is
 why it went unnoticed.
 
-**Release order is the whole story here**, and it is worth writing down
-because the fast case looks reassuring and is an accident. `release()`
-does `if entity not in self._active` followed by `self._active.remove(...)`,
-both linear scans from index 0:
+**Release order used to be the whole story here**, and the guard below is
+what holds the fix in place. When the active set was a list, `release()`
+did an `in` scan followed by a `list.remove()` -- two linear scans from
+index 0 -- so cost depended entirely on the order entities came back:
 
-- Releasing *oldest-first* finds the match at index 0 immediately, and
-  the removal is a C-level memmove. Measured near-linear: 3000 entities
-  drain in ~1 ms.
-- Releasing *newest-first* scans the entire list with Python-level
-  equality on every release. Measured quadratic: 500 -> 2.1 ms,
-  1000 -> 8.3, 2000 -> 32.9, **3000 -> 73.4 ms**, or four and a half
-  frames to put a pool away.
+- *Oldest-first* found its match at index 0 and removed it with a C-level
+  memmove. Near-linear, and reassuring, and an accident.
+- *Newest-first* scanned the whole list every time. Quadratic:
+  500 -> 2.1 ms, 1000 -> 8.3, 2000 -> 32.9, **3000 -> 73.4 ms**, four and
+  a half frames to put a pool away.
 
-Anything other than strictly oldest-first is quadratic; newest-first is
-simply the clearest case to measure. The guard below is therefore expected
-to **fail** until `release()` is fixed, and it says so rather than being
-written loose enough to pass. Putting the before-number in a merged
-artefact is this suite's entire purpose.
+The active set is now a dict keyed on entity id, so release is O(1) in
+any order. `test_pool_churn_is_linear` measures the worst of the old
+orders precisely because it was the one that fell over; keep it that way,
+or a regression back to a list would pass unnoticed.
 """
 
 from __future__ import annotations
@@ -68,15 +65,6 @@ def _drain_newest_first(pool: EntityPool) -> None:
 
 
 @pytest.mark.performance
-@pytest.mark.xfail(
-    reason=(
-        "EntityPool.release() is O(n) -- an `in` scan plus a list.remove(), "
-        "so releasing newest-first drains quadratically (3000 entities take "
-        "~73ms, four and a half frames). Fixed separately; this guard flips "
-        "to passing then."
-    ),
-    strict=True,
-)
 def test_pool_churn_is_linear() -> None:
     """Filling and draining 4x the pool should cost about 4x."""
     small_pool = _build_pool(500)
