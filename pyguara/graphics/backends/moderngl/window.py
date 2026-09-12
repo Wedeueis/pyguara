@@ -48,6 +48,14 @@ class PygameGLWindow:
         self._width = config.screen_width
         self._height = config.screen_height
 
+        # `set_mode()` initialises the display module implicitly, which is
+        # why the pygame backend gets away without this -- but
+        # `gl_set_attribute()` does not, and raises "video system not
+        # initialized" when it is the first display call in the process.
+        # It is idempotent, so calling it here costs nothing when the
+        # caller has already initialised pygame.
+        pygame.display.init()
+
         # Set OpenGL attributes before creating display
         pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MAJOR_VERSION, 3)
         pygame.display.gl_set_attribute(pygame.GL_CONTEXT_MINOR_VERSION, 3)

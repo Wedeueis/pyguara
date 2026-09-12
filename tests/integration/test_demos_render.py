@@ -31,7 +31,14 @@ from tools.agent_view import DEMOS, is_blank  # noqa: E402
 
 # boot_process only opens a window and draws nothing; that is its whole point
 # as tutorial module 1, so a flat frame there is correct rather than a defect.
-DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"})
+#
+# mourisco_ressonancia runs on the ModernGL backend, and these tests run
+# under SDL's dummy video driver, which provides no OpenGL at all -- the
+# demo cannot even create its context, let alone draw. It is covered
+# instead by `tools/agent_view.py mourisco_ressonancia --gl`, which uses
+# SDL's offscreen driver and reads the GL framebuffer.
+GL_ONLY_DEMOS = {"mourisco_ressonancia"}
+DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"} - GL_ONLY_DEMOS)
 
 FRAMES = 20
 
