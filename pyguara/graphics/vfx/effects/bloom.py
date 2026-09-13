@@ -64,7 +64,13 @@ class BloomEffect(PostProcessEffect):
         self._threshold_program: moderngl.Program | None = None
         self._blur_program: moderngl.Program | None = None
         self._composite_program: moderngl.Program | None = None
-        self._vao: moderngl.VertexArray | None = None
+
+        # One VAO per program, built once. A fullscreen-quad VAO binds no
+        # buffers at all (the vertices come from gl_VertexID), so there is
+        # nothing about it that changes between frames.
+        self._threshold_vao: moderngl.VertexArray | None = None
+        self._blur_vao: moderngl.VertexArray | None = None
+        self._composite_vao: moderngl.VertexArray | None = None
 
         # Internal FBO names
         self._bright_fbo_name = "_bloom_bright"
@@ -103,8 +109,10 @@ class BloomEffect(PostProcessEffect):
             vertex_shader=vert_source, fragment_shader=composite_source
         )
 
-        # Create VAO (fullscreen quad uses gl_VertexID)
-        self._vao = self._ctx.vertex_array(self._threshold_program, [])
+        # Create the VAOs (fullscreen quad uses gl_VertexID)
+        self._threshold_vao = self._ctx.vertex_array(self._threshold_program, [])
+        self._blur_vao = self._ctx.vertex_array(self._blur_program, [])
+        self._composite_vao = self._ctx.vertex_array(self._composite_program, [])
 
     def apply(
         self,
@@ -121,7 +129,9 @@ class BloomEffect(PostProcessEffect):
         """
         if self._threshold_program is None or self._blur_program is None:
             return
-        if self._composite_program is None or self._vao is None:
+        if self._composite_program is None or self._threshold_vao is None:
+            return
+        if self._blur_vao is None or self._composite_vao is None:
             return
 
         # Get temp framebuffers
@@ -135,11 +145,9 @@ class BloomEffect(PostProcessEffect):
         input_fbo.texture.use(0)
         self._threshold_program["u_texture"] = 0
         self._threshold_program["u_threshold"] = self.threshold
-        self._vao = self._ctx.vertex_array(self._threshold_program, [])
-        self._vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
+        self._threshold_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
 
         # Pass 2: Blur bright pixels (ping-pong horizontal/vertical)
-        blur_vao = self._ctx.vertex_array(self._blur_program, [])
         self._blur_program["u_texel_size"] = texel_size
 
         for _ in range(self.blur_passes):
@@ -148,33 +156,35 @@ class BloomEffect(PostProcessEffect):
             bright_fbo.texture.use(0)
             self._blur_program["u_texture"] = 0
             self._blur_program["u_direction"] = (1.0, 0.0)
-            blur_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
+            self._blur_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
 
             # Vertical blur: blur -> bright
             bright_fbo.bind()
             blur_fbo.texture.use(0)
             self._blur_program["u_texture"] = 0
             self._blur_program["u_direction"] = (0.0, 1.0)
-            blur_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-
-        blur_vao.release()
+            self._blur_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
 
         # Pass 3: Composite bloom with original
         output_fbo.bind()
         input_fbo.texture.use(0)
         bright_fbo.texture.use(1)
-        composite_vao = self._ctx.vertex_array(self._composite_program, [])
         self._composite_program["u_scene"] = 0
         self._composite_program["u_bloom"] = 1
         self._composite_program["u_intensity"] = self.intensity
-        composite_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-        composite_vao.release()
+        self._composite_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
 
     def release(self) -> None:
         """Release GPU resources."""
-        if self._vao is not None:
-            self._vao.release()
-            self._vao = None
+        if self._threshold_vao is not None:
+            self._threshold_vao.release()
+            self._threshold_vao = None
+        if self._blur_vao is not None:
+            self._blur_vao.release()
+            self._blur_vao = None
+        if self._composite_vao is not None:
+            self._composite_vao.release()
+            self._composite_vao = None
         if self._threshold_program is not None:
             self._threshold_program.release()
             self._threshold_program = None
