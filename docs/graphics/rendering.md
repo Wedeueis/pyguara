@@ -91,6 +91,52 @@ ambient_entity.add_component(AmbientLight(
 
 The light pass renders all lights additively, then the composite pass multiplies world × lightmap.
 
+### Day/night cycle
+
+`AmbientCycle` drives an `AmbientLight` around a loop of keyframes, which is the
+mechanism under a day/night cycle. What the times of day are *called*, and
+whether a loop is a day at all, stays with the game:
+
+```python
+from pyguara.graphics.lighting import (
+    AmbientCycle,
+    AmbientCycleSystem,
+    LightKeyframe,
+)
+
+ambient_entity.add_component(AmbientLight())
+ambient_entity.add_component(AmbientCycle(
+    keyframes=[
+        LightKeyframe(0.00, Color(12, 14, 34), 0.18),   # midnight
+        LightKeyframe(0.25, Color(255, 174, 110), 0.65),  # dawn
+        LightKeyframe(0.50, Color(255, 250, 235), 1.00),  # noon
+        LightKeyframe(0.75, Color(120, 90, 140), 0.45),   # dusk
+    ],
+    duration=240.0,  # real seconds for one full loop
+))
+
+cycle_system = AmbientCycleSystem(entity_manager)   # scene-owned, ticked with dt
+```
+
+The loop is a **ring**: the last keyframe interpolates back round to the first
+through 1.0/0.0, so there is no need for a keyframe at both ends. Phases are
+wrapped, not clamped — `sample_cycle(keyframes, 1.25)` samples 0.25.
+
+`AmbientCycle` requires an `AmbientLight` on the same entity, and is opt-in per
+entity: a scene that attaches no cycle behaves exactly as it did before. The
+`LightingSystem` needs no changes either — it re-reads `AmbientLight` from the
+ECS every tick regardless of what wrote it.
+
+**A cycle owns the `AmbientLight` on its entity**, overwriting colour and
+intensity on every tick it plays. A transient flash — lightning, an explosion
+lighting the sky — is therefore either a `LightSource` (arguably what lightning
+is) or a `playing = False` for its duration. It is not a second writer setting
+`intensity` between ticks; that value does not survive the next one.
+
+`sample_cycle(keyframes, phase)` is a plain function over plain data, so a game
+tinting its fog, its particles or its UI by the same phase calls it directly
+rather than reaching into the system.
+
 ## Post-Processing
 
 Screen-space effects are chained via `PostProcessStack`:
