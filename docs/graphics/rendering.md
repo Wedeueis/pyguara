@@ -91,6 +91,56 @@ ambient_entity.add_component(AmbientLight(
 
 The light pass renders all lights additively, then the composite pass multiplies world × lightmap.
 
+### Light types
+
+`LightType` picks the shape `light.frag` cuts:
+
+| Type | Shape |
+|------|-------|
+| `POINT` | Radial gradient from the centre, shaped by `falloff`. The default. |
+| `DIRECTIONAL` | Parallel rays — the quad is lit evenly, with no distance falloff. `radius` bounds the area rather than shaping it, so a scene-wide sun is a directional light with a large radius. |
+| `SPOT` | A `POINT` masked to a cone of `spot_angle` degrees (the **full** opening, so 60 reaches 30 either side) pointed along `spot_direction`. |
+
+```python
+entity.add_component(LightSource(
+    light_type=LightType.SPOT,
+    radius=240.0,
+    spot_angle=50.0,      # full cone opening, degrees
+    spot_direction=90.0,  # clockwise from screen +x, so this points down
+))
+```
+
+**Angles run clockwise from screen +x**, because screen Y points down —
+the same convention `IRenderer.draw_line` uses. The cosine of the
+half-angle is computed once per frame on the CPU and handed to the shader,
+which compares dot products rather than calling `cos` per fragment.
+
+### Flicker
+
+Any light can gutter:
+
+```python
+entity.add_component(LightSource(
+    color=Color(255, 170, 90),
+    flicker_enabled=True,
+    flicker_speed=9.0,      # Hz
+    flicker_intensity=0.25, # bound, not a scale: stays within ±25% of intensity
+))
+```
+
+`flicker_intensity` is a **bound**, not a scale — a light set to vary by 25%
+never drops below 75% of its configured intensity, and never below zero
+whatever the value. Two lights with the same settings do not flicker in
+lockstep: the starting phase is derived from the entity id, and from a
+checksum of it rather than `hash()`, so a replay reproduces the same
+flicker on a later run.
+
+Flicker resolves **on the CPU**, in `LightingSystem.update(dt)`, folded into
+the intensity the shader receives. That system already walks every light and
+already has `dt`, so this needs no time uniform and no extra instance
+attribute — and it stays testable without a GL context, which is the only
+kind of lighting test this repository can run everywhere.
+
 ### Day/night cycle
 
 `AmbientCycle` drives an `AmbientLight` around a loop of keyframes, which is the
