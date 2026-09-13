@@ -156,3 +156,65 @@ def test_the_filled_slice_is_contiguous_for_upload() -> None:
     count = pack_sprite_instances(batch, out)
 
     assert out[:count].flags["C_CONTIGUOUS"]
+
+
+def test_an_enabled_tint_is_packed_normalised() -> None:
+    """Batches carry 0-255 RGBA; the shader multiplies in 0-1."""
+    batch = RenderBatch(
+        texture=_Texture(),
+        destinations=[(0.0, 0.0), (1.0, 1.0)],
+        colors=[(255, 0, 0, 255), (0, 128, 255, 0)],
+        colors_enabled=True,
+    )
+    out = _scratch()
+
+    pack_sprite_instances(batch, out)
+
+    assert out[0, 7:11] == pytest.approx([1.0, 0.0, 0.0, 1.0])
+    assert out[1, 7:11] == pytest.approx([0.0, 128 / 255, 1.0, 0.0], abs=1e-6)
+
+
+def test_no_tint_broadcasts_opaque_white() -> None:
+    """The colour columns are always packed -- an untinted batch multiplies
+    the texel by 1, which is why no second shader program is needed."""
+    batch = RenderBatch(texture=_Texture(), destinations=[(0.0, 0.0)] * 2)
+    out = _scratch()
+
+    pack_sprite_instances(batch, out)
+
+    assert out[:2, 7:11] == pytest.approx(np.ones((2, 4)))
+
+
+def test_a_short_colour_list_broadcasts_white_rather_than_tinting_some() -> None:
+    """`colors_enabled` gates the packing, not the shader -- and it gates it
+    on the whole batch, so a malformed one renders plainly rather than
+    tinting its first few sprites."""
+    batch = RenderBatch(
+        texture=_Texture(),
+        destinations=[(0.0, 0.0), (1.0, 1.0)],
+        colors=[(255, 0, 0, 255)],
+        colors_enabled=True,
+    )
+    out = _scratch()
+
+    pack_sprite_instances(batch, out)
+
+    assert out[:2, 7:11] == pytest.approx(np.ones((2, 4)))
+
+
+def test_colours_left_over_from_a_previous_batch_do_not_leak() -> None:
+    """The scratch array is reused every frame: an untinted batch packed
+    after a tinted one must overwrite the colour columns, not inherit them."""
+    out = _scratch()
+    tinted = RenderBatch(
+        texture=_Texture(),
+        destinations=[(0.0, 0.0)],
+        colors=[(255, 0, 0, 255)],
+        colors_enabled=True,
+    )
+    pack_sprite_instances(tinted, out)
+
+    plain = RenderBatch(texture=_Texture(), destinations=[(0.0, 0.0)])
+    pack_sprite_instances(plain, out)
+
+    assert out[0, 7:11] == pytest.approx([1.0, 1.0, 1.0, 1.0])

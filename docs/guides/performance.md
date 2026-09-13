@@ -172,20 +172,20 @@ between Python and GPU work is itself informative.
 All on the transform path, so the pack column is genuinely a *component* of
 the end-to-end column rather than a figure from a different code path.
 
-| Sprites | End-to-end | …of which: instance pack (row loop) | Pack share |
-| ---: | ---: | ---: | ---: |
-| 1000 | 1.53 | 0.65 | 42% |
-| 5000 | 5.09 | 3.44 | 68% |
-| 20000 | 16.00 | 12.98 | **81%** |
+| Sprites | End-to-end | …of which: instance pack | Pack share | Pack, as a row loop |
+| ---: | ---: | ---: | ---: | ---: |
+| 1000 | 1.86 | 0.40 | 21% | 0.85 |
+| 5000 | 3.33 | 1.99 | 60% | 4.46 |
+| 20000 | 11.62 | 8.07 | **69%** | 17.47 |
 
-**The Python pack loop dominates, and its share grows with count.** Filling the
-instance array one row at a time accounts for four fifths of an entire
-20,000-sprite draw; the GPU work and the upload together are the remaining
-fifth. Anything done to speed this path up should be aimed at the pack.
-
-Packing the same data with numpy column writes instead of a row loop: 0.40 ms at
-1000, 2.00 ms at 5000, **8.20 ms at 20000** — about 1.6× faster, and the gap
-widens with count.
+**The Python pack still dominates at scale, but it no longer runs a row at a
+time.** The last column is the row loop the path used to run, measured at the
+same widths for comparison: filling the instance array with numpy column writes
+instead is about 2.2× faster at 20000, and that alone took the whole
+20,000-sprite draw from roughly 16 ms to 11.6 ms. The pack's *share* fell from
+four fifths to a bit over two thirds — it is still where the time is, so
+anything further done to this path should still be aimed at it, and the
+remaining cost is dominated by turning Python lists of tuples into arrays.
 
 ### Instance layout width
 
@@ -193,15 +193,15 @@ Packing and uploading 20000 instances, 7 floats each versus 11:
 
 | Floats per instance | Time |
 | ---: | ---: |
-| 7 (today) | 9.75 ms |
-| 11 (with a per-instance tint) | 9.46 ms |
+| 7 (position and transform only) | 9.02 ms |
+| 11 (with a per-instance tint) | 9.53 ms |
 
-**Indistinguishable from noise** — across runs the two swap places, so the real
-difference is under a few percent. Widening the sprite instance layout to carry
-a per-instance tint therefore costs effectively nothing, which makes carrying it
-unconditionally cheaper than maintaining a second shader program for untinted
-batches. Broadcasting a constant into four extra columns is free once the pack
-is vectorised; the bytes uploaded are 320 KB per frame at 20,000 sprites.
+**Within a few percent, and across runs the two swap places.** Widening the
+sprite instance layout to carry a per-instance tint therefore costs effectively
+nothing, which is why the GL sprite path carries it unconditionally rather than
+keeping a second shader program for untinted batches — an untinted batch simply
+broadcasts white into the four colour columns, which is free once the pack is
+vectorised. The bytes uploaded are 320 KB per frame at 20,000 sprites.
 
 ---
 

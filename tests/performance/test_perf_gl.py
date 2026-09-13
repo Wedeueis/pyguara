@@ -25,15 +25,19 @@ import math
 import numpy as np
 import pytest
 
+from pyguara.graphics.backends.moderngl.instancing import (
+    INSTANCE_FLOATS,
+    pack_sprite_instances,
+)
 from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
 from pyguara.graphics.types import RenderBatch
 
 pytestmark = [pytest.mark.performance, pytest.mark.slow]
 
-# What `ModernGLRenderer` packs today, and what it would pack if the
-# sprite path carried a per-instance tint. Measuring both puts the cost of
-# that layout change on record before anyone argues about it.
-FLOATS_TODAY = 7
+# What `ModernGLRenderer` packed before the sprite path carried a
+# per-instance tint, and what it packs now. Measuring both keeps the cost
+# of that layout decision on record rather than on trust.
+FLOATS_UNTINTED = 7
 FLOATS_WITH_TINT = 11
 
 
@@ -73,11 +77,13 @@ def _batch(texture, count: int, *, transformed: bool) -> RenderBatch:
 
 
 def _pack_rows(batch: RenderBatch, floats: int) -> np.ndarray:
-    """Fill an instance array the way `render_batch` does today: row by row.
+    """Fill an instance array the way `render_batch` used to: row by row.
 
-    Reproduced here rather than called through the renderer so the Python
-    cost is isolated from the draw call. Kept faithful to the original,
-    including the per-row length guards.
+    The engine packs with numpy column writes now
+    (`instancing.pack_sprite_instances`). This is kept as the baseline that
+    change is measured against -- reproduced here rather than called
+    through the renderer so the Python cost stays isolated from the draw
+    call, and kept faithful to the original, per-row length guards and all.
     """
     count = len(batch.destinations)
     data = np.zeros((count, floats), dtype="f4")
@@ -92,7 +98,7 @@ def _pack_rows(batch: RenderBatch, floats: int) -> np.ndarray:
             if i < len(batch.scales):
                 scale_x, scale_y = batch.scales[i]
         row = [x, y, rotation, scale_x, scale_y, width, height]
-        if floats > FLOATS_TODAY:
+        if floats > FLOATS_UNTINTED:
             row += [1.0, 1.0, 1.0, 1.0]
         data[i] = row
     return data
@@ -101,8 +107,10 @@ def _pack_rows(batch: RenderBatch, floats: int) -> np.ndarray:
 def _pack_vectorised(batch: RenderBatch, floats: int) -> np.ndarray:
     """Fill the same array with numpy column writes instead of a row loop.
 
-    Not what the engine does -- this measures the headroom a vectorised
-    pack would recover, so the optimisation is argued from a number.
+    Parameterised by width, which `pack_sprite_instances` is not -- it
+    exists to price a layout the engine does not ship, which is the whole
+    job of `test_sweep_instance_stride_cost` below. The benchmark of the
+    pack the engine *does* run calls the real function.
     """
     count = len(batch.destinations)
     data = np.empty((count, floats), dtype="f4")
@@ -116,7 +124,7 @@ def _pack_vectorised(batch: RenderBatch, floats: int) -> np.ndarray:
         data[:, 3:5] = 1.0
     data[:, 5] = float(batch.texture.width)
     data[:, 6] = float(batch.texture.height)
-    if floats > FLOATS_TODAY:
+    if floats > FLOATS_UNTINTED:
         data[:, 7:11] = 1.0
     return data
 
@@ -150,31 +158,41 @@ def test_sweep_render_batch_end_to_end(benchmark, gl_ctx, renderer, count: int) 
 
 @pytest.mark.parametrize("count", [1000, 5000, 20000])
 def test_sweep_instance_pack_row_loop(benchmark, gl_ctx, count: int) -> None:
-    """Report the Python cost of the current row-by-row instance pack.
+    """Report the Python cost of the row-by-row instance pack it replaced.
 
     This is the portable half of the end-to-end number above.
     """
     batch = _batch(_GLTexture(gl_ctx), count, transformed=True)
-    benchmark.pedantic(lambda: _pack_rows(batch, FLOATS_TODAY), rounds=5, iterations=1)
+    benchmark.pedantic(
+        lambda: _pack_rows(batch, FLOATS_WITH_TINT), rounds=5, iterations=1
+    )
 
 
 @pytest.mark.parametrize("count", [1000, 5000, 20000])
 def test_sweep_instance_pack_vectorised(benchmark, gl_ctx, count: int) -> None:
-    """Report the same pack done with numpy column writes."""
+    """Report the pack the engine actually runs, at the same sizes.
+
+    Calls `pack_sprite_instances` rather than a local copy of it, so this
+    figure cannot drift away from the shipped code the way a reproduction
+    would.
+    """
     batch = _batch(_GLTexture(gl_ctx), count, transformed=True)
+    scratch = np.empty((count, INSTANCE_FLOATS), dtype="f4")
     benchmark.pedantic(
-        lambda: _pack_vectorised(batch, FLOATS_TODAY), rounds=5, iterations=1
+        lambda: pack_sprite_instances(batch, scratch), rounds=5, iterations=1
     )
 
 
-@pytest.mark.parametrize("floats", [FLOATS_TODAY, FLOATS_WITH_TINT])
+@pytest.mark.parametrize("floats", [FLOATS_UNTINTED, FLOATS_WITH_TINT])
 def test_sweep_instance_stride_cost(benchmark, gl_ctx, floats: int) -> None:
-    """Report what widening the instance layout for a tint would cost.
+    """Report what widening the instance layout for the tint cost.
 
-    Packing and uploading 20000 instances at 7 floats each versus 11. If
-    the difference is small -- and a broadcast into four extra columns
-    should be -- then carrying the tint attribute unconditionally is
-    cheaper than maintaining a second shader program for untinted batches.
+    Packing and uploading 20000 instances at 7 floats each versus 11. The
+    difference measured small -- a broadcast into four extra columns is
+    nearly free once the pack is vectorised -- which is why the sprite path
+    carries the tint attribute unconditionally instead of keeping a second
+    shader program for untinted batches. Kept so that decision stays
+    falsifiable rather than remembered.
     """
     batch = _batch(_GLTexture(gl_ctx), 20000, transformed=True)
     vbo = gl_ctx.buffer(reserve=20000 * floats * 4)

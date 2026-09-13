@@ -25,11 +25,12 @@ class ModernGLRenderer:
 
     On what "high-performance" means here, measured rather than assumed
     (see `docs/guides/performance.md`): a 20,000-sprite batch costs about
-    16 ms end to end, and **four fifths of that is the Python loop that
-    packs the instance array**, not the GPU -- a share that grows with
-    sprite count. So the useful lever on this path is CPU-side packing,
-    and the bottleneck above it is `Batcher`, which costs roughly three
-    times as much again for the same batch.
+    11.6 ms end to end, and **roughly two thirds of that is the CPU-side
+    pack of the instance array**, not the GPU -- a share that grows with
+    sprite count, and that was four fifths before the pack was vectorised
+    (`instancing.pack_sprite_instances`). So the useful lever on this path
+    is still CPU-side packing, and the bottleneck above it is `Batcher`,
+    which costs roughly four times as much again for the same batch.
 
     The coordinate system matches Pygame:
     - Origin at top-left (0, 0)
@@ -37,10 +38,11 @@ class ModernGLRenderer:
     - Positions in screen pixels
     """
 
-    # Instance data layout: pos(2) + rot(1) + scale(2) + size(2) = 7 floats = 28 bytes.
-    # The layout itself, and the packing of it, live in `instancing.py`.
+    # Instance data layout: pos(2) + rot(1) + scale(2) + size(2) + color(4)
+    # = 11 floats = 44 bytes. The layout itself, and the packing of it,
+    # live in `instancing.py`.
     INSTANCE_FLOATS = instancing.INSTANCE_FLOATS
-    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 28 bytes
+    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 44 bytes
 
     # Initial instance buffer capacity (grows as needed)
     INITIAL_CAPACITY = 1024
@@ -188,11 +190,12 @@ class ModernGLRenderer:
                 # Instance data (per-instance, hence /i)
                 (
                     self._instance_vbo,
-                    "2f 1f 2f 2f/i",
+                    "2f 1f 2f 2f 4f/i",
                     "in_pos",
                     "in_rot",
                     "in_scale",
                     "in_size",
+                    "in_color",
                 ),
             ],
         )
@@ -370,7 +373,12 @@ class ModernGLRenderer:
         # Convert rotation from degrees to radians
         rot_rad = math.radians(rotation)
 
-        # Pack instance data for a single sprite
+        # Pack instance data for a single sprite. This shares the batch
+        # path's VBO and VAO, so it must carry the full instance layout --
+        # a short row would leave the next attributes reading whatever the
+        # previous frame left at that stride. Untinted: `IRenderer` has no
+        # per-call colour on this method, and `draw_text()` routes through
+        # here with its colour already baked into the glyph texture.
         instance_data = np.array(
             [
                 position.x,  # pos x
@@ -380,6 +388,10 @@ class ModernGLRenderer:
                 scale.y,  # scale y
                 float(texture.width),  # size x
                 float(texture.height),  # size y
+                1.0,  # tint r
+                1.0,  # tint g
+                1.0,  # tint b
+                1.0,  # tint a
             ],
             dtype="f4",
         )

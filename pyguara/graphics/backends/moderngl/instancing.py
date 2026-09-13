@@ -15,8 +15,17 @@ import numpy as np
 
 from pyguara.graphics.types import RenderBatch
 
-# Per-instance layout: pos(2) + rot(1) + scale(2) + size(2) = 7 floats.
-INSTANCE_FLOATS = 7
+# Per-instance layout: pos(2) + rot(1) + scale(2) + size(2) + color(4)
+# = 11 floats. The colour columns are always present, never gated by a
+# uniform or a second shader program: broadcasting a constant white into
+# four columns is free once the pack is vectorised, and
+# `docs/guides/performance.md` measures 7 floats against 11 at 20,000
+# sprites as a difference below the noise floor. A uniform would instead
+# force a per-batch state change to buy nothing.
+INSTANCE_FLOATS = 11
+
+# Column span for the tint, so a layout change has one place to happen.
+_COLOR_COLUMNS = slice(7, 11)
 
 
 def pack_sprite_instances(batch: RenderBatch, out: np.ndarray) -> int:
@@ -28,7 +37,8 @@ def pack_sprite_instances(batch: RenderBatch, out: np.ndarray) -> int:
 
     Optional per-instance data is applied only when its list is both
     enabled and the same length as `destinations`; a mismatch broadcasts
-    the neutral value (no rotation, unit scale) across every row. That is
+    the neutral value (no rotation, unit scale, opaque white) across every
+    row -- so `colors_enabled` gates the packing, not the shader. That is
     one check for the batch rather than the per-row `i < len(...)` guards
     this replaced, and it means a half-filled list yields an obviously
     untransformed batch rather than a batch that is transformed for its
@@ -74,5 +84,12 @@ def pack_sprite_instances(batch: RenderBatch, out: np.ndarray) -> int:
 
     rows[:, 5] = float(batch.texture.width)
     rows[:, 6] = float(batch.texture.height)
+
+    if batch.colors_enabled and len(batch.colors) == count:
+        # 0-255 on the batch, 0-1 in the shader, where the tint multiplies
+        # the sampled texel.
+        rows[:, _COLOR_COLUMNS] = np.asarray(batch.colors, dtype="f4") / 255.0
+    else:
+        rows[:, _COLOR_COLUMNS] = 1.0
 
     return count
