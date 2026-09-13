@@ -9,12 +9,14 @@ layout(location = 2) in vec2 in_pos;    // Screen position (pixels)
 layout(location = 3) in float in_rot;   // Rotation (radians)
 layout(location = 4) in vec2 in_scale;  // Scale factor
 layout(location = 5) in vec2 in_size;   // Texture dimensions (pixels)
+layout(location = 6) in vec4 in_color;  // Per-instance tint (0.0 to 1.0)
 
 // Uniforms
 uniform mat4 u_projection;
 
 // Output to fragment shader
 out vec2 v_uv;
+out vec4 v_color;
 
 void main() {
     // Apply size and scale to the base quad vertex
@@ -28,6 +30,7 @@ void main() {
     // Translate to screen position and project
     gl_Position = u_projection * vec4(rotated + in_pos, 0.0, 1.0);
 
-    // Pass UV coordinates to fragment shader
+    // Pass UV coordinates and tint to fragment shader
     v_uv = in_uv;
+    v_color = in_color;
 }

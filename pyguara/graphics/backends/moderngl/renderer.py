@@ -8,6 +8,7 @@ import pygame
 
 import moderngl
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.graphics.backends.moderngl import instancing
 from pyguara.graphics.backends.moderngl.texture import GLTextureFactory
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
@@ -24,11 +25,12 @@ class ModernGLRenderer:
 
     On what "high-performance" means here, measured rather than assumed
     (see `docs/guides/performance.md`): a 20,000-sprite batch costs about
-    16 ms end to end, and **four fifths of that is the Python loop that
-    packs the instance array**, not the GPU -- a share that grows with
-    sprite count. So the useful lever on this path is CPU-side packing,
-    and the bottleneck above it is `Batcher`, which costs roughly three
-    times as much again for the same batch.
+    11.6 ms end to end, and **roughly two thirds of that is the CPU-side
+    pack of the instance array**, not the GPU -- a share that grows with
+    sprite count, and that was four fifths before the pack was vectorised
+    (`instancing.pack_sprite_instances`). So the useful lever on this path
+    is still CPU-side packing, and the bottleneck above it is `Batcher`,
+    which costs roughly four times as much again for the same batch.
 
     The coordinate system matches Pygame:
     - Origin at top-left (0, 0)
@@ -36,9 +38,11 @@ class ModernGLRenderer:
     - Positions in screen pixels
     """
 
-    # Instance data layout: pos(2) + rot(1) + scale(2) + size(2) = 7 floats = 28 bytes
-    INSTANCE_FLOATS = 7
-    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 28 bytes
+    # Instance data layout: pos(2) + rot(1) + scale(2) + size(2) + color(4)
+    # = 11 floats = 44 bytes. The layout itself, and the packing of it,
+    # live in `instancing.py`.
+    INSTANCE_FLOATS = instancing.INSTANCE_FLOATS
+    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 44 bytes
 
     # Initial instance buffer capacity (grows as needed)
     INITIAL_CAPACITY = 1024
@@ -80,10 +84,15 @@ class ModernGLRenderer:
         # Create static quad geometry
         self._quad_vbo = self._create_quad_vbo()
 
-        # Create dynamic instance buffer
+        # Create dynamic instance buffer, and the CPU-side scratch array
+        # that is packed and uploaded from. The two are grown together so
+        # that a frame's pack never allocates.
         self._instance_capacity = self.INITIAL_CAPACITY
         self._instance_vbo = self._ctx.buffer(
             reserve=self._instance_capacity * self.INSTANCE_STRIDE
+        )
+        self._instance_scratch = np.empty(
+            (self._instance_capacity, self.INSTANCE_FLOATS), dtype="f4"
         )
 
         # Create VAO linking both buffers
@@ -181,11 +190,12 @@ class ModernGLRenderer:
                 # Instance data (per-instance, hence /i)
                 (
                     self._instance_vbo,
-                    "2f 1f 2f 2f/i",
+                    "2f 1f 2f 2f 4f/i",
                     "in_pos",
                     "in_rot",
                     "in_scale",
                     "in_size",
+                    "in_color",
                 ),
             ],
         )
@@ -363,7 +373,12 @@ class ModernGLRenderer:
         # Convert rotation from degrees to radians
         rot_rad = math.radians(rotation)
 
-        # Pack instance data for a single sprite
+        # Pack instance data for a single sprite. This shares the batch
+        # path's VBO and VAO, so it must carry the full instance layout --
+        # a short row would leave the next attributes reading whatever the
+        # previous frame left at that stride. Untinted: `IRenderer` has no
+        # per-call colour on this method, and `draw_text()` routes through
+        # here with its colour already baked into the glyph texture.
         instance_data = np.array(
             [
                 position.x,  # pos x
@@ -373,6 +388,10 @@ class ModernGLRenderer:
                 scale.y,  # scale y
                 float(texture.width),  # size x
                 float(texture.height),  # size y
+                1.0,  # tint r
+                1.0,  # tint g
+                1.0,  # tint b
+                1.0,  # tint a
             ],
             dtype="f4",
         )
@@ -458,49 +477,11 @@ class ModernGLRenderer:
         if count > self._instance_capacity:
             self._grow_instance_buffer(count)
 
-        # Pack instance data into numpy array
-        instance_data = np.zeros((count, self.INSTANCE_FLOATS), dtype="f4")
-
-        tex_width = float(batch.texture.width)
-        tex_height = float(batch.texture.height)
-
-        if not batch.transforms_enabled:
-            # Fast path: no transforms
-            for i, (x, y) in enumerate(batch.destinations):
-                instance_data[i] = [
-                    x,  # pos x
-                    y,  # pos y
-                    0.0,  # rotation
-                    1.0,  # scale x
-                    1.0,  # scale y
-                    tex_width,  # size x
-                    tex_height,  # size y
-                ]
-        else:
-            # Transform path: include rotation and scale
-            for i, (x, y) in enumerate(batch.destinations):
-                rot = 0.0
-                scale_x = 1.0
-                scale_y = 1.0
-
-                if i < len(batch.rotations):
-                    rot = math.radians(batch.rotations[i])
-
-                if i < len(batch.scales):
-                    scale_x, scale_y = batch.scales[i]
-
-                instance_data[i] = [
-                    x,  # pos x
-                    y,  # pos y
-                    rot,  # rotation (radians)
-                    scale_x,  # scale x
-                    scale_y,  # scale y
-                    tex_width,  # size x
-                    tex_height,  # size y
-                ]
-
-        # Upload instance data to GPU
-        self._instance_vbo.write(instance_data.tobytes())
+        # Pack into the reusable scratch array and upload the filled rows.
+        # `.write()` takes the array view directly -- `tobytes()` would copy
+        # the whole batch a second time for nothing.
+        packed = instancing.pack_sprite_instances(batch, self._instance_scratch)
+        self._instance_vbo.write(self._instance_scratch[:packed])
 
         # Bind texture
         gl_texture = batch.texture.native_handle
@@ -525,6 +506,12 @@ class ModernGLRenderer:
             reserve=new_capacity * self.INSTANCE_STRIDE
         )
         self._instance_capacity = new_capacity
+
+        # Grow the scratch array alongside it, so the pack keeps writing
+        # into one array for the life of the renderer.
+        self._instance_scratch = np.empty(
+            (new_capacity, self.INSTANCE_FLOATS), dtype="f4"
+        )
 
         # Recreate VAO with new instance buffer
         self._vao.release()

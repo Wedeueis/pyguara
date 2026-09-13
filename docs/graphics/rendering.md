@@ -39,24 +39,33 @@ The rendering process within each pass follows these stages:
 
 ## Material System
 
-Materials combine shader, texture, and uniforms:
+Materials combine shader, texture, and uniforms. A `Shader` wraps an
+already-compiled `moderngl.Program`; `ShaderCache` is what turns source into
+one, keyed by name so the same shader compiles once:
 
 ```python
-from pyguara.graphics.materials import Material, Shader
+from pyguara.graphics.materials import Material, ShaderCache
 
-# Custom material with grayscale shader
-grayscale_shader = Shader(ctx, vert_src, frag_src)
+cache = ShaderCache(ctx)
+grayscale_shader = cache.get_or_compile("grayscale", vert_src, frag_src)
 material = Material(
     shader=grayscale_shader,
     texture=my_texture,
-    uniforms={"intensity": 0.8}
+    uniforms={"intensity": 0.8},
 )
 
 # Assign to sprite
 sprite.material = material
 ```
 
-Sprites without explicit materials use the default sprite material automatically.
+**What this does today: sorting, and nothing on the GPU.** A material's `id`
+reaches `RenderQueue` and `Batcher`, which sort and break batches by it, so
+assigning one is visible in the draw-call structure. But `ModernGLRenderer`
+never reads `RenderBatch.material` -- it draws every batch through its own
+sprite program -- so a custom shader assigned this way has no effect on what
+is rendered. Wiring the backend to honour materials is filed, not built.
+
+Sprites without an explicit material sort together as material `0`.
 
 ## 2D Lighting
 
@@ -120,10 +129,11 @@ when something is hit. Both are composed into a scene rather than resolved from
 DI, the same way `ParticleSystem` is:
 
 - **`Sparks`** — a bounded pool of coloured shape particles (`draw_circle` /
-  `draw_line`). `ParticleSystem` is the right tool when particles *are* sprites;
-  these are not, and the distinction is forced by the backend, since ModernGL's
-  sprite path carries no per-instance tint while its shape path takes a colour
-  per primitive.
+  `draw_line`). `ParticleSystem` is the right tool when particles *are*
+  sprites; these are not. The two are separate because a spark has no texture
+  to bind and none worth authoring: the shape path batches each shape type into
+  one instanced draw call from a colour per primitive, with no texture in
+  sight.
 - **`Shaker`** — several overlapping `CameraShake` impulses summed into one
   pixel offset, so a second impact adds to the first rather than cutting it
   short. The result is a plain offset: a world-space scene adds it to the camera
@@ -163,6 +173,7 @@ When using Pygame backend, advanced graphics features gracefully degrade:
 | Feature | ModernGL | Pygame |
 |---------|----------|--------|
 | Sprite rendering | Hardware instanced | Software blitting |
+| Per-sprite tint | Per-instance vertex attribute | `BLEND_RGBA_MULT` per sprite |
 | Lighting | Dynamic light maps | Fully lit (no shadows) |
 | Post-processing | Bloom, vignette, etc. | Pass-through (no effects) |
 | Materials | Custom shaders | Default only |
