@@ -47,3 +47,6 @@ nav:
       - Replay: systems/replay.md
       - Resources: systems/resources.md
       - Scripting: systems/scripting.md
+  - Kits:
+      - Overview: kits/index.md
+      - Progression: kits/progression.md
