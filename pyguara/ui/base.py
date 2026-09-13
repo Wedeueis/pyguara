@@ -37,6 +37,12 @@ class UIElement(ABC):
         self.constraints: LayoutConstraints | None = None
         self.padding: Padding | None = None
 
+        # Whether keyboard traversal can land on this element. Off by
+        # default: a container, a label or a decorative panel is not a stop
+        # on the Tab ring, and opting in is a smaller thing to get right
+        # than opting every layout box out.
+        self.focusable = False
+
         # Callbacks
         self.on_click: Callable[[UIElement], None] | None = None
 

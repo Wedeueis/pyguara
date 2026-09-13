@@ -31,6 +31,7 @@ class Slider(Widget):
         if width <= 0:
             raise ValueError(f"Slider width must be positive, got {width}")
         super().__init__(position, Vector2(width, 20))
+        self.focusable = True
         self.min_val = min_val
         self.max_val = max_val
         self.value = min_val

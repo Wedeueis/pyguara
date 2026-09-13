@@ -14,6 +14,7 @@ class TextInput(Widget):
     ) -> None:
         """Initialize the text input."""
         super().__init__(position, Vector2(width, 30))
+        self.focusable = True
         self.text = ""
         self.placeholder = placeholder
         self.active = False

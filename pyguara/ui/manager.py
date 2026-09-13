@@ -4,6 +4,7 @@ from pyguara.common.types import Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.log import get_logger
 from pyguara.ui.base import UIElement
@@ -155,15 +156,102 @@ class UIManager:
         if event_type == UIEventType.MOUSE_DOWN:
             self.set_focus(clicked_element)
 
-    def _on_key_event(self, event: OnRawKeyEvent) -> None:
-        """Handle keyboard events and route to focused element."""
-        if self._focused_element is None:
-            return
+    def focus_ring(self) -> list[UIElement]:
+        """Every focusable element, in traversal order.
 
+        Order is a depth-first walk of the element tree in the order roots
+        were added and children were parented -- which is the order a
+        reader's eye takes through a declared layout, and needs no
+        geometry. A hidden or disabled element is skipped along with its
+        whole subtree: a collapsed panel's contents are not reachable by
+        Tab just because they still exist.
+
+        Rebuilt per call rather than cached. A cache would have to be
+        invalidated by every `add_child`, every `visible` flip and every
+        `enabled` flip, and traversal happens on a keypress -- human-speed,
+        not frame-speed.
+        """
+        ring: list[UIElement] = []
+
+        def walk(element: UIElement) -> None:
+            if not element.visible or not element.enabled:
+                return
+            if element.focusable:
+                ring.append(element)
+            for child in element.children:
+                walk(child)
+
+        for root in self._root_elements:
+            walk(root)
+        return ring
+
+    def focus_next(self) -> UIElement | None:
+        """Move focus to the next focusable element, wrapping at the end.
+
+        Returns:
+            The newly focused element, or None if nothing is focusable.
+        """
+        return self._step_focus(1)
+
+    def focus_previous(self) -> UIElement | None:
+        """Move focus to the previous focusable element, wrapping at the start.
+
+        Returns:
+            The newly focused element, or None if nothing is focusable.
+        """
+        return self._step_focus(-1)
+
+    def _step_focus(self, step: int) -> UIElement | None:
+        """Move focus `step` places along the ring, wrapping.
+
+        Focus that is currently on nothing -- or on an element that has
+        since been hidden, disabled or removed -- enters the ring at its
+        start when stepping forward and at its end when stepping back,
+        rather than being stuck.
+        """
+        ring = self.focus_ring()
+        if not ring:
+            self.set_focus(None)
+            return None
+
+        if self._focused_element in ring:
+            index = ring.index(self._focused_element) + step
+        else:
+            index = 0 if step > 0 else -1
+
+        target = ring[index % len(ring)]
+        self.set_focus(target)
+        return target
+
+    def _on_key_event(self, event: OnRawKeyEvent) -> None:
+        """Handle keyboard events and route to focused element.
+
+        Traversal is the fallback, not the first move: the focused element
+        sees the key first, and Tab or an arrow only moves focus if it did
+        not consume it. That is what lets a text input use its arrow keys
+        for the caret while the same keys still traverse a row of buttons.
+        """
         event_type = UIEventType.KEY_DOWN if event.is_down else UIEventType.KEY_UP
 
-        # Route to focused element
-        self._focused_element.handle_event(event_type, Vector2(0, 0), event.key_code)
+        consumed = False
+        if self._focused_element is not None:
+            consumed = self._focused_element.handle_event(
+                event_type, Vector2(0, 0), event.key_code
+            )
+
+        if consumed or not event.is_down:
+            return
+
+        if event.key_code == keys.TAB:
+            shifted = bool(event.modifiers & {keys.L_SHIFT, keys.R_SHIFT})
+            if shifted:
+                self.focus_previous()
+            else:
+                self.focus_next()
+        elif event.key_code in (keys.DOWN, keys.RIGHT):
+            self.focus_next()
+        elif event.key_code in (keys.UP, keys.LEFT):
+            self.focus_previous()
 
     def _on_resize_event(self, event: WindowResizeEvent) -> None:
         """Re-lay the UI out against the new window size."""

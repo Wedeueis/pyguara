@@ -293,6 +293,36 @@ The UI system (`pyguara.ui`) is immediate-mode friendly but retains state via an
 - **Theme**: a global `UITheme` (`get_theme()`/`set_theme()`) controls colors
   and spacing; elements read it live, so a swap re-skins existing widgets.
 
+## Keyboard focus
+
+`UIManager` keeps a focus ring, so a menu is reachable without a mouse:
+
+| Key | Moves |
+|---|---|
+| `Tab` / `Down` / `Right` | Focus forward, wrapping at the end |
+| `Shift+Tab` / `Up` / `Left` | Focus back, wrapping at the start |
+
+```python
+element.focusable = True          # Button/Checkbox/Slider/TextInput: already True
+manager.focus_next()              # or focus_previous()
+manager.focus_ring()              # every focusable element, in order
+```
+
+**Order is the element tree, depth-first**, in the order roots were added and
+children were parented — the order a reader's eye takes through a declared
+layout, with no geometry involved. A hidden or disabled element is skipped
+along with its whole subtree, so a collapsed panel's contents aren't reachable
+by Tab just because they still exist.
+
+**Traversal is the fallback, not the first move.** The focused element sees the
+key first and Tab or an arrow only moves focus if it didn't consume it — which
+is what lets a text input keep its arrow keys for the caret while the same keys
+traverse a row of buttons.
+
+`focusable` is off by default: a container, a label or a decorative panel is
+not a stop on the ring, and opting in is a smaller thing to get right than
+opting every layout box out.
+
 ## Integration
 The UI is rendered via the `UIRenderer` protocol, allowing it to sit on top of the main game render pass.
 
