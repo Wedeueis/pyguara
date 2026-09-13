@@ -39,9 +39,16 @@ class LightPass(BaseRenderPass):
     3. Uses additive blending so overlapping lights combine
     """
 
-    # Instance data layout: pos(2) + radius(1) + color(3) + intensity(1) + falloff(1) = 8 floats
-    INSTANCE_FLOATS = 8
-    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 32 bytes
+    # Instance data layout: pos(2) + radius(1) + color(3) + intensity(1)
+    # + falloff(1) + type(1) + spot_dir(1) + spot_cos_half(1) = 11 floats.
+    #
+    # `games/mourisco_ressonancia/pulse_pass.py` copies the *shape* of this
+    # layout but is not bound to it: it compiles its own program from
+    # `pulse_ring.vert/frag`, owns its own quad and instance buffers, and
+    # its eighth float is a ring thickness rather than a falloff. The two
+    # share the lightmap FBO and the additive blend, nothing else.
+    INSTANCE_FLOATS = 11
+    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 44 bytes
     INITIAL_CAPACITY = 64
 
     def __init__(
@@ -127,12 +134,15 @@ class LightPass(BaseRenderPass):
                 (self._quad_vbo, "2f 2f", "in_vert", "in_uv"),
                 (
                     self._instance_vbo,
-                    "2f 1f 3f 1f 1f/i",
+                    "2f 1f 3f 1f 1f 1f 1f 1f/i",
                     "in_pos",
                     "in_radius",
                     "in_color",
                     "in_intensity",
                     "in_falloff",
+                    "in_type",
+                    "in_spot_dir",
+                    "in_spot_cos_half",
                 ),
             ],
         )
@@ -206,6 +216,9 @@ class LightPass(BaseRenderPass):
                 light.color[2],
                 light.intensity,
                 light.falloff,
+                light.light_type,
+                light.spot_direction,
+                light.spot_cos_half_angle,
             ]
 
         # Upload to GPU
@@ -282,12 +295,15 @@ class LightPass(BaseRenderPass):
                 (self._quad_vbo, "2f 2f", "in_vert", "in_uv"),
                 (
                     self._instance_vbo,
-                    "2f 1f 3f 1f 1f/i",
+                    "2f 1f 3f 1f 1f 1f 1f 1f/i",
                     "in_pos",
                     "in_radius",
                     "in_color",
                     "in_intensity",
                     "in_falloff",
+                    "in_type",
+                    "in_spot_dir",
+                    "in_spot_cos_half",
                 ),
             ],
         )
