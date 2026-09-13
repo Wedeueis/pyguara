@@ -7,10 +7,12 @@ the packed rows then *look like* on screen is the job of
 """
 
 import math
+import pathlib
 
 import numpy as np
 import pytest
 
+from pyguara.graphics.backends.moderngl import instancing
 from pyguara.graphics.backends.moderngl.instancing import (
     INSTANCE_FLOATS,
     pack_sprite_instances,
@@ -218,3 +220,17 @@ def test_colours_left_over_from_a_previous_batch_do_not_leak() -> None:
     pack_sprite_instances(plain, out)
 
     assert out[0, 7:11] == pytest.approx([1.0, 1.0, 1.0, 1.0])
+
+
+def test_the_default_material_shaders_are_the_shaders_in_use() -> None:
+    """`materials/defaults.py` kept inline copies of the sprite shaders,
+    which stopped matching the moment the sprite path grew a tint. They
+    read from the same files now; this fails if anyone inlines them again."""
+    from pyguara.graphics.materials import (
+        DEFAULT_SPRITE_FRAGMENT,
+        DEFAULT_SPRITE_VERTEX,
+    )
+
+    shader_dir = pathlib.Path(instancing.__file__).parent / "shaders"
+    assert (shader_dir / "sprite.vert").read_text() == DEFAULT_SPRITE_VERTEX
+    assert (shader_dir / "sprite.frag").read_text() == DEFAULT_SPRITE_FRAGMENT

@@ -43,8 +43,11 @@ class Sprite(BaseComponent):
     material: Any = None  # Type: Optional["Material"]
 
     # Multiplied into the texture at draw time. Opaque white (the default)
-    # draws unmodified; a backend only pays for per-instance tinting once a
-    # batch contains something else -- see RenderBatch.colors_enabled.
+    # draws unmodified, and a batch of nothing but white sprites is marked
+    # untinted so a backend can skip the work -- see
+    # RenderBatch.colors_enabled. What "the work" is differs: Pygame tints
+    # a copied surface per sprite, while the GL path carries the colour as
+    # a per-instance vertex attribute it packs either way.
     color: Color = field(default_factory=lambda: Color(255, 255, 255, 255))
 
     def __post_init__(self) -> None:

@@ -4,12 +4,16 @@ A pool of short-lived primitives drawn through `IRenderer.draw_circle` and
 `draw_line` rather than as textured sprites.
 
 `ParticleSystem` is the right tool when particles *are* sprites. These are
-not, and the distinction is forced by the backend: under ModernGL the
-sprite path carries no per-instance tint, so a textured particle can only
-ever be white, while the shape path takes a colour per primitive and
-batches each shape type into one instanced draw call anyway. Anything
-whose whole point is its colour -- an ember, a blood spray, a rain splash
--- therefore goes through shapes.
+not: a spark has no texture to bind, and none worth authoring for a
+two-pixel dot. The shape path takes a colour per primitive, binds no
+texture at all, and still batches each shape type into one instanced draw
+call, so an ember, a blood spray or a rain splash costs less through
+shapes than through sprites.
+
+This module once justified itself differently -- that ModernGL's sprite
+path carried no per-instance tint, so a textured particle could only ever
+be white. That was true, and is no longer: the GL sprite path packs an
+RGBA tint per instance. The reasoning above is the one that survives it.
 
 Typical use, composed into a scene rather than resolved from DI::
 
