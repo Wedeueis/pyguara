@@ -14,6 +14,7 @@ class Button(Widget):
     ) -> None:
         """Initialize the button."""
         super().__init__(position, size)
+        self.focusable = True
         self.text = text
         self.text_padding = 5
 

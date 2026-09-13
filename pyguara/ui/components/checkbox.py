@@ -12,6 +12,7 @@ class Checkbox(Widget):
     def __init__(self, label: str, position: Vector2, checked: bool = False) -> None:
         """Initialize the checkbox."""
         super().__init__(position, Vector2(20, 20))  # Fixed box size
+        self.focusable = True
         self.label = label
         self.checked = checked
         self.box_size = 20
