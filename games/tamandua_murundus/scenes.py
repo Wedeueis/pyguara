@@ -36,6 +36,12 @@ from games.tamandua_murundus.swarm import (
     make_insect_texture,
 )
 from games.tamandua_murundus.systems import MurunduSystem, TongueSystem
+from games.tamandua_murundus.upgrade_ui import (
+    CardElement,
+    card_views,
+    layout_cards,
+)
+from games.tamandua_murundus.upgrades import Card, build_pool
 from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
@@ -45,7 +51,19 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP, A, D, S, W
+from pyguara.input.keys import (
+    DOWN,
+    ESCAPE,
+    LEFT,
+    RETURN,
+    RIGHT,
+    SPACE,
+    UP,
+    A,
+    D,
+    S,
+    W,
+)
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.kits.progression import (
@@ -55,10 +73,14 @@ from pyguara.kits.progression import (
     Magnet,
     MagnetSystem,
     PickupCollected,
+    UpgradeRecord,
     grant_experience,
+    offer,
+    take,
 )
 from pyguara.scene.base import Scene
 from pyguara.spatial.system import SpatialIndexSystem
+from pyguara.ui.manager import UIManager
 
 # The clearing, inset from the window so the vignette has something to
 # darken that is not gameplay.
@@ -162,6 +184,12 @@ class ClearingScene(Scene):
         self._magnets: MagnetSystem | None = None
         self._levels = 0
 
+        # The 1-of-3 pick. `_cards` being non-empty *is* the paused state:
+        # one flag would be a second source of truth for the same thing.
+        self._pool: list[Card] = []
+        self._record = UpgradeRecord()
+        self._cards: list[CardElement] = []
+
     # ---- setup -----------------------------------------------------
 
     def on_enter(self) -> None:
@@ -202,6 +230,8 @@ class ClearingScene(Scene):
         dispatcher.subscribe(MurunduBroken, self._on_murundu_broken)
         dispatcher.subscribe(TongueLashed, self._on_tongue_lashed)
 
+        self._pool = build_pool(self.entity_manager)
+
         self._create_player()
         self._create_murundus()
         self._setup_input()
@@ -217,6 +247,7 @@ class ClearingScene(Scene):
         for action in ("move_up", "move_down", "move_left", "move_right"):
             inputs.register_action(action, ActionType.HOLD)
         inputs.register_action("back", ActionType.PRESS)
+        inputs.register_action("confirm", ActionType.PRESS)
 
         for key, action in (
             (W, "move_up"),
@@ -228,14 +259,20 @@ class ClearingScene(Scene):
             (D, "move_right"),
             (RIGHT, "move_right"),
             (ESCAPE, "back"),
+            (RETURN, "confirm"),
+            (SPACE, "confirm"),
         ):
             inputs.bind_input(InputDevice.KEYBOARD, key, action)
 
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
 
     def _on_action(self, event: OnActionEvent) -> None:
-        """Track which directions are held."""
+        """Track which directions are held, and take a card on confirm."""
         held = event.value > 0
+        if event.action_name == "confirm":
+            if held and self.picking:
+                self._take_card()
+            return
         if event.action_name == "move_up":
             self._held_up = held
         elif event.action_name == "move_down":
@@ -277,7 +314,6 @@ class ClearingScene(Scene):
         scene's own world; the `UIManager` is a container singleton and
         outlives it.
         """
-        from pyguara.ui.manager import UIManager
 
         self.container.get(UIManager)._root_elements.clear()
 
@@ -306,22 +342,99 @@ class ClearingScene(Scene):
         )
 
     def _on_level_up(self, event: LeveledUp) -> None:
-        """Mark a level. D5 spends it on a 1-of-3 pick.
+        """Freeze the run and offer a pick.
 
         The kit counts levels into `pending_levels` and never spends them
-        -- it has no idea what a level is worth here -- so until D5 the
-        run banks them and says so.
+        -- it has no idea what a level is worth here. Spending one is
+        this method and `_take_card()`: a level buys exactly one upgrade,
+        and a grant that crossed several levels queues several picks
+        rather than collapsing them.
         """
         self._levels = event.level
         if self.fx is None:
             return
-        self.fx.popup(
-            f"NÍVEL {event.level}",
-            Vector2(WINDOW_WIDTH / 2 - 40, WINDOW_HEIGHT / 2 - 60),
-            INSECT_LIT,
-            size=22,
-        )
         self.fx.flash.trigger(Color(150, 255, 210, 40), 0.2)
+        if not self._cards:
+            self._open_pick()
+
+    # ---- the 1-of-3 pick -------------------------------------------
+
+    @property
+    def picking(self) -> bool:
+        """Whether the run is paused on an upgrade pick."""
+        return bool(self._cards)
+
+    def _open_pick(self) -> None:
+        """Offer up to three eligible upgrades and hand focus to them.
+
+        Drawn from `kits/progression`'s `offer()`, which filters by
+        eligibility and samples without replacement -- this scene
+        contributes the content and the layout, and no weighting logic of
+        its own.
+        """
+        drawn = offer(self._rng, [card.upgrade for card in self._pool], self._record)
+        by_key = {card.upgrade.key: card for card in self._pool}
+        cards = [by_key[upgrade.key] for upgrade in drawn]
+        if not cards:
+            # The pool is spent. Bank the level rather than freezing the
+            # run on an empty menu.
+            self._spend_level()
+            return
+
+        ui_manager = self.container.get(UIManager)
+        ui_manager._root_elements.clear()
+        self._cards = [
+            CardElement(card, position)
+            for card, position in zip(
+                cards, layout_cards(cards, WINDOW_WIDTH, WINDOW_HEIGHT), strict=True
+            )
+        ]
+        for element in self._cards:
+            ui_manager.add_element(element)
+        # Focus the first card, so the ring starts somewhere rather than
+        # needing a Tab to enter it.
+        ui_manager.set_focus(self._cards[0])
+
+    def _take_card(self) -> None:
+        """Take the focused card, close the pick, and resume the run."""
+        ui_manager = self.container.get(UIManager)
+        focused = ui_manager.focused_element
+        chosen = next((element for element in self._cards if element is focused), None)
+        if chosen is None:
+            return
+
+        take(self._record, chosen.card.upgrade, self._player_id or "")
+        if self.fx is not None:
+            self.fx.popup(
+                chosen.card.title,
+                Vector2(WINDOW_WIDTH / 2 - 60, WINDOW_HEIGHT / 2 - 40),
+                INSECT_LIT,
+                size=22,
+            )
+        self._close_pick()
+        self._spend_level()
+
+        # Several levels can be owed at once -- a boss-sized grant, or a
+        # mote collected while one pick was already open. Offer the next
+        # immediately rather than making the player earn it again.
+        player = self._player()
+        if player is not None and player.get_component(Experience).pending_levels > 0:
+            self._open_pick()
+
+    def _close_pick(self) -> None:
+        """Take the cards down and give focus back to nothing."""
+        ui_manager = self.container.get(UIManager)
+        ui_manager.set_focus(None)
+        ui_manager._root_elements.clear()
+        self._cards = []
+
+    def _spend_level(self) -> None:
+        """Decrement what the kit banked. The kit never does this itself."""
+        player = self._player()
+        if player is None:
+            return
+        experience = player.get_component(Experience)
+        experience.pending_levels = max(0, experience.pending_levels - 1)
 
     def _on_insect_killed(self, event: InsectKilled) -> None:
         """Spark, flare, count the kill, and leave what it was worth."""
@@ -357,12 +470,24 @@ class ClearingScene(Scene):
         self._read_input()
         self._advance_presentation(dt)
 
+        # A pick stops the world. Not a hit-stop -- that is a timed beat
+        # and this lasts as long as the player takes -- so it gates the
+        # step directly rather than going through `gameplay_dt`, which
+        # still runs so an in-flight hit-stop keeps decaying underneath.
         gameplay_dt = self.fx.gameplay_dt(dt)
-        if gameplay_dt > 0.0:
+        if gameplay_dt > 0.0 and not self.picking:
             self._step_simulation(gameplay_dt)
 
     def _read_input(self) -> None:
-        """Fold the held directions into a movement vector."""
+        """Fold the held directions into a movement vector.
+
+        Zero while a pick is open: the arrow keys belong to the focus ring
+        then, and an anteater drifting behind the cards would be the
+        player steering something they cannot see.
+        """
+        if self.picking:
+            self._move = Vector2.zero()
+            return
         self._move = Vector2(
             float(self._held_right) - float(self._held_left),
             float(self._held_down) - float(self._held_up),
@@ -571,6 +696,7 @@ class ClearingScene(Scene):
         # unbloomed, and still inside what `agent_view` can capture.
         self.fx.bind_finished_frame()
         self._draw_hud(world_renderer)
+        self._draw_cards(world_renderer)
         world_renderer.end_frame()
 
     def _murundu_views(self) -> list[render.MurunduView]:
@@ -672,6 +798,76 @@ class ClearingScene(Scene):
                 )
             )
         return lights
+
+    def _draw_cards(self, renderer: IRenderer) -> None:
+        """Draw the 1-of-3 pick over the frozen clearing.
+
+        Drawn here rather than by the card widgets themselves because
+        `UIRenderer` composites after the final blit, where no capture can
+        reach it (#162). The elements still own layout and focus -- this
+        only reads their rects and asks the manager which one is focused.
+        """
+        if not self._cards:
+            return
+
+        ui_manager = self.container.get(UIManager)
+        views = card_views(self._cards, ui_manager.focused_element)
+
+        # Every box first, then a flush, then every label. The GL backend
+        # buckets shapes by type and flushes them at `end_frame()`, while
+        # `draw_text` draws immediately -- so text written before the
+        # flush ends up *under* the rectangles, however late it was
+        # issued. The first version of this drew each card's box and label
+        # together and produced unreadable cards.
+        renderer.draw_rect(
+            Rect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT), Color(6, 9, 12, 168)
+        )
+        for view in views:
+            renderer.draw_rect(view.bounds, Color(16, 24, 22, 240))
+            renderer.draw_rect(
+                view.bounds,
+                INSECT_LIT if view.focused else render.HUD_DIM,
+                width=3 if view.focused else 1,
+            )
+        renderer.end_frame()
+
+        renderer.draw_text(
+            "ESCOLHA UMA DÁDIVA DO CERRADO",
+            Vector2(WINDOW_WIDTH / 2 - 175, WINDOW_HEIGHT / 2 - 128),
+            INSECT_LIT,
+            20,
+        )
+        for view in views:
+            bounds = view.bounds
+            renderer.draw_text(
+                view.title,
+                Vector2(bounds.x + 16, bounds.y + 22),
+                INSECT_LIT if view.focused else render.HUD_TEXT,
+                18,
+            )
+            renderer.draw_text(
+                view.blurb,
+                Vector2(bounds.x + 16, bounds.y + 60),
+                render.HUD_TEXT if view.focused else render.HUD_DIM,
+                12,
+            )
+            taken = self._record.taken.get(view.card_key, 0)
+            if taken:
+                renderer.draw_text(
+                    f"x{taken}",
+                    Vector2(bounds.x + bounds.width - 44, bounds.y + 22),
+                    render.HUD_DIM,
+                    14,
+                )
+
+        # Plain words, not arrow glyphs: the default font has no arrows and
+        # renders them as boxes.
+        renderer.draw_text(
+            "[A/D ou TAB] escolher   ·   [ENTER] aceitar",
+            Vector2(WINDOW_WIDTH / 2 - 145, WINDOW_HEIGHT / 2 + 104),
+            render.HUD_TEXT,
+            13,
+        )
 
     def _draw_hud(self, renderer: IRenderer) -> None:
         """Counters and the control hint."""
