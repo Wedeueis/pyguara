@@ -86,6 +86,16 @@ class Framebuffer:
         return self._height
 
     @property
+    def samples(self) -> int:
+        """MSAA sample count. 0 means no multisampling."""
+        return self._samples
+
+    @property
+    def dtype(self) -> str:
+        """Texture data type, e.g. `"f1"` (8-bit) or `"f2"` (16-bit float)."""
+        return self._dtype
+
+    @property
     def texture(self) -> moderngl.Texture:
         """The backing texture that can be sampled from."""
         if self._texture is None:
@@ -190,31 +200,104 @@ class FramebufferManager:
         width: int | None = None,
         height: int | None = None,
         *,
-        samples: int = 0,
-        dtype: str = "f1",
+        samples: int | None = None,
+        dtype: str | None = None,
     ) -> Framebuffer:
-        """Get an existing framebuffer or create a new one.
+        """Get the framebuffer called `name`, creating it if it is new.
+
+        **An argument you pass is a requirement, not a preference.** If
+        `name` already exists with a different format, this raises rather
+        than handing back the existing one. It used to hand it back
+        silently, which is what turns a format mismatch into invisible
+        data loss: a caller asking for a 16-bit float buffer and getting
+        an 8-bit one has no way to tell, and the range simply disappears
+        somewhere downstream.
+
+        Arguments you leave out are not requirements. That distinction is
+        what lets the two kinds of caller coexist: a game's bootstrap
+        claims `lightmap` as `f2` because it needs the range, and
+        `LightPass` later asks for the same buffer without caring, and
+        gets the one that is there.
 
         Args:
             name: Unique identifier for the framebuffer.
-            width: Width in pixels (defaults to viewport width).
-            height: Height in pixels (defaults to viewport height).
-            samples: Number of MSAA samples (0 for no multisampling).
-            dtype: Data type for the texture.
+            width: Required width in pixels. None uses the viewport's.
+            height: Required height in pixels. None uses the viewport's.
+            samples: Required MSAA sample count. None accepts any.
+            dtype: Required texture data type, e.g. `"f1"` or `"f2"`.
+                None accepts whatever exists, and creates `"f1"`.
 
         Returns:
-            The framebuffer instance.
+            The framebuffer.
+
+        Raises:
+            ValueError: If `name` exists and any argument given here
+                disagrees with it.
         """
-        if name in self._framebuffers:
-            return self._framebuffers[name]
+        existing = self._framebuffers.get(name)
+        if existing is not None:
+            self._reject_conflict(existing, width, height, samples, dtype)
+            return existing
 
         # Use viewport dimensions if not specified
         w = width if width is not None else self._width
         h = height if height is not None else self._height
 
-        fbo = Framebuffer(self._ctx, name, w, h, samples=samples, dtype=dtype)
+        fbo = Framebuffer(
+            self._ctx,
+            name,
+            w,
+            h,
+            samples=samples if samples is not None else 0,
+            dtype=dtype if dtype is not None else "f1",
+        )
         self._framebuffers[name] = fbo
         return fbo
+
+    @staticmethod
+    def _reject_conflict(
+        existing: Framebuffer,
+        width: int | None,
+        height: int | None,
+        samples: int | None,
+        dtype: str | None,
+    ) -> None:
+        """Raise if any requested attribute disagrees with `existing`.
+
+        Args:
+            existing: The framebuffer already registered under the name.
+            width: Requested width, or None for no requirement.
+            height: Requested height, or None for no requirement.
+            samples: Requested sample count, or None.
+            dtype: Requested data type, or None.
+
+        Raises:
+            ValueError: Naming every attribute that disagrees, what was
+                asked for and what is actually there.
+        """
+        mismatches = [
+            (label, wanted, actual)
+            for label, wanted, actual in (
+                ("width", width, existing.width),
+                ("height", height, existing.height),
+                ("samples", samples, existing.samples),
+                ("dtype", dtype, existing.dtype),
+            )
+            if wanted is not None and wanted != actual
+        ]
+        if not mismatches:
+            return
+
+        detail = ", ".join(
+            f"{label}={wanted!r} but it is {actual!r}"
+            for label, wanted, actual in mismatches
+        )
+        raise ValueError(
+            f"framebuffer {existing.name!r} already exists and does not "
+            f"match: asked for {detail}. Whoever created it first wins; "
+            f"claim it with the format you need before anything else asks "
+            f"for it, or drop the argument if you do not mind."
+        )
 
     def get(self, name: str) -> Framebuffer | None:
         """Get a framebuffer by name.
