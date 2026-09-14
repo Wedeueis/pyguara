@@ -19,12 +19,8 @@ from games.tamandua_murundus.events import (
     MurunduBroken,
     TongueLashed,
 )
-from games.tamandua_murundus.systems import (
-    D1_INSECT_CAP,
-    InsectDriftSystem,
-    MurunduSystem,
-    TongueSystem,
-)
+from games.tamandua_murundus.swarm import Swarm
+from games.tamandua_murundus.systems import MurunduSystem, TongueSystem
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
 from pyguara.common.spatial import SpatialHash
@@ -54,85 +50,77 @@ def make_mound(
     return entity.id, mound
 
 
-def insect_count(entity_manager: EntityManager) -> int:
-    """How many insects are alive."""
-    return sum(1 for _ in entity_manager.get_entities_with(Insect))
+def make_swarm(entity_manager: EntityManager, cap: int = 8) -> Swarm:
+    """A small swarm, with no decorative layer to get in the way."""
+    return Swarm(entity_manager, ARENA, RandomStream(seed=5), cap=cap, decorative=0)
 
 
 class TestMurunduFeeding:
     def test_a_mound_releases_an_insect_when_its_timer_expires(self) -> None:
         entity_manager = EntityManager()
+        swarm = make_swarm(entity_manager)
         make_mound(entity_manager, Vector2(400, 300), feed_interval=1.0, feed_timer=0.0)
-        system = MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
-        )
+        system = MurunduSystem(entity_manager, EventDispatcher(), swarm)
 
         system.update(0.1)
 
-        assert insect_count(entity_manager) == 1
+        assert swarm.active_count == 1
 
     def test_a_mound_waits_out_its_interval(self) -> None:
         entity_manager = EntityManager()
+        swarm = make_swarm(entity_manager)
         make_mound(entity_manager, Vector2(400, 300), feed_interval=1.0, feed_timer=1.0)
-        system = MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
-        )
+        system = MurunduSystem(entity_manager, EventDispatcher(), swarm)
 
         system.update(0.1)
 
-        assert insect_count(entity_manager) == 0
+        assert swarm.active_count == 0
 
     def test_a_released_insect_starts_beside_its_mound(self) -> None:
         """Not on top of it -- an insect spawned at the centre is hidden
         by the mound it came out of."""
         entity_manager = EntityManager()
+        swarm = make_swarm(entity_manager)
         make_mound(entity_manager, Vector2(400, 300), feed_timer=0.0)
-        MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
-        ).update(0.1)
+        MurunduSystem(entity_manager, EventDispatcher(), swarm).update(0.1)
 
-        insect = next(iter(entity_manager.get_entities_with(Insect)))
+        insect = swarm.active_insects()[0]
         offset = insect.get_component(Transform).position - Vector2(400, 300)
 
         assert offset.magnitude == pytest.approx(38.0, abs=0.5)
 
     def test_a_released_insect_remembers_its_anchor(self) -> None:
         entity_manager = EntityManager()
+        swarm = make_swarm(entity_manager)
         mound_id, _ = make_mound(entity_manager, Vector2(400, 300), feed_timer=0.0)
-        MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
-        ).update(0.1)
+        MurunduSystem(entity_manager, EventDispatcher(), swarm).update(0.1)
 
-        insect = next(iter(entity_manager.get_entities_with(Insect)))
-
-        assert insect.get_component(Insect).anchor == mound_id
+        assert swarm.active_insects()[0].get_component(Insect).anchor == mound_id
 
     def test_a_broken_mound_stops_feeding(self) -> None:
         """The whole point of breaking one."""
         entity_manager = EntityManager()
+        swarm = make_swarm(entity_manager)
         make_mound(entity_manager, Vector2(400, 300), feed_timer=0.0, broken=True)
-        MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
-        ).update(1.0)
+        MurunduSystem(entity_manager, EventDispatcher(), swarm).update(1.0)
 
-        assert insect_count(entity_manager) == 0
+        assert swarm.active_count == 0
 
     def test_the_cap_holds_across_every_mound(self) -> None:
-        """The cap is on the clearing, not on each mound -- five mounds
-        must not each get their own allowance."""
+        """The cap is the pool's, not each mound's -- five mounds must not
+        each get their own allowance."""
         entity_manager = EntityManager()
+        swarm = make_swarm(entity_manager, cap=6)
         for _ in range(5):
             make_mound(
                 entity_manager, Vector2(400, 300), feed_interval=0.01, feed_timer=0.0
             )
-        system = MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
-        )
+        system = MurunduSystem(entity_manager, EventDispatcher(), swarm)
 
         for _ in range(200):
             system.update(0.05)
 
-        assert insect_count(entity_manager) == D1_INSECT_CAP
+        assert swarm.active_count == 6
 
 
 class TestMurunduBreaking:
@@ -140,7 +128,7 @@ class TestMurunduBreaking:
         entity_manager = EntityManager()
         mound_id, mound = make_mound(entity_manager, Vector2(1, 1), health=3.0)
         system = MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
+            entity_manager, EventDispatcher(), make_swarm(entity_manager)
         )
 
         assert system.damage(mound_id, 1.0) is False
@@ -152,7 +140,7 @@ class TestMurunduBreaking:
         dispatcher = EventDispatcher()
         broken = Recorder(dispatcher, MurunduBroken)
         mound_id, mound = make_mound(entity_manager, Vector2(1, 1), health=1.0)
-        system = MurunduSystem(entity_manager, dispatcher, ARENA, RandomStream(seed=1))
+        system = MurunduSystem(entity_manager, dispatcher, make_swarm(entity_manager))
 
         assert system.damage(mound_id, 1.0) is True
         assert mound.broken is True
@@ -166,7 +154,7 @@ class TestMurunduBreaking:
         first, _ = make_mound(entity_manager, Vector2(1, 1), health=1.0)
         make_mound(entity_manager, Vector2(2, 2), health=1.0)
         make_mound(entity_manager, Vector2(3, 3), health=1.0)
-        system = MurunduSystem(entity_manager, dispatcher, ARENA, RandomStream(seed=1))
+        system = MurunduSystem(entity_manager, dispatcher, make_swarm(entity_manager))
 
         system.damage(first, 1.0)
 
@@ -179,7 +167,7 @@ class TestMurunduBreaking:
         dispatcher = EventDispatcher()
         broken = Recorder(dispatcher, MurunduBroken)
         mound_id, _ = make_mound(entity_manager, Vector2(1, 1), health=1.0)
-        system = MurunduSystem(entity_manager, dispatcher, ARENA, RandomStream(seed=1))
+        system = MurunduSystem(entity_manager, dispatcher, make_swarm(entity_manager))
 
         system.damage(mound_id, 1.0)
         system.damage(mound_id, 1.0)
@@ -189,84 +177,36 @@ class TestMurunduBreaking:
     def test_damaging_something_that_is_not_a_mound_is_ignored(self) -> None:
         entity_manager = EntityManager()
         system = MurunduSystem(
-            entity_manager, EventDispatcher(), ARENA, RandomStream(seed=1)
+            entity_manager, EventDispatcher(), make_swarm(entity_manager)
         )
 
         assert system.damage("no-such-entity", 1.0) is False
 
 
-def make_insect(
-    entity_manager: EntityManager, position: Vector2, velocity: Vector2
-) -> Transform:
-    """Put one insect in the world and return its transform."""
-    entity = entity_manager.create_entity()
-    transform = Transform(position=position)
-    entity.add_component(transform)
-    entity.add_component(Insect(velocity=velocity))
-    return transform
-
-
-class TestInsectDrift:
-    def test_an_insect_moves_along_its_velocity(self) -> None:
-        entity_manager = EntityManager()
-        transform = make_insect(entity_manager, Vector2(400, 300), Vector2(100.0, 0.0))
-
-        InsectDriftSystem(entity_manager, ARENA).update(0.1)
-
-        assert transform.position.x > 400.0
-
-    def test_an_insect_turns_back_at_the_edge(self) -> None:
-        """Turns rather than clamps: a clamped insect piles up against the
-        boundary and the clearing grows a rim of stuck sprites."""
-        entity_manager = EntityManager()
-        entity = entity_manager.create_entity()
-        entity.add_component(Transform(position=Vector2(ARENA.right - 1, 300)))
-        insect = Insect(velocity=Vector2(400.0, 0.0))
-        entity.add_component(insect)
-
-        InsectDriftSystem(entity_manager, ARENA).update(0.1)
-
-        assert insect.velocity.x < 0.0
-
-    def test_an_insect_stays_inside_the_clearing(self) -> None:
-        entity_manager = EntityManager()
-        transform = make_insect(
-            entity_manager,
-            Vector2(ARENA.right - 2, ARENA.bottom - 2),
-            Vector2(600.0, 600.0),
-        )
-        system = InsectDriftSystem(entity_manager, ARENA)
-
-        for _ in range(120):
-            system.update(0.016)
-
-        assert ARENA.left <= transform.position.x <= ARENA.right
-        assert ARENA.top <= transform.position.y <= ARENA.bottom
-
-
 def tongue_scene(
     insect_at: Vector2, facing: float = 0.0
-) -> tuple[TongueSystem, EntityManager, Tamandua, Recorder, Recorder]:
-    """An anteater at (400, 300) and one insect, both in the index."""
+) -> tuple[TongueSystem, Swarm, Tamandua, Recorder, Recorder]:
+    """An anteater at (400, 300) and one insect from the pool."""
     entity_manager = EntityManager()
     dispatcher = EventDispatcher()
     lashed = Recorder(dispatcher, TongueLashed)
     killed = Recorder(dispatcher, InsectKilled)
     index: SpatialHash[str] = SpatialHash()
+    swarm = make_swarm(entity_manager)
 
     hunter_entity = entity_manager.create_entity()
     hunter_entity.add_component(Transform(position=Vector2(400, 300)))
     hunter = Tamandua(facing=facing)
     hunter_entity.add_component(hunter)
 
-    insect = entity_manager.create_entity()
-    insect.add_component(Transform(position=insect_at))
-    insect.add_component(Insect())
+    insect = swarm.release_at(insect_at, "mound")
+    assert insect is not None
+    insect.get_component(Transform).position = insect_at
     index.insert(insect.id, insect_at)
 
     return (
-        TongueSystem(entity_manager, dispatcher, index),
-        entity_manager,
+        TongueSystem(entity_manager, dispatcher, index, swarm),
+        swarm,
         hunter,
         lashed,
         killed,
@@ -309,21 +249,32 @@ class TestTongue:
         assert missed.events == []
         assert len(hit.events) == 1
 
-    def test_a_killed_insect_is_removed_and_announced(self) -> None:
-        system, entity_manager, _, _, killed = tongue_scene(Vector2(480, 300))
+    def test_a_killed_insect_goes_back_to_the_pool_and_is_announced(self) -> None:
+        """Released, not destroyed: at this rate of death, creating and
+        removing entities is exactly the cost the pool exists to avoid."""
+        system, swarm, _, _, killed = tongue_scene(Vector2(480, 300))
 
         system.update(0.1)
 
-        assert insect_count(entity_manager) == 0
+        assert swarm.active_count == 0
         assert len(killed.events) == 1
+
+    def test_a_pooled_insect_that_is_not_out_is_not_a_target(self) -> None:
+        """An idle insect is still an entity and, for one more tick, still
+        in the spatial index -- without the active check the tongue eats
+        the dead from wherever they were last released."""
+        system, swarm, hunter, lashed, _ = tongue_scene(Vector2(480, 300))
+        system.update(0.1)
+        hunter.tongue_cooldown = 0.0
+
+        system.update(0.1)
+
+        assert len(lashed.events) == 1
 
     def test_the_tongue_respects_its_cooldown(self) -> None:
         """Otherwise it lashes once per frame and the clearing empties in
         a second."""
-        system, entity_manager, hunter, lashed, _ = tongue_scene(Vector2(480, 300))
-        entity = entity_manager.create_entity()
-        entity.add_component(Transform(position=Vector2(470, 300)))
-        entity.add_component(Insect())
+        system, _, hunter, lashed, _ = tongue_scene(Vector2(480, 300))
 
         system.update(0.001)
         system.update(0.001)
