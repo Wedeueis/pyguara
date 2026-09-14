@@ -260,34 +260,32 @@ class Swarm:
         ]
 
     def _make_insect(self, entity_manager: EntityManager, index: int) -> Entity:
-        """Build one pooled insect, carrying only what an idle one needs.
+        """Build one pooled insect, complete.
 
-        **`FlockingAgent` and `SpatialTracked` are deliberately not added
-        here.** Pooled entities are never destroyed, so a component
-        attached at construction keeps the entity in every query that
-        matches it for the life of the scene -- `FlockingSystem` would
-        resolve all `SWARM_CAP` of them every tick and `SpatialIndexSystem`
-        would re-insert all of them, whether ten insects are out or seven
-        hundred. Measured: that alone took the demo from ~45 fps to ~18.
-        The two components are attached on acquire and dropped on release.
+        Everything an insect will ever need is attached here, including
+        the components systems query on. That is safe because `EntityPool`
+        parks an idle entity with `EntityManager.set_entity_enabled()`, so
+        it keeps its components and still matches no query -- see that
+        method for what this used to cost when each game had to detach
+        them by hand.
         """
         entity = entity_manager.create_entity()
         entity.add_component(Poolable())
         entity.add_component(Transform(position=Vector2.zero()))
         entity.add_component(Insect())
-        return entity
-
-    def _make_agent(self) -> FlockingAgent:
-        """Tuning for one insect, varied so the flock is not uniform."""
-        return FlockingAgent(
-            max_speed=self._rng.uniform(54.0, 82.0),
-            max_force=150.0,
-            neighbor_radius=46.0,
-            separation_radius=15.0,
-            cohesion_weight=0.8,
-            alignment_weight=0.9,
-            separation_weight=1.9,
+        entity.add_component(
+            FlockingAgent(
+                max_speed=self._rng.uniform(54.0, 82.0),
+                max_force=150.0,
+                neighbor_radius=46.0,
+                separation_radius=15.0,
+                cohesion_weight=0.8,
+                alignment_weight=0.9,
+                separation_weight=1.9,
+            )
         )
+        entity.add_component(SpatialTracked())
+        return entity
 
     @property
     def active_count(self) -> int:
@@ -314,11 +312,8 @@ class Swarm:
         insect.health = 1.0
         insect.anchor = anchor
 
-        # Attached now, not at construction -- see `_make_insect`.
-        agent = self._make_agent()
+        agent = entity.get_component(FlockingAgent)
         agent.velocity = Vector2(math.cos(angle) * 40.0, math.sin(angle) * 40.0)
-        entity.add_component(agent)
-        entity.add_component(SpatialTracked())
         return entity
 
     def active_insects(self) -> list[Entity]:
@@ -329,12 +324,10 @@ class Swarm:
         """Return one insect to the pool.
 
         Pooled rather than destroyed: at this rate of death, creating and
-        removing entities is the cost the pool exists to avoid. The two
-        query-visible components come off, so an idle insect costs nothing
-        in `FlockingSystem` or the spatial index.
+        removing entities is the cost the pool exists to avoid. The pool
+        disables the entity, so an idle insect keeps its tuning and still
+        costs nothing in `FlockingSystem` or the spatial index.
         """
-        entity.remove_component(FlockingAgent)
-        entity.remove_component(SpatialTracked)
         self._pool.release(entity)
 
     def update_motes(self, dt: float) -> None:
