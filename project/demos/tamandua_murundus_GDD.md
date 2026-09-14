@@ -1,18 +1,19 @@
 # Game Design Document: *Tamanduá: O Guardião dos Murundus*
 
-**Version:** 0.1 — scope contract, written before the build
+**Version:** 1.0 — as built
 **Engine:** PyGuara (pre-alpha)
 **Genre:** Horde Survivor / Density Showcase
 **Theme:** A cerrado clearing between dusk and dawn
 
-> **Status: future tense.** This document is a *contract for what will be
-> built*, written at D0 so that scope is argued once rather than drifting
-> through six PRs. It is rewritten as-built at D6, at which point every
-> number below is either confirmed or corrected against a measurement.
+> **Status: past tense.** Version 0.1 of this document was a scope contract
+> written before any of the demo existed, so that scope was argued once
+> rather than drifting through six PRs. This is the rewrite: what was
+> actually built, what the numbers actually came out at, and where the
+> contract was wrong.
 >
-> Two rules were applied to every feature in the original design fiction:
-> **which engine capability does this prove?** — and if the answer is "none,
-> it is content", it was cut. §8 lists every cut with its reason.
+> **§10 "What the contract got wrong"** is the part worth reading if you
+> only read one section. Predictions that held are cheap; the three that
+> did not are where the engine taught us something.
 
 ---
 
@@ -26,22 +27,25 @@ the swarm. Break one and the tide thins. Survive to first light.
 
 ### 1.2 The "Meta" Pitch
 
-This demo exists to prove four pieces of engine work, each of which shipped
-before it. **This section is load-bearing**: if a feature below cannot be
-traced to one of these four, it does not belong in the demo.
+The demo exists to prove four pieces of engine work, each of which shipped
+before it. Every feature below traces to one of them; §9 lists what was cut for
+failing that test.
 
-| Engine capability | Where it lives | What the demo does with it |
-| --- | --- | --- |
-| **Per-instance sprite tint on the GL backend** | `pyguara/graphics/backends/moderngl/instancing.py`, `shaders/sprite.*` | One neutral insect texture, N colours, **one draw call**. Dull brown at dusk; bioluminescent at midnight. Same texture, same batch, tint driven by the time-of-day curve. |
-| **Ambient day/night cycle** | `pyguara/graphics/lighting/cycle.py` | `AmbientCycle` + keyframes drives the run's three phases and resolves at dawn. The clearing is lit by the cycle, not by hand-mutated ambient. |
-| **Light type, cone and flicker** | `pyguara/graphics/lighting/` | The anteater carries a `SPOT` light — the cone it can actually see by. Murundus glow with `flicker_enabled`. |
-| **The progression kit** | `pyguara/kits/progression/` | Killed insects drop XP motes; `Magnet` pulls them in; enough motes freezes the run and offers 1-of-3 cards. |
+| Engine capability | Where it lives | What the demo does with it | Shipped in |
+| --- | --- | --- | --- |
+| **Per-instance sprite tint on the GL backend** | `graphics/backends/moderngl/instancing.py`, `shaders/sprite.*` | One neutral insect texture, N colours, **one draw call**. Dull brown at dusk, bioluminescent at midnight. | #147 |
+| **Ambient day/night cycle** | `graphics/lighting/cycle.py` | `AmbientCycle` drives the run's phases and resolves at dawn. One loop of the cycle **is** one run. | #148 |
+| **Light type, cone and flicker** | `graphics/lighting/` | The anteater carries a real `SPOT` light — the cone it reads the clearing by. Murundus glow with `flicker_enabled`. | #149 |
+| **The progression kit** | `kits/progression/` | Killed insects drop XP motes; `Magnet` pulls them in; a level freezes the run and offers 1-of-3 cards. | #150 |
 
-Two engine results are *also* on display, though they predate this plan:
-the flocking optimisation (`pyguara/ai/flocking_system.py`) and the
-`SpatialHash` the magnet and the tongue both query.
+A fifth arrived *because* of the demo rather than before it: **entity dormancy**
+(#157), which came out of a defect this build hit twice. See §10.
 
-**The climax is a density climax, not a boss.** See §8.
+Also on display, predating this plan: the flocking optimisation
+(`ai/flocking_system.py`), the shared `SpatialHash`, and E8's UI focus ring
+(#151), whose first real consumer is the upgrade pick.
+
+**The climax is a density climax, not a boss.** §9.
 
 ---
 
@@ -49,19 +53,25 @@ the flocking optimisation (`pyguara/ai/flocking_system.py`) and the
 
 ### 2.1 Core loop
 
-Roughly **four minutes**, one clearing, three lighting phases resolving at
-dawn. There is no level select, no meta-progression and no run variety: the
-demo is a single scripted arc, because its job is to show a curve, not to be
-replayed.
+**240 seconds**, one clearing, four named phases resolving at dawn. One loop of
+the `AmbientCycle` is the whole run, so a single number drives the light, the
+swarm's tint and the spawn rate and they cannot drift apart.
 
-1. **Dusk (0:00–1:20)** — a handful of insects. The player learns the tongue
-   and finds the murundus.
-2. **Night (1:20–3:00)** — the swarm builds. Bioluminescence comes up with the
-   ambient curve. Motes accumulate; the first cards are offered.
-3. **Deep night (3:00–3:40)** — peak density. This is the measurement made
-   visible.
-4. **Dawn (3:40–4:00)** — the ambient curve resolves, the swarm thins, the run
-   ends. Not a victory screen: a sunrise.
+| Phase | Cycle | Ambient | Releases per feed |
+| --- | ---: | ---: | ---: |
+| ANOITECER | 0.00 | 0.66 → 0.40 | 1 |
+| NOITE | 0.30 | 0.40 → 0.20 | 2 |
+| NOITE FECHADA | 0.55 | 0.20 → 0.14 | 3 |
+| REVOADA | 0.75 | 0.14 → 0.11 | 4 |
+| AMANHECER | 0.88 | first light | 0 |
+
+The phases are aligned to the *light*, not spaced evenly: the peak-density phase
+has to sit in the darkest stretch. An earlier table put REVOADA at 0.86 and the
+HUD announced the climax over a frame that still looked like dusk.
+
+The run stops at cycle phase **0.98**, not 1.0. A cycle is a ring — let it reach
+1.0 and it is back at phase 0, which is dusk, so the clearing flashed from first
+light to nightfall and held there.
 
 ### 2.2 The anteater
 
@@ -69,75 +79,75 @@ replayed.
 | --- | --- |
 | `WASD` / arrows | Move |
 | *(automatic)* | **The tongue** auto-lashes the nearest insect in an arc in front of the anteater, on a cooldown |
-| `Tab` / arrows, `Enter` | Navigate and pick an upgrade card, while the run is frozen |
+| `A`/`D`, `Tab`, `Enter` | Pick an upgrade while the run is frozen |
 
-**The tongue is automatic.** The player steers; the tongue picks its own
-target. This is a genre convention and it is also the honest choice here —
-aiming would make the demo about input handling, which is not on the list in
-§1.2.
-
-Mechanically the tongue is `Hitbox` + `ActiveFrameWindow` from
-`kits/action_combat`, with target selection through the shared `SpatialHash`.
-No new engine surface.
+The tongue is `Hitbox`-shaped in spirit but simpler in fact: a cooldown, an arc
+test, and a `SpatialHash` radius query for candidates. No new engine surface.
+Target search went through the spatial index from D1, before the swarm was large
+enough to need it — the tongue should not be the thing that stops scaling.
 
 ### 2.3 The swarm
 
-**The hybrid split is stated here deliberately, so nobody mistakes the picture
-for the measurement.** `swarm.py` carries two layers:
+**The hybrid split, as shipped:**
 
 | Layer | Count | Flocks | Hittable | Costs |
 | --- | ---: | --- | --- | --- |
-| **Interactive** | up to `SWARM_CAP` | yes, via `FlockingSystem` | yes | flocking + batching |
-| **Decorative** | a multiple of it | no — cheap drift | no | batching only |
+| **Interactive** | `SWARM_CAP` = **700** | yes, `groups=3` | yes | flocking + batching |
+| **Decorative** | 1,400 | no — cheap drift | no | batching only |
 
-Both layers draw in **the same batch, through the same tint channel**. The
-decorative layer exists so the screen looks like the cerrado at midnight; the
-interactive layer is what the engine is actually being measured on.
+Both draw in **the same batch, through the same tint channel**. The decorative
+layer is dimmed rather than recoloured: it is the same insects further away, and
+a second hue would read as a second species.
 
-`SWARM_CAP` is set from `docs/guides/performance.md`, not from ambition. As
-measured on **WSL2 · Mesa 23.2.1 over D3D12 · RTX 3050 · CPython 3.12 ·
-2026-09-12**, against a 16.7 ms frame:
+**`SWARM_CAP` is measured.** Re-measured in the real scene with every CPU-side
+system a frame runs, decorative layer at shipping size:
 
-| Agents | `groups=1` | `groups=3` |
-| ---: | ---: | ---: |
-| 1000 | 16.0 ms | 7.4 ms |
-| 2000 | 34.3 ms | 15.6 ms |
+| interactive | ms/frame (CPU) |
+| ---: | ---: |
+| 300 | 3.75 |
+| 500 | 6.26 |
+| **700** | **9.08** ← shipped |
+| 900 | 12.73 |
+| 1100 | 16.88 — over budget on CPU alone |
 
-**So: ~1000 fully-simulated boids at 60 Hz, or ~2000 with steering staggered
-to 20 Hz.** The demo will run the interactive layer with `groups=3` and set
-`SWARM_CAP` below the arithmetic ceiling, because flocking is not the only
-system in the frame — the batcher, the tongue, the motes and the post-process
-stack all bill against the same 16.7 ms. **D2 re-measures in the real scene
-and D6 records what was actually affordable.** The number in this row is a
-prediction until then.
+Measured on WSL2 · Mesa 23.2.1 over D3D12 · RTX 3050 · CPython 3.12 · 2026-09-14.
 
-Clumped density costs materially more than uniform — 161.9 ms against 53.5 at
-3000 agents — and a horde converging on a player is exactly the clumped case.
-The murundus are the mitigation as well as the mechanic: they keep the swarm
-distributed around anchors instead of collapsing onto the player.
+**But the CPU is not what binds on this machine.** See §10.
 
 ### 2.4 Murundus
 
-Termite mounds. Each is a spawn anchor that feeds the swarm from its own
-position, and each can be broken.
-
-- Breaking one **stops it feeding** and thins the tide from that quarter.
-- Each carries a flickering `LightSource` — a genuine use of E6's
-  `flicker_enabled`, not decoration bolted on.
-- They are the reason the swarm is spatially distributed rather than a single
-  ball converging on the player, which is a performance decision as much as a
-  design one (§2.3).
+Five mounds, fixed positions, each a spawn anchor with a flickering
+`LightSource`. Breaking one stops it feeding. They keep the swarm distributed
+around anchors rather than collapsing onto the player — which is a performance
+decision as much as a design one, since clumped flocking costs roughly three
+times uniform at the same count.
 
 ### 2.5 Motes and cards
 
-Killed insects drop XP motes (`Attracted`). The anteater carries a `Magnet`.
-Collected motes feed `grant_experience()`; a level freezes the run and offers
-**1-of-3** cards from a flat table of **6–8 upgrades**.
+Killed insects drop XP motes (`Attracted`, pooled, cap 220). The anteater
+carries a `Magnet` of radius **108** — deliberately **shorter than the tongue's
+150**. Matching them made the magnet invisible: every kill landed inside the pull
+radius, so every mote was collected on the frame it dropped and the genre's
+signature mechanic never visibly happened.
 
-Cards are picked with the keyboard, which is the first real consumer of the UI
-focus ring (`UIManager.focus_next()`).
+**The level curve is measured.** A simulated run with the player orbiting the
+clearing kills ~242 insects and collects ~236 of them. Against that yield:
 
-The upgrade table is flat — no synergy graph, no evolution paths. §8.
+| base | growth | levels reached |
+| ---: | ---: | ---: |
+| **14.0** | **1.28** | **8** ← shipped |
+| 10.0 | 1.24 | 9 |
+| 8.0 | 1.20 | 11 |
+| 6.0 | 1.18 | 13 |
+
+Eight, because the card table is seven: a run should offer about as many picks as
+there are distinct things to pick. An idle player reaches level 2.
+
+The same simulation: **242 kills still leaves 638 of 700 alive.** The player
+cannot clear the clearing, which is the point of a density climax.
+
+A level freezes the run and offers **1-of-3** from **seven flat upgrades**, two
+thematic. Picked with the keyboard through `UIManager`'s focus ring.
 
 ---
 
@@ -145,160 +155,214 @@ The upgrade table is flat — no synergy graph, no evolution paths. §8.
 
 ### 3.1 Art style
 
-**No sprite art ships with this demo.** Every texture is generated at runtime
-through `TextureFactory.create_from_bytes`, as every other demo in this
-repository does. That keeps the repo asset-free, and it makes the tint work
-maximally visible: **one neutral blob, N colours, one draw call.** A reader
-who wants to know whether per-instance tint works can look at one screenshot.
-
-The palette is cerrado at night: burnt ochre earth, dark scrub, and the
-insects shifting from dull brown to cyan-green bioluminescence as the ambient
-curve falls.
+**No sprite art ships.** Every texture is generated at runtime through
+`TextureFactory.create_from_bytes` — the insect is one soft white blob, 8×8, and
+the *tint* is what makes a thousand of them different colours. That keeps the
+repo asset-free and makes the result legible: if the tint path broke, every
+insect on screen would be that exact white.
 
 ### 3.2 Lighting and glow
 
-The render graph is
 `WorldPass → LightPass(f2) → CompositePass → PostProcessPass(Bloom, Vignette) → FinalPass`.
+No heat haze — that is *Protocolo Bandeira*'s showcase. Bloom threshold **0.62**,
+lower than Bandeira's 0.86, because the clearing spends the run dark and what has
+to cross is a bioluminescent insect, not a muzzle flash.
 
-**Bloom is this demo's showcase**, because bioluminescence is precisely a
-threshold-crossing colour. **There is no heat haze** — that is *Protocolo
-Bandeira*'s showcase, and two demos claiming the same effect teaches nothing.
+**Insects are not lights** — but a tinted sprite cannot bloom unaided either. The
+composite multiplies the world by the light map, so under a sub-1.0 ambient a
+sprite comes out *darker* than it was drawn, however bright its tint. The flock
+is bucketed into a fixed 3×2 grid instead: at most **six aggregate lights at cell
+centroids**, weighted by density. Lighting cost stays independent of `SWARM_CAP`.
 
-**Insects are not lights.** If each insect were a `LightSource`, both
-`LightingSystem`'s per-entity Python collection and the light instance buffer
-would scale with N, and the crowd benchmark would quietly become a lighting
-benchmark. Bioluminescence is an **additive tinted sprite that crosses the
-bloom threshold**, plus roughly six aggregate lights at flock centroids — the
-pooled pattern `arena_fx.LIGHT_POOL_SIZE = 56` already uses.
-
-**The demo must not own a custom `BaseRenderPass`.**
-`mourisco_ressonancia/pulse_pass.py` is the only precedent, and it has to
-reach up into the *engine's* shader directory because nothing resolves
-game-local shader paths. If the glow needs a custom additive pass, that is an
-engine gap to raise — not a thing to copy.
+**No custom `BaseRenderPass`**, as contracted.
 
 ### 3.3 Audio
 
-**None.** No demo in this repository ships audio assets, and adding the first
-one here would prove nothing on the §1.2 list.
+None, as contracted.
 
 ---
 
-## 4. Technical Implementation Specifications
+## 4. Technical Implementation
 
-### 4.1 Module layout
+### 4.1 Module layout, as built
 
-`games/tamandua_murundus/`, modelled on `protocolo_bandeira`'s split.
-**~3,600–4,000 lines is the ceiling to hold.**
+**3,233 lines**, against a contracted ceiling of 3,600–4,000.
 
-| File | Responsibility |
-| --- | --- |
-| `bootstrap.py` | DI + the render graph above |
-| `swarm.py` | The centrepiece: pool, flocking tick, tint curve, `SWARM_CAP`, and a **pure `build_batch()`** |
-| `cerrado_fx.py` | The `arena_fx.py` analogue: backdrop, light pool, day/night hookup, `Sparks`/`Shaker`/`FloatingText`/`ScreenFlash`, hit-stop, `run_pipeline()` |
-| `render.py` | Every draw call + palette, with the per-shape-type flush discipline |
-| `phases.py` | Run clock, phase table, time-keyed spawn budget |
-| `upgrades.py` / `upgrade_ui.py` | Upgrade table + apply functions; card layout |
-| `scenes.py`, `systems.py`, `components.py`, `events.py`, `pooling.py`, `main.py` | As per Bandeira |
+| File | Lines | Responsibility |
+| --- | ---: | --- |
+| `scenes.py` | 950 | The run: setup, input, the frame, the pick |
+| `swarm.py` | 434 | Pool, flocking, tint curve, `SWARM_CAP`, pure `build_batch()` |
+| `cerrado_fx.py` | 361 | Backdrop, light pool, the cycle, feedback, hit-stop, `run_pipeline()` |
+| `render.py` | 250 | Draw calls + palette |
+| `systems.py` | 205 | Mounds and the tongue |
+| `motes.py` | 198 | Pooled XP motes |
+| `upgrades.py` | 196 | The seven cards and their closures |
+| `bootstrap.py` | 193 | DI + the render graph |
+| `phases.py` | 133 | Run clock, phase table, glow curve |
+| `upgrade_ui.py` | 128 | Card elements and layout |
+| `components.py`, `events.py`, `main.py` | 184 | — |
 
-### 4.2 `build_batch()` must be pure
+### 4.2 `build_batch()` is pure — and it paid
 
-**Decided before `swarm.py` is written, not retrofitted.**
-
-GL demos are excluded from `DEMOS_THAT_DRAW` — SDL's dummy video driver has no
-OpenGL — so the tint showcase would otherwise ship covered only by a manual
-smoke test. But `tests/visual/` rasterises nothing: it snapshots the ordered
-stream of backend calls against a recording `IRenderer`.
-
-A **pure** `build_batch(...) -> RenderBatch` makes the swarm's batch —
-including `colors_enabled=True` and the actual tint values — deterministically
-snapshot-testable without a GPU. This is a design constraint on the module,
-decided up front or not at all.
+The contract's load-bearing constraint, and it earned its place. GL demos cannot
+boot headlessly (SDL's dummy driver has no OpenGL), so the tint showcase would
+have shipped covered by a manual smoke and nothing else. `tests/visual/`
+rasterises nothing — it snapshots the batch's own tint values at three points on
+the curve, on any machine, with no GPU.
 
 ### 4.3 Run clock and spawn budget
 
-`phases.py` owns a run clock and a **time-keyed** spawn schedule. Note that
-`SpawnDirector`'s release-rate budget is bypassed by both existing consumers
-(`budget=0.0, cost=0.0`), which is a signal that a release-rate budget is the
-wrong abstraction for a horde. This demo will hand-roll a time-keyed schedule
-and an alive-count cap locally, and **that is a finding to report upward**,
-not a pattern to spread.
+`phases.py` owns both. `SpawnDirector` is deliberately unused: its model is a
+release-rate *budget*, and both existing consumers bypass that gate entirely.
+Reported upward as **#163** rather than worked around silently.
 
-### 4.4 Registration chores
+### 4.4 Testing
 
-- `tools/agent_view.py`'s `DEMOS` dict
-- `GL_ONLY_DEMOS` in `tests/integration/test_demos_render.py`
-- the exclusion note in `games/validate_demos.py`
-- a `games/README.md` capstone entry
+**111 tests**, none of which need a GPU:
+
+| Suite | Tests |
+| --- | ---: |
+| `test_tamandua_upgrades.py` | 23 |
+| `test_tamandua_phases.py` | 22 |
+| `test_tamandua_motes.py` | 22 |
+| `test_tamandua_swarm.py` | 21 |
+| `test_tamandua_clearing.py` | 20 |
+| `tests/visual/test_tamandua_swarm_snapshots.py` | 3 |
 
 ---
 
 ## 5. Level Design: "The Clearing"
 
-**Scene:** `games/tamandua_murundus/scenes.py`
-
-- **Map structure:** a single bounded clearing. No scrolling world, no rooms,
-  no procgen. A bounded arena is what keeps the swarm on screen, which is what
-  makes a density showcase visible at all.
-- **Murundus:** a handful of mounds at fixed positions, spread so the swarm
-  arrives from several directions.
-- **Bounds:** soft — the anteater is kept in, and the swarm is steered back by
-  the flock's own cohesion rather than by walls.
+A single bounded clearing, five mounds at fixed positions, soft bounds. No
+scrolling world, no procgen. A bounded arena is what keeps the swarm on screen,
+which is what makes a density showcase visible at all.
 
 ---
 
 ## 6. Cultural note
 
-The *murundu* is real: the earth mounds that dot the Brazilian cerrado, many
-of them built by termites over decades, standing above the seasonal flood
-line. The tamanduá-bandeira that eats from them is the same animal *Protocolo
-Bandeira* casts as a garbage collector. This demo puts it back in its own
-landscape.
+The *murundu* is real: the earth mounds that dot the Brazilian cerrado, many of
+them built by termites over decades, standing above the seasonal flood line. The
+tamanduá-bandeira that eats from them is the same animal *Protocolo Bandeira*
+casts as a garbage collector. This demo puts it back in its own landscape.
 
 ---
 
 ## 7. Asset Requirements Checklist
 
-- [ ] **Textures:** none on disk. All generated at runtime
-      (`TextureFactory.create_from_bytes`).
-- [ ] **Audio:** none. See §3.3.
-- [ ] **Fonts:** engine default.
-- [ ] **Shaders:** none game-local. See §3.2.
+- [x] **Textures:** none on disk. One 8×8 blob generated at runtime.
+- [x] **Audio:** none.
+- [x] **Fonts:** engine default.
+- [x] **Shaders:** none game-local.
 
 ---
 
-## 8. Cut and deferred
+## 8. How to run it
 
-Every item below was in the original design fiction and is **not** being
-built. This section exists so that this document is not read as a backlog in
-six months.
+```bash
+uv run python games/tamandua_murundus/main.py                      # a real window
+uv run python tools/agent_view.py tamandua_murundus --gl --frames 2000 --shot 1900
+```
+
+**The windowed run has been done** — 180 frames presented to a real X11 window,
+which also exercised the vsync-fallback path (`OpenGL vsync unavailable on this
+driver; opening without it`). That is the divergence
+`docs/guides/agent-visual-inspection.md` exists to warn about, so it is worth
+recording that this demo survives it.
+
+**A capture cannot reach a level-up.** `agent_view`'s `--press` has no key-up, so
+a held direction pins the anteater against a wall *facing the wall* — one kill in
+116 seconds with 589 insects behind it. The demo is fine; the tool cannot play
+it. Verifying the upgrade cards required temporarily raising `MOTE_VALUE`.
+
+---
+
+## 9. Cut and deferred
+
+Unchanged from the contract. Every item below was in the original design fiction
+and is **not** built.
 
 | Cut | Why | Gated on |
 | --- | --- | --- |
-| **The 3-phase Matriarca boss** | Three reasons stack. No multi-phase boss exists anywhere in the repo, and `ai/fsm.py` has *zero importers across `games/`* — so building it means either wiring FSM for the first time (unplanned engine work) or hand-rolling a phase machine that teaches the framework nothing. Behaviour-tree composites have **memory**, so a health-threshold front guard stops being re-checked once a sequence advances — which is issue #46's exact gap and precisely the pattern a phase-abort boss needs. And it is by far the largest content cost in the document, none of it reusable. | **#46** (reactive BT composites / FSM transition table) |
-| **Weapon evolution paths** | A second data table proving nothing the first does not, and doubling the balance surface. The mechanism already exists — `Upgrade.requires` + `UpgradeRecord.taken` — so this is content, not capability. | Revisit once `kits/progression` has one real consumer |
-| **Claw cleave, tail-sweep ultimate** | Both are `Hitbox` + `ActiveFrameWindow` with a different shape. The tongue proves that path. If they return, they return as *upgrades* in the card table, which is free. | — |
-| **12-minute run, six phases** | Run length is a balance problem with zero engine payoff, and a 12-minute run cannot be iterated on through `agent_view` frame captures. Cut to ~4 minutes, three phases + dawn. | — |
-| **The synergy table** | Replaced by 6–8 flat upgrades, two of them thematic enough that the flavour survives. | — |
-| **Audio** | No demo here ships audio assets. §3.3. | — |
-| **Meta-progression** | Between-run persistence proves `persistence`, which is not on the §1.2 list, and needs a second run to be visible at all. | — |
-| **Sprite art** | Runtime-generated textures make the tint result *more* legible, not less. §3.1. | — |
-| **Sun-angle shadows, normal-mapped terrain** | There is no sampler in `light.frag` at all. A much larger change and its own proposal. | — |
+| **The 3-phase Matriarca boss** | No multi-phase boss exists anywhere, and `ai/fsm.py` has zero importers across `games/`. Behaviour-tree composites have memory, so a health-threshold front guard stops being re-checked once a sequence advances — #46's exact gap, and precisely the pattern a phase-abort boss needs. Largest content cost in the document, none of it reusable. | **#46** |
+| **Weapon evolution paths** | The mechanism already exists (`Upgrade.requires` + `UpgradeRecord.taken`), so this is content, not capability. | A second consumer of `kits/progression` |
+| **Claw cleave, tail-sweep ultimate** | Both are the tongue with a different shape. If they return, they return as cards, which is free. | — |
+| **12-minute run, six phases** | Run length is a balance problem with no engine payoff, and a 12-minute run cannot be iterated on through frame captures. | — |
+| **The synergy table** | Replaced by seven flat upgrades. | — |
+| **Audio, meta-progression, sprite art** | None prove anything on the §1.2 list. | — |
+| **Sun-angle shadows, normal-mapped terrain** | There is no sampler in `light.frag` at all. | Its own proposal |
 
 ---
 
-## 9. Build order
+## 10. What the contract got wrong
 
-| PR | Delivers |
+Three predictions in version 0.1 did not survive contact. Recorded because they
+are the parts that taught us something.
+
+### 10.1 "`SWARM_CAP` will be bound by the CPU"
+
+It is not, on this machine. The CPU table in §2.3 is real and 700 leaves ~7 ms of
+headroom — but the demo runs at roughly **47 fps** building to ~320 insects, and
+D1 with *no swarm at all* already ran at ~60. **The post-process stack binds
+first**: three bloom blur passes at 960×720 through Mesa on D3D12.
+
+So the honest statement of this demo's ceiling is "700 interactive insects are
+affordable on the CPU; what the frame actually costs depends on the driver under
+the post stack". A machine with a real GL driver would likely tell a different
+story, which is exactly why `docs/guides/performance.md` says to quote CPU-side
+numbers when quoting an engine limit.
+
+### 10.2 "A pooled entity is cheap while idle"
+
+Assumed, never stated, and wrong. `EntityPool` never destroys anything, so every
+component a factory attaches keeps its entity in **every matching query for the
+life of the scene**. A pool of 700 insects each carrying a `FlockingAgent` cost
+`FlockingSystem` all 700 every tick whether ten were in play or seven hundred —
+and worst when the pool was mostly *idle*, because idle entities sat at one
+position and an O(n·k) neighbour search over a single point is its own
+degenerate case.
+
+Measured, in one process: **103 ms/frame against 1.4 ms** at 20 active out of 700.
+
+This demo worked around it twice by hand before it was fixed properly in the
+engine as **entity dormancy (#157)**, which also fixed
+`protocolo_bandeira`'s `EnemyPool` — a pool that had never had the workaround and
+had been carrying its idle enemies in the spatial index since it merged.
+
+### 10.3 "The HUD belongs on the `UIRenderer`"
+
+It does, in principle. It could not go there in practice: `UIRenderer` composites
+*after* the final blit, and `tools/agent_view.py` captures the buffer the final
+blit reads — so **nothing on the UI layer is visible to any capture this
+repository can take** (**#162**). No `UIManager` widget in any demo has ever been
+seen in a frame.
+
+The HUD and the upgrade cards are therefore drawn onto the finished frame, past
+the composite and the post stack. The cards remain real `UIElement`s so E8's
+focus ring drives them; they simply draw nothing of their own. When #162 is
+fixed, `CardElement.render()` is where that drawing belongs and the scene's
+hand-drawing is what comes out.
+
+**This is tooling dictating design**, and it should not survive.
+
+---
+
+## 11. What the demo sent back upstream
+
+Nine findings were filed rather than fixed in place, plus one fixed in the engine:
+
+| | |
 | --- | --- |
-| **D0** | This document |
-| **D1** | The clearing, the tongue, the murundus |
-| **D2** | The Revoada — swarm scale and per-instance tint |
-| **D3** | Day, dusk, and the night the swarm lights up |
-| **D4** | XP motes and the level curve |
-| **D5** | The 1-of-3 pick and the Cerrado upgrade table |
-| **D6** | This document, rewritten as-built |
+| **#157** | Entity dormancy — **fixed**, not filed. §10.2 |
+| #158 | `get_or_create` silently ignores a conflicting dtype; the HDR chain never reaches its tonemap |
+| #159 | The material system is plumbed through the pipeline but never read by the backend |
+| #160 | `Atlas`/`SpriteSheet` cannot feed the instanced sprite path — no per-instance UV |
+| #161 | No visibility culling (with the 25.2 ms number, and the argument against bothering) |
+| #162 | `agent_view` cannot capture the UI layer. §10.3 |
+| #163 | `SpawnDirector`'s release-rate budget is bypassed by every consumer |
+| #164 | `vinagre_matilha` has an O(n²) neighbour loop bypassing the spatial hash |
+| #165 | `mourisco_ressonancia` builds a second `FramebufferManager` |
+| #166 | GL blend state is set by the window, not the renderer |
 
-D1 is independent. **D2 → D6 is a genuine chain** — each link either consumes
-an API the previous introduces or edits the same file — so they merge in
-order.
+That list is the real argument for building a demo against an engine rather than
+alongside one.

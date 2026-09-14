@@ -84,8 +84,11 @@ These modules correspond to the "Tutorial Series Roadmap".
   **per-instance sprite tint** on the GL sprite path (one texture, N colours,
   one draw call), the **ambient day/night cycle**, a genuine `SPOT` light for
   the anteater's cone and `flicker_enabled` mounds, `kits/progression` for XP
-  and the 1-of-3 upgrade pick, and the shared `SpatialHash` for the tongue's
-  target search.
+  and the 1-of-3 upgrade pick (the first real consumer of `UIManager`'s focus
+  ring), and the shared `SpatialHash` for the tongue's target search.
+* **Scale:** 700 interactive flocking insects plus a 1,400-strong decorative
+  layer, in one instanced draw call. The 700 is measured, not chosen — see the
+  table in `swarm.py`.
 * **Run:** `uv run python games/tamandua_murundus/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py tamandua_murundus --gl`
   (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
