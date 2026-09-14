@@ -57,7 +57,7 @@ class Murundu(StrictComponent):
     max_health: float = 12.0
     radius: float = 34.0
     broken: bool = False
-    feed_interval: float = 1.4
+    feed_interval: float = 2.6
     feed_timer: float = 0.0
     glow_phase: float = 0.0
 
