@@ -18,6 +18,13 @@ from games.tamandua_murundus.events import (
     MurunduBroken,
     TongueLashed,
 )
+from games.tamandua_murundus.phases import (
+    DAWN_HOLD_PHASE,
+    PHASES,
+    Phase,
+    glow_for_intensity,
+    phase_at,
+)
 from games.tamandua_murundus.swarm import (
     INSECT_LIT,
     STEERING_GROUPS,
@@ -64,16 +71,7 @@ TONGUE_DAMAGE_TO_MOUND = 1.0
 # the clearing rather than clamping its centre to the edge.
 BODY_RADIUS = 16.0
 
-# How long the swarm takes to go from dull brown to full bioluminescence.
-# D2 ramps it off the run clock so the tint is visibly a curve; D3 hands
-# the job to the ambient cycle and this constant goes with it.
-GLOW_RAMP_SECONDS = 45.0
 
-# How the mounds' output ramps. Like the glow, D2 drives this off the run
-# clock so the swarm visibly *builds*; D3's phase table replaces the
-# driver, and only the driver -- `MurunduSystem` already takes a number.
-RELEASE_RAMP_SECONDS = 18.0
-MAX_RELEASE_PER_FEED = 6
 LASH_ANIMATION = 0.16
 
 
@@ -109,6 +107,7 @@ class ClearingScene(Scene):
         self._swarm: Swarm | None = None
         self._insect_texture = None
         self._elapsed = 0.0
+        self._dawn = False
 
     # ---- setup -----------------------------------------------------
 
@@ -275,6 +274,21 @@ class ClearingScene(Scene):
         self._lash = max(0.0, self._lash - dt)
         self.fx.update(dt, self._camera)
 
+        # One loop of the cycle is one run. Stopping it just before the
+        # wrap is what makes this a run with an end instead of an endless
+        # clearing -- and it has to be *before*: the cycle is a ring, so a
+        # phase allowed to reach 1.0 is back at 0, which is dusk. The run
+        # would flash from first light to nightfall and hold there.
+        if self.fx.cycle.phase >= DAWN_HOLD_PHASE and self.fx.cycle.playing:
+            self.fx.cycle.playing = False
+            self._dawn = True
+            self.fx.popup(
+                "AMANHECEU",
+                Vector2(WINDOW_WIDTH / 2 - 50, WINDOW_HEIGHT / 2),
+                render.MURUNDU_GLOW,
+                size=28,
+            )
+
     def _step_simulation(self, dt: float) -> None:
         """Move the anteater, then run the clearing's systems."""
         if self.fx is None:
@@ -315,10 +329,10 @@ class ClearingScene(Scene):
         if self._spatial is not None:
             self._spatial.update(dt)
         if self._murundus is not None:
-            self._murundus.release_per_feed = min(
-                MAX_RELEASE_PER_FEED,
-                1 + int(self._elapsed / RELEASE_RAMP_SECONDS),
-            )
+            # The difficulty curve, straight off the phase table. Dawn's
+            # phase asks for zero, which ends the run's pressure without a
+            # separate "stop spawning" flag.
+            self._murundus.release_per_feed = self._phase().release_per_feed
             self._murundus.update(dt)
         if self._flocking is not None:
             self._flocking.update(dt)
@@ -433,11 +447,22 @@ class ClearingScene(Scene):
         self.fx.flash.render(world_renderer, Rect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT))
         world_renderer.end_frame()
 
-        self._draw_hud(world_renderer)
+        # Popups stay in the world: a number floating off a mound belongs
+        # in the clearing, lit like everything else in it.
         self.fx.popups.render(world_renderer, self._camera)
 
         self.fx.set_dynamic_lights(self._lights())
         self.fx.run_pipeline(self._camera)
+
+        # The HUD does not go in the world. D1 drew it there, so it picked
+        # up the light map -- which read well at a fixed dusk, but the
+        # clearing now spends the middle of the run at an ambient of 0.11,
+        # and a HUD multiplied by that is unreadable exactly when the run
+        # is busiest. Drawn onto the finished frame instead: unlit,
+        # unbloomed, and still inside what `agent_view` can capture.
+        self.fx.bind_finished_frame()
+        self._draw_hud(world_renderer)
+        world_renderer.end_frame()
 
     def _murundu_views(self) -> list[render.MurunduView]:
         """One view per mound, with its pulse resolved."""
@@ -454,6 +479,12 @@ class ClearingScene(Scene):
                 )
             )
         return views
+
+    def _phase(self) -> Phase:
+        """Which stretch of the night the run is in."""
+        if self.fx is None:
+            return PHASES[0]
+        return phase_at(self.fx.cycle.phase)
 
     def _draw_swarm(self, renderer: IRenderer) -> None:
         """Draw both swarm layers as one instanced, tinted batch.
@@ -472,12 +503,14 @@ class ClearingScene(Scene):
     def _glow(self) -> float:
         """How bioluminescent the swarm is right now, 0..1.
 
-        D2 ramps this off the run clock so the tint is visibly a *curve*
-        rather than a constant. **D3 replaces the source with the ambient
-        cycle's phase** -- and only the source; everything downstream of
-        this method already takes a number.
+        Read off the ambient light the cycle is writing, so the swarm
+        lights up exactly as the clearing goes dark -- the same number
+        from the other end, rather than a second curve running alongside
+        the first and free to drift from it.
         """
-        return min(1.0, self._elapsed / GLOW_RAMP_SECONDS)
+        if self.fx is None:
+            return 0.0
+        return glow_for_intensity(self.fx.ambient_intensity)
 
     def _lights(self) -> list[tuple[Vector2, Color, float, float]]:
         """This frame's dynamic lights: one per intact mound.
@@ -520,8 +553,22 @@ class ClearingScene(Scene):
         renderer.draw_text(
             "TAMANDUÁ: O GUARDIÃO DOS MURUNDUS", Vector2(28, 22), render.HUD_TEXT, 20
         )
+
+        # The clock, as a name rather than a number: "NOITE FECHADA" says
+        # what the player is about to be in the middle of, where "2:47"
+        # would not.
+        phase = self._phase()
         renderer.draw_text(
-            "[WASD] mover   ·   a língua ataca sozinha   ·   encoste num murundu para quebrá-lo",
+            phase.name,
+            Vector2(WINDOW_WIDTH - 250, 22),
+            insect_tint(self._glow()),
+            20,
+        )
+        renderer.draw_text(
+            "o guardião segurou a clareira até o primeiro sol"
+            if self._dawn
+            else "[WASD] mover   ·   a língua ataca sozinha   ·   "
+            "encoste num murundu para quebrá-lo",
             Vector2(28, 50),
             render.HUD_DIM,
             13,
@@ -550,7 +597,7 @@ class ClearingScene(Scene):
         # is the difference between a claim and a readout.
         if self._swarm is not None:
             renderer.draw_text(
-                f"REVOADA {self._swarm.active_count}/{SWARM_CAP}",
+                f"ENXAME {self._swarm.active_count}/{SWARM_CAP}",
                 Vector2(WINDOW_WIDTH // 2 - 70, WINDOW_HEIGHT - 44),
                 insect_tint(self._glow()),
                 16,

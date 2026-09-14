@@ -17,17 +17,20 @@ the frame keeps being drawn. The scene steps its systems with
 real `dt` -- sparks have to fly and the shake has to settle during the
 freeze, or it reads as a stutter instead of an impact.
 
-**The ambient light is left alone here.** D3 attaches an `AmbientCycle` to
-the ambient entity, and the rule that comes with it is that the cycle owns
-the light: a module that also wrote `AmbientLight.intensity` would be a
-second writer racing it. So this module sets the ambient *once*, at
-construction, and never touches it again.
+**The cycle owns the ambient light.** `AmbientCycle` is attached to the
+ambient entity here and `AmbientCycleSystem` writes its colour and
+intensity every tick. Nothing else in this module ever touches that
+component -- the engine's ownership rule is that a second writer racing
+the cycle for the same field loses on whichever tick it runs last, so a
+transient flash is a `LightSource` (the flare pool below) or a
+`playing = False`, never an assignment to `AmbientLight.intensity`.
 """
 
 from __future__ import annotations
 
 import math
 
+from games.tamandua_murundus.phases import CYCLE_KEYFRAMES, RUN_SECONDS
 from games.tamandua_murundus.render import Backdrop
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
@@ -39,16 +42,12 @@ from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.components.floating_text import FloatingText
 from pyguara.graphics.components.screen_flash import ScreenFlash
 from pyguara.graphics.lighting.components import AmbientLight, LightSource, LightType
+from pyguara.graphics.lighting.cycle import AmbientCycle, AmbientCycleSystem
 from pyguara.graphics.lighting.light_system import LightingSystem
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer
 from pyguara.graphics.vfx.shake import Shaker
 from pyguara.graphics.vfx.sparks import Sparks
-
-# Dusk, where the run starts: warm but already going. D3 replaces this
-# fixed pair with the first keyframe of an `AmbientCycle`.
-AMBIENT_COLOR = Color(158, 162, 196)
-AMBIENT_BASE = 0.66
 
 # Dynamic lights (mounds, flock centroids, kills) borrow from this pool.
 # Asking for more than this drops the extras rather than allocating
@@ -116,12 +115,23 @@ class CerradoFX:
         self._lighting = LightingSystem(entity_manager)
         attach_lighting(container, self._lighting)
 
-        # Set once. From D3 an `AmbientCycle` drives this entity, and the
-        # cycle owns the light -- see the module docstring.
+        # The clearing's light for the whole run, in one component. The
+        # cycle owns it from here -- see the module docstring.
         self.ambient_entity = entity_manager.create_entity("ambient")
+        # Seeded with the cycle's own first keyframe rather than the
+        # component default, so frame zero is already dusk. The cycle
+        # overwrites this on its first tick regardless -- but that tick
+        # happens after the first frame is drawn.
         self.ambient_entity.add_component(
-            AmbientLight(color=AMBIENT_COLOR, intensity=AMBIENT_BASE)
+            AmbientLight(
+                color=CYCLE_KEYFRAMES[0].color,
+                intensity=CYCLE_KEYFRAMES[0].intensity,
+            )
         )
+        self.ambient_entity.add_component(
+            AmbientCycle(keyframes=CYCLE_KEYFRAMES, duration=RUN_SECONDS)
+        )
+        self.cycle_system = AmbientCycleSystem(entity_manager)
 
         # The tamanduá's own cone: a genuine SPOT light, aimed by the
         # player's facing. This is the light the clearing is actually read
@@ -221,8 +231,29 @@ class CerradoFX:
 
     # ---- frame -----------------------------------------------------
 
+    @property
+    def cycle(self) -> AmbientCycle:
+        """The run's day/night cycle."""
+        return self.ambient_entity.get_component(AmbientCycle)
+
+    @property
+    def ambient_intensity(self) -> float:
+        """The clearing's current ambient intensity.
+
+        Read back off the component the cycle writes, rather than
+        re-sampling the curve: one source, and no way for a caller's idea
+        of the light to drift from what is actually lighting the scene.
+        """
+        return self.ambient_entity.get_component(AmbientLight).intensity
+
     def update(self, dt: float, camera: Camera2D | None = None) -> None:
-        """Advance everything that runs on real time, not gameplay time."""
+        """Advance everything that runs on real time, not gameplay time.
+
+        The cycle ticks here rather than with the gameplay systems: the
+        sun does not stop for a hit-stop, and a clearing that froze its
+        own light for four frames on every kill would read as a stutter.
+        """
+        self.cycle_system.update(dt)
         self.time += dt
         self.sparks.update(dt)
         self.shaker.update(dt)
@@ -288,6 +319,25 @@ class CerradoFX:
             if name == "light":
                 render_pass.set_camera(camera)
             render_pass.execute(graph.ctx, graph)
+
+    def bind_finished_frame(self) -> None:
+        """Bind the buffer the final blit reads, for drawing over it.
+
+        Anything drawn after this lands on the *finished* image: past the
+        composite, so the light map does not multiply it, and past the
+        post stack, so bloom does not smear it. That is what a HUD needs.
+
+        The alternative -- `UIRenderer`, which composites after the final
+        blit -- is where a HUD belongs in principle, and it is invisible to
+        `tools/agent_view.py`: the capture reads this buffer, which by
+        construction is the frame *before* the UI overlay. A HUD drawn
+        there could not be checked by the only visual tool this repository
+        gives an agent, so it is drawn here instead and can be.
+        """
+        graph = self._container.get(RenderGraph)
+        final_pass = graph.get_pass("final")
+        name = getattr(final_pass, "input_fbo_name", "world")
+        graph.fbo_manager.get_or_create(name).bind()
 
 
 def attach_lighting(container: DIContainer, lighting: LightingSystem) -> None:
