@@ -102,11 +102,11 @@ def main() -> None:
         scene_class=GFGameScene,
     )
 
-    # Protocolo Bandeira, true_coral and mourisco_ressonancia are not
-    # booted here. All three run on the ModernGL backend, and SDL's
-    # `dummy` video driver -- set at the top of this file -- provides no
-    # OpenGL at all, so none of them can create a context. Smoke them
-    # with, e.g.:
+    # Protocolo Bandeira, true_coral, mourisco_ressonancia and
+    # tamandua_murundus are not booted here. All four run on the ModernGL
+    # backend, and SDL's `dummy` video driver -- set at the top of this
+    # file -- provides no OpenGL at all, so none of them can create a
+    # context. Smoke them with, e.g.:
     #     uv run python tools/agent_view.py protocolo_bandeira --gl --frames 30
 
     # 3. Asset Pipeline Module (Flyweight Loader / .meta files)

@@ -76,6 +76,21 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Look at it headlessly:** `uv run python tools/agent_view.py protocolo_bandeira --gl`
   (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
 
+### [tamandua_murundus](./tamandua_murundus) — Tamanduá: O Guardião dos Murundus
+* **Genre:** Horde survivor / density showcase. A giant anteater holds one
+  cerrado clearing from dusk to dawn against a rising swarm.
+* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+  (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`),
+  **per-instance sprite tint** on the GL sprite path (one texture, N colours,
+  one draw call), the **ambient day/night cycle**, a genuine `SPOT` light for
+  the anteater's cone and `flicker_enabled` mounds, `kits/progression` for XP
+  and the 1-of-3 upgrade pick, and the shared `SpatialHash` for the tongue's
+  target search.
+* **Run:** `uv run python games/tamandua_murundus/main.py`
+* **Look at it headlessly:** `uv run python tools/agent_view.py tamandua_murundus --gl`
+  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Spec:** [`project/demos/tamandua_murundus_GDD.md`](../project/demos/tamandua_murundus_GDD.md)
+
 ### [true_coral](./true_coral) — True Coral
 * **Genre:** Snake, on a rain-soaked forest floor at night.
 * **Key Concepts:** the **ModernGL** backend with lighting and post-processing

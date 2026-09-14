@@ -38,7 +38,12 @@ from tools.agent_view import DEMOS, is_blank  # noqa: E402
 # context, let alone draw. They are covered instead by
 # `tools/agent_view.py <demo> --gl`, which uses SDL's offscreen driver and
 # reads the GL framebuffer.
-GL_ONLY_DEMOS = {"mourisco_ressonancia", "true_coral", "protocolo_bandeira"}
+GL_ONLY_DEMOS = {
+    "mourisco_ressonancia",
+    "true_coral",
+    "protocolo_bandeira",
+    "tamandua_murundus",
+}
 DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"} - GL_ONLY_DEMOS)
 
 FRAMES = 20
