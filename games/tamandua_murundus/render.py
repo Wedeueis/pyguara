@@ -37,13 +37,14 @@ MURUNDU_RIM = Color(112, 82, 58)
 MURUNDU_GLOW = Color(255, 176, 92)
 MURUNDU_BROKEN = Color(44, 33, 28)
 
+# The swarm's own two colours live in `swarm.py`, beside the curve that
+# interpolates between them -- the tint is swarm state, not a palette
+# entry the renderer looks up.
+
 TAMANDUA_BODY = Color(96, 84, 72)
 TAMANDUA_STRIPE = Color(228, 224, 214)
 TAMANDUA_SNOUT = Color(74, 64, 56)
 TONGUE = Color(232, 118, 128)
-
-INSECT_DULL = Color(126, 96, 62)
-INSECT_LIT = Color(120, 255, 196)
 
 HUD_TEXT = Color(226, 240, 220)
 HUD_DIM = Color(128, 148, 132)
@@ -58,21 +59,6 @@ class MurunduView:
     health_fraction: float
     broken: bool
     glow: float
-
-
-@dataclass(slots=True)
-class InsectView:
-    """What the renderer needs to know about one insect.
-
-    `tint` is resolved by the caller rather than here, because from D3 it
-    comes off the day/night curve and the renderer should not be the thing
-    that knows what time it is.
-    """
-
-    position: Vector2
-    angle: float
-    tint: Color
-    size: float
 
 
 class Backdrop:
@@ -232,19 +218,6 @@ def draw_tamandua(
         )
         renderer.draw_line(snout, tip, TONGUE, width=3)
         renderer.draw_circle(tip, 3.0, TONGUE)
-
-
-def draw_insects(renderer: IRenderer, views: list[InsectView]) -> None:
-    """Draw the interactive insects.
-
-    D1 draws them as shape primitives, which is honest about what this PR
-    proves: the tongue and the mounds. **D2 replaces this with a single
-    instanced, per-instance-tinted sprite batch**, which is the capability
-    the demo exists to show -- and which is why `InsectView` already
-    carries a resolved `tint` that nothing here is yet using per-instance.
-    """
-    for view in views:
-        renderer.draw_circle(view.position, view.size, view.tint)
 
 
 def draw_tongue_arc(

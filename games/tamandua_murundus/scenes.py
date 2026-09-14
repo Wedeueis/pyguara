@@ -12,30 +12,35 @@ import math
 from games.tamandua_murundus import render
 from games.tamandua_murundus.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
 from games.tamandua_murundus.cerrado_fx import CerradoFX
-from games.tamandua_murundus.components import Insect, Murundu, Tamandua
+from games.tamandua_murundus.components import Murundu, Tamandua
 from games.tamandua_murundus.events import (
     InsectKilled,
     MurunduBroken,
     TongueLashed,
 )
-from games.tamandua_murundus.systems import (
-    InsectDriftSystem,
-    MurunduSystem,
-    TongueSystem,
+from games.tamandua_murundus.swarm import (
+    INSECT_LIT,
+    STEERING_GROUPS,
+    SWARM_CAP,
+    Swarm,
+    build_batch,
+    insect_tint,
+    make_insect_texture,
 )
+from games.tamandua_murundus.systems import MurunduSystem, TongueSystem
+from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
 from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D
-from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP, A, D, S, W
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.scene.base import Scene
-from pyguara.spatial.components import SpatialTracked
 from pyguara.spatial.system import SpatialIndexSystem
 
 # The clearing, inset from the window so the vignette has something to
@@ -58,6 +63,17 @@ TONGUE_DAMAGE_TO_MOUND = 1.0
 # The anteater's drawn body radius, used to keep its silhouette inside
 # the clearing rather than clamping its centre to the edge.
 BODY_RADIUS = 16.0
+
+# How long the swarm takes to go from dull brown to full bioluminescence.
+# D2 ramps it off the run clock so the tint is visibly a curve; D3 hands
+# the job to the ambient cycle and this constant goes with it.
+GLOW_RAMP_SECONDS = 45.0
+
+# How the mounds' output ramps. Like the glow, D2 drives this off the run
+# clock so the swarm visibly *builds*; D3's phase table replaces the
+# driver, and only the driver -- `MurunduSystem` already takes a number.
+RELEASE_RAMP_SECONDS = 18.0
+MAX_RELEASE_PER_FEED = 6
 LASH_ANIMATION = 0.16
 
 
@@ -87,9 +103,12 @@ class ClearingScene(Scene):
         self._held_right = False
 
         self._murundus: MurunduSystem | None = None
-        self._drift: InsectDriftSystem | None = None
         self._tongue: TongueSystem | None = None
         self._spatial: SpatialIndexSystem | None = None
+        self._flocking: FlockingSystem | None = None
+        self._swarm: Swarm | None = None
+        self._insect_texture = None
+        self._elapsed = 0.0
 
     # ---- setup -----------------------------------------------------
 
@@ -107,12 +126,20 @@ class ClearingScene(Scene):
         dispatcher = self.event_dispatcher
         index = self.container.get(SpatialHash)
 
+        self._swarm = Swarm(self.entity_manager, ARENA, self._rng)
+        self._insect_texture = make_insect_texture(self.container.get(TextureFactory))
+
         self._spatial = SpatialIndexSystem(self.entity_manager, index, dispatcher)
-        self._murundus = MurunduSystem(
-            self.entity_manager, dispatcher, ARENA, self._rng
+        self._murundus = MurunduSystem(self.entity_manager, dispatcher, self._swarm)
+        self._tongue = TongueSystem(self.entity_manager, dispatcher, index, self._swarm)
+
+        # Steering staggered across three ticks. Every insect still
+        # integrates every frame -- only the decision rate drops -- which
+        # is the difference between 1000 agents costing 16.0 ms and
+        # 7.4 ms (docs/guides/performance.md).
+        self._flocking = FlockingSystem(
+            self.entity_manager, cell_size=48.0, groups=STEERING_GROUPS
         )
-        self._drift = InsectDriftSystem(self.entity_manager, ARENA)
-        self._tongue = TongueSystem(self.entity_manager, dispatcher, index)
 
         dispatcher.subscribe(InsectKilled, self._on_insect_killed)
         dispatcher.subscribe(MurunduBroken, self._on_murundu_broken)
@@ -201,7 +228,7 @@ class ClearingScene(Scene):
         """Spark, flare and count a kill."""
         self._kills += 1
         if self.fx is not None:
-            self.fx.kill(event.position, render.INSECT_LIT)
+            self.fx.kill(event.position, insect_tint(self._glow()))
 
     def _on_murundu_broken(self, event: MurunduBroken) -> None:
         """The run's biggest beat: shake, flash, hit-stop, a word."""
@@ -244,6 +271,7 @@ class ClearingScene(Scene):
         """Advance everything that keeps running through a hit-stop."""
         if self.fx is None:
             return
+        self._elapsed += dt
         self._lash = max(0.0, self._lash - dt)
         self.fx.update(dt, self._camera)
 
@@ -287,24 +315,48 @@ class ClearingScene(Scene):
         if self._spatial is not None:
             self._spatial.update(dt)
         if self._murundus is not None:
+            self._murundus.release_per_feed = min(
+                MAX_RELEASE_PER_FEED,
+                1 + int(self._elapsed / RELEASE_RAMP_SECONDS),
+            )
             self._murundus.update(dt)
-        if self._drift is not None:
-            self._drift.update(dt)
+        if self._flocking is not None:
+            self._flocking.update(dt)
+        self._keep_swarm_in_the_clearing()
         if self._tongue is not None:
             self._tongue.update(dt)
+        if self._swarm is not None:
+            self._swarm.update_motes(dt)
 
-        self._track_new_insects()
+    def _keep_swarm_in_the_clearing(self) -> None:
+        """Turn any insect that has left the clearing back into it.
 
-    def _track_new_insects(self) -> None:
-        """Opt newly released insects into the spatial index.
-
-        Done here rather than at creation so `MurunduSystem` stays a thing
-        that releases insects, rather than a thing that knows how this
-        game finds them again.
+        `FlockingSystem` has no notion of bounds -- cohesion holds the
+        flock together but nothing holds the flock anywhere, so a swarm
+        given one direction long enough leaves the screen and the demo
+        becomes an empty clearing. Reflecting the velocity at the edge
+        costs a comparison per insect and keeps the density where the
+        player can see it.
         """
-        for entity in self.entity_manager.get_entities_with(Insect):
-            if not entity.has_component(SpatialTracked):
-                entity.add_component(SpatialTracked())
+        if self._swarm is None:
+            return
+
+        for entity in self._swarm.active_insects():
+            transform = entity.get_component(Transform)
+            agent = entity.get_component(FlockingAgent)
+            position, velocity = transform.position, agent.velocity
+
+            if position.x < ARENA.left or position.x > ARENA.right:
+                agent.velocity = Vector2(-velocity.x, velocity.y)
+                transform.position = Vector2(
+                    min(max(position.x, ARENA.left), ARENA.right), position.y
+                )
+            if position.y < ARENA.top or position.y > ARENA.bottom:
+                agent.velocity = Vector2(agent.velocity.x, -velocity.y)
+                transform.position = Vector2(
+                    transform.position.x,
+                    min(max(position.y, ARENA.top), ARENA.bottom),
+                )
 
     def _try_break_mound(self, position: Vector2, hunter: Tamandua) -> None:
         """Chew the mound the anteater is standing against, if any."""
@@ -350,7 +402,7 @@ class ClearingScene(Scene):
         for view in self._murundu_views():
             render.draw_murundu(world_renderer, view)
 
-        render.draw_insects(world_renderer, self._insect_views())
+        self._draw_swarm(world_renderer)
 
         player = self._player()
         if player is not None:
@@ -403,25 +455,29 @@ class ClearingScene(Scene):
             )
         return views
 
-    def _insect_views(self) -> list[render.InsectView]:
-        """One view per insect.
+    def _draw_swarm(self, renderer: IRenderer) -> None:
+        """Draw both swarm layers as one instanced, tinted batch.
 
-        The tint is flat in D1 -- dull brown, the colour they are at dusk.
-        D3 drives it off the ambient cycle, which is when this stops being
-        a constant and starts being the thing the demo is about.
+        This is the demo's thesis in four lines: one texture, N colours,
+        one `render_batch()`. The batch itself is built by the pure
+        `build_batch()`, which is what makes the tint values testable
+        without a GPU -- see `tests/visual/`.
         """
-        views = []
-        for entity in self.entity_manager.get_entities_with(Insect, Transform):
-            insect = entity.get_component(Insect)
-            views.append(
-                render.InsectView(
-                    position=entity.get_component(Transform).position,
-                    angle=math.atan2(insect.velocity.y, insect.velocity.x),
-                    tint=render.INSECT_DULL,
-                    size=4.0,
-                )
-            )
-        return views
+        if self._swarm is None or self._insect_texture is None:
+            return
+        renderer.render_batch(
+            build_batch(self._swarm.batch_input(self._insect_texture, self._glow()))
+        )
+
+    def _glow(self) -> float:
+        """How bioluminescent the swarm is right now, 0..1.
+
+        D2 ramps this off the run clock so the tint is visibly a *curve*
+        rather than a constant. **D3 replaces the source with the ambient
+        cycle's phase** -- and only the source; everything downstream of
+        this method already takes a number.
+        """
+        return min(1.0, self._elapsed / GLOW_RAMP_SECONDS)
 
     def _lights(self) -> list[tuple[Vector2, Color, float, float]]:
         """This frame's dynamic lights: one per intact mound.
@@ -432,6 +488,18 @@ class ClearingScene(Scene):
         measurement (GDD §3.2).
         """
         lights: list[tuple[Vector2, Color, float, float]] = []
+
+        # The flock's own glow: a handful of aggregate lights at cell
+        # centroids, not one per insect. This is what lifts the swarm past
+        # the bloom threshold -- the composite multiplies the world by the
+        # light map, so a tinted sprite under a sub-1.0 ambient comes out
+        # darker than it was drawn and never blooms unaided.
+        glow = self._glow()
+        if self._swarm is not None and glow > 0.05:
+            tint = insect_tint(glow)
+            for centre, weight in self._swarm.centroids():
+                lights.append((centre, tint, 150.0 + 90.0 * weight, glow * weight))
+
         for entity in self.entity_manager.get_entities_with(Murundu, Transform):
             mound = entity.get_component(Murundu)
             if mound.broken:
@@ -473,9 +541,20 @@ class ClearingScene(Scene):
         renderer.draw_text(
             f"INSETOS COMIDOS {self._kills}",
             Vector2(WINDOW_WIDTH - 250, WINDOW_HEIGHT - 44),
-            render.INSECT_LIT,
+            INSECT_LIT,
             16,
         )
+
+        # The count the demo is actually about. `SWARM_CAP` is a measured
+        # ceiling (see `swarm.py`), so showing the live number against it
+        # is the difference between a claim and a readout.
+        if self._swarm is not None:
+            renderer.draw_text(
+                f"REVOADA {self._swarm.active_count}/{SWARM_CAP}",
+                Vector2(WINDOW_WIDTH // 2 - 70, WINDOW_HEIGHT - 44),
+                insect_tint(self._glow()),
+                16,
+            )
 
     def _player(self):
         """The anteater entity, or None if it is gone."""

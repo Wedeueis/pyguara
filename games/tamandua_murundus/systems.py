@@ -16,17 +16,18 @@ from games.tamandua_murundus.events import (
     MurunduBroken,
     TongueLashed,
 )
+from games.tamandua_murundus.swarm import Swarm
 from pyguara.common.components import Transform
-from pyguara.common.random import RandomStream
 from pyguara.common.spatial import SpatialHash
-from pyguara.common.types import Rect, Vector2
+from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
+from pyguara.ecs.pool import Poolable
 from pyguara.events.dispatcher import EventDispatcher
 
-# How many interactive insects D1 keeps alive at once. Small on purpose:
-# this PR proves the tongue and the mounds, and a crowd here would make
-# the D2 measurement look like a regression rather than a result.
-D1_INSECT_CAP = 60
+# The interactive cap now lives on the `Swarm` itself (`swarm.SWARM_CAP`),
+# because the pool is what enforces it: `release_at()` returns None when
+# every insect is already out, which is the cap doing its job rather than
+# a count this module has to keep.
 
 
 class MurunduSystem:
@@ -36,26 +37,28 @@ class MurunduSystem:
         self,
         entity_manager: EntityManager,
         dispatcher: EventDispatcher,
-        arena: Rect,
-        rng: RandomStream,
+        swarm: Swarm,
+        *,
+        release_per_feed: int = 1,
     ) -> None:
         """Store collaborators.
 
         Args:
-            entity_manager: Source of mounds, and where insects are made.
+            entity_manager: Source of mounds.
             dispatcher: Where `MurunduBroken` is dispatched.
-            arena: Keeps released insects inside the clearing.
-            rng: Drives release direction and wobble.
+            swarm: Where released insects come from. The pool enforces the
+                cap, so this system never counts insects itself.
+            release_per_feed: How many insects each feed releases. The run
+                clock raises this as the night goes on (D3 onward); D2
+                leaves it at one so the swarm builds at a readable rate.
         """
         self._entity_manager = entity_manager
         self._dispatcher = dispatcher
-        self._arena = arena
-        self._rng = rng
+        self._swarm = swarm
+        self.release_per_feed = release_per_feed
 
     def update(self, dt: float) -> None:
         """Advance every intact mound's feed timer."""
-        insects = sum(1 for _ in self._entity_manager.get_entities_with(Insect))
-
         for entity in self._entity_manager.get_entities_with(Murundu, Transform):
             mound = entity.get_component(Murundu)
             if mound.broken:
@@ -63,32 +66,16 @@ class MurunduSystem:
 
             mound.glow_phase += dt
             mound.feed_timer -= dt
-            if mound.feed_timer > 0.0 or insects >= D1_INSECT_CAP:
+            if mound.feed_timer > 0.0:
                 continue
 
             mound.feed_timer = mound.feed_interval
-            self._release(entity.get_component(Transform).position, entity.id)
-            insects += 1
-
-    def _release(self, origin: Vector2, anchor: str) -> None:
-        """Put one insect into the world beside its mound."""
-        angle = self._rng.uniform(0.0, math.tau)
-        entity = self._entity_manager.create_entity()
-        entity.add_component(
-            Transform(
-                position=Vector2(
-                    origin.x + math.cos(angle) * 38.0,
-                    origin.y + math.sin(angle) * 38.0,
-                )
-            )
-        )
-        entity.add_component(
-            Insect(
-                velocity=Vector2(math.cos(angle) * 42.0, math.sin(angle) * 42.0),
-                wobble=self._rng.uniform(0.0, math.tau),
-                anchor=anchor,
-            )
-        )
+            origin = entity.get_component(Transform).position
+            for _ in range(self.release_per_feed):
+                if self._swarm.release_at(origin, entity.id) is None:
+                    # Pool exhausted. Stop asking this frame rather than
+                    # spinning through the rest of the releases.
+                    break
 
     def damage(self, entity_id: str, amount: float) -> bool:
         """Take `amount` off a mound, breaking it if it reaches zero.
@@ -128,52 +115,6 @@ class MurunduSystem:
         return True
 
 
-class InsectDriftSystem:
-    """Moves D1's insects: outward from their mound, with a wobble.
-
-    Placeholder motion, and labelled as such. The real behaviour is
-    `FlockingSystem` in D2; what this has to do is keep insects on screen
-    and moving differently from each other, so the tongue has a moving
-    target and the clearing is not static.
-    """
-
-    def __init__(self, entity_manager: EntityManager, arena: Rect) -> None:
-        """Store collaborators."""
-        self._entity_manager = entity_manager
-        self._arena = arena
-
-    def update(self, dt: float) -> None:
-        """Drift every insect, turning it back at the clearing's edge."""
-        for entity in self._entity_manager.get_entities_with(Insect, Transform):
-            insect = entity.get_component(Insect)
-            transform = entity.get_component(Transform)
-
-            insect.wobble += dt * 2.4
-            drift = math.sin(insect.wobble) * 26.0
-            heading = insect.velocity
-            side = Vector2(-heading.y, heading.x)
-            magnitude = side.magnitude
-            if magnitude > 0.0:
-                side = Vector2(side.x / magnitude, side.y / magnitude)
-
-            position = Vector2(
-                transform.position.x + (heading.x + side.x * drift) * dt,
-                transform.position.y + (heading.y + side.y * drift) * dt,
-            )
-
-            # Turn back at the edge rather than clamping: a clamped insect
-            # piles up against the boundary and the clearing grows a rim
-            # of stuck sprites.
-            if position.x < self._arena.left or position.x > self._arena.right:
-                insect.velocity = Vector2(-insect.velocity.x, insect.velocity.y)
-                position = Vector2(transform.position.x, position.y)
-            if position.y < self._arena.top or position.y > self._arena.bottom:
-                insect.velocity = Vector2(insect.velocity.x, -insect.velocity.y)
-                position = Vector2(position.x, transform.position.y)
-
-            transform.position = position
-
-
 class TongueSystem:
     """Auto-lashes the nearest insect in the arc in front of the anteater.
 
@@ -188,11 +129,22 @@ class TongueSystem:
         entity_manager: EntityManager,
         dispatcher: EventDispatcher,
         spatial_index: SpatialHash[str],
+        swarm: Swarm,
     ) -> None:
-        """Store collaborators."""
+        """Store collaborators.
+
+        Args:
+            entity_manager: Source of anteaters and hit candidates.
+            dispatcher: Where `TongueLashed` and `InsectKilled` go.
+            spatial_index: Queried for candidates near the snout.
+            swarm: A killed insect goes back to its pool rather than being
+                destroyed -- at this rate of death, creating and removing
+                entities is exactly the cost the pool exists to avoid.
+        """
         self._entity_manager = entity_manager
         self._dispatcher = dispatcher
         self._spatial_index = spatial_index
+        self._swarm = swarm
 
     def update(self, dt: float) -> None:
         """Tick every anteater's cooldown and lash when it is ready."""
@@ -212,9 +164,8 @@ class TongueSystem:
             insect = target.get_component(Insect)
             insect.health -= 1.0
 
-            killed = insect.health <= 0.0
-            if killed:
-                self._entity_manager.remove_entity(target.id)
+            if insect.health <= 0.0:
+                self._swarm.kill(target)
                 self._dispatcher.dispatch(
                     InsectKilled(entity=target.id, position=target_position)
                 )
@@ -235,6 +186,11 @@ class TongueSystem:
         ):
             candidate = self._entity_manager.get_entity(candidate_id)
             if candidate is None or not candidate.has_component(Insect):
+                continue
+            # A pooled insect that is not currently out is still an entity
+            # and still in the spatial index; without this the tongue eats
+            # the dead, from wherever they were last released.
+            if not candidate.get_component(Poolable).is_active:
                 continue
 
             offset = candidate.get_component(Transform).position - origin
