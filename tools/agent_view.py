@@ -208,27 +208,83 @@ def _render_graph(container: object) -> object | None:
     return graph
 
 
+def _capture_fbo(graph: object) -> object | None:
+    """Return the framebuffer the final pass blits from, if it exists.
+
+    This is the buffer that holds the composed frame, and the one a GL
+    capture reads. `_redirect_ui_into(...)` also aims the UI overlay at
+    it, so a capture shows the frame a player would see rather than the
+    frame minus its UI.
+    """
+    final_pass = graph.get_pass("final")  # type: ignore[attr-defined]
+    name = getattr(final_pass, "input_fbo_name", "world")
+    return graph.fbo_manager.get(name)  # type: ignore[attr-defined]
+
+
+def _redirect_ui_into(container: object, graph: object, active: dict) -> None:
+    """Make the UI overlay land in the capture buffer, not on the screen.
+
+    **Why this is needed at all.** `Application` composites the UI onto the
+    *default* framebuffer, after the final pass has blitted to it. A
+    capture cannot read that: under SDL's offscreen driver the default
+    framebuffer reads back as solid zeros (verified -- the read succeeds
+    and returns nothing). So for as long as this tool has existed, every
+    capture has been the frame *minus its UI*, and no `UIManager` widget
+    in any demo had ever been seen in one.
+
+    The fix is to bind the capture buffer immediately before the UI
+    composites, so the overlay lands there instead. `GLUIRenderer.present()`
+    draws a fullscreen quad into whatever framebuffer is bound, so no
+    engine change is needed -- only the target.
+
+    The screen loses its UI on those frames, which does not matter when
+    nobody is looking at it. In `--windowed` runs somebody is, so this is
+    not installed and a windowed capture still omits the UI layer.
+
+    Args:
+        container: The demo's DI container.
+        graph: The render graph, or None for a non-GL backend.
+        active: One-key dict the caller flips on capture ticks.
+    """
+    from pyguara.graphics.protocols import UIRenderer
+
+    try:
+        ui_renderer = container.get(UIRenderer)  # type: ignore[attr-defined]
+    except Exception:  # pragma: no cover - backend without a UI renderer
+        return
+
+    original_present = ui_renderer.present
+
+    def present_into_capture() -> None:
+        if active["on"]:
+            fbo = _capture_fbo(graph)
+            if fbo is not None:
+                fbo.bind()
+        original_present()
+
+    ui_renderer.present = present_into_capture  # type: ignore[method-assign]
+
+
 def _capture(graph: object | None) -> pygame.Surface | None:
     """Return the frame just rendered, from whichever backend drew it.
 
     The pygame backends draw into the display surface, so reading it back
-    is the whole job. A ModernGL backend does not: under an `OPENGL`
-    display, `get_surface()` hands back a surface the GPU never touched.
+    is the whole job -- and their UI draws straight onto that surface, so
+    it is already included.
 
-    For GL, read the offscreen framebuffer the final pass blits from
-    rather than the default one. The default framebuffer is only valid
-    between drawing and the buffer swap -- reading it after `present()`
-    returns an undefined back buffer (a blank capture), and reading it
-    before blocked outright under the offscreen driver. The FBO has
-    neither problem and holds exactly the composed frame.
+    A ModernGL backend does not: under an `OPENGL` display,
+    `get_surface()` hands back a surface the GPU never touched. So read
+    the offscreen framebuffer the final pass blits from. The default
+    framebuffer is no use -- after the swap it is an undefined back
+    buffer, and before it reads back as solid zeros under the offscreen
+    driver. The UI is composited into this same buffer on capture ticks;
+    see `_redirect_ui_into()`.
     """
     surface = pygame.display.get_surface()
     if graph is None:
         return surface
 
-    final_pass = graph.get_pass("final")  # type: ignore[attr-defined]
-    name = getattr(final_pass, "input_fbo_name", "world")
-    fbo = graph.fbo_manager.get(name)  # type: ignore[attr-defined]
+    fbo = _capture_fbo(graph)
     if fbo is None:
         return surface
 
@@ -291,9 +347,17 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
     saved: list[tuple[Path, bool]] = []
     original_render = app._render
 
+    # Flipped on for the frames being captured, so the UI composites into
+    # the buffer the capture reads instead of onto the unreadable screen.
+    # Not installed for a windowed run -- see `_redirect_ui_into()`.
+    capturing = {"on": False}
+    if graph is not None and "--windowed" not in sys.argv:
+        _redirect_ui_into(container, graph, capturing)
+
     def render_and_capture() -> None:
         nonlocal tick
         tick += 1
+        capturing["on"] = tick in script.shots
 
         for at, key in script.keys:
             if at == tick:
