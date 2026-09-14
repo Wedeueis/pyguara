@@ -18,6 +18,7 @@ from games.tamandua_murundus.events import (
     MurunduBroken,
     TongueLashed,
 )
+from games.tamandua_murundus.motes import MOTE_VALUE, Motes
 from games.tamandua_murundus.phases import (
     DAWN_HOLD_PHASE,
     PHASES,
@@ -47,6 +48,15 @@ from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP, A, D, S, W
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
+from pyguara.kits.progression import (
+    Experience,
+    Geometric,
+    LeveledUp,
+    Magnet,
+    MagnetSystem,
+    PickupCollected,
+    grant_experience,
+)
 from pyguara.scene.base import Scene
 from pyguara.spatial.system import SpatialIndexSystem
 
@@ -70,6 +80,46 @@ TONGUE_DAMAGE_TO_MOUND = 1.0
 # The anteater's drawn body radius, used to keep its silhouette inside
 # the clearing rather than clamping its centre to the edge.
 BODY_RADIUS = 16.0
+
+# The level curve. Geometric rather than linear, so the run slows without
+# stopping -- and measured, not guessed.
+#
+# A simulated run with the player orbiting the clearing (an engaged
+# player, not an idle one) kills ~242 insects over the 240-second night
+# and collects **~236** of them -- the handful it does not are motes that
+# fell outside the magnet's reach and were never returned to, which is
+# the gap `MAGNET_RADIUS` exists to create. Against that yield:
+#
+#     base  growth   levels reached
+#     14.0    1.28        8
+#     10.0    1.24        9
+#      8.0    1.20       11
+#      6.0    1.18       13
+#
+# Eight is the fit, because D5's card table is six to eight upgrades: a
+# run should offer about as many picks as there are distinct things to
+# pick. An idle player reaches level 2 on the same curve, which is the
+# spread that makes the levels feel earned.
+#
+# Note what the same simulation says about the swarm: 242 kills still
+# leaves 638 of 700 alive. The player cannot clear the clearing, which is
+# the point of a density climax.
+LEVEL_CURVE = Geometric(base=14.0, growth=1.28)
+
+# What that simulated run yielded, kept so the test below pins the curve
+# against a measurement rather than against itself.
+MEASURED_RUN_YIELD = 236.0
+
+# The magnet's reach, deliberately *shorter* than the tongue's 150.
+#
+# Matching them made the magnet invisible: every kill landed inside the
+# pull radius, so every mote was collected on the frame it dropped and
+# the signature mechanic of the genre never visibly happened. Shorter,
+# the far half of the kills leave motes on the ground that the anteater
+# has to drift toward -- which is both what makes the magnet legible and
+# what gives the player a reason to keep moving through the swarm rather
+# than standing in it.
+MAGNET_RADIUS = 108.0
 
 
 LASH_ANIMATION = 0.16
@@ -108,6 +158,9 @@ class ClearingScene(Scene):
         self._insect_texture = None
         self._elapsed = 0.0
         self._dawn = False
+        self._motes: Motes | None = None
+        self._magnets: MagnetSystem | None = None
+        self._levels = 0
 
     # ---- setup -----------------------------------------------------
 
@@ -140,6 +193,11 @@ class ClearingScene(Scene):
             self.entity_manager, cell_size=48.0, groups=STEERING_GROUPS
         )
 
+        self._motes = Motes(self.entity_manager, ARENA, self._rng)
+        self._magnets = MagnetSystem(self.entity_manager, dispatcher, index)
+
+        dispatcher.subscribe(PickupCollected, self._on_mote_collected)
+        dispatcher.subscribe(LeveledUp, self._on_level_up)
         dispatcher.subscribe(InsectKilled, self._on_insect_killed)
         dispatcher.subscribe(MurunduBroken, self._on_murundu_broken)
         dispatcher.subscribe(TongueLashed, self._on_tongue_lashed)
@@ -196,6 +254,8 @@ class ClearingScene(Scene):
             )
         )
         entity.add_component(Tamandua())
+        entity.add_component(Experience())
+        entity.add_component(Magnet(radius=MAGNET_RADIUS))
         self._player_id = entity.id
 
     def _create_murundus(self) -> None:
@@ -223,8 +283,50 @@ class ClearingScene(Scene):
 
     # ---- events ----------------------------------------------------
 
+    def _on_mote_collected(self, event: PickupCollected) -> None:
+        """Turn a collected mote into experience.
+
+        The kit dispatches the payload and stops; deciding that a mote is
+        worth experience is the game's, which is why `Attracted.payload`
+        is opaque to `kits/progression` in the first place.
+        """
+        if self._motes is None:
+            return
+        self._motes.collect(event.pickup)
+
+        player = self._player()
+        if player is None:
+            return
+        grant_experience(
+            self.event_dispatcher,
+            player.id,
+            player.get_component(Experience),
+            LEVEL_CURVE,
+            float(event.payload),
+        )
+
+    def _on_level_up(self, event: LeveledUp) -> None:
+        """Mark a level. D5 spends it on a 1-of-3 pick.
+
+        The kit counts levels into `pending_levels` and never spends them
+        -- it has no idea what a level is worth here -- so until D5 the
+        run banks them and says so.
+        """
+        self._levels = event.level
+        if self.fx is None:
+            return
+        self.fx.popup(
+            f"NÍVEL {event.level}",
+            Vector2(WINDOW_WIDTH / 2 - 40, WINDOW_HEIGHT / 2 - 60),
+            INSECT_LIT,
+            size=22,
+        )
+        self.fx.flash.trigger(Color(150, 255, 210, 40), 0.2)
+
     def _on_insect_killed(self, event: InsectKilled) -> None:
-        """Spark, flare and count a kill."""
+        """Spark, flare, count the kill, and leave what it was worth."""
+        if self._motes is not None:
+            self._motes.drop(event.position, MOTE_VALUE)
         self._kills += 1
         if self.fx is not None:
             self.fx.kill(event.position, insect_tint(self._glow()))
@@ -341,6 +443,12 @@ class ClearingScene(Scene):
             self._tongue.update(dt)
         if self._swarm is not None:
             self._swarm.update_motes(dt)
+        if self._motes is not None:
+            self._motes.update(dt)
+        # After the motes settle, so a mote dropped this frame is already
+        # where it belongs before the magnet decides whether to pull it.
+        if self._magnets is not None:
+            self._magnets.update(dt)
 
     def _keep_swarm_in_the_clearing(self) -> None:
         """Turn any insect that has left the clearing back into it.
@@ -417,6 +525,7 @@ class ClearingScene(Scene):
             render.draw_murundu(world_renderer, view)
 
         self._draw_swarm(world_renderer)
+        self._draw_motes(world_renderer)
 
         player = self._player()
         if player is not None:
@@ -479,6 +588,22 @@ class ClearingScene(Scene):
                 )
             )
         return views
+
+    def _draw_motes(self, renderer: IRenderer) -> None:
+        """Draw the motes, in their own instanced batch.
+
+        A second batch rather than a row in the swarm's: they share the
+        texture but not the tint, and folding them in would mean the
+        swarm's `build_batch()` taking a second colour and a second size
+        for a layer that is not the swarm.
+        """
+        if self._motes is None or self._insect_texture is None:
+            return
+        if self._motes.active_count == 0:
+            return
+        renderer.render_batch(
+            self._motes.build_batch(self._insect_texture, self._glow())
+        )
 
     def _phase(self) -> Phase:
         """Which stretch of the night the run is in."""
@@ -581,7 +706,7 @@ class ClearingScene(Scene):
         )
         renderer.draw_text(
             f"MURUNDUS {intact}/{len(MURUNDU_POSITIONS)}",
-            Vector2(28, WINDOW_HEIGHT - 44),
+            Vector2(268, WINDOW_HEIGHT - 44),
             render.MURUNDU_GLOW,
             16,
         )
@@ -595,6 +720,25 @@ class ClearingScene(Scene):
         # The count the demo is actually about. `SWARM_CAP` is a measured
         # ceiling (see `swarm.py`), so showing the live number against it
         # is the difference between a claim and a readout.
+        player = self._player()
+        if player is not None:
+            experience = player.get_component(Experience)
+            cost = LEVEL_CURVE.cost_for(experience.level)
+            renderer.draw_text(
+                f"NÍVEL {experience.level}   {int(experience.current)}/{int(cost)}",
+                Vector2(28, WINDOW_HEIGHT - 68),
+                INSECT_LIT,
+                16,
+            )
+            # The bar under it: a level-up is the run's only reward, so
+            # how close one is has to be readable at a glance rather than
+            # by parsing two numbers.
+            width = 220
+            renderer.draw_rect(Rect(28, WINDOW_HEIGHT - 46, width, 4), render.HUD_DIM)
+            filled = int(width * max(0.0, min(1.0, experience.current / cost)))
+            if filled > 0:
+                renderer.draw_rect(Rect(28, WINDOW_HEIGHT - 46, filled, 4), INSECT_LIT)
+
         if self._swarm is not None:
             renderer.draw_text(
                 f"ENXAME {self._swarm.active_count}/{SWARM_CAP}",
