@@ -33,7 +33,12 @@ class EnemyPool(EntityPool):
         """Create an enemy entity for the pool."""
         entity = em.create_entity(f"enemy_{index}")
 
-        entity.add_component(Transform(position=Vector2(-1000, -1000)))
+        # Origin, not a far-off corner. An idle pooled entity used to stay
+        # in every query it matched, so this pool parked its enemies out of
+        # sight at (-1000, -1000) to keep them from being hit, drawn or
+        # counted. `EntityPool` disables them now, so they match nothing
+        # and there is nowhere they need to be parked.
+        entity.add_component(Transform(position=Vector2.zero()))
         entity.add_component(
             EnemyAI(
                 enemy_type=EnemyType.CHASER,

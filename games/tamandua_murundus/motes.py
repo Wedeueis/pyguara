@@ -1,12 +1,12 @@
 """XP motes: what a dead insect leaves behind, and who comes to get it.
 
-A pooled layer with the same discipline `swarm.py` arrived at the hard
-way: **the query-visible components go on at acquire and come off at
-release.** `EntityPool` never destroys anything, so an `Attracted` or a
-`SpatialTracked` attached at construction would keep every mote in
-`MagnetSystem`'s candidate set and in the spatial index for the life of
-the scene, whether one is on the ground or two hundred. That cost the
-swarm two thirds of its frame rate in D2; it would cost the same here.
+A pooled layer. The factory attaches everything a mote will ever need,
+including the components systems query on: `EntityPool` parks an idle
+entity with `EntityManager.set_entity_enabled()`, so it keeps its
+components and still matches no query. Both this pool and the swarm's
+used to detach those components by hand on release, which worked and
+threw away state -- see that method for what the trap cost and why it is
+the engine's problem rather than each pool's.
 
 The magnet itself is `kits/progression`'s, and is deliberately **not a
 physics interaction** -- a radius query and a velocity, no collider. A
@@ -76,14 +76,16 @@ class Motes:
         self._pool = EntityPool(entity_manager, "motes", cap, self._make_mote)
 
     def _make_mote(self, entity_manager: EntityManager, index: int) -> Entity:
-        """Build one pooled mote, carrying only what an idle one needs.
+        """Build one pooled mote, complete.
 
-        `Attracted` and `SpatialTracked` are attached on acquire -- see
-        the module docstring for why that is not a detail.
+        `payload` is set per drop rather than here, because what a mote is
+        worth is decided by whatever killed the insect.
         """
         entity = entity_manager.create_entity()
         entity.add_component(Poolable())
         entity.add_component(Transform(position=Vector2.zero()))
+        entity.add_component(Attracted())
+        entity.add_component(SpatialTracked())
         return entity
 
     @property
@@ -114,8 +116,12 @@ class Motes:
             min(max(position.y + math.sin(angle) * distance, arena.top), arena.bottom),
         )
 
-        entity.add_component(Attracted(payload=value))
-        entity.add_component(SpatialTracked())
+        pickup = entity.get_component(Attracted)
+        pickup.payload = value
+        # Reset what a previous life left behind: a recycled mote that
+        # came back inactive would never be collected again.
+        pickup.active = True
+        pickup.current_speed = 0.0
         self._drift[entity.id] = Vector2(
             math.cos(angle) * distance * 1.6, math.sin(angle) * distance * 1.6
         )
@@ -132,8 +138,6 @@ class Motes:
         if entity is None or not entity.has_component(Attracted):
             return
 
-        entity.remove_component(Attracted)
-        entity.remove_component(SpatialTracked)
         self._drift.pop(entity_id, None)
         self._pool.release(entity)
 
