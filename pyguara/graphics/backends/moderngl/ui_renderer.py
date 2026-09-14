@@ -106,7 +106,14 @@ class GLUIRenderer:
         # Create texture for UI surface
         self._texture = self._ctx.texture((width, height), 4)
         self._texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
-        self._texture.swizzle = "BGRA"  # pygame uses BGRA internally
+        # No swizzle. `present()` uploads via `pygame.image.tobytes(surface,
+        # "RGBA")`, which normalises whatever the surface holds internally
+        # into R,G,B,A byte order -- so telling GL to read those bytes as
+        # BGRA converts a second time and swaps red with blue. This was
+        # invisible for as long as it existed because nothing could
+        # capture the UI layer (#162); the first capture that could showed
+        # Protocolo Bandeira's brown menu buttons rendered blue.
+        self._texture.swizzle = "RGBA"
 
         self._dirty = False
 
