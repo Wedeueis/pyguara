@@ -81,6 +81,12 @@ class GLTextureLoader:
             gl_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
         else:
             gl_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
-        gl_texture.swizzle = "BGRA"  # pygame uses BGRA internally
+        # No swizzle, for the same reason as `ui_renderer.py`: the bytes
+        # above are already RGBA, because that is what `tobytes` was asked
+        # for. Reading them as BGRA swaps red with blue. Latent rather
+        # than visible -- every GL demo generates its textures at runtime
+        # through `GLTextureFactory`, which never had the swizzle, so this
+        # path has no consumer that would have shown it.
+        gl_texture.swizzle = "RGBA"
 
         return GLTexture(path, gl_texture, width, height)
