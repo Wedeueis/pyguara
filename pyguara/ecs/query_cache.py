@@ -166,6 +166,11 @@ class QueryCache:
         Args:
             query_key: The component types forming the query.
         """
+        # `entity_ids_with`, not `get_entities_with`: the cache mirrors the
+        # component index, and a disabled entity is still in it. Filtering
+        # dormancy in here would strand every parked entity -- the cache is
+        # maintained by component add/remove, and parking an entity is
+        # neither.
         self._cache[query_key] = frozenset(
-            entity.id for entity in self._manager.get_entities_with(*query_key)
+            self._manager.entity_ids_with(tuple(query_key))
         )

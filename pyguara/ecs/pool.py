@@ -64,6 +64,16 @@ class EntityPool:
     spawn rate picks `size` deliberately instead of discovering an
     unbounded pool the hard way.
 
+    **An idle entity is disabled, not stripped.** It keeps every
+    component, and `EntityManager` excludes it from every query until it
+    is acquired again. That matters because a pooled entity is never
+    destroyed: without it, a pool of 700 insects each carrying a
+    `FlockingAgent` costs `FlockingSystem` all 700 every tick whether ten
+    are in play or seven hundred -- measured in `games/tamandua_murundus`
+    as the difference between ~60 and ~18 frames per second. A factory may
+    therefore attach everything an entity will ever need, which is the
+    obvious way to write one.
+
     The active set is a dict keyed on entity id, not a list, and that is
     load-bearing rather than incidental. A list costs two O(n) scans per
     `release()` -- one to check membership, one to remove -- so putting a
@@ -105,6 +115,11 @@ class EntityPool:
             poolable = entity.get_component(Poolable)
             poolable.pool_name = pool_name
             poolable.is_active = False
+            # Parked from the moment it is built. A pooled entity is never
+            # destroyed, so anything attached to it would otherwise match
+            # every query for the life of the scene -- see
+            # `EntityManager.set_entity_enabled()`.
+            entity_manager.set_entity_enabled(entity.id, False)
             self._available.append(entity)
 
     def acquire(self) -> Entity | None:
@@ -118,6 +133,7 @@ class EntityPool:
             return None
         entity = self._available.pop()
         entity.get_component(Poolable).is_active = True
+        self._entity_manager.set_entity_enabled(entity.id, True)
         self._active[entity.id] = entity
         return entity
 
@@ -137,6 +153,7 @@ class EntityPool:
             return
         del self._active[entity.id]
         entity.get_component(Poolable).is_active = False
+        self._entity_manager.set_entity_enabled(entity.id, False)
         self._available.append(entity)
 
     def get_active(self) -> list[Entity]:

@@ -45,6 +45,10 @@ class EntityManager:
 
         self._query_cache: QueryCache = QueryCache(self)
 
+        # Entities that exist and keep every component, but are excluded
+        # from every query. See `set_entity_enabled()`.
+        self._disabled: set[str] = set()
+
         # Entities removed this frame: their id is already gone from
         # _entities (soft-dead), but their component-index entries linger
         # until flush_pending_removals() runs at the frame boundary. This is
@@ -137,6 +141,10 @@ class EntityManager:
         entity._on_component_removed = None
         entity._is_removed = True
         del self._entities[entity_id]
+        # A destroyed entity is not a parked one. Leaving its id behind
+        # would disable whatever reused that id later, and `create_entity`
+        # takes an explicit id.
+        self._disabled.discard(entity_id)
 
         # Iterate a copy: a subscriber may unsubscribe itself, or tear down a
         # subsystem that unsubscribes, while it is being notified.
@@ -210,6 +218,51 @@ class EntityManager:
     # Lookup
     # -------------------------------------------------------------------------
 
+    def set_entity_enabled(self, entity_id: str, enabled: bool) -> None:
+        """Include or exclude an entity from every query, without changing it.
+
+        A disabled entity still exists, still answers `get_entity()`, and
+        **keeps every component it had** -- it simply stops matching
+        `get_entities_with()` and friends. Re-enabling it brings it back
+        exactly as it was.
+
+        This is what `EntityPool` uses to park an idle entity. A pooled
+        entity is never destroyed, so anything still attached to it goes
+        on matching queries for the life of the scene: a pool of 700
+        insects carrying a `FlockingAgent` each costs `FlockingSystem` all
+        700 every tick whether ten are in play or seven hundred. Measured
+        in `games/tamandua_murundus`, that alone was the difference
+        between ~60 and ~18 frames per second.
+
+        The alternative games reached for first -- attaching and detaching
+        the query-visible components by hand on acquire and release --
+        works, but it destroys component state that pooling exists to
+        preserve, and it silently stops working the moment someone adds a
+        component and forgets to add it to both lists.
+
+        Args:
+            entity_id: The entity to enable or disable. Unknown ids are
+                ignored, so a caller need not check first.
+            enabled: True to include it in queries again, False to park it.
+        """
+        if entity_id not in self._entities:
+            self._disabled.discard(entity_id)
+            return
+
+        if enabled:
+            self._disabled.discard(entity_id)
+        else:
+            self._disabled.add(entity_id)
+
+    def is_entity_enabled(self, entity_id: str) -> bool:
+        """Whether `entity_id` currently matches queries.
+
+        Unknown and removed entities report False -- they match nothing
+        either way, and reporting True for something that does not exist
+        would be the more surprising answer.
+        """
+        return entity_id in self._entities and entity_id not in self._disabled
+
     def get_entity(self, entity_id: str) -> Entity | None:
         """Retrieve a live entity by id.
 
@@ -241,7 +294,10 @@ class EntityManager:
         if not component_types:
             return
 
+        disabled = self._disabled
         for entity_id in self._matching_entity_ids(component_types):
+            if entity_id in disabled:
+                continue
             entity = self._entities.get(entity_id)
             if entity is not None:
                 yield entity
@@ -291,7 +347,10 @@ class EntityManager:
             yield from self.get_entities_with(*component_types)
             return
 
+        disabled = self._disabled
         for entity_id in cached_ids:
+            if entity_id in disabled:
+                continue
             entity = self._entities.get(entity_id)
             if entity is not None:
                 yield entity
@@ -344,7 +403,10 @@ class EntityManager:
         if not component_types:
             return
 
+        disabled = self._disabled
         for entity_id in self._matching_entity_ids(component_types):
+            if entity_id in disabled:
+                continue
             entity = self._entities.get(entity_id)
             if entity is None:
                 continue
@@ -368,7 +430,10 @@ class EntityManager:
         if not component_types:
             return
 
+        disabled = self._disabled
         for entity_id in self._matching_entity_ids(component_types):
+            if entity_id in disabled:
+                continue
             entity = self._entities.get(entity_id)
             if entity is None:
                 continue
@@ -378,6 +443,32 @@ class EntityManager:
     # -------------------------------------------------------------------------
     # Index maintenance
     # -------------------------------------------------------------------------
+
+    def entity_ids_with(
+        self, component_types: tuple[type[Component], ...]
+    ) -> Iterator[str]:
+        """Iterate live entity ids carrying every given component type.
+
+        Unlike `get_entities_with()`, this does **not** skip disabled
+        entities. It backs the query cache, which mirrors the component
+        index: dormancy is applied when a query is iterated, never when
+        its cache is built. Building the cache with disabled entities
+        filtered out would strand them -- they are added to a cache by
+        `add_component`, and nothing re-adds an entity that was merely
+        parked.
+
+        Args:
+            component_types: One or more component classes.
+
+        Yields:
+            Matching entity ids, excluding entities already removed.
+        """
+        if not component_types:
+            return
+        entities = self._entities
+        for entity_id in self._matching_entity_ids(component_types):
+            if entity_id in entities:
+                yield entity_id
 
     def _matching_entity_ids(
         self, component_types: tuple[type[Component], ...]
