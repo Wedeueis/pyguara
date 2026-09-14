@@ -95,6 +95,11 @@ DEMOS: dict[str, tuple[str, str, str]] = {
         "games.protocolo_bandeira.scenes",
         "MenuScene",
     ),
+    "tamandua_murundus": (
+        "games.tamandua_murundus.bootstrap",
+        "games.tamandua_murundus.scenes",
+        "ClearingScene",
+    ),
     "true_coral": (
         "games.true_coral.bootstrap",
         "games.true_coral.scenes",

@@ -1,0 +1,484 @@
+"""The clearing: one scene, one run, from dusk toward dawn.
+
+D1 builds the place and the verbs -- move, lash, break a mound. The run
+clock, the swarm, the day/night curve, the motes and the cards arrive in
+D2 through D5, each hanging off what is here.
+"""
+
+from __future__ import annotations
+
+import math
+
+from games.tamandua_murundus import render
+from games.tamandua_murundus.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
+from games.tamandua_murundus.cerrado_fx import CerradoFX
+from games.tamandua_murundus.components import Insect, Murundu, Tamandua
+from games.tamandua_murundus.events import (
+    InsectKilled,
+    MurunduBroken,
+    TongueLashed,
+)
+from games.tamandua_murundus.systems import (
+    InsectDriftSystem,
+    MurunduSystem,
+    TongueSystem,
+)
+from pyguara.common.components import Transform
+from pyguara.common.random import RandomStream
+from pyguara.common.spatial import SpatialHash
+from pyguara.common.types import Color, Rect, Vector2
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.input.events import OnActionEvent
+from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP, A, D, S, W
+from pyguara.input.manager import InputManager
+from pyguara.input.types import ActionType, InputDevice
+from pyguara.scene.base import Scene
+from pyguara.spatial.components import SpatialTracked
+from pyguara.spatial.system import SpatialIndexSystem
+
+# The clearing, inset from the window so the vignette has something to
+# darken that is not gameplay.
+ARENA = Rect(40, 96, WINDOW_WIDTH - 80, WINDOW_HEIGHT - 152)
+
+# Where the mounds stand. Fixed rather than scattered: they are the
+# clearing's landmarks, and a player who learns where they are is the
+# player the design wants.
+MURUNDU_POSITIONS = [
+    Vector2(ARENA.left + 140, ARENA.top + 120),
+    Vector2(ARENA.right - 150, ARENA.top + 96),
+    Vector2(ARENA.left + 108, ARENA.bottom - 130),
+    Vector2(ARENA.right - 128, ARENA.bottom - 108),
+    Vector2(ARENA.x + ARENA.width // 2, ARENA.top + 62),
+]
+
+TONGUE_DAMAGE_TO_MOUND = 1.0
+
+# The anteater's drawn body radius, used to keep its silhouette inside
+# the clearing rather than clamping its centre to the edge.
+BODY_RADIUS = 16.0
+LASH_ANIMATION = 0.16
+
+
+class ClearingScene(Scene):
+    """One run in the clearing."""
+
+    def __init__(self, event_dispatcher: EventDispatcher) -> None:
+        """Initialize the scene."""
+        super().__init__("ClearingScene", event_dispatcher)
+        self.fx: CerradoFX | None = None
+        self._rng = RandomStream(seed=11)
+        self._camera = Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
+        # Centred on the window, so `screen_offset` comes out zero and the
+        # scene's world coordinates *are* screen coordinates. A camera
+        # left at the origin displaces the whole light map by half a
+        # screen while the geometry stays put -- the lights end up in the
+        # bottom-right corner and nothing else moves.
+        self._camera.position = Vector2(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)
+        self._player_id: str | None = None
+        self._lash = 0.0
+        self._kills = 0
+        self._mounds_broken = 0
+        self._move = Vector2.zero()
+        self._held_up = False
+        self._held_down = False
+        self._held_left = False
+        self._held_right = False
+
+        self._murundus: MurunduSystem | None = None
+        self._drift: InsectDriftSystem | None = None
+        self._tongue: TongueSystem | None = None
+        self._spatial: SpatialIndexSystem | None = None
+
+    # ---- setup -----------------------------------------------------
+
+    def on_enter(self) -> None:
+        """Build the clearing, the mounds and the anteater."""
+        self.fx = CerradoFX(
+            self.container,
+            self.entity_manager,
+            width=WINDOW_WIDTH,
+            height=WINDOW_HEIGHT,
+            arena=ARENA,
+            seed=11,
+        )
+
+        dispatcher = self.event_dispatcher
+        index = self.container.get(SpatialHash)
+
+        self._spatial = SpatialIndexSystem(self.entity_manager, index, dispatcher)
+        self._murundus = MurunduSystem(
+            self.entity_manager, dispatcher, ARENA, self._rng
+        )
+        self._drift = InsectDriftSystem(self.entity_manager, ARENA)
+        self._tongue = TongueSystem(self.entity_manager, dispatcher, index)
+
+        dispatcher.subscribe(InsectKilled, self._on_insect_killed)
+        dispatcher.subscribe(MurunduBroken, self._on_murundu_broken)
+        dispatcher.subscribe(TongueLashed, self._on_tongue_lashed)
+
+        self._create_player()
+        self._create_murundus()
+        self._setup_input()
+
+    def _setup_input(self) -> None:
+        """Bind movement.
+
+        Actions rather than a per-frame key poll, because that is what
+        `InputManager` offers and what the replay layer records -- a
+        scene that read the keyboard directly would not replay.
+        """
+        inputs = self.container.get(InputManager)
+        for action in ("move_up", "move_down", "move_left", "move_right"):
+            inputs.register_action(action, ActionType.HOLD)
+        inputs.register_action("back", ActionType.PRESS)
+
+        for key, action in (
+            (W, "move_up"),
+            (UP, "move_up"),
+            (S, "move_down"),
+            (DOWN, "move_down"),
+            (A, "move_left"),
+            (LEFT, "move_left"),
+            (D, "move_right"),
+            (RIGHT, "move_right"),
+            (ESCAPE, "back"),
+        ):
+            inputs.bind_input(InputDevice.KEYBOARD, key, action)
+
+        self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
+
+    def _on_action(self, event: OnActionEvent) -> None:
+        """Track which directions are held."""
+        held = event.value > 0
+        if event.action_name == "move_up":
+            self._held_up = held
+        elif event.action_name == "move_down":
+            self._held_down = held
+        elif event.action_name == "move_left":
+            self._held_left = held
+        elif event.action_name == "move_right":
+            self._held_right = held
+
+    def _create_player(self) -> None:
+        """Place the anteater in the middle of the clearing."""
+        entity = self.entity_manager.create_entity("tamandua")
+        entity.add_component(
+            Transform(
+                position=Vector2(ARENA.x + ARENA.width / 2, ARENA.y + ARENA.height / 2)
+            )
+        )
+        entity.add_component(Tamandua())
+        self._player_id = entity.id
+
+    def _create_murundus(self) -> None:
+        """Stand the mounds up, each with its own flickering light."""
+        for offset, position in enumerate(MURUNDU_POSITIONS):
+            entity = self.entity_manager.create_entity()
+            entity.add_component(Transform(position=position))
+            entity.add_component(
+                Murundu(
+                    feed_timer=offset * 0.28,
+                    glow_phase=offset * 1.31,
+                )
+            )
+
+    def on_exit(self) -> None:
+        """Drop the UI this scene put up.
+
+        The entities, the lights and the spatial index go with the
+        scene's own world; the `UIManager` is a container singleton and
+        outlives it.
+        """
+        from pyguara.ui.manager import UIManager
+
+        self.container.get(UIManager)._root_elements.clear()
+
+    # ---- events ----------------------------------------------------
+
+    def _on_insect_killed(self, event: InsectKilled) -> None:
+        """Spark, flare and count a kill."""
+        self._kills += 1
+        if self.fx is not None:
+            self.fx.kill(event.position, render.INSECT_LIT)
+
+    def _on_murundu_broken(self, event: MurunduBroken) -> None:
+        """The run's biggest beat: shake, flash, hit-stop, a word."""
+        self._mounds_broken += 1
+        if self.fx is not None:
+            self.fx.mound_broken(event.position)
+            self.fx.popup(
+                "MURUNDU QUEBRADO",
+                Vector2(event.position.x, event.position.y - 44),
+                render.MURUNDU_GLOW,
+                size=18,
+            )
+
+    def _on_tongue_lashed(self, event: TongueLashed) -> None:
+        """Start the lash animation."""
+        self._lash = LASH_ANIMATION
+
+    # ---- frame -----------------------------------------------------
+
+    def update(self, dt: float) -> None:
+        """Read input, step the simulation, advance the presentation."""
+        if self.fx is None:
+            return
+
+        self._read_input()
+        self._advance_presentation(dt)
+
+        gameplay_dt = self.fx.gameplay_dt(dt)
+        if gameplay_dt > 0.0:
+            self._step_simulation(gameplay_dt)
+
+    def _read_input(self) -> None:
+        """Fold the held directions into a movement vector."""
+        self._move = Vector2(
+            float(self._held_right) - float(self._held_left),
+            float(self._held_down) - float(self._held_up),
+        )
+
+    def _advance_presentation(self, dt: float) -> None:
+        """Advance everything that keeps running through a hit-stop."""
+        if self.fx is None:
+            return
+        self._lash = max(0.0, self._lash - dt)
+        self.fx.update(dt, self._camera)
+
+    def _step_simulation(self, dt: float) -> None:
+        """Move the anteater, then run the clearing's systems."""
+        if self.fx is None:
+            return
+
+        player = self._player()
+        if player is not None:
+            hunter = player.get_component(Tamandua)
+            transform = player.get_component(Transform)
+
+            magnitude = self._move.magnitude
+            if magnitude > 0.0:
+                step = hunter.speed * dt / magnitude
+                # Inset by the body radius, so the anteater stops with
+                # its whole silhouette inside the clearing rather than
+                # half of it over the HUD.
+                transform.position = Vector2(
+                    min(
+                        max(
+                            transform.position.x + self._move.x * step,
+                            ARENA.left + BODY_RADIUS,
+                        ),
+                        ARENA.right - BODY_RADIUS,
+                    ),
+                    min(
+                        max(
+                            transform.position.y + self._move.y * step,
+                            ARENA.top + BODY_RADIUS,
+                        ),
+                        ARENA.bottom - BODY_RADIUS,
+                    ),
+                )
+                hunter.facing = math.atan2(self._move.y, self._move.x)
+
+            self.fx.aim_snout(transform.position, hunter.facing)
+            self._try_break_mound(transform.position, hunter)
+
+        if self._spatial is not None:
+            self._spatial.update(dt)
+        if self._murundus is not None:
+            self._murundus.update(dt)
+        if self._drift is not None:
+            self._drift.update(dt)
+        if self._tongue is not None:
+            self._tongue.update(dt)
+
+        self._track_new_insects()
+
+    def _track_new_insects(self) -> None:
+        """Opt newly released insects into the spatial index.
+
+        Done here rather than at creation so `MurunduSystem` stays a thing
+        that releases insects, rather than a thing that knows how this
+        game finds them again.
+        """
+        for entity in self.entity_manager.get_entities_with(Insect):
+            if not entity.has_component(SpatialTracked):
+                entity.add_component(SpatialTracked())
+
+    def _try_break_mound(self, position: Vector2, hunter: Tamandua) -> None:
+        """Chew the mound the anteater is standing against, if any."""
+        if self._murundus is None or hunter.tongue_cooldown > 0.0:
+            return
+
+        for entity in self.entity_manager.get_entities_with(Murundu, Transform):
+            mound = entity.get_component(Murundu)
+            if mound.broken:
+                continue
+            offset = entity.get_component(Transform).position - position
+            if offset.magnitude > mound.radius + 22.0:
+                continue
+
+            hunter.tongue_cooldown = hunter.tongue_interval
+            self._lash = LASH_ANIMATION
+            if not self._murundus.damage(entity.id, TONGUE_DAMAGE_TO_MOUND):
+                self.fx and self.fx.sparks.burst(
+                    entity.get_component(Transform).position,
+                    render.MURUNDU_RIM,
+                    count=5,
+                )
+            return
+
+    # ---- render ----------------------------------------------------
+
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
+        """Draw the clearing, then run the lighting/post pipeline.
+
+        Everything goes through `world_renderer`, including the HUD, so it
+        all passes through the light map and the bloom -- a HUD drawn on
+        the UI renderer after the final blit would be the only unlit thing
+        on screen. The `end_frame()` calls are the flush discipline: the
+        GL backend buckets shapes by type and flushes all of them at once,
+        so anything whose layering matters needs its own batch.
+        """
+        if self.fx is None:
+            return
+
+        offset = self.fx.offset
+        self.fx.draw_ground(world_renderer)
+
+        for view in self._murundu_views():
+            render.draw_murundu(world_renderer, view)
+
+        render.draw_insects(world_renderer, self._insect_views())
+
+        player = self._player()
+        if player is not None:
+            hunter = player.get_component(Tamandua)
+            position = player.get_component(Transform).position
+            shaken = Vector2(position.x + offset.x, position.y + offset.y)
+            render.draw_tongue_arc(
+                world_renderer,
+                shaken,
+                hunter.facing,
+                hunter.tongue_range,
+                hunter.tongue_arc,
+                1.0 if hunter.tongue_cooldown <= 0.0 else 0.0,
+            )
+            render.draw_tamandua(
+                world_renderer,
+                shaken,
+                hunter.facing,
+                self._lash / LASH_ANIMATION if self._lash > 0.0 else 0.0,
+            )
+
+        self.fx.sparks.render(world_renderer, offset)
+        world_renderer.end_frame()
+
+        # The mound-break flash is a full-screen rect, and rects flush
+        # before circles and lines -- so it needs a batch of its own to
+        # land over the clearing rather than under it.
+        self.fx.flash.render(world_renderer, Rect(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT))
+        world_renderer.end_frame()
+
+        self._draw_hud(world_renderer)
+        self.fx.popups.render(world_renderer, self._camera)
+
+        self.fx.set_dynamic_lights(self._lights())
+        self.fx.run_pipeline(self._camera)
+
+    def _murundu_views(self) -> list[render.MurunduView]:
+        """One view per mound, with its pulse resolved."""
+        views = []
+        for entity in self.entity_manager.get_entities_with(Murundu, Transform):
+            mound = entity.get_component(Murundu)
+            views.append(
+                render.MurunduView(
+                    position=entity.get_component(Transform).position,
+                    radius=mound.radius,
+                    health_fraction=mound.health / mound.max_health,
+                    broken=mound.broken,
+                    glow=0.5 + 0.5 * math.sin(mound.glow_phase * 3.1),
+                )
+            )
+        return views
+
+    def _insect_views(self) -> list[render.InsectView]:
+        """One view per insect.
+
+        The tint is flat in D1 -- dull brown, the colour they are at dusk.
+        D3 drives it off the ambient cycle, which is when this stops being
+        a constant and starts being the thing the demo is about.
+        """
+        views = []
+        for entity in self.entity_manager.get_entities_with(Insect, Transform):
+            insect = entity.get_component(Insect)
+            views.append(
+                render.InsectView(
+                    position=entity.get_component(Transform).position,
+                    angle=math.atan2(insect.velocity.y, insect.velocity.x),
+                    tint=render.INSECT_DULL,
+                    size=4.0,
+                )
+            )
+        return views
+
+    def _lights(self) -> list[tuple[Vector2, Color, float, float]]:
+        """This frame's dynamic lights: one per intact mound.
+
+        Note what is *not* here: the insects. Each one as a `LightSource`
+        would make `LightingSystem`'s per-entity collection scale with the
+        swarm, and D2's crowd measurement would quietly become a lighting
+        measurement (GDD §3.2).
+        """
+        lights: list[tuple[Vector2, Color, float, float]] = []
+        for entity in self.entity_manager.get_entities_with(Murundu, Transform):
+            mound = entity.get_component(Murundu)
+            if mound.broken:
+                continue
+            pulse = 0.5 + 0.5 * math.sin(mound.glow_phase * 3.1)
+            lights.append(
+                (
+                    entity.get_component(Transform).position,
+                    render.MURUNDU_GLOW,
+                    150.0,
+                    0.34 + pulse * 0.2,
+                )
+            )
+        return lights
+
+    def _draw_hud(self, renderer: IRenderer) -> None:
+        """Counters and the control hint."""
+        renderer.draw_text(
+            "TAMANDUÁ: O GUARDIÃO DOS MURUNDUS", Vector2(28, 22), render.HUD_TEXT, 20
+        )
+        renderer.draw_text(
+            "[WASD] mover   ·   a língua ataca sozinha   ·   encoste num murundu para quebrá-lo",
+            Vector2(28, 50),
+            render.HUD_DIM,
+            13,
+        )
+
+        intact = sum(
+            1
+            for entity in self.entity_manager.get_entities_with(Murundu)
+            if not entity.get_component(Murundu).broken
+        )
+        renderer.draw_text(
+            f"MURUNDUS {intact}/{len(MURUNDU_POSITIONS)}",
+            Vector2(28, WINDOW_HEIGHT - 44),
+            render.MURUNDU_GLOW,
+            16,
+        )
+        renderer.draw_text(
+            f"INSETOS COMIDOS {self._kills}",
+            Vector2(WINDOW_WIDTH - 250, WINDOW_HEIGHT - 44),
+            render.INSECT_LIT,
+            16,
+        )
+
+    def _player(self):
+        """The anteater entity, or None if it is gone."""
+        if self._player_id is None:
+            return None
+        return self.entity_manager.get_entity(self._player_id)
