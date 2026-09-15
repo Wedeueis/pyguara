@@ -9,6 +9,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from pyguara.graphics.pipeline.buffers import (
+    HDR_DTYPE,
+    STANDARD_CHAIN,
+    WORLD_FBO_NAME,
+)
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.pipeline.viewport import Viewport
 
@@ -207,3 +212,40 @@ class TestRenderGraphExecution:
 
         assert render_pass.release.called
         assert graph.passes == []
+
+
+class TestTheGraphDeclaresTheHdrChain:
+    """The chain's format has an owner, rather than being whatever the
+    first pass to reach a buffer happened to ask for.
+
+    Half the HDR pipeline was missing because of that: each demo widened
+    `lightmap` by claiming it in its bootstrap before `LightPass` could,
+    while `world`, `composite` and `post_processed` stayed 8-bit and the
+    extra range died at the composite.
+    """
+
+    def test_every_standard_buffer_is_declared_hdr(self) -> None:
+        graph = RenderGraph(MagicMock(), 800, 600)
+
+        declared = {
+            name: graph.fbo_manager.declared_format(name) for name in STANDARD_CHAIN
+        }
+
+        assert declared == dict.fromkeys(STANDARD_CHAIN, HDR_DTYPE)
+
+    def test_a_pass_asking_by_name_gets_the_declared_format(self) -> None:
+        """`WorldPass` and friends ask without a dtype; before this they
+        got `f1` because they were the first to create the buffer."""
+        ctx = MagicMock()
+        ctx.texture.side_effect = lambda *a, **k: MagicMock()
+        ctx.framebuffer.side_effect = lambda *a, **k: MagicMock()
+        graph = RenderGraph(ctx, 800, 600)
+
+        assert graph.fbo_manager.get_or_create(WORLD_FBO_NAME).dtype == HDR_DTYPE
+
+    def test_declaring_does_not_allocate_the_chain(self) -> None:
+        """Construction should not cost four framebuffers' worth of VRAM
+        for a pipeline that may use two of them."""
+        graph = RenderGraph(MagicMock(), 800, 600)
+
+        assert [graph.fbo_manager.get(name) for name in STANDARD_CHAIN] == [None] * 4

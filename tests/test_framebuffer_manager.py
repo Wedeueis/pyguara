@@ -146,3 +146,73 @@ class TestOmittedArgumentsAreNotRequirements:
         manager.get_or_create("world", 800, 600, dtype="f1", samples=0)
 
         assert manager.get_or_create("world", 800, 600, dtype="f1", samples=0)
+
+
+class TestDeclaringAFormat:
+    """Declaring gives a chain of buffers one owner.
+
+    Without it the format is whichever caller reaches a name first: the
+    demos widened `lightmap` to `f2` by claiming it in their bootstrap
+    before `LightPass` could create it at the 8-bit default, and every
+    other buffer in the chain stayed `f1` because nobody did the same.
+    """
+
+    def test_a_declared_name_is_created_at_that_format(self) -> None:
+        manager = make_manager()
+        manager.declare("world", dtype="f2")
+
+        assert manager.get_or_create("world").dtype == "f2"
+
+    def test_declaring_allocates_nothing(self) -> None:
+        """A declaration is a format, not a buffer -- a pipeline without
+        lighting should not pay for a light map it never binds."""
+        manager = make_manager()
+
+        manager.declare("lightmap", dtype="f2")
+
+        assert manager.get("lightmap") is None
+
+    def test_an_undeclared_name_still_defaults_to_eight_bit(self) -> None:
+        manager = make_manager()
+
+        assert manager.get_or_create("scratch").dtype == "f1"
+
+    def test_an_explicit_request_still_wins_over_the_declaration(self) -> None:
+        """A caller that names a format is stating a requirement; the
+        declaration only fills in for callers that do not."""
+        manager = make_manager()
+        manager.declare("world", dtype="f2")
+
+        assert manager.get_or_create("world", dtype="f1").dtype == "f1"
+
+    def test_declared_format_reports_the_declaration(self) -> None:
+        manager = make_manager()
+        manager.declare("world", dtype="f2")
+
+        assert manager.declared_format("world") == "f2"
+
+    def test_declared_format_is_none_when_nothing_declared_it(self) -> None:
+        assert make_manager().declared_format("world") is None
+
+    def test_declaring_the_same_format_twice_is_fine(self) -> None:
+        manager = make_manager()
+        manager.declare("world", dtype="f2")
+
+        manager.declare("world", dtype="f2")
+
+        assert manager.declared_format("world") == "f2"
+
+    def test_a_second_conflicting_declaration_raises(self) -> None:
+        """Whoever declared first would otherwise win silently."""
+        manager = make_manager()
+        manager.declare("world", dtype="f2")
+
+        with pytest.raises(ValueError, match="already declared"):
+            manager.declare("world", dtype="f1")
+
+    def test_declaring_a_format_the_existing_buffer_contradicts_raises(self) -> None:
+        manager = make_manager()
+        manager.get_or_create("world", dtype="f1")
+
+        with pytest.raises(ValueError, match="dtype"):
+            manager.declare("world", dtype="f2")

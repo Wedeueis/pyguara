@@ -219,6 +219,25 @@ class PygameFramebufferManager:
         """
         return None
 
+    def declare(self, name: str, *, dtype: str) -> None:
+        """Accept and ignore a format declaration (no FBO support).
+
+        Args:
+            name: FBO name (ignored).
+            dtype: Texture data type (ignored).
+        """
+
+    def declared_format(self, name: str) -> None:
+        """Return None (nothing is ever declared here).
+
+        Args:
+            name: FBO name (ignored).
+
+        Returns:
+            None.
+        """
+        return None
+
     def resize_all(self, width: int, height: int) -> None:
         """Update stored dimensions.
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pyguara.graphics.pipeline.buffers import HDR_DTYPE
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
@@ -75,6 +76,11 @@ class BloomEffect(PostProcessEffect):
         # Internal FBO names
         self._bright_fbo_name = "_bloom_bright"
         self._blur_fbo_name = "_bloom_blur"
+
+        # Bloom's scratch buffers are part of the HDR chain: they carry the
+        # bright pass's output, which is where values above 1.0 would live.
+        fbo_manager.declare(self._bright_fbo_name, dtype=HDR_DTYPE)
+        fbo_manager.declare(self._blur_fbo_name, dtype=HDR_DTYPE)
 
         self._create_resources()
 

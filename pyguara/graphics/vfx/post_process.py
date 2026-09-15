@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pyguara.graphics.pipeline.buffers import HDR_DTYPE
 from pyguara.log import get_logger
 
 if TYPE_CHECKING:
@@ -118,6 +119,11 @@ class PostProcessStack:
         # Ping-pong buffer names
         self._ping_name = "_pp_ping"
         self._pong_name = "_pp_pong"
+
+        # The stack's ping/pong carry the frame between effects, so they are
+        # part of the chain and share its format.
+        fbo_manager.declare(self._ping_name, dtype=HDR_DTYPE)
+        fbo_manager.declare(self._pong_name, dtype=HDR_DTYPE)
 
     @property
     def effects(self) -> list[PostProcessEffect]:
