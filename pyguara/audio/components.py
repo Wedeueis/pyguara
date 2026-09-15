@@ -9,14 +9,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from pyguara.audio.types import AudioPriority
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import StrictComponent
 
 if TYPE_CHECKING:
     pass
 
 
 @dataclass
-class AudioSource(BaseComponent):
+class AudioSource(StrictComponent):
     """Component for entities that can play audio.
 
     Attaches audio playback capability to an entity, allowing sounds
@@ -33,12 +33,6 @@ class AudioSource(BaseComponent):
         max_distance: Maximum distance for spatial attenuation.
         play_on_awake: Alias for auto_play (Unity-style naming).
     """
-
-    # Allow play/stop methods - these are intentional convenience methods
-    # Tracked debt, not an answer: this component's behaviour belongs in
-    # a system, and moving it is #72's job. The escape keeps it
-    # compiling until then.
-    _allow_methods: bool = True
 
     clip_path: str = ""
     volume: float = 1.0
@@ -74,23 +68,6 @@ class AudioSource(BaseComponent):
         """Get the current channel ID if playing."""
         return self._channel_id
 
-    def play(self) -> None:
-        """Request to start playing the audio.
-
-        The actual playback is handled by AudioSourceSystem.
-        """
-        if not self.clip_path:
-            return
-        self._is_playing = True
-        self._stop_requested = False
-
-    def stop(self) -> None:
-        """Request to stop playing the audio.
-
-        The actual stop is handled by AudioSourceSystem.
-        """
-        self._stop_requested = True
-
     def on_detach(self) -> None:
         """Request stop when removed from entity.
 
@@ -101,7 +78,7 @@ class AudioSource(BaseComponent):
 
 
 @dataclass
-class AudioListener(BaseComponent):
+class AudioListener(StrictComponent):
     """Component marking an entity as the audio listener.
 
     There should typically only be one AudioListener in a scene.
@@ -119,7 +96,7 @@ class AudioListener(BaseComponent):
 
 
 @dataclass
-class AudioEmitter(BaseComponent):
+class AudioEmitter(StrictComponent):
     """Component for one-shot sound effects at a position.
 
     Unlike AudioSource which is for persistent/looping sounds,
@@ -132,12 +109,6 @@ class AudioEmitter(BaseComponent):
         remove_after_play: Whether to remove this component after playing.
     """
 
-    # Allow emit method - intentional convenience method
-    # Tracked debt, not an answer: this component's behaviour belongs in
-    # a system, and moving it is #72's job. The escape keeps it
-    # compiling until then.
-    _allow_methods: bool = True
-
     clip_path: str = ""
     volume: float = 1.0
     played: bool = False
@@ -147,9 +118,50 @@ class AudioEmitter(BaseComponent):
         """Initialize the component."""
         super().__init__()
 
-    def emit(self) -> None:
-        """Request to play the sound effect.
 
-        The actual playback is handled by AudioSourceSystem.
-        """
-        self.played = False
+# --- Requesting playback -------------------------------------------
+#
+# These set flags; `AudioSourceSystem` is what reaches the backend. They
+# are free functions rather than methods because they mutate, which is
+# the same line `Transform`/`set_parent` and `Health`/`apply_damage`
+# draw. The issue that tracked this (#75, CC-6) recorded them as
+# "reaching the audio backend from the component" -- they do not, and
+# have not for some time.
+
+
+def play(source: AudioSource) -> None:
+    """Ask for `source` to start playing.
+
+    A request, not the playback: `AudioSourceSystem` picks it up on its
+    next tick and talks to the backend. A source with no clip is ignored,
+    so a component configured but not yet given a clip stays silent
+    rather than half-starting.
+
+    Args:
+        source: The source to start.
+    """
+    if not source.clip_path:
+        return
+    source._is_playing = True
+    source._stop_requested = False
+
+
+def stop(source: AudioSource) -> None:
+    """Ask for `source` to stop.
+
+    Args:
+        source: The source to stop.
+    """
+    source._stop_requested = True
+
+
+def emit(emitter: AudioEmitter) -> None:
+    """Ask for `emitter`'s one-shot to play again.
+
+    Clears the played latch; `AudioSourceSystem` fires it on its next
+    tick and sets the latch back.
+
+    Args:
+        emitter: The emitter to re-fire.
+    """
+    emitter.played = False

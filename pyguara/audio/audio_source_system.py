@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
+from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource, play
 from pyguara.audio.types import SpatialAudioConfig
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
@@ -133,7 +133,7 @@ class AudioSourceSystem:
                 and source._channel_id is None
             ):
                 source._auto_played = True
-                source.play()
+                play(source)
 
             # Handle play requests
             if source._is_playing and source._channel_id is None:

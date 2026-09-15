@@ -5,7 +5,14 @@ from unittest.mock import MagicMock
 import pytest
 
 from pyguara.audio.audio_source_system import AudioSourceSystem
-from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
+from pyguara.audio.components import (
+    AudioEmitter,
+    AudioListener,
+    AudioSource,
+    emit,
+    play,
+    stop,
+)
 from pyguara.audio.types import AudioPriority, SpatialAudioConfig
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
@@ -58,7 +65,7 @@ class TestAudioSource:
     def test_play_sets_playing_flag(self):
         """Test that play() sets the playing flag."""
         source = AudioSource(clip_path="sounds/test.wav")
-        source.play()
+        play(source)
 
         assert source._is_playing is True
         assert source._stop_requested is False
@@ -66,15 +73,15 @@ class TestAudioSource:
     def test_play_without_clip_does_nothing(self):
         """Test that play() does nothing without clip_path."""
         source = AudioSource()
-        source.play()
+        play(source)
 
         assert source._is_playing is False
 
     def test_stop_sets_stop_flag(self):
         """Test that stop() sets the stop flag."""
         source = AudioSource(clip_path="sounds/test.wav")
-        source.play()
-        source.stop()
+        play(source)
+        stop(source)
 
         assert source._stop_requested is True
 
@@ -97,7 +104,7 @@ class TestAudioSource:
     def test_on_detach_requests_stop(self):
         """Test that on_detach requests stop."""
         source = AudioSource(clip_path="sounds/test.wav")
-        source.play()
+        play(source)
 
         source.on_detach()
 
@@ -147,7 +154,7 @@ class TestAudioEmitter:
         emitter = AudioEmitter(clip_path="sounds/test.wav")
         emitter.played = True
 
-        emitter.emit()
+        emit(emitter)
 
         assert emitter.played is False
 
@@ -267,7 +274,7 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/sfx.wav", spatial=False)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
 
         assert source._channel_id is not None
@@ -282,11 +289,11 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/sfx.wav", spatial=False)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
 
         channel_id = source._channel_id
-        source.stop()
+        stop(source)
         system.update(0.016)
 
         audio_system.stop_sfx.assert_called_with(channel_id)
@@ -302,7 +309,7 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/sfx.wav", spatial=True)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
 
         audio_system.play_sfx_at_position.assert_called()
@@ -317,7 +324,7 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/sfx.wav", spatial=True)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)  # Starts playback, channel_id becomes 2.
         system.update(0.016)  # Source still playing: pushes a mix update.
 
@@ -338,7 +345,7 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/sfx.wav", spatial=False)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
         system.update(0.016)
 
@@ -353,7 +360,7 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/loop.wav", loop=True, spatial=False)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
 
         # Check that loops=-1 was passed (infinite loop)
@@ -415,7 +422,7 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/test.wav", spatial=False)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
 
         channel_id = source._channel_id
@@ -435,7 +442,7 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/missing.wav", spatial=False)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
 
         # Should not crash, source should not be playing
@@ -449,12 +456,12 @@ class TestAudioSourceSystem:
         source = AudioSource(clip_path="sounds/cached.wav", spatial=False)
         entity.add_component(source)
 
-        source.play()
+        play(source)
         system.update(0.016)
 
         # Reset source to play again
         source._channel_id = None
-        source.play()
+        play(source)
         system.update(0.016)
 
         # Should only load once (cached)
@@ -481,7 +488,7 @@ class TestAudioSourceSystem:
         entity.add_component(Transform(position=Vector2(0, 0)))
         source = AudioSource(clip_path="s.wav", spatial=False, **source_kwargs)
         entity.add_component(source)
-        source.play()
+        play(source)
         system.update(0.016)
         return entity, source
 
@@ -509,7 +516,7 @@ class TestAudioSourceSystem:
         entity.add_component(Transform(position=Vector2(50, 0)))
         source = AudioSource(clip_path="s.wav", spatial=True)
         entity.add_component(source)
-        source.play()
+        play(source)
         system.update(0.016)  # channel 2
         system.update(0.016)  # spatial mix pushed
         assert audio_system.set_channel_mix.called
@@ -532,7 +539,7 @@ class TestAudioSourceSystem:
 
         audio_system.is_channel_active.return_value = True
         audio_system.play_sfx.reset_mock()
-        source.play()
+        play(source)
         system.update(0.016)
 
         audio_system.play_sfx.assert_called_once()
