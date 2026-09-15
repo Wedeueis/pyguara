@@ -32,16 +32,15 @@ class ProgressBar(Widget):
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the progress bar."""
-        # Background
-        renderer.draw_rect(self.rect, self.bg_color or self.theme.colors.background)
+        # The track reads as cut into the surface rather than sitting on it.
+        renderer.draw_rect(self.rect, self.bg_color or self.theme.colors.surface_inset)
 
-        # Border
-        renderer.draw_rect(self.rect, self.theme.colors.border, width=1)
+        renderer.draw_rect(self.rect, self.theme.colors.edge_strong, width=1)
 
         # Fill
         if self.value > 0:
             fill_width = int(self.rect.width * self.value)
             fill_rect = Rect(self.rect.x, self.rect.y, fill_width, self.rect.height)
             renderer.draw_rect(
-                fill_rect, self.fill_color or self.theme.colors.secondary
+                fill_rect, self.fill_color or self.theme.colors.action_secondary
             )
