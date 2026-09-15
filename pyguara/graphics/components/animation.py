@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import StrictComponent
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.log import get_logger
 from pyguara.resources.types import Texture
@@ -18,13 +18,13 @@ class AnimationClip:
 
     Attributes:
         frame_events: 0-based frame index -> event name(s) fired when
-            `Animator.update()` lands on (or catches up through) that
+            `advance_animator()` lands on (or catches up through) that
             frame. Consumed by `AnimationSystem`, which turns each fired
             name into an `AnimationFrameEvent` -- the mechanism
             `kits/action_combat`'s `ActiveFrameWindow` uses to toggle a
             Hitbox's active frames without its own timer. Not fired for
-            frame 0 by `play()`'s initial-frame application; only by
-            `update()`-driven frame transitions.
+            frame 0 by `play_clip()`'s initial-frame application; only by
+            `advance_animator()`-driven frame transitions.
     """
 
     name: str
@@ -44,21 +44,16 @@ class AnimationClip:
             )
 
 
-class Animator(BaseComponent):
+class Animator(StrictComponent):
     """Component that manages playback of AnimationClips.
 
     It 'drives' a Sprite component. Every frame, it calculates which texture
     frame should be visible and assigns it to the Sprite.
 
-    Note:
-        This is a legacy component with playback logic. Ideally, animation
-        logic would be in an AnimationSystem.
+    Holds the clip table and the playback cursor; the behaviour that moves
+    that cursor lives beside this class as free functions, and
+    `AnimationSystem` is what calls them each frame. See "Playback" below.
     """
-
-    # Tracked debt, not an answer: this component's behaviour belongs in
-    # a system, and moving it is #37's job. The escape keeps it
-    # compiling until then.
-    _allow_methods = True
 
     def __init__(self, sprite: Sprite) -> None:
         """Initialize the animator with a target sprite.
@@ -74,86 +69,6 @@ class Animator(BaseComponent):
         self._current_time: float = 0.0
         self._current_frame_index: int = 0
         self._playing: bool = False
-
-    def add_clip(self, clip: AnimationClip) -> None:
-        """Register a new animation state."""
-        self._clips[clip.name] = clip
-
-    def play(self, name: str, force_reset: bool = False) -> None:
-        """
-        Start playing an animation.
-
-        Args:
-            name (str): The name of the clip (e.g., 'run').
-            force_reset (bool): If True, restarts animation even if already playing it.
-        """
-        if name not in self._clips:
-            logger.warning("Animation clip '%s' not found", name)
-            return
-
-        # Optimization: Don't restart if we are already playing this clip
-        if self._current_clip and self._current_clip.name == name and not force_reset:
-            return
-
-        self._current_clip = self._clips[name]
-        self._current_time = 0.0
-        self._current_frame_index = 0
-        self._playing = True
-
-        # Apply first frame immediately
-        self._apply_frame()
-
-    def update(self, dt: float) -> list[str]:
-        """Advance the animation timer.
-
-        Catches up all whole frames owed for ``dt`` in one call, so a lag
-        spike or a host running slower than the clip's ``frame_rate`` does not
-        silently drop frames or fall permanently behind.
-
-        Returns:
-            Every `AnimationClip.frame_events` name attached to a frame
-            crossed this call, oldest first -- every frame in between on a
-            multi-frame catch-up, not just the one landed on, so a hit
-            window can't be skipped by a lag spike.
-        """
-        if not self._playing or not self._current_clip:
-            return []
-
-        self._current_time += dt
-
-        # Duration of a single frame; frame_rate is > 0 (AnimationClip validates).
-        seconds_per_frame = 1.0 / self._current_clip.frame_rate
-        if self._current_time < seconds_per_frame:
-            return []
-
-        frames_advanced = int(self._current_time / seconds_per_frame)
-        self._current_time -= frames_advanced * seconds_per_frame
-
-        total_frames = len(self._current_clip.frames)
-        previous_index = self._current_frame_index
-        raw_index = previous_index + frames_advanced
-
-        if raw_index < total_frames:
-            self._current_frame_index = raw_index
-            crossed = range(previous_index + 1, raw_index + 1)
-        elif self._current_clip.loop:
-            self._current_frame_index = raw_index % total_frames
-            crossed = range(previous_index + 1, raw_index + 1)
-        else:
-            self._current_frame_index = total_frames - 1
-            self._current_time = 0.0
-            self._playing = False  # Stop at end
-            crossed = range(previous_index + 1, total_frames)
-
-        frame_events = self._current_clip.frame_events
-        fired = [
-            name
-            for index in crossed
-            for name in frame_events.get(index % total_frames, ())
-        ]
-
-        self._apply_frame()
-        return fired
 
     def _apply_frame(self) -> None:
         """Update the visual Sprite component with the current texture."""
@@ -232,21 +147,16 @@ class AnimationState:
     on_complete: Callable[[], None] | None = None
 
 
-class AnimationStateMachine(BaseComponent):
+class AnimationStateMachine(StrictComponent):
     """Hierarchical Finite State Machine for animation control.
 
     Manages states, transitions, and callbacks for complex animation behavior.
     Built on top of the Animator component.
 
-    Note:
-        This is a legacy component with state machine logic. Ideally, FSM
-        logic would be in an AnimationStateMachineSystem.
+    Holds the state table and the current state; the transition logic
+    lives beside this class as free functions, driven by
+    `AnimationSystem`. See "Playback" below.
     """
-
-    # Tracked debt, not an answer: this component's behaviour belongs in
-    # a system, and moving it is #37's job. The escape keeps it
-    # compiling until then.
-    _allow_methods = True
 
     def __init__(self, sprite: Sprite, animator: Animator):
         """
@@ -266,124 +176,225 @@ class AnimationStateMachine(BaseComponent):
         # not every frame the finished clip sits on its last frame.
         self._completion_handled: bool = False
 
-    def add_state(self, state: AnimationState) -> None:
-        """
-        Register a new animation state.
-
-        Args:
-            state (AnimationState): The state to add.
-        """
-        self._states[state.name] = state
-        # Register the clip with the animator
-        self._animator.add_clip(state.clip)
-
-    def set_default_state(self, state_name: str) -> None:
-        """
-        Set the default state to enter when starting the state machine.
-
-        Args:
-            state_name (str): Name of the default state.
-
-        Raises:
-            ValueError: If the state doesn't exist.
-        """
-        if state_name not in self._states:
-            raise ValueError(f"State '{state_name}' does not exist")
-        self._default_state = state_name
-        # Auto-enter default state
-        self.transition_to(state_name, force=True)
-
-    def transition_to(self, state_name: str, force: bool = False) -> bool:
-        """
-        Transition to a new state.
-
-        Args:
-            state_name (str): Name of the target state.
-            force (bool): If True, transition even if already in this state.
-
-        Returns:
-            bool: True if transition succeeded, False otherwise.
-        """
-        if state_name not in self._states:
-            logger.warning("Animation state '%s' not found", state_name)
-            return False
-
-        target_state = self._states[state_name]
-
-        # Skip if already in this state (unless forced)
-        if not force and self._current_state == target_state:
-            return False
-
-        # Exit current state
-        if self._current_state and self._current_state.on_exit:
-            self._current_state.on_exit()
-
-        # Enter new state
-        self._current_state = target_state
-        self._completion_handled = False
-
-        # Call on_enter callback
-        if target_state.on_enter:
-            target_state.on_enter()
-
-        # Start playing the animation
-        self._animator.play(target_state.clip.name, force_reset=True)
-
-        return True
-
-    def update(self, dt: float) -> list[str]:
-        """
-        Update the state machine and check for transitions.
-
-        Args:
-            dt (float): Delta time in seconds.
-
-        Returns:
-            Frame-event names fired by the animator this call -- see
-            `Animator.update()`.
-        """
-        # Update the animator
-        fired = self._animator.update(dt)
-
-        if not self._current_state:
-            return fired
-
-        # Fire the completion callback once, on the frame the clip finishes.
-        if self._animator.is_finished and not self._completion_handled:
-            self._completion_handled = True
-            if self._current_state.on_complete:
-                self._current_state.on_complete()
-
-        # Check for automatic transitions every frame (IMMEDIATE fires as soon
-        # as the state is entered; ANIMATION_END only once the clip finishes).
-        self._check_transitions()
-
-        return fired
-
-    def _check_transitions(self) -> None:
-        """Check if any transitions should trigger based on current conditions."""
-        if not self._current_state:
-            return
-
-        # Sort transitions by priority (highest first)
-        sorted_transitions = sorted(
-            self._current_state.transitions, key=lambda t: t.priority, reverse=True
-        )
-
-        for transition in sorted_transitions:
-            should_transition = (
-                transition.condition == TransitionCondition.IMMEDIATE
-                or (
-                    transition.condition == TransitionCondition.ANIMATION_END
-                    and self._animator.is_finished
-                )
-            )
-
-            if should_transition:
-                self.transition_to(transition.to_state)
-                break  # Only execute one transition per update
-
     @property
     def current_state_name(self) -> str | None:
         """Get the name of the current state."""
         return self._current_state.name if self._current_state else None
+
+
+# --- Playback ------------------------------------------------------
+#
+# The behaviour that drives the two components above, as free functions
+# beside the data they move -- the same split `Transform`/`set_parent`
+# and `Health`/`apply_damage` use. `AnimationSystem` calls
+# `advance_animator` / `advance_state_machine` once per frame; a game
+# calls `play_clip` and `transition_to` directly.
+#
+# These read and write the components' private cursors. That is
+# deliberate: they are those classes' own behaviour, living in their own
+# module, not an outside caller reaching in.
+
+
+def add_clip(animator: Animator, clip: AnimationClip) -> None:
+    """Register `clip` under its own name, replacing any clip of that name.
+
+    Args:
+        animator: The animator to register with.
+        clip: The clip to add.
+    """
+    animator._clips[clip.name] = clip
+
+
+def play_clip(animator: Animator, name: str, force_reset: bool = False) -> None:
+    """Start playing the clip called `name`.
+
+    Re-requesting the clip already playing is ignored unless
+    `force_reset` is set, so a caller can ask every frame -- which is what
+    a state machine does -- without restarting the animation each time.
+
+    Args:
+        animator: The animator to drive.
+        name: The clip's name, e.g. "run".
+        force_reset: Restart even if this clip is already playing.
+    """
+    if name not in animator._clips:
+        logger.warning("Animation clip '%s' not found", name)
+        return
+
+    current = animator._current_clip
+    if current and current.name == name and not force_reset:
+        return
+
+    animator._current_clip = animator._clips[name]
+    animator._current_time = 0.0
+    animator._current_frame_index = 0
+    animator._playing = True
+
+    # Apply the first frame immediately, so the sprite does not show the
+    # previous clip's texture for one frame.
+    animator._apply_frame()
+
+
+def advance_animator(animator: Animator, dt: float) -> list[str]:
+    """Advance the playback cursor by `dt`.
+
+    Catches up every whole frame owed for `dt` in one call, so a lag spike
+    or a host running slower than the clip's `frame_rate` does not
+    silently drop frames or fall permanently behind.
+
+    Args:
+        animator: The animator to advance.
+        dt: Seconds since the last call.
+
+    Returns:
+        Every `AnimationClip.frame_events` name attached to a frame
+        crossed this call, oldest first -- every frame in between on a
+        multi-frame catch-up, not just the one landed on, so a hit window
+        cannot be skipped by a lag spike.
+    """
+    clip = animator._current_clip
+    if not animator._playing or not clip:
+        return []
+
+    animator._current_time += dt
+
+    # frame_rate is > 0; `AnimationClip` validates it.
+    seconds_per_frame = 1.0 / clip.frame_rate
+    if animator._current_time < seconds_per_frame:
+        return []
+
+    frames_advanced = int(animator._current_time / seconds_per_frame)
+    animator._current_time -= frames_advanced * seconds_per_frame
+
+    total_frames = len(clip.frames)
+    previous_index = animator._current_frame_index
+    raw_index = previous_index + frames_advanced
+
+    if raw_index < total_frames:
+        animator._current_frame_index = raw_index
+        crossed = range(previous_index + 1, raw_index + 1)
+    elif clip.loop:
+        animator._current_frame_index = raw_index % total_frames
+        crossed = range(previous_index + 1, raw_index + 1)
+    else:
+        animator._current_frame_index = total_frames - 1
+        animator._current_time = 0.0
+        animator._playing = False  # Stop at end
+        crossed = range(previous_index + 1, total_frames)
+
+    frame_events = clip.frame_events
+    fired = [
+        name for index in crossed for name in frame_events.get(index % total_frames, ())
+    ]
+
+    animator._apply_frame()
+    return fired
+
+
+def add_state(machine: AnimationStateMachine, state: AnimationState) -> None:
+    """Register `state`, and its clip with the machine's animator.
+
+    Args:
+        machine: The state machine to register with.
+        state: The state to add.
+    """
+    machine._states[state.name] = state
+    add_clip(machine._animator, state.clip)
+
+
+def set_default_state(machine: AnimationStateMachine, state_name: str) -> None:
+    """Set the machine's starting state and enter it immediately.
+
+    Args:
+        machine: The state machine to configure.
+        state_name: Name of the default state.
+
+    Raises:
+        ValueError: If no state of that name has been added.
+    """
+    if state_name not in machine._states:
+        raise ValueError(f"State '{state_name}' does not exist")
+    machine._default_state = state_name
+    transition_to(machine, state_name, force=True)
+
+
+def transition_to(
+    machine: AnimationStateMachine, state_name: str, force: bool = False
+) -> bool:
+    """Move the machine into `state_name`, running the state callbacks.
+
+    Args:
+        machine: The state machine to move.
+        state_name: Name of the target state.
+        force: Re-enter even if the machine is already in that state.
+
+    Returns:
+        Whether the transition happened.
+    """
+    if state_name not in machine._states:
+        logger.warning("Animation state '%s' not found", state_name)
+        return False
+
+    target_state = machine._states[state_name]
+
+    if not force and machine._current_state == target_state:
+        return False
+
+    if machine._current_state and machine._current_state.on_exit:
+        machine._current_state.on_exit()
+
+    machine._current_state = target_state
+    machine._completion_handled = False
+
+    if target_state.on_enter:
+        target_state.on_enter()
+
+    play_clip(machine._animator, target_state.clip.name, force_reset=True)
+    return True
+
+
+def advance_state_machine(machine: AnimationStateMachine, dt: float) -> list[str]:
+    """Advance the machine's animator and take any transition now due.
+
+    Args:
+        machine: The state machine to advance.
+        dt: Seconds since the last call.
+
+    Returns:
+        The frame-event names the animator fired -- see
+        `advance_animator`.
+    """
+    fired = advance_animator(machine._animator, dt)
+
+    if not machine._current_state:
+        return fired
+
+    # Once per completion, not every frame the finished clip sits on its
+    # last frame.
+    if machine._animator.is_finished and not machine._completion_handled:
+        machine._completion_handled = True
+        if machine._current_state.on_complete:
+            machine._current_state.on_complete()
+
+    _take_due_transition(machine)
+    return fired
+
+
+def _take_due_transition(machine: AnimationStateMachine) -> None:
+    """Take the highest-priority transition whose condition now holds.
+
+    At most one per advance: taking two in a frame would skip a state's
+    `on_enter` work entirely.
+    """
+    state = machine._current_state
+    if not state:
+        return
+
+    for transition in sorted(state.transitions, key=lambda t: t.priority, reverse=True):
+        due = transition.condition == TransitionCondition.IMMEDIATE or (
+            transition.condition == TransitionCondition.ANIMATION_END
+            and machine._animator.is_finished
+        )
+        if due:
+            transition_to(machine, transition.to_state)
+            break

@@ -16,7 +16,7 @@ class AnimationFrameEvent:
     """Fired when a playing clip reaches a frame carrying a named event.
 
     `AnimationSystem` dispatches one of these per name returned by
-    `Animator.update()`/`AnimationStateMachine.update()` -- see
+    `advance_animator()`/`advance_state_machine()` -- see
     `AnimationClip.frame_events`. `kits/action_combat`'s
     `ActiveFrameWindow`/`ActiveFrameSystem` subscribe to this to toggle a
     Hitbox's active frames without a separate timer, but it carries no

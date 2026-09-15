@@ -7,7 +7,12 @@ in the scene, eliminating the need for manual update() calls in game code.
 
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.components.animation import AnimationStateMachine, Animator
+from pyguara.graphics.components.animation import (
+    AnimationStateMachine,
+    Animator,
+    advance_animator,
+    advance_state_machine,
+)
 from pyguara.graphics.events import AnimationFrameEvent
 
 
@@ -16,7 +21,9 @@ class AnimationSystem:
     System that automatically updates all animation components.
 
     Processes all entities with Animator or AnimationStateMachine components,
-    calling their update() methods each frame.
+    advancing each one every frame. Both components are pure data; the
+    advancing is `advance_state_machine` / `advance_animator`, the free
+    functions that live beside them.
 
     Compatible with SystemManager's update(dt) signature.
     """
@@ -44,14 +51,14 @@ class AnimationSystem:
         # Check for AnimationStateMachine first (higher-level)
         for entity in self._entity_manager.get_entities_with(AnimationStateMachine):
             fsm = entity.get_component(AnimationStateMachine)
-            for name in fsm.update(dt):
+            for name in advance_state_machine(fsm, dt):
                 self._dispatch_frame_event(entity.id, fsm.current_state_name, name)
 
         # Update standalone Animators (those without AnimationStateMachine)
         for entity in self._entity_manager.get_entities_with(Animator):
             if not entity.has_component(AnimationStateMachine):
                 animator = entity.get_component(Animator)
-                for name in animator.update(dt):
+                for name in advance_animator(animator, dt):
                     self._dispatch_frame_event(
                         entity.id, animator.current_clip_name, name
                     )
