@@ -84,22 +84,6 @@ void main() {
 """
 
 
-@pytest.fixture
-def gl_ctx() -> Iterator[Any]:
-    """A standalone GL context, or a skip on a machine without one."""
-    moderngl = pytest.importorskip("moderngl")
-    try:
-        ctx = moderngl.create_standalone_context()
-    except Exception as exc:  # pragma: no cover - depends on the machine
-        pytest.skip(f"no standalone GL context available: {exc}")
-    ctx.enable(moderngl.BLEND)
-    ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-    try:
-        yield ctx
-    finally:
-        ctx.release()
-
-
 class _SolidTexture:
     """A single-colour opaque texture, wrapped as the renderer expects."""
 

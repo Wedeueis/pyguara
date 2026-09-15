@@ -37,26 +37,6 @@ pytestmark = pytest.mark.integration
 _SIZE = 64
 
 
-@pytest.fixture(scope="module")
-def gl_ctx() -> Iterator[Any]:
-    """A standalone GL context, or a skip on a machine without one.
-
-    Nothing is configured on it: `ModernGLRenderer` applies the default
-    blend mode itself, so these tests draw under the same state the engine
-    does without a window having to arrange it.
-    """
-    moderngl = pytest.importorskip("moderngl")
-    try:
-        ctx = moderngl.create_standalone_context()
-    except Exception as exc:  # pragma: no cover - depends on the machine
-        pytest.skip(f"no standalone GL context available: {exc}")
-
-    try:
-        yield ctx
-    finally:
-        ctx.release()
-
-
 class _WhiteTexture:
     """An opaque white GL texture, wrapped as the renderer expects."""
 
