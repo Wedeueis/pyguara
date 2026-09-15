@@ -8,13 +8,17 @@ classes enforce that rule at different strengths:
 
 Prefer `StrictComponent` for new components. A component may still declare
 lifecycle hooks (`__init__`, `__post_init__`, `on_attach`, `on_detach`),
-dunder methods, and `@property` accessors.
+dunder methods, `@property` accessors, and methods marked `@pure_query` --
+side-effect-free reads of the component's own fields.
 """
 
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, Protocol
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 if TYPE_CHECKING:
     from pyguara.ecs.entity import Entity
@@ -64,6 +68,62 @@ ALLOWED_METHODS: frozenset[str] = frozenset(
 )
 
 
+_PURE_QUERY_FLAG = "__pyguara_pure_query__"
+
+
+def pure_query(method: _F) -> _F:
+    """Mark a component method as a side-effect-free read of its own fields.
+
+    The data-only rule exists so behaviour cannot hide inside components,
+    and a method that only *reads* the component it is called on hides
+    nothing. `tags.has_tag("enemy")` is the same fact as
+    `has_tag(tags, "enemy")` and reads better at the call site, so the
+    rule allows it -- explicitly, at the definition, rather than by
+    accident.
+
+    **This is not an escape hatch.** A pure query may not mutate anything,
+    may not reach a system, a backend or the event dispatcher, and may not
+    touch another entity's state. Anything that does is logic and belongs
+    in a system; `_allow_methods = True` remains the way to say "this is
+    logic and I know it", and remains a thing to migrate rather than keep.
+
+    Example:
+        ```python
+        @dataclass(slots=True)
+        class EntityTags(StrictComponent):
+            tags: set[str] = field(default_factory=set)
+
+            @pure_query
+            def has_tag(self, tag: str) -> bool:
+                return tag in self.tags
+        ```
+
+    Args:
+        method: The method to mark.
+
+    Returns:
+        The same method, flagged so the data-only check skips it.
+    """
+    setattr(method, _PURE_QUERY_FLAG, True)
+    return method
+
+
+def _is_pure_query(cls: type, name: str) -> bool:
+    """Report whether `name` resolves to a method marked `@pure_query`.
+
+    Args:
+        cls: The class whose MRO is searched.
+        name: The attribute name to resolve.
+
+    Returns:
+        True if the first definition of `name` in the MRO carries the mark.
+    """
+    for base in cls.__mro__:
+        if name in base.__dict__:
+            return getattr(base.__dict__[name], _PURE_QUERY_FLAG, False) is True
+    return False
+
+
 def _is_property(cls: type, name: str) -> bool:
     """Report whether a class attribute resolves to a property descriptor.
 
@@ -100,7 +160,7 @@ def _get_logic_methods(cls: type, base_cls: type) -> list[str]:
         if name in ALLOWED_METHODS or name.startswith("_"):
             continue
 
-        if _is_property(cls, name):
+        if _is_property(cls, name) or _is_pure_query(cls, name):
             continue
 
         try:

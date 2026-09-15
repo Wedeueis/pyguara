@@ -1,11 +1,11 @@
 import copy
 import pickle
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
-from pyguara.ecs.component import BaseComponent, StrictComponent
+from pyguara.ecs.component import BaseComponent, StrictComponent, pure_query
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
@@ -1113,3 +1113,34 @@ def test_clear_on_an_empty_world_is_a_noop() -> None:
     manager = EntityManager()
     manager.clear()
     assert list(manager.get_all_entities()) == []
+
+
+def test_a_pure_query_is_allowed() -> None:
+    """A method that only reads the component's own fields hides nothing,
+    so the rule permits it -- marked explicitly at the definition."""
+
+    @dataclass
+    class Tagged(StrictComponent):
+        tags: set[str] = field(default_factory=set)
+
+        @pure_query
+        def has_tag(self, tag: str) -> bool:
+            return tag in self.tags
+
+    assert Tagged(tags={"enemy"}).has_tag("enemy")
+
+
+def test_a_pure_query_does_not_excuse_its_neighbours() -> None:
+    """Marking one method does not turn the check off for the class."""
+    with pytest.raises(TypeError, match="mutate"):
+
+        @dataclass
+        class Mixed(StrictComponent):
+            count: int = 0
+
+            @pure_query
+            def is_empty(self) -> bool:
+                return self.count == 0
+
+            def mutate(self) -> None:
+                self.count += 1
