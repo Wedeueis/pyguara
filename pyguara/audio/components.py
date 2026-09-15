@@ -35,6 +35,9 @@ class AudioSource(BaseComponent):
     """
 
     # Allow play/stop methods - these are intentional convenience methods
+    # Tracked debt, not an answer: this component's behaviour belongs in
+    # a system, and moving it is #72's job. The escape keeps it
+    # compiling until then.
     _allow_methods: bool = True
 
     clip_path: str = ""
@@ -130,6 +133,9 @@ class AudioEmitter(BaseComponent):
     """
 
     # Allow emit method - intentional convenience method
+    # Tracked debt, not an answer: this component's behaviour belongs in
+    # a system, and moving it is #72's job. The escape keeps it
+    # compiling until then.
     _allow_methods: bool = True
 
     clip_path: str = ""

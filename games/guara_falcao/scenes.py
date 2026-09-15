@@ -31,7 +31,7 @@ from games.guara_falcao.systems import (
     PlayerControlSystem,
     PlayerStatsSystem,
 )
-from pyguara.common.components import Transform
+from pyguara.common.components import Transform, render_position, teleport
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.manager import ConfigManager
 from pyguara.events.dispatcher import EventDispatcher
@@ -326,7 +326,7 @@ class GameScene(Scene):
                     # teleport(), not assignment: a respawn is not motion, and
                     # interpolating it would draw the player sliding back
                     # across the level for a frame.
-                    transform.teleport(spawn)
+                    teleport(transform, spawn)
 
                 # Reset velocity so the fall that killed the player doesn't
                 # carry over into the respawn.
@@ -564,7 +564,7 @@ class GameScene(Scene):
                     # position makes motion stutter whenever the display rate
                     # is not locked to the 60Hz physics rate.
                     screen_pos = (
-                        transform.render_position(self.render_alpha) - camera_offset
+                        render_position(transform, self.render_alpha) - camera_offset
                     )
 
                     # Flash when invincible

@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass
 
 from pyguara.common.types import Vector2
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import BaseComponent, StrictComponent
 
 
 @dataclass(slots=True)
@@ -55,7 +55,7 @@ class ResourceLink(BaseComponent):
         BaseComponent.__init__(self)
 
 
-class Transform(BaseComponent):
+class Transform(StrictComponent):
     """Position, rotation and scale in 2D space, with optional parenting.
 
     A transform may be parented to another, in which case its stored values
@@ -66,10 +66,12 @@ class Transform(BaseComponent):
     Angles are in **radians** throughout, except `rotation_degrees`.
 
     Note:
-        This component carries logic, which the data-only ECS rule otherwise
-        forbids (hence `_allow_methods`). Moving the hierarchy math to a
-        TransformSystem is tracked as cross-cutting concern CC-6; it touches
-        most of the engine, so it is not attempted piecemeal.
+        Everything here is a property, which the data-only rule permits: the
+        stored values, the cached `world_*` trio and its dirty propagation,
+        and the direction vectors. The *behaviour* -- `set_parent`,
+        `teleport`, `look_at`, the coordinate conversions -- lives beside
+        this class as free functions, the same split `StatBlock`/`get_stat`
+        and `Health`/`apply_damage` use. See "Transform behaviour" below.
 
     Attributes:
         interpolate: Whether the renderer draws this between fixed ticks.
@@ -83,8 +85,6 @@ class Transform(BaseComponent):
         previous_position: Position at the previous fixed tick, maintained by
             `SceneManager.fixed_update()` while `interpolate` is set.
     """
-
-    _allow_methods = True  # See the note above: hierarchy math lives here.
 
     def __init__(
         self,
@@ -126,52 +126,6 @@ class Transform(BaseComponent):
         # render_alpha instead of using the current position directly.
         self.interpolate = interpolate
         self.previous_position: Vector2 = self._local_position
-
-    def teleport(self, position: Vector2) -> None:
-        """Move without drawing the journey.
-
-        A normal position change is interpolated, so the renderer draws the
-        entity partway between where it was and where it now is. That is what
-        makes ordinary motion smooth, and exactly wrong for a move that is not
-        motion: a respawn, a level load, wrapping around a screen edge. Those
-        would be drawn as a streak across everything in between for one frame.
-
-        This sets both the current and previous position, leaving nothing to
-        interpolate across.
-
-        Args:
-            position: Where to place the transform.
-        """
-        self.position = position
-        self.previous_position = self.position
-
-    def render_position(self, alpha: float) -> Vector2:
-        """Return where this transform should be drawn between two ticks.
-
-        Physics advances at a fixed rate while frames are presented at the
-        display's rate, so drawing `position` directly shows the last
-        completed tick. When those rates are not locked together some frames
-        show no movement and the next shows two ticks' worth -- motion that
-        reads as stutter even though the simulation is perfectly regular.
-        At 60Hz physics on a 75Hz display, a body moving 300 px/s is drawn
-        in steps of 0 to 5 pixels where every step should be 4.
-
-        Interpolating between the previous tick and the current one, by how
-        far the frame sits between them, removes that. It costs one tick of
-        latency, which is why it is opt-in through `interpolate`; a transform
-        that has not opted in is drawn where it is, and `previous_position`
-        is not maintained for it.
-
-        Args:
-            alpha: Progress through the current tick, 0.0 to 1.0. The
-                application hands this to `Scene.render` as `render_alpha`.
-
-        Returns:
-            The position to draw at.
-        """
-        if not self.interpolate:
-            return self.position
-        return self.previous_position.lerp(self.position, alpha)
 
     # --- Properties ---
 
@@ -231,7 +185,7 @@ class Transform(BaseComponent):
         if self._parent:
             self._parent._update_world_transform()
             # Convert world position to local space
-            local_pos = self._parent.world_to_local(value)
+            local_pos = world_to_local(self._parent, value)
             self.position = local_pos
         else:
             self.position = value
@@ -264,85 +218,6 @@ class Transform(BaseComponent):
     def parent(self) -> Transform | None:
         """The parent transform, or None if this one is a root."""
         return self._parent
-
-    def is_ancestor_of(self, other: Transform) -> bool:
-        """Report whether this transform is somewhere above `other`.
-
-        Args:
-            other: The candidate descendant.
-
-        Returns:
-            True if `other` is this transform or below it in the hierarchy.
-        """
-        node: Transform | None = other
-        while node is not None:
-            if node is self:
-                return True
-            node = node._parent
-        return False
-
-    def set_parent(
-        self, parent: Transform | None, keep_world_transform: bool = True
-    ) -> None:
-        """Attach this transform to a parent, or detach it with None.
-
-        Args:
-            parent: The new parent, or None to make this a root.
-            keep_world_transform: Preserve the current world position,
-                rotation and scale by rewriting the local values.
-
-        Raises:
-            ValueError: If `parent` is this transform or one of its own
-                descendants. Such a cycle has no world transform, and every
-                later `world_*` read would recurse until the stack ran out.
-        """
-        if parent is self._parent:
-            return
-
-        if parent is not None and self.is_ancestor_of(parent):
-            raise ValueError(
-                "Cannot parent a Transform to itself or to one of its own "
-                "descendants; the resulting cycle has no world transform."
-            )
-
-        world_pos: Vector2 | None = None
-        world_rot: float | None = None
-        world_scl: Vector2 | None = None
-
-        if keep_world_transform:
-            world_pos = self.world_position
-            world_rot = self.world_rotation
-            world_scl = self.world_scale
-
-        if self._parent and self in self._parent._children:
-            self._parent._children.remove(self)
-
-        self._parent = parent
-        if parent:
-            parent._children.append(self)
-
-        if keep_world_transform and world_pos is not None:
-            assert world_rot is not None
-            assert world_scl is not None
-
-            if parent:
-                parent._update_world_transform()
-                self.position = parent.world_to_local(world_pos)
-                self.rotation = world_rot - parent.world_rotation
-
-                # A zero-scaled parent has no invertible transform; leave the
-                # local scale alone rather than dividing by zero.
-                p_scale = parent.world_scale
-                if p_scale.x != 0 and p_scale.y != 0:
-                    self.scale = Vector2(
-                        world_scl.x / p_scale.x, world_scl.y / p_scale.y
-                    )
-            else:
-                self.position = world_pos
-                self.rotation = world_rot
-                self.scale = world_scl
-
-        self._mark_dirty()
 
     @property
     def children(self) -> list[Transform]:
@@ -385,82 +260,7 @@ class Transform(BaseComponent):
 
     # --- Operations ---
 
-    def translate(self, translation: Vector2) -> None:
-        """Move by an offset in local space.
-
-        Args:
-            translation: The offset to add to the local position.
-        """
-        self.position += translation
-
-    def rotate(self, angle_radians: float) -> None:
-        """Turn by an angle in **radians**.
-
-        Args:
-            angle_radians: The angle to add to the local rotation. Use
-                `math.radians()` to convert, or set `rotation_degrees`.
-        """
-        self.rotation += angle_radians
-
-    def look_at(self, target: Vector2) -> None:
-        """Rotate so `forward` points at a world position.
-
-        Args:
-            target: The world point to face.
-        """
-        direction = target - self.world_position
-        self.world_rotation = math.atan2(direction.y, direction.x)
-
-    def distance_to(self, other: Transform) -> float:
-        """Return the world-space distance to another transform.
-
-        Args:
-            other: The transform to measure to.
-
-        Returns:
-            The straight-line distance between world positions.
-        """
-        return self.world_position.distance_to(other.world_position)
-
     # --- Coordinate Conversion ---
-
-    def local_to_world(self, local_point: Vector2) -> Vector2:
-        """Convert a point from this transform's local space to world space.
-
-        Args:
-            local_point: The point in local space.
-
-        Returns:
-            The same point in world space.
-        """
-        self._update_world_transform()
-
-        scaled = Vector2(
-            local_point.x * self._world_scale.x, local_point.y * self._world_scale.y
-        )
-        rotated = scaled.rotated(self._world_rotation)
-        return rotated + self._world_position
-
-    def world_to_local(self, world_point: Vector2) -> Vector2:
-        """Convert a point from world space to this transform's local space.
-
-        Args:
-            world_point: The point in world space.
-
-        Returns:
-            The same point in local space, or the origin if either world scale
-            axis is zero, which makes the transform non-invertible.
-        """
-        self._update_world_transform()
-
-        translated = world_point - self._world_position
-        unrotated = translated.rotated(-self._world_rotation)
-        if self._world_scale.x == 0 or self._world_scale.y == 0:
-            return Vector2(0, 0)
-
-        return Vector2(
-            unrotated.x / self._world_scale.x, unrotated.y / self._world_scale.y
-        )
 
     # --- Internal Updates ---
 
@@ -510,3 +310,237 @@ class Transform(BaseComponent):
             f"rot={math.degrees(self.rotation):.1f}°, "
             f"scale={self.scale})"
         )
+
+
+# --- Transform behaviour -------------------------------------------
+#
+# Free functions rather than methods, and the reason is the data-only
+# rule: `Transform` is a component, and a component is data. The same
+# split the rest of the engine already uses -- `StatBlock`/`get_stat`,
+# `Health`/`apply_damage` -- applied to the one component every
+# subsystem touches.
+#
+# What stayed on the class is everything expressible as a property:
+# `position`/`rotation`/`scale`, the cached `world_*` trio and its dirty
+# propagation, and the direction vectors. Those are reads of the
+# component's own state, they are what the other 100-odd call sites in
+# this repository use, and `StrictComponent` permits properties -- so
+# moving them would have been a migration with no rule behind it.
+#
+# These functions touch `Transform`'s private fields (`_parent`,
+# `_children`, `_mark_dirty`). That is deliberate: they are the class's
+# behaviour, living beside it in its own module, not an outside caller
+# reaching in.
+
+
+def teleport(transform: Transform, position: Vector2) -> None:
+    """Move without drawing the journey.
+
+    A normal position change is interpolated, so the renderer draws the
+    entity partway between where it was and where it now is. That is what
+    makes ordinary motion smooth, and exactly wrong for a move that is not
+    motion: a respawn, a level load, wrapping around a screen edge. Those
+    would be drawn as a streak across everything in between for one frame.
+
+    This sets both the current and previous position, leaving nothing to
+    interpolate across.
+
+    Args:
+        position: Where to place the transform.
+    """
+    transform.position = position
+    transform.previous_position = transform.position
+
+
+def render_position(transform: Transform, alpha: float) -> Vector2:
+    """Return where this transform should be drawn between two ticks.
+
+    Physics advances at a fixed rate while frames are presented at the
+    display's rate, so drawing `position` directly shows the last
+    completed tick. When those rates are not locked together some frames
+    show no movement and the next shows two ticks' worth -- motion that
+    reads as stutter even though the simulation is perfectly regular.
+    At 60Hz physics on a 75Hz display, a body moving 300 px/s is drawn
+    in steps of 0 to 5 pixels where every step should be 4.
+
+    Interpolating between the previous tick and the current one, by how
+    far the frame sits between them, removes that. It costs one tick of
+    latency, which is why it is opt-in through `interpolate`; a transform
+    that has not opted in is drawn where it is, and `previous_position`
+    is not maintained for it.
+
+    Args:
+        alpha: Progress through the current tick, 0.0 to 1.0. The
+            application hands this to `Scene.render` as `render_alpha`.
+
+    Returns:
+        The position to draw at.
+    """
+    if not transform.interpolate:
+        return transform.position
+    return transform.previous_position.lerp(transform.position, alpha)
+
+
+def is_ancestor_of(transform: Transform, other: Transform) -> bool:
+    """Report whether this transform is somewhere above `other`.
+
+    Args:
+        other: The candidate descendant.
+
+    Returns:
+        True if `other` is this transform or below it in the hierarchy.
+    """
+    node: Transform | None = other
+    while node is not None:
+        if node is transform:
+            return True
+        node = node._parent
+    return False
+
+
+def set_parent(
+    transform: Transform,
+    parent: Transform | None,
+    keep_world_transform: bool = True,
+) -> None:
+    """Attach this transform to a parent, or detach it with None.
+
+    Args:
+        parent: The new parent, or None to make this a root.
+        keep_world_transform: Preserve the current world position,
+            rotation and scale by rewriting the local values.
+
+    Raises:
+        ValueError: If `parent` is this transform or one of its own
+            descendants. Such a cycle has no world transform, and every
+            later `world_*` read would recurse until the stack ran out.
+    """
+    if parent is transform._parent:
+        return
+
+    if parent is not None and is_ancestor_of(transform, parent):
+        raise ValueError(
+            "Cannot parent a Transform to itself or to one of its own "
+            "descendants; the resulting cycle has no world transform."
+        )
+
+    world_pos: Vector2 | None = None
+    world_rot: float | None = None
+    world_scl: Vector2 | None = None
+
+    if keep_world_transform:
+        world_pos = transform.world_position
+        world_rot = transform.world_rotation
+        world_scl = transform.world_scale
+
+    if transform._parent and transform in transform._parent._children:
+        transform._parent._children.remove(transform)
+
+    transform._parent = parent
+    if parent:
+        parent._children.append(transform)
+
+    if keep_world_transform and world_pos is not None:
+        assert world_rot is not None
+        assert world_scl is not None
+
+        if parent:
+            parent._update_world_transform()
+            transform.position = world_to_local(parent, world_pos)
+            transform.rotation = world_rot - parent.world_rotation
+
+            # A zero-scaled parent has no invertible transform; leave the
+            # local scale alone rather than dividing by zero.
+            p_scale = parent.world_scale
+            if p_scale.x != 0 and p_scale.y != 0:
+                transform.scale = Vector2(
+                    world_scl.x / p_scale.x, world_scl.y / p_scale.y
+                )
+        else:
+            transform.position = world_pos
+            transform.rotation = world_rot
+            transform.scale = world_scl
+
+    transform._mark_dirty()
+
+
+def translate(transform: Transform, translation: Vector2) -> None:
+    """Move by an offset in local space.
+
+    Args:
+        translation: The offset to add to the local position.
+    """
+    transform.position += translation
+
+
+def rotate(transform: Transform, angle_radians: float) -> None:
+    """Turn by an angle in **radians**.
+
+    Args:
+        angle_radians: The angle to add to the local rotation. Use
+            `math.radians()` to convert, or set `rotation_degrees`.
+    """
+    transform.rotation += angle_radians
+
+
+def look_at(transform: Transform, target: Vector2) -> None:
+    """Rotate so `forward` points at a world position.
+
+    Args:
+        target: The world point to face.
+    """
+    direction = target - transform.world_position
+    transform.world_rotation = math.atan2(direction.y, direction.x)
+
+
+def distance_to(transform: Transform, other: Transform) -> float:
+    """Return the world-space distance to another transform.
+
+    Args:
+        other: The transform to measure to.
+
+    Returns:
+        The straight-line distance between world positions.
+    """
+    return transform.world_position.distance_to(other.world_position)
+
+
+def local_to_world(transform: Transform, local_point: Vector2) -> Vector2:
+    """Convert a point from this transform's local space to world space.
+
+    Args:
+        local_point: The point in local space.
+
+    Returns:
+        The same point in world space.
+    """
+    transform._update_world_transform()
+
+    scaled = Vector2(
+        local_point.x * transform._world_scale.x,
+        local_point.y * transform._world_scale.y,
+    )
+    rotated = scaled.rotated(transform._world_rotation)
+    return rotated + transform._world_position
+
+
+def world_to_local(transform: Transform, world_point: Vector2) -> Vector2:
+    """Convert a point from world space to this transform's local space.
+
+    Args:
+        world_point: The point in world space.
+
+    Returns:
+        The same point in local space, or the origin if either world scale
+        axis is zero, which makes the transform non-invertible.
+    """
+    transform._update_world_transform()
+
+    translated = world_point - transform._world_position
+    unrotated = translated.rotated(-transform._world_rotation)
+    if transform._world_scale.x == 0 or transform._world_scale.y == 0:
+        return Vector2(0, 0)
+
+    return Vector2(
+        unrotated.x / transform._world_scale.x, unrotated.y / transform._world_scale.y
+    )

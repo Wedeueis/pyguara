@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Optional
 from pyguara.ai.blackboard import Blackboard
 from pyguara.ai.fsm import StateMachine
 from pyguara.common.types import Vector2
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import BaseComponent, StrictComponent, pure_query
 
 if TYPE_CHECKING:
     from pyguara.ai.behavior_tree import BehaviorTree
@@ -90,7 +90,7 @@ class SteeringAgent(BaseComponent):
 
 
 @dataclass
-class Navigator(BaseComponent):
+class Navigator(StrictComponent):
     """Component that handles pathfollowing.
 
     Attributes:
@@ -103,19 +103,29 @@ class Navigator(BaseComponent):
         path logic would be in a NavigationSystem.
     """
 
-    _allow_methods: bool = field(default=True, repr=False, init=False)
-
     path: list[Vector2] = field(default_factory=list)
     current_index: int = 0
     reach_threshold: float = 5.0
 
-    def set_path(self, path: list[Vector2]) -> None:
-        """Set the path defined by a list of vectors."""
-        self.path = path
-        self.current_index = 0
-
+    @pure_query
     def get_current_target(self) -> Vector2 | None:
         """Return the current imediate destination."""
         if 0 <= self.current_index < len(self.path):
             return self.path[self.current_index]
         return None
+
+
+def set_path(navigator: Navigator, path: list[Vector2]) -> None:
+    """Give `navigator` a new path to follow, from its start.
+
+    A free function rather than a method: it mutates, so it is behaviour
+    rather than a read of the component's own fields, and the data-only
+    rule puts behaviour outside the component. `get_current_target` stays
+    a method because it only reads -- see `pure_query`.
+
+    Args:
+        navigator: The navigator to redirect.
+        path: Waypoints in world space. Replaces whatever was there.
+    """
+    navigator.path = path
+    navigator.current_index = 0

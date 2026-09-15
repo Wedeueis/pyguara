@@ -1,11 +1,11 @@
 import copy
 import pickle
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 
-from pyguara.ecs.component import BaseComponent, StrictComponent
+from pyguara.ecs.component import BaseComponent, StrictComponent, pure_query
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
@@ -300,10 +300,11 @@ def test_data_only_component_no_warning() -> None:
         assert len(component_warnings) == 0
 
 
-def test_base_component_warns_on_logic_methods() -> None:
-    """BaseComponent should warn when logic methods are detected."""
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+def test_base_component_rejects_logic_methods() -> None:
+    """A component is data. Declaring behaviour on one now fails at class
+    definition rather than warning -- the warning had no adopters and
+    nine components escaped it with `_allow_methods`."""
+    with pytest.raises(TypeError, match="ComponentWithLogic"):
 
         class ComponentWithLogic(BaseComponent):
             def __init__(self) -> None:
@@ -311,15 +312,8 @@ def test_base_component_warns_on_logic_methods() -> None:
                 self.value = 0
 
             def update(self) -> None:
-                """This method contains logic - should trigger warning."""
+                """Behaviour, which belongs in a system."""
                 self.value += 1
-
-        # Should have exactly one warning about the logic method
-        component_warnings = [
-            warning for warning in w if "ComponentWithLogic" in str(warning.message)
-        ]
-        assert len(component_warnings) == 1
-        assert "update" in str(component_warnings[0].message)
 
 
 def test_base_component_allows_methods_with_flag() -> None:
@@ -873,9 +867,9 @@ def test_query_cache_statistics_report_registered_queries_and_occupancy() -> Non
 
 
 def test_base_component_reports_logic_methods_in_sorted_order() -> None:
-    """The warning lists offending methods deterministically, so the message is
+    """The error lists offending methods deterministically, so the message is
     stable enough to assert on and to diff across runs."""
-    with pytest.warns(UserWarning) as record:
+    with pytest.raises(TypeError) as excinfo:
 
         @dataclass
         class Messy(BaseComponent):
@@ -885,7 +879,38 @@ def test_base_component_reports_logic_methods_in_sorted_order() -> None:
 
             def alpha(self) -> None: ...
 
-    assert "alpha, zeta" in str(record[0].message)
+    assert "alpha, zeta" in str(excinfo.value)
+
+
+def test_a_pure_query_is_allowed() -> None:
+    """A method that only reads the component's own fields hides nothing,
+    so the rule permits it -- marked explicitly at the definition."""
+
+    @dataclass
+    class Tagged(BaseComponent):
+        tags: set[str] = field(default_factory=set)
+
+        @pure_query
+        def has_tag(self, tag: str) -> bool:
+            return tag in self.tags
+
+    assert Tagged(tags={"enemy"}).has_tag("enemy")
+
+
+def test_a_pure_query_does_not_excuse_its_neighbours() -> None:
+    """Marking one method does not turn the check off for the class."""
+    with pytest.raises(TypeError, match="mutate"):
+
+        @dataclass
+        class Mixed(BaseComponent):
+            count: int = 0
+
+            @pure_query
+            def is_empty(self) -> bool:
+                return self.count == 0
+
+            def mutate(self) -> None:
+                self.count += 1
 
 
 def test_strict_component_accepts_class_keyword_arguments() -> None:

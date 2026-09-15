@@ -7,7 +7,12 @@ string-dispatch gaps went unseen.
 
 import pytest
 
-from pyguara.ai.components import Navigator, SteeringAgent, SteeringBehaviorType
+from pyguara.ai.components import (
+    Navigator,
+    SteeringAgent,
+    SteeringBehaviorType,
+    set_path,
+)
 from pyguara.ai.steering_system import SteeringSystem
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
@@ -169,7 +174,7 @@ class TestTargetResolution:
         em = EntityManager()
         e = _agent_entity(em, Vector2(0, 0), behavior="seek", max_speed=200)
         nav = Navigator(reach_threshold=8.0)
-        nav.set_path([Vector2(120, 0), Vector2(120, 120)])
+        set_path(nav, [Vector2(120, 0), Vector2(120, 120)])
         e.add_component(nav)
 
         _run(SteeringSystem(em), frames=240)

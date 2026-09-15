@@ -55,7 +55,10 @@ class Animator(BaseComponent):
         logic would be in an AnimationSystem.
     """
 
-    _allow_methods = True  # Legacy component with animation playback logic
+    # Tracked debt, not an answer: this component's behaviour belongs in
+    # a system, and moving it is #37's job. The escape keeps it
+    # compiling until then.
+    _allow_methods = True
 
     def __init__(self, sprite: Sprite) -> None:
         """Initialize the animator with a target sprite.
@@ -240,7 +243,10 @@ class AnimationStateMachine(BaseComponent):
         logic would be in an AnimationStateMachineSystem.
     """
 
-    _allow_methods = True  # Legacy component with FSM logic
+    # Tracked debt, not an answer: this component's behaviour belongs in
+    # a system, and moving it is #37's job. The escape keeps it
+    # compiling until then.
+    _allow_methods = True
 
     def __init__(self, sprite: Sprite, animator: Animator):
         """

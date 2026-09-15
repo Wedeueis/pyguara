@@ -33,14 +33,6 @@ class PlayerState(BaseComponent):
         """Initialize the component."""
         super().__init__()
 
-    def set_state(self, new_state: PlayerAnimState) -> bool:
-        """Change state and reset timer. Returns True if state changed."""
-        if new_state != self.current_state:
-            self.current_state = new_state
-            self.state_time = 0.0
-            return True
-        return False
-
 
 @dataclass
 class Health(BaseComponent):
@@ -53,18 +45,6 @@ class Health(BaseComponent):
     def __post_init__(self) -> None:
         """Initialize the component."""
         super().__init__()
-
-    def take_damage(self, amount: int = 1) -> bool:
-        """Take damage. Returns True if still alive."""
-        if self.invincible_time > 0:
-            return True
-        self.current = max(0, self.current - amount)
-        self.invincible_time = 1.5  # Brief invincibility
-        return self.current > 0
-
-    def heal(self, amount: int = 1) -> None:
-        """Heal up to max health."""
-        self.current = min(self.max_health, self.current + amount)
 
 
 @dataclass
@@ -153,11 +133,6 @@ class Score(BaseComponent):
         """Initialize the component."""
         super().__init__()
 
-    def add_coins(self, amount: int = 1) -> None:
-        """Add coins and update score."""
-        self.coins_collected += amount
-        self.value += amount * 100
-
 
 @dataclass
 class PatrolMotion(BaseComponent):
@@ -185,3 +160,66 @@ class PatrolMotion(BaseComponent):
     def __post_init__(self) -> None:
         """Initialize the component."""
         super().__init__()
+
+
+def set_state(state: PlayerState, new_state: PlayerAnimState) -> bool:
+    """Move `state` into `new_state`, restarting its timer.
+
+    A free function because it mutates. Re-entering the state already
+    held is a no-op, so a caller can set it every frame without
+    restarting the animation.
+
+    Args:
+        state: The component to change.
+        new_state: The state to move into.
+
+    Returns:
+        Whether the state actually changed.
+    """
+    if new_state == state.current_state:
+        return False
+    state.current_state = new_state
+    state.state_time = 0.0
+    return True
+
+
+def take_damage(health: Health, amount: int = 1) -> bool:
+    """Apply `amount` to `health`, unless it is still invincible.
+
+    A free function because it mutates -- the same shape
+    `kits/action_combat`'s `apply_damage()` already uses.
+
+    Args:
+        health: The health to reduce.
+        amount: Damage to apply.
+
+    Returns:
+        Whether the entity is still alive afterwards. A hit absorbed by
+        invincibility reports alive without reducing anything.
+    """
+    if health.invincible_time > 0:
+        return True
+    health.current = max(0, health.current - amount)
+    health.invincible_time = 1.5  # Brief invincibility
+    return health.current > 0
+
+
+def heal(health: Health, amount: int = 1) -> None:
+    """Restore `amount`, never past `max_health`.
+
+    Args:
+        health: The health to restore.
+        amount: How much to restore.
+    """
+    health.current = min(health.max_health, health.current + amount)
+
+
+def add_coins(score: Score, amount: int = 1) -> None:
+    """Credit `amount` coins to `score`, and the points they are worth.
+
+    Args:
+        score: The score to credit.
+        amount: How many coins were collected.
+    """
+    score.coins_collected += amount
+    score.value += amount * 100

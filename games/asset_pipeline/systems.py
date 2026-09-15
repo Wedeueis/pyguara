@@ -4,6 +4,7 @@ Reusing the MovementSystem logic.
 """
 
 from games.asset_pipeline.components import Transform
+from pyguara.common.components import teleport
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 
@@ -31,6 +32,6 @@ class MovementSystem:
             # between ticks, so assigning here would draw the sprite streaking
             # back across the whole screen on the wrapping frame.
             if transform.position.x > 800:
-                transform.teleport(Vector2(0, transform.position.y))
+                teleport(transform, Vector2(0, transform.position.y))
             if transform.position.y > 600:
-                transform.teleport(Vector2(transform.position.x, 0))
+                teleport(transform, Vector2(transform.position.x, 0))
