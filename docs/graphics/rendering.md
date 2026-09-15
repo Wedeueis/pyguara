@@ -58,14 +58,37 @@ material = Material(
 sprite.material = material
 ```
 
-**What this does today: sorting, and nothing on the GPU.** A material's `id`
-reaches `RenderQueue` and `Batcher`, which sort and break batches by it, so
-assigning one is visible in the draw-call structure. But `ModernGLRenderer`
-never reads `RenderBatch.material` -- it draws every batch through its own
-sprite program -- so a custom shader assigned this way has no effect on what
-is rendered. Wiring the backend to honour materials is filed, not built.
+A material's `id` sorts the queue and breaks batches, and
+`ModernGLRenderer.render_batch()` then draws the batch through the material's
+program, feeding it the same projection the sprite path uses, the batch's
+texture on unit 0, and the material's own uniforms. Sprites without an
+explicit material sort together as material `0` and draw through the built-in
+sprite shader.
 
-Sprites without an explicit material sort together as material `0`.
+**The instance layout is fixed**, so a material's *vertex* shader has to
+consume it: `in_vert`, `in_uv` per vertex and `in_pos`, `in_rot`, `in_scale`,
+`in_size`, `in_color` per instance. For a fragment-only effect -- the common
+case -- reuse the default vertex stage:
+
+```python
+from pyguara.graphics.materials.defaults import DEFAULT_SPRITE_VERTEX
+
+shader = cache.get_or_compile("grayscale", DEFAULT_SPRITE_VERTEX, frag_src)
+```
+
+A vertex shader that consumes neither `in_vert` nor `in_pos` raises rather
+than drawing every sprite on top of each other. Attributes the GLSL linker
+drops because nothing downstream reads them -- `in_uv` and `in_color` in a
+fragment shader that ignores `v_uv`/`v_color` -- are fine and expected.
+
+**A material's own `texture` is a second sampler, not a replacement.** Unit 0
+belongs to the batch's texture, which is what the sprites *are*; a material
+texture binds to unit 1 as `u_material_texture`, for a mask, a ramp or a noise
+field. A uniform the shader does not declare is ignored, matching
+`Shader.set_uniform` everywhere else.
+
+Materials are a ModernGL-backend feature: the Pygame backend ignores them, as
+the comparison table below records.
 
 ## 2D Lighting
 
