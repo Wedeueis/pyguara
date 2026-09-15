@@ -52,6 +52,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Mesa's software rasteriser plus EGL, so
+      # `moderngl.create_standalone_context()` works with no display. Without
+      # it every GL test in this repository skips here and the pixel suites
+      # prove nothing in the pipeline -- which is what PYGUARA_REQUIRE_GL
+      # below turns from a silent skip into a failure.
+      - name: Install headless OpenGL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libglx-mesa0 libgl1-mesa-dri libglvnd0
+
       - name: Install Dependencies
         run: make install
 
@@ -60,6 +71,9 @@ jobs:
 
       - name: Run Integration Tests
         run: make test-integration
+        env:
+          PYGUARA_REQUIRE_GL: "1"
+          LIBGL_ALWAYS_SOFTWARE: "1"
 
       # This runs coverage and fails if <85% (as defined in Makefile)
       - name: Check Coverage
