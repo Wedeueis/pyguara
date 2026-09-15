@@ -13,6 +13,7 @@ import pygame
 
 import moderngl
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.graphics.backends.surface_blending import blit_blended_rect
 
 # Shader source for UI overlay
 _UI_VERT_SHADER = """
@@ -135,13 +136,23 @@ class GLUIRenderer:
     def draw_rect(
         self, rect: Rect, color: Color, width: int = 0, border_radius: int = 0
     ) -> None:
-        """Draw a filled or outlined rectangle."""
+        """Draw a filled or outlined rectangle.
+
+        A translucent colour is blended rather than written. This surface
+        is `SRCALPHA`, and `pygame.draw` replaces the destination pixel
+        including its alpha -- so a half-transparent fill would cut a hole
+        straight through whatever the UI had already drawn there, and the
+        world would show through it.
+        """
         pygame_rect = pygame.Rect(rect.x, rect.y, rect.width, rect.height)
         rgba = self._to_pygame_color(color)
 
-        pygame.draw.rect(
-            self._surface, rgba, pygame_rect, width, border_radius=border_radius
-        )
+        if rgba[3] < 255:
+            blit_blended_rect(self._surface, pygame_rect, rgba, width, border_radius)
+        else:
+            pygame.draw.rect(
+                self._surface, rgba, pygame_rect, width, border_radius=border_radius
+            )
         self._dirty = True
 
     def draw_circle(
