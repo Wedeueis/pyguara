@@ -43,6 +43,7 @@ GL_ONLY_DEMOS = {
     "true_coral",
     "protocolo_bandeira",
     "tamandua_murundus",
+    "guara_falcao",
 }
 DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"} - GL_ONLY_DEMOS)
 

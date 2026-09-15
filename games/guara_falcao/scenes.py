@@ -1,25 +1,47 @@
 """Guará & Falcão - Game Scenes.
 
-Title and gameplay scenes for the platformer game.
+Two scenes live here -- the title screen and the game -- and two more in
+`menus.py`, pushed over whichever of these is running. Between them they are
+the demo's whole point: the same UI system and the same design-system theme
+drawing a menu, a HUD and a modal, over a world drawn with nothing but
+renderer primitives.
+
+The gameplay underneath is unchanged. `systems.py`, `components.py` and
+`level_builder.py` were not touched: what this rewrite replaces is how the
+frame looks and how the screens are built, not how the platformer plays.
 """
 
-import sys
+from __future__ import annotations
 
+import math
+
+from games.guara_falcao import art
+from games.guara_falcao.bootstrap import (
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+    attach_lighting,
+    begin_world,
+    run_pipeline,
+)
 from games.guara_falcao.components import (
     CharacterSprite,
     Collectible,
+    Hazard,
     Health,
     PlatformSprite,
+    PlayerAnimState,
     PlayerState,
-    Score,
     ZoneTrigger,
 )
 from games.guara_falcao.events import (
     CheckpointReachedEvent,
     CollectiblePickedEvent,
+    DebugCollidersToggled,
     PlayerDeathEvent,
 )
+from games.guara_falcao.hud import Hud
 from games.guara_falcao.level_builder import LevelBuilder
+from games.guara_falcao.menus import OptionsScene, PauseScene, Scrim, quit_game
 from games.guara_falcao.systems import (
     AnimationFSMSystem,
     CameraFollowSystem,
@@ -36,6 +58,8 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.manager import ConfigManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.lighting.components import AmbientLight, LightSource
+from pyguara.graphics.lighting.light_system import LightingSystem
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, F1, LEFT, RIGHT, SPACE, UP, R
@@ -53,74 +77,198 @@ from pyguara.physics.solid_system import SolidSystem
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
-from pyguara.ui.components.button import Button
 from pyguara.ui.components.text import Label
+from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.manager import UIManager
+from pyguara.ui.types import UILayer
+
+AMBIENT = Color(255, 236, 206)
+AMBIENT_INTENSITY = 0.84
+"""Just under full, and that margin is the whole lighting budget.
+
+The composite multiplies the world by the light map, and the light map is
+ambient *plus* every light. At ambient 1.0 anything lit at all lands above
+1.0, crosses the bloom threshold and hazes over -- so the frame has to sit
+slightly under, leaving the sun and the pickups somewhere to go."""
+
+SUN_COLOR = Color(255, 196, 120)
+FRUIT_LIGHT = Color(180, 255, 120)
+CHECKPOINT_LIGHT = Color(150, 240, 220)
+
+
+def _sun(scene: Scene, width: int) -> None:
+    """Hang the sun and the ambient term in a scene's world.
+
+    Placed well above the frame: a light *inside* it has a hotspot, and
+    anything that walks into a hotspot on a float light map blows out.
+
+    Args:
+        scene: The scene whose entity manager to build them in.
+        width: Viewport width, for where to put the sun.
+    """
+    ambient = scene.entity_manager.create_entity("ambient")
+    ambient.add_component(AmbientLight(color=AMBIENT, intensity=AMBIENT_INTENSITY))
+
+    sun = scene.entity_manager.create_entity("sun")
+    sun.add_component(Transform(position=Vector2(width * 0.74, -180.0)))
+    sun.add_component(LightSource(color=SUN_COLOR, radius=900.0, intensity=0.33))
 
 
 class TitleScene(Scene):
-    """Title screen for Guará & Falcão."""
+    """The title screen: a live Cerrado behind a carved wordmark."""
 
     def __init__(self, event_dispatcher: EventDispatcher):
         """Initialize the title scene."""
         super().__init__("TitleScene", event_dispatcher)
+        self._camera = Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self._lighting: LightingSystem | None = None
+        self._elapsed = 0.0
+        self._visible = True
 
     def on_enter(self) -> None:
-        """Create title UI."""
-        print("Guará & Falcão - Title")
+        """Build the backdrop's lights and the menu."""
+        self._lighting = LightingSystem(self.entity_manager)
+        _sun(self, WINDOW_WIDTH)
+        attach_lighting(self.container, self._lighting)
+        self._build_menu()
+
+    def on_resume(self) -> None:
+        """Rebuild the menu after returning from the game or the options."""
+        super().on_resume()
+        self._visible = True
+        if self._lighting:
+            attach_lighting(self.container, self._lighting)
+        self._build_menu()
+
+    def _build_menu(self) -> None:
+        """The wordmark plate, the button column and the badge."""
         ui_manager = self.container.get(UIManager)
         ui_manager.clear()
 
-        # Title
-        title = Label("GUARA & FALCAO", position=Vector2(260, 100))
-        ui_manager.add_element(title)
-
-        # Subtitle
-        subtitle = Label("A Platformer Adventure", position=Vector2(280, 140))
-        ui_manager.add_element(subtitle)
-
-        # Button container
-        container = BoxContainer(
-            position=Vector2(300, 240), size=Vector2(200, 200), spacing=15
+        # A light touch of the same scrim the pause menu uses, so the
+        # wordmark has something to sit on. At full strength it is a modal
+        # wash and would bury the backdrop it is meant to settle.
+        ui_manager.add_element(
+            Scrim(WINDOW_WIDTH, WINDOW_HEIGHT, strength=0.32), UILayer.BACKDROP
         )
 
-        btn_start = Button("START GAME", position=Vector2(0, 0), size=Vector2(200, 50))
-        btn_start.on_click = self._on_start_click
-        container.add_child(btn_start)
+        plate_width, plate_height = 520, 132
+        plate_x = (WINDOW_WIDTH - plate_width) // 2
+        plate = BevelPanel(
+            Vector2(plate_x, 96), Vector2(plate_width, plate_height), border_width=3
+        )
+        plate.add_child(
+            Label("GUARÁ & FALCÃO", Vector2(plate_x + 54, 126), font_size=44)
+        )
+        plate.add_child(
+            Label("PYGUARA SOLAR ENGINE", Vector2(plate_x + 150, 184), font_size=16)
+        )
+        ui_manager.add_element(plate, UILayer.CONTENT)
 
-        btn_quit = Button("QUIT", position=Vector2(0, 0), size=Vector2(200, 50))
-        btn_quit.on_click = self._on_quit_click
-        container.add_child(btn_quit)
+        column = BoxContainer(
+            Vector2((WINDOW_WIDTH - 260) // 2, 288),
+            Vector2(260, 220),
+            spacing=14,
+        )
+        for text, skin, handler in (
+            ("Play", Skins.SAGE, self._on_play),
+            ("Options", Skins.WOOD, self._on_options),
+            ("Quit", Skins.WOOD, self._on_quit),
+        ):
+            button = BevelButton(text, Vector2(0, 0), Vector2(260, 52), skin=skin)
+            button.on_click = handler
+            column.add_child(button)
+        ui_manager.add_element(column, UILayer.CONTENT)
 
-        ui_manager.add_element(container)
+        badge = BevelPanel(
+            Vector2((WINDOW_WIDTH - 210) // 2, 536), Vector2(210, 34), border_width=1
+        )
+        badge.add_child(
+            Label(
+                "BUILT ON PYGUARA",
+                Vector2((WINDOW_WIDTH - 140) // 2, 546),
+                font_size=12,
+            )
+        )
+        ui_manager.add_element(badge, UILayer.CONTENT)
 
-    def _on_start_click(self, el) -> None:
-        """Start the game."""
+        # Focus the first button, so the screen is usable without a mouse
+        # and the focus ring has somewhere to start.
+        ui_manager.set_focus(column.children[0])
+
+    def _on_play(self, _element: object) -> None:
+        """Start a run."""
         scene_manager = self.container.get(SceneManager)
-        game_scene = GameScene(self.event_dispatcher)
-        scene_manager.register(game_scene)
+        scene_manager.register(GameScene(self.event_dispatcher))
         scene_manager.push_scene("GameScene")
 
-    def _on_quit_click(self, el) -> None:
-        """Quit the game."""
-        sys.exit(0)
+    def _on_options(self, _element: object) -> None:
+        """Open the options panel over the title."""
+        scene_manager = self.container.get(SceneManager)
+        scene_manager.register(
+            OptionsScene(self.event_dispatcher, WINDOW_WIDTH, WINDOW_HEIGHT)
+        )
+        scene_manager.push_scene("OptionsScene")
+
+    def _on_quit(self, _element: object) -> None:
+        """Leave."""
+        quit_game()
 
     def on_exit(self) -> None:
         """Clean up scene resources."""
-        pass
 
-    def on_resume(self) -> None:
-        """Recreate UI when returning from GameScene."""
-        self.on_enter()
+    def on_pause(self) -> None:
+        """Stop drawing while the game or the options sit on top.
+
+        Two scenes both drawing a full-screen backdrop is wasted work, and
+        the one underneath cannot run the render pipeline without stealing
+        the buffer the one above is drawing into.
+        """
+        super().on_pause()
+        self._visible = False
 
     def update(self, dt: float) -> None:
-        """Update logic."""
-        pass
+        """Drift the backdrop."""
+        self._elapsed += dt
+        if self._lighting:
+            self._lighting.update(dt)
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Render the scene."""
-        world_renderer.clear(Color(40, 50, 60))
+        """Draw the Cerrado behind the menu."""
+        if not self._visible:
+            return
+
+        begin_world(self.container)
+        drift = self._elapsed * 12.0
+
+        art.draw_sky(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
+        art.draw_sun(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
+        art.draw_parallax(world_renderer, drift, WINDOW_WIDTH, WINDOW_HEIGHT)
+
+        # The hero and the companion, walking the near band.
+        ground = WINDOW_HEIGHT * 0.72 + 40
+        walker = Vector2(
+            WINDOW_WIDTH * 0.2 + math.sin(self._elapsed * 0.4) * 60.0, ground - 46
+        )
+        art.draw_guara(
+            world_renderer,
+            walker,
+            Vector2(64, 92),
+            facing_right=True,
+            running=True,
+            airborne=False,
+            phase=self._elapsed,
+        )
+        art.draw_falcao(
+            world_renderer,
+            Vector2(walker.x + 6, walker.y - 74),
+            self._elapsed,
+            facing_right=True,
+        )
+
+        world_renderer.end_frame()
+        run_pipeline(self.container, self._camera)
 
 
 class GameScene(Scene):
@@ -146,6 +294,7 @@ class GameScene(Scene):
         self._hazard_system: HazardSystem | None = None
         self._effect_system: EffectSystem | None = None
         self._player_stats_system: PlayerStatsSystem | None = None
+        self._lighting: LightingSystem | None = None
 
         # Game state
         self._camera: Camera2D | None = None
@@ -153,6 +302,8 @@ class GameScene(Scene):
         self._level_builder: LevelBuilder | None = None
         self._input_manager: InputManager | None = None
         self._coroutine_manager: CoroutineManager | None = None
+        self._hud: Hud | None = None
+        self._elapsed = 0.0
 
         # Game flags
         self._is_dead = False
@@ -165,16 +316,12 @@ class GameScene(Scene):
 
     def on_enter(self) -> None:
         """Initialize game systems and load level."""
-        print("Guará & Falcão - Game Started")
-
-        # Get managers
         ui_manager = self.container.get(UIManager)
         ui_manager.clear()
 
         self._input_manager = self.container.get(InputManager)
         self._coroutine_manager = self.container.get(CoroutineManager)
 
-        # Setup input
         self._setup_input()
 
         # Initialize physics with gravity for side-scroller
@@ -218,35 +365,60 @@ class GameScene(Scene):
         self._player_stats_system = PlayerStatsSystem(self.entity_manager)
 
         # Setup camera
-        self._camera = Camera2D(800, 600)
+        self._camera = Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
         self._camera_follow.set_camera(self._camera)
 
         # Build level
         self._level_builder = LevelBuilder()
         spawn_point = self._level_builder.load_level(self.entity_manager)
 
-        # Create player
         self._player_id = self._level_builder.create_player(
             self.entity_manager, spawn_point
         )
+        self._link_player()
 
-        # Link player to systems
-        player = self.entity_manager.get_entity(self._player_id)
-        if player:
-            self._player_control.set_player(player)
-            self._camera_follow.set_target(player)
-            self._collectible_system.set_player(player)
-            self._checkpoint_system.set_player(player)
-            self._checkpoint_system.set_initial_spawn(spawn_point)
-            self._hazard_system.set_player(player)
+        # Lighting: the sun, plus a small light on every pickup so bloom
+        # makes them findable from across a wide level.
+        self._lighting = LightingSystem(self.entity_manager)
+        _sun(self, WINDOW_WIDTH)
+        self._light_pickups()
+        attach_lighting(self.container, self._lighting)
 
         # Register events
         self.event_dispatcher.subscribe(PlayerDeathEvent, self._on_player_death)
         self.event_dispatcher.subscribe(CheckpointReachedEvent, self._on_checkpoint)
         self.event_dispatcher.subscribe(CollectiblePickedEvent, self._on_collectible)
+        self.event_dispatcher.subscribe(DebugCollidersToggled, self._on_collider_toggle)
 
-        # Setup HUD
         self._setup_hud()
+
+    def on_resume(self) -> None:
+        """Rebuild the HUD and reclaim the light pass after a menu closes."""
+        if self._lighting:
+            attach_lighting(self.container, self._lighting)
+        self._setup_hud()
+
+    def _link_player(self) -> None:
+        """Point every system that needs the player at the current one."""
+        if not self._player_id:
+            return
+        player = self.entity_manager.get_entity(self._player_id)
+        if not player:
+            return
+        self._player_control.set_player(player)  # type: ignore[union-attr]
+        self._camera_follow.set_target(player)  # type: ignore[union-attr]
+        self._collectible_system.set_player(player)  # type: ignore[union-attr]
+        self._checkpoint_system.set_player(player)  # type: ignore[union-attr]
+        self._hazard_system.set_player(player)  # type: ignore[union-attr]
+
+    def _light_pickups(self) -> None:
+        """Give every uncollected pickup its own small light."""
+        for entity in self.entity_manager.get_entities_with(Transform, Collectible):
+            collectible = entity.get_component(Collectible)
+            color = (
+                FRUIT_LIGHT if collectible.collect_type == "coin" else CHECKPOINT_LIGHT
+            )
+            entity.add_component(LightSource(color=color, radius=120.0, intensity=0.7))
 
     def _setup_input(self) -> None:
         """Configure input bindings."""
@@ -269,7 +441,6 @@ class GameScene(Scene):
         im.bind_input(InputDevice.KEYBOARD, ESCAPE, "back")
         im.bind_input(InputDevice.KEYBOARD, F1, "toggle_colliders")
 
-        # Subscribe to action events
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
 
     def _on_action(self, event: OnActionEvent) -> None:
@@ -277,7 +448,6 @@ class GameScene(Scene):
         action = event.action_name
         is_pressed = event.value > 0
 
-        # Track hold states for movement
         if action == "move_left":
             self._move_left_held = is_pressed
         elif action == "move_right":
@@ -287,20 +457,43 @@ class GameScene(Scene):
         elif action == "restart" and is_pressed and not self._is_dead:
             self._restart_level()
         elif action == "back" and is_pressed:
-            self.container.get(SceneManager).pop_scene()
+            self._open_pause()
         elif action == "toggle_colliders" and is_pressed:
             self._show_colliders = not self._show_colliders
 
-    def _setup_hud(self) -> None:
-        """Create HUD elements."""
-        ui_manager = self.container.get(UIManager)
+    def _on_collider_toggle(self, event: DebugCollidersToggled) -> None:
+        """Honour the options panel's developer toggle."""
+        self._show_colliders = event.shown
 
-        # Instructions
-        instructions = Label(
-            "Arrows/Space: Move & Jump | R: Restart | F1: Colliders | ESC: Menu",
-            position=Vector2(20, 560),
+    def _open_pause(self) -> None:
+        """Push the pause menu over this scene.
+
+        `pause_below=True` stops this scene updating while leaving it
+        rendering, which is the whole trick: the menu sits over a frozen
+        game rather than over a black screen.
+        """
+        scene_manager = self.container.get(SceneManager)
+        scene_manager.register(
+            PauseScene(self.event_dispatcher, WINDOW_WIDTH, WINDOW_HEIGHT)
         )
-        ui_manager.add_element(instructions)
+        scene_manager.push_scene("PauseScene", pause_below=True)
+
+    def set_show_colliders(self, shown: bool) -> None:
+        """Turn collider outlines on or off.
+
+        Args:
+            shown: Whether to draw them.
+        """
+        self._show_colliders = shown
+
+    def _setup_hud(self) -> None:
+        """Build the HUD on its own layer."""
+        ui_manager = self.container.get(UIManager)
+        ui_manager.clear(UILayer.HUD)
+
+        total = len(list(self.entity_manager.get_entities_with(Transform, Collectible)))
+        self._hud = Hud(ui_manager, total_collectibles=total)
+        self._hud.pause_button.on_click = lambda _element: self._open_pause()
 
     def _on_player_death(self, event: PlayerDeathEvent) -> None:
         """Handle player death."""
@@ -312,7 +505,6 @@ class GameScene(Scene):
         """Death and respawn coroutine."""
         yield wait_for_seconds(1.0)
 
-        # Respawn at checkpoint
         if self._checkpoint_system and self._player_id:
             spawn = self._checkpoint_system.get_spawn_point()
             player = self.entity_manager.get_entity(self._player_id)
@@ -337,7 +529,6 @@ class GameScene(Scene):
                     health.current = health.max_health
                     health.invincible_time = 1.0
 
-                # Reset platformer controller state
                 if controller and self._platformer_system:
                     self._platformer_system.reset_jump_state(controller)
                     controller.is_grounded = False
@@ -346,8 +537,6 @@ class GameScene(Scene):
 
     def _on_checkpoint(self, event: CheckpointReachedEvent) -> None:
         """Handle checkpoint reached."""
-        print(f"Checkpoint reached: {event.zone_name}")
-
         if event.zone_name == "goal":
             self._level_complete = True
             if self._coroutine_manager:
@@ -356,39 +545,49 @@ class GameScene(Scene):
     def _complete_sequence(self):
         """Level complete coroutine."""
         ui_manager = self.container.get(UIManager)
-        label = Label("LEVEL COMPLETE!", position=Vector2(280, 250))
-        ui_manager.add_element(label)
+        banner = BevelPanel(
+            Vector2((WINDOW_WIDTH - 420) // 2, WINDOW_HEIGHT // 2 - 60),
+            Vector2(420, 96),
+            border_width=3,
+            shadow=True,
+        )
+        banner.add_child(
+            Label(
+                "LEVEL COMPLETE",
+                Vector2((WINDOW_WIDTH - 260) // 2, WINDOW_HEIGHT // 2 - 26),
+                font_size=32,
+            )
+        )
+        ui_manager.add_element(banner, UILayer.OVERLAY)
 
         yield wait_for_seconds(2.0)
 
+        ui_manager.clear()
         self.container.get(SceneManager).pop_scene()
 
     def _on_collectible(self, event: CollectiblePickedEvent) -> None:
         """Handle collectible pickup."""
-        print(f"Collected {event.collect_type}: +{event.value}")
 
     def on_exit(self) -> None:
         """Cleanup."""
         if self._physics_system:
             self._physics_system.cleanup()
+        self.container.get(UIManager).clear(UILayer.HUD)
 
     def fixed_update(self, fixed_dt: float) -> None:
         """Run fixed timestep update for physics."""
         if self._is_dead or self._level_complete:
             return
 
-        # Calculate move input from held keys (same as in update)
         move_input = 0.0
         if self._move_left_held:
             move_input = -1.0
         elif self._move_right_held:
             move_input = 1.0
 
-        # Update player controller with current input state
         if self._player_control:
             self._player_control.update(fixed_dt, move_input, self._jump_pressed)
 
-        # Reset jump flag after it's been consumed
         self._jump_pressed = False
 
         # 1. Whatever authors a solid's motion (patrol, here) runs first.
@@ -418,40 +617,30 @@ class GameScene(Scene):
 
     def update(self, dt: float) -> None:
         """Update game logic."""
+        self._elapsed += dt
+
         if self._is_dead or self._level_complete:
             if self._coroutine_manager:
                 self._coroutine_manager.update(dt)
             return
 
-        # Note: PlayerControlSystem and PlatformerSystem now run in fixed_update
-        # for proper physics synchronization
+        for system in (
+            self._animation_fsm,
+            self._camera_follow,
+            self._collectible_system,
+            self._checkpoint_system,
+            self._health_system,
+            self._hazard_system,
+            self._effect_system,
+            self._player_stats_system,
+            self._lighting,
+            self._coroutine_manager,
+        ):
+            if system is not None:
+                system.update(dt)
 
-        if self._animation_fsm:
-            self._animation_fsm.update(dt)
-
-        if self._camera_follow:
-            self._camera_follow.update(dt)
-
-        if self._collectible_system:
-            self._collectible_system.update(dt)
-
-        if self._checkpoint_system:
-            self._checkpoint_system.update(dt)
-
-        if self._health_system:
-            self._health_system.update(dt)
-
-        if self._hazard_system:
-            self._hazard_system.update(dt)
-
-        if self._effect_system:
-            self._effect_system.update(dt)
-
-        if self._player_stats_system:
-            self._player_stats_system.update(dt)
-
-        if self._coroutine_manager:
-            self._coroutine_manager.update(dt)
+        if self._hud and self._player_id:
+            self._hud.update(self.entity_manager.get_entity(self._player_id))
 
     def _restart_level(self) -> None:
         """Restart the current level."""
@@ -461,174 +650,176 @@ class GameScene(Scene):
         self._is_dead = False
         self._level_complete = False
 
-        ui_manager = self.container.get(UIManager)
-        ui_manager.clear()
-
         if self._level_builder:
             spawn_point = self._level_builder.load_level(self.entity_manager)
             self._player_id = self._level_builder.create_player(
                 self.entity_manager, spawn_point
             )
-
-            player = self.entity_manager.get_entity(self._player_id)
-            if player:
-                self._player_control.set_player(player)
-                self._camera_follow.set_target(player)
-                self._collectible_system.set_player(player)
-                self._checkpoint_system.set_player(player)
+            self._link_player()
+            if self._checkpoint_system:
                 self._checkpoint_system.set_initial_spawn(spawn_point)
-                self._hazard_system.set_player(player)
 
+        _sun(self, WINDOW_WIDTH)
+        self._light_pickups()
         self._setup_hud()
 
-    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Render the game."""
-        world_renderer.clear(Color(35, 45, 55))
+    # ---- drawing --------------------------------------------------------
 
-        # Get camera transform
+    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
+        """Draw the level, then run the light and post passes over it."""
         camera_offset = Vector2.zero()
         if self._camera:
-            camera_offset = self._camera.position - Vector2(400, 300)
-
-        # Render platforms
-        for entity in self.entity_manager.get_entities_with(Transform, PlatformSprite):
-            transform = entity.get_component(Transform)
-            sprite = entity.get_component(PlatformSprite)
-
-            # Apply camera offset
-            screen_pos = transform.position - camera_offset
-
-            rect = Rect(
-                screen_pos.x - sprite.size.x // 2,
-                screen_pos.y - sprite.size.y // 2,
-                sprite.size.x,
-                sprite.size.y,
+            camera_offset = self._camera.position - Vector2(
+                WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2
             )
-            world_renderer.draw_rect(rect, sprite.color)
 
-        # Render collectibles (not collected)
-        for entity in self.entity_manager.get_entities_with(
-            Transform, CharacterSprite, Collectible
-        ):
-            collectible = entity.get_component(Collectible)
-            if collectible.collected:
-                continue
+        begin_world(self.container)
 
-            transform = entity.get_component(Transform)
-            sprite = entity.get_component(CharacterSprite)
+        art.draw_sky(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
+        art.draw_sun(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
+        art.draw_parallax(world_renderer, camera_offset.x, WINDOW_WIDTH, WINDOW_HEIGHT)
 
-            screen_pos = transform.position - camera_offset
-
-            rect = Rect(
-                screen_pos.x - sprite.size.x // 2,
-                screen_pos.y - sprite.size.y // 2,
-                sprite.size.x,
-                sprite.size.y,
-            )
-            world_renderer.draw_rect(rect, sprite.color)
-
-        # Render checkpoints/goals
-        for entity in self.entity_manager.get_entities_with(
-            Transform, CharacterSprite, ZoneTrigger
-        ):
-            transform = entity.get_component(Transform)
-            sprite = entity.get_component(CharacterSprite)
-            trigger = entity.get_component(ZoneTrigger)
-
-            screen_pos = transform.position - camera_offset
-
-            # Change color if triggered
-            color = sprite.color
-            if trigger.triggered:
-                color = Color(150, 255, 150)
-
-            rect = Rect(
-                screen_pos.x - sprite.size.x // 2,
-                screen_pos.y - sprite.size.y // 2,
-                sprite.size.x,
-                sprite.size.y,
-            )
-            world_renderer.draw_rect(rect, color)
-
-        # Render player
-        if self._player_id:
-            player = self.entity_manager.get_entity(self._player_id)
-            if player:
-                transform = player.get_component(Transform)
-                sprite = player.get_component(CharacterSprite)
-                state = player.get_component(PlayerState)
-                health = player.get_component(Health)
-
-                if transform and sprite:
-                    # render_position, not position: drawing the raw fixed-tick
-                    # position makes motion stutter whenever the display rate
-                    # is not locked to the 60Hz physics rate.
-                    screen_pos = (
-                        render_position(transform, self.render_alpha) - camera_offset
-                    )
-
-                    # Flash when invincible
-                    color = sprite.color
-                    if health and health.invincible_time > 0:
-                        # Flash every 0.1 seconds
-                        if int(health.invincible_time * 10) % 2 == 0:
-                            color = Color(255, 255, 255)
-
-                    rect = Rect(
-                        screen_pos.x - sprite.size.x // 2,
-                        screen_pos.y - sprite.size.y // 2,
-                        sprite.size.x,
-                        sprite.size.y,
-                    )
-                    world_renderer.draw_rect(rect, color)
-
-                    # Draw direction indicator
-                    if state:
-                        indicator_x = (
-                            screen_pos.x + 15
-                            if state.facing_right
-                            else screen_pos.x - 15
-                        )
-                        indicator_rect = Rect(
-                            indicator_x - 4,
-                            screen_pos.y - sprite.size.y // 2 + 5,
-                            8,
-                            8,
-                        )
-                        world_renderer.draw_rect(indicator_rect, Color(255, 200, 150))
+        self._draw_platforms(world_renderer, camera_offset)
+        self._draw_pickups(world_renderer, camera_offset)
+        self._draw_zones(world_renderer, camera_offset)
+        self._draw_player(world_renderer, camera_offset)
 
         if self._show_colliders:
             if self._collider_debug is None:
                 self._collider_debug = ColliderDebugRenderer(self.entity_manager)
             self._collider_debug.render(world_renderer, camera_offset)
 
-        # Render HUD
-        self._render_hud(world_renderer)
+        # Shapes are batched and flushed here; anything drawn after this
+        # lands on top of them. The HUD is widgets on the UI layer, which
+        # composites later still.
+        world_renderer.end_frame()
+        run_pipeline(
+            self.container, self._camera or Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
+        )
 
-    def _render_hud(self, renderer: IRenderer) -> None:
-        """Render HUD elements."""
+    def _screen_rect(
+        self, transform: Transform, size: Vector2, offset: Vector2
+    ) -> Rect:
+        """The screen rectangle for a centred sprite.
+
+        Args:
+            transform: The entity's transform.
+            size: Its sprite size.
+            offset: The camera offset.
+
+        Returns:
+            The rectangle to draw into.
+        """
+        position = transform.position - offset
+        return Rect(
+            int(position.x - size.x // 2),
+            int(position.y - size.y // 2),
+            int(size.x),
+            int(size.y),
+        )
+
+    def _draw_platforms(self, renderer: IRenderer, offset: Vector2) -> None:
+        """Draw solid tiles as earth and platforms as planks."""
+        for entity in self.entity_manager.get_entities_with(Transform, PlatformSprite):
+            sprite = entity.get_component(PlatformSprite)
+            rect = self._screen_rect(
+                entity.get_component(Transform), sprite.size, offset
+            )
+            if rect.width <= 34 and rect.height <= 34:
+                art.draw_ground_tile(
+                    renderer, rect, entity.get_component(Transform).position.x
+                )
+            else:
+                art.draw_plank(renderer, rect)
+
+    def _draw_pickups(self, renderer: IRenderer, offset: Vector2) -> None:
+        """Draw uncollected pickups, and the hazards."""
+        for entity in self.entity_manager.get_entities_with(
+            Transform, CharacterSprite, Collectible
+        ):
+            collectible = entity.get_component(Collectible)
+            if collectible.collected:
+                continue
+            transform = entity.get_component(Transform)
+            position = transform.position - offset
+            art.draw_pickup(
+                renderer,
+                Vector2(position.x, position.y),
+                11.0,
+                collectible.collect_type,
+                self._elapsed,
+            )
+
+        for entity in self.entity_manager.get_entities_with(
+            Transform, CharacterSprite, Hazard
+        ):
+            sprite = entity.get_component(CharacterSprite)
+            art.draw_hazard(
+                renderer,
+                self._screen_rect(entity.get_component(Transform), sprite.size, offset),
+            )
+
+    def _draw_zones(self, renderer: IRenderer, offset: Vector2) -> None:
+        """Draw checkpoints and the goal."""
+        for entity in self.entity_manager.get_entities_with(
+            Transform, CharacterSprite, ZoneTrigger
+        ):
+            sprite = entity.get_component(CharacterSprite)
+            trigger = entity.get_component(ZoneTrigger)
+            rect = self._screen_rect(
+                entity.get_component(Transform), sprite.size, offset
+            )
+            if trigger.zone_name == "goal":
+                art.draw_goal(renderer, rect, self._elapsed)
+            else:
+                art.draw_checkpoint(renderer, rect, trigger.triggered)
+
+    def _draw_player(self, renderer: IRenderer, offset: Vector2) -> None:
+        """Draw the guará, and the falcão riding above."""
         if not self._player_id:
             return
-
         player = self.entity_manager.get_entity(self._player_id)
         if not player:
             return
 
+        transform = player.get_component(Transform)
+        sprite = player.get_component(CharacterSprite)
+        state = player.get_component(PlayerState)
         health = player.get_component(Health)
-        score = player.get_component(Score)
+        if transform is None or sprite is None:
+            return
 
-        # Health hearts
-        if health:
-            for i in range(health.max_health):
-                x = 20 + i * 25
-                color = Color(200, 50, 50) if i < health.current else Color(80, 80, 80)
-                rect = Rect(x, 20, 20, 20)
-                renderer.draw_rect(rect, color)
+        # render_position, not position: drawing the raw fixed-tick position
+        # makes motion stutter whenever the display rate is not locked to
+        # the 60Hz physics rate.
+        position = render_position(transform, self.render_alpha) - offset
 
-        # Score/coins
-        if score:
-            # Simple coin counter (ideally we'd use text)
-            for i in range(min(score.coins_collected, 10)):
-                x = 700 - i * 15
-                rect = Rect(x, 20, 12, 12)
-                renderer.draw_rect(rect, Color(255, 220, 50))
+        facing = state.facing_right if state else True
+        anim = state.current_state if state else PlayerAnimState.IDLE
+        flash = bool(
+            health
+            and health.invincible_time > 0
+            and int(health.invincible_time * 10) % 2 == 0
+        )
+
+        # Drawn half again as big as the collision box. A character that
+        # exactly fills its collider reads as a crate; the overhang is
+        # where the mane, the ears and the tail live.
+        art.draw_guara(
+            renderer,
+            Vector2(position.x, position.y),
+            Vector2(sprite.size.x * 1.5, sprite.size.y * 1.4),
+            facing_right=facing,
+            running=anim == PlayerAnimState.RUN,
+            airborne=anim in (PlayerAnimState.JUMP, PlayerAnimState.FALL),
+            phase=self._elapsed,
+            flash=flash,
+        )
+        art.draw_falcao(
+            renderer,
+            Vector2(
+                position.x - (10 if facing else -10), position.y - sprite.size.y * 0.8
+            ),
+            self._elapsed,
+            facing_right=facing,
+        )
