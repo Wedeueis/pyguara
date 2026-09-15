@@ -13,6 +13,10 @@ from games.guara_falcao.components import (
     PlayerState,
     Score,
     ZoneTrigger,
+    add_coins,
+    heal,
+    set_state,
+    take_damage,
 )
 from games.guara_falcao.events import (
     CheckpointReachedEvent,
@@ -174,7 +178,7 @@ class AnimationFSMSystem:
 
             # Determine animation state based on platformer state
             new_state = self._determine_state(state, controller)
-            state.set_state(new_state)
+            set_state(state, new_state)
 
     def _determine_state(
         self, state: PlayerState, controller: PlatformerController
@@ -315,11 +319,11 @@ class CollectibleSystem:
             collectible.collected = True
 
             if collectible.collect_type == "coin" and score:
-                score.add_coins(collectible.value)
+                add_coins(score, collectible.value)
             elif collectible.collect_type == "health":
                 health = self._player.get_component(Health)
                 if health:
-                    health.heal(collectible.value)
+                    heal(health, collectible.value)
             elif collectible.collect_type == "power":
                 stat_block = self._player.get_component(StatBlock)
                 effect_container = self._player.get_component(EffectContainer)
@@ -416,7 +420,7 @@ class HealthSystem:
         if not health:
             return
 
-        alive = health.take_damage(damage)
+        alive = take_damage(health, damage)
 
         self._dispatcher.dispatch(
             PlayerDamagedEvent(damage=damage, remaining_health=health.current)
@@ -469,7 +473,7 @@ class HazardSystem:
 
             if distance < self.HAZARD_DISTANCE:
                 # Apply damage
-                alive = player_health.take_damage(hazard.damage)
+                alive = take_damage(player_health, hazard.damage)
                 self._apply_knockback(hazard, player_transform, transform)
 
                 self._dispatcher.dispatch(

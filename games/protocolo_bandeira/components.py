@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 
 from pyguara.common.types import Color, Vector2
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import BaseComponent, pure_query
 
 
 class EntityTeam(Enum):
@@ -40,13 +40,10 @@ class Weapon(BaseComponent):
         """Initialize the component."""
         super().__init__()
 
+    @pure_query
     def can_fire(self) -> bool:
-        """Check if weapon can fire."""
+        """Whether the cooldown has elapsed. Reads only its own field."""
         return self.cooldown <= 0
-
-    def fire(self) -> None:
-        """Fire the weapon, starting cooldown."""
-        self.cooldown = self.fire_rate
 
 
 @dataclass
@@ -94,11 +91,6 @@ class Score(BaseComponent):
         """Initialize the component."""
         super().__init__()
 
-    def add_kill(self, points: int = 100) -> None:
-        """Add a kill and points."""
-        self.kills += 1
-        self.value += points
-
 
 @dataclass
 class ShooterSprite(BaseComponent):
@@ -143,3 +135,27 @@ class AIContext:
         return (
             self.player_position is not None and self.distance_to_player < attack_range
         )
+
+
+def fire(weapon: Weapon) -> None:
+    """Start `weapon`'s cooldown, marking it as having just fired.
+
+    A free function because it mutates: `can_fire` reads and stays a
+    method, this writes and does not. Same split the engine uses for
+    `Health`/`apply_damage`.
+
+    Args:
+        weapon: The weapon that fired.
+    """
+    weapon.cooldown = weapon.fire_rate
+
+
+def add_kill(score: Score, points: int = 100) -> None:
+    """Record one kill against `score`.
+
+    Args:
+        score: The score to credit.
+        points: What the kill was worth.
+    """
+    score.kills += 1
+    score.value += points

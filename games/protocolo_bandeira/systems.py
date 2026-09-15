@@ -14,6 +14,8 @@ from games.protocolo_bandeira.components import (
     Movement,
     Score,
     Weapon,
+    add_kill,
+    fire,
 )
 from games.protocolo_bandeira.events import (
     BulletFiredEvent,
@@ -438,7 +440,7 @@ class WeaponSystem:
             team="player",
             attacker=self._player.id,
         )
-        weapon.fire()
+        fire(weapon)
         self._dispatcher.dispatch(
             BulletFiredEvent(
                 position=position,
@@ -473,7 +475,7 @@ class ScoreSystem:
         if self._player:
             score = self._player.get_component(Score)
             if score:
-                score.add_kill(event.points)
+                add_kill(score, event.points)
 
     def update_wave(self, wave: int) -> None:
         """Update wave number in score."""
