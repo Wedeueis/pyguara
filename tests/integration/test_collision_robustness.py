@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from pyguara.common.components import Transform
+from pyguara.common.components import Transform, render_position, teleport
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
@@ -154,9 +154,9 @@ class TestRenderInterpolation:
         transform = Transform(position=Vector2(10, 0), interpolate=True)
         transform.previous_position = Vector2(0, 0)
 
-        assert transform.render_position(0.0) == Vector2(0, 0)
-        assert transform.render_position(0.5) == Vector2(5, 0)
-        assert transform.render_position(1.0) == Vector2(10, 0)
+        assert render_position(transform, 0.0) == Vector2(0, 0)
+        assert render_position(transform, 0.5) == Vector2(5, 0)
+        assert render_position(transform, 1.0) == Vector2(10, 0)
 
     def test_a_transform_that_opted_out_is_drawn_where_it_is(self) -> None:
         """Opting out must keep working now that interpolation is the default.
@@ -167,7 +167,7 @@ class TestRenderInterpolation:
         transform = Transform(position=Vector2(10, 0), interpolate=False)
         transform.previous_position = Vector2(0, 0)
 
-        assert transform.render_position(0.5) == Vector2(10, 0)
+        assert render_position(transform, 0.5) == Vector2(10, 0)
 
     def test_physics_turns_interpolation_on_for_the_bodies_it_creates(self) -> None:
         """A game should not have to know to ask for this.
@@ -208,13 +208,13 @@ class TestRenderInterpolation:
         transform.previous_position = Vector2(10, 0)
 
         transform.position = Vector2(790, 0)
-        assert transform.render_position(0.5) == Vector2(400, 0), (
+        assert render_position(transform, 0.5) == Vector2(400, 0), (
             "a plain assignment interpolates, which is the hazard teleport exists for"
         )
 
-        transform.teleport(Vector2(10, 0))
-        assert transform.render_position(0.5) == Vector2(10, 0)
-        assert transform.render_position(0.0) == Vector2(10, 0)
+        teleport(transform, Vector2(10, 0))
+        assert render_position(transform, 0.5) == Vector2(10, 0)
+        assert render_position(transform, 0.0) == Vector2(10, 0)
 
     def test_interpolation_evens_out_the_steps_a_viewer_sees(self) -> None:
         """The point of the helper, stated as the property that matters.
@@ -239,7 +239,7 @@ class TestRenderInterpolation:
                 accumulator -= fixed_dt
             alpha = accumulator / fixed_dt
             raw.append(transform.position.x)
-            smooth.append(transform.render_position(alpha).x)
+            smooth.append(render_position(transform, alpha).x)
 
         raw_steps = [b - a for a, b in zip(raw, raw[1:], strict=False)]
         smooth_steps = [b - a for a, b in zip(smooth, smooth[1:], strict=False)]

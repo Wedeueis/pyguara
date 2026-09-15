@@ -11,7 +11,18 @@ import math
 
 import pytest
 
-from pyguara.common.components import ResourceLink, Tag, Transform
+from pyguara.common.components import (
+    ResourceLink,
+    Tag,
+    Transform,
+    distance_to,
+    is_ancestor_of,
+    local_to_world,
+    look_at,
+    rotate,
+    set_parent,
+    world_to_local,
+)
 from pyguara.common.types import Vector2
 
 
@@ -39,7 +50,7 @@ class TestTransformDefaults:
         """Transform.rotate() is radians while the old Vector2.rotate() was
         degrees; the unit is asserted here so the two cannot silently swap."""
         t = Transform()
-        t.rotate(math.pi)
+        rotate(t, math.pi)
         assert abs(t.rotation_degrees - 180) < 1e-9
 
 
@@ -65,9 +76,9 @@ class TestTransformDirections:
 
     def test_forward_is_right_and_look_at_agrees(self) -> None:
         t = Transform(position=Vector2(0, 0))
-        t.look_at(Vector2(10, 0))
+        look_at(t, Vector2(10, 0))
         assert_vec(t.forward, (1, 0))
-        t.look_at(Vector2(0, 10))
+        look_at(t, Vector2(0, 10))
         assert_vec(t.forward, (0, 1))
 
 
@@ -75,13 +86,13 @@ class TestTransformHierarchy:
     def test_child_world_position_includes_parent_offset(self) -> None:
         parent = Transform(position=Vector2(100, 50))
         child = Transform(position=Vector2(10, 5))
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
         assert_vec(child.world_position, (110, 55))
 
     def test_child_inherits_parent_rotation_and_scale(self) -> None:
         parent = Transform(rotation=math.pi / 2, scale=Vector2(2, 2))
         child = Transform(position=Vector2(1, 0))
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
 
         assert_vec(child.world_position, (0, 2))
         assert abs(child.world_rotation - math.pi / 2) < 1e-9
@@ -91,7 +102,7 @@ class TestTransformHierarchy:
         parent = Transform(position=Vector2(100, 100))
         child = Transform(position=Vector2(10, 10))
 
-        child.set_parent(parent, keep_world_transform=True)
+        set_parent(child, parent, keep_world_transform=True)
 
         assert_vec(child.world_position, (10, 10))
         assert_vec(child.position, (-90, -90))
@@ -99,10 +110,10 @@ class TestTransformHierarchy:
     def test_detaching_preserves_world_position(self) -> None:
         parent = Transform(position=Vector2(100, 100))
         child = Transform(position=Vector2(10, 10))
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
         assert_vec(child.world_position, (110, 110))
 
-        child.set_parent(None, keep_world_transform=True)
+        set_parent(child, None, keep_world_transform=True)
 
         assert child.parent is None
         assert_vec(child.world_position, (110, 110))
@@ -110,31 +121,31 @@ class TestTransformHierarchy:
     def test_reparenting_removes_the_child_from_the_old_parent(self) -> None:
         a, b = Transform(), Transform()
         child = Transform()
-        child.set_parent(a)
-        child.set_parent(b)
+        set_parent(child, a)
+        set_parent(child, b)
 
         assert a.children == []
         assert b.children == [child]
 
     def test_children_returns_a_snapshot_not_the_live_list(self) -> None:
         parent = Transform()
-        Transform().set_parent(parent)
+        set_parent(Transform(), parent)
         snapshot = parent.children
         snapshot.clear()
         assert len(parent.children) == 1
 
     def test_setting_parent_to_the_current_parent_is_a_noop(self) -> None:
         parent, child = Transform(), Transform()
-        child.set_parent(parent)
-        child.set_parent(parent)
+        set_parent(child, parent)
+        set_parent(child, parent)
         assert parent.children == [child]
 
     def test_three_level_chain_composes(self) -> None:
         a = Transform(position=Vector2(100, 0))
         b = Transform(position=Vector2(10, 0))
         c = Transform(position=Vector2(1, 0))
-        b.set_parent(a, keep_world_transform=False)
-        c.set_parent(b, keep_world_transform=False)
+        set_parent(b, a, keep_world_transform=False)
+        set_parent(c, b, keep_world_transform=False)
         assert_vec(c.world_position, (111, 0))
 
 
@@ -145,28 +156,28 @@ class TestTransformCycles:
     def test_self_parenting_is_rejected(self) -> None:
         t = Transform()
         with pytest.raises(ValueError, match="itself or to one of its own"):
-            t.set_parent(t)
+            set_parent(t, t)
         assert t.parent is None
         assert t.children == []
 
     def test_direct_cycle_is_rejected(self) -> None:
         a, b = Transform(), Transform()
-        a.set_parent(b)
+        set_parent(a, b)
         with pytest.raises(ValueError, match="descendants"):
-            b.set_parent(a)
+            set_parent(b, a)
 
     def test_indirect_cycle_is_rejected(self) -> None:
         a, b, c = Transform(), Transform(), Transform()
-        b.set_parent(a)
-        c.set_parent(b)
+        set_parent(b, a)
+        set_parent(c, b)
         with pytest.raises(ValueError, match="descendants"):
-            a.set_parent(c)
+            set_parent(a, c)
 
     def test_the_hierarchy_survives_a_rejected_cycle(self) -> None:
         a, b = Transform(), Transform()
-        a.set_parent(b)
+        set_parent(a, b)
         with pytest.raises(ValueError):
-            b.set_parent(a)
+            set_parent(b, a)
 
         assert a.parent is b
         assert b.parent is None
@@ -175,18 +186,18 @@ class TestTransformCycles:
 
     def test_is_ancestor_of(self) -> None:
         a, b, unrelated = Transform(), Transform(), Transform()
-        b.set_parent(a)
-        assert a.is_ancestor_of(b)
-        assert a.is_ancestor_of(a)
-        assert not b.is_ancestor_of(a)
-        assert not a.is_ancestor_of(unrelated)
+        set_parent(b, a)
+        assert is_ancestor_of(a, b)
+        assert is_ancestor_of(a, a)
+        assert not is_ancestor_of(b, a)
+        assert not is_ancestor_of(a, unrelated)
 
 
 class TestTransformDirtyCaching:
     def test_moving_a_parent_updates_child_world_position(self) -> None:
         parent = Transform(position=Vector2(0, 0))
         child = Transform(position=Vector2(10, 0))
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
         assert_vec(child.world_position, (10, 0))
 
         parent.position = Vector2(100, 0)
@@ -195,8 +206,8 @@ class TestTransformDirtyCaching:
 
     def test_moving_a_parent_updates_a_grandchild(self) -> None:
         a, b, c = Transform(), Transform(), Transform()
-        b.set_parent(a, keep_world_transform=False)
-        c.set_parent(b, keep_world_transform=False)
+        set_parent(b, a, keep_world_transform=False)
+        set_parent(c, b, keep_world_transform=False)
         c.position = Vector2(1, 0)
         assert_vec(c.world_position, (1, 0))
 
@@ -209,7 +220,7 @@ class TestTransformDirtyCaching:
         because cleaning a node also cleans its ancestors, so a dirty node can
         never have a clean descendant -- this walks that interleaving."""
         parent, child = Transform(), Transform()
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
 
         for step in range(1, 4):
             parent.position = Vector2(step * 10, 0)
@@ -220,7 +231,7 @@ class TestTransformDirtyCaching:
 
     def test_rotating_a_parent_updates_child_world_rotation(self) -> None:
         parent, child = Transform(), Transform()
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
         assert child.world_rotation == 0.0
 
         parent.rotation = math.pi
@@ -232,24 +243,24 @@ class TestTransformCoordinateConversion:
     def test_local_to_world_round_trips(self) -> None:
         t = Transform(position=Vector2(10, 20), rotation=0.7, scale=Vector2(2, 3))
         point = Vector2(5, -4)
-        assert_vec(t.world_to_local(t.local_to_world(point)), (5, -4), tol=1e-6)
+        assert_vec(world_to_local(t, local_to_world(t, point)), (5, -4), tol=1e-6)
 
     def test_local_to_world_applies_scale_rotation_then_translation(self) -> None:
         t = Transform(
             position=Vector2(10, 0), rotation=math.pi / 2, scale=Vector2(2, 2)
         )
-        assert_vec(t.local_to_world(Vector2(1, 0)), (10, 2))
+        assert_vec(local_to_world(t, Vector2(1, 0)), (10, 2))
 
     def test_world_to_local_of_a_zero_scaled_transform_returns_origin(self) -> None:
         """A zero scale is not invertible; the origin is returned rather than
         raising ZeroDivisionError mid-frame."""
         t = Transform(scale=Vector2(0, 0))
-        assert t.world_to_local(Vector2(5, 5)) == Vector2(0, 0)
+        assert world_to_local(t, Vector2(5, 5)) == Vector2(0, 0)
 
     def test_world_position_setter_accounts_for_the_parent(self) -> None:
         parent = Transform(position=Vector2(100, 100))
         child = Transform()
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
 
         child.world_position = Vector2(150, 150)
 
@@ -259,7 +270,7 @@ class TestTransformCoordinateConversion:
     def test_world_rotation_setter_accounts_for_the_parent(self) -> None:
         parent = Transform(rotation=math.pi / 2)
         child = Transform()
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
 
         child.world_rotation = math.pi
 
@@ -269,9 +280,9 @@ class TestTransformCoordinateConversion:
     def test_distance_to_uses_world_space(self) -> None:
         parent = Transform(position=Vector2(100, 0))
         child = Transform()
-        child.set_parent(parent, keep_world_transform=False)
+        set_parent(child, parent, keep_world_transform=False)
         other = Transform(position=Vector2(103, 4))
-        assert child.distance_to(other) == 5.0
+        assert distance_to(child, other) == 5.0
 
 
 class TestSharedComponents:

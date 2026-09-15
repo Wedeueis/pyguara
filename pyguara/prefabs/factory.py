@@ -10,7 +10,7 @@ import copy
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from pyguara.common.components import Transform
+from pyguara.common.components import Transform, set_parent
 from pyguara.common.types import Vector2
 from pyguara.log import get_logger
 from pyguara.prefabs.types import PrefabChild, PrefabData, PrefabInstance
@@ -258,7 +258,7 @@ class PrefabFactory:
         """Create child entities and parent them to `parent_entity`.
 
         Each child's Transform (if it has one) is attached to the parent's
-        Transform via `Transform.set_parent(..., keep_world_transform=False)`,
+        Transform via `set_parent(Transform, ..., keep_world_transform=False)`,
         so the child's authored position is treated as local to the parent and
         the child follows the parent when it moves. `PrefabChild.offset` is
         added to that local position.
@@ -320,7 +320,9 @@ class PrefabFactory:
                     )
 
             if parent_transform is not None and child_transform is not None:
-                child_transform.set_parent(parent_transform, keep_world_transform=False)
+                set_parent(
+                    child_transform, parent_transform, keep_world_transform=False
+                )
 
             created.append(child_entity)
 
