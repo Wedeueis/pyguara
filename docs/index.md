@@ -61,6 +61,7 @@ Essential engine features:
 *   **[Resources](systems/resources.md)**: Caching and type-safe asset loading.
 *   **[Prefabs](systems/prefabs.md)**: Data-driven entity templates with inheritance and child hierarchies.
 *   **[Developer Tools](systems/editor.md)**: In-game debug overlay -- hierarchy, inspector, assets browser.
+*   **[UI Design System](systems/ui-design-system.md)**: Brand palette, the Cerrado themes, and the semantic colour roles every component reads.
 
 ## 🚀 Quick Start
 
