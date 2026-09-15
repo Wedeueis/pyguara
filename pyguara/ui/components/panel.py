@@ -28,3 +28,10 @@ class Panel(Widget):
         renderer.draw_rect(self.rect, bg_color, width=0)
 
         renderer.draw_rect(self.rect, self.theme.colors.edge, width=self.border_width)
+
+        # Children, which a panel used to lay out and then never draw --
+        # so a panel with contents rendered as an empty box unless the
+        # caller added the contents as a separate root beside it.
+        for child in self.children:
+            if child.visible:
+                child.render(renderer)

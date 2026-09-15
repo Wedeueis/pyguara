@@ -6,6 +6,7 @@ import pytest
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.button import Button
+from pyguara.ui.components.canvas import Canvas
 from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.text import Label
 from pyguara.ui.components.text_input import TextInput
@@ -214,3 +215,39 @@ class TestComponentsReadTheSemanticRoles:
             assert mock_renderer.draw_rect.call_args_list[0].args[1] == Color(6, 6, 6)
         finally:
             set_theme(UITheme())
+
+
+class TestContainersDrawTheirChildren:
+    """`Panel` and `Canvas` laid their children out and then never drew them.
+
+    A panel with contents rendered as an empty box, so anything built that
+    way had to add its contents as separate roots beside the panel and keep
+    the two in sync by hand. `BoxContainer` always drew its children; these
+    two were the odd ones out, and `Canvas`'s docstring even claimed it.
+    """
+
+    def test_a_panel_draws_a_child(self, mock_renderer: Any) -> None:
+        panel = Panel(Vector2(0, 0), Vector2(100, 50))
+        panel.add_child(Label("inside", Vector2(10, 10)))
+
+        panel.render(mock_renderer)
+
+        assert mock_renderer.draw_text.call_args.args[0] == "inside"
+
+    def test_a_panel_skips_a_hidden_child(self, mock_renderer: Any) -> None:
+        panel = Panel(Vector2(0, 0), Vector2(100, 50))
+        hidden = Label("inside", Vector2(10, 10))
+        hidden.visible = False
+        panel.add_child(hidden)
+
+        panel.render(mock_renderer)
+
+        mock_renderer.draw_text.assert_not_called()
+
+    def test_a_canvas_draws_a_child(self, mock_renderer: Any) -> None:
+        canvas = Canvas(Vector2(0, 0), Vector2(100, 50))
+        canvas.add_child(Label("inside", Vector2(10, 10)))
+
+        canvas.render(mock_renderer)
+
+        assert mock_renderer.draw_text.call_args.args[0] == "inside"
