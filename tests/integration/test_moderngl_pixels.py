@@ -41,9 +41,9 @@ _SIZE = 64
 def gl_ctx() -> Iterator[Any]:
     """A standalone GL context, or a skip on a machine without one.
 
-    Blending is enabled here for the same reason the performance suite's
-    fixture does it: `PygameGLWindow.open()` owns that state in the real
-    engine, and there is no window here.
+    Nothing is configured on it: `ModernGLRenderer` applies the default
+    blend mode itself, so these tests draw under the same state the engine
+    does without a window having to arrange it.
     """
     moderngl = pytest.importorskip("moderngl")
     try:
@@ -51,8 +51,6 @@ def gl_ctx() -> Iterator[Any]:
     except Exception as exc:  # pragma: no cover - depends on the machine
         pytest.skip(f"no standalone GL context available: {exc}")
 
-    ctx.enable(moderngl.BLEND)
-    ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
     try:
         yield ctx
     finally:

@@ -100,12 +100,9 @@ class PygameGLWindow:
         # Create ModernGL context from the current OpenGL context
         self._ctx = moderngl.create_context()
 
-        # Enable blending for alpha transparency
-        self._ctx.enable(moderngl.BLEND)
-        self._ctx.blend_func = (
-            moderngl.SRC_ALPHA,
-            moderngl.ONE_MINUS_SRC_ALPHA,
-        )
+        # Blending is deliberately not set up here: it is renderer state,
+        # and `ModernGLRenderer` applies it (see `blend.py`). A window that
+        # configured it would only hide a renderer that did not.
 
         self._is_open = True
         return True

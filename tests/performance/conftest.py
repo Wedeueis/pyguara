@@ -183,10 +183,11 @@ def gl_ctx() -> Iterator[Any]:
     uses SDL's offscreen driver instead, but that exists to capture what a
     *demo* draws, which is a different job.
 
-    Blending is enabled here because the renderer does not do it --
-    `PygameGLWindow.open()` does, and there is no window in this fixture.
-    Anything measuring or reading back blended output has to set it up
-    itself, which is worth knowing before trusting a pixel readback.
+    Nothing is set up on the context here. `ModernGLRenderer` applies the
+    default blend mode when it is constructed, so anything measuring or
+    reading back blended output gets it from the renderer -- which is what
+    the engine does too. A test that draws *without* a renderer has to set
+    the state up itself.
 
     Yields:
         The ModernGL context.
@@ -197,8 +198,6 @@ def gl_ctx() -> Iterator[Any]:
     except Exception as exc:  # pragma: no cover - depends on the machine
         pytest.skip(f"no standalone GL context available: {exc}")
 
-    ctx.enable(moderngl.BLEND)
-    ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
     try:
         yield ctx
     finally:
