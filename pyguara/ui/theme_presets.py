@@ -3,6 +3,12 @@
 This module provides ready-to-use theme configurations for common use cases.
 All themes can be customized by cloning and modifying specific properties.
 
+Each preset names only the base colours and lets `ColorScheme.derive()` fill
+the semantic roles -- surfaces, the text hierarchy, action states -- from
+them. Constructing `ColorScheme(...)` directly instead would leave every
+derived role at the *generic* default, so a magenta theme would render
+steel-blue buttons.
+
 Example:
     >>> from pyguara.ui.theme_presets import Themes
     >>> from pyguara.ui.theme import set_theme
@@ -31,7 +37,7 @@ def _create_dark_theme() -> UITheme:
     """Create dark theme preset."""
     return UITheme(
         name="dark",
-        colors=ColorScheme(
+        colors=ColorScheme.derive(
             primary=Color(70, 130, 180),  # Steel blue
             secondary=Color(100, 149, 237),  # Cornflower blue
             background=Color(32, 32, 32),  # Dark gray
@@ -59,7 +65,7 @@ def _create_light_theme() -> UITheme:
     """Create light theme preset."""
     return UITheme(
         name="light",
-        colors=ColorScheme(
+        colors=ColorScheme.derive(
             primary=Color(41, 128, 185),  # Peter River blue
             secondary=Color(52, 152, 219),  # Bright blue
             background=Color(236, 240, 241),  # Light gray
@@ -87,7 +93,7 @@ def _create_high_contrast_theme() -> UITheme:
     """Create high contrast theme for accessibility."""
     return UITheme(
         name="high_contrast",
-        colors=ColorScheme(
+        colors=ColorScheme.derive(
             primary=Color(255, 255, 255),  # White
             secondary=Color(255, 255, 0),  # Yellow
             background=Color(0, 0, 0),  # Black
@@ -109,7 +115,7 @@ def _create_cyberpunk_theme() -> UITheme:
     """Create cyberpunk/neon theme."""
     return UITheme(
         name="cyberpunk",
-        colors=ColorScheme(
+        colors=ColorScheme.derive(
             primary=Color(255, 0, 255),  # Magenta
             secondary=Color(0, 255, 255),  # Cyan
             background=Color(10, 10, 20),  # Very dark blue-black
@@ -141,7 +147,7 @@ def _create_forest_theme() -> UITheme:
     """Create nature/forest theme."""
     return UITheme(
         name="forest",
-        colors=ColorScheme(
+        colors=ColorScheme.derive(
             primary=Color(46, 125, 50),  # Green
             secondary=Color(76, 175, 80),  # Light green
             background=Color(33, 43, 33),  # Dark green-gray
@@ -169,7 +175,7 @@ def _create_retro_theme() -> UITheme:
     """Create retro/vintage theme."""
     return UITheme(
         name="retro",
-        colors=ColorScheme(
+        colors=ColorScheme.derive(
             primary=Color(255, 152, 0),  # Orange
             secondary=Color(255, 193, 7),  # Amber
             background=Color(66, 66, 66),  # Dark gray

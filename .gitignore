@@ -182,3 +182,6 @@ Thumbs.db
 
 # Frames written by tools/agent_view.py
 .agent-view/
+
+# WSL/Windows download markers, one per file copied in from a browser
+*:Zone.Identifier

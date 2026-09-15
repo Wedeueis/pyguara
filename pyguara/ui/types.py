@@ -1,6 +1,8 @@
 """UI domain definitions and constants."""
 
-from dataclasses import dataclass, field
+from __future__ import annotations
+
+from dataclasses import dataclass, field, fields
 from enum import Enum, auto
 
 from pyguara.common.types import Color  # FIX: Import Color
@@ -98,20 +100,208 @@ class UIEventType(Enum):
 # --- Theme Structures ---
 
 
+# The five colours every other role is derived from, and the two state
+# overlays. A theme that sets only these still gets a coherent full palette
+# out of `ColorScheme.derive()`.
+_BASE_PRIMARY = Color(70, 130, 180)
+_BASE_SECONDARY = Color(100, 149, 237)
+_BASE_BACKGROUND = Color(32, 32, 32)
+_BASE_TEXT = Color(255, 255, 255)
+_BASE_BORDER = Color(96, 96, 96)
+
+
+def _relative_luminance(color: Color) -> float:
+    """Perceived brightness of `color`, 0.0-255.0.
+
+    Args:
+        color: The colour to weigh.
+
+    Returns:
+        The luminance, weighting green far above blue the way an eye does.
+    """
+    return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b
+
+
+def _readable_on(color: Color) -> Color:
+    """Black or white, whichever stays legible on `color`.
+
+    Args:
+        color: The background the text sits on.
+
+    Returns:
+        `Color.BLACK` over a light background, `Color.WHITE` over a dark one.
+    """
+    return Color.BLACK if _relative_luminance(color) > 140 else Color.WHITE
+
+
+def _toward_text(background: Color, text: Color, amount: float) -> Color:
+    """Shift `background` towards `text` by `amount`.
+
+    Lifting a surface means lightening it in a dark theme and darkening it
+    in a light one. Interpolating towards the *text* colour does both,
+    because a theme's text is always the far end of its own contrast range.
+
+    Args:
+        background: The surface colour to shift.
+        text: The theme's text colour, standing in for "away from the
+            background".
+        amount: How far to move, 0.0-1.0.
+
+    Returns:
+        The shifted colour.
+    """
+    return background.lerp(text, amount)
+
+
 @dataclass
 class ColorScheme:
-    """Standardized color palette using Color objects."""
+    """Standardized color palette using Color objects.
 
-    # FIX: Use Color objects instead of Tuples
-    primary: Color = field(default_factory=lambda: Color(70, 130, 180))
-    secondary: Color = field(default_factory=lambda: Color(100, 149, 237))
-    background: Color = field(default_factory=lambda: Color(32, 32, 32))
-    text: Color = field(default_factory=lambda: Color(255, 255, 255))
-    border: Color = field(default_factory=lambda: Color(96, 96, 96))
+    Two layers. The **base** five plus two overlays are the shorthand a
+    theme has always been written in. The **semantic roles** below them --
+    surfaces, a text hierarchy, edges, action states -- are what components
+    actually read, so a design system can say "this is the pressed colour
+    of a primary action" rather than overloading `secondary` to mean it.
+
+    Every semantic role has a default derived from the base colours, so a
+    theme that sets only the base five is still coherent: see `derive()`,
+    which is how the presets and `pyguara.ui.design_system` build theirs.
+    """
+
+    # --- Base ---
+    primary: Color = field(default_factory=lambda: _BASE_PRIMARY)
+    secondary: Color = field(default_factory=lambda: _BASE_SECONDARY)
+    background: Color = field(default_factory=lambda: _BASE_BACKGROUND)
+    text: Color = field(default_factory=lambda: _BASE_TEXT)
+    border: Color = field(default_factory=lambda: _BASE_BORDER)
 
     # State overlays
     hover_overlay: Color = field(default_factory=lambda: Color(255, 255, 255))
     press_overlay: Color = field(default_factory=lambda: Color(0, 0, 0))
+
+    # --- Surfaces, in depth order: the page, a card on it, something
+    # raised off the card, and something cut into it. ---
+    surface_canvas: Color = field(default_factory=lambda: _BASE_BACKGROUND)
+    surface_card: Color = field(
+        default_factory=lambda: _toward_text(_BASE_BACKGROUND, _BASE_TEXT, 0.06)
+    )
+    surface_raised: Color = field(
+        default_factory=lambda: _toward_text(_BASE_BACKGROUND, _BASE_TEXT, 0.12)
+    )
+    surface_inset: Color = field(
+        default_factory=lambda: _BASE_BACKGROUND.lerp(Color.BLACK, 0.12)
+    )
+
+    # --- Text, in descending emphasis. ---
+    text_heading: Color = field(default_factory=lambda: _BASE_TEXT)
+    text_body: Color = field(default_factory=lambda: _BASE_TEXT)
+    text_muted: Color = field(
+        default_factory=lambda: _BASE_TEXT.lerp(_BASE_BACKGROUND, 0.35)
+    )
+    text_faint: Color = field(
+        default_factory=lambda: _BASE_TEXT.lerp(_BASE_BACKGROUND, 0.55)
+    )
+    text_on_primary: Color = field(default_factory=lambda: _readable_on(_BASE_PRIMARY))
+    text_on_disabled: Color = field(
+        default_factory=lambda: _BASE_TEXT.lerp(_BASE_BACKGROUND, 0.55)
+    )
+
+    # --- Edges. ---
+    edge: Color = field(default_factory=lambda: _BASE_BORDER)
+    edge_strong: Color = field(
+        default_factory=lambda: _BASE_BORDER.lerp(_BASE_TEXT, 0.3)
+    )
+    focus_ring: Color = field(default_factory=lambda: _BASE_SECONDARY)
+
+    # --- Actions, by state. ---
+    action_primary: Color = field(default_factory=lambda: _BASE_PRIMARY)
+    action_primary_hover: Color = field(
+        default_factory=lambda: _BASE_PRIMARY.lerp(Color.WHITE, 0.15)
+    )
+    action_primary_press: Color = field(
+        default_factory=lambda: _BASE_PRIMARY.lerp(Color.BLACK, 0.15)
+    )
+    action_secondary: Color = field(default_factory=lambda: _BASE_SECONDARY)
+    action_disabled: Color = field(
+        default_factory=lambda: _toward_text(_BASE_BACKGROUND, _BASE_TEXT, 0.1)
+    )
+
+    @classmethod
+    def derive(
+        cls,
+        *,
+        primary: Color | None = None,
+        secondary: Color | None = None,
+        background: Color | None = None,
+        text: Color | None = None,
+        border: Color | None = None,
+        **overrides: Color,
+    ) -> ColorScheme:
+        """Build a full scheme from the base colours, then apply `overrides`.
+
+        This is the difference between a preset that only names five
+        colours and one whose surfaces, edges and action states all belong
+        to the same palette. Pass a role in `overrides` to state it
+        outright -- which is what a design system does, having chosen every
+        value deliberately rather than by rule.
+
+        Args:
+            primary: The brand/action colour.
+            secondary: The supporting accent, also the default focus ring.
+            background: The canvas the UI sits on.
+            text: The body text colour, and the far end of the contrast
+                range every surface is lifted towards.
+            border: The default edge colour.
+            **overrides: Any role named here wins over the derived value.
+
+        Returns:
+            A scheme with every role populated.
+
+        Raises:
+            TypeError: If `overrides` names something that is not a role.
+        """
+        base_primary = primary if primary is not None else _BASE_PRIMARY
+        base_secondary = secondary if secondary is not None else _BASE_SECONDARY
+        base_background = background if background is not None else _BASE_BACKGROUND
+        base_text = text if text is not None else _BASE_TEXT
+        base_border = border if border is not None else _BASE_BORDER
+
+        derived: dict[str, Color] = {
+            "primary": base_primary,
+            "secondary": base_secondary,
+            "background": base_background,
+            "text": base_text,
+            "border": base_border,
+            "surface_canvas": base_background,
+            "surface_card": _toward_text(base_background, base_text, 0.06),
+            "surface_raised": _toward_text(base_background, base_text, 0.12),
+            "surface_inset": base_background.lerp(Color.BLACK, 0.12),
+            "text_heading": base_text,
+            "text_body": base_text,
+            "text_muted": base_text.lerp(base_background, 0.35),
+            "text_faint": base_text.lerp(base_background, 0.55),
+            "text_on_primary": _readable_on(base_primary),
+            "text_on_disabled": base_text.lerp(base_background, 0.55),
+            "edge": base_border,
+            "edge_strong": base_border.lerp(base_text, 0.3),
+            "focus_ring": base_secondary,
+            "action_primary": base_primary,
+            "action_primary_hover": base_primary.lerp(Color.WHITE, 0.15),
+            "action_primary_press": base_primary.lerp(Color.BLACK, 0.15),
+            "action_secondary": base_secondary,
+            "action_disabled": _toward_text(base_background, base_text, 0.1),
+        }
+
+        known = {f.name for f in fields(cls)}
+        unknown = set(overrides) - known
+        if unknown:
+            raise TypeError(
+                f"ColorScheme has no role(s) {sorted(unknown)}. "
+                f"Known roles: {sorted(known)}"
+            )
+
+        derived.update(overrides)
+        return cls(**derived)
 
 
 @dataclass
