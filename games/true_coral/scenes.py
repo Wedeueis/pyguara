@@ -153,7 +153,7 @@ class MenuScene(_AtmosphericScene):
         self.build_atmosphere()
 
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         container = BoxContainer(
             position=Vector2(WINDOW_WIDTH / 2 - 110, 430),
@@ -304,7 +304,7 @@ class GameScene(_AtmosphericScene):
         self.build_atmosphere()
 
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         self._input_manager = self.container.get(InputManager)
         self._setup_input()
@@ -683,7 +683,7 @@ class GameOverScene(_AtmosphericScene):
         self.build_atmosphere()
 
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         container = BoxContainer(
             position=Vector2(WINDOW_WIDTH / 2 - 110, 420),

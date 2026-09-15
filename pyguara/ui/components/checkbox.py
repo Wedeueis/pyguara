@@ -1,5 +1,7 @@
 """Boolean toggle component."""
 
+from collections.abc import Callable
+
 from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
@@ -17,6 +19,26 @@ class Checkbox(Widget):
         self.checked = checked
         self.box_size = 20
         self.label_spacing = 5
+
+        # Fired only on a real toggle, so a settings screen can react
+        # instead of comparing `checked` against a remembered copy.
+        self.on_change: Callable[[bool], None] | None = None
+
+    def set_checked(self, checked: bool) -> None:
+        """Set the state, firing `on_change` if it moved.
+
+        Args:
+            checked: The new state.
+        """
+        if checked == self.checked:
+            return
+        self.checked = checked
+        if self.on_change is not None:
+            self.on_change(checked)
+
+    def toggle(self) -> None:
+        """Flip the state, firing `on_change`."""
+        self.set_checked(not self.checked)
 
     def measure(self, renderer: UIRenderer) -> None:
         """Recompute total width (box + label) from the label's text size."""
@@ -70,5 +92,5 @@ class Checkbox(Widget):
             and self.state == UIElementState.HOVERED
             and consumed
         ):
-            self.checked = not self.checked
+            self.toggle()
         return consumed

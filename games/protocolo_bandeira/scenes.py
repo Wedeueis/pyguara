@@ -163,7 +163,7 @@ class MenuScene(_ClearingScene):
     def on_enter(self) -> None:
         """Create menu UI and the clearing behind it."""
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         self.build_fx(seed=7)
 
@@ -325,7 +325,7 @@ class ArenaScene(_ClearingScene):
     def on_enter(self) -> None:
         """Initialize game systems and start the first wave."""
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         self.build_fx()
 
@@ -469,7 +469,7 @@ class ArenaScene(_ClearingScene):
         frame. Nothing to build here; the method stays as the place that
         explains why.
         """
-        self.container.get(UIManager)._root_elements.clear()
+        self.container.get(UIManager).clear()
 
     # ---- feedback --------------------------------------------------
 
@@ -974,7 +974,7 @@ class GameOverScene(_ClearingScene):
         _high_score = max(_high_score, self._final_score)
 
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         self.build_fx(seed=3)
 
