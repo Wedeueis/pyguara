@@ -346,6 +346,7 @@ def teleport(transform: Transform, position: Vector2) -> None:
     interpolate across.
 
     Args:
+        transform: The transform to move.
         position: Where to place the transform.
     """
     transform.position = position
@@ -370,6 +371,7 @@ def render_position(transform: Transform, alpha: float) -> Vector2:
     is not maintained for it.
 
     Args:
+        transform: The transform to locate.
         alpha: Progress through the current tick, 0.0 to 1.0. The
             application hands this to `Scene.render` as `render_alpha`.
 
@@ -385,6 +387,7 @@ def is_ancestor_of(transform: Transform, other: Transform) -> bool:
     """Report whether this transform is somewhere above `other`.
 
     Args:
+        transform: The candidate ancestor.
         other: The candidate descendant.
 
     Returns:
@@ -406,6 +409,7 @@ def set_parent(
     """Attach this transform to a parent, or detach it with None.
 
     Args:
+        transform: The transform to reparent.
         parent: The new parent, or None to make this a root.
         keep_world_transform: Preserve the current world position,
             rotation and scale by rewriting the local values.
@@ -468,6 +472,7 @@ def translate(transform: Transform, translation: Vector2) -> None:
     """Move by an offset in local space.
 
     Args:
+        transform: The transform to move.
         translation: The offset to add to the local position.
     """
     transform.position += translation
@@ -477,6 +482,7 @@ def rotate(transform: Transform, angle_radians: float) -> None:
     """Turn by an angle in **radians**.
 
     Args:
+        transform: The transform to turn.
         angle_radians: The angle to add to the local rotation. Use
             `math.radians()` to convert, or set `rotation_degrees`.
     """
@@ -487,6 +493,7 @@ def look_at(transform: Transform, target: Vector2) -> None:
     """Rotate so `forward` points at a world position.
 
     Args:
+        transform: The transform to rotate.
         target: The world point to face.
     """
     direction = target - transform.world_position
@@ -497,6 +504,7 @@ def distance_to(transform: Transform, other: Transform) -> float:
     """Return the world-space distance to another transform.
 
     Args:
+        transform: The transform to measure from.
         other: The transform to measure to.
 
     Returns:
@@ -509,6 +517,7 @@ def local_to_world(transform: Transform, local_point: Vector2) -> Vector2:
     """Convert a point from this transform's local space to world space.
 
     Args:
+        transform: The transform whose local space the point is in.
         local_point: The point in local space.
 
     Returns:
@@ -528,6 +537,7 @@ def world_to_local(transform: Transform, world_point: Vector2) -> Vector2:
     """Convert a point from world space to this transform's local space.
 
     Args:
+        transform: The transform whose local space to convert into.
         world_point: The point in world space.
 
     Returns:
