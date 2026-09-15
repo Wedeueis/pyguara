@@ -108,7 +108,7 @@ class MenuScene(Scene):
     def on_enter(self) -> None:
         """Build the stage-select UI."""
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         container = BoxContainer(
             position=Vector2(340, 250), size=Vector2(280, 260), spacing=14
@@ -214,7 +214,7 @@ class GameScene(Scene):
     def on_enter(self) -> None:
         """Build the level, register systems, and wire input/events."""
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         self._input_manager = self.container.get(InputManager)
         self._setup_input()

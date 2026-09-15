@@ -38,13 +38,49 @@ class PygameUIRenderer:
     def draw_rect(
         self, rect: Rect, color: Color, width: int = 0, border_radius: int = 0
     ) -> None:
-        """Draw a filled or outlined rectangle."""
+        """Draw a filled or outlined rectangle.
+
+        A translucent colour is blended through a scratch surface rather
+        than drawn directly. `pygame.draw` *replaces* the destination pixel
+        including its alpha, so a scrim drawn straight onto the display --
+        which is opaque -- would land solid black instead of dimming the
+        frame behind it. Blitting is what blends.
+        """
         pygame_rect = pygame.Rect(rect.x, rect.y, rect.width, rect.height)
         rgba = self._to_pygame_color(color)
+
+        if rgba[3] < 255 and rect.width > 0 and rect.height > 0:
+            self._blit_blended(pygame_rect, rgba, width, border_radius)
+            return
 
         pygame.draw.rect(
             self._surface, rgba, pygame_rect, width, border_radius=border_radius
         )
+
+    def _blit_blended(
+        self,
+        pygame_rect: pygame.Rect,
+        rgba: tuple[int, int, int, int],
+        width: int,
+        border_radius: int,
+    ) -> None:
+        """Draw `rgba` into a scratch surface and blit it, so alpha blends.
+
+        Args:
+            pygame_rect: Destination rectangle, in screen coordinates.
+            rgba: The colour, with an alpha below 255.
+            width: Outline width; 0 fills.
+            border_radius: Corner radius.
+        """
+        scratch = pygame.Surface(pygame_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(
+            scratch,
+            rgba,
+            pygame.Rect(0, 0, pygame_rect.width, pygame_rect.height),
+            width,
+            border_radius=border_radius,
+        )
+        self._surface.blit(scratch, pygame_rect.topleft)
 
     def draw_circle(
         self, center: Vector2, radius: float, color: Color, width: int = 0

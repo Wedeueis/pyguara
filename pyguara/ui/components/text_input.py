@@ -1,5 +1,7 @@
 """Keyboard input component."""
 
+from collections.abc import Callable
+
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
@@ -19,6 +21,24 @@ class TextInput(Widget):
         self.placeholder = placeholder
         self.active = False
         self.max_length = 32
+
+        # Fired on every accepted edit, so a field can drive something live
+        # rather than being read once on submit.
+        self.on_change: Callable[[str], None] | None = None
+
+    def set_text(self, text: str) -> None:
+        """Replace the contents, firing `on_change` if they differ.
+
+        Args:
+            text: The new contents, truncated to `max_length`.
+        """
+        trimmed = text[: self.max_length]
+        if trimmed == self.text:
+            return
+        self.text = trimmed
+        self.invalidate_layout()
+        if self.on_change is not None:
+            self.on_change(trimmed)
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the input box and text."""
@@ -75,18 +95,14 @@ class TextInput(Widget):
 
         # Keyboard input handling
         if self.active and event_type == UIEventType.KEY_DOWN:
-            if key_code == 8:  # Backspace
-                if self.text:
-                    self.text = self.text[:-1]
-                return True
-            elif key_code == 127:  # Delete
+            if key_code in (8, 127):  # Backspace, Delete
                 # Delete behaves same as backspace for simple single-cursor input
                 if self.text:
-                    self.text = self.text[:-1]
+                    self.set_text(self.text[:-1])
                 return True
             elif 32 <= key_code <= 126:  # Printable ASCII range
                 if len(self.text) < self.max_length:
-                    self.text += chr(key_code)
+                    self.set_text(self.text + chr(key_code))
                 return True
 
         return False

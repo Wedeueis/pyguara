@@ -60,16 +60,25 @@ def cerrado_dusk() -> UITheme:
         text_body=Color.from_hex("#f2e6d2"),
         text_muted=Color.from_hex("#b9a3ad"),
         text_faint=Color.from_hex("#87707f"),
-        text_on_primary=Wood.INK_900,
+        # Cream on the Guará orange, as specified. Deriving this by
+        # luminance picks ink, which is legible but not what the design
+        # team drew; where the palette states a value it wins over the rule.
+        text_on_primary=Sand.C100,
         text_on_disabled=Color.from_hex("#87707f"),
         edge=Color.from_hex("#493a52"),
         edge_strong=Color.from_hex("#6b5578"),
+        edge_subtle=Color.from_hex("#31253a"),
         focus_ring=Sand.C300,
         action_primary=Guara.C500,
         action_primary_hover=Guara.C400,
         action_primary_press=Guara.C600,
         action_secondary=Sand.C500,
         action_disabled=Color.from_hex("#352b3a"),
+        surface_scrim=Color(26, 18, 32, 189),
+        surface_overlay=Color(23, 17, 27, 240),
+        state_ok=Color.from_hex("#8ab332"),
+        state_warn=Color.from_hex("#e4b509"),
+        state_danger=Guara.C500,
     )
     return UITheme(
         name="cerrado_dusk",
@@ -111,6 +120,7 @@ def cerrado_day() -> UITheme:
         text_on_disabled=Color.from_hex("#9b7c58"),
         edge=Color.from_hex("#e0bf8a"),
         edge_strong=Color.from_hex("#bb8b52"),
+        edge_subtle=Color.from_hex("#eed7a6"),
         # Not the Guará the day theme's primary action is already wearing:
         # a focus ring the same colour as the fill it surrounds is not a
         # focus ring. Ink reads against both the action and the sand.
@@ -120,6 +130,13 @@ def cerrado_day() -> UITheme:
         action_primary_press=Guara.C700,
         action_secondary=Wood.C400,
         action_disabled=Color.from_hex("#e0bf8a"),
+        # The day theme's scrim is still ink, not sand: dimming towards the
+        # background would wash a modal out rather than push the scene back.
+        surface_scrim=Color(36, 21, 49, 160),
+        surface_overlay=Color(254, 245, 223, 244),
+        state_ok=Color.from_hex("#6f9422"),
+        state_warn=Color.from_hex("#c79a06"),
+        state_danger=Guara.C700,
     )
     return UITheme(
         name="cerrado_day",

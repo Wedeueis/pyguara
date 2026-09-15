@@ -315,7 +315,7 @@ class ClearingScene(Scene):
         outlives it.
         """
 
-        self.container.get(UIManager)._root_elements.clear()
+        self.container.get(UIManager).clear()
 
     # ---- events ----------------------------------------------------
 
@@ -382,7 +382,7 @@ class ClearingScene(Scene):
             return
 
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
         self._cards = [
             CardElement(card, position)
             for card, position in zip(
@@ -425,7 +425,7 @@ class ClearingScene(Scene):
         """Take the cards down and give focus back to nothing."""
         ui_manager = self.container.get(UIManager)
         ui_manager.set_focus(None)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
         self._cards = []
 
     def _spend_level(self) -> None:

@@ -70,7 +70,7 @@ class TitleScene(Scene):
         """Create title UI."""
         print("Guará & Falcão - Title")
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         # Title
         title = Label("GUARA & FALCAO", position=Vector2(260, 100))
@@ -169,7 +169,7 @@ class GameScene(Scene):
 
         # Get managers
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         self._input_manager = self.container.get(InputManager)
         self._coroutine_manager = self.container.get(CoroutineManager)
@@ -462,7 +462,7 @@ class GameScene(Scene):
         self._level_complete = False
 
         ui_manager = self.container.get(UIManager)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         if self._level_builder:
             spawn_point = self._level_builder.load_level(self.entity_manager)

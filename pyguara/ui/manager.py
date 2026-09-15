@@ -8,7 +8,7 @@ from pyguara.input import keys
 from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.log import get_logger
 from pyguara.ui.base import UIElement
-from pyguara.ui.types import UIEventType
+from pyguara.ui.types import UIEventType, UILayer
 
 logger = get_logger(__name__)
 
@@ -18,7 +18,11 @@ class UIManager:
 
     def __init__(self, dispatcher: EventDispatcher) -> None:
         """Initialize the UI manager and subscribe to input events."""
-        self._root_elements: list[UIElement] = []
+        # Roots by layer, each layer keeping the order things were added.
+        # A flat list could not say "the HUD is under the pause menu" -- it
+        # could only say "the HUD was added first", which stops being true
+        # the moment a scene rebuilds it.
+        self._layers: dict[int, list[UIElement]] = {}
         self._dispatcher = dispatcher
         self._focused_element: UIElement | None = None
 
@@ -34,10 +38,93 @@ class UIManager:
         self._dispatcher.subscribe(OnRawKeyEvent, self._on_key_event)
         self._dispatcher.subscribe(WindowResizeEvent, self._on_resize_event)
 
-    def add_element(self, element: UIElement) -> None:
-        """Add a root-level UI element."""
-        self._root_elements.append(element)
+    def add_element(self, element: UIElement, layer: int = UILayer.CONTENT) -> None:
+        """Add a root-level UI element to `layer`.
+
+        Args:
+            element: The root to add.
+            layer: Which band it belongs to. Higher draws later and is hit
+                first. `UILayer` names the four the engine expects.
+        """
+        self._layers.setdefault(int(layer), []).append(element)
+        element._manager = self
         self._layout_dirty = True
+
+    def remove_element(self, element: UIElement) -> bool:
+        """Remove a root element, whichever layer it is in.
+
+        Args:
+            element: The root to remove.
+
+        Returns:
+            True if it was there.
+        """
+        for roots in self._layers.values():
+            if element in roots:
+                roots.remove(element)
+                element._manager = None
+                if self._focused_element is element:
+                    self.set_focus(None)
+                self._layout_dirty = True
+                return True
+        return False
+
+    def clear(self, layer: int | None = None) -> None:
+        """Drop every root element, or every root in one layer.
+
+        Scene teardown is what this is for. Before it existed, every demo in
+        the repository reached into the manager's private list to do the
+        same thing.
+
+        Args:
+            layer: The layer to empty, or None for all of them.
+        """
+        if layer is None:
+            targets = list(self._layers.values())
+        else:
+            targets = [self._layers.get(int(layer), [])]
+
+        for roots in targets:
+            for element in roots:
+                element._manager = None
+            roots.clear()
+
+        if self._focused_element is not None and not any(
+            self._focused_element in roots
+            or self._is_descendant(root, self._focused_element)
+            for roots in self._layers.values()
+            for root in roots
+        ):
+            self.set_focus(None)
+        self._layout_dirty = True
+
+    def elements(self, layer: int | None = None) -> list[UIElement]:
+        """The root elements, back to front.
+
+        Args:
+            layer: Restrict to one layer, or None for all of them.
+
+        Returns:
+            A snapshot list -- mutate the manager, not this.
+        """
+        if layer is not None:
+            return list(self._layers.get(int(layer), []))
+        return [element for _, element in self._ordered_roots()]
+
+    def _ordered_roots(self) -> list[tuple[int, UIElement]]:
+        """Every root as `(layer, element)`, back to front."""
+        return [
+            (layer, element)
+            for layer in sorted(self._layers)
+            for element in self._layers[layer]
+        ]
+
+    @staticmethod
+    def _is_descendant(root: UIElement, element: UIElement) -> bool:
+        """Whether `element` sits anywhere under `root`."""
+        if root is element:
+            return True
+        return any(UIManager._is_descendant(child, element) for child in root.children)
 
     def set_screen_size(self, width: int, height: int) -> None:
         """Tell the UI the size of the surface its roots lay out against.
@@ -63,7 +150,7 @@ class UIManager:
 
     def update(self, dt: float) -> None:
         """Update all managed UI elements."""
-        for element in self._root_elements:
+        for _, element in self._ordered_roots():
             element.update(dt)
 
     def render(self, renderer: UIRenderer) -> None:
@@ -72,7 +159,7 @@ class UIManager:
             self._run_layout(renderer)
             self._layout_dirty = False
 
-        for element in self._root_elements:
+        for _, element in self._ordered_roots():
             if element.visible:
                 element.render(renderer)
 
@@ -80,7 +167,7 @@ class UIManager:
         """Lay every root out against the current screen rect."""
         if self._screen_rect.width <= 0 or self._screen_rect.height <= 0:
             has_constraints = any(
-                self._subtree_has_constraints(el) for el in self._root_elements
+                self._subtree_has_constraints(el) for _, el in self._ordered_roots()
             )
             if has_constraints and not self._warned_no_screen:
                 logger.warning(
@@ -91,7 +178,7 @@ class UIManager:
                 self._warned_no_screen = True
             return
 
-        for element in self._root_elements:
+        for _, element in self._ordered_roots():
             element.layout(self._screen_rect, renderer)
 
     @staticmethod
@@ -114,12 +201,14 @@ class UIManager:
 
         # Notify old element of focus lost
         if self._focused_element:
+            self._focused_element.set_focused(False)
             self._focused_element.handle_event(UIEventType.FOCUS_LOST, Vector2(0, 0), 0)
 
         self._focused_element = element
 
         # Notify new element of focus gained
         if self._focused_element:
+            self._focused_element.set_focused(True)
             self._focused_element.handle_event(
                 UIEventType.FOCUS_GAINED, Vector2(0, 0), 0
             )
@@ -145,8 +234,9 @@ class UIManager:
         # On click, track focus changes
         clicked_element: UIElement | None = None
 
-        # Iterate in reverse (Front-to-Back) to find who clicks first
-        for element in reversed(self._root_elements):
+        # Front-to-back across every layer, so an overlay takes the click
+        # before the HUD underneath it does.
+        for _, element in reversed(self._ordered_roots()):
             if element.handle_event(event_type, pos, event.button):
                 if event_type == UIEventType.MOUSE_DOWN:
                     clicked_element = element
@@ -170,20 +260,29 @@ class UIManager:
         invalidated by every `add_child`, every `visible` flip and every
         `enabled` flip, and traversal happens on a keypress -- human-speed,
         not frame-speed.
-        """
-        ring: list[UIElement] = []
 
-        def walk(element: UIElement) -> None:
+        Returns:
+            The focusable elements of the topmost layer that has any.
+        """
+
+        def walk(element: UIElement, ring: list[UIElement]) -> None:
             if not element.visible or not element.enabled:
                 return
             if element.focusable:
                 ring.append(element)
             for child in element.children:
-                walk(child)
+                walk(child, ring)
 
-        for root in self._root_elements:
-            walk(root)
-        return ring
+        # Only the topmost layer that has anything focusable. That is what
+        # makes a modal modal: while an options panel is up, Tab cycles the
+        # options and cannot wander into the HUD frozen behind it.
+        for layer in sorted(self._layers, reverse=True):
+            ring: list[UIElement] = []
+            for root in self._layers[layer]:
+                walk(root, ring)
+            if ring:
+                return ring
+        return []
 
     def focus_next(self) -> UIElement | None:
         """Move focus to the next focusable element, wrapping at the end.
@@ -242,7 +341,9 @@ class UIManager:
         if consumed or not event.is_down:
             return
 
-        if event.key_code == keys.TAB:
+        if event.key_code in (keys.RETURN, keys.SPACE):
+            self._activate_focused()
+        elif event.key_code == keys.TAB:
             shifted = bool(event.modifiers & {keys.L_SHIFT, keys.R_SHIFT})
             if shifted:
                 self.focus_previous()
@@ -252,6 +353,19 @@ class UIManager:
             self.focus_next()
         elif event.key_code in (keys.UP, keys.LEFT):
             self.focus_previous()
+
+    def _activate_focused(self) -> None:
+        """Fire the focused element's click callback.
+
+        What makes a menu keyboard-complete: Tab to a button, press Enter.
+        Without it the ring could move but never choose, and a showcase
+        that needs a mouse to press a button is not showing much.
+        """
+        element = self._focused_element
+        if element is None or not element.enabled or not element.visible:
+            return
+        if element.on_click is not None:
+            element.on_click(element)
 
     def _on_resize_event(self, event: WindowResizeEvent) -> None:
         """Re-lay the UI out against the new window size."""

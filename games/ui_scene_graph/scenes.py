@@ -29,7 +29,7 @@ class GameScene(Scene):
         ui_manager = self.container.get(UIManager)
 
         # Clear previous UI (Tutorial simplification)
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         # Create Back Button
         btn_back = Button("BACK", position=Vector2(20, 20), size=Vector2(100, 40))
@@ -72,7 +72,7 @@ class MenuScene(Scene):
         ui_manager = self.container.get(UIManager)
 
         # Clear previous UI
-        ui_manager._root_elements.clear()
+        ui_manager.clear()
 
         # Create a vertical box container
         container = BoxContainer(

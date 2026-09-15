@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
@@ -45,6 +45,17 @@ class UIElement(ABC):
 
         # Callbacks
         self.on_click: Callable[[UIElement], None] | None = None
+
+        # Whether the focus ring is currently on this element. Kept apart
+        # from `state` because focus outlives a hover: a focused button the
+        # mouse then passes over must go back to looking focused when the
+        # cursor leaves, not to looking idle.
+        self._focused = False
+
+        # Set by `UIManager.add_element` on a root, so an element can tell
+        # the manager its layout is stale -- a label whose text changed is
+        # a different width, and nothing else can see that.
+        self._manager: Any | None = None
 
     @property
     def theme(self) -> "UITheme":
@@ -105,6 +116,49 @@ class UIElement(ABC):
         # 2. Self Processing
         return self._process_input(event_type, position, button)
 
+    def set_focused(self, focused: bool) -> None:
+        """Mark this element as holding (or losing) the focus ring.
+
+        `UIElementState.FOCUSED` was read by `Button`, `Checkbox` and the
+        design-system components long before anything assigned it, so Tab
+        moved the ring invisibly. This is what assigns it.
+
+        Args:
+            focused: Whether the ring is now on this element.
+        """
+        self._focused = focused
+        if self.state not in (UIElementState.PRESSED, UIElementState.HOVERED):
+            self.state = self._resting_state()
+
+    def set_enabled(self, enabled: bool) -> None:
+        """Enable or disable the element, and show it.
+
+        Args:
+            enabled: Whether the element accepts input.
+        """
+        self.enabled = enabled
+        self.state = self._resting_state()
+
+    def _resting_state(self) -> UIElementState:
+        """What this element looks like when it is neither hovered nor held."""
+        if not self.enabled:
+            return UIElementState.DISABLED
+        if self._focused:
+            return UIElementState.FOCUSED
+        return UIElementState.NORMAL
+
+    def invalidate_layout(self) -> None:
+        """Tell the manager this element's layout is stale.
+
+        Walks up to the root, since the manager only knows about roots. A
+        no-op for an element that is not in a manager.
+        """
+        element: UIElement = self
+        while element.parent is not None:
+            element = element.parent
+        if element._manager is not None:
+            element._manager.invalidate_layout()
+
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int
     ) -> bool:
@@ -122,7 +176,7 @@ class UIElement(ABC):
                 return True  # Consume hover
             else:
                 if self.state == UIElementState.HOVERED:
-                    self.state = UIElementState.NORMAL
+                    self.state = self._resting_state()
 
         elif event_type == UIEventType.MOUSE_DOWN:
             if contains and button == 1:
@@ -136,7 +190,7 @@ class UIElement(ABC):
                     if self.on_click:
                         self.on_click(self)
                 else:
-                    self.state = UIElementState.NORMAL
+                    self.state = self._resting_state()
                 return True
 
         return False

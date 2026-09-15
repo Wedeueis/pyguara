@@ -39,5 +39,17 @@ class Label(Widget):
         )
 
     def set_text(self, text: str) -> None:
-        """Update text and force layout recalculation."""
+        """Update the text and force a layout recalculation.
+
+        The recalculation is the point: a label sizes itself from its
+        content, so a HUD counter going from "9" to "10" is a different
+        width, and every sibling in its container moves. This said it
+        forced a layout long before it did.
+
+        Args:
+            text: The new text.
+        """
+        if text == self.text:
+            return
         self.text = text
+        self.invalidate_layout()

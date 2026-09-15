@@ -64,6 +64,16 @@ class Skins:
         text=Sand.C100,
     )
 
+    GHOST = ButtonSkin(
+        # Transparent fill: a ghost button is an outline over whatever it
+        # sits on, which is why every colour here but the fill is opaque.
+        fill=Color(0, 0, 0, 0),
+        hover=Color(242, 230, 210, 20),
+        press=Color(242, 230, 210, 40),
+        edge=Sand.C500,
+        text=Sand.C100,
+    )
+
     GUARA = ButtonSkin(
         fill=Guara.C500,
         hover=Guara.C400,

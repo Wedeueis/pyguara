@@ -177,3 +177,67 @@ class TestSerialisation:
         clone.colors.surface_card = Color(9, 9, 9)
 
         assert theme.colors.surface_card != Color(9, 9, 9)
+
+
+class TestModalAndStatusRoles:
+    """Roles the design system's own token file names, ported in a second
+    pass because the showcase needs them: a scrim and an overlay surface for
+    modals, a subtle edge for row rules, and the three status colours a
+    meter is drawn in."""
+
+    def test_the_scrim_is_translucent(self) -> None:
+        """An opaque scrim is not a scrim -- it hides what it should dim."""
+        scheme = ColorScheme.derive(**DARK)
+
+        assert 0 < scheme.surface_scrim.a < 255
+
+    def test_the_scrim_is_darker_than_the_canvas(self) -> None:
+        scheme = ColorScheme.derive(**LIGHT)
+
+        assert _luminance(scheme.surface_scrim) < _luminance(scheme.surface_canvas)
+
+    def test_an_overlay_is_nearly_solid(self) -> None:
+        """A modal surface shows a hint of the scene, not a view of it."""
+        scheme = ColorScheme.derive(**DARK)
+
+        assert scheme.surface_overlay.a > scheme.surface_scrim.a
+
+    @pytest.mark.parametrize("base", [DARK, LIGHT], ids=["dark", "light"])
+    def test_a_subtle_edge_sits_between_the_surface_and_the_edge(
+        self, base: dict[str, Color]
+    ) -> None:
+        """A row rule that reads as strongly as a border is not a rule."""
+        scheme = ColorScheme.derive(**base)
+
+        subtle = abs(_luminance(scheme.edge_subtle) - _luminance(scheme.surface_canvas))
+        full = abs(_luminance(scheme.edge) - _luminance(scheme.surface_canvas))
+        assert subtle < full
+
+    def test_status_colours_do_not_follow_the_theme(self) -> None:
+        """Danger is red because of what red means, not what the theme is."""
+        blue = ColorScheme.derive(primary=Color(0, 0, 255))
+        green = ColorScheme.derive(primary=Color(0, 255, 0))
+
+        assert blue.state_danger == green.state_danger
+        assert blue.state_danger.r > blue.state_danger.b
+
+    def test_a_theme_can_still_state_its_own(self) -> None:
+        scheme = ColorScheme.derive(state_danger=Color(1, 2, 3))
+
+        assert scheme.state_danger == Color(1, 2, 3)
+
+
+class TestTheCerradoThemesCarryThem:
+    def test_dusk_uses_the_specified_text_on_primary(self) -> None:
+        """Derivation picks ink by luminance; the palette says cream, and
+        where the design team states a value it wins over the rule."""
+        from pyguara.ui.design_system import cerrado_dusk
+        from pyguara.ui.design_system.tokens import Sand
+
+        assert cerrado_dusk().colors.text_on_primary == Sand.C100
+
+    def test_both_themes_carry_a_translucent_scrim(self) -> None:
+        from pyguara.ui.design_system import cerrado_day, cerrado_dusk
+
+        for theme in (cerrado_dusk(), cerrado_day()):
+            assert 0 < theme.colors.surface_scrim.a < 255

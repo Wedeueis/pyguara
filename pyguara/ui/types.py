@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 
 from pyguara.common.types import Color  # FIX: Import Color
 
@@ -18,6 +18,28 @@ class UIElementState(Enum):
     PRESSED = auto()
     DISABLED = auto()
     FOCUSED = auto()
+
+
+class UILayer(IntEnum):
+    """Which band of the screen an element belongs to.
+
+    The manager sorts roots by layer and then by the order they were added,
+    so a HUD stays under an overlay no matter which was built first -- the
+    thing a flat list cannot express. Values are spaced by 100 so a game can
+    slot its own band between two of these without renumbering.
+    """
+
+    BACKDROP = 0
+    """Behind everything: a menu's backing plate, a vignette."""
+
+    CONTENT = 100
+    """The default. A menu, a screen's own widgets."""
+
+    HUD = 200
+    """In-world readouts that stay up while the game runs."""
+
+    OVERLAY = 300
+    """Modals: a pause menu, an options panel, a dialog."""
 
 
 class UIAnchor(Enum):
@@ -153,6 +175,34 @@ def _toward_text(background: Color, text: Color, amount: float) -> Color:
     return background.lerp(text, amount)
 
 
+# Conventional status colours. Unlike every other role these are *not*
+# derivable from a theme's five base colours -- "danger" is red because of
+# what red means, not because of what the theme's primary is -- so they have
+# fixed defaults that a theme overrides when its palette has its own.
+_BASE_STATE_OK = Color.from_hex("#4caf50")
+_BASE_STATE_WARN = Color.from_hex("#ff9800")
+_BASE_STATE_DANGER = Color.from_hex("#f44336")
+
+SCRIM_ALPHA = 190
+"""How opaque a scrim is: enough to push a frozen scene back, not hide it."""
+
+OVERLAY_ALPHA = 240
+"""A modal surface is nearly solid -- a hint of the scene, not a view of it."""
+
+
+def _scrim_from(background: Color) -> Color:
+    """The translucent ink a modal is laid over.
+
+    Args:
+        background: The theme's canvas colour.
+
+    Returns:
+        A darkened, part-transparent version of it.
+    """
+    dark = background.lerp(Color.BLACK, 0.3)
+    return Color(dark.r, dark.g, dark.b, SCRIM_ALPHA)
+
+
 @dataclass
 class ColorScheme:
     """Standardized color palette using Color objects.
@@ -226,6 +276,26 @@ class ColorScheme:
         default_factory=lambda: _toward_text(_BASE_BACKGROUND, _BASE_TEXT, 0.1)
     )
 
+    # --- Modal surfaces. Both carry alpha, so both need a renderer that
+    # blends rather than replaces -- see the UI renderers' draw_rect. ---
+    surface_scrim: Color = field(default_factory=lambda: _scrim_from(_BASE_BACKGROUND))
+    surface_overlay: Color = field(
+        default_factory=lambda: Color(
+            _BASE_BACKGROUND.lerp(Color.BLACK, 0.12).r,
+            _BASE_BACKGROUND.lerp(Color.BLACK, 0.12).g,
+            _BASE_BACKGROUND.lerp(Color.BLACK, 0.12).b,
+            OVERLAY_ALPHA,
+        )
+    )
+    edge_subtle: Color = field(
+        default_factory=lambda: _BASE_BACKGROUND.lerp(_BASE_BORDER, 0.5)
+    )
+
+    # --- Status. What a meter means, not what the brand looks like. ---
+    state_ok: Color = field(default_factory=lambda: _BASE_STATE_OK)
+    state_warn: Color = field(default_factory=lambda: _BASE_STATE_WARN)
+    state_danger: Color = field(default_factory=lambda: _BASE_STATE_DANGER)
+
     @classmethod
     def derive(
         cls,
@@ -290,6 +360,17 @@ class ColorScheme:
             "action_primary_press": base_primary.lerp(Color.BLACK, 0.15),
             "action_secondary": base_secondary,
             "action_disabled": _toward_text(base_background, base_text, 0.1),
+            "surface_scrim": _scrim_from(base_background),
+            "surface_overlay": Color(
+                base_background.lerp(Color.BLACK, 0.12).r,
+                base_background.lerp(Color.BLACK, 0.12).g,
+                base_background.lerp(Color.BLACK, 0.12).b,
+                OVERLAY_ALPHA,
+            ),
+            "edge_subtle": base_background.lerp(base_border, 0.5),
+            "state_ok": _BASE_STATE_OK,
+            "state_warn": _BASE_STATE_WARN,
+            "state_danger": _BASE_STATE_DANGER,
         }
 
         known = {f.name for f in fields(cls)}
