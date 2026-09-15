@@ -7,12 +7,16 @@ for them to drift apart.
 
 **On the spawn schedule.** This is time-keyed: a phase says how many
 insects a mound releases per feed, and the clock says which phase it is.
-`kits/spawn`'s `SpawnDirector` was the obvious thing to reach for and is
-deliberately not used -- its model is a release-rate *budget*, and both
-existing consumers in this repository bypass that gate entirely
-(`budget=0.0, cost=0.0`), which is a fair signal that a budget is the
-wrong abstraction for a horde whose whole shape is "more, on a schedule".
-That is a finding to report upward, not a pattern to spread; see the PR.
+`kits/spawn`'s `SpawnDirector` was the obvious thing to reach for and was
+deliberately not used -- its model was a release-rate *budget*, which
+every consumer in this repository bypassed (`budget=0.0, cost=0.0`).
+That finding was reported upward and the budget is now gone: the director
+gates on a time-keyed schedule and an alive cap instead (#163).
+
+This still does not use it, for a different and smaller reason: the phase
+curve is continuous, not a queue of waves, and the *time of day is the run
+clock* -- one number driving the light, the tint and the spawn rate. A
+director would bring a second clock alongside it.
 """
 
 from __future__ import annotations
