@@ -446,6 +446,7 @@ class TextureFactory(Protocol):
         ...
 
 
+@runtime_checkable
 class IFramebuffer(Protocol):
     """Interface for framebuffer objects (render targets).
 
@@ -494,6 +495,7 @@ class IFramebuffer(Protocol):
         ...
 
 
+@runtime_checkable
 class IRenderPass(Protocol):
     """Interface for a single pass in the render pipeline.
 
