@@ -31,12 +31,12 @@ Usage:
 
 from dataclasses import dataclass, field
 
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import StrictComponent, pure_query
 from pyguara.physics.types import ShapeType
 
 
 @dataclass
-class TriggerVolume(BaseComponent):
+class TriggerVolume(StrictComponent):
     """High-level trigger volume component that tracks entities inside it.
 
     TriggerVolume automatically creates a sensor Collider and subscribes to
@@ -61,8 +61,6 @@ class TriggerVolume(BaseComponent):
         one_shot: If True, trigger deactivates after first entity enters.
     """
 
-    _allow_methods: bool = field(default=True, repr=False, init=False)
-
     # Shape configuration (creates sensor Collider)
     shape_type: ShapeType = ShapeType.BOX
     dimensions: list = field(default_factory=lambda: [100.0, 100.0])
@@ -81,6 +79,7 @@ class TriggerVolume(BaseComponent):
         """Initialize base component state."""
         super().__init__()
 
+    @pure_query
     def contains_entity(self, entity_id: str) -> bool:
         """Check if an entity is currently inside the trigger.
 
@@ -92,6 +91,7 @@ class TriggerVolume(BaseComponent):
         """
         return entity_id in self.entities_inside
 
+    @pure_query
     def get_entity_count(self) -> int:
         """Get number of entities currently inside.
 
@@ -100,6 +100,7 @@ class TriggerVolume(BaseComponent):
         """
         return len(self.entities_inside)
 
+    @pure_query
     def is_empty(self) -> bool:
         """Check if trigger is empty.
 
@@ -108,6 +109,7 @@ class TriggerVolume(BaseComponent):
         """
         return len(self.entities_inside) == 0
 
+    @pure_query
     def has_any_entity(self) -> bool:
         """Check if trigger has any entities inside.
 
@@ -116,6 +118,7 @@ class TriggerVolume(BaseComponent):
         """
         return len(self.entities_inside) > 0
 
+    @pure_query
     def matches_tags(self, entity_tags: set[str] | None) -> bool:
         """Check if entity's tags match this trigger's filter.
 
@@ -138,7 +141,7 @@ class TriggerVolume(BaseComponent):
 
 
 @dataclass
-class EntityTags(BaseComponent):
+class EntityTags(StrictComponent):
     """Component for tagging entities with string identifiers.
 
     Tags are used by TriggerVolumes for filtering which entities can
@@ -153,14 +156,13 @@ class EntityTags(BaseComponent):
         tags: Set of string tags for this entity.
     """
 
-    _allow_methods: bool = field(default=True, repr=False, init=False)
-
     tags: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         """Initialize base component state."""
         super().__init__()
 
+    @pure_query
     def has_tag(self, tag: str) -> bool:
         """Check if entity has a specific tag.
 
@@ -172,6 +174,7 @@ class EntityTags(BaseComponent):
         """
         return tag in self.tags
 
+    @pure_query
     def has_any_tag(self, *tags: str) -> bool:
         """Check if entity has any of the specified tags.
 
@@ -183,6 +186,7 @@ class EntityTags(BaseComponent):
         """
         return bool(self.tags & set(tags))
 
+    @pure_query
     def has_all_tags(self, *tags: str) -> bool:
         """Check if entity has all of the specified tags.
 

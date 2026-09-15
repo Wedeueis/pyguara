@@ -28,7 +28,7 @@ Usage:
 from dataclasses import dataclass, field
 from enum import Enum, auto
 
-from pyguara.ecs.component import BaseComponent
+from pyguara.ecs.component import StrictComponent, pure_query
 
 
 class PlatformerState(Enum):
@@ -52,7 +52,7 @@ class PlatformerInput:
 
 
 @dataclass
-class PlatformerController(BaseComponent):
+class PlatformerController(StrictComponent):
     """Component for 2D platformer character movement.
 
     The PlatformerController provides responsive platformer movement with
@@ -97,8 +97,6 @@ class PlatformerController(BaseComponent):
         facing_right: Direction character is facing (internal).
         move_input: Current horizontal movement input -1/0/1 (internal).
     """
-
-    _allow_methods: bool = field(default=True, repr=False, init=False)
 
     # Movement parameters
     move_speed: float = 200.0
@@ -146,6 +144,7 @@ class PlatformerController(BaseComponent):
         """Initialize base component state."""
         super().__init__()
 
+    @pure_query
     def can_jump(self) -> bool:
         """Check if character can currently jump.
 
@@ -157,6 +156,7 @@ class PlatformerController(BaseComponent):
             return False
         return self.is_grounded or self.coyote_timer > 0
 
+    @pure_query
     def can_wall_jump(self) -> bool:
         """Check if character can wall jump.
 
@@ -165,6 +165,7 @@ class PlatformerController(BaseComponent):
         """
         return self.wall_jump_enabled and (self.on_wall_left or self.on_wall_right)
 
+    @pure_query
     def is_wall_sliding(self) -> bool:
         """Check if character is wall sliding.
 
