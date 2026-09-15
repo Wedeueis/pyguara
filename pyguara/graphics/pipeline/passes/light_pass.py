@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from pyguara.graphics.backends.moderngl.blend import BlendMode, blending
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.graphics.pipeline.viewport import Viewport
@@ -228,16 +229,12 @@ class LightPass(BaseRenderPass):
         # Set projection matrix
         self._update_projection(viewport.width, viewport.height)
 
-        # Enable additive blending
-        ctx.enable(ctx.BLEND)
-        ctx.blend_func = ctx.ONE, ctx.ONE  # Additive: src + dst
-
-        # Render all lights
-        if self._vao is not None:
-            self._vao.render(mode=ctx.TRIANGLE_STRIP, instances=len(lights))
-
-        # Restore blend mode
-        ctx.blend_func = ctx.SRC_ALPHA, ctx.ONE_MINUS_SRC_ALPHA
+        # Overlapping lights have to accumulate rather than occlude, so
+        # this pass is the one place that leaves the renderer's mode. The
+        # context manager puts it back.
+        with blending(ctx, BlendMode.ADDITIVE):
+            if self._vao is not None:
+                self._vao.render(mode=ctx.TRIANGLE_STRIP, instances=len(lights))
 
         # Clear camera for next frame
         self._camera = None

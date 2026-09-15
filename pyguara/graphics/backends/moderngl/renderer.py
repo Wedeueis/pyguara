@@ -9,6 +9,10 @@ import pygame
 import moderngl
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.moderngl import instancing
+from pyguara.graphics.backends.moderngl.blend import (
+    DEFAULT_BLEND_MODE,
+    apply_blend_mode,
+)
 from pyguara.graphics.backends.moderngl.texture import GLTextureFactory
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
@@ -68,6 +72,11 @@ class ModernGLRenderer:
         self._ctx = ctx
         self._width = width
         self._height = height
+
+        # Blending is the renderer's state, not the window's. Applying it
+        # here is what makes a renderer over a standalone context -- a test,
+        # a second window backend -- draw the same as one over a window.
+        apply_blend_mode(ctx, DEFAULT_BLEND_MODE)
 
         # CPU-rasterized text: rendered via pygame.font, uploaded as an
         # ephemeral GL texture per draw_text() call and released immediately
@@ -305,8 +314,13 @@ class ModernGLRenderer:
         return self._height
 
     def begin_frame(self) -> None:
-        """Prepare for a new frame of rendering."""
-        pass
+        """Prepare for a new frame of rendering.
+
+        Re-asserts the default blend mode. A pass that switches modes
+        restores it on its way out, but re-asserting here means a pass that
+        fails to cannot bleed into the next frame.
+        """
+        apply_blend_mode(self._ctx, DEFAULT_BLEND_MODE)
 
     def end_frame(self) -> None:
         """Flush accumulated shape primitives.

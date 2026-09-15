@@ -57,8 +57,25 @@ def test_window_initialization(gl_window: PygameGLWindow, mock_ctx: MagicMock) -
     assert gl_window.height == 600
     assert gl_window.get_screen() == mock_ctx
 
-    # Check if blending was enabled
-    mock_ctx.enable.assert_called()
+
+def test_the_window_leaves_the_blend_state_alone(mock_ctx: MagicMock) -> None:
+    """Blending is the renderer's state; the window used to set it.
+
+    A window that configured it would hide a renderer that did not -- which
+    is exactly what happened: every standalone-context test had to enable
+    blending by hand. See `test_gl_blend_state.py` for the pixel-level half.
+    """
+    with (
+        patch("moderngl.create_context", return_value=mock_ctx),
+        patch("pygame.display.set_mode"),
+        patch("pygame.display.gl_set_attribute"),
+    ):
+        PygameGLWindow().open(
+            WindowConfig(title="Test", screen_width=800, screen_height=600)
+        )
+
+    mock_ctx.enable.assert_not_called()
+    assert "blend_func" not in mock_ctx.__dict__
 
 
 def test_renderer_initialization(mock_ctx: MagicMock) -> None:
