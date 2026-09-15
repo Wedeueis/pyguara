@@ -115,13 +115,17 @@ def configure_game_container() -> DIContainer:
     )
     container.register_instance(TextureFactory, GLTextureFactory(ctx))  # type: ignore[type-abstract]
 
-    fbo_manager = FramebufferManager(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-    container.register_instance(FramebufferManager, fbo_manager)
-
     # The lighting system is scene-agnostic but needs an EntityManager,
     # which is per-scene, so the scene builds its own and hands it to the
     # passes registered here via `set_lighting_system`.
     render_graph = RenderGraph(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
+
+    # The graph builds its own framebuffer manager, and the passes resolve
+    # every buffer through that one. Anything else built here -- the bloom
+    # effect, the post-process stack -- has to share it, or it allocates a
+    # second, parallel set of buffers that the graph never looks at.
+    fbo_manager = render_graph.fbo_manager
+    container.register_instance(FramebufferManager, fbo_manager)
 
     world_pass = WorldPass(renderer)
     pulse_pass = PulsePass(ctx)
