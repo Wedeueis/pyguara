@@ -183,6 +183,7 @@ class FramebufferManager:
         self._width = width
         self._height = height
         self._framebuffers: dict[str, Framebuffer] = {}
+        self._declared: dict[str, str] = {}
 
     @property
     def width(self) -> int:
@@ -214,10 +215,10 @@ class FramebufferManager:
         somewhere downstream.
 
         Arguments you leave out are not requirements. That distinction is
-        what lets the two kinds of caller coexist: a game's bootstrap
-        claims `lightmap` as `f2` because it needs the range, and
+        what lets the two kinds of caller coexist: `RenderGraph` declares
+        `lightmap` as `f2` because the chain needs the range, and
         `LightPass` later asks for the same buffer without caring, and
-        gets the one that is there.
+        gets the format the declaration named.
 
         Args:
             name: Unique identifier for the framebuffer.
@@ -225,7 +226,8 @@ class FramebufferManager:
             height: Required height in pixels. None uses the viewport's.
             samples: Required MSAA sample count. None accepts any.
             dtype: Required texture data type, e.g. `"f1"` or `"f2"`.
-                None accepts whatever exists, and creates `"f1"`.
+                None accepts whatever exists, and creates the declared
+                format, or `"f1"` if the name was never declared.
 
         Returns:
             The framebuffer.
@@ -249,10 +251,68 @@ class FramebufferManager:
             w,
             h,
             samples=samples if samples is not None else 0,
-            dtype=dtype if dtype is not None else "f1",
+            dtype=self._format_for(name, dtype),
         )
         self._framebuffers[name] = fbo
         return fbo
+
+    def declare(self, name: str, *, dtype: str) -> None:
+        """Record the format `name` is created with, before anything creates it.
+
+        Declaring is not allocating: the framebuffer is still built by the
+        first `get_or_create` that needs it, at the declared format rather
+        than the 8-bit default. That is what gives a chain of buffers one
+        owner -- without it, the format is whichever caller happens to run
+        first, and every other caller has to either pass the same dtype or
+        accept what it finds.
+
+        Args:
+            name: The framebuffer name.
+            dtype: The texture data type to create it with.
+
+        Raises:
+            ValueError: If `name` was already declared as a different format,
+                or already exists in one.
+        """
+        existing = self._framebuffers.get(name)
+        if existing is not None:
+            self._reject_conflict(existing, None, None, None, dtype)
+
+        declared = self._declared.get(name)
+        if declared is not None and declared != dtype:
+            raise ValueError(
+                f"Framebuffer '{name}' is already declared as {declared!r}; "
+                f"'{dtype}' would silently win or lose depending on which "
+                "declaration ran first. Declare it once."
+            )
+
+        self._declared[name] = dtype
+
+    def declared_format(self, name: str) -> str | None:
+        """Report the format `name` was declared with, if any.
+
+        Args:
+            name: The framebuffer name.
+
+        Returns:
+            The declared data type, or None.
+        """
+        return self._declared.get(name)
+
+    def _format_for(self, name: str, requested: str | None) -> str:
+        """Resolve the data type to create `name` with.
+
+        Args:
+            name: The framebuffer name.
+            requested: The caller's requirement, or None.
+
+        Returns:
+            The requirement if there is one, else the declared format, else
+            the 8-bit default.
+        """
+        if requested is not None:
+            return requested
+        return self._declared.get(name, "f1")
 
     @staticmethod
     def _reject_conflict(

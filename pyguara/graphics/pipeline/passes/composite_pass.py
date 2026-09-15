@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pyguara.graphics.pipeline.buffers import COMPOSITE_FBO_NAME  # re-exported
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
@@ -20,9 +21,6 @@ if TYPE_CHECKING:
 
 # Shader file paths
 _SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
-
-# Name of the framebuffer this pass writes to
-COMPOSITE_FBO_NAME = "composite"
 
 
 class CompositePass(BaseRenderPass):

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pyguara.graphics.pipeline.buffers import POST_PROCESSED_FBO_NAME
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ class PostProcessPass(BaseRenderPass):
         self,
         post_process_stack: PostProcessStack,
         input_fbo_name: str = "composite",
-        output_fbo_name: str = "post_processed",
+        output_fbo_name: str = POST_PROCESSED_FBO_NAME,
         *,
         enabled: bool = True,
     ) -> None:

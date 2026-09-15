@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from pyguara.common.types import Color
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.batch import Batcher
+from pyguara.graphics.pipeline.buffers import WORLD_FBO_NAME  # re-exported
 from pyguara.graphics.pipeline.queue import RenderQueue
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.graphics.pipeline.viewport import Viewport
@@ -21,10 +22,6 @@ if TYPE_CHECKING:
     import moderngl
 
     from pyguara.graphics.pipeline.graph import RenderGraph
-
-
-# Name of the framebuffer this pass writes to
-WORLD_FBO_NAME = "world"
 
 
 class WorldPass(BaseRenderPass):

@@ -14,6 +14,7 @@ import numpy as np
 
 from pyguara.graphics.backends.moderngl.blend import BlendMode, blending
 from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME  # re-exported
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.graphics.pipeline.viewport import Viewport
 
@@ -26,9 +27,6 @@ if TYPE_CHECKING:
 
 # Shader file paths
 _SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
-
-# Name of the framebuffer this pass writes to
-LIGHT_FBO_NAME = "lightmap"
 
 
 class LightPass(BaseRenderPass):

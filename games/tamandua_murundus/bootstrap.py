@@ -48,7 +48,6 @@ from pyguara.graphics.pipeline.passes import (
     PostProcessPass,
     WorldPass,
 )
-from pyguara.graphics.pipeline.passes.light_pass import LIGHT_FBO_NAME
 from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 from pyguara.graphics.vfx.effects.vignette import VignetteEffect
@@ -145,12 +144,12 @@ def configure_game_container() -> DIContainer:
     fbo_manager = render_graph.fbo_manager
     container.register_instance(FramebufferManager, fbo_manager)
 
-    # Claim the light map as 16-bit float before `LightPass` does. An
-    # 8-bit map clamps at 1.0, so no light can brighten anything past what
-    # was drawn -- and a swarm that never over-exposes never crosses the
-    # bloom threshold, which is the entire look of the second half of this
-    # run.
-    fbo_manager.get_or_create(LIGHT_FBO_NAME, dtype="f2")
+    # The light map is 16-bit float because `RenderGraph` declares the
+    # whole chain that way (`pipeline/buffers.py`) -- this bootstrap used to
+    # claim it by hand. An 8-bit map clamps at 1.0, so no light could
+    # brighten anything past what was drawn, and a swarm that never
+    # over-exposes never crosses the bloom threshold, which is the entire
+    # look of the second half of this run.
 
     stack = PostProcessStack(ctx, fbo_manager)
     stack.add_effect(

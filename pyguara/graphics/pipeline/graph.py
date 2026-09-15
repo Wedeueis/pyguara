@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pyguara.graphics.pipeline.buffers import HDR_DTYPE, STANDARD_CHAIN
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.log import get_logger
@@ -52,6 +53,13 @@ class RenderGraph:
         self._ctx = ctx
         self._fbo_manager = FramebufferManager(ctx, width, height)
         self._passes: list[BaseRenderPass] = []
+
+        # The chain's format has an owner here rather than being whatever
+        # the first pass to reach a buffer happened to ask for. Declaring
+        # allocates nothing -- each buffer is still built by the first pass
+        # that needs it, at 16-bit float instead of the 8-bit default.
+        for name in STANDARD_CHAIN:
+            self._fbo_manager.declare(name, dtype=HDR_DTYPE)
 
     @property
     def ctx(self) -> moderngl.Context:
