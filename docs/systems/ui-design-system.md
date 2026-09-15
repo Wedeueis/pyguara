@@ -108,3 +108,19 @@ solid white; on the ModernGL backend the overlay is `SRCALPHA`, so the same
 call punches a transparent hole in the element. `bevel_edges()` mixes the
 highlight into the fill colour on the CPU instead, which gives the same
 result on both backends and is deterministic enough to assert in a test.
+
+## Seeing it work
+
+`games/guara_falcao` is the worked example: a title screen, a HUD, a pause
+menu and an options panel, all skinned by `cerrado_dusk()` and none of them
+holding a colour of their own.
+
+```bash
+uv run python tools/agent_view.py guara_falcao --gl --frames 40 --shot 39
+```
+
+It is also where the pieces that are *not* colour get exercised —
+`UILayer.HUD` under `UILayer.OVERLAY`, the focus ring scoped to the topmost
+layer so Tab cannot leave an open modal, `LayoutConstraints` anchoring the
+HUD to the corners, and the options panel's theme row calling `set_theme()`
+live, which re-skins the panel the switch is sitting in.

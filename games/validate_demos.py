@@ -26,8 +26,6 @@ from games.asset_pipeline.bootstrap import configure_game_container as ap_bootst
 from games.asset_pipeline.scenes import AssetScene as APAssetScene
 
 # Import bootstrap configurations
-from games.guara_falcao.bootstrap import configure_game_container as gf_bootstrap
-from games.guara_falcao.scenes import GameScene as GFGameScene
 from games.vinagre_matilha.bootstrap import configure_game_container as vm_bootstrap
 from games.vinagre_matilha.level_builder import STAGE_1
 from games.vinagre_matilha.scenes import GameScene as VMGameScene
@@ -95,19 +93,12 @@ def main() -> None:
 
     results = {}
 
-    # 1. Platformer Game (Guará & Falcão)
-    results["Guara & Falcao (Platformer)"] = validate_game(
-        name="Guara & Falcao",
-        configure_container_fn=gf_bootstrap,
-        scene_class=GFGameScene,
-    )
-
-    # Protocolo Bandeira, true_coral, mourisco_ressonancia and
-    # tamandua_murundus are not booted here. All four run on the ModernGL
+    # guara_falcao, protocolo_bandeira, true_coral, mourisco_ressonancia and
+    # tamandua_murundus are not booted here. All five run on the ModernGL
     # backend, and SDL's `dummy` video driver -- set at the top of this
     # file -- provides no OpenGL at all, so none of them can create a
     # context. Smoke them with, e.g.:
-    #     uv run python tools/agent_view.py protocolo_bandeira --gl --frames 30
+    #     uv run python tools/agent_view.py guara_falcao --gl --frames 30
 
     # 3. Asset Pipeline Module (Flyweight Loader / .meta files)
     results["Asset Pipeline (Module 3)"] = validate_game(

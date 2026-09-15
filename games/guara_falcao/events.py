@@ -59,3 +59,16 @@ class LevelCompleteEvent:
 
     score: int
     coins: int
+
+
+@dataclass
+class DebugCollidersToggled:
+    """Fired when the options panel turns collider outlines on or off.
+
+    An event rather than a direct call: the options panel is a scene
+    pushed over the game and holds no reference to it, and reaching down
+    the scene stack to find one would couple a menu to what it was opened
+    from.
+    """
+
+    shown: bool

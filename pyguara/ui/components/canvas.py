@@ -27,6 +27,9 @@ class Canvas(Widget):
         # Draw background / Clear
         renderer.draw_rect(self.rect, self.bg_color or self.theme.colors.background)
 
-        # The 'custom drawing' is usually done by attaching children
-        # or overriding render() in a subclass of Canvas.
-        pass
+        # The 'custom drawing' is usually done by attaching children or by
+        # overriding render() in a subclass. Its docstring said "and
+        # children" long before it drew any.
+        for child in self.children:
+            if child.visible:
+                child.render(renderer)

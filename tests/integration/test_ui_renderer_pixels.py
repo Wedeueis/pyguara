@@ -139,3 +139,26 @@ def test_nothing_drawn_leaves_the_target_alone(blended_ctx: Any) -> None:
     pixel = render_ui(blended_ctx, lambda ui: None)
 
     assert pixel == (0, 0, 0)
+
+
+def test_a_translucent_fill_blends_instead_of_punching_a_hole(
+    blended_ctx: Any,
+) -> None:
+    """The overlay surface is `SRCALPHA`, and `pygame.draw` replaces the
+    destination pixel including its alpha rather than compositing into it.
+
+    So a half-transparent fill drawn over UI that is already there *erased*
+    it, and the world showed through the hole. A ghost-skinned button --
+    transparent fill, border only -- made this visible: it showed the game
+    running behind the options panel it was sitting on.
+    """
+    pixel = render_ui(
+        blended_ctx,
+        lambda ui: (
+            ui.draw_rect(Rect(0, 0, _SIZE, _SIZE), Color(200, 40, 40)),
+            ui.draw_rect(Rect(0, 0, _SIZE, _SIZE), Color(0, 0, 0, 128)),
+        ),
+    )
+
+    # Half black over opaque red: dimmed, not a hole through to the clear.
+    assert pixel == pytest.approx((100, 20, 20), abs=3)
