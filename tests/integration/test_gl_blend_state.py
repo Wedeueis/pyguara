@@ -31,11 +31,13 @@ _SIZE = 64
 
 @pytest.fixture
 def bare_ctx() -> Iterator[Any]:
-    """A standalone GL context with nothing set up on it.
+    """A standalone GL context of this module's own, never the shared one.
 
-    Function-scoped and unconfigured on purpose: the other GL fixtures in
-    this suite enable blending themselves, which would mask exactly the
-    thing under test.
+    Function-scoped and untouched on purpose. These tests are *about* the
+    context's global blend state, and they change it -- `gl_ctx` is
+    session-scoped, so doing that there would leak into every other GL
+    test. A fresh context per test is also the only way to observe what a
+    renderer sets up on a context nothing has configured.
     """
     moderngl = pytest.importorskip("moderngl")
     try:

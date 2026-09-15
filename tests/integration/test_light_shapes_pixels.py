@@ -15,7 +15,6 @@ tests run against mocks, and a mock cannot fail this.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
 from typing import Any
 
 import numpy as np
@@ -35,20 +34,6 @@ pytestmark = pytest.mark.integration
 
 _SIZE = 128
 _CENTRE = _SIZE // 2
-
-
-@pytest.fixture(scope="module")
-def gl_ctx() -> Iterator[Any]:
-    """A standalone GL context, or a skip on a machine without one."""
-    moderngl = pytest.importorskip("moderngl")
-    try:
-        ctx = moderngl.create_standalone_context()
-    except Exception as exc:  # pragma: no cover - depends on the machine
-        pytest.skip(f"no standalone GL context available: {exc}")
-    try:
-        yield ctx
-    finally:
-        ctx.release()
 
 
 class _Graph:

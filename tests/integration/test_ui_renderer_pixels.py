@@ -15,13 +15,16 @@ in the wrong colours.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import numpy as np
 import pytest
 
 from pyguara.common.types import Color, Rect
+from pyguara.graphics.backends.moderngl.blend import (
+    DEFAULT_BLEND_MODE,
+    apply_blend_mode,
+)
 from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
 
 pytestmark = pytest.mark.integration
@@ -30,28 +33,31 @@ _SIZE = 64
 _CENTRE = _SIZE // 2
 
 
-@pytest.fixture(scope="module")
-def gl_ctx() -> Iterator[Any]:
-    """A standalone GL context, or a skip on a machine without one."""
-    moderngl = pytest.importorskip("moderngl")
-    try:
-        ctx = moderngl.create_standalone_context()
-    except Exception as exc:  # pragma: no cover - depends on the machine
-        pytest.skip(f"no standalone GL context available: {exc}")
+@pytest.fixture
+def blended_ctx(gl_ctx: Any) -> Any:
+    """The shared GL context with alpha blending set up.
 
-    ctx.enable(moderngl.BLEND)
-    ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-    try:
-        yield ctx
-    finally:
-        ctx.release()
+    `GLUIRenderer` draws without a `ModernGLRenderer`, so nothing has
+    applied the engine's blend mode -- and a UI renderer whose panels do
+    not blend reads back nothing like what it draws. This applies the same
+    mode the renderer would, from the same source, rather than repeating
+    the factor pair here.
+
+    Args:
+        gl_ctx: The session's standalone context.
+
+    Returns:
+        The same context, with blending enabled.
+    """
+    apply_blend_mode(gl_ctx, DEFAULT_BLEND_MODE)
+    return gl_ctx
 
 
-def render_ui(gl_ctx: Any, draw) -> tuple[int, int, int]:
+def render_ui(ctx: Any, draw) -> tuple[int, int, int]:
     """Run `draw` against a UI renderer and read back the centre pixel.
 
     Args:
-        gl_ctx: The GL context.
+        ctx: The GL context, with blending already set up.
         draw: Callable taking the `GLUIRenderer`.
 
     Returns:
@@ -62,10 +68,10 @@ def render_ui(gl_ctx: Any, draw) -> tuple[int, int, int]:
     if not pygame.get_init():
         pygame.init()
 
-    fbo = gl_ctx.simple_framebuffer((_SIZE, _SIZE))
+    fbo = ctx.simple_framebuffer((_SIZE, _SIZE))
     fbo.use()
-    gl_ctx.clear(0.0, 0.0, 0.0, 1.0)
-    renderer = GLUIRenderer(gl_ctx, _SIZE, _SIZE)
+    ctx.clear(0.0, 0.0, 0.0, 1.0)
+    renderer = GLUIRenderer(ctx, _SIZE, _SIZE)
     try:
         draw(renderer)
         # The overlay composites into whatever framebuffer is bound, which
@@ -80,56 +86,56 @@ def render_ui(gl_ctx: Any, draw) -> tuple[int, int, int]:
         fbo.release()
 
 
-def test_a_ui_rect_keeps_its_channel_order(gl_ctx: Any) -> None:
+def test_a_ui_rect_keeps_its_channel_order(blended_ctx: Any) -> None:
     """Red stays red. The defect this pins swapped it with blue, turning
     Protocolo Bandeira's brown menu buttons into blue ones -- which nobody
     saw, because nothing could capture the UI layer.
     """
     pixel = render_ui(
-        gl_ctx,
+        blended_ctx,
         lambda ui: ui.draw_rect(Rect(0, 0, _SIZE, _SIZE), Color(200, 30, 10)),
     )
 
     assert pixel == (200, 30, 10)
 
 
-def test_blue_is_not_silently_red(gl_ctx: Any) -> None:
+def test_blue_is_not_silently_red(blended_ctx: Any) -> None:
     """The mirror of the test above: a swap passes one of these and fails
     the other only if both are checked."""
     pixel = render_ui(
-        gl_ctx,
+        blended_ctx,
         lambda ui: ui.draw_rect(Rect(0, 0, _SIZE, _SIZE), Color(10, 30, 200)),
     )
 
     assert pixel == (10, 30, 200)
 
 
-def test_a_grey_rect_survives_unchanged(gl_ctx: Any) -> None:
+def test_a_grey_rect_survives_unchanged(blended_ctx: Any) -> None:
     """A control: grey is symmetric under a red/blue swap, so it passes
     either way. It is here to prove the harness itself is not the thing
     producing the right answer."""
     pixel = render_ui(
-        gl_ctx,
+        blended_ctx,
         lambda ui: ui.draw_rect(Rect(0, 0, _SIZE, _SIZE), Color(128, 128, 128)),
     )
 
     assert pixel == (128, 128, 128)
 
 
-def test_the_overlay_composites_where_it_is_bound(gl_ctx: Any) -> None:
+def test_the_overlay_composites_where_it_is_bound(blended_ctx: Any) -> None:
     """What `agent_view` relies on: `present()` draws into the currently
     bound framebuffer, so a capture can aim it at a buffer it can read
     rather than at the unreadable default one."""
     pixel = render_ui(
-        gl_ctx,
+        blended_ctx,
         lambda ui: ui.draw_rect(Rect(0, 0, _SIZE, _SIZE), Color(0, 255, 0)),
     )
 
     assert pixel == (0, 255, 0)
 
 
-def test_nothing_drawn_leaves_the_target_alone(gl_ctx: Any) -> None:
+def test_nothing_drawn_leaves_the_target_alone(blended_ctx: Any) -> None:
     """An idle frame must not paint over what the render graph produced."""
-    pixel = render_ui(gl_ctx, lambda ui: None)
+    pixel = render_ui(blended_ctx, lambda ui: None)
 
     assert pixel == (0, 0, 0)

@@ -23,10 +23,8 @@ more than the code being timed, and turns every measurement into noise.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from typing import Any, TypeVar
-
-import pytest
 
 from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem
 from pyguara.common.components import Transform
@@ -169,36 +167,3 @@ def build_hash(count: int, *, spread: float, seed: int = 99) -> SpatialHash[int]
     for key in range(count):
         index.insert(key, Vector2(rng.uniform(0.0, spread), rng.uniform(0.0, spread)))
     return index
-
-
-# ---- GL -------------------------------------------------------------
-
-
-@pytest.fixture(scope="session")
-def gl_ctx() -> Iterator[Any]:
-    """A standalone ModernGL context, or a skip if the machine has none.
-
-    Standalone rather than SDL: this needs no window, no display, and no
-    swap semantics polluting a timing loop. `tools/agent_view.py --gl`
-    uses SDL's offscreen driver instead, but that exists to capture what a
-    *demo* draws, which is a different job.
-
-    Nothing is set up on the context here. `ModernGLRenderer` applies the
-    default blend mode when it is constructed, so anything measuring or
-    reading back blended output gets it from the renderer -- which is what
-    the engine does too. A test that draws *without* a renderer has to set
-    the state up itself.
-
-    Yields:
-        The ModernGL context.
-    """
-    moderngl = pytest.importorskip("moderngl")
-    try:
-        ctx = moderngl.create_standalone_context()
-    except Exception as exc:  # pragma: no cover - depends on the machine
-        pytest.skip(f"no standalone GL context available: {exc}")
-
-    try:
-        yield ctx
-    finally:
-        ctx.release()
