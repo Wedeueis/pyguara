@@ -11,8 +11,9 @@ PyGuara's ECS is built for worlds of thousands of entities. It has three parts:
 
 ## Components
 
-Components inherit from `StrictComponent` (preferred) or `BaseComponent`, and
-are almost always dataclasses.
+Components inherit from `BaseComponent`, or from `StrictComponent` — the same
+class under an older name, kept for the components already using it. They are
+almost always dataclasses.
 
 ```python
 from dataclasses import dataclass
@@ -26,15 +27,9 @@ class Health(StrictComponent):
 
 ### Data-only enforcement
 
-Both base classes inspect subclasses at class-definition time and reject logic:
-
-- `StrictComponent` raises `TypeError`.
-- `BaseComponent` emits a `UserWarning`, and accepts `_allow_methods = True`
-  as an escape hatch for legacy components.
-
-Permitted on a component: lifecycle hooks (`__init__`, `__post_init__`,
-`on_attach`, `on_detach`), dunder methods, `@property` accessors, and
-underscore-prefixed private helpers. Anything else belongs in a System.
+A component that declares a logic method raises `TypeError` at
+class-definition time — import time, not review time. This used to be a
+`UserWarning`, which had no adopters and nine components escaping it.
 
 ```python
 @dataclass(slots=True)
@@ -46,9 +41,47 @@ class Velocity(StrictComponent):
         ...
 ```
 
+Permitted on a component: lifecycle hooks (`__init__`, `__post_init__`,
+`on_attach`, `on_detach`), dunder methods, `@property` accessors,
+underscore-prefixed private helpers, and methods marked `@pure_query`.
+Anything else belongs in a System, or in a free function beside the
+component.
+
+`@pure_query` is for a side-effect-free read of the component's *own* fields
+that reads better as a method — `tags.has_tag("enemy")` over
+`has_tag(tags, "enemy")`. It is not an escape hatch: a pure query may not
+mutate anything, reach a system, a backend or the dispatcher, or touch
+another entity.
+
+```python
+@dataclass(slots=True)
+class EntityTags(StrictComponent):
+    tags: set[str] = field(default_factory=set)
+
+    @pure_query
+    def has_tag(self, tag: str) -> bool:
+        return tag in self.tags
+```
+
+`_allow_methods = True` still opts a component out wholesale. It is debt to
+migrate, not a supported answer.
+
+### Slots
+
 Use `@dataclass(slots=True)`. `BaseComponent` declares `__slots__`, and a
 subclass without slots reintroduces a per-instance `__dict__`, which is the
 dominant memory cost once entity counts get large.
+
+### Where behaviour goes instead
+
+Two destinations, and the choice is not a matter of taste:
+
+- **A System**, when it is per-frame work over a query — `AnimationSystem`
+  advancing every animator, `AudioSourceSystem` talking to the backend.
+- **A free function beside the component**, when it is an operation a caller
+  invokes at a moment of its choosing: `Transform`/`set_parent`,
+  `StatBlock`/`get_stat`, `Health`/`apply_damage`. A system here would only
+  have to re-expose every operation as a method of its own.
 
 ## Entities
 

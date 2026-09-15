@@ -203,9 +203,10 @@ class Component(Protocol):
 class BaseComponent:
     """Reference implementation of the `Component` protocol.
 
-    Subclasses that declare logic methods trigger a `UserWarning` at class
-    definition time. Set `_allow_methods = True` on a subclass to opt out;
-    prefer `StrictComponent` for new code, which rejects such methods outright.
+    Subclasses that declare logic methods raise `TypeError` at class
+    definition time. Set `_allow_methods = True` on a subclass to opt out --
+    debt to migrate rather than a supported answer. `StrictComponent` is
+    this class under an older name; either base gives the same check.
 
     `__slots__` keeps per-instance overhead low. Dataclass subclasses should
     declare `@dataclass(slots=True)`; non-dataclass subclasses should declare
