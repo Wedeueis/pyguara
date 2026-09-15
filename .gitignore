@@ -185,3 +185,9 @@ Thumbs.db
 
 # WSL/Windows download markers, one per file copied in from a browser
 *:Zone.Identifier
+
+# The design system's key art: 11MB of PNGs, three of them over the
+# pre-commit large-file cap. The bundle's HTML, tokens and component
+# sources are committed; the art stays out of the repository and is
+# distributed with the design system itself.
+docs/design_system/assets/
