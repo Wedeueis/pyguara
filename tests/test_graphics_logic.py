@@ -1,5 +1,11 @@
 from pyguara.common.types import Vector2
-from pyguara.graphics.components.animation import AnimationClip, Animator
+from pyguara.graphics.components.animation import (
+    AnimationClip,
+    Animator,
+    add_clip,
+    advance_animator,
+    play_clip,
+)
 from pyguara.graphics.components.particles import ParticleSystem
 from pyguara.graphics.components.sprite import Sprite
 
@@ -22,22 +28,22 @@ def test_animator_playback():
     animator = Animator(sprite)
 
     clip = AnimationClip(name="run", frames=[tex1, tex2], frame_rate=1.0, loop=True)
-    animator.add_clip(clip)
+    add_clip(animator, clip)
 
     # Act: Play
-    animator.play("run")
+    play_clip(animator, "run")
     assert sprite.texture == tex1
 
     # Act: Update (0.5s - No change yet)
-    animator.update(0.5)
+    advance_animator(animator, 0.5)
     assert sprite.texture == tex1
 
     # Act: Update (0.6s -> Total 1.1s -> Next frame)
-    animator.update(0.6)
+    advance_animator(animator, 0.6)
     assert sprite.texture == tex2
 
     # Act: Loop (Total 2.2s -> Back to frame 1)
-    animator.update(1.1)
+    advance_animator(animator, 1.1)
     assert sprite.texture == tex1
 
 

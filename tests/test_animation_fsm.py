@@ -11,6 +11,13 @@ from pyguara.graphics.components.animation import (
     AnimationTransition,
     Animator,
     TransitionCondition,
+    add_clip,
+    add_state,
+    advance_animator,
+    advance_state_machine,
+    play_clip,
+    set_default_state,
+    transition_to,
 )
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.resources.types import Texture
@@ -61,7 +68,7 @@ def test_animator_properties():
 
     # Create test clips
     idle_clip = AnimationClip("idle", [MockTexture(f"idle_{i}") for i in range(4)])
-    animator.add_clip(idle_clip)
+    add_clip(animator, idle_clip)
 
     # Initially not playing
     assert animator.is_playing is False
@@ -69,7 +76,7 @@ def test_animator_properties():
     assert animator.is_finished is False
 
     # Start playing
-    animator.play("idle")
+    play_clip(animator, "idle")
     assert animator.is_playing is True
     assert animator.current_clip_name == "idle"
     assert animator.is_finished is False
@@ -80,15 +87,15 @@ def test_animator_catches_up_multiple_frames_in_one_update():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"run_{i}") for i in range(8)]
-    animator.add_clip(AnimationClip("run", frames, frame_rate=10.0, loop=True))
-    animator.play("run")
+    add_clip(animator, AnimationClip("run", frames, frame_rate=10.0, loop=True))
+    play_clip(animator, "run")
 
     # 10 FPS => 0.1s/frame. A 0.45s lag spike should land on frame 4, not 1.
-    animator.update(0.45)
+    advance_animator(animator, 0.45)
     assert sprite.texture is frames[4]
 
     # A dt that wraps past the end of a looping clip lands correctly.
-    animator.update(0.6)  # +6 frames from 4 => 10 => wraps to 2
+    advance_animator(animator, 0.6)  # +6 frames from 4 => 10 => wraps to 2
     assert sprite.texture is frames[2]
 
 
@@ -97,10 +104,10 @@ def test_animator_non_looping_clamps_on_a_large_dt():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"a_{i}") for i in range(3)]
-    animator.add_clip(AnimationClip("attack", frames, frame_rate=10.0, loop=False))
-    animator.play("attack")
+    add_clip(animator, AnimationClip("attack", frames, frame_rate=10.0, loop=False))
+    play_clip(animator, "attack")
 
-    animator.update(5.0)  # far past the 0.3s clip
+    advance_animator(animator, 5.0)  # far past the 0.3s clip
 
     assert sprite.texture is frames[-1]
     assert animator.is_playing is False
@@ -119,19 +126,19 @@ def test_animator_is_finished():
         frame_rate=10.0,
         loop=False,
     )
-    animator.add_clip(clip)
+    add_clip(animator, clip)
 
-    animator.play("attack")
+    play_clip(animator, "attack")
     assert animator.is_finished is False
 
     # Update through the animation (3 frames / 10 FPS = 0.3 seconds)
-    animator.update(0.1)  # Frame 1
+    advance_animator(animator, 0.1)  # Frame 1
     assert animator.is_finished is False
 
-    animator.update(0.1)  # Frame 2
+    advance_animator(animator, 0.1)  # Frame 2
     assert animator.is_finished is False
 
-    animator.update(0.1)  # Animation finishes
+    advance_animator(animator, 0.1)  # Animation finishes
     assert animator.is_finished is True
     assert animator.is_playing is False
 
@@ -208,7 +215,7 @@ def test_state_machine_add_state():
     clip = AnimationClip("idle", [MockTexture()])
     state = AnimationState("idle", clip)
 
-    fsm.add_state(state)
+    add_state(fsm, state)
 
     # State should be registered internally
     assert "idle" in fsm._states
@@ -222,9 +229,9 @@ def test_state_machine_set_default_state():
 
     clip = AnimationClip("idle", [MockTexture()])
     state = AnimationState("idle", clip)
-    fsm.add_state(state)
+    add_state(fsm, state)
 
-    fsm.set_default_state("idle")
+    set_default_state(fsm, "idle")
 
     assert fsm.current_state_name == "idle"
     assert animator.is_playing is True
@@ -238,7 +245,7 @@ def test_state_machine_set_invalid_default_state():
     fsm = AnimationStateMachine(sprite, animator)
 
     with pytest.raises(ValueError, match="does not exist"):
-        fsm.set_default_state("nonexistent")
+        set_default_state(fsm, "nonexistent")
 
 
 def test_state_machine_manual_transition():
@@ -254,14 +261,14 @@ def test_state_machine_manual_transition():
     idle_state = AnimationState("idle", idle_clip)
     walk_state = AnimationState("walk", walk_clip)
 
-    fsm.add_state(idle_state)
-    fsm.add_state(walk_state)
+    add_state(fsm, idle_state)
+    add_state(fsm, walk_state)
 
-    fsm.set_default_state("idle")
+    set_default_state(fsm, "idle")
     assert fsm.current_state_name == "idle"
 
     # Manual transition
-    result = fsm.transition_to("walk")
+    result = transition_to(fsm, "walk")
     assert result is True
     assert fsm.current_state_name == "walk"
     assert animator.current_clip_name == "walk"
@@ -291,15 +298,15 @@ def test_state_machine_transition_callbacks():
         on_exit=lambda: events.append("walk_exit"),
     )
 
-    fsm.add_state(idle_state)
-    fsm.add_state(walk_state)
+    add_state(fsm, idle_state)
+    add_state(fsm, walk_state)
 
-    fsm.set_default_state("idle")
+    set_default_state(fsm, "idle")
     assert events == ["idle_enter"]
 
     events.clear()
 
-    fsm.transition_to("walk")
+    transition_to(fsm, "walk")
     assert events == ["idle_exit", "walk_enter"]
 
 
@@ -330,18 +337,18 @@ def test_state_machine_automatic_transition():
     attack_state = AnimationState("attack", attack_clip, transitions=[attack_to_idle])
     idle_state = AnimationState("idle", idle_clip)
 
-    fsm.add_state(attack_state)
-    fsm.add_state(idle_state)
+    add_state(fsm, attack_state)
+    add_state(fsm, idle_state)
 
-    fsm.set_default_state("attack")
+    set_default_state(fsm, "attack")
     assert fsm.current_state_name == "attack"
 
     # Update until animation finishes (2 frames at 10 FPS = 0.2s)
-    fsm.update(0.1)  # Frame 1
+    advance_state_machine(fsm, 0.1)  # Frame 1
     assert fsm.current_state_name == "attack"
 
     # Animation finishes and transitions to idle
-    fsm.update(0.1)  # Frame 2, animation ends, transition triggers
+    advance_state_machine(fsm, 0.1)  # Frame 2, animation ends, transition triggers
     assert fsm.current_state_name == "idle"
 
 
@@ -362,14 +369,14 @@ def test_state_machine_on_complete_callback():
     )
 
     state = AnimationState("attack", clip, on_complete=lambda: completed.append(True))
-    fsm.add_state(state)
-    fsm.set_default_state("attack")
+    add_state(fsm, state)
+    set_default_state(fsm, "attack")
 
     # Update until animation finishes
-    fsm.update(0.1)  # Frame 1
+    advance_state_machine(fsm, 0.1)  # Frame 1
     assert len(completed) == 0
 
-    fsm.update(0.1)  # Animation finishes, callback should fire
+    advance_state_machine(fsm, 0.1)  # Animation finishes, callback should fire
     assert len(completed) == 1
 
 
@@ -388,11 +395,11 @@ def test_state_machine_on_complete_fires_once_when_held_past_completion():
     )
     # No ANIMATION_END transition: the FSM will sit on this finished clip.
     state = AnimationState("death", clip, on_complete=lambda: completed.append(True))
-    fsm.add_state(state)
-    fsm.set_default_state("death")
+    add_state(fsm, state)
+    set_default_state(fsm, "death")
 
     for _ in range(20):
-        fsm.update(0.1)
+        advance_state_machine(fsm, 0.1)
 
     assert completed == [True]  # exactly one, not one-per-frame
 
@@ -407,16 +414,16 @@ def test_state_machine_on_complete_refires_after_replaying_the_state():
     clip = AnimationClip(
         "hit", [MockTexture(f"hit_{i}") for i in range(2)], frame_rate=10.0, loop=False
     )
-    fsm.add_state(AnimationState("hit", clip, on_complete=lambda: completed.append(1)))
-    fsm.set_default_state("hit")
+    add_state(fsm, AnimationState("hit", clip, on_complete=lambda: completed.append(1)))
+    set_default_state(fsm, "hit")
 
     for _ in range(5):
-        fsm.update(0.1)
+        advance_state_machine(fsm, 0.1)
     assert len(completed) == 1
 
-    fsm.transition_to("hit", force=True)  # replay
+    transition_to(fsm, "hit", force=True)  # replay
     for _ in range(5):
-        fsm.update(0.1)
+        advance_state_machine(fsm, 0.1)
     assert len(completed) == 2
 
 
@@ -431,21 +438,23 @@ def test_state_machine_immediate_transition_fires_on_entry():
         to_state="loop",
         condition=TransitionCondition.IMMEDIATE,
     )
-    fsm.add_state(
+    add_state(
+        fsm,
         AnimationState(
             "intro",
             AnimationClip("intro", [MockTexture("intro")], loop=True),
             transitions=[intro_to_loop],
-        )
+        ),
     )
-    fsm.add_state(
-        AnimationState("loop", AnimationClip("loop", [MockTexture("loop")], loop=True))
+    add_state(
+        fsm,
+        AnimationState("loop", AnimationClip("loop", [MockTexture("loop")], loop=True)),
     )
 
-    fsm.set_default_state("intro")
+    set_default_state(fsm, "intro")
     assert fsm.current_state_name == "intro"
 
-    fsm.update(0.016)
+    advance_state_machine(fsm, 0.016)
     assert fsm.current_state_name == "loop"
 
 
@@ -482,14 +491,14 @@ def test_state_machine_transition_priority():
     high_state = AnimationState("high", clip, on_enter=lambda: events.append("high"))
     low_state = AnimationState("low", clip, on_enter=lambda: events.append("low"))
 
-    fsm.add_state(test_state)
-    fsm.add_state(high_state)
-    fsm.add_state(low_state)
+    add_state(fsm, test_state)
+    add_state(fsm, high_state)
+    add_state(fsm, low_state)
 
-    fsm.set_default_state("test")
+    set_default_state(fsm, "test")
 
     # Update until animation finishes
-    fsm.update(1.0)
+    advance_state_machine(fsm, 1.0)
 
     # Should transition to high priority state
     assert fsm.current_state_name == "high"
@@ -507,8 +516,8 @@ def test_animation_system_updates_animator():
     animator = Animator(sprite)
 
     frames = [MockTexture(f"idle_{i}") for i in range(4)]
-    animator.add_clip(AnimationClip("idle", frames, frame_rate=10.0))
-    animator.play("idle")
+    add_clip(animator, AnimationClip("idle", frames, frame_rate=10.0))
+    play_clip(animator, "idle")
     assert sprite.texture is frames[0]
 
     entity_manager = EntityManager()
@@ -530,10 +539,10 @@ def test_animation_system_updates_state_machine():
     fsm = AnimationStateMachine(sprite, animator)
 
     frames = [MockTexture(f"idle_{i}") for i in range(4)]
-    fsm.add_state(
-        AnimationState("idle", AnimationClip("idle", frames, frame_rate=10.0))
+    add_state(
+        fsm, AnimationState("idle", AnimationClip("idle", frames, frame_rate=10.0))
     )
-    fsm.set_default_state("idle")
+    set_default_state(fsm, "idle")
     assert sprite.texture is frames[0]
 
     entity_manager = EntityManager()
@@ -554,10 +563,10 @@ def test_animation_system_prioritizes_state_machine():
     fsm = AnimationStateMachine(sprite, animator)
 
     frames = [MockTexture(f"idle_{i}") for i in range(4)]
-    fsm.add_state(
-        AnimationState("idle", AnimationClip("idle", frames, frame_rate=10.0))
+    add_state(
+        fsm, AnimationState("idle", AnimationClip("idle", frames, frame_rate=10.0))
     )
-    fsm.set_default_state("idle")
+    set_default_state(fsm, "idle")
 
     entity_manager = EntityManager()
     entity = entity_manager.create_entity()
@@ -577,88 +586,92 @@ def test_landing_on_a_frame_fires_its_events():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"f{i}") for i in range(4)]
-    animator.add_clip(
+    add_clip(
+        animator,
         AnimationClip(
             "attack",
             frames,
             frame_rate=10.0,
             frame_events={2: ("swing_start",)},
-        )
+        ),
     )
-    animator.play("attack")
+    play_clip(animator, "attack")
 
-    assert animator.update(0.1) == []  # frame 1, no event there
-    assert animator.update(0.1) == ["swing_start"]  # frame 2
+    assert advance_animator(animator, 0.1) == []  # frame 1, no event there
+    assert advance_animator(animator, 0.1) == ["swing_start"]  # frame 2
 
 
 def test_a_multi_frame_catch_up_fires_every_crossed_frames_events():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"f{i}") for i in range(5)]
-    animator.add_clip(
+    add_clip(
+        animator,
         AnimationClip(
             "attack",
             frames,
             frame_rate=10.0,
             frame_events={1: ("wind_up",), 2: ("swing_start",), 3: ("swing_end",)},
-        )
+        ),
     )
-    animator.play("attack")
+    play_clip(animator, "attack")
 
     # One big dt jumps straight from frame 0 to frame 3 -- every frame
     # events in between still fire, in order, not just the landed-on frame.
     # (0.34, not 0.3: 0.3 / 0.1 rounds to 2.999...96 in binary floating
     # point and would truncate one frame short.)
-    assert animator.update(0.34) == ["wind_up", "swing_start", "swing_end"]
+    assert advance_animator(animator, 0.34) == ["wind_up", "swing_start", "swing_end"]
 
 
 def test_a_frame_with_no_events_fires_nothing():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"f{i}") for i in range(3)]
-    animator.add_clip(AnimationClip("idle", frames, frame_rate=10.0))
-    animator.play("idle")
+    add_clip(animator, AnimationClip("idle", frames, frame_rate=10.0))
+    play_clip(animator, "idle")
 
-    assert animator.update(0.1) == []
+    assert advance_animator(animator, 0.1) == []
 
 
 def test_looping_wraps_and_still_fires_the_wrapped_frames_events():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"f{i}") for i in range(3)]
-    animator.add_clip(
+    add_clip(
+        animator,
         AnimationClip(
             "loop",
             frames,
             frame_rate=10.0,
             loop=True,
             frame_events={0: ("cycle_start",)},
-        )
+        ),
     )
-    animator.play("loop")
+    play_clip(animator, "loop")
 
-    animator.update(0.1)  # frame 1
-    assert animator.update(0.2) == ["cycle_start"]  # frame 2 then wraps to 0
+    advance_animator(animator, 0.1)  # frame 1
+    assert advance_animator(animator, 0.2) == ["cycle_start"]  # frame 2 then wraps to 0
 
 
 def test_a_non_looping_clip_still_fires_its_final_frames_events():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"f{i}") for i in range(3)]
-    animator.add_clip(
+    add_clip(
+        animator,
         AnimationClip(
             "attack",
             frames,
             frame_rate=10.0,
             loop=False,
             frame_events={2: ("hit_confirm",)},
-        )
+        ),
     )
-    animator.play("attack")
+    play_clip(animator, "attack")
 
     # A big dt would overshoot frame 2 without clamping -- the clip stops
     # at the last frame instead, and that frame's events still fire.
-    assert animator.update(1.0) == ["hit_confirm"]
+    assert advance_animator(animator, 1.0) == ["hit_confirm"]
 
 
 def test_frame_events_flow_through_the_state_machine():
@@ -666,17 +679,18 @@ def test_frame_events_flow_through_the_state_machine():
     animator = Animator(sprite)
     fsm = AnimationStateMachine(sprite, animator)
     frames = [MockTexture(f"f{i}") for i in range(3)]
-    fsm.add_state(
+    add_state(
+        fsm,
         AnimationState(
             "attack",
             AnimationClip(
                 "attack", frames, frame_rate=10.0, frame_events={1: ("hit",)}
             ),
-        )
+        ),
     )
-    fsm.set_default_state("attack")
+    set_default_state(fsm, "attack")
 
-    assert fsm.update(0.1) == ["hit"]
+    assert advance_state_machine(fsm, 0.1) == ["hit"]
 
 
 def test_animation_system_dispatches_an_animation_frame_event():
@@ -686,12 +700,13 @@ def test_animation_system_dispatches_an_animation_frame_event():
     sprite = Sprite(MockTexture())
     animator = Animator(sprite)
     frames = [MockTexture(f"f{i}") for i in range(3)]
-    animator.add_clip(
+    add_clip(
+        animator,
         AnimationClip(
             "attack", frames, frame_rate=10.0, frame_events={1: ("swing_start",)}
-        )
+        ),
     )
-    animator.play("attack")
+    play_clip(animator, "attack")
 
     entity_manager = EntityManager()
     entity = entity_manager.create_entity()
@@ -707,3 +722,33 @@ def test_animation_system_dispatches_an_animation_frame_event():
     assert received[0].entity_id == entity.id
     assert received[0].name == "swing_start"
     assert received[0].clip_name == "attack"
+
+
+# ===== Component purity =====
+
+
+class TestComponentPurity:
+    """The two animation components were the last `_allow_methods = True`
+    escapes in `pyguara/graphics`. These pin the move down, so a method
+    cannot drift back onto them unnoticed."""
+
+    def test_both_components_are_strict(self) -> None:
+        from pyguara.ecs.component import StrictComponent
+
+        assert issubclass(Animator, StrictComponent)
+        assert issubclass(AnimationStateMachine, StrictComponent)
+
+    def test_neither_component_still_carries_its_behaviour(self) -> None:
+        """A negative control for the test above: `issubclass` alone would
+        pass just as happily with every method still attached."""
+        for gone in ("add_clip", "play", "update"):
+            assert not hasattr(Animator, gone)
+        for gone in ("add_state", "set_default_state", "transition_to", "update"):
+            assert not hasattr(AnimationStateMachine, gone)
+
+    def test_adding_a_method_back_fails_at_class_definition(self) -> None:
+        with pytest.raises(TypeError, match="Regression"):
+
+            class Regression(Animator):
+                def tick(self, dt: float) -> None:
+                    pass

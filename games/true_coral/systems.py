@@ -78,7 +78,7 @@ class SnakeMovementSystem:
     One grid step per `1 / move_rate` seconds (`move_rate` read fresh from
     `StatBlock` every tick, so `StarEffect`'s boost takes effect
     immediately). A big `dt` catches up multiple steps in one call, same
-    reasoning as `Animator.update()`'s multi-frame catch-up.
+    reasoning as `advance_animator()`'s multi-frame catch-up.
     """
 
     RESPAWN_LENGTH = 3
