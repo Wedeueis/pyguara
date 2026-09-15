@@ -42,11 +42,28 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Status:** ✅ Implemented
 * **Run:** `uv run python games/ui_scene_graph/main.py`
 
-## Future Capstone Projects
-
-* **Guará & Falcão** (Platformer)
-
 ## Capstone Projects
+
+### [guara_falcao](./guara_falcao) — Guará & Falcão
+* **Genre:** Platformer, and the engine's **UI showcase**. A title screen, an
+  in-game HUD, a pause menu and an options panel, all over a Cerrado at the
+  amber hour.
+* **Key Concepts:** the `pyguara.ui.design_system` Cerrado theme skinning
+  every stock component; `UILayer` (the HUD on `HUD`, the menus on `OVERLAY`);
+  `LayoutConstraints` anchoring each HUD cluster to a corner; the focus ring
+  and Enter/Space activation; `Slider`/`Checkbox` `on_change`; a scene-stack
+  pause (`push_scene(..., pause_below=True)`) that leaves the frozen game
+  rendering behind a translucent scrim; and a live `set_theme()` swap between
+  Cerrado Dusk and Day that re-skins everything on screen.
+* **Art:** none. Every pixel of the world is a renderer primitive — see
+  [`art.py`](./guara_falcao/art.py). The demo ships no textures on purpose:
+  the subject is the UI, and an asset pipeline beside it would be the thing
+  everyone looked at instead.
+* **Run:** `uv run python games/guara_falcao/main.py`
+* **Look at it headlessly:** `uv run python tools/agent_view.py guara_falcao --gl`
+  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all).
+  Walk the screens with
+  `--click 640,314@20 --click 1199,681@60 --click 640,358@100`.
 
 ### [vinagre_matilha](./vinagre_matilha) — Vinagre: Matilha
 * **Genre:** Real-time squad tactics. Lead a bush-dog pack running a jaguar down a riverbed.
