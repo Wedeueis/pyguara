@@ -13,11 +13,17 @@ Two rules everything in this module obeys.
 so the world and the menus in front of it are the same Cerrado. Nothing
 here invents a colour.
 
-**Shapes first, then `end_frame()`, then text.** The ModernGL backend
-buckets shape instances and flushes them in one draw call at `end_frame()`,
-while `draw_text` uploads and draws immediately -- so text drawn before the
-flush ends up *behind* shapes queued before it. Callers own the flush; this
-module only queues shapes.
+**`end_frame()` is a depth boundary, not just a text boundary.** The
+ModernGL backend buckets shape instances *by type* and draws one instanced
+call per bucket -- every rect, then every circle, then every line. Within a
+single flush that means **circles always land on top of rectangles, whatever
+order they were submitted in**: a tree canopy drawn before a platform still
+covers it, and a fruit drawn before the player still hides them.
+
+So a caller draws one depth layer, calls `end_frame()`, and draws the next.
+Text is the same rule for the same reason -- `draw_text` uploads and draws
+immediately, so text queued before a flush ends up behind the shapes in it.
+Callers own the flush; this module only queues shapes.
 """
 
 from __future__ import annotations
