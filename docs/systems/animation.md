@@ -114,23 +114,33 @@ deliberately overshoot outside `[0, 1]`; the rest stay within it.
 A **clip** is an ordered list of textures plus a frame rate. An **`Animator`**
 plays one clip at a time and writes the current frame onto a `Sprite`.
 
+`Animator` is a data-only component &mdash; the clip table and the playback
+cursor &mdash; so the behaviour that moves that cursor is free functions
+beside it, the same split `Transform`/`set_parent` and `Health`/`apply_damage`
+use. Import them from the same module.
+
 ```python
-from pyguara.graphics.components.animation import AnimationClip, Animator
+from pyguara.graphics.components.animation import (
+    AnimationClip,
+    Animator,
+    add_clip,
+    play_clip,
+)
 
 animator = Animator(sprite)
-animator.add_clip(AnimationClip("run", run_frames, frame_rate=12.0, loop=True))
-animator.add_clip(AnimationClip("hit", hit_frames, frame_rate=20.0, loop=False))
+add_clip(animator, AnimationClip("run", run_frames, frame_rate=12.0, loop=True))
+add_clip(animator, AnimationClip("hit", hit_frames, frame_rate=20.0, loop=False))
 
-animator.play("run")             # no-op if "run" is already playing
-animator.play("run", force_reset=True)  # restart from frame 0
+play_clip(animator, "run")             # no-op if "run" is already playing
+play_clip(animator, "run", force_reset=True)  # restart from frame 0
 ```
 
 `AnimationClip` rejects an empty frame list or a non-positive `frame_rate` at
-construction. `Animator.update(dt)` catches up **every** whole frame the `dt`
-covers, so a lag spike or a host slower than the clip's `frame_rate` does not
-drop frames or drift behind. A non-looping clip stops on its last frame;
-`is_finished` then reports `True` (and `is_playing` `False`). `play()` an
-unknown clip name logs a warning and does nothing.
+construction. `advance_animator(animator, dt)` catches up **every** whole frame
+the `dt` covers, so a lag spike or a host slower than the clip's `frame_rate`
+does not drop frames or drift behind. A non-looping clip stops on its last
+frame; `is_finished` then reports `True` (and `is_playing` `False`).
+`play_clip()` with an unknown clip name logs a warning and does nothing.
 
 ### State machine
 
@@ -143,11 +153,15 @@ from pyguara.graphics.components.animation import (
     AnimationStateMachine,
     AnimationTransition,
     TransitionCondition,
+    add_state,
+    set_default_state,
+    transition_to,
 )
 
 fsm = AnimationStateMachine(sprite, animator)
-fsm.add_state(AnimationState("idle", idle_clip))
-fsm.add_state(
+add_state(fsm, AnimationState("idle", idle_clip))
+add_state(
+    fsm,
     AnimationState(
         "attack",
         attack_clip,
@@ -157,11 +171,11 @@ fsm.add_state(
             )
         ],
         on_complete=lambda: print("attack done"),
-    )
+    ),
 )
-fsm.set_default_state("idle")     # enters the state and starts its clip
+set_default_state(fsm, "idle")   # enters the state and starts its clip
 
-fsm.transition_to("attack")      # manual switch; returns False if already there
+transition_to(fsm, "attack")     # manual switch; returns False if already there
 ```
 
 * `AnimationState` carries `on_enter`, `on_exit` and `on_complete` callbacks.
@@ -178,7 +192,7 @@ fsm.transition_to("attack")      # manual switch; returns False if already there
 
 `AnimationSystem` is registered automatically on every `Scene`'s
 `SystemManager` (priority 300) and ticked at the fixed timestep. Each tick it
-updates every `AnimationStateMachine`, then every standalone `Animator` whose
-entity does **not** also have a state machine (the machine drives its own
-animator). You do not call it, and you should not update animators a second
-time from scene code.
+calls `advance_state_machine()` on every `AnimationStateMachine`, then
+`advance_animator()` on every standalone `Animator` whose entity does **not**
+also have a state machine (the machine drives its own animator). You do not
+call it, and you should not advance animators a second time from scene code.
