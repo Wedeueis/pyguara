@@ -10,6 +10,7 @@ import moderngl
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.moderngl import instancing
 from pyguara.graphics.backends.moderngl.texture import GLTextureFactory
+from pyguara.graphics.materials.material import Material
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 
@@ -47,6 +48,12 @@ class ModernGLRenderer:
     # Initial instance buffer capacity (grows as needed)
     INITIAL_CAPACITY = 1024
 
+    # What a material's vertex shader has to consume for the instance layout
+    # to mean anything. The rest of the layout may be optimised out by the
+    # linker when nothing downstream reads it; these two feed gl_Position, so
+    # a program without them is ignoring the layout rather than trimming it.
+    REQUIRED_ATTRIBUTES = ("in_vert", "in_pos")
+
     # Shape instance layout: pos(2) + size(2) + rot(1) + color(4) + width(1)
     # + shape_type(1) = 11 floats = 44 bytes.
     SHAPE_INSTANCE_FLOATS = 11
@@ -83,6 +90,13 @@ class ModernGLRenderer:
 
         # Create static quad geometry
         self._quad_vbo = self._create_quad_vbo()
+
+        # One VAO per custom-material program. A moderngl VAO is bound to
+        # the program it was built against, so a batch carrying a material
+        # needs its own -- over the *same* quad and instance buffers, so the
+        # pack and upload above are shared. Dropped and rebuilt whenever the
+        # instance buffer is grown, since the VAOs reference the old one.
+        self._material_vaos: dict[int, moderngl.VertexArray] = {}
 
         # Create dynamic instance buffer, and the CPU-side scratch array
         # that is packed and uploaded from. The two are grown together so
@@ -177,13 +191,63 @@ class ModernGLRenderer:
 
         return self._ctx.buffer(vertices.tobytes())
 
-    def _create_vao(self) -> moderngl.VertexArray:
-        """Create the VAO linking static quad and dynamic instance buffers.
+    def _require_instance_attributes(self, program: moderngl.Program) -> None:
+        """Check `program` consumes enough of the instance layout to mean it.
+
+        Args:
+            program: A material's shader program.
+
+        Raises:
+            ValueError: If the program consumes neither of the attributes
+                that feed `gl_Position`.
+        """
+        missing = [a for a in self.REQUIRED_ATTRIBUTES if a not in program]
+        if not missing:
+            return
+
+        raise ValueError(
+            f"A material's vertex shader must consume {', '.join(missing)}: "
+            "the renderer packs one fixed instance layout (in_vert, in_uv "
+            "per-vertex; in_pos, in_rot, in_scale, in_size, in_color "
+            "per-instance), and a shader that ignores it draws every sprite "
+            "in the same place rather than failing. Reuse "
+            "`materials.defaults.DEFAULT_SPRITE_VERTEX` unless you mean to "
+            "replace the vertex stage."
+        )
+
+    def _create_vao(
+        self, program: moderngl.Program | None = None
+    ) -> moderngl.VertexArray:
+        """Create a VAO linking static quad and dynamic instance buffers.
 
         The /i flag marks attributes as instanced (per-instance rather than per-vertex).
+
+        Args:
+            program: The program to bind the buffers against. Defaults to the
+                built-in sprite program.
+
+        Returns:
+            A vertex array over the shared quad and instance buffers.
+
+        Raises:
+            ValueError: If `program`'s vertex shader does not declare the
+                instance layout this renderer packs.
         """
+        if program is None:
+            # The built-in sprite program, whose layout is this file's own
+            # and is covered by the pixel tests; only a material's program
+            # is worth validating.
+            program = self._program
+        else:
+            self._require_instance_attributes(program)
+
+        # `skip_errors` because the GLSL linker drops an attribute nothing
+        # downstream reads: a fragment-only material that ignores `v_uv` and
+        # `v_color` leaves the program with no `in_uv`/`in_color` to bind,
+        # which is legitimate. The required pair above is what distinguishes
+        # that from a shader ignoring the layout altogether.
         return self._ctx.vertex_array(
-            self._program,
+            program,
             [
                 # Static quad geometry (per-vertex)
                 (self._quad_vbo, "2f 2f", "in_vert", "in_uv"),
@@ -198,6 +262,7 @@ class ModernGLRenderer:
                     "in_color",
                 ),
             ],
+            skip_errors=True,
         )
 
     def _create_shape_shader_program(self) -> moderngl.Program:
@@ -286,13 +351,17 @@ class ModernGLRenderer:
             dtype="f4",
         )
 
+        # Kept so a material's program can be handed the same matrix at draw
+        # time; material programs are not known here.
+        self._projection_bytes = projection.tobytes()
+
         uniform = self._program["u_projection"]
         if hasattr(uniform, "write"):
-            uniform.write(projection.tobytes())
+            uniform.write(self._projection_bytes)
 
         shape_uniform = self._shape_program["u_projection"]
         if hasattr(shape_uniform, "write"):
-            shape_uniform.write(projection.tobytes())
+            shape_uniform.write(self._projection_bytes)
 
     @property
     def width(self) -> int:
@@ -483,13 +552,55 @@ class ModernGLRenderer:
         packed = instancing.pack_sprite_instances(batch, self._instance_scratch)
         self._instance_vbo.write(self._instance_scratch[:packed])
 
-        # Bind texture
+        # Bind texture. The batch's texture is what these sprites *are*, so
+        # it owns unit 0 whether or not a material is present.
         gl_texture = batch.texture.native_handle
         gl_texture.use(0)
-        self._program["u_texture"] = 0
+
+        vao = self._vao
+        if batch.material is None:
+            self._program["u_texture"] = 0
+        else:
+            vao = self._bind_material(batch.material)
 
         # Draw all instances in one call
-        self._vao.render(moderngl.TRIANGLE_STRIP, instances=count)
+        vao.render(moderngl.TRIANGLE_STRIP, instances=count)
+
+    def _bind_material(self, material: Material) -> moderngl.VertexArray:
+        """Select `material`'s program, feed it its uniforms, and return its VAO.
+
+        `Shader.set_uniform` ignores a name the program does not declare, so a
+        material that sets a uniform its shader dropped is not an error here --
+        the same tolerance the rest of the material system has.
+
+        Args:
+            material: The material the batch carries.
+
+        Returns:
+            The vertex array bound to the material's program.
+        """
+        shader = material.shader
+        vao = self._material_vaos.get(shader.program.glo)
+        if vao is None:
+            vao = self._create_vao(shader.program)
+            self._material_vaos[shader.program.glo] = vao
+
+        shader.set_uniform("u_projection", self._projection_bytes)
+        shader.set_uniform("u_texture", 0)
+
+        # A material's own texture is a *second* sampler -- a mask, a ramp,
+        # a noise field -- because unit 0 is the sprite's. Silently dropping
+        # it would be the same shape of quiet no-op this path is fixing.
+        if material.texture is not None:
+            gl_texture = material.texture.native_handle
+            if gl_texture is not None:
+                gl_texture.use(1)
+                shader.set_uniform("u_material_texture", 1)
+
+        for name, value in material.uniforms.items():
+            shader.set_uniform(name, value)
+
+        return vao
 
     def _grow_instance_buffer(self, required_capacity: int) -> None:
         """Grow the instance buffer to accommodate more sprites.
@@ -516,6 +627,12 @@ class ModernGLRenderer:
         # Recreate VAO with new instance buffer
         self._vao.release()
         self._vao = self._create_vao()
+
+        # Every material VAO points at the buffer just released; drop them
+        # and let the next batch that needs one rebuild it.
+        for vao in self._material_vaos.values():
+            vao.release()
+        self._material_vaos.clear()
 
     def _grow_shape_buffer(self, shape_type: float, required_capacity: int) -> None:
         """Grow one shape-type bucket's instance buffer to fit more instances.
@@ -654,6 +771,10 @@ class ModernGLRenderer:
             self._instance_vbo.release()
         if self._program:
             self._program.release()
+
+        for vao in self._material_vaos.values():
+            vao.release()
+        self._material_vaos.clear()
 
         for vao in self._shape_vaos.values():
             vao.release()
