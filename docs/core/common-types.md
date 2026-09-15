@@ -101,12 +101,19 @@ r.inflate(4, 4)                     # grows around the same centre
 Position, rotation and scale, with optional parenting. Angles are **radians**
 everywhere except `rotation_degrees`.
 
+`Transform` is a data-only component, so its behaviour is free functions
+beside it in `pyguara.common.components` — the same split
+`StatBlock`/`get_stat` and `Health`/`apply_damage` use. Properties
+(`position`, `rotation`, every `world_*`) stay on the component.
+
 ```python
+from pyguara.common.components import Transform, look_at, rotate, translate
+
 t = Transform(position=Vector2(100, 50), rotation=math.pi / 2)
 t.position, t.rotation, t.rotation_degrees, t.scale
-t.translate(Vector2(5, 0))
-t.rotate(math.pi)          # radians
-t.look_at(Vector2(0, 0))   # points `forward` at a world position
+translate(t, Vector2(5, 0))
+rotate(t, math.pi)          # radians
+look_at(t, Vector2(0, 0))   # points `forward` at a world position
 ```
 
 ### Hierarchy
@@ -115,9 +122,9 @@ A parented transform stores values *local* to its parent; the `world_*`
 properties resolve the chain.
 
 ```python
-child.set_parent(parent)                            # keeps world position
-child.set_parent(parent, keep_world_transform=False)  # keeps local values
-child.set_parent(None)                              # detach
+set_parent(child, parent)                            # keeps world position
+set_parent(child, parent, keep_world_transform=False)  # keeps local values
+set_parent(child, None)                              # detach
 ```
 
 World values are cached and rebuilt lazily: a setter marks the subtree dirty,
@@ -127,31 +134,38 @@ and the next `world_*` read recomputes only what it needs. This is transparent
 Cycles are rejected:
 
 ```python
-t.set_parent(t)          # ValueError
-a.set_parent(b); b.set_parent(a)   # ValueError
+set_parent(t, t)                     # ValueError
+set_parent(a, b); set_parent(b, a)   # ValueError
 ```
 
 A cycle has no world transform, so without this guard every later `world_*`
-read recursed until the stack ran out. `is_ancestor_of(other)` exposes the same
-check.
+read recursed until the stack ran out. `is_ancestor_of(t, other)` exposes the
+same check.
 
 ### Coordinate conversion
 
 ```python
-t.local_to_world(Vector2(1, 0))
-t.world_to_local(Vector2(110, 55))
-t.distance_to(other_transform)      # world space
+local_to_world(t, Vector2(1, 0))
+world_to_local(t, Vector2(110, 55))
+distance_to(t, other_transform)      # world space
 ```
 
 A zero world scale is not invertible; `world_to_local` returns the origin
 rather than raising mid-frame.
 
-### Why Transform has methods
+### Why the behaviour is beside Transform, not in a system
 
-`Transform` sets `_allow_methods = True`, opting out of the data-only
-component rule. It is the engine's largest exception to that rule, and moving
-the hierarchy math into a `TransformSystem` is tracked as a cross-cutting
-concern rather than attempted piecemeal — it touches most of the engine.
+`Transform` was the engine's largest exception to the data-only rule, holding
+ten methods under `_allow_methods = True`. A `TransformSystem` was the obvious
+destination and the wrong one: none of this is per-frame work over a query. It
+is ten independent operations a caller invokes at a moment of its choosing, and
+a system would have had to expose all ten as methods anyway. So they became
+free functions, and the rule got a carve-out (`@pure_query`) for the
+side-effect-free reads that genuinely read better as methods.
+
+The lazy `world_*` cache stayed on the component. Its invalidation is driven by
+the property setters, which are permitted, and splitting the cache from the
+setters that dirty it would have made both harder to reason about.
 
 ## Rules of thumb
 
