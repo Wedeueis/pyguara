@@ -71,7 +71,7 @@ class WaveManager:
         self._pool = enemy_pool
         self._dispatcher = event_dispatcher
         self._rng = rng if rng is not None else RandomStream()
-        self._director = SpawnDirector(budget=0.0, regen_rate=0.0, max_budget=0.0)
+        self._director = SpawnDirector()
 
         # Wave state
         self._current_wave = 0
@@ -98,7 +98,7 @@ class WaveManager:
 
         composition = self._generate_enemy_composition(wave_number, total_enemies)
         entries = [
-            SpawnEntry(factory=self._make_spawn_factory(enemy_type, health), cost=0.0)
+            SpawnEntry(factory=self._make_spawn_factory(enemy_type, health))
             for enemy_type, health in composition
         ]
         self._pending_in_wave = len(entries)
