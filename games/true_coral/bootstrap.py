@@ -48,7 +48,6 @@ from pyguara.graphics.pipeline.passes import (
     PostProcessPass,
     WorldPass,
 )
-from pyguara.graphics.pipeline.passes.light_pass import LIGHT_FBO_NAME
 from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 from pyguara.graphics.vfx.effects.storm import StormEffect
@@ -150,19 +149,19 @@ def configure_game_container() -> DIContainer:
     fbo_manager = render_graph.fbo_manager
     container.register_instance(FramebufferManager, fbo_manager)
 
-    # Claim the light map before `LightPass` does, so it is 16-bit float
-    # rather than the manager's default 8-bit.
+    # The light map is 16-bit float because `RenderGraph` declares the
+    # whole chain that way (`pipeline/buffers.py`) -- this bootstrap used to
+    # claim it by hand.
     #
-    # This is the difference between the lighting working and not. Lights
+    # It is the difference between the lighting working and not. Lights
     # blend additively into this buffer and the composite multiplies the
-    # world by it, so an 8-bit map -- clamped at 1.0 -- can only ever
-    # restore a colour to what was drawn. No light brightens anything, a
-    # glowing mushroom cannot push its surroundings past the bloom
-    # threshold, and a lightning strike cannot reveal the floor, because
-    # the ambient term it lifts is already saturated. With a float map the
+    # world by it, so an 8-bit map -- clamped at 1.0 -- could only ever
+    # restore a colour to what was drawn. No light brightened anything, a
+    # glowing mushroom could not push its surroundings past the bloom
+    # threshold, and a lightning strike could not reveal the floor, because
+    # the ambient term it lifts was already saturated. With a float map the
     # same lights over-expose what they fall on, which is what bloom is
     # looking for.
-    fbo_manager.get_or_create(LIGHT_FBO_NAME, dtype="f2")
 
     storm = StormEffect(ctx)
     stack = PostProcessStack(ctx, fbo_manager)
