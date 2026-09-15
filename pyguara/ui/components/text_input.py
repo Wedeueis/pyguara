@@ -22,22 +22,18 @@ class TextInput(Widget):
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the input box and text."""
-        # Background
-        bg_color = self.theme.colors.background
-        border_color = self.theme.colors.border
+        # A field is cut into the surface; the focus ring is what says it
+        # is taking keystrokes, rather than the accent colour standing in.
+        colors = self.theme.colors
+        border_color = colors.focus_ring if self.active else colors.edge_strong
 
-        if self.active:
-            border_color = self.theme.colors.secondary
-
-        renderer.draw_rect(self.rect, bg_color)
+        renderer.draw_rect(self.rect, colors.surface_inset)
         renderer.draw_rect(self.rect, border_color, width=1)
 
-        # Text
+        # Text. A placeholder is faint text, not a border colour that
+        # happened to be dim enough.
         display_text = self.text if self.text else self.placeholder
-        color = self.theme.colors.text
-
-        if not self.text:
-            color = self.theme.colors.border  # Dim placeholder
+        color = colors.text_body if self.text else colors.text_faint
 
         # Draw text with padding
         renderer.draw_text(
@@ -51,7 +47,7 @@ class TextInput(Widget):
             renderer.draw_line(
                 Vector2(cursor_x, self.rect.y + 5),
                 Vector2(cursor_x, self.rect.y + 25),
-                self.theme.colors.text,
+                colors.text_body,
             )
 
     def handle_event(

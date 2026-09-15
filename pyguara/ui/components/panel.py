@@ -22,9 +22,9 @@ class Panel(Widget):
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the panel background and border."""
-        # Background
-        bg_color = self._color or self.theme.colors.background
+        # A panel is a card sitting on the canvas, not the canvas itself --
+        # `surface_card` is what separates it from the background behind it.
+        bg_color = self._color or self.theme.colors.surface_card
         renderer.draw_rect(self.rect, bg_color, width=0)
 
-        # Border
-        renderer.draw_rect(self.rect, self.theme.colors.border, width=self.border_width)
+        renderer.draw_rect(self.rect, self.theme.colors.edge, width=self.border_width)

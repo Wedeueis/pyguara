@@ -6,8 +6,11 @@ import pytest
 from pyguara.common.types import Color, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.button import Button
+from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.text import Label
-from pyguara.ui.types import UIElementState, UIEventType
+from pyguara.ui.components.text_input import TextInput
+from pyguara.ui.theme import UITheme, set_theme
+from pyguara.ui.types import ColorScheme, UIElementState, UIEventType
 
 
 @pytest.fixture  # type: ignore[misc]
@@ -121,3 +124,93 @@ def test_widget_state_colors() -> None:
     assert dim_color.g == 50
     assert dim_color.b == 50
     assert dim_color.a == 255
+
+
+class TestComponentsReadTheSemanticRoles:
+    """Components used to overload the base five colours.
+
+    `secondary` meant the accent, the hover fill, the focus ring and a
+    checkbox tick all at once, and a placeholder was drawn in the *border*
+    colour because it happened to be dim. Each of those is now a role a
+    theme states outright, which is what lets a design system re-skin the
+    stock components without touching them.
+    """
+
+    def test_a_button_fills_with_the_action_states(self, mock_renderer: Any) -> None:
+        theme = UITheme(
+            name="t",
+            colors=ColorScheme.derive(
+                action_primary=Color(1, 1, 1),
+                action_primary_hover=Color(2, 2, 2),
+                action_primary_press=Color(3, 3, 3),
+                action_disabled=Color(4, 4, 4),
+            ),
+        )
+        set_theme(theme)
+        try:
+            btn = Button("Go", Vector2(0, 0))
+            seen = {}
+            for state in (
+                UIElementState.NORMAL,
+                UIElementState.HOVERED,
+                UIElementState.PRESSED,
+                UIElementState.DISABLED,
+            ):
+                btn.state = state
+                seen[state] = btn.fill_color()
+
+            assert seen[UIElementState.NORMAL] == Color(1, 1, 1)
+            assert seen[UIElementState.HOVERED] == Color(2, 2, 2)
+            assert seen[UIElementState.PRESSED] == Color(3, 3, 3)
+            assert seen[UIElementState.DISABLED] == Color(4, 4, 4)
+        finally:
+            set_theme(UITheme())
+
+    def test_a_focused_button_borders_with_the_focus_ring(self) -> None:
+        set_theme(
+            UITheme(name="t", colors=ColorScheme.derive(focus_ring=Color(9, 9, 9)))
+        )
+        try:
+            btn = Button("Go", Vector2(0, 0))
+            btn.state = UIElementState.FOCUSED
+
+            assert btn.border_color() == Color(9, 9, 9)
+        finally:
+            set_theme(UITheme())
+
+    def test_a_placeholder_is_faint_text_not_a_border(self, mock_renderer: Any) -> None:
+        set_theme(
+            UITheme(
+                name="t",
+                colors=ColorScheme.derive(
+                    text_faint=Color(7, 7, 7), border=Color(8, 8, 8)
+                ),
+            )
+        )
+        try:
+            field = TextInput(Vector2(0, 0), placeholder="name")
+
+            field.render(mock_renderer)
+
+            assert mock_renderer.draw_text.call_args.args[2] == Color(7, 7, 7)
+        finally:
+            set_theme(UITheme())
+
+    def test_a_panel_is_a_card_not_the_canvas(self, mock_renderer: Any) -> None:
+        """A panel drawn in the background colour is invisible on it."""
+        set_theme(
+            UITheme(
+                name="t",
+                colors=ColorScheme.derive(
+                    background=Color(5, 5, 5), surface_card=Color(6, 6, 6)
+                ),
+            )
+        )
+        try:
+            panel = Panel(Vector2(0, 0), Vector2(10, 10))
+
+            panel.render(mock_renderer)
+
+            assert mock_renderer.draw_rect.call_args_list[0].args[1] == Color(6, 6, 6)
+        finally:
+            set_theme(UITheme())

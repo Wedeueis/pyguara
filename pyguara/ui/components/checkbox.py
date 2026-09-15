@@ -1,6 +1,6 @@
 """Boolean toggle component."""
 
-from pyguara.common.types import Color, Rect, Vector2
+from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.widget import Widget
 from pyguara.ui.types import UIElementState, UIEventType
@@ -29,13 +29,21 @@ class Checkbox(Widget):
 
         # 1. Draw Box
         box_rect = Rect(self.rect.x, self.rect.y, self.box_size, self.box_size)
-        bg_color = self.theme.colors.background
+        colors = self.theme.colors
+        bg_color = colors.surface_inset
 
         if self.state == UIElementState.HOVERED:
-            bg_color = Color(bg_color.r + 20, bg_color.g + 20, bg_color.b + 20, 255)
+            # Towards the raised surface rather than by a flat +20 per
+            # channel, which washed out on a light theme and did nothing
+            # on a dark one near white.
+            bg_color = bg_color.lerp(colors.surface_raised, 0.6)
 
         renderer.draw_rect(box_rect, bg_color)
-        renderer.draw_rect(box_rect, self.theme.colors.border, width=1)
+        renderer.draw_rect(
+            box_rect,
+            colors.focus_ring if self.state == UIElementState.FOCUSED else colors.edge,
+            width=1,
+        )
 
         # 2. Draw Check (Inner Box)
         if self.checked:
@@ -44,13 +52,13 @@ class Checkbox(Widget):
             check_rect = Rect(
                 self.rect.x + offset, self.rect.y + offset, inner_size, inner_size
             )
-            renderer.draw_rect(check_rect, self.theme.colors.secondary)
+            renderer.draw_rect(check_rect, self.theme.colors.action_secondary)
 
         # 3. Draw Label text
         text_pos = Vector2(
             self.rect.x + self.box_size + self.label_spacing, self.rect.y
         )
-        renderer.draw_text(self.label, text_pos, self.theme.colors.text)
+        renderer.draw_text(self.label, text_pos, self.theme.colors.text_body)
 
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int
