@@ -19,15 +19,18 @@ from unittest.mock import MagicMock
 import pytest
 
 from games.guara_falcao import art
-from games.guara_falcao.components import Health, Score
+from games.guara_falcao.components import Collectible, Health, Score
 from games.guara_falcao.events import DebugCollidersToggled
 from games.guara_falcao.hud import Hud
 from games.guara_falcao.menus import OptionsScene, PauseScene
+from games.guara_falcao.scenes import GameScene
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.common.components import Transform
 from pyguara.common.types import Rect, Vector2
 from pyguara.di.container import DIContainer
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.lighting.components import LightSource
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.kits.effects import EffectContainer
 from pyguara.kits.effects.effect import Effect
@@ -332,3 +335,90 @@ class TestTheArt:
         for band in art.SKY_BANDS:
             luminance = (0.2126 * band.r + 0.7152 * band.g + 0.0722 * band.b) / 255
             assert luminance < BLOOM_THRESHOLD
+
+
+class TestPickupMotionAndGlow:
+    """A pickup's sprite, its light and its collection radius are one thing.
+
+    The float started life as a sine added at draw time, which moved the
+    sprite and nothing else -- so the fruit drifted away from its own glow.
+    And nothing removes a collected pickup, it is only flagged, so its
+    light burned on over an empty patch of air: what "the fruit did not
+    disappear" actually looked like.
+    """
+
+    def _scene(self, container: DIContainer) -> Any:
+        scene = GameScene(container.get(EventDispatcher))
+        scene.resolve_dependencies(container)
+        return scene
+
+    @staticmethod
+    def _fruit(scene: Any, y: float = 100.0, collected: bool = False) -> Any:
+        entity = scene.entity_manager.create_entity()
+        entity.add_component(Transform(position=Vector2(200.0, y)))
+        entity.add_component(Collectible(collect_type="coin", collected=collected))
+        return entity
+
+    def test_preparing_lights_a_pickup_and_records_its_height(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._scene(game_container)
+        fruit = self._fruit(scene, y=140.0)
+
+        scene._prepare_pickups()
+
+        assert fruit.get_component(LightSource) is not None
+        assert scene._pickup_home[fruit.id] == 140.0
+
+    def test_an_uncollected_pickup_floats(self, game_container: DIContainer) -> None:
+        scene = self._scene(game_container)
+        fruit = self._fruit(scene, y=140.0)
+        scene._prepare_pickups()
+
+        heights = set()
+        for _ in range(12):
+            scene._elapsed += 0.1
+            scene._animate_pickups()
+            heights.add(round(fruit.get_component(Transform).position.y, 3))
+
+        assert len(heights) > 1
+
+    def test_the_float_is_a_displacement_not_a_drift(
+        self, game_container: DIContainer
+    ) -> None:
+        """Accumulating on the previous position would walk the fruit off
+        the screen over a long run."""
+        scene = self._scene(game_container)
+        fruit = self._fruit(scene, y=140.0)
+        scene._prepare_pickups()
+
+        for _ in range(600):
+            scene._elapsed += 0.1
+            scene._animate_pickups()
+
+        assert abs(fruit.get_component(Transform).position.y - 140.0) <= 3.0
+
+    def test_collecting_one_puts_its_light_out(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._scene(game_container)
+        fruit = self._fruit(scene)
+        scene._prepare_pickups()
+        assert fruit.get_component(LightSource).enabled is True
+
+        fruit.get_component(Collectible).collected = True
+        scene._animate_pickups()
+
+        assert fruit.get_component(LightSource).enabled is False
+
+    def test_a_collected_pickup_stops_floating(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._scene(game_container)
+        fruit = self._fruit(scene, y=140.0, collected=True)
+        scene._prepare_pickups()
+
+        scene._elapsed += 1.0
+        scene._animate_pickups()
+
+        assert fruit.get_component(Transform).position.y == 140.0
