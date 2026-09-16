@@ -57,7 +57,7 @@ class FoodDirector:
         self._grid_height = grid_height
         self._is_cell_free = is_cell_free
         self._rng = rng if rng is not None else RandomStream()
-        self._director = SpawnDirector(budget=0.0, regen_rate=0.0, max_budget=0.0)
+        self._director = SpawnDirector()
         self._active_cells: set[Cell] = set()
 
     def update(self, dt: float) -> None:
@@ -65,8 +65,7 @@ class FoodDirector:
         if self._director.is_idle and len(self._active_cells) < self.TARGET_POPULATION:
             needed = self.TARGET_POPULATION - len(self._active_cells)
             entries = [
-                SpawnEntry(factory=self._make_spawn_factory(), cost=0.0)
-                for _ in range(needed)
+                SpawnEntry(factory=self._make_spawn_factory()) for _ in range(needed)
             ]
             self._director.queue_wave(
                 Wave(entries=entries, interval=self.SPAWN_INTERVAL)
