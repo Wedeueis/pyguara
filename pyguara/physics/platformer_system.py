@@ -189,6 +189,23 @@ class PlatformerSystem:
         body.grounded = hit is not None
         controller.is_grounded = body.grounded
 
+        # A grounded character has its jump back, however it got there.
+        #
+        # This is deliberately the *level* state, not the airborne->grounded
+        # edge below. A jump blocked by a ceiling is consumed --
+        # `_perform_jump` sets `_jump_used` -- without the character ever
+        # leaving the ground, so the edge never fires again and the jump
+        # stays spent for the rest of the run. Standing under a platform
+        # with no headroom and pressing jump once was enough to lose it
+        # permanently.
+        #
+        # Only `_jump_used` is cleared here, not the whole of
+        # `reset_jump_state()`: that also wipes `jump_buffer_timer`, and
+        # wiping it on every grounded tick would eat the buffered press
+        # that the buffer exists to honour.
+        if controller.is_grounded:
+            controller._jump_used = False
+
         # Reset coyote time when landing
         if controller.is_grounded and not was_grounded:
             controller.coyote_timer = 0.0
@@ -490,6 +507,17 @@ class PlatformerSystem:
                 result = self._mover.move(
                     origin, half_extents, delta, body._remainder, entity_id
                 )
+
+        # A ceiling stops the rise. Without this the character keeps the
+        # upward velocity it can no longer act on, and hangs against the
+        # ceiling for the ~0.4s gravity needs to cancel it.
+        #
+        # Upward blocks only. A downward block is a landing, and landings
+        # are already flush against the floor with their velocity left
+        # alone -- changing that would change how the character falls,
+        # which is not what this is about.
+        if result.hit_y and delta.y < 0 and body.velocity.y < 0:
+            body.velocity = Vector2(body.velocity.x, 0.0)
 
         transform.position = result.position
         body._remainder = result.remainder
