@@ -3,11 +3,10 @@
 Menu and Gameplay scenes demonstrating the UI Scene Graph.
 """
 
-import sys
-
 from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.window import Window
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.components.button import Button
@@ -89,8 +88,6 @@ class MenuScene(Scene):
         btn_quit.on_click = self.on_quit_click
         container.add_child(btn_quit)
 
-        # Apply layout
-
         # Add to manager
         ui_manager.add_element(container)
 
@@ -101,9 +98,15 @@ class MenuScene(Scene):
         scene_manager.push(GameScene(self.event_dispatcher))
 
     def on_quit_click(self, el) -> None:
-        """Handle quit button."""
+        """Handle quit button.
+
+        Closes the window rather than killing the process directly: the
+        main loop runs while `window.is_open`, so this lets `Application`
+        fall out of `run()` and go through its normal shutdown/teardown
+        instead of skipping it with `sys.exit()`.
+        """
         print("Quit clicked!")
-        sys.exit(0)
+        self.container.get(Window).close()
 
     def on_exit(self) -> None:
         """Cleanup."""

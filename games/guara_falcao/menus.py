@@ -13,15 +13,16 @@ inside the options panel cycles the options and nothing else.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 
 from games.guara_falcao.events import DebugCollidersToggled
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
+from pyguara.graphics.window import Window
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.base import UIElement
@@ -412,6 +413,10 @@ class OptionsScene(Scene):
         """Draw nothing: the scene under this one is still rendering."""
 
 
-def quit_game() -> None:
-    """Leave the demo."""
-    sys.exit(0)
+def quit_game(container: DIContainer) -> None:
+    """Leave the demo.
+
+    Closes the window rather than `sys.exit()`, so `Application.run()`
+    falls out of its loop and runs its normal shutdown/teardown.
+    """
+    container.get(Window).close()
