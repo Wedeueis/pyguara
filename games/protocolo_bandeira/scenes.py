@@ -21,7 +21,6 @@ hit should look.
 from __future__ import annotations
 
 import math
-import sys
 
 from games.protocolo_bandeira import render
 from games.protocolo_bandeira.arena_fx import ArenaFX
@@ -56,6 +55,7 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.pool import Poolable
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.window import Window
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, SPACE, UP, A, D, S, W
 from pyguara.input.manager import InputManager
@@ -201,8 +201,12 @@ class MenuScene(_ClearingScene):
         scene_manager.push_scene("ArenaScene")
 
     def _on_quit_click(self, el) -> None:
-        """Quit the game."""
-        sys.exit(0)
+        """Quit the game.
+
+        Closes the window rather than `sys.exit()`, so `Application.run()`
+        falls out of its loop and runs its normal shutdown/teardown.
+        """
+        self.container.get(Window).close()
 
     def on_exit(self) -> None:
         """Clean up scene resources."""
