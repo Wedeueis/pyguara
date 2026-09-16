@@ -244,9 +244,13 @@ class TitleScene(Scene):
 
         art.draw_sky(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
         art.draw_sun(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
-        art.draw_parallax(world_renderer, drift, WINDOW_WIDTH, WINDOW_HEIGHT)
+        world_renderer.end_frame()
 
-        # The hero and the companion, walking the near band.
+        art.draw_parallax(world_renderer, drift, WINDOW_WIDTH, WINDOW_HEIGHT)
+        world_renderer.end_frame()
+
+        # The hero and the companion, walking the near band -- after a
+        # flush, so the canopies behind them stay behind them.
         ground = WINDOW_HEIGHT * 0.72 + 40
         walker = Vector2(
             WINDOW_WIDTH * 0.2 + math.sin(self._elapsed * 0.4) * 60.0, ground - 46
@@ -418,7 +422,11 @@ class GameScene(Scene):
             color = (
                 FRUIT_LIGHT if collectible.collect_type == "coin" else CHECKPOINT_LIGHT
             )
-            entity.add_component(LightSource(color=color, radius=120.0, intensity=0.7))
+            # Small and soft. A pickup is meant to catch the eye across a
+            # level, not to be a second sun -- at radius 120 / intensity
+            # 0.7 each fruit blew a white hole through the bloom pass, and
+            # a row of them merged into one wash.
+            entity.add_component(LightSource(color=color, radius=34.0, intensity=0.14))
 
     def _setup_input(self) -> None:
         """Configure input bindings."""
@@ -675,13 +683,25 @@ class GameScene(Scene):
 
         begin_world(self.container)
 
+        # One `end_frame()` per depth layer. The backend draws every
+        # rectangle, then every circle, then every line -- so without a
+        # flush between these groups the tree canopies (circles) cover the
+        # platforms (rectangles) they stand behind, and a fruit covers the
+        # player. Submission order alone does not decide it.
         art.draw_sky(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
         art.draw_sun(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
+        world_renderer.end_frame()
+
         art.draw_parallax(world_renderer, camera_offset.x, WINDOW_WIDTH, WINDOW_HEIGHT)
+        world_renderer.end_frame()
 
         self._draw_platforms(world_renderer, camera_offset)
+        world_renderer.end_frame()
+
         self._draw_pickups(world_renderer, camera_offset)
         self._draw_zones(world_renderer, camera_offset)
+        world_renderer.end_frame()
+
         self._draw_player(world_renderer, camera_offset)
 
         if self._show_colliders:
