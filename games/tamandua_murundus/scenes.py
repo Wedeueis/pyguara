@@ -296,7 +296,14 @@ class ClearingScene(Scene):
         self._player_id = entity.id
 
     def _create_murundus(self) -> None:
-        """Stand the mounds up, each with its own flickering light."""
+        """Stand the mounds up, each with its own pulsing glow.
+
+        The pulse is a per-mound `sin()` phase resolved straight into the
+        light tuple `_lights()` hands the renderer each frame, not a
+        `LightSource.flicker_enabled` component -- these lights are
+        ephemeral and aggregated for the same reason the swarm's are (see
+        `_lights()`), so there is no per-entity `LightSource` to flag.
+        """
         for offset, position in enumerate(MURUNDU_POSITIONS):
             entity = self.entity_manager.create_entity()
             entity.add_component(Transform(position=position))
