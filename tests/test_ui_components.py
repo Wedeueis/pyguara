@@ -11,7 +11,7 @@ from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.text import Label
 from pyguara.ui.components.text_input import TextInput
 from pyguara.ui.theme import UITheme, set_theme
-from pyguara.ui.types import ColorScheme, UIElementState, UIEventType
+from pyguara.ui.types import ColorScheme, TextAlign, UIElementState, UIEventType
 
 
 @pytest.fixture  # type: ignore[misc]
@@ -174,6 +174,7 @@ class TestComponentsReadTheSemanticRoles:
         try:
             btn = Button("Go", Vector2(0, 0))
             btn.state = UIElementState.FOCUSED
+            btn.focus_visible = True
 
             assert btn.border_color() == Color(9, 9, 9)
         finally:
@@ -251,3 +252,63 @@ class TestContainersDrawTheirChildren:
         canvas.render(mock_renderer)
 
         assert mock_renderer.draw_text.call_args.args[0] == "inside"
+
+
+class TestLabelAlignment:
+    """A caller centring text used to guess its width by eye.
+
+    `Label` measures its own text at render time already -- `width` +
+    `align` puts that measurement to use instead of a hardcoded x offset
+    that is wrong the moment the text, the font or the panel changes.
+    """
+
+    def test_without_a_width_the_rect_is_exactly_the_text(
+        self, mock_renderer: Any
+    ) -> None:
+        """Unchanged behaviour for every caller that does not opt in."""
+        mock_renderer.get_text_size.return_value = (64, 20)
+        label = Label("Hi", Vector2(10, 10))
+
+        label.render(mock_renderer)
+
+        assert label.rect.width == 64
+        assert mock_renderer.draw_text.call_args.args[1].x == 10
+
+    def test_center_places_the_text_in_the_middle_of_the_width(
+        self, mock_renderer: Any
+    ) -> None:
+        mock_renderer.get_text_size.return_value = (60, 20)
+        label = Label("Hi", Vector2(100, 10), width=200, align=TextAlign.CENTER)
+
+        label.render(mock_renderer)
+
+        # (200 - 60) // 2 == 70, offset from the label's own x (100).
+        assert mock_renderer.draw_text.call_args.args[1].x == 170
+
+    def test_right_aligns_to_the_far_edge(self, mock_renderer: Any) -> None:
+        mock_renderer.get_text_size.return_value = (60, 20)
+        label = Label("Hi", Vector2(100, 10), width=200, align=TextAlign.RIGHT)
+
+        label.render(mock_renderer)
+
+        assert mock_renderer.draw_text.call_args.args[1].x == 240
+
+    def test_a_fixed_width_does_not_shrink_to_the_text(
+        self, mock_renderer: Any
+    ) -> None:
+        mock_renderer.get_text_size.return_value = (10, 20)
+        label = Label("Hi", Vector2(0, 0), width=200)
+
+        label.render(mock_renderer)
+
+        assert label.rect.width == 200
+
+    def test_height_is_still_measured_with_a_fixed_width(
+        self, mock_renderer: Any
+    ) -> None:
+        mock_renderer.get_text_size.return_value = (10, 33)
+        label = Label("Hi", Vector2(0, 0), width=200)
+
+        label.render(mock_renderer)
+
+        assert label.rect.height == 33

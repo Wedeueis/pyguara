@@ -151,10 +151,10 @@ class BevelButton(Button):
         """The edge colour, honouring `skin` unless focused.
 
         Returns:
-            The focus ring when focused, otherwise the skin's or theme's
-            edge.
+            The focus ring when focused and visible, otherwise the skin's
+            or theme's edge.
         """
-        if self.state == UIElementState.FOCUSED:
+        if self.state == UIElementState.FOCUSED and self.focus_visible:
             return self.theme.colors.focus_ring
         if self.skin is None:
             return super().border_color()

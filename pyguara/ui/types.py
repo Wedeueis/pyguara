@@ -56,6 +56,19 @@ class UIAnchor(Enum):
     BOTTOM_RIGHT = auto()
 
 
+class TextAlign(Enum):
+    """Where a `Label` positions its text within its own width.
+
+    Only meaningful when the label has an explicit `width` -- an
+    auto-sizing label's rect is exactly the text's width, so there is
+    nowhere for alignment to move it.
+    """
+
+    LEFT = auto()
+    CENTER = auto()
+    RIGHT = auto()
+
+
 class LayoutDirection(Enum):
     """Direction for container stacking."""
 

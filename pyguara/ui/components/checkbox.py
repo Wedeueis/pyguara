@@ -61,9 +61,12 @@ class Checkbox(Widget):
             bg_color = bg_color.lerp(colors.surface_raised, 0.6)
 
         renderer.draw_rect(box_rect, bg_color)
+        focused_and_visible = (
+            self.state == UIElementState.FOCUSED and self.focus_visible
+        )
         renderer.draw_rect(
             box_rect,
-            colors.focus_ring if self.state == UIElementState.FOCUSED else colors.edge,
+            colors.focus_ring if focused_and_visible else colors.edge,
             width=1,
         )
 
