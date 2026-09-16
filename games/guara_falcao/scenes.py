@@ -96,6 +96,13 @@ SUN_COLOR = Color(255, 196, 120)
 FRUIT_LIGHT = Color(180, 255, 120)
 CHECKPOINT_LIGHT = Color(150, 240, 220)
 
+PICKUP_BOB_HEIGHT = 3.0
+PICKUP_BOB_RATE = 2.2
+"""How far and how fast a pickup floats, in pixels and radians per second.
+
+Small on purpose: the collection radius is 30px, so a bob big enough to
+notice is also big enough to change when a pickup is picked up."""
+
 
 def _sun(scene: Scene, width: int) -> None:
     """Hang the sun and the ambient term in a scene's world.
@@ -309,6 +316,10 @@ class GameScene(Scene):
         self._hud: Hud | None = None
         self._elapsed = 0.0
 
+        # Each pickup's resting height, so the bob is a displacement from
+        # somewhere rather than an accumulating drift.
+        self._pickup_home: dict[str, float] = {}
+
         # Game flags
         self._is_dead = False
         self._level_complete = False
@@ -385,7 +396,7 @@ class GameScene(Scene):
         # makes them findable from across a wide level.
         self._lighting = LightingSystem(self.entity_manager)
         _sun(self, WINDOW_WIDTH)
-        self._light_pickups()
+        self._prepare_pickups()
         attach_lighting(self.container, self._lighting)
 
         # Register events
@@ -415,10 +426,18 @@ class GameScene(Scene):
         self._checkpoint_system.set_player(player)  # type: ignore[union-attr]
         self._hazard_system.set_player(player)  # type: ignore[union-attr]
 
-    def _light_pickups(self) -> None:
-        """Give every uncollected pickup its own small light."""
+    def _prepare_pickups(self) -> None:
+        """Light every pickup, and remember the height it floats around.
+
+        The bob lives on the transform rather than in the drawing, so the
+        sprite, the light and the collection radius all agree on where the
+        fruit is. Doing it at draw time made the fruit drift away from its
+        own glow.
+        """
+        self._pickup_home.clear()
         for entity in self.entity_manager.get_entities_with(Transform, Collectible):
             collectible = entity.get_component(Collectible)
+            self._pickup_home[entity.id] = entity.get_component(Transform).position.y
             color = (
                 FRUIT_LIGHT if collectible.collect_type == "coin" else CHECKPOINT_LIGHT
             )
@@ -647,8 +666,43 @@ class GameScene(Scene):
             if system is not None:
                 system.update(dt)
 
+        self._animate_pickups()
+
         if self._hud and self._player_id:
             self._hud.update(self.entity_manager.get_entity(self._player_id))
+
+    def _animate_pickups(self) -> None:
+        """Float the uncollected pickups, and put out the collected ones.
+
+        Two jobs, one loop, because they are the same question asked of the
+        same entity: a pickup is either still there -- in which case it
+        bobs and glows -- or it is gone. Nothing removes a collected
+        entity, it is only flagged, so its light would otherwise burn on at
+        full strength over an empty patch of air. That lingering glow is
+        what "the fruit did not disappear" looks like.
+        """
+        for entity in self.entity_manager.get_entities_with(Transform, Collectible):
+            light = entity.get_component(LightSource)
+            collected = entity.get_component(Collectible).collected
+
+            if collected:
+                if light is not None and light.enabled:
+                    light.enabled = False
+                continue
+
+            home = self._pickup_home.get(entity.id)
+            if home is None:
+                continue
+
+            # Offset per entity so a row of fruit does not bob in unison,
+            # which reads as one object rather than several.
+            phase = self._elapsed * PICKUP_BOB_RATE + hash(entity.id) % 100 / 16.0
+            transform = entity.get_component(Transform)
+            # A new vector, not `position.y = ...`: `Vector2` is immutable.
+            transform.position = Vector2(
+                transform.position.x,
+                home + math.sin(phase) * PICKUP_BOB_HEIGHT,
+            )
 
     def _restart_level(self) -> None:
         """Restart the current level."""
@@ -668,7 +722,7 @@ class GameScene(Scene):
                 self._checkpoint_system.set_initial_spawn(spawn_point)
 
         _sun(self, WINDOW_WIDTH)
-        self._light_pickups()
+        self._prepare_pickups()
         self._setup_hud()
 
     # ---- drawing --------------------------------------------------------
@@ -767,7 +821,6 @@ class GameScene(Scene):
                 Vector2(position.x, position.y),
                 11.0,
                 collectible.collect_type,
-                self._elapsed,
             )
 
         for entity in self.entity_manager.get_entities_with(
