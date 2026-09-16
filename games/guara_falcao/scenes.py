@@ -81,7 +81,7 @@ from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.manager import UIManager
-from pyguara.ui.types import UILayer
+from pyguara.ui.types import TextAlign, UILayer
 
 AMBIENT = Color(255, 236, 206)
 AMBIENT_INTENSITY = 0.84
@@ -158,11 +158,26 @@ class TitleScene(Scene):
         plate = BevelPanel(
             Vector2(plate_x, 96), Vector2(plate_width, plate_height), border_width=3
         )
+        # Centred against the plate's own width, not a guessed x offset --
+        # a guess is wrong the moment the text, the font or the plate
+        # changes, and it was: the title measured 28px off-centre.
         plate.add_child(
-            Label("GUARÁ & FALCÃO", Vector2(plate_x + 54, 126), font_size=44)
+            Label(
+                "GUARÁ & FALCÃO",
+                Vector2(plate_x, 126),
+                font_size=44,
+                width=plate_width,
+                align=TextAlign.CENTER,
+            )
         )
         plate.add_child(
-            Label("PYGUARA SOLAR ENGINE", Vector2(plate_x + 150, 184), font_size=16)
+            Label(
+                "PYGUARA SOLAR ENGINE",
+                Vector2(plate_x, 184),
+                font_size=16,
+                width=plate_width,
+                align=TextAlign.CENTER,
+            )
         )
         ui_manager.add_element(plate, UILayer.CONTENT)
 
@@ -181,14 +196,18 @@ class TitleScene(Scene):
             column.add_child(button)
         ui_manager.add_element(column, UILayer.CONTENT)
 
+        badge_width = 210
+        badge_x = (WINDOW_WIDTH - badge_width) // 2
         badge = BevelPanel(
-            Vector2((WINDOW_WIDTH - 210) // 2, 536), Vector2(210, 34), border_width=1
+            Vector2(badge_x, 536), Vector2(badge_width, 34), border_width=1
         )
         badge.add_child(
             Label(
                 "BUILT ON PYGUARA",
-                Vector2((WINDOW_WIDTH - 140) // 2, 546),
+                Vector2(badge_x, 546),
                 font_size=12,
+                width=badge_width,
+                align=TextAlign.CENTER,
             )
         )
         ui_manager.add_element(badge, UILayer.CONTENT)
@@ -545,17 +564,21 @@ class GameScene(Scene):
     def _complete_sequence(self):
         """Level complete coroutine."""
         ui_manager = self.container.get(UIManager)
+        banner_width = 420
+        banner_x = (WINDOW_WIDTH - banner_width) // 2
         banner = BevelPanel(
-            Vector2((WINDOW_WIDTH - 420) // 2, WINDOW_HEIGHT // 2 - 60),
-            Vector2(420, 96),
+            Vector2(banner_x, WINDOW_HEIGHT // 2 - 60),
+            Vector2(banner_width, 96),
             border_width=3,
             shadow=True,
         )
         banner.add_child(
             Label(
                 "LEVEL COMPLETE",
-                Vector2((WINDOW_WIDTH - 260) // 2, WINDOW_HEIGHT // 2 - 26),
+                Vector2(banner_x, WINDOW_HEIGHT // 2 - 26),
                 font_size=32,
+                width=banner_width,
+                align=TextAlign.CENTER,
             )
         )
         ui_manager.add_element(banner, UILayer.OVERLAY)
