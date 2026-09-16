@@ -283,29 +283,32 @@ def draw_ground_tile(renderer: IRenderer, rect: Rect, world_x: float) -> None:
     renderer.draw_rect(rect, EARTH[int(world_x // 32) % len(EARTH)])
 
 
-def draw_fruit(
-    renderer: IRenderer, center: Vector2, radius: float, phase: float
-) -> None:
+def draw_fruit(renderer: IRenderer, center: Vector2, radius: float) -> None:
     """Draw a hanging lime with a specular dot.
+
+    Draws where it is told and nowhere else. The float used to be a sine
+    added here, which meant the fruit drifted while the light attached to
+    its entity stayed put -- a glow hanging beside the thing glowing. The
+    motion belongs to the transform, so the drawing, the light and the
+    pickup radius all agree on where the fruit is.
 
     Args:
         renderer: The world renderer.
         center: Screen position.
         radius: Fruit radius in pixels.
-        phase: Seconds, for the bob.
     """
-    bob = math.sin(phase * 2.2) * 2.0
-    at = Vector2(center.x, center.y + bob)
-    renderer.draw_circle(at, radius, FRUIT)
-    renderer.draw_circle(Vector2(at.x, at.y + radius * 0.25), radius * 0.7, FRUIT_RIPE)
+    renderer.draw_circle(center, radius, FRUIT)
     renderer.draw_circle(
-        Vector2(at.x - radius * 0.3, at.y - radius * 0.35), radius * 0.22, Color.WHITE
+        Vector2(center.x, center.y + radius * 0.25), radius * 0.7, FRUIT_RIPE
+    )
+    renderer.draw_circle(
+        Vector2(center.x - radius * 0.3, center.y - radius * 0.35),
+        radius * 0.22,
+        Color.WHITE,
     )
 
 
-def draw_pickup(
-    renderer: IRenderer, center: Vector2, radius: float, kind: str, phase: float
-) -> None:
+def draw_pickup(renderer: IRenderer, center: Vector2, radius: float, kind: str) -> None:
     """Draw a collectible, by kind.
 
     Args:
@@ -313,17 +316,14 @@ def draw_pickup(
         center: Screen position.
         radius: Radius in pixels.
         kind: `"coin"`, `"health"` or `"power"`.
-        phase: Seconds, for the bob.
     """
     if kind == "coin":
-        draw_fruit(renderer, center, radius, phase)
+        draw_fruit(renderer, center, radius)
         return
 
     color = HEALTH_PICKUP if kind == "health" else POWER_PICKUP
-    bob = math.sin(phase * 2.6) * 2.0
-    at = Vector2(center.x, center.y + bob)
-    renderer.draw_circle(at, radius, color)
-    renderer.draw_circle(at, radius * 0.55, Color.WHITE)
+    renderer.draw_circle(center, radius, color)
+    renderer.draw_circle(center, radius * 0.55, Color.WHITE)
 
 
 def draw_checkpoint(renderer: IRenderer, rect: Rect, lit: bool) -> None:
