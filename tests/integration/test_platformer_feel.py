@@ -469,3 +469,112 @@ class TestWalkingOverTileSeams:
         recorded from the guara_falcao measurement in the class docstring.
         """
         assert self._walk(merged=True) == 0.0
+
+
+class TestCeilingHeadBump:
+    """A jump blocked by a ceiling used to cost the jump forever.
+
+    `_jump_used` was cleared only on the airborne->grounded rising edge, so
+    a jump that never leaves the ground -- because there is nowhere to go --
+    never re-armed. `guara_falcao`'s moving platform sits with its underside
+    exactly flush against the player's resting head line, so every player
+    who jumped while standing under it lost the ability to jump for the
+    rest of the run.
+    """
+
+    def _flush_ceiling(self, world: Platformer) -> Entity:
+        """A box whose underside sits exactly at the player's head.
+
+        Player half-height is `PLAYER_HEIGHT / 2`, resting at `RESTING_Y`,
+        so the head line is `RESTING_Y - PLAYER_HEIGHT / 2 == GROUND_TOP -
+        PLAYER_HEIGHT`. A wide, thin ceiling centred there gives zero
+        clearance -- the same geometry the demo's moving platform produces.
+
+        Built KINEMATIC rather than STATIC so a test can move it later:
+        `PhysicsSystem.sync_kinematic_transforms()` mirrors a kinematic
+        body's position from its `Transform` every tick, but a static
+        body's shape is set once and never re-synced.
+
+        Wall jump is off, matching `guara_falcao`'s own controller
+        (`level_builder.py`: `wall_jump_enabled=False`). Left on, a ceiling
+        this wide overlaps the character's side probes too, and the
+        character wall-jumps off it instead of head-bumping -- a different
+        path (`_perform_wall_jump`) that never touches `_jump_used` at all,
+        and so never reproduces the bug this class is about.
+        """
+        world.controller.wall_jump_enabled = False
+        head_line = GROUND_TOP - PLAYER_HEIGHT
+        return world._body(Vector2(400, head_line), BodyType.KINEMATIC, [400.0, 20.0])
+
+    def test_a_blocked_jump_gains_no_height(self) -> None:
+        """Confirms the setup actually has zero clearance."""
+        world = Platformer()
+        self._flush_ceiling(world)
+        world.run(40)
+
+        assert world.jump() == 0.0
+
+    def test_jumping_again_after_the_ceiling_is_cleared(self) -> None:
+        """The bug in one assertion: this used to return 0.0 forever."""
+        world = Platformer()
+        ceiling = self._flush_ceiling(world)
+        world.run(40)
+
+        world.jump()  # blocked; used to consume the jump permanently
+
+        ceiling.get_component(Transform).position = Vector2(400, -2000)
+        world.run(10)  # let the kinematic ceiling's new position sync in
+
+        assert world.jump() > 20.0
+
+    def test_jump_used_clears_while_still_grounded(self) -> None:
+        """The mechanism directly: no airborne trip required to re-arm.
+
+        Two ticks, not one: the tick that performs the jump necessarily
+        ends with `_jump_used = True` -- that is `can_jump()` doing its job
+        of blocking a second jump on the same frame. What the fix changes
+        is the *next* tick, where the character is still grounded (it
+        never went anywhere) and nothing has requested another jump.
+        """
+        world = Platformer()
+        self._flush_ceiling(world)
+        world.run(40)
+
+        world.controller.pending_input = PlatformerInput(jump=True)
+        world.physics.update(DT)
+        world.platformer.update(DT)
+        assert world.controller._jump_used is True  # just consumed, as normal
+
+        world.physics.update(DT)
+        world.platformer.update(DT)
+
+        assert world.controller.is_grounded is True
+        assert world.controller._jump_used is False
+
+    def test_a_ceiling_hit_zeroes_upward_velocity(self) -> None:
+        """Without this the character hangs against the ceiling for the
+        ~0.4s gravity takes to cancel the leftover upward speed."""
+        world = Platformer()
+        self._flush_ceiling(world)
+        world.run(40)
+
+        world.controller.pending_input = PlatformerInput(jump=True)
+        world.physics.update(DT)
+        world.platformer.update(DT)
+
+        assert world.body.velocity.y == pytest.approx(0.0)
+
+    def test_a_downward_landing_is_not_zeroed_like_a_ceiling_hit(self) -> None:
+        """The new branch is upward-only: `delta.y < 0` guards it.
+
+        A falling landing also blocks on Y (`result.hit_y`), so without
+        that guard this fix would zero a landing's vertical velocity too
+        -- which nothing asked for and nothing here is meant to change.
+        """
+        world = Platformer()
+        world.player.get_component(Transform).position = Vector2(400, RESTING_Y - 100)
+        world.body.velocity = Vector2(0, 0)
+
+        world.run(1)  # one tick of falling before it reaches the floor
+
+        assert world.body.velocity.y > 0.0
