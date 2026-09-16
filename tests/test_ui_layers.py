@@ -26,6 +26,7 @@ from pyguara.input import keys
 from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.checkbox import Checkbox
+from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.slider import Slider
 from pyguara.ui.components.text import Label
 from pyguara.ui.components.text_input import TextInput
@@ -187,10 +188,13 @@ class TestFocusIsVisible:
     def test_a_focused_button_shows_the_focus_ring_colour(
         self, manager: UIManager
     ) -> None:
+        """With `visible=True` -- what Tab/arrow traversal passes. A plain
+        `set_focus()` (a click, a screen pre-focusing on build) does not,
+        which `TestFocusVisibility` below covers."""
         element = _button()
         manager.add_element(element)
 
-        manager.set_focus(element)
+        manager.set_focus(element, visible=True)
 
         assert element.border_color() == element.theme.colors.focus_ring
 
@@ -308,3 +312,123 @@ class TestLabelInvalidatesLayout:
         label.set_text("9")
 
         assert manager._layout_dirty is False
+
+
+class TestFocusVisibility:
+    """The focus ring paints only when the keyboard put it there.
+
+    Before this, the ring painted whenever an element held focus at all --
+    including a mouse click, and a screen pre-focusing its first button on
+    build so Tab has somewhere to start. Either one put a bright outline on
+    a button nobody navigated to, which read as a stray highlight rather
+    than a focus indicator.
+    """
+
+    def test_set_focus_defaults_to_invisible(self, manager: UIManager) -> None:
+        element = _button()
+        manager.add_element(element)
+
+        manager.set_focus(element)
+
+        assert element.state == UIElementState.FOCUSED
+        assert element.focus_visible is False
+
+    def test_a_mouse_click_focuses_without_a_ring(self, manager: UIManager) -> None:
+        element = _button()
+        manager.add_element(element)
+
+        for is_down in (True, False):
+            manager._on_mouse_event(
+                OnMouseEvent(
+                    position=(10, 10), button=1, is_down=is_down, is_motion=False
+                )
+            )
+
+        assert manager.focused_element is element
+        assert element.focus_visible is False
+
+    def test_tab_traversal_shows_the_ring(self, manager: UIManager) -> None:
+        element = _button()
+        manager.add_element(element)
+
+        manager._on_key_event(
+            OnRawKeyEvent(key_code=keys.TAB, is_down=True, modifiers=set())
+        )
+
+        assert manager.focused_element is element
+        assert element.focus_visible is True
+
+    def test_arrow_traversal_shows_the_ring_too(self, manager: UIManager) -> None:
+        element = _button()
+        manager.add_element(element)
+
+        manager._on_key_event(
+            OnRawKeyEvent(key_code=keys.DOWN, is_down=True, modifiers=set())
+        )
+
+        assert element.focus_visible is True
+
+    def test_losing_focus_clears_visibility(self, manager: UIManager) -> None:
+        first, second = _button("1"), _button("2")
+        manager.add_element(first)
+        manager.add_element(second)
+
+        manager.set_focus(first, visible=True)
+        manager.set_focus(second)
+
+        assert first.focus_visible is False
+
+    def test_reselecting_the_same_element_still_updates_visibility(
+        self, manager: UIManager
+    ) -> None:
+        """Tab with only one focusable thing on screen re-selects it --
+        the ring still has to appear, even though nothing else changed."""
+        element = _button()
+        manager.add_element(element)
+        manager.set_focus(element)  # invisible
+
+        manager.set_focus(element, visible=True)
+
+        assert element.focus_visible is True
+
+    def test_clicking_a_button_inside_a_container_focuses_the_button(
+        self, manager: UIManager
+    ) -> None:
+        """The regression: a click used to focus the ROOT (the container
+        the click bubbled up through), not the button actually hit."""
+        from pyguara.ui.layout import BoxContainer
+
+        container = BoxContainer(Vector2(0, 0), Vector2(200, 200))
+        button = _button("inside", 10, 10)
+        container.add_child(button)
+        manager.add_element(container)
+
+        for is_down in (True, False):
+            manager._on_mouse_event(
+                OnMouseEvent(
+                    position=(20, 20), button=1, is_down=is_down, is_motion=False
+                )
+            )
+
+        assert manager.focused_element is button
+
+    def test_a_click_on_a_decorative_child_focuses_nothing(
+        self, manager: UIManager
+    ) -> None:
+        """A click landing on a non-focusable label inside a panel must
+        not focus the label, and must not focus the panel either -- the
+        original bug, where the ROOT the click bubbled up through got
+        focused regardless of what was actually under the cursor."""
+        panel = Panel(Vector2(0, 0), Vector2(200, 100))
+        label = Label("decoration", Vector2(10, 10))
+        panel.add_child(label)
+        manager.add_element(panel)
+
+        for is_down in (True, False):
+            manager._on_mouse_event(
+                OnMouseEvent(
+                    position=(15, 15), button=1, is_down=is_down, is_motion=False
+                )
+            )
+
+        assert manager.focused_element is None

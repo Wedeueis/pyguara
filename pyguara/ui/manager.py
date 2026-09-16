@@ -190,13 +190,24 @@ class UIManager:
             UIManager._subtree_has_constraints(child) for child in element.children
         )
 
-    def set_focus(self, element: UIElement | None) -> None:
+    def set_focus(self, element: UIElement | None, *, visible: bool = False) -> None:
         """Set the focused element.
 
         Args:
             element: Element to focus, or None to clear focus.
+            visible: Whether a component should paint a focus ring for it.
+                False for a mouse click or a screen pre-focusing its first
+                button on build -- neither is the keyboard asking to see
+                where it is. Keyboard traversal (`_step_focus`) and the
+                Enter/Space activation path are the only callers that pass
+                `True`.
         """
         if self._focused_element is element:
+            # Still update visibility: pressing Tab when only one
+            # focusable element exists re-selects the same element, and
+            # the ring has to appear even though nothing else changed.
+            if element is not None:
+                element.set_focused(True, visible=visible)
             return
 
         # Notify old element of focus lost
@@ -208,7 +219,7 @@ class UIManager:
 
         # Notify new element of focus gained
         if self._focused_element:
-            self._focused_element.set_focused(True)
+            self._focused_element.set_focused(True, visible=visible)
             self._focused_element.handle_event(
                 UIEventType.FOCUS_GAINED, Vector2(0, 0), 0
             )
@@ -239,12 +250,40 @@ class UIManager:
         for _, element in reversed(self._ordered_roots()):
             if element.handle_event(event_type, pos, event.button):
                 if event_type == UIEventType.MOUSE_DOWN:
-                    clicked_element = element
+                    # `element` is only the root the event bubbled up
+                    # through -- a click on a button inside a BoxContainer
+                    # root would otherwise focus the container. `hit_test`
+                    # finds the actual leaf under the cursor; walking up
+                    # from it finds the nearest thing Tab can reach, which
+                    # is a decorative label's button, panel or container,
+                    # not the label itself.
+                    clicked_element = self._nearest_focusable(element.hit_test(pos))
                 break
 
-        # Update focus on mouse down
+        # Update focus on mouse down. No ring: a mouse click is not the
+        # keyboard asking to see where focus is.
         if event_type == UIEventType.MOUSE_DOWN:
             self.set_focus(clicked_element)
+
+    @staticmethod
+    def _nearest_focusable(element: UIElement) -> UIElement | None:
+        """`element` if it is a stop on the Tab ring, else None.
+
+        `hit_test()` finds the deepest thing under the cursor, which can be
+        a decorative label or an un-focusable panel background rather than
+        the button it happens to sit next to -- a click that lands on
+        neither should not silently focus something the user did not
+        click. It should not focus the *container* either, which is what
+        happened before `hit_test()` existed: the root the click bubbled
+        up through is not what was actually hit.
+
+        Args:
+            element: The element actually under the cursor.
+
+        Returns:
+            `element` if focusable, else None.
+        """
+        return element if element.focusable else None
 
     def focus_ring(self) -> list[UIElement]:
         """Every focusable element, in traversal order.
@@ -319,7 +358,7 @@ class UIManager:
             index = 0 if step > 0 else -1
 
         target = ring[index % len(ring)]
-        self.set_focus(target)
+        self.set_focus(target, visible=True)
         return target
 
     def _on_key_event(self, event: OnRawKeyEvent) -> None:

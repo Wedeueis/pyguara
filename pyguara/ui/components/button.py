@@ -51,11 +51,17 @@ class Button(Widget):
     def border_color(self) -> Color:
         """The edge colour, which doubles as the focus indicator.
 
+        The ring only paints when `focus_visible` is set -- keyboard
+        traversal turns it on, a mouse click or a screen pre-focusing its
+        first button on build does not. A focused-but-not-visible button
+        still gets the strong edge, same as an unfocused one.
+
         Returns:
-            The focus ring when focused, the strong edge otherwise.
+            The focus ring when focused and visible, the strong edge
+            otherwise.
         """
         colors = self.theme.colors
-        if self.state == UIElementState.FOCUSED:
+        if self.state == UIElementState.FOCUSED and self.focus_visible:
             return colors.focus_ring
         return colors.edge_strong
 

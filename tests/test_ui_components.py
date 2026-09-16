@@ -174,6 +174,7 @@ class TestComponentsReadTheSemanticRoles:
         try:
             btn = Button("Go", Vector2(0, 0))
             btn.state = UIElementState.FOCUSED
+            btn.focus_visible = True
 
             assert btn.border_color() == Color(9, 9, 9)
         finally:

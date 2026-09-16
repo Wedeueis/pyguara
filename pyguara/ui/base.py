@@ -52,6 +52,17 @@ class UIElement(ABC):
         # cursor leaves, not to looking idle.
         self._focused = False
 
+        # Whether that focus should actually be *painted*. Set on keyboard
+        # traversal (Tab, arrows) and cleared on a mouse click or a
+        # programmatic `set_focus()` -- the standard focus-visible split.
+        # `state` still becomes FOCUSED either way, since the element *is*
+        # focused and still gets the keyboard; this only gates the ring a
+        # component draws for it. Without the split, every button a mouse
+        # user last clicked -- and the one a screen pre-focuses on build,
+        # before any key was ever pressed -- sat under a bright outline
+        # nobody asked to see.
+        self.focus_visible = False
+
         # Set by `UIManager.add_element` on a root, so an element can tell
         # the manager its layout is stale -- a label whose text changed is
         # a different width, and nothing else can see that.
@@ -116,7 +127,7 @@ class UIElement(ABC):
         # 2. Self Processing
         return self._process_input(event_type, position, button)
 
-    def set_focused(self, focused: bool) -> None:
+    def set_focused(self, focused: bool, *, visible: bool = False) -> None:
         """Mark this element as holding (or losing) the focus ring.
 
         `UIElementState.FOCUSED` was read by `Button`, `Checkbox` and the
@@ -125,8 +136,12 @@ class UIElement(ABC):
 
         Args:
             focused: Whether the ring is now on this element.
+            visible: Whether a component should actually *paint* the ring
+                for it. Ignored when `focused` is False -- losing focus
+                always clears visibility too.
         """
         self._focused = focused
+        self.focus_visible = visible and focused
         if self.state not in (UIElementState.PRESSED, UIElementState.HOVERED):
             self.state = self._resting_state()
 
@@ -199,6 +214,34 @@ class UIElement(ABC):
         """Add a child element to this container."""
         child.parent = self
         self.children.append(child)
+
+    def hit_test(self, position: Vector2) -> "UIElement":
+        """The deepest visible, enabled descendant under `position`.
+
+        Front-to-back, mirroring the order `handle_event()` bubbles in.
+        Used to find *what was actually clicked* -- `handle_event()` only
+        reports whether something under this element consumed the event,
+        not which element that was, which is enough to route input but not
+        enough to focus the right thing. A click inside a `BoxContainer` of
+        buttons used to focus the container itself.
+
+        Args:
+            position: The point to test, in the same space as `self.rect`.
+
+        Returns:
+            The deepest matching descendant, or `self` if none of this
+            element's children contain the point.
+        """
+        for child in reversed(self.children):
+            if not child.visible or not child.enabled:
+                continue
+            contains = (
+                child.rect.x <= position.x <= child.rect.x + child.rect.width
+                and child.rect.y <= position.y <= child.rect.y + child.rect.height
+            )
+            if contains:
+                return child.hit_test(position)
+        return self
 
     def layout(self, available_rect: Rect, renderer: UIRenderer) -> None:
         """Resolve this element's rect, then its children's, for one frame.

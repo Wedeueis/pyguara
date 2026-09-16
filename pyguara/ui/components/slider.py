@@ -89,7 +89,7 @@ class Slider(Widget):
         handle_color = colors.action_secondary
         if self.state == UIElementState.HOVERED or self._dragging:
             handle_color = colors.action_primary_hover
-        elif self.state == UIElementState.FOCUSED:
+        elif self.state == UIElementState.FOCUSED and self.focus_visible:
             handle_color = colors.focus_ring
 
         renderer.draw_circle(Vector2(handle_x, mid_y), 8, handle_color)

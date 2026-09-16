@@ -192,6 +192,7 @@ class TestBevelButton:
     def test_focus_beats_the_skins_edge(self, dusk: None) -> None:
         button = BevelButton("Play", Vector2(0, 0), skin=Skins.WOOD)
         button.state = UIElementState.FOCUSED
+        button.focus_visible = True
 
         assert button.border_color() == cerrado_dusk().colors.focus_ring
 
