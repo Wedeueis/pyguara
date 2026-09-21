@@ -125,19 +125,27 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Spec:** [`project/demos/true_coral_GDD.md`](../project/demos/true_coral_GDD.md)
 
 ### [quintal_cerrado](./quintal_cerrado) — Quintal do Cerrado
-* **Genre:** Cozy agroforestry. Till and plant a static 12x8 plot, viewed
-  head-on. **Status: Phase 1 of 5** (see the PRD) — this is the grid
-  foundation only: procedural tilemap construction, click-to-till/plant.
-  Growth, companion planting, the chemical-vs-organic fork, automation and
-  real persistence land in later phases.
+* **Genre:** Cozy agroforestry. Till, plant and grow three species on a
+  static 12x8 plot, viewed head-on. **Status: Phase 2 of 5** (see the
+  PRD) — grid, growth and stratification. The chemical-vs-organic pest
+  fork, automation and real persistence land in later phases.
 * **Key Concepts:** the first real adopter of `pyguara.tilemap`
   (`Tilemap`/`TileLayer`/`Tileset`, built procedurally rather than from a
   `.tmx` — the plot is simulation state, not level art) for anything beyond
   `physics.tilemap.merge_tile_rects`; `pyguara.ui.components.canvas.Canvas`
   as a clickable world surface, reusing `UIManager`'s existing mouse
-  routing instead of a second `InputManager` mouse path; the plain
-  pygame backend (no lighting/post-processing needed for a static grid).
-* **Art:** none. Soil tiles and seedlings are renderer primitives, the same
+  routing instead of a second `InputManager` mouse path; the first real
+  adopter of `pyguara.ai.fsm` (`State`/`StateMachine`, driven for free by
+  the engine's own `AISystem`) for a plant's seedling→growing→mature→
+  harvestable lifecycle; a companion-planting/shade simulation
+  (`systems/shade_system.py`, `systems/syntropic_system.py`) matching the
+  PRD's own example almost exactly — an understory plant only gets its
+  growth bonus once an adjacent canopy tree has actually matured enough to
+  cast shade; a small `juice.Motes` particle pool (adapted from
+  `pyguara.graphics.vfx.sparks.Sparks` for a camera-less, UI-drawn world)
+  giving tilling and every growth-stage change a burst-and-pop beat, plus
+  idle sway and a pulsing "ready" ring on harvestable plants.
+* **Art:** none. Soil tiles and plants are renderer primitives, the same
   house style as `guara_falcao`.
 * **Run:** `uv run python games/quintal_cerrado/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py quintal_cerrado`
