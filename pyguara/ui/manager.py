@@ -99,7 +99,7 @@ class UIManager:
         self._layout_dirty = True
 
     def elements(self, layer: int | None = None) -> list[UIElement]:
-        """The root elements, back to front.
+        """Return the root elements, back to front.
 
         Args:
             layer: Restrict to one layer, or None for all of them.
@@ -399,9 +399,20 @@ class UIManager:
         What makes a menu keyboard-complete: Tab to a button, press Enter.
         Without it the ring could move but never choose, and a showcase
         that needs a mouse to press a button is not showing much.
+
+        Gated by `focus_ring()` membership, not just `enabled`/`visible` --
+        the same "topmost layer wins" rule that keeps Tab from wandering
+        into the HUD frozen behind a modal. Without it, a focused element
+        left behind by a layer that closed over top of it (a mouse click
+        focuses on press, the click's own handler can tear its layer down
+        before that focus is applied) still fires on the next Enter/Space,
+        which is a menu button activating itself from underneath whatever
+        is now actually on top.
         """
         element = self._focused_element
         if element is None or not element.enabled or not element.visible:
+            return
+        if element not in self.focus_ring():
             return
         if element.on_click is not None:
             element.on_click(element)

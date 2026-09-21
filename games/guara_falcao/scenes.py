@@ -490,7 +490,18 @@ class GameScene(Scene):
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
 
     def _on_action(self, event: OnActionEvent) -> None:
-        """Handle input action events."""
+        """Handle input action events.
+
+        Pushing an overlay (the pause menu) with `pause_below=True` freezes
+        this scene's `update()`/`fixed_update()`, but not its subscription to
+        the shared `EventDispatcher` -- it keeps receiving `OnActionEvent`
+        underneath the overlay. Without this guard, an action like "back"
+        reaches `_open_pause()` again while already paused, which re-registers
+        and re-pushes a second `PauseScene` on top of the first.
+        """
+        if self.container.get(SceneManager).current_scene is not self:
+            return
+
         action = event.action_name
         is_pressed = event.value > 0
 
