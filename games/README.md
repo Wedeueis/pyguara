@@ -126,34 +126,38 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ### [quintal_cerrado](./quintal_cerrado) — Quintal do Cerrado
 * **Genre:** Cozy agroforestry. The full till → seed → water → grow →
-  harvest loop, on a static 12x8 plot, viewed head-on, with a clickable
-  tool bar (till, one plant tool per species, water, harvest -- every tool
-  also has a keyboard shortcut, but the bar is what makes them
-  discoverable). **Status: Phase 2 of 5** (see the PRD) — the core loop is
-  playable end to end; the chemical-vs-organic pest fork, automation and
-  real persistence land in later phases. Harvesting frees a cell to
-  replant immediately but grants no currency yet -- there is no
-  `PlayerEconomy` until a later phase.
+  harvest loop on a static 12x8 plot, plus the PRD's **agroecological
+  dilemma**: a pest outbreak arrives once the plot is established, and you
+  answer it with slow, cheap, organic **compost** (keeps the 2.0x organic
+  sale premium) or a fast, expensive chemical **spray** (clears it at
+  once and grows the crop faster, but sells for 0.5x, degrades the soil
+  and marks every plant it reaches for good). A tool bar names every tool;
+  each also has a keyboard shortcut. **Status: Phase 3 of 5** (see the
+  PRD) — automation and real persistence land in later phases.
 * **Key Concepts:** the first real adopter of `pyguara.tilemap`
   (`Tilemap`/`TileLayer`/`Tileset`, built procedurally rather than from a
-  `.tmx` — the plot is simulation state, not level art) for anything beyond
-  `physics.tilemap.merge_tile_rects`; `pyguara.ui.components.canvas.Canvas`
-  as a clickable world surface, reusing `UIManager`'s existing mouse
-  routing instead of a second `InputManager` mouse path; the first real
-  adopter of `pyguara.ai.fsm` (`State`/`StateMachine`, driven for free by
-  the engine's own `AISystem`) for a plant's seedling→growing→mature→
-  harvestable lifecycle; a companion-planting/shade simulation
+  `.tmx` — the plot is simulation state, not level art);
+  `pyguara.ui.components.canvas.Canvas` as a clickable world surface,
+  reusing `UIManager`'s existing mouse routing; the first real adopter of
+  `pyguara.ai.fsm` (`State`/`StateMachine`, driven for free by the
+  engine's own `AISystem`) in **two** places — each plant's
+  seedling→growing→mature→harvestable lifecycle (with `infested`/`dying`
+  branches, since `AIComponent` has one FSM slot), and a singleton
+  `garden_conditions` machine (`stable → outbreak → resolved_* → stable`)
+  that paces outbreaks; a companion-planting/shade simulation
   (`systems/shade_system.py`, `systems/syntropic_system.py`) matching the
-  PRD's own example almost exactly — an understory plant only gets its
-  growth bonus once an adjacent canopy tree has actually matured enough to
-  cast shade; soil moisture (`systems/soil_system.py`) that evaporates
-  over time and gates growth below a threshold, so watering is a real,
-  revisit-worthy action rather than a cosmetic tool; a small `juice.Motes`
-  particle pool (adapted from `pyguara.graphics.vfx.sparks.Sparks` for a
-  camera-less, UI-drawn world) giving tilling, watering, harvesting and
-  every growth-stage change its own burst-and-pop beat, plus idle sway, a
-  moisture tint on the soil itself, and a pulsing "ready" ring on
-  harvestable plants.
+  PRD's own example — an understory plant only gets its bonus once an
+  adjacent canopy tree has matured enough to cast shade; a pest simulation
+  (`systems/pest_system.py`) where pressure spreads between plants (faster
+  through a monoculture), decays with organic matter, dies off without a
+  host, and is suppressed by a grown Pequi; soil moisture that evaporates
+  and gates growth; a small economy (`economy.py`, `treatments.py`) where
+  seeds and treatments cost Sementes and a harvest pays them back; and a
+  `juice.Motes`/`juice.FloatingLabels` pair (adapted from
+  `pyguara.graphics.vfx.sparks.Sparks` and `floating_text.FloatingText` for
+  a camera-less, UI-drawn world) giving every action its own burst, plus
+  idle sway, moisture/degradation tints on the soil, crawling pest marks,
+  a red outbreak flash and a pulsing "ready" ring on harvestable plants.
 * **Art:** none. Soil tiles and plants are renderer primitives, the same
   house style as `guara_falcao`.
 * **Run:** `uv run python games/quintal_cerrado/main.py`

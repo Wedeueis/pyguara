@@ -23,6 +23,7 @@ from games.quintal_cerrado.garden_widget import GardenGridCanvas
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.common.types import Color
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.input import MouseButtonEvent
@@ -167,8 +168,11 @@ class TestTheGardenScreen:
             "plant_guandu",
             "plant_cagaita",
             "plant_baru",
+            "plant_pequi",
             "water",
             "harvest",
+            "compost",
+            "spray",
         }
 
         scene._tool_buttons["water"].on_click(scene._tool_buttons["water"])
@@ -297,3 +301,74 @@ class TestTheGardenScreen:
         # The cell stays tilled, ready to replant immediately.
         assert scene.grid.soil_at(cell).soil_type == "tilled_dirt"
         assert scene.grid.can_plant(cell)
+
+    def test_hud_shows_the_players_sementes(self, game_container: DIContainer) -> None:
+        scene = self._entered_scene(game_container)
+        scene.economy.credits = 42
+
+        scene.update(1 / 60)
+
+        assert scene._hud is not None
+        assert scene._hud.credits_label.text == "Sementes: 42"
+
+    def test_hud_shows_an_outbreak(self, game_container: DIContainer) -> None:
+        scene = self._entered_scene(game_container)
+        scene.conditions.phase = "outbreak"
+
+        scene.update(1 / 60)
+
+        assert scene._hud is not None
+        assert "OUTBREAK" in scene._hud.status_label.text
+
+    def test_an_unaffordable_seed_says_so_and_plants_nothing(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._entered_scene(game_container)
+        cell = (2, 2)
+        scene.grid.till(cell)
+        scene.economy.credits = 0
+        scene._set_active_tool("plant_baru")
+
+        scene._on_cell_clicked(cell)
+        scene.update(1 / 60)
+
+        assert cell not in scene.grid.plant_at
+        assert scene._hud is not None
+        assert "Not enough" in scene._hud.message_label.text
+
+    def test_the_plot_renders_every_state_without_error(
+        self, game_container: DIContainer, renderer: Any
+    ) -> None:
+        """A smoke test for draw paths the frame-capture only sees by luck.
+
+        Infested and dying plants, pest marks, degraded soil, floating
+        labels and the outbreak alert are each drawn only in a state a
+        short scripted playthrough may never reach, and a mocked renderer
+        is enough to catch a bad argument or a missing key in any of them.
+        """
+        scene = self._entered_scene(game_container)
+        assert scene._canvas is not None
+        for cell, stage in (
+            ((0, 0), "seedling"),
+            ((1, 0), "growing"),
+            ((2, 0), "mature"),
+            ((3, 0), "harvestable"),
+            ((4, 0), "infested"),
+            ((5, 0), "dying"),
+        ):
+            scene.grid.till(cell)
+            scene._plant(cell, "baru")
+            entity = scene.entity_manager.get_entity(scene.grid.plant_at[cell])
+            entity.get_component(AIComponent).fsm._transition_to(stage)
+        scene.grid.soil_at((6, 0)).is_chemically_degraded = True
+        scene.grid.soil_at((7, 0)).pest_pressure = 0.9
+        scene._canvas.spawn_label((0, 0), "+16", Color(255, 226, 140))
+        scene._canvas.flash_alert()
+        scene._canvas.celebrate_spray((3, 3))
+        scene._canvas.celebrate_compost((3, 3))
+
+        scene._canvas.update(1 / 60)
+        scene._canvas.render(renderer)
+
+        assert renderer.draw_rect.called
+        assert renderer.draw_text.called

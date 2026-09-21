@@ -122,3 +122,85 @@ class Motes:
                 return mote
             if self._next == start:
                 return None
+
+
+@dataclass(slots=True)
+class _Label:
+    """One pooled floating label. Inactive entries keep their storage."""
+
+    text: str = ""
+    position: Vector2 = field(default_factory=Vector2.zero)
+    color: Color = field(default_factory=lambda: Color(255, 255, 255))
+    life: float = 0.0
+    life_total: float = 1.0
+    active: bool = False
+
+
+class FloatingLabels:
+    """A pool of short-lived text that drifts up and fades: "+16", "Need 15".
+
+    The same idea as `pyguara.graphics.components.floating_text.FloatingText`
+    and adapted for the same reason as `Motes`: that one is typed against
+    `IRenderer` plus a `Camera2D`, and this plot has neither.
+    """
+
+    DRIFT = Vector2(0, -34)
+    """Pixels per second every label rises at."""
+
+    def __init__(self, capacity: int = 16) -> None:
+        """Pre-allocate the pool.
+
+        Args:
+            capacity: Maximum labels alive at once. A spawn past it is
+                dropped, the same as `Motes`.
+        """
+        self._pool = [_Label() for _ in range(capacity)]
+        self._next = 0
+
+    def spawn(
+        self, text: str, position: Vector2, color: Color, life: float = 1.0
+    ) -> None:
+        """Start one label.
+
+        Args:
+            text: What to show. Never wrapped or measured -- keep it short.
+            position: Screen-space start.
+            color: Starting colour; alpha fades to zero over `life`.
+            life: Seconds it lives.
+        """
+        for _ in range(len(self._pool)):
+            label = self._pool[self._next]
+            self._next = (self._next + 1) % len(self._pool)
+            if not label.active:
+                label.text = text
+                label.position = position
+                label.color = color
+                label.life = life
+                label.life_total = life
+                label.active = True
+                return
+
+    def update(self, dt: float) -> None:
+        """Advance every live label and retire the expired ones."""
+        for label in self._pool:
+            if not label.active:
+                continue
+            label.life -= dt
+            if label.life <= 0.0:
+                label.active = False
+                continue
+            label.position = label.position + self.DRIFT * dt
+
+    def render(self, renderer: UIRenderer) -> None:
+        """Draw every live label, faded by its remaining life."""
+        for label in self._pool:
+            if not label.active:
+                continue
+            remaining = label.life / label.life_total if label.life_total > 0 else 0.0
+            color = Color(
+                label.color.r,
+                label.color.g,
+                label.color.b,
+                int(label.color.a * remaining),
+            )
+            renderer.draw_text(label.text, label.position, color, 16)

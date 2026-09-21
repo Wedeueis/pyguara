@@ -34,9 +34,9 @@ from games.quintal_cerrado.garden_grid import (
     TILE_SIZE,
     GardenGrid,
 )
-from games.quintal_cerrado.juice import Motes
+from games.quintal_cerrado.juice import FloatingLabels, Motes
 from games.quintal_cerrado.species import SPECIES_TABLE
-from pyguara.common.grid import Cell, cell_to_world
+from pyguara.common.grid import Cell, cell_to_world, neighbors8
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.protocols import UIRenderer
@@ -46,6 +46,17 @@ from pyguara.ui.types import UIEventType
 TILL_DUST = Color(196, 158, 110)
 WATER_DROPLET = Color(120, 180, 200)
 HARVEST_GOLD = Color(240, 210, 130)
+COMPOST_COLOR = Color(126, 150, 88)
+SPRAY_COLOR = Color(214, 226, 170)
+PEST_BURST = Color(120, 76, 158)
+WILT_BURST = Color(140, 128, 112)
+GAIN_COLOR = Color(255, 226, 140)
+WARN_COLOR = Color(236, 120, 96)
+
+ALERT_COLOR = (190, 50, 50)
+ALERT_MAX_ALPHA = 95
+ALERT_DECAY = 1.3
+"""Per-second decay of the outbreak alert flash; ~0.75s to clear."""
 
 SWAY_SPEED = 1.6
 """Radians per second the idle sway's sine advances at."""
@@ -100,8 +111,10 @@ class GardenGridCanvas(Canvas):
         self._entity_manager = entity_manager
         self.on_cell_clicked: Callable[[Cell], None] | None = None
         self._motes = Motes()
+        self._labels = FloatingLabels()
         self._visuals: dict[str, _PlantVisual] = {}
         self._elapsed = 0.0
+        self._alert = 0.0
 
     def _cell_at(self, position: Vector2) -> Cell | None:
         """The cell under a screen-space `position`, or None off-grid."""
@@ -154,6 +167,49 @@ class GardenGridCanvas(Canvas):
         self._motes.burst(center, color, count=16, speed=70.0, life=0.7)
         self._motes.burst(center, HARVEST_GOLD, count=8, speed=90.0, life=0.5)
 
+    def celebrate_compost(self, cell: Cell) -> None:
+        """Turn over some rich earth -- call right after a successful compost.
+
+        Args:
+            cell: The cell that was just composted.
+        """
+        self._motes.burst(
+            self._cell_screen_center(cell), COMPOST_COLOR, count=9, speed=30.0, life=0.6
+        )
+
+    def celebrate_spray(self, cell: Cell) -> None:
+        """Puff a pale chemical cloud over the cell and its eight neighbours.
+
+        Args:
+            cell: The centre of the spray.
+        """
+        for target in [cell, *neighbors8(cell)]:
+            if self.grid.in_bounds(target):
+                self._motes.burst(
+                    self._cell_screen_center(target),
+                    SPRAY_COLOR,
+                    count=5,
+                    speed=28.0,
+                    life=0.7,
+                    radius=4.0,
+                )
+
+    def spawn_label(self, cell: Cell, text: str, color: Color) -> None:
+        """Float a short piece of text up from a cell: "+16", "Need 15".
+
+        Args:
+            cell: The cell it rises from.
+            text: What to show.
+            color: Its colour; it fades out as it rises.
+        """
+        self._labels.spawn(
+            text, self._cell_screen_center(cell) - Vector2(10, 14), color
+        )
+
+    def flash_alert(self) -> None:
+        """Wash the plot red for a moment -- an outbreak just began."""
+        self._alert = 1.0
+
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int
     ) -> bool:
@@ -170,6 +226,8 @@ class GardenGridCanvas(Canvas):
         super().update(dt)
         self._elapsed += dt
         self._motes.update(dt)
+        self._labels.update(dt)
+        self._alert = max(0.0, self._alert - dt * ALERT_DECAY)
         self._update_plant_visuals(dt)
 
     def _update_plant_visuals(self, dt: float) -> None:
@@ -191,13 +249,13 @@ class GardenGridCanvas(Canvas):
                     sway_seed=hash(entity_id) % 100 / 16.0,
                 )
                 self._visuals[entity_id] = visual
-                self._celebrate_stage(cell, plant.species_id)
+                self._celebrate_stage(cell, plant.species_id, plant.growth_stage)
                 continue
 
             if plant.growth_stage != visual.known_stage:
                 visual.known_stage = plant.growth_stage
                 visual.pop = 1.0
-                self._celebrate_stage(cell, plant.species_id)
+                self._celebrate_stage(cell, plant.species_id, plant.growth_stage)
             elif visual.pop > 0.0:
                 visual.pop = max(0.0, visual.pop - dt * POP_DECAY)
 
@@ -207,9 +265,14 @@ class GardenGridCanvas(Canvas):
         for stale_id in set(self._visuals) - live_ids:
             del self._visuals[stale_id]
 
-    def _celebrate_stage(self, cell: Cell, species_id: str) -> None:
+    def _celebrate_stage(self, cell: Cell, species_id: str, stage: str) -> None:
+        """Burst on a stage change -- in the pest's colour if it is bad news."""
         species = SPECIES_TABLE.get(species_id)
         color = species.color if species is not None else Color.WHITE
+        if stage == "infested":
+            color = PEST_BURST
+        elif stage == "dying":
+            color = WILT_BURST
         self._motes.burst(
             self._cell_screen_center(cell), color, count=10, speed=45.0, life=0.55
         )
@@ -227,11 +290,26 @@ class GardenGridCanvas(Canvas):
                     TILE_SIZE,
                     TILE_SIZE,
                 )
-                moisture = self.grid.soil_at((x, y)).moisture
-                art.draw_soil_tile(renderer, rect, kind, moisture=moisture)
+                soil = self.grid.soil_at((x, y))
+                art.draw_soil_tile(
+                    renderer,
+                    rect,
+                    kind,
+                    moisture=soil.moisture,
+                    degraded=soil.is_chemically_degraded,
+                )
+                if soil.pest_pressure > 0.05:
+                    art.draw_pest_marks(
+                        renderer, rect, soil.pest_pressure, self._elapsed
+                    )
 
         self._draw_plants(renderer)
         self._motes.render(renderer)
+        self._labels.render(renderer)
+        if self._alert > 0.0:
+            renderer.draw_rect(
+                self.rect, Color(*ALERT_COLOR, int(ALERT_MAX_ALPHA * self._alert))
+            )
 
         for child in self.children:
             if child.visible:
