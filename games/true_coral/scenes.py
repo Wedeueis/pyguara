@@ -15,7 +15,6 @@ text written over the top.
 from __future__ import annotations
 
 import math
-import sys
 
 from games.true_coral import render
 from games.true_coral.atmosphere import Atmosphere
@@ -44,6 +43,7 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.floating_text import FloatingText
 from pyguara.graphics.components.screen_flash import ScreenFlash
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.window import Window
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import DOWN, ESCAPE, LEFT, RIGHT, UP
 from pyguara.input.manager import InputManager
@@ -179,8 +179,12 @@ class MenuScene(_AtmosphericScene):
         scene_manager.push_scene("GameScene")
 
     def _on_quit_click(self, el) -> None:
-        """Quit the game."""
-        sys.exit(0)
+        """Quit the game.
+
+        Closes the window rather than `sys.exit()`, so `Application.run()`
+        falls out of its loop and runs its normal shutdown/teardown.
+        """
+        self.container.get(Window).close()
 
     def on_exit(self) -> None:
         """Clean up scene resources."""

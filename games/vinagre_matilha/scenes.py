@@ -14,8 +14,6 @@ can be tested headlessly with no renderer in sight.
 
 from __future__ import annotations
 
-import sys
-
 from games.vinagre_matilha import render
 from games.vinagre_matilha.combat import (
     JaguarCombatSystem,
@@ -48,6 +46,7 @@ from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.components.floating_text import FloatingText
 from pyguara.graphics.components.screen_flash import ScreenFlash
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.window import Window
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, NUM_1, NUM_2, NUM_3, A, D, R, S, W
 from pyguara.input.manager import InputManager
@@ -137,7 +136,9 @@ class MenuScene(Scene):
         return _start
 
     def _on_quit_click(self, _element: object) -> None:
-        sys.exit(0)
+        # Closes the window rather than `sys.exit()`, so `Application.run()`
+        # falls out of its loop and runs its normal shutdown/teardown.
+        self.container.get(Window).close()
 
     def on_exit(self) -> None:
         """Nothing to clean up."""

@@ -239,7 +239,7 @@ class TitleScene(Scene):
 
     def _on_quit(self, _element: object) -> None:
         """Leave."""
-        quit_game()
+        quit_game(self.container)
 
     def on_exit(self) -> None:
         """Clean up scene resources."""
