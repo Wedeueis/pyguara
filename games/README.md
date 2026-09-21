@@ -125,10 +125,15 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Spec:** [`project/demos/true_coral_GDD.md`](../project/demos/true_coral_GDD.md)
 
 ### [quintal_cerrado](./quintal_cerrado) — Quintal do Cerrado
-* **Genre:** Cozy agroforestry. Till, plant and grow three species on a
-  static 12x8 plot, viewed head-on. **Status: Phase 2 of 5** (see the
-  PRD) — grid, growth and stratification. The chemical-vs-organic pest
-  fork, automation and real persistence land in later phases.
+* **Genre:** Cozy agroforestry. The full till → seed → water → grow →
+  harvest loop, on a static 12x8 plot, viewed head-on, with a clickable
+  tool bar (till, one plant tool per species, water, harvest -- every tool
+  also has a keyboard shortcut, but the bar is what makes them
+  discoverable). **Status: Phase 2 of 5** (see the PRD) — the core loop is
+  playable end to end; the chemical-vs-organic pest fork, automation and
+  real persistence land in later phases. Harvesting frees a cell to
+  replant immediately but grants no currency yet -- there is no
+  `PlayerEconomy` until a later phase.
 * **Key Concepts:** the first real adopter of `pyguara.tilemap`
   (`Tilemap`/`TileLayer`/`Tileset`, built procedurally rather than from a
   `.tmx` — the plot is simulation state, not level art) for anything beyond
@@ -141,10 +146,14 @@ These modules correspond to the "Tutorial Series Roadmap".
   (`systems/shade_system.py`, `systems/syntropic_system.py`) matching the
   PRD's own example almost exactly — an understory plant only gets its
   growth bonus once an adjacent canopy tree has actually matured enough to
-  cast shade; a small `juice.Motes` particle pool (adapted from
-  `pyguara.graphics.vfx.sparks.Sparks` for a camera-less, UI-drawn world)
-  giving tilling and every growth-stage change a burst-and-pop beat, plus
-  idle sway and a pulsing "ready" ring on harvestable plants.
+  cast shade; soil moisture (`systems/soil_system.py`) that evaporates
+  over time and gates growth below a threshold, so watering is a real,
+  revisit-worthy action rather than a cosmetic tool; a small `juice.Motes`
+  particle pool (adapted from `pyguara.graphics.vfx.sparks.Sparks` for a
+  camera-less, UI-drawn world) giving tilling, watering, harvesting and
+  every growth-stage change its own burst-and-pop beat, plus idle sway, a
+  moisture tint on the soil itself, and a pulsing "ready" ring on
+  harvestable plants.
 * **Art:** none. Soil tiles and plants are renderer primitives, the same
   house style as `guara_falcao`.
 * **Run:** `uv run python games/quintal_cerrado/main.py`

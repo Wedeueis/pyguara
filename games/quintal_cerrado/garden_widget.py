@@ -11,11 +11,13 @@ instead of adding a second, unexercised raw-`InputManager` mouse path.
 not an exact one: nothing else turns a click into *game* state this way.
 
 Also owns the plot's visual feedback: a `juice.Motes` particle burst on
-tilling and on every plant stage change (including the first, "just
-planted" one), a brief overshoot-scale pop on the same events, and a slow
-idle sway so a mature plot doesn't read as a field of static stickers. A
-static grid of coloured circles would prove the simulation runs; it
-wouldn't read as *alive* the way every other capstone's world does.
+tilling, watering, harvesting, and every plant stage change (including the
+first, "just planted" one), a brief overshoot-scale pop on a stage change,
+a slow idle sway so a mature plot doesn't read as a field of static
+stickers, and a moisture tint on the soil itself so watering is something
+a player can see, not just a number gating growth off-screen. A static
+grid of coloured circles would prove the simulation runs; it wouldn't read
+as *alive* the way every other capstone's world does.
 """
 
 from __future__ import annotations
@@ -42,6 +44,8 @@ from pyguara.ui.components.canvas import Canvas
 from pyguara.ui.types import UIEventType
 
 TILL_DUST = Color(196, 158, 110)
+WATER_DROPLET = Color(120, 180, 200)
+HARVEST_GOLD = Color(240, 210, 130)
 
 SWAY_SPEED = 1.6
 """Radians per second the idle sway's sine advances at."""
@@ -123,6 +127,33 @@ class GardenGridCanvas(Canvas):
             self._cell_screen_center(cell), TILL_DUST, count=7, speed=35.0, life=0.4
         )
 
+    def celebrate_water(self, cell: Cell) -> None:
+        """Splash a few droplets -- call right after a successful watering.
+
+        Args:
+            cell: The cell that was just watered.
+        """
+        self._motes.burst(
+            self._cell_screen_center(cell), WATER_DROPLET, count=6, speed=25.0, life=0.5
+        )
+
+    def celebrate_harvest(self, cell: Cell, species_id: str) -> None:
+        """Burst the species' colour plus a gold accent -- the loop's payoff.
+
+        A bigger, two-colour beat than a stage change's burst: harvesting
+        is the moment the loop closes and the cell is free again, and
+        should read as more rewarding than "the plant grew a bit".
+
+        Args:
+            cell: The cell that was just harvested.
+            species_id: The harvested plant's species, for its colour.
+        """
+        species = SPECIES_TABLE.get(species_id)
+        color = species.color if species is not None else Color.WHITE
+        center = self._cell_screen_center(cell)
+        self._motes.burst(center, color, count=16, speed=70.0, life=0.7)
+        self._motes.burst(center, HARVEST_GOLD, count=8, speed=90.0, life=0.5)
+
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int
     ) -> bool:
@@ -196,7 +227,8 @@ class GardenGridCanvas(Canvas):
                     TILE_SIZE,
                     TILE_SIZE,
                 )
-                art.draw_soil_tile(renderer, rect, kind)
+                moisture = self.grid.soil_at((x, y)).moisture
+                art.draw_soil_tile(renderer, rect, kind, moisture=moisture)
 
         self._draw_plants(renderer)
         self._motes.render(renderer)

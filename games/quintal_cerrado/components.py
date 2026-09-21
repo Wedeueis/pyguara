@@ -70,3 +70,24 @@ def till_cell(soil: SoilCell) -> bool:
         return False
     soil.soil_type = "tilled_dirt"
     return True
+
+
+WATER_AMOUNT = 0.4
+"""Moisture a single watering adds, capped at 1.0. `systems/soil_system.py`
+decays it back down over time, so this is a top-up, not a permanent fix."""
+
+
+def water_cell(soil: SoilCell) -> bool:
+    """Raise a cell's moisture, capped at 1.0.
+
+    Args:
+        soil: The cell to water.
+
+    Returns:
+        Whether watering changed anything. Already-saturated soil is a
+        no-op, not an error.
+    """
+    if soil.moisture >= 1.0:
+        return False
+    soil.moisture = min(1.0, soil.moisture + WATER_AMOUNT)
+    return True

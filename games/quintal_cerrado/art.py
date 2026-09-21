@@ -35,7 +35,16 @@ _SOIL_COLORS: dict[str, Color] = {
 }
 
 
-def draw_soil_tile(renderer: UIRenderer, rect: Rect, kind: str) -> None:
+MOISTURE_TINT = Water.C300
+MOISTURE_TINT_STRENGTH = 0.35
+"""How far a fully-saturated (moisture=1.0) cell shifts towards
+`MOISTURE_TINT` -- a legible "this is wet" cue without washing out the
+till/tilled colour contrast a glance needs first."""
+
+
+def draw_soil_tile(
+    renderer: UIRenderer, rect: Rect, kind: str, *, moisture: float = 0.0
+) -> None:
     """Fill one cell with its soil kind's colour, plus a grid line.
 
     Args:
@@ -45,8 +54,14 @@ def draw_soil_tile(renderer: UIRenderer, rect: Rect, kind: str) -> None:
             fall back to raw dirt rather than raising, so a gid a future
             phase has not taught this module about yet still draws
             something instead of crashing the whole grid.
+        moisture: `SoilCell.moisture`, 0.0-1.0. Tints the tile towards
+            `MOISTURE_TINT` so watering (and its `systems/soil_system.py`
+            decay) is something a player can actually see, not just a
+            number that quietly gates growth.
     """
-    renderer.draw_rect(rect, _SOIL_COLORS.get(kind, RAW_DIRT))
+    base = _SOIL_COLORS.get(kind, RAW_DIRT)
+    color = base.lerp(MOISTURE_TINT, moisture * MOISTURE_TINT_STRENGTH)
+    renderer.draw_rect(rect, color)
     renderer.draw_rect(rect, GRID_LINE, width=1)
 
 
