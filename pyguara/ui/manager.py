@@ -99,7 +99,7 @@ class UIManager:
         self._layout_dirty = True
 
     def elements(self, layer: int | None = None) -> list[UIElement]:
-        """The root elements, back to front.
+        """Return the root elements, back to front.
 
         Args:
             layer: Restrict to one layer, or None for all of them.
