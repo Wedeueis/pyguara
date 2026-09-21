@@ -57,9 +57,6 @@ from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
 from pyguara.log.manager import LogManager
 from pyguara.log.types import LogLevel
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
-from pyguara.physics.collision_system import CollisionSystem
-from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.prefabs.loader import PrefabCache
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.manager import ResourceManager
@@ -165,12 +162,10 @@ def configure_game_container() -> DIContainer:
     container.register_singleton(SystemManager, SystemManager)
     container.register_singleton(CoroutineManager, CoroutineManager)
 
-    physics_engine = PymunkEngine()
-    container.register_instance(IPhysicsEngine, physics_engine)  # type: ignore[type-abstract]
-    collision_system = CollisionSystem(event_dispatcher)
-    container.register_instance(CollisionSystem, collision_system)
-    physics_engine.set_collision_system(collision_system)
-
+    # No IPhysicsEngine/CollisionSystem here: movement is a hand-rolled
+    # AABB/grid stepper against CaveLayout (see systems.py's PlayerController)
+    # for tight platformer feel, and nothing else in this demo touches
+    # RigidBody/pymunk.
     container.register_singleton(Application, Application)
 
     return container

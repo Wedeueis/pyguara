@@ -2,7 +2,7 @@
 
 A twin-stick arena shooter demonstrating:
 - AI behavior trees
-- Object pooling for bullets and enemies
+- Object pooling for enemies (bullets are `kits.projectiles.Projectile`s)
 - Wave-based spawning with difficulty scaling
 - Score tracking
 """
