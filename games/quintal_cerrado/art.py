@@ -190,3 +190,129 @@ def draw_plant(
             2.5,
             HARVEST_FRUIT,
         )
+
+
+NO_POWER = Color(206, 84, 70)
+SOLAR_CELL = Color(44, 74, 128)
+SOLAR_FRAME = Color(150, 170, 200)
+PIPE = Color(120, 138, 150)
+DRONE_BODY = Sand.C300
+SENSOR_TRACK = Color(24, 20, 20, 150)
+
+
+def draw_structure(
+    renderer: UIRenderer,
+    rect: Rect,
+    kind: str,
+    *,
+    powered: bool = True,
+    elapsed: float = 0.0,
+) -> None:
+    """Draw one placed structure inside its cell.
+
+    Args:
+        renderer: The UI renderer to draw through.
+        rect: The cell's screen rectangle.
+        kind: A key of `structures.STRUCTURE_TABLE`. An unknown kind draws
+            nothing, the same tolerance `draw_soil_tile` gives an unknown
+            tile.
+        powered: Whether it has power. An unpowered device draws a red
+            warning dot, so a plot that has outgrown its panels says so.
+        elapsed: Seconds since the scene entered, animating the glint, the
+            droplets, the blink and the drone's hover.
+    """
+    cx, cy = rect.centerx, rect.centery
+    if kind == "solar_panel":
+        panel = Rect(rect.x + 6, rect.y + 9, rect.width - 12, rect.height - 18)
+        renderer.draw_rect(panel, SOLAR_CELL)
+        renderer.draw_rect(panel, SOLAR_FRAME, width=2)
+        renderer.draw_line(
+            Vector2(cx, panel.top), Vector2(cx, panel.bottom), SOLAR_FRAME, width=1
+        )
+        renderer.draw_line(
+            Vector2(panel.left, cy), Vector2(panel.right, cy), SOLAR_FRAME, width=1
+        )
+        glint = 0.5 + 0.5 * math.sin(elapsed * 2.2)
+        renderer.draw_circle(
+            Vector2(panel.left + 8, panel.top + 7),
+            2.0 + glint,
+            Color(255, 244, 200, int(120 + 120 * glint)),
+        )
+    elif kind == "drip_irrigation":
+        renderer.draw_line(
+            Vector2(rect.x + 6, cy), Vector2(rect.right - 6, cy), PIPE, width=4
+        )
+        renderer.draw_line(
+            Vector2(cx, rect.y + 6), Vector2(cx, rect.bottom - 6), PIPE, width=4
+        )
+        renderer.draw_circle(Vector2(cx, cy), 6, PIPE)
+        if powered:
+            for index in range(4):
+                phase = (elapsed * 1.6 + index * 0.25) % 1.0
+                angle = index * math.pi / 2 + math.pi / 4
+                distance = 8 + phase * 12
+                renderer.draw_circle(
+                    Vector2(
+                        cx + math.cos(angle) * distance, cy + math.sin(angle) * distance
+                    ),
+                    2.0,
+                    Color(
+                        Water.C300.r, Water.C300.g, Water.C300.b, int(255 * (1 - phase))
+                    ),
+                )
+    elif kind == "soil_sensor":
+        renderer.draw_line(
+            Vector2(cx, cy + 12), Vector2(cx, rect.bottom - 6), PIPE, width=3
+        )
+        renderer.draw_rect(Rect(cx - 7, cy - 10, 14, 20), PIPE)
+        blink = 1.0 if math.sin(elapsed * 4.0) > 0.0 else 0.35
+        renderer.draw_circle(
+            Vector2(cx, cy - 3), 3.0, Color(120, 230, 150, int(255 * blink))
+        )
+    elif kind == "auto_harvester":
+        hover = math.sin(elapsed * 3.0) * 2.0
+        body = Vector2(cx, cy + hover)
+        renderer.draw_circle(Vector2(cx + 2, rect.bottom - 8), 6, Color(0, 0, 0, 60))
+        renderer.draw_circle(body, 8, DRONE_BODY if powered else PIPE)
+        spin = elapsed * (14.0 if powered else 0.0)
+        for arm in (0.0, math.pi / 2):
+            dx, dy = math.cos(spin + arm) * 14, math.sin(spin + arm) * 4
+            renderer.draw_line(
+                Vector2(body.x - dx, body.y - 8 - dy),
+                Vector2(body.x + dx, body.y - 8 + dy),
+                SOLAR_FRAME,
+                width=2,
+            )
+    else:
+        return
+
+    if not powered:
+        renderer.draw_circle(Vector2(rect.right - 7, rect.y + 7), 4.0, NO_POWER)
+
+
+def draw_sensor_readout(
+    renderer: UIRenderer, rect: Rect, moisture: float, organic: float, pest: float
+) -> None:
+    """Draw three thin bars along the bottom of a cell a soil sensor covers.
+
+    Args:
+        renderer: The UI renderer to draw through.
+        rect: The cell's screen rectangle.
+        moisture: `SoilCell.moisture`, 0.0-1.0 (blue).
+        organic: `SoilCell.organic_matter`, 0.0-1.0 (green).
+        pest: `SoilCell.pest_pressure`, 0.0-1.0 (magenta) -- the one that
+            earns the sensor its place: it reads pests before a plant does.
+    """
+    width = rect.width - 10
+    for row, (value, color) in enumerate(
+        (
+            (moisture, Water.C300),
+            (organic, Verdant.SAGE_100),
+            (pest, Color(210, 90, 200)),
+        )
+    ):
+        y = rect.bottom - 14 + row * 4
+        renderer.draw_rect(Rect(rect.x + 5, y, width, 3), SENSOR_TRACK)
+        filled = int(width * max(0.0, min(1.0, value)))
+        if filled > 0:
+            renderer.draw_rect(Rect(rect.x + 5, y, filled, 3), color)

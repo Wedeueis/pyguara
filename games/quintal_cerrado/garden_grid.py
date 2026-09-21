@@ -91,8 +91,16 @@ class GardenGrid:
         return water_cell(self.soil_at(cell))
 
     def can_plant(self, cell: Cell) -> bool:
-        """Report whether `cell` is tilled, in bounds, and unoccupied."""
-        if not self.in_bounds(cell) or cell in self.plant_at:
+        """Report whether `cell` is tilled, in bounds, and unoccupied.
+
+        A structure occupies its cell too -- nothing grows under a solar
+        panel.
+        """
+        if (
+            not self.in_bounds(cell)
+            or cell in self.plant_at
+            or cell in self.automation_at
+        ):
             return False
         return self.soil_at(cell).soil_type == "tilled_dirt"
 
@@ -118,3 +126,26 @@ class GardenGrid:
         """
         self.plant_at.pop(cell, None)
         self.tilemap.layers["flora"].set_tile(cell, EMPTY_GID)
+
+    def can_build(self, cell: Cell) -> bool:
+        """Report whether a structure can go on `cell`.
+
+        Any in-bounds cell with nothing on it: a structure does not need
+        tilled soil, but it does not share a cell with a plant or another
+        structure.
+        """
+        return (
+            self.in_bounds(cell)
+            and cell not in self.plant_at
+            and cell not in self.automation_at
+        )
+
+    def mark_built(self, cell: Cell, entity_id: str) -> None:
+        """Record that the structure `entity_id` now occupies `cell`.
+
+        Args:
+            cell: A cell already confirmed `can_build`.
+            entity_id: The structure entity's id.
+        """
+        self.automation_at[cell] = entity_id
+        self.tilemap.layers["automation"].set_tile(cell, 1)

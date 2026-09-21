@@ -27,7 +27,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from games.quintal_cerrado import art
-from games.quintal_cerrado.components import PlantComponent
+from games.quintal_cerrado.components import AutomationComponent, PlantComponent
 from games.quintal_cerrado.garden_grid import (
     GRID_HEIGHT,
     GRID_WIDTH,
@@ -36,6 +36,7 @@ from games.quintal_cerrado.garden_grid import (
 )
 from games.quintal_cerrado.juice import FloatingLabels, Motes
 from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.structures import STRUCTURE_TABLE, area
 from pyguara.common.grid import Cell, cell_to_world, neighbors8
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
@@ -177,6 +178,19 @@ class GardenGridCanvas(Canvas):
             self._cell_screen_center(cell), COMPOST_COLOR, count=9, speed=30.0, life=0.6
         )
 
+    def celebrate_build(self, cell: Cell, kind: str) -> None:
+        """Puff the structure's colour as it goes down.
+
+        Args:
+            cell: Where it was placed.
+            kind: A key of `structures.STRUCTURE_TABLE`.
+        """
+        structure = STRUCTURE_TABLE.get(kind)
+        color = structure.color if structure is not None else Color.WHITE
+        self._motes.burst(
+            self._cell_screen_center(cell), color, count=12, speed=50.0, life=0.6
+        )
+
     def celebrate_spray(self, cell: Cell) -> None:
         """Puff a pale chemical cloud over the cell and its eight neighbours.
 
@@ -303,6 +317,7 @@ class GardenGridCanvas(Canvas):
                         renderer, rect, soil.pest_pressure, self._elapsed
                     )
 
+        self._draw_structures(renderer)
         self._draw_plants(renderer)
         self._motes.render(renderer)
         self._labels.render(renderer)
@@ -350,3 +365,55 @@ class GardenGridCanvas(Canvas):
                 sway=sway,
                 elapsed=self._elapsed,
             )
+
+    def _structure_at(self, cell: Cell) -> AutomationComponent | None:
+        entity_id = self.grid.automation_at.get(cell)
+        if entity_id is None:
+            return None
+        entity = self._entity_manager.get_entity(entity_id)
+        if entity is None or not entity.has_component(AutomationComponent):
+            return None
+        return entity.get_component(AutomationComponent)
+
+    def _draw_structures(self, renderer: UIRenderer) -> None:
+        """Draw every placed structure, then each sensor's readout bars.
+
+        The readouts go under the plants but over the soil, on every cell
+        any sensor reaches -- collected into a set first so two overlapping
+        sensors do not draw the same bars twice.
+        """
+        sensed: set[Cell] = set()
+        for cell in self.grid.automation_at:
+            structure = self._structure_at(cell)
+            if structure is None:
+                continue
+            art.draw_structure(
+                renderer,
+                self._cell_rect(cell),
+                structure.kind,
+                powered=structure.powered,
+                elapsed=self._elapsed,
+            )
+            if structure.kind == "soil_sensor":
+                sensed.update(
+                    area(self.grid, cell, STRUCTURE_TABLE["soil_sensor"].radius)
+                )
+
+        for cell in sensed:
+            soil = self.grid.soil_at(cell)
+            art.draw_sensor_readout(
+                renderer,
+                self._cell_rect(cell),
+                soil.moisture,
+                soil.organic_matter,
+                soil.pest_pressure,
+            )
+
+    def _cell_rect(self, cell: Cell) -> Rect:
+        """The screen rectangle of `cell`."""
+        return Rect(
+            self.rect.x + cell[0] * TILE_SIZE,
+            self.rect.y + cell[1] * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE,
+        )

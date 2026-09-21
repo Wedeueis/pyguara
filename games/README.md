@@ -132,8 +132,11 @@ These modules correspond to the "Tutorial Series Roadmap".
   sale premium) or a fast, expensive chemical **spray** (clears it at
   once and grows the crop faster, but sells for 0.5x, degrades the soil
   and marks every plant it reaches for good). A tool bar names every tool;
-  each also has a keyboard shortcut. **Status: Phase 3 of 5** (see the
-  PRD) — automation and real persistence land in later phases.
+  each also has a keyboard shortcut. A **store** (a scene pushed over the
+  frozen garden) sells a four-step automation tech tree — solar panel →
+  drip irrigation → soil sensor → harvester drone — each unlocked by
+  *placing* the one before it. **Status: Phase 4 of 5** (see the PRD) —
+  real persistence and the scoring screen land in the last phase.
 * **Key Concepts:** the first real adopter of `pyguara.tilemap`
   (`Tilemap`/`TileLayer`/`Tileset`, built procedurally rather than from a
   `.tmx` — the plot is simulation state, not level art);
@@ -151,7 +154,12 @@ These modules correspond to the "Tutorial Series Roadmap".
   (`systems/pest_system.py`) where pressure spreads between plants (faster
   through a monoculture), decays with organic matter, dies off without a
   host, and is suppressed by a grown Pequi; soil moisture that evaporates
-  and gates growth; a small economy (`economy.py`, `treatments.py`) where
+  and gates growth; the automation tree (`structures.py`,
+  `systems/automation_system.py`), where one solar panel powers three
+  devices handed out in placement order, drip irrigation holds the soil
+  above the moisture line, a sensor prints moisture/humus/pest bars on the
+  tiles it reaches, and a drone sells ready crops through the same
+  `economy.sell_harvest` the harvest tool uses; a small economy (`economy.py`, `treatments.py`) where
   seeds and treatments cost Sementes and a harvest pays them back; and a
   `juice.Motes`/`juice.FloatingLabels` pair (adapted from
   `pyguara.graphics.vfx.sparks.Sparks` and `floating_text.FloatingText` for
