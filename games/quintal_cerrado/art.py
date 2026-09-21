@@ -13,6 +13,8 @@ draw calls take the same renderer a `Panel` or `ProgressBar` would.
 
 from __future__ import annotations
 
+import math
+
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.design_system.tokens import Rock, Sand, Verdant, Water, Wood
@@ -48,18 +50,73 @@ def draw_soil_tile(renderer: UIRenderer, rect: Rect, kind: str) -> None:
     renderer.draw_rect(rect, GRID_LINE, width=1)
 
 
-def draw_seedling(renderer: UIRenderer, center: Vector2, color: Color) -> None:
-    """Draw a planted seedling as a small stem and a leaf.
+STAGE_SCALE: dict[str, float] = {
+    "seedling": 0.55,
+    "growing": 0.8,
+    "mature": 1.0,
+    "harvestable": 1.0,
+}
+
+HARVEST_RING = Sand.C200
+HARVEST_FRUIT = Sand.C300
+
+
+def draw_plant(
+    renderer: UIRenderer,
+    center: Vector2,
+    color: Color,
+    stage: str,
+    *,
+    pop: float = 0.0,
+    sway: float = 0.0,
+    elapsed: float = 0.0,
+) -> None:
+    """Draw a plant at its growth stage, with a pop-in bounce and idle sway.
 
     Args:
         renderer: The UI renderer to draw through.
         center: The cell's centre, in screen space.
         color: The species' colour.
+        stage: `PlantComponent.growth_stage` -- picks the silhouette size.
+            An unrecognised stage falls back to full size rather than
+            raising, the same tolerance `draw_soil_tile` gives an unknown
+            tile kind.
+        pop: 1.0 right after planting or a stage change, easing to 0.0 --
+            a brief overshoot scale so a transition reads as an event, not
+            just a fact discovered a frame later.
+        sway: A per-plant horizontal offset in pixels, so a full plot
+            doesn't read as a field of static stickers.
+        elapsed: Seconds since the scene entered, driving the harvestable
+            stage's pulsing ring -- the same role `phase` plays in
+            `guara_falcao.art.draw_guara`'s run cycle.
     """
+    scale = STAGE_SCALE.get(stage, 1.0) * (1.0 + 0.4 * pop)
+    base = Vector2(center.x + sway, center.y)
+
+    stem_height = 10 * scale
     renderer.draw_line(
-        Vector2(center.x, center.y + 10),
-        Vector2(center.x, center.y - 2),
+        Vector2(base.x, base.y + stem_height),
+        Vector2(base.x, base.y - 2 * scale),
         TILLED_DIRT,
-        width=3,
+        width=max(1, round(3 * scale)),
     )
-    renderer.draw_circle(Vector2(center.x, center.y - 6), 7, color)
+
+    leaf_center = Vector2(base.x, base.y - 6 * scale)
+    leaf_radius = 7 * scale
+    renderer.draw_circle(leaf_center, leaf_radius, color)
+
+    if stage == "harvestable":
+        pulse = 0.5 + 0.5 * math.sin(elapsed * 3.0)
+        ring_color = Color(
+            HARVEST_RING.r, HARVEST_RING.g, HARVEST_RING.b, int(110 + 90 * pulse)
+        )
+        renderer.draw_circle(
+            leaf_center, leaf_radius + 3 + 2 * pulse, ring_color, width=2
+        )
+        renderer.draw_circle(
+            Vector2(
+                leaf_center.x + leaf_radius * 0.5, leaf_center.y - leaf_radius * 0.3
+            ),
+            2.5,
+            HARVEST_FRUIT,
+        )

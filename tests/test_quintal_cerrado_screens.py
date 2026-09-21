@@ -18,8 +18,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from games.quintal_cerrado.components import PlantComponent
 from games.quintal_cerrado.garden_widget import GardenGridCanvas
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
+from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
@@ -179,18 +181,18 @@ class TestTheGardenScreen:
         scene = self._entered_scene(game_container)
 
         scene._on_action(
-            OnActionEvent(action_name="tool_plant", context="gameplay", value=1.0)
+            OnActionEvent(action_name="plant_cagaita", context="gameplay", value=1.0)
         )
 
-        assert scene._active_tool == "plant"
+        assert scene._active_tool == "plant_cagaita"
         assert scene._tool_label is not None
-        assert "Plant" in scene._tool_label.text
+        assert "Cagaita" in scene._tool_label.text
 
     def test_planting_requires_tilled_unoccupied_ground(
         self, game_container: DIContainer
     ) -> None:
         scene = self._entered_scene(game_container)
-        scene._set_active_tool("plant")
+        scene._set_active_tool("plant_guandu")
         cell = (3, 3)
 
         scene._on_cell_clicked(cell)
@@ -199,3 +201,38 @@ class TestTheGardenScreen:
         scene.grid.till(cell)
         scene._on_cell_clicked(cell)
         assert cell in scene.grid.plant_at
+
+    def test_each_species_tool_plants_its_own_species(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._entered_scene(game_container)
+
+        for tool, cell in (
+            ("plant_guandu", (0, 0)),
+            ("plant_cagaita", (1, 0)),
+            ("plant_baru", (2, 0)),
+        ):
+            scene.grid.till(cell)
+            scene._set_active_tool(tool)
+            scene._on_cell_clicked(cell)
+
+            entity_id = scene.grid.plant_at[cell]
+            entity = scene.entity_manager.get_entity(entity_id)
+            assert entity.get_component(PlantComponent).species_id == tool.removeprefix(
+                "plant_"
+            )
+
+    def test_a_newly_planted_entity_carries_a_seedling_fsm(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._entered_scene(game_container)
+        cell = (4, 4)
+        scene.grid.till(cell)
+        scene._set_active_tool("plant_guandu")
+
+        scene._on_cell_clicked(cell)
+
+        entity = scene.entity_manager.get_entity(scene.grid.plant_at[cell])
+        assert entity.has_component(AIComponent)
+        assert entity.get_component(AIComponent).fsm is not None
+        assert entity.get_component(PlantComponent).growth_stage == "seedling"
