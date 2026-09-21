@@ -10,9 +10,9 @@ small on purpose.
 one row, one seed per species on the other -- every tool also has a
 keyboard shortcut, but the bar is what makes them discoverable) and a
 `GardenGridCanvas` that turns a grid click into the active tool's action.
-Five simulation systems run every fixed tick -- `SoilSystem`,
-`ShadeSystem`, `SyntropicSystem`, `PestSystem`, `PlantGrowthSystem`, in
-that priority order (see the `_*_PRIORITY` constants) -- registered on
+Six simulation systems run every fixed tick -- `SoilSystem`,
+`AutomationSystem`, `ShadeSystem`, `SyntropicSystem`, `PestSystem`,
+`PlantGrowthSystem`, in that priority order (see the `_*_PRIORITY` constants) -- registered on
 `self.system_manager`, which `SceneManager.fixed_update()` already calls
 automatically for every active scene alongside the engine's own
 `AISystem`.
@@ -24,6 +24,10 @@ outbreaks. Seeds and treatments cost Sementes, and a harvest pays them
 back -- double for an organically grown plant, half for one that was
 ever sprayed (`economy.py`). That is the PRD's dilemma: the spray fixes an
 outbreak at once, and the compost is what keeps the premium.
+
+The store (`store.py`) is a scene pushed over this one. Buying a structure
+puts it in the player's inventory and hands them a `build_<kind>` tool;
+the next click on a free cell places it, and `AutomationSystem` takes over.
 """
 
 from __future__ import annotations
@@ -36,11 +40,15 @@ from games.quintal_cerrado.components import (
     GardenConditions,
     PlantComponent,
     PlayerEconomy,
-    add_credits,
     spend_credits,
 )
-from games.quintal_cerrado.economy import COMPOST_COST, SPRAY_COST, sale_value
-from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
+from games.quintal_cerrado.economy import COMPOST_COST, SPRAY_COST, sell_harvest
+from games.quintal_cerrado.events import (
+    OutbreakResolvedEvent,
+    OutbreakStartedEvent,
+    PlantHarvestedEvent,
+    SolarIncomeEvent,
+)
 from games.quintal_cerrado.garden_grid import (
     GRID_HEIGHT,
     GRID_WIDTH,
@@ -56,6 +64,9 @@ from games.quintal_cerrado.garden_widget import (
 from games.quintal_cerrado.hud import Hud
 from games.quintal_cerrado.plant_states import build_plant_ai
 from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.store import StoreOverlayScene
+from games.quintal_cerrado.structures import STRUCTURE_TABLE, place_structure
+from games.quintal_cerrado.systems.automation_system import AutomationSystem
 from games.quintal_cerrado.systems.pest_system import PestSystem
 from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
@@ -67,7 +78,7 @@ from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import B, C, G, H, M, P, S, T, W
+from pyguara.input.keys import KEY_O, B, C, G, H, M, P, S, T, W
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.scene.base import Scene
@@ -84,6 +95,7 @@ from pyguara.ui.types import LayoutDirection, TextAlign, UILayer
 # moisture before shade, before the companion bonus that reads shade,
 # before growth that reads both.
 _SOIL_PRIORITY = 500
+_AUTOMATION_PRIORITY = 505
 _SHADE_PRIORITY = 510
 _SYNTROPIC_PRIORITY = 520
 _PEST_PRIORITY = 525
@@ -118,6 +130,10 @@ _TOOL_KEYS = {
     "plant_baru": B,
     "plant_pequi": P,
 }
+
+STORE_ACTION = "open_store"
+"""Not a tool -- it has no active state -- so it is bound and handled apart
+from `_TOOL_KEYS`, and its button is not in `_tool_buttons`."""
 
 _TOOL_BAR_BUTTON_SIZE = Vector2(114, 34)
 _TOOL_BAR_SPACING = 6
@@ -235,6 +251,8 @@ class GardenScene(Scene):
         self.event_dispatcher.subscribe(
             OutbreakResolvedEvent, self._on_outbreak_resolved
         )
+        self.event_dispatcher.subscribe(PlantHarvestedEvent, self._on_drone_harvest)
+        self.event_dispatcher.subscribe(SolarIncomeEvent, self._on_solar_income)
 
     def _create_entities(self) -> None:
         """The two non-plant entities: the player, and the garden's conditions."""
@@ -256,6 +274,13 @@ class GardenScene(Scene):
     def _register_systems(self) -> None:
         self.system_manager.register(
             SoilSystem(self.grid), priority=_SOIL_PRIORITY, system_type=SoilSystem
+        )
+        self.system_manager.register(
+            AutomationSystem(
+                self.entity_manager, self.grid, self.economy, self.event_dispatcher
+            ),
+            priority=_AUTOMATION_PRIORITY,
+            system_type=AutomationSystem,
         )
         self.system_manager.register(
             ShadeSystem(self.entity_manager, self.grid),
@@ -281,8 +306,12 @@ class GardenScene(Scene):
     def _build_grid_widget(self, ui_manager: UIManager) -> Vector2:
         grid_width_px = GRID_WIDTH * TILE_SIZE
         grid_height_px = GRID_HEIGHT * TILE_SIZE
+        # 16px below centre: the tool bar's two rows sit above the grid, and
+        # the HUD panel in the top-left corner would otherwise clip the
+        # leftmost button of the lower row.
         origin = Vector2(
-            (WINDOW_WIDTH - grid_width_px) // 2, (WINDOW_HEIGHT - grid_height_px) // 2
+            (WINDOW_WIDTH - grid_width_px) // 2,
+            (WINDOW_HEIGHT - grid_height_px) // 2 + 16,
         )
         self._canvas = GardenGridCanvas(origin, self.grid, self.entity_manager)
         self._canvas.on_cell_clicked = self._on_cell_clicked
@@ -299,7 +328,8 @@ class GardenScene(Scene):
         """
         row_height = int(_TOOL_BAR_BUTTON_SIZE.y)
         for row_index, tools in enumerate(reversed(_TOOL_ROWS)):
-            count = len(tools)
+            has_store = tools is _ACTION_TOOLS
+            count = len(tools) + (1 if has_store else 0)
             width = count * _TOOL_BAR_BUTTON_SIZE.x + (count - 1) * _TOOL_BAR_SPACING
             position = Vector2(
                 origin.x + (GRID_WIDTH * TILE_SIZE - width) / 2,
@@ -324,6 +354,15 @@ class GardenScene(Scene):
                 button.on_click = self._tool_button_handler(tool)
                 self._tool_buttons[tool] = button
                 row.add_child(button)
+            if has_store:
+                store = BevelButton(
+                    "Store (O)",
+                    Vector2(0, 0),
+                    _TOOL_BAR_BUTTON_SIZE,
+                    skin=Skins.WOOD,
+                )
+                store.on_click = lambda _element: self._open_store()
+                row.add_child(store)
             ui_manager.add_element(row, UILayer.CONTENT)
 
     def _build_price_hint(self, ui_manager: UIManager, origin: Vector2) -> None:
@@ -354,6 +393,8 @@ class GardenScene(Scene):
         for tool, key in _TOOL_KEYS.items():
             input_manager.register_action(tool, ActionType.PRESS)
             input_manager.bind_input(InputDevice.KEYBOARD, key, tool)
+        input_manager.register_action(STORE_ACTION, ActionType.PRESS)
+        input_manager.bind_input(InputDevice.KEYBOARD, KEY_O, STORE_ACTION)
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
 
     def _on_action(self, event: OnActionEvent) -> None:
@@ -363,6 +404,8 @@ class GardenScene(Scene):
             return
         if event.action_name in _TOOL_KEYS:
             self._set_active_tool(event.action_name)
+        elif event.action_name == STORE_ACTION:
+            self._open_store()
 
     def _set_active_tool(self, tool: str) -> None:
         self._active_tool = tool
@@ -381,6 +424,48 @@ class GardenScene(Scene):
     def _on_outbreak_resolved(self, event: OutbreakResolvedEvent) -> None:
         self._say(f"Pests gone ({event.method})")
 
+    def _on_drone_harvest(self, event: PlantHarvestedEvent) -> None:
+        if self._canvas is not None:
+            self._canvas.celebrate_harvest(event.cell, event.species_id)
+            self._canvas.spawn_label(event.cell, f"+{event.value}", GAIN_COLOR)
+
+    def _on_solar_income(self, event: SolarIncomeEvent) -> None:
+        if self._canvas is not None:
+            self._canvas.spawn_label(event.cell, f"+{event.amount}", GAIN_COLOR)
+
+    def _open_store(self) -> None:
+        """Push the store over the garden, freezing it while the player shops."""
+        scene_manager = self.container.get(SceneManager)
+        if scene_manager.current_scene is not self:
+            return
+        scene_manager.register(
+            StoreOverlayScene(
+                self.event_dispatcher,
+                self.economy,
+                self._on_structure_bought,
+                WINDOW_WIDTH,
+                WINDOW_HEIGHT,
+            )
+        )
+        scene_manager.push_scene("StoreOverlayScene", pause_below=True)
+
+    def _on_structure_bought(self, kind: str) -> None:
+        """The store has closed on a purchase: hand over the placement tool."""
+        self._set_active_tool(f"build_{kind}")
+        self._say(f"Place your {STRUCTURE_TABLE[kind].display_name}")
+
+    def _build(self, cell: Cell, kind: str) -> None:
+        """Place a structure from the inventory, and drop the tool when it runs out."""
+        if (
+            place_structure(self.grid, self.entity_manager, self.economy, kind, cell)
+            != "ok"
+        ):
+            return
+        if self._canvas is not None:
+            self._canvas.celebrate_build(cell, kind)
+        if self.economy.inventory.get(kind, 0) <= 0:
+            self._set_active_tool("till")
+
     def _on_cell_clicked(self, cell: Cell) -> None:
         tool = self._active_tool
         if tool == "till":
@@ -397,6 +482,8 @@ class GardenScene(Scene):
             self._spray(cell)
         elif tool.startswith("plant_"):
             self._plant(cell, tool.removeprefix("plant_"))
+        elif tool.startswith("build_"):
+            self._build(cell, tool.removeprefix("build_"))
 
     def _cant_afford(self, cell: Cell, cost: int) -> None:
         """Tell the player, at the cell they clicked, what they were short of."""
@@ -458,22 +545,12 @@ class GardenScene(Scene):
             if self._canvas is not None:
                 self._canvas.spawn_label(cell, "Cleared", Color(190, 180, 168))
             return
-        if plant.growth_stage != "harvestable":
+        sold = sell_harvest(self.grid, self.entity_manager, self.economy, cell)
+        if sold is None or self._canvas is None:
             return
-
-        value = sale_value(plant)
-        add_credits(self.economy, value)
-        if plant.is_chemical_boosted:
-            self.economy.chemical_sales += 1
-        else:
-            self.economy.organic_sales += 1
-
-        species_id = plant.species_id
-        self.entity_manager.remove_entity(entity_id)
-        self.grid.unmark_planted(cell)
-        if self._canvas is not None:
-            self._canvas.celebrate_harvest(cell, species_id)
-            self._canvas.spawn_label(cell, f"+{value}", GAIN_COLOR)
+        species_id, value = sold
+        self._canvas.celebrate_harvest(cell, species_id)
+        self._canvas.spawn_label(cell, f"+{value}", GAIN_COLOR)
 
     def on_exit(self) -> None:
         """Nothing to clean up yet."""

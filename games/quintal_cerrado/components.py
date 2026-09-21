@@ -9,7 +9,7 @@ crop, by contrast, has individual identity, a position and (from Phase 2
 on) FSM-driven behaviour, so it is a real entity carrying `PlantComponent`.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pyguara.ecs.component import BaseComponent
 
@@ -77,11 +77,18 @@ class PlayerEconomy(BaseComponent):
         chemical_sales: Harvests sold at the chemical discount. Both counts
             are what a later evaluation screen scores the player's
             agroecology on.
+        inventory: Structures bought from the store and not yet placed,
+            by kind.
+        unlocked_tech: Structure kinds the player has placed at least once
+            -- what `structures.py`'s tech tree gates each next structure
+            on, and what the save schema records.
     """
 
     credits: float = STARTING_CREDITS
     organic_sales: int = 0
     chemical_sales: int = 0
+    inventory: dict[str, int] = field(default_factory=dict)
+    unlocked_tech: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         """Initialize the component."""
@@ -107,6 +114,30 @@ class GardenConditions(BaseComponent):
     last_treatment: str = ""
     organic_resolutions: int = 0
     chemical_resolutions: int = 0
+
+    def __post_init__(self) -> None:
+        """Initialize the component."""
+        super().__init__()
+
+
+@dataclass
+class AutomationComponent(BaseComponent):
+    """A placed structure: what it is and what it is currently doing.
+
+    Attributes:
+        kind: A key of `structures.STRUCTURE_TABLE`.
+        powered: Whether the structure has power this tick. Written by
+            `systems/automation_system.py`, which shares each solar panel's
+            output out in placement order; a structure that needs power and
+            does not get it does nothing, and the art draws a warning.
+        timer: Seconds of accumulated work -- a solar panel's progress
+            towards its next payout, or a drone's cooldown to its next
+            harvest.
+    """
+
+    kind: str = "solar_panel"
+    powered: bool = True
+    timer: float = 0.0
 
     def __post_init__(self) -> None:
         """Initialize the component."""

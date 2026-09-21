@@ -30,3 +30,34 @@ class OutbreakResolvedEvent:
     """
 
     method: str
+
+
+@dataclass
+class PlantHarvestedEvent:
+    """Fired when a harvester drone sells a plant on its own.
+
+    A player's own harvest is handled where it is clicked; a drone acts on
+    its own schedule, so the scene learns of it through this.
+
+    Attributes:
+        cell: Where the plant was.
+        species_id: What it was.
+        value: Sementes it sold for.
+    """
+
+    cell: Cell
+    species_id: str
+    value: int
+
+
+@dataclass
+class SolarIncomeEvent:
+    """Fired when a solar panel pays out.
+
+    Attributes:
+        cell: The panel's cell.
+        amount: Sementes paid.
+    """
+
+    cell: Cell
+    amount: int
