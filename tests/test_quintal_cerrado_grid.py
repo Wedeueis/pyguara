@@ -72,3 +72,49 @@ def test_mark_planted_records_occupancy_and_flora_gid() -> None:
 
     assert grid.plant_at[cell] == "plant-entity-id"
     assert grid.tilemap.layers["flora"].get_tile(cell) != 0
+
+
+def test_unmark_planted_clears_occupancy_and_flora_gid_but_not_tilth() -> None:
+    grid = GardenGrid()
+    cell = (4, 2)
+    grid.till(cell)
+    grid.mark_planted(cell, "plant-entity-id")
+
+    grid.unmark_planted(cell)
+
+    assert cell not in grid.plant_at
+    assert grid.tilemap.layers["flora"].get_tile(cell) == 0
+    assert grid.soil_at(cell).soil_type == "tilled_dirt"
+    assert grid.can_plant(cell) is True
+
+
+def test_water_raises_moisture_up_to_the_cap() -> None:
+    grid = GardenGrid()
+    cell = (0, 0)
+    before = grid.soil_at(cell).moisture
+
+    assert grid.water(cell) is True
+    assert grid.soil_at(cell).moisture > before
+    assert grid.soil_at(cell).moisture <= 1.0
+
+
+def test_water_a_saturated_cell_is_a_noop() -> None:
+    grid = GardenGrid()
+    cell = (0, 0)
+    grid.soil_at(cell).moisture = 1.0
+
+    assert grid.water(cell) is False
+
+
+def test_water_works_regardless_of_soil_type() -> None:
+    grid = GardenGrid()
+    cell = (0, 0)
+    assert grid.soil_at(cell).soil_type == "raw_dirt"
+
+    assert grid.water(cell) is True
+
+
+def test_water_out_of_bounds_reports_false_rather_than_raising() -> None:
+    grid = GardenGrid()
+
+    assert grid.water((-1, 0)) is False

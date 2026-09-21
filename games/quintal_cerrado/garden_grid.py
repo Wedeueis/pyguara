@@ -8,10 +8,11 @@ structures are real entities.
 
 from __future__ import annotations
 
-from games.quintal_cerrado.components import SoilCell, till_cell
+from games.quintal_cerrado.components import SoilCell, till_cell, water_cell
 from games.quintal_cerrado.level_builder import TILLED_GID, build_tilemap
 from pyguara.common.grid import Cell, cell_to_world
 from pyguara.common.types import Vector2
+from pyguara.tilemap.layer import EMPTY_GID
 from pyguara.tilemap.tilemap import Tilemap
 
 GRID_WIDTH = 12
@@ -71,6 +72,24 @@ class GardenGrid:
         self.tilemap.layers["terrain"].set_tile(cell, TILLED_GID)
         return True
 
+    def water(self, cell: Cell) -> bool:
+        """Raise a cell's moisture.
+
+        Works regardless of `soil_type` -- raw dirt takes water same as
+        tilled ground -- there's no reason to gate this the way `till`/
+        `can_plant` gate on being tilled.
+
+        Args:
+            cell: The cell to water.
+
+        Returns:
+            Whether watering changed anything -- out of bounds or already
+            saturated both report False rather than raising.
+        """
+        if not self.in_bounds(cell):
+            return False
+        return water_cell(self.soil_at(cell))
+
     def can_plant(self, cell: Cell) -> bool:
         """Report whether `cell` is tilled, in bounds, and unoccupied."""
         if not self.in_bounds(cell) or cell in self.plant_at:
@@ -86,3 +105,16 @@ class GardenGrid:
         """
         self.plant_at[cell] = entity_id
         self.tilemap.layers["flora"].set_tile(cell, 1)
+
+    def unmark_planted(self, cell: Cell) -> None:
+        """Clear `cell`'s occupancy after a harvest.
+
+        Leaves the underlying soil tilled -- a harvested plot is ready to
+        replant immediately, matching the till → seed → water → grow →
+        harvest loop's own rhythm rather than forcing a re-till first.
+
+        Args:
+            cell: A cell that was `plant_at`.
+        """
+        self.plant_at.pop(cell, None)
+        self.tilemap.layers["flora"].set_tile(cell, EMPTY_GID)

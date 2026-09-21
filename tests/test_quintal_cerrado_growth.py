@@ -86,6 +86,7 @@ class TestGrowthProgression:
         cell = (0, 0)
         scene.grid.till(cell)
         scene._plant(cell, "guandu")
+        scene.grid.water(cell)
 
         seen_stages = set()
         for _ in range(round(30 / FIXED_DT)):
@@ -110,6 +111,7 @@ class TestGrowthProgression:
         cell = (0, 0)
         scene.grid.till(cell)
         scene._plant(cell, "guandu")
+        scene.grid.water(cell)
 
         _tick(scene, SPECIES_TABLE["guandu"].stage_seconds * 3 + 1.0)
         plant = _plant_component(scene, cell)
@@ -118,6 +120,32 @@ class TestGrowthProgression:
 
         _tick(scene, 5.0)
         assert _plant_component(scene, cell).growth_progress == progress_at_harvest
+
+    def test_growth_stalls_below_the_moisture_threshold(
+        self, scene: GardenScene
+    ) -> None:
+        cell = (0, 0)
+        scene.grid.till(cell)
+        scene._plant(cell, "guandu")
+        scene.grid.soil_at(cell).moisture = 0.0
+
+        _tick(scene, 5.0)
+
+        assert _plant_component(scene, cell).growth_progress == 0.0
+        assert _plant_component(scene, cell).growth_stage == "seedling"
+
+    def test_watering_resumes_stalled_growth(self, scene: GardenScene) -> None:
+        cell = (0, 0)
+        scene.grid.till(cell)
+        scene._plant(cell, "guandu")
+        scene.grid.soil_at(cell).moisture = 0.0
+        _tick(scene, 2.0)
+        assert _plant_component(scene, cell).growth_progress == 0.0
+
+        scene.grid.water(cell)
+        _tick(scene, 2.0)
+
+        assert _plant_component(scene, cell).growth_progress > 0.0
 
 
 class TestStratificationBonus:
@@ -150,6 +178,7 @@ class TestStratificationBonus:
     ) -> None:
         scene.grid.till((3, 3))
         scene._plant((3, 3), "baru")
+        scene.grid.water((3, 3))
         scene.grid.till((3, 4))
         scene._plant((3, 4), "cagaita")
 
@@ -180,3 +209,29 @@ class TestStratificationBonus:
         scene.system_manager.update(FIXED_DT)
 
         assert _plant_component(scene, (5, 5)).growth_multiplier == 1.0
+
+
+class TestMoisture:
+    def test_moisture_evaporates_over_time(self, scene: GardenScene) -> None:
+        cell = (0, 0)
+        scene.grid.water(cell)
+        after_watering = scene.grid.soil_at(cell).moisture
+
+        _tick(scene, 10.0)
+
+        assert scene.grid.soil_at(cell).moisture < after_watering
+
+    def test_moisture_never_drops_below_zero(self, scene: GardenScene) -> None:
+        cell = (0, 0)
+        scene.grid.soil_at(cell).moisture = 0.01
+
+        _tick(scene, 5.0)
+
+        assert scene.grid.soil_at(cell).moisture == 0.0
+
+    def test_watering_a_saturated_cell_is_a_noop(self, scene: GardenScene) -> None:
+        cell = (0, 0)
+        scene.grid.soil_at(cell).moisture = 1.0
+
+        assert scene.grid.water(cell) is False
+        assert scene.grid.soil_at(cell).moisture == 1.0

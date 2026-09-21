@@ -34,6 +34,7 @@ from pyguara.prefabs.loader import PrefabCache
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
+from pyguara.ui.design_system import Skins
 from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UILayer
 
@@ -147,8 +148,31 @@ class TestTheGardenScreen:
         scene = self._entered_scene(game_container)
 
         assert scene._active_tool == "till"
-        assert scene._tool_label is not None
-        assert "Till" in scene._tool_label.text
+        assert scene._tool_buttons["till"].skin is Skins.SAGE
+        assert scene._tool_buttons["water"].skin is Skins.GHOST
+
+    def test_tool_bar_has_a_clickable_button_per_tool(
+        self, game_container: DIContainer
+    ) -> None:
+        """The bar itself is the fix for a tool being invisible in the HUD.
+
+        `water`/`harvest` have keyboard shortcuts but nothing on screen
+        named them before this bar existed -- a click is what makes them
+        discoverable.
+        """
+        scene = self._entered_scene(game_container)
+
+        assert set(scene._tool_buttons) == {
+            "till",
+            "plant_guandu",
+            "plant_cagaita",
+            "plant_baru",
+            "water",
+            "harvest",
+        }
+
+        scene._tool_buttons["water"].on_click(scene._tool_buttons["water"])
+        assert scene._active_tool == "water"
 
     def test_a_real_mouse_click_tills_the_cell_under_it(
         self, game_container: DIContainer
@@ -175,7 +199,7 @@ class TestTheGardenScreen:
 
         assert scene.grid.soil_at(cell).soil_type == "tilled_dirt"
 
-    def test_switching_tool_updates_the_label_and_active_tool(
+    def test_switching_tool_updates_active_tool_and_button_highlight(
         self, game_container: DIContainer
     ) -> None:
         scene = self._entered_scene(game_container)
@@ -185,8 +209,8 @@ class TestTheGardenScreen:
         )
 
         assert scene._active_tool == "plant_cagaita"
-        assert scene._tool_label is not None
-        assert "Cagaita" in scene._tool_label.text
+        assert scene._tool_buttons["plant_cagaita"].skin is Skins.SAGE
+        assert scene._tool_buttons["till"].skin is Skins.GHOST
 
     def test_planting_requires_tilled_unoccupied_ground(
         self, game_container: DIContainer
@@ -236,3 +260,40 @@ class TestTheGardenScreen:
         assert entity.has_component(AIComponent)
         assert entity.get_component(AIComponent).fsm is not None
         assert entity.get_component(PlantComponent).growth_stage == "seedling"
+
+    def test_watering_raises_moisture_and_celebrates(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._entered_scene(game_container)
+        scene._set_active_tool("water")
+        cell = (2, 2)
+        before = scene.grid.soil_at(cell).moisture
+
+        scene._on_cell_clicked(cell)
+
+        assert scene.grid.soil_at(cell).moisture > before
+
+    def test_harvest_tool_only_removes_a_harvestable_plant(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._entered_scene(game_container)
+        cell = (5, 5)
+        scene.grid.till(cell)
+        scene._plant(cell, "guandu")
+        entity_id = scene.grid.plant_at[cell]
+
+        # Still a seedling -- harvest is a no-op.
+        scene._set_active_tool("harvest")
+        scene._on_cell_clicked(cell)
+        assert cell in scene.grid.plant_at
+
+        # Force it ready and try again.
+        plant = scene.entity_manager.get_entity(entity_id).get_component(PlantComponent)
+        plant.growth_stage = "harvestable"
+        scene._on_cell_clicked(cell)
+
+        assert cell not in scene.grid.plant_at
+        assert scene.entity_manager.get_entity(entity_id) is None
+        # The cell stays tilled, ready to replant immediately.
+        assert scene.grid.soil_at(cell).soil_type == "tilled_dirt"
+        assert scene.grid.can_plant(cell)
