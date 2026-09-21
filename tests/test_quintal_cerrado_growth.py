@@ -1,4 +1,4 @@
-"""Plant growth, shade, and companion-bonus logic, headless.
+"""Plant growth, shade, pests, treatments and the economy, headless.
 
 Drives `GardenScene.system_manager.update(dt)` directly -- the same call
 `SceneManager.fixed_update()` makes automatically for every active scene
@@ -16,10 +16,19 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from games.quintal_cerrado import garden_states, treatments
 from games.quintal_cerrado.components import PlantComponent
+from games.quintal_cerrado.economy import (
+    COMPOST_COST,
+    SPRAY_COST,
+    sale_value,
+)
+from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
 from games.quintal_cerrado.scenes import GardenScene
 from games.quintal_cerrado.species import SPECIES_TABLE
+from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.common.random import RandomStream
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
@@ -235,3 +244,518 @@ class TestMoisture:
 
         assert scene.grid.water(cell) is False
         assert scene.grid.soil_at(cell).moisture == 1.0
+
+
+def _force_stage(scene: GardenScene, cell: tuple[int, int], stage: str) -> None:
+    """Put a planted plant straight into `stage` through its own FSM.
+
+    Through `_transition_to`, not by writing `growth_stage`, so the state's
+    `on_enter()` runs and the machine and the component agree.
+    """
+    entity = scene.entity_manager.get_entity(scene.grid.plant_at[cell])
+    entity.get_component(AIComponent).fsm._transition_to(stage)
+
+
+def _plant_at(
+    scene: GardenScene, cell: tuple[int, int], species: str, stage: str = "growing"
+) -> None:
+    scene.grid.till(cell)
+    scene._plant(cell, species)
+    _force_stage(scene, cell, stage)
+
+
+class TestPestPressure:
+    def test_pressure_spreads_to_a_vulnerable_neighbour(
+        self, scene: GardenScene
+    ) -> None:
+        _plant_at(scene, (5, 5), "guandu")
+        _plant_at(scene, (5, 6), "cagaita")
+        scene.grid.soil_at((5, 5)).pest_pressure = 0.8
+
+        _tick(scene, 3.0)
+
+        assert scene.grid.soil_at((5, 6)).pest_pressure > 0.0
+
+    def test_seedlings_are_immune(self, scene: GardenScene) -> None:
+        _plant_at(scene, (5, 5), "guandu")
+        _plant_at(scene, (5, 6), "cagaita", stage="seedling")
+        # Dry, so the seedling cannot grow out of its immunity mid-test.
+        scene.grid.soil_at((5, 6)).moisture = 0.0
+        scene.grid.soil_at((5, 5)).pest_pressure = 0.8
+
+        _tick(scene, 5.0)
+
+        assert scene.grid.soil_at((5, 6)).pest_pressure == 0.0
+        assert _plant_component(scene, (5, 6)).health == 1.0
+
+    def test_a_monoculture_spreads_faster_than_a_mixed_plot(
+        self, scene: GardenScene
+    ) -> None:
+        _plant_at(scene, (2, 2), "guandu")
+        _plant_at(scene, (2, 3), "guandu")
+        _plant_at(scene, (8, 2), "guandu")
+        _plant_at(scene, (8, 3), "cagaita")
+        scene.grid.soil_at((2, 2)).pest_pressure = 0.8
+        scene.grid.soil_at((8, 2)).pest_pressure = 0.8
+
+        _tick(scene, 2.0)
+
+        assert (
+            scene.grid.soil_at((2, 3)).pest_pressure
+            > scene.grid.soil_at((8, 3)).pest_pressure
+        )
+
+    def test_organic_matter_speeds_up_decay(self, scene: GardenScene) -> None:
+        rich, poor = (2, 2), (8, 2)
+        scene.grid.soil_at(rich).organic_matter = 1.0
+        scene.grid.soil_at(poor).organic_matter = 0.0
+        scene.grid.soil_at(rich).pest_pressure = 0.6
+        scene.grid.soil_at(poor).pest_pressure = 0.6
+
+        _tick(scene, 3.0)
+
+        assert (
+            scene.grid.soil_at(rich).pest_pressure
+            < scene.grid.soil_at(poor).pest_pressure
+        )
+
+    def test_pests_with_no_host_die_off_faster(self, scene: GardenScene) -> None:
+        hosted, empty = (2, 2), (8, 2)
+        _plant_at(scene, hosted, "guandu")
+        scene.grid.soil_at(hosted).pest_pressure = 0.4
+        scene.grid.soil_at(empty).pest_pressure = 0.4
+
+        _tick(scene, 3.0)
+
+        assert (
+            scene.grid.soil_at(empty).pest_pressure
+            < scene.grid.soil_at(hosted).pest_pressure
+        )
+
+    def test_a_grown_pequi_repels_pests(self, scene: GardenScene) -> None:
+        near, far = (2, 2), (8, 2)
+        _plant_at(scene, (2, 3), "pequi", stage="mature")
+        scene.grid.soil_at(near).pest_pressure = 0.6
+        scene.grid.soil_at(far).pest_pressure = 0.6
+
+        _tick(scene, 3.0)
+
+        assert (
+            scene.grid.soil_at(near).pest_pressure
+            < scene.grid.soil_at(far).pest_pressure
+        )
+
+    def test_a_young_pequi_does_not_repel_yet(self, scene: GardenScene) -> None:
+        near, far = (2, 2), (8, 2)
+        _plant_at(scene, (2, 3), "pequi", stage="growing")
+        scene.grid.soil_at(near).pest_pressure = 0.6
+        scene.grid.soil_at(far).pest_pressure = 0.6
+
+        _tick(scene, 3.0)
+
+        assert scene.grid.soil_at(near).pest_pressure == pytest.approx(
+            scene.grid.soil_at(far).pest_pressure
+        )
+
+
+class TestInfestation:
+    def test_pest_pressure_makes_a_plant_infested(self, scene: GardenScene) -> None:
+        _plant_at(scene, (3, 3), "baru", stage="mature")
+        scene.grid.soil_at((3, 3)).pest_pressure = 0.8
+
+        _tick(scene, 0.2)
+
+        assert _plant_component(scene, (3, 3)).growth_stage == "infested"
+
+    def test_a_seedling_is_never_infested(self, scene: GardenScene) -> None:
+        scene.grid.till((3, 3))
+        scene._plant((3, 3), "baru")
+        scene.grid.soil_at((3, 3)).pest_pressure = 0.9
+
+        _tick(scene, 3.0)
+
+        assert _plant_component(scene, (3, 3)).growth_stage == "seedling"
+
+    def test_an_infested_plant_does_not_grow(self, scene: GardenScene) -> None:
+        _plant_at(scene, (3, 3), "baru", stage="mature")
+        scene.grid.soil_at((3, 3)).organic_matter = 0.0
+        scene.grid.soil_at((3, 3)).pest_pressure = 0.8
+        scene.grid.water((3, 3))
+        _tick(scene, 0.2)
+        assert _plant_component(scene, (3, 3)).growth_stage == "infested"
+        progress = _plant_component(scene, (3, 3)).growth_progress
+
+        _tick(scene, 3.0)
+
+        assert _plant_component(scene, (3, 3)).growth_progress == progress
+
+    def test_it_recovers_to_the_stage_and_progress_it_left(
+        self, scene: GardenScene
+    ) -> None:
+        _plant_at(scene, (3, 3), "baru", stage="mature")
+        _plant_component(scene, (3, 3)).growth_progress = 0.6
+        scene.grid.soil_at((3, 3)).pest_pressure = 0.8
+        _tick(scene, 0.2)
+        assert _plant_component(scene, (3, 3)).growth_stage == "infested"
+
+        scene.grid.soil_at((3, 3)).pest_pressure = 0.0
+        _tick(scene, 0.2)
+
+        plant = _plant_component(scene, (3, 3))
+        assert plant.growth_stage == "mature"
+        assert plant.growth_progress >= 0.6
+
+    def test_an_untreated_plant_dies(self, scene: GardenScene) -> None:
+        _plant_at(scene, (3, 3), "baru", stage="mature")
+        soil = scene.grid.soil_at((3, 3))
+        soil.organic_matter = 0.0
+        soil.pest_pressure = 0.9
+
+        _tick(scene, 45.0)
+
+        assert _plant_component(scene, (3, 3)).growth_stage == "dying"
+
+    def test_a_dying_plant_stays_dying(self, scene: GardenScene) -> None:
+        _plant_at(scene, (3, 3), "baru", stage="mature")
+        _force_stage(scene, (3, 3), "dying")
+
+        _tick(scene, 5.0)
+
+        assert _plant_component(scene, (3, 3)).growth_stage == "dying"
+
+
+class TestTreatments:
+    def test_compost_costs_sementes_and_enriches_the_soil(
+        self, scene: GardenScene
+    ) -> None:
+        cell = (2, 2)
+        scene.grid.till(cell)
+        before = scene.grid.soil_at(cell).organic_matter
+        credits = scene.economy.credits
+
+        result = treatments.apply_compost(
+            scene.grid, scene.economy, scene.conditions, cell
+        )
+
+        assert result == treatments.OK
+        assert scene.grid.soil_at(cell).organic_matter > before
+        assert scene.economy.credits == credits - COMPOST_COST
+        assert scene.conditions.last_treatment == "organic"
+
+    def test_compost_on_raw_dirt_does_nothing_and_costs_nothing(
+        self, scene: GardenScene
+    ) -> None:
+        credits = scene.economy.credits
+
+        result = treatments.apply_compost(
+            scene.grid, scene.economy, scene.conditions, (2, 2)
+        )
+
+        assert result == treatments.NOTHING
+        assert scene.economy.credits == credits
+
+    def test_compost_needs_the_money(self, scene: GardenScene) -> None:
+        cell = (2, 2)
+        scene.grid.till(cell)
+        scene.economy.credits = COMPOST_COST - 1
+        before = scene.grid.soil_at(cell).organic_matter
+
+        result = treatments.apply_compost(
+            scene.grid, scene.economy, scene.conditions, cell
+        )
+
+        assert result == treatments.BROKE
+        assert scene.grid.soil_at(cell).organic_matter == before
+
+    def test_spray_clears_a_three_by_three_and_degrades_the_soil(
+        self, scene: GardenScene
+    ) -> None:
+        centre = (5, 5)
+        for cell in ((5, 5), (6, 5), (4, 4)):
+            scene.grid.soil_at(cell).pest_pressure = 0.7
+        far = (9, 5)
+        scene.grid.soil_at(far).pest_pressure = 0.7
+        credits = scene.economy.credits
+
+        result = treatments.apply_spray(
+            scene.grid,
+            scene.entity_manager,
+            scene.economy,
+            scene.conditions,
+            centre,
+        )
+
+        assert result == treatments.OK
+        for cell in ((5, 5), (6, 5), (4, 4)):
+            assert scene.grid.soil_at(cell).pest_pressure == 0.0
+            assert scene.grid.soil_at(cell).is_chemically_degraded
+        assert scene.grid.soil_at(far).pest_pressure == 0.7
+        assert not scene.grid.soil_at(far).is_chemically_degraded
+        assert scene.economy.credits == credits - SPRAY_COST
+        assert scene.conditions.last_treatment == "chemical"
+
+    def test_spray_marks_every_plant_it_reaches(self, scene: GardenScene) -> None:
+        _plant_at(scene, (5, 5), "guandu")
+        _plant_at(scene, (6, 6), "cagaita")
+        _plant_at(scene, (10, 6), "baru")
+
+        treatments.apply_spray(
+            scene.grid,
+            scene.entity_manager,
+            scene.economy,
+            scene.conditions,
+            (5, 5),
+        )
+
+        assert _plant_component(scene, (5, 5)).is_chemical_boosted
+        assert _plant_component(scene, (6, 6)).is_chemical_boosted
+        assert not _plant_component(scene, (10, 6)).is_chemical_boosted
+
+    def test_spray_needs_the_money(self, scene: GardenScene) -> None:
+        scene.economy.credits = SPRAY_COST - 1
+        scene.grid.soil_at((5, 5)).pest_pressure = 0.7
+
+        result = treatments.apply_spray(
+            scene.grid,
+            scene.entity_manager,
+            scene.economy,
+            scene.conditions,
+            (5, 5),
+        )
+
+        assert result == treatments.BROKE
+        assert scene.grid.soil_at((5, 5)).pest_pressure == 0.7
+        assert not scene.grid.soil_at((5, 5)).is_chemically_degraded
+
+    def test_compost_heals_degraded_soil_once_it_is_rich_enough(
+        self, scene: GardenScene
+    ) -> None:
+        cell = (5, 5)
+        scene.grid.till(cell)
+        treatments.apply_spray(
+            scene.grid, scene.entity_manager, scene.economy, scene.conditions, cell
+        )
+        assert scene.grid.soil_at(cell).is_chemically_degraded
+
+        treatments.apply_compost(scene.grid, scene.economy, scene.conditions, cell)
+        assert scene.grid.soil_at(cell).is_chemically_degraded
+
+        treatments.apply_compost(scene.grid, scene.economy, scene.conditions, cell)
+        assert not scene.grid.soil_at(cell).is_chemically_degraded
+
+    def test_a_sprayed_plant_grows_faster_but_degraded_soil_slows_it(
+        self, scene: GardenScene
+    ) -> None:
+        plain, sprayed = (2, 2), (9, 5)
+        for cell in (plain, sprayed):
+            scene.grid.till(cell)
+            scene._plant(cell, "guandu")
+            scene.grid.water(cell)
+        treatments.apply_spray(
+            scene.grid,
+            scene.entity_manager,
+            scene.economy,
+            scene.conditions,
+            sprayed,
+        )
+
+        _tick(scene, 1.0)
+
+        # +50% for the chemical boost, -20% for the degraded soil: net faster.
+        assert (
+            _plant_component(scene, sprayed).growth_progress
+            > _plant_component(scene, plain).growth_progress
+        )
+
+
+class TestEconomy:
+    def test_planting_charges_the_seed_cost(self, scene: GardenScene) -> None:
+        scene.grid.till((2, 2))
+        credits = scene.economy.credits
+
+        scene._plant((2, 2), "baru")
+
+        assert scene.economy.credits == credits - SPECIES_TABLE["baru"].seed_cost
+
+    def test_an_unaffordable_seed_plants_nothing(self, scene: GardenScene) -> None:
+        scene.grid.till((2, 2))
+        scene.economy.credits = SPECIES_TABLE["baru"].seed_cost - 1
+
+        scene._plant((2, 2), "baru")
+
+        assert (2, 2) not in scene.grid.plant_at
+        assert scene.economy.credits == SPECIES_TABLE["baru"].seed_cost - 1
+
+    def test_an_organic_harvest_sells_at_the_premium(self, scene: GardenScene) -> None:
+        _plant_at(scene, (2, 2), "baru", stage="harvestable")
+        credits = scene.economy.credits
+        plant = _plant_component(scene, (2, 2))
+
+        scene._harvest((2, 2))
+
+        assert sale_value(plant) == SPECIES_TABLE["baru"].base_price * 2
+        assert scene.economy.credits == credits + sale_value(plant)
+        assert scene.economy.organic_sales == 1
+        assert (2, 2) not in scene.grid.plant_at
+
+    def test_a_chemical_harvest_sells_at_the_discount(self, scene: GardenScene) -> None:
+        _plant_at(scene, (2, 2), "baru", stage="harvestable")
+        _plant_component(scene, (2, 2)).is_chemical_boosted = True
+        credits = scene.economy.credits
+        plant = _plant_component(scene, (2, 2))
+
+        scene._harvest((2, 2))
+
+        assert sale_value(plant) == SPECIES_TABLE["baru"].base_price // 2
+        assert scene.economy.credits == credits + sale_value(plant)
+        assert scene.economy.chemical_sales == 1
+
+    def test_the_organic_premium_beats_the_chemical_shortcut(
+        self, scene: GardenScene
+    ) -> None:
+        organic = PlantComponent(species_id="cagaita")
+        chemical = PlantComponent(species_id="cagaita", is_chemical_boosted=True)
+
+        assert sale_value(organic) == 4 * sale_value(chemical)
+
+    def test_an_infested_plant_cannot_be_harvested(self, scene: GardenScene) -> None:
+        _plant_at(scene, (2, 2), "baru", stage="harvestable")
+        _force_stage(scene, (2, 2), "infested")
+        credits = scene.economy.credits
+
+        scene._harvest((2, 2))
+
+        assert (2, 2) in scene.grid.plant_at
+        assert scene.economy.credits == credits
+
+    def test_a_dying_plant_is_cleared_for_nothing(self, scene: GardenScene) -> None:
+        _plant_at(scene, (2, 2), "baru")
+        _force_stage(scene, (2, 2), "dying")
+        credits = scene.economy.credits
+
+        scene._harvest((2, 2))
+
+        assert (2, 2) not in scene.grid.plant_at
+        assert scene.economy.credits == credits
+        assert scene.grid.can_plant((2, 2))
+
+
+class TestOutbreakFsm:
+    @pytest.fixture(autouse=True)
+    def _fast_outbreaks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(garden_states, "OUTBREAK_DELAY", 1.0)
+        monkeypatch.setattr(garden_states, "RESOLVED_COOLDOWN", 1.0)
+
+    def _three_plants(self, scene: GardenScene) -> None:
+        for cell in ((2, 2), (5, 5), (9, 3)):
+            _plant_at(scene, cell, "guandu")
+
+    def test_an_outbreak_needs_enough_established_plants(
+        self, scene: GardenScene
+    ) -> None:
+        _plant_at(scene, (2, 2), "guandu")
+        _plant_at(scene, (5, 5), "guandu")
+
+        _tick(scene, 5.0)
+
+        assert scene.conditions.phase == "stable"
+
+    def test_an_outbreak_ignores_seedlings(self, scene: GardenScene) -> None:
+        for cell in ((2, 2), (5, 5), (9, 3)):
+            _plant_at(scene, cell, "guandu", stage="seedling")
+            # Dry, so they stay seedlings for the whole test.
+            scene.grid.soil_at(cell).moisture = 0.0
+
+        _tick(scene, 5.0)
+
+        assert scene.conditions.phase == "stable"
+
+    def test_an_outbreak_begins_and_is_announced(self, scene: GardenScene) -> None:
+        started: list[OutbreakStartedEvent] = []
+        scene.event_dispatcher.subscribe(OutbreakStartedEvent, started.append)
+        self._three_plants(scene)
+
+        _tick(scene, 3.0)
+
+        assert scene.conditions.phase == "outbreak"
+        assert len(started) == 1
+        assert 0 < len(started[0].cells) <= garden_states.OUTBREAK_CELLS
+        for cell in started[0].cells:
+            assert cell in scene.grid.plant_at
+
+    def test_an_outbreak_only_starts_on_plants(self, scene: GardenScene) -> None:
+        self._three_plants(scene)
+        _tick(scene, 3.0)
+
+        infested = [
+            (x, y)
+            for y, row in enumerate(scene.grid.soil)
+            for x, soil in enumerate(row)
+            if soil.pest_pressure > 0.0
+        ]
+        assert infested
+        assert all(cell in scene.grid.plant_at for cell in infested)
+
+    def test_a_seeded_rng_makes_a_reproducible_outbreak(
+        self, game_container: DIContainer
+    ) -> None:
+        def cells_for(seed: int) -> list[tuple[int, int]]:
+            garden = GardenScene(
+                game_container.get(EventDispatcher), rng=RandomStream(seed)
+            )
+            manager = game_container.get(SceneManager)
+            manager.register(garden)
+            manager.switch_to("GardenScene")
+            for cell in ((2, 2), (5, 5), (9, 3), (3, 6), (7, 6)):
+                _plant_at(garden, cell, "guandu")
+            started: list[OutbreakStartedEvent] = []
+            garden.event_dispatcher.subscribe(OutbreakStartedEvent, started.append)
+            _tick(garden, 3.0)
+            return started[-1].cells
+
+        assert cells_for(7) == cells_for(7)
+
+    def test_it_resolves_organically_once_the_pests_are_gone(
+        self, scene: GardenScene
+    ) -> None:
+        resolved: list[OutbreakResolvedEvent] = []
+        scene.event_dispatcher.subscribe(OutbreakResolvedEvent, resolved.append)
+        self._three_plants(scene)
+        _tick(scene, 3.0)
+        assert scene.conditions.phase == "outbreak"
+
+        for row in scene.grid.soil:
+            for soil in row:
+                soil.pest_pressure = 0.0
+        _tick(scene, 0.2)
+
+        assert scene.conditions.phase == "resolved_organic"
+        assert scene.conditions.organic_resolutions == 1
+        assert resolved[-1].method == "organic"
+
+    def test_it_resolves_chemically_after_a_spray(self, scene: GardenScene) -> None:
+        self._three_plants(scene)
+        _tick(scene, 3.0)
+        assert scene.conditions.phase == "outbreak"
+
+        for row in scene.grid.soil:
+            for soil in row:
+                soil.pest_pressure = 0.0
+        scene.conditions.last_treatment = "chemical"
+        _tick(scene, 0.2)
+
+        assert scene.conditions.phase == "resolved_chemical"
+        assert scene.conditions.chemical_resolutions == 1
+
+    def test_it_returns_to_stable_after_the_cooldown(self, scene: GardenScene) -> None:
+        self._three_plants(scene)
+        _tick(scene, 3.0)
+        for row in scene.grid.soil:
+            for soil in row:
+                soil.pest_pressure = 0.0
+        _tick(scene, 0.2)
+        assert scene.conditions.phase == "resolved_organic"
+
+        _tick(scene, 1.5)
+
+        assert scene.conditions.phase in ("stable", "outbreak")

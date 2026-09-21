@@ -17,7 +17,7 @@ import math
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
-from pyguara.ui.design_system.tokens import Rock, Sand, Verdant, Water, Wood
+from pyguara.ui.design_system.tokens import Rock, Roxo, Sand, Verdant, Water, Wood
 
 WORLD_BACKDROP = Verdant.COLONIAL_700
 
@@ -42,8 +42,23 @@ MOISTURE_TINT_STRENGTH = 0.35
 till/tilled colour contrast a glance needs first."""
 
 
+DEGRADED_TINT = Color(206, 132, 96)
+DEGRADED_TINT_STRENGTH = 0.4
+"""How far chemically degraded soil shifts towards `DEGRADED_TINT` -- the
+PRD's "soil turns dusty red"."""
+
+PEST = Roxo.C700
+PEST_TINT = Roxo.C500
+DYING_TINT = Color(112, 102, 92)
+
+
 def draw_soil_tile(
-    renderer: UIRenderer, rect: Rect, kind: str, *, moisture: float = 0.0
+    renderer: UIRenderer,
+    rect: Rect,
+    kind: str,
+    *,
+    moisture: float = 0.0,
+    degraded: bool = False,
 ) -> None:
     """Fill one cell with its soil kind's colour, plus a grid line.
 
@@ -58,11 +73,41 @@ def draw_soil_tile(
             `MOISTURE_TINT` so watering (and its `systems/soil_system.py`
             decay) is something a player can actually see, not just a
             number that quietly gates growth.
+        degraded: `SoilCell.is_chemically_degraded`. Tints the tile dusty
+            red, so the cost of a chemical spray stays visible in the
+            ground long after the pests are gone.
     """
     base = _SOIL_COLORS.get(kind, RAW_DIRT)
+    if degraded:
+        base = base.lerp(DEGRADED_TINT, DEGRADED_TINT_STRENGTH)
     color = base.lerp(MOISTURE_TINT, moisture * MOISTURE_TINT_STRENGTH)
     renderer.draw_rect(rect, color)
     renderer.draw_rect(rect, GRID_LINE, width=1)
+
+
+def draw_pest_marks(
+    renderer: UIRenderer, rect: Rect, pressure: float, elapsed: float
+) -> None:
+    """Scatter small crawling dots over a cell, more of them the worse it is.
+
+    Args:
+        renderer: The UI renderer to draw through.
+        rect: The cell's screen rectangle.
+        pressure: `SoilCell.pest_pressure`, 0.0-1.0.
+        elapsed: Seconds since the scene entered, so the dots crawl.
+    """
+    count = math.ceil(pressure * 5)
+    for index in range(count):
+        angle = index * 2.4 + elapsed * (0.8 + 0.15 * index)
+        radius = rect.width * (0.18 + 0.05 * (index % 3))
+        renderer.draw_circle(
+            Vector2(
+                rect.centerx + math.cos(angle) * radius,
+                rect.centery + math.sin(angle * 1.3) * radius,
+            ),
+            2.0,
+            PEST,
+        )
 
 
 STAGE_SCALE: dict[str, float] = {
@@ -70,6 +115,8 @@ STAGE_SCALE: dict[str, float] = {
     "growing": 0.8,
     "mature": 1.0,
     "harvestable": 1.0,
+    "infested": 0.9,
+    "dying": 0.7,
 }
 
 HARVEST_RING = Sand.C200
@@ -106,6 +153,11 @@ def draw_plant(
             `guara_falcao.art.draw_guara`'s run cycle.
     """
     scale = STAGE_SCALE.get(stage, 1.0) * (1.0 + 0.4 * pop)
+    if stage == "infested":
+        color = color.lerp(PEST_TINT, 0.5)
+    elif stage == "dying":
+        color = color.lerp(DYING_TINT, 0.8)
+        sway = 0.0
     base = Vector2(center.x + sway, center.y)
 
     stem_height = 10 * scale
@@ -117,6 +169,9 @@ def draw_plant(
     )
 
     leaf_center = Vector2(base.x, base.y - 6 * scale)
+    if stage == "dying":
+        # A wilted plant sags: the leaf droops down and to one side.
+        leaf_center = Vector2(base.x + 4 * scale, base.y - 1 * scale)
     leaf_radius = 7 * scale
     renderer.draw_circle(leaf_center, leaf_radius, color)
 

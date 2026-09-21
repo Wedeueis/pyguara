@@ -28,6 +28,18 @@ from pyguara.ecs.manager import EntityManager
 MOISTURE_GROWTH_THRESHOLD = 0.15
 """Below this, a plant's growth simply does not advance this tick."""
 
+CHEMICAL_GROWTH_BOOST = 1.5
+"""The chemical shortcut's "fast yield boost" (PRD): a plant that was ever
+sprayed grows this much faster -- and sells for half, see `economy.py`."""
+
+DEGRADED_SOIL_GROWTH = 0.8
+"""Growth multiplier on chemically degraded soil, the cost the PRD says the
+shortcut leaves in the ground."""
+
+FROZEN_STAGES = frozenset({"harvestable", "infested", "dying"})
+"""Stages that do not accumulate growth: a harvestable plant is done, and an
+infested or dying one is fighting pests, not growing."""
+
 
 class PlantGrowthSystem:
     """Advances every planted entity's `growth_progress`."""
@@ -50,16 +62,19 @@ class PlantGrowthSystem:
             if entity is None or not entity.has_component(PlantComponent):
                 continue
             plant = entity.get_component(PlantComponent)
-            if plant.growth_stage == "harvestable":
-                # Terminal for now (selling is Phase 3's economy system)
-                # -- stop accumulating rather than let an unbounded number
-                # sit in a field the save schema will read.
+            if plant.growth_stage in FROZEN_STAGES:
+                # Stop accumulating rather than let an unbounded number sit
+                # in a field the save schema will read.
                 continue
-            if self._grid.soil_at(cell).moisture < MOISTURE_GROWTH_THRESHOLD:
+            soil = self._grid.soil_at(cell)
+            if soil.moisture < MOISTURE_GROWTH_THRESHOLD:
                 continue
             species = SPECIES_TABLE.get(plant.species_id)
             if species is None or species.stage_seconds <= 0:
                 continue
-            plant.growth_progress += (
-                dt / species.stage_seconds
-            ) * plant.growth_multiplier
+            multiplier = plant.growth_multiplier
+            if plant.is_chemical_boosted:
+                multiplier *= CHEMICAL_GROWTH_BOOST
+            if soil.is_chemically_degraded:
+                multiplier *= DEGRADED_SOIL_GROWTH
+            plant.growth_progress += (dt / species.stage_seconds) * multiplier

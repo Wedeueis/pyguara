@@ -7,6 +7,16 @@ only defines what each stage does. `systems/plant_growth_system.py`
 accumulates `PlantComponent.growth_progress`; a state's `update()` only
 checks it against a per-stage budget and reports the next stage's name.
 
+Pests (Phase 3) live in the *same* machine, not a second one:
+`AIComponent.fsm` is a single slot, so a plant that can be infested needs
+`infested`/`dying` as branches of its lifecycle. A growing, mature or
+harvestable plant whose cell's pest pressure crosses `INFEST_THRESHOLD`
+moves to `infested`, remembering the stage and progress it left in the
+state machine's `Blackboard` -- the one thing the blackboard is for here,
+transient per-plant scratch nothing else reads -- and returns to exactly
+that stage once the pressure falls below `RECOVER_THRESHOLD`. If its
+health runs out first it moves to `dying`, which is terminal.
+
 `build_plant_ai()` is the module's one entry point: a freshly planted
 entity gets a brand new `Blackboard`/`StateMachine`/`AIComponent` triple,
 never a shared one -- `AIComponent.fsm` is a single slot, so each plant
@@ -27,6 +37,17 @@ STAGE_THRESHOLD = 1.0
 accumulates it as a fraction of `Species.stage_seconds`, and each state's
 `on_enter()` resets it to 0 -- so this is a per-stage budget, not a
 cumulative total across the whole lifecycle."""
+
+INFEST_THRESHOLD = 0.5
+"""`PlantComponent.pest_pressure` at which a plant becomes infested."""
+
+RECOVER_THRESHOLD = 0.2
+"""Pressure an infested plant must fall below to recover. Lower than
+`INFEST_THRESHOLD` on purpose -- a plant hovering around one number would
+flicker between the two states every tick."""
+
+_RESUME_STAGE = "resume_stage"
+_RESUME_PROGRESS = "resume_progress"
 
 
 class _PlantState(State):
@@ -53,10 +74,25 @@ class _PlantState(State):
         field instead of reaching into the FSM.
         """
         self.plant.growth_stage = self.STAGE_NAME
-        self.plant.growth_progress = 0.0
+        resumed = self.blackboard.get(_RESUME_PROGRESS)
+        self.plant.growth_progress = resumed if resumed is not None else 0.0
+        self.blackboard.set(_RESUME_PROGRESS, None)
 
     def on_exit(self) -> None:
         """Nothing to release -- see `on_enter()`'s docstring."""
+
+    def _infestation(self) -> str | None:
+        """`"infested"`, after remembering where to return to, if pests hit.
+
+        Returns:
+            The next state's name when pest pressure has crossed
+            `INFEST_THRESHOLD`, else None.
+        """
+        if self.plant.pest_pressure < INFEST_THRESHOLD:
+            return None
+        self.blackboard.set(_RESUME_STAGE, self.STAGE_NAME)
+        self.blackboard.set(_RESUME_PROGRESS, self.plant.growth_progress)
+        return "infested"
 
 
 class SeedlingState(_PlantState):
@@ -77,7 +113,9 @@ class GrowingState(_PlantState):
     STAGE_NAME = "growing"
 
     def update(self, dt: float) -> str | None:
-        """Advance to `mature` once the stage's growth budget fills."""
+        """Get infested, or advance to `mature` once the budget fills."""
+        if (infested := self._infestation()) is not None:
+            return infested
         if self.plant.growth_progress >= STAGE_THRESHOLD:
             return "mature"
         return None
@@ -94,19 +132,54 @@ class MatureState(_PlantState):
     STAGE_NAME = "mature"
 
     def update(self, dt: float) -> str | None:
-        """Advance to `harvestable` once the stage's growth budget fills."""
+        """Get infested, or advance to `harvestable` once the budget fills."""
+        if (infested := self._infestation()) is not None:
+            return infested
         if self.plant.growth_progress >= STAGE_THRESHOLD:
             return "harvestable"
         return None
 
 
 class HarvestableState(_PlantState):
-    """Ready. Terminal for now -- harvesting is Phase 3's economy system."""
+    """Ready to harvest. Stays put until the player does, or pests arrive."""
 
     STAGE_NAME = "harvestable"
 
     def update(self, dt: float) -> str | None:
-        """Stay put -- there is no harvest action yet."""
+        """Get infested; otherwise wait for the harvest tool."""
+        return self._infestation()
+
+
+class InfestedState(_PlantState):
+    """Under pest pressure. Recovers to where it was, or dies trying.
+
+    Unlike its siblings this does *not* reset `growth_progress` on entry:
+    the progress it left with is parked in the blackboard, and is handed
+    back by whichever stage it returns to.
+    """
+
+    STAGE_NAME = "infested"
+
+    def on_enter(self) -> None:
+        """Mark the plant infested, leaving its growth progress alone."""
+        self.plant.growth_stage = self.STAGE_NAME
+
+    def update(self, dt: float) -> str | None:
+        """Die if health runs out; recover if the pressure lifts."""
+        if self.plant.health <= 0.0:
+            return "dying"
+        if self.plant.pest_pressure < RECOVER_THRESHOLD:
+            return self.blackboard.get(_RESUME_STAGE, "growing")
+        return None
+
+
+class DyingState(_PlantState):
+    """Terminal. The harvest tool clears it for nothing."""
+
+    STAGE_NAME = "dying"
+
+    def update(self, dt: float) -> str | None:
+        """Stay put -- there is no coming back."""
         return None
 
 
@@ -127,5 +200,7 @@ def build_plant_ai(entity: Entity) -> AIComponent:
     machine.add_state("growing", GrowingState(entity, blackboard))
     machine.add_state("mature", MatureState(entity, blackboard))
     machine.add_state("harvestable", HarvestableState(entity, blackboard))
+    machine.add_state("infested", InfestedState(entity, blackboard))
+    machine.add_state("dying", DyingState(entity, blackboard))
     machine.set_initial_state("seedling")
     return AIComponent(blackboard=blackboard, fsm=machine)

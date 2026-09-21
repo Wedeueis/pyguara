@@ -6,48 +6,68 @@ centred column, `set_focus` on the first button) -- this demo's showcase
 is the grid and persistence, not the menu, so the title screen stays
 small on purpose.
 
-`GardenScene` owns the plot: a clickable tool bar (till, one plant tool per
-species, water, harvest -- every tool also has a keyboard shortcut, but
-the bar is what makes them discoverable without reading the source) and a
+`GardenScene` owns the plot: a clickable, two-row tool bar (actions on
+one row, one seed per species on the other -- every tool also has a
+keyboard shortcut, but the bar is what makes them discoverable) and a
 `GardenGridCanvas` that turns a grid click into the active tool's action.
-Four simulation systems run every fixed tick -- `SoilSystem`,
-`ShadeSystem`, `SyntropicSystem`, `PlantGrowthSystem`, in that priority
-order (`_SOIL_PRIORITY`=500, `_SHADE_PRIORITY`=510,
-`_SYNTROPIC_PRIORITY`=520, `_GROWTH_PRIORITY`=530) -- registered on
+Five simulation systems run every fixed tick -- `SoilSystem`,
+`ShadeSystem`, `SyntropicSystem`, `PestSystem`, `PlantGrowthSystem`, in
+that priority order (see the `_*_PRIORITY` constants) -- registered on
 `self.system_manager`, which `SceneManager.fixed_update()` already calls
 automatically for every active scene alongside the engine's own
-`AISystem`. That closes the till -> seed -> water -> grow -> harvest loop
-end to end: the last two, `water` and `harvest`, are what this pass adds
-to Phase 2's grid and growth work. No persistence, no pest fork, no
-economy yet -- a harvested plant frees its cell to replant, but grants no
-currency, since `PlayerEconomy` doesn't exist until a later phase.
+`AISystem`.
+
+Two entities besides the plants live in the scene's world: `player`,
+carrying `PlayerEconomy`, and `garden_conditions`, carrying
+`GardenConditions` and the FSM (`garden_states.py`) that paces pest
+outbreaks. Seeds and treatments cost Sementes, and a harvest pays them
+back -- double for an organically grown plant, half for one that was
+ever sprayed (`economy.py`). That is the PRD's dilemma: the spray fixes an
+outbreak at once, and the compost is what keeps the premium.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from games.quintal_cerrado import art
+from games.quintal_cerrado import art, treatments
 from games.quintal_cerrado.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
-from games.quintal_cerrado.components import PlantComponent
+from games.quintal_cerrado.components import (
+    GardenConditions,
+    PlantComponent,
+    PlayerEconomy,
+    add_credits,
+    spend_credits,
+)
+from games.quintal_cerrado.economy import COMPOST_COST, SPRAY_COST, sale_value
+from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
 from games.quintal_cerrado.garden_grid import (
     GRID_HEIGHT,
     GRID_WIDTH,
     TILE_SIZE,
     GardenGrid,
 )
-from games.quintal_cerrado.garden_widget import GardenGridCanvas
+from games.quintal_cerrado.garden_states import build_conditions_ai
+from games.quintal_cerrado.garden_widget import (
+    GAIN_COLOR,
+    WARN_COLOR,
+    GardenGridCanvas,
+)
+from games.quintal_cerrado.hud import Hud
 from games.quintal_cerrado.plant_states import build_plant_ai
+from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.systems.pest_system import PestSystem
 from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
 from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.syntropic_system import SyntropicSystem
 from pyguara.common.grid import Cell
-from pyguara.common.types import Vector2
+from pyguara.common.random import RandomStream
+from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import B, C, G, H, T, W
+from pyguara.input.keys import B, C, G, H, M, P, S, T, W
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.scene.base import Scene
@@ -66,30 +86,42 @@ from pyguara.ui.types import LayoutDirection, TextAlign, UILayer
 _SOIL_PRIORITY = 500
 _SHADE_PRIORITY = 510
 _SYNTROPIC_PRIORITY = 520
+_PEST_PRIORITY = 525
 _GROWTH_PRIORITY = 530
 
-# Tool id -> the tool bar button's short label. Order here is the bar's
-# left-to-right order.
-_TOOL_LABELS = {
-    "till": "Till (T)",
+# The tool bar's two rows, top to bottom: seeds, then actions. Each maps a
+# tool id to its button's label; the order here is the row's left-to-right
+# order.
+_SEED_TOOLS = {
     "plant_guandu": "Guandu (G)",
     "plant_cagaita": "Cagaita (C)",
     "plant_baru": "Baru (B)",
+    "plant_pequi": "Pequi (P)",
+}
+_ACTION_TOOLS = {
+    "till": "Till (T)",
     "water": "Water (W)",
     "harvest": "Harvest (H)",
+    "compost": "Compost (M)",
+    "spray": "Spray (S)",
 }
+_TOOL_ROWS = (_SEED_TOOLS, _ACTION_TOOLS)
 
 _TOOL_KEYS = {
     "till": T,
+    "water": W,
+    "harvest": H,
+    "compost": M,
+    "spray": S,
     "plant_guandu": G,
     "plant_cagaita": C,
     "plant_baru": B,
-    "water": W,
-    "harvest": H,
+    "plant_pequi": P,
 }
 
-_TOOL_BAR_BUTTON_SIZE = Vector2(104, 34)
+_TOOL_BAR_BUTTON_SIZE = Vector2(114, 34)
 _TOOL_BAR_SPACING = 6
+_TOOL_BAR_ROW_GAP = 6
 
 
 class TitleScene(Scene):
@@ -164,25 +196,62 @@ class TitleScene(Scene):
 
 
 class GardenScene(Scene):
-    """The garden: the grid, the tool bar, and till/plant/water/harvest."""
+    """The garden: the grid, the tool bar, and the whole farming loop."""
 
-    def __init__(self, event_dispatcher: EventDispatcher) -> None:
-        """Initialize the garden scene."""
+    def __init__(
+        self, event_dispatcher: EventDispatcher, rng: RandomStream | None = None
+    ) -> None:
+        """Initialize the garden scene.
+
+        Args:
+            event_dispatcher: The game's dispatcher.
+            rng: Randomness for picking where an outbreak starts. Pass a
+                seeded stream for a reproducible one.
+        """
         super().__init__("GardenScene", event_dispatcher)
         self.grid = GardenGrid()
+        self.economy = PlayerEconomy()
+        self.conditions = GardenConditions()
+        self._rng = rng
         self._canvas: GardenGridCanvas | None = None
+        self._hud: Hud | None = None
         self._tool_buttons: dict[str, BevelButton] = {}
         self._active_tool = "till"
 
     def on_enter(self) -> None:
-        """Build the grid widget and tool bar, wire input, register systems."""
+        """Build the widgets and entities, wire input, register systems."""
         ui_manager = self.container.get(UIManager)
         ui_manager.clear()
 
         self._setup_input()
         origin = self._build_grid_widget(ui_manager)
         self._build_tool_bar(ui_manager, origin)
+        self._build_price_hint(ui_manager, origin)
+        self._hud = Hud(ui_manager)
+        self._create_entities()
         self._register_systems()
+
+        self.event_dispatcher.subscribe(OutbreakStartedEvent, self._on_outbreak_started)
+        self.event_dispatcher.subscribe(
+            OutbreakResolvedEvent, self._on_outbreak_resolved
+        )
+
+    def _create_entities(self) -> None:
+        """The two non-plant entities: the player, and the garden's conditions."""
+        player = self.entity_manager.create_entity("player")
+        player.add_component(self.economy)
+
+        garden = self.entity_manager.create_entity("garden_conditions")
+        garden.add_component(self.conditions)
+        garden.add_component(
+            build_conditions_ai(
+                garden,
+                self.grid,
+                self.entity_manager,
+                self.event_dispatcher,
+                self._rng,
+            )
+        )
 
     def _register_systems(self) -> None:
         self.system_manager.register(
@@ -197,6 +266,11 @@ class GardenScene(Scene):
             SyntropicSystem(self.entity_manager, self.grid),
             priority=_SYNTROPIC_PRIORITY,
             system_type=SyntropicSystem,
+        )
+        self.system_manager.register(
+            PestSystem(self.entity_manager, self.grid),
+            priority=_PEST_PRIORITY,
+            system_type=PestSystem,
         )
         self.system_manager.register(
             PlantGrowthSystem(self.entity_manager, self.grid),
@@ -216,37 +290,58 @@ class GardenScene(Scene):
         return origin
 
     def _build_tool_bar(self, ui_manager: UIManager, origin: Vector2) -> None:
-        """A row of clickable tool buttons, above the grid.
+        """Two rows of clickable tool buttons above the grid.
 
         Every tool also has a keyboard shortcut (`_TOOL_KEYS`), but a
         shortcut nothing on screen names is not discoverable -- this bar
-        is what a player actually finds "water" and "harvest" through.
+        is what a player actually finds "water" and "harvest" through. The
+        actions sit on the row nearest the grid, and the seeds above them.
         """
-        tool_count = len(_TOOL_LABELS)
-        total_width = (
-            tool_count * _TOOL_BAR_BUTTON_SIZE.x + (tool_count - 1) * _TOOL_BAR_SPACING
-        )
-        bar_position = Vector2(
-            origin.x + (GRID_WIDTH * TILE_SIZE - total_width) / 2,
-            origin.y - _TOOL_BAR_BUTTON_SIZE.y - 12,
-        )
-        row = BoxContainer(
-            bar_position,
-            Vector2(total_width, _TOOL_BAR_BUTTON_SIZE.y),
-            direction=LayoutDirection.HORIZONTAL,
-            spacing=_TOOL_BAR_SPACING,
-        )
-        for tool, label in _TOOL_LABELS.items():
-            button = BevelButton(
-                label,
-                Vector2(0, 0),
-                _TOOL_BAR_BUTTON_SIZE,
-                skin=Skins.SAGE if tool == self._active_tool else Skins.GHOST,
+        row_height = int(_TOOL_BAR_BUTTON_SIZE.y)
+        for row_index, tools in enumerate(reversed(_TOOL_ROWS)):
+            count = len(tools)
+            width = count * _TOOL_BAR_BUTTON_SIZE.x + (count - 1) * _TOOL_BAR_SPACING
+            position = Vector2(
+                origin.x + (GRID_WIDTH * TILE_SIZE - width) / 2,
+                origin.y
+                - 12
+                - (row_index + 1) * row_height
+                - row_index * _TOOL_BAR_ROW_GAP,
             )
-            button.on_click = self._tool_button_handler(tool)
-            self._tool_buttons[tool] = button
-            row.add_child(button)
-        ui_manager.add_element(row, UILayer.CONTENT)
+            row = BoxContainer(
+                position,
+                Vector2(width, row_height),
+                direction=LayoutDirection.HORIZONTAL,
+                spacing=_TOOL_BAR_SPACING,
+            )
+            for tool, label in tools.items():
+                button = BevelButton(
+                    label,
+                    Vector2(0, 0),
+                    _TOOL_BAR_BUTTON_SIZE,
+                    skin=Skins.SAGE if tool == self._active_tool else Skins.GHOST,
+                )
+                button.on_click = self._tool_button_handler(tool)
+                self._tool_buttons[tool] = button
+                row.add_child(button)
+            ui_manager.add_element(row, UILayer.CONTENT)
+
+    def _build_price_hint(self, ui_manager: UIManager, origin: Vector2) -> None:
+        """One line under the grid naming what everything costs.
+
+        Built from `SPECIES_TABLE` and `economy.py` rather than typed out, so
+        it cannot drift from what `_plant`/`_apply_*` actually charge.
+        """
+        seeds = "  ".join(
+            f"{species.display_name} {species.seed_cost}"
+            for species in SPECIES_TABLE.values()
+        )
+        hint = Label(
+            f"Seeds: {seeds}   |   Compost {COMPOST_COST}   Spray {SPRAY_COST}",
+            Vector2(origin.x, origin.y + GRID_HEIGHT * TILE_SIZE + 12),
+            font_size=13,
+        )
+        ui_manager.add_element(hint, UILayer.CONTENT)
 
     def _tool_button_handler(self, tool: str) -> Callable[[object], None]:
         def _handler(_element: object) -> None:
@@ -274,34 +369,77 @@ class GardenScene(Scene):
         for tool_name, button in self._tool_buttons.items():
             button.skin = Skins.SAGE if tool_name == tool else Skins.GHOST
 
+    def _say(self, text: str) -> None:
+        if self._hud is not None:
+            self._hud.show_message(text)
+
+    def _on_outbreak_started(self, event: OutbreakStartedEvent) -> None:
+        if self._canvas is not None:
+            self._canvas.flash_alert()
+        self._say("Pests! Treat them")
+
+    def _on_outbreak_resolved(self, event: OutbreakResolvedEvent) -> None:
+        self._say(f"Pests gone ({event.method})")
+
     def _on_cell_clicked(self, cell: Cell) -> None:
-        if self._active_tool == "till":
+        tool = self._active_tool
+        if tool == "till":
             if self.grid.till(cell) and self._canvas is not None:
                 self._canvas.celebrate_till(cell)
-        elif self._active_tool == "water":
+        elif tool == "water":
             if self.grid.water(cell) and self._canvas is not None:
                 self._canvas.celebrate_water(cell)
-        elif self._active_tool == "harvest":
+        elif tool == "harvest":
             self._harvest(cell)
-        elif self._active_tool.startswith("plant_"):
-            species_id = self._active_tool.removeprefix("plant_")
-            self._plant(cell, species_id)
+        elif tool == "compost":
+            self._compost(cell)
+        elif tool == "spray":
+            self._spray(cell)
+        elif tool.startswith("plant_"):
+            self._plant(cell, tool.removeprefix("plant_"))
+
+    def _cant_afford(self, cell: Cell, cost: int) -> None:
+        """Tell the player, at the cell they clicked, what they were short of."""
+        if self._canvas is not None:
+            self._canvas.spawn_label(cell, f"Need {cost}", WARN_COLOR)
+        self._say("Not enough Sementes")
 
     def _plant(self, cell: Cell, species_id: str) -> None:
-        if not self.grid.can_plant(cell):
+        species = SPECIES_TABLE.get(species_id)
+        if species is None or not self.grid.can_plant(cell):
+            return
+        if not spend_credits(self.economy, species.seed_cost):
+            self._cant_afford(cell, species.seed_cost)
             return
         entity = self.entity_manager.create_entity()
         entity.add_component(PlantComponent(species_id=species_id))
         entity.add_component(build_plant_ai(entity))
         self.grid.mark_planted(cell, entity.id)
 
-    def _harvest(self, cell: Cell) -> None:
-        """Remove a harvestable plant, freeing its (still tilled) cell.
+    def _compost(self, cell: Cell) -> None:
+        result = treatments.apply_compost(
+            self.grid, self.economy, self.conditions, cell
+        )
+        if result == treatments.OK and self._canvas is not None:
+            self._canvas.celebrate_compost(cell)
+        elif result == treatments.BROKE:
+            self._cant_afford(cell, COMPOST_COST)
 
-        No currency changes hands -- `PlayerEconomy` doesn't exist until a
-        later phase. The loop's payoff right now is mechanical: the cell
-        is free to replant, and `GardenGridCanvas.celebrate_harvest()`
-        gives the moment itself a bigger beat than an ordinary stage change.
+    def _spray(self, cell: Cell) -> None:
+        result = treatments.apply_spray(
+            self.grid, self.entity_manager, self.economy, self.conditions, cell
+        )
+        if result == treatments.OK and self._canvas is not None:
+            self._canvas.celebrate_spray(cell)
+        elif result == treatments.BROKE:
+            self._cant_afford(cell, SPRAY_COST)
+
+    def _harvest(self, cell: Cell) -> None:
+        """Sell a harvestable plant, or clear a dead one, freeing its cell.
+
+        The cell stays tilled either way, ready to replant. An infested
+        plant is refused -- treating the pests first is the point of the
+        outbreak -- and a plant still growing is left alone.
         """
         entity_id = self.grid.plant_at.get(cell)
         if entity_id is None:
@@ -310,20 +448,40 @@ class GardenScene(Scene):
         if entity is None or not entity.has_component(PlantComponent):
             return
         plant = entity.get_component(PlantComponent)
+
+        if plant.growth_stage == "infested":
+            self._say("Treat the pests first")
+            return
+        if plant.growth_stage == "dying":
+            self.entity_manager.remove_entity(entity_id)
+            self.grid.unmark_planted(cell)
+            if self._canvas is not None:
+                self._canvas.spawn_label(cell, "Cleared", Color(190, 180, 168))
+            return
         if plant.growth_stage != "harvestable":
             return
+
+        value = sale_value(plant)
+        add_credits(self.economy, value)
+        if plant.is_chemical_boosted:
+            self.economy.chemical_sales += 1
+        else:
+            self.economy.organic_sales += 1
 
         species_id = plant.species_id
         self.entity_manager.remove_entity(entity_id)
         self.grid.unmark_planted(cell)
         if self._canvas is not None:
             self._canvas.celebrate_harvest(cell, species_id)
+            self._canvas.spawn_label(cell, f"+{value}", GAIN_COLOR)
 
     def on_exit(self) -> None:
         """Nothing to clean up yet."""
 
     def update(self, dt: float) -> None:
-        """No scene-level animation; the grid widget drives its own juice."""
+        """Refresh the HUD; the grid widget drives its own juice."""
+        if self._hud is not None:
+            self._hud.update(dt, self.economy, self.conditions)
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Clear the world; the grid itself draws as UI (`GardenGridCanvas`)."""
