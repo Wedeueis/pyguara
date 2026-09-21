@@ -123,3 +123,22 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Look at it headlessly:** `uv run python tools/agent_view.py true_coral --gl`
   (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
 * **Spec:** [`project/demos/true_coral_GDD.md`](../project/demos/true_coral_GDD.md)
+
+### [quintal_cerrado](./quintal_cerrado) — Quintal do Cerrado
+* **Genre:** Cozy agroforestry. Till and plant a static 12x8 plot, viewed
+  head-on. **Status: Phase 1 of 5** (see the PRD) — this is the grid
+  foundation only: procedural tilemap construction, click-to-till/plant.
+  Growth, companion planting, the chemical-vs-organic fork, automation and
+  real persistence land in later phases.
+* **Key Concepts:** the first real adopter of `pyguara.tilemap`
+  (`Tilemap`/`TileLayer`/`Tileset`, built procedurally rather than from a
+  `.tmx` — the plot is simulation state, not level art) for anything beyond
+  `physics.tilemap.merge_tile_rects`; `pyguara.ui.components.canvas.Canvas`
+  as a clickable world surface, reusing `UIManager`'s existing mouse
+  routing instead of a second `InputManager` mouse path; the plain
+  pygame backend (no lighting/post-processing needed for a static grid).
+* **Art:** none. Soil tiles and seedlings are renderer primitives, the same
+  house style as `guara_falcao`.
+* **Run:** `uv run python games/quintal_cerrado/main.py`
+* **Look at it headlessly:** `uv run python tools/agent_view.py quintal_cerrado`
+* **Spec:** [`project/demos/quintal_do_cerrado_PRD.md`](../project/demos/quintal_do_cerrado_PRD.md)
