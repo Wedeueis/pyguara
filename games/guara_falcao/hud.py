@@ -206,6 +206,12 @@ class Hud:
         self.pause_button = BevelButton(
             "Pause", Vector2(0, 0), Vector2(120, 38), skin=Skins.GHOST
         )
+        # Mouse-only: a HUD icon holding keyboard focus competes with
+        # gameplay's own bindings for the same key -- Space is "jump" to
+        # the game and "activate the focused button" to the UI at once, so
+        # clicking Pause once with the mouse turns every later jump into a
+        # second pause until something else steals focus back.
+        self.pause_button.focusable = False
         self.pause_button.constraints = create_anchored_constraints(
             UIAnchor.BOTTOM_RIGHT, margin=20
         )
