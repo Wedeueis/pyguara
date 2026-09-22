@@ -807,9 +807,9 @@ class TestTheOverlays:
         assert manager.current_scene is scene
 
     def test_the_menu_button_opens_the_pause_menu(self, scene: GardenScene) -> None:
-        assert scene._hud is not None
+        assert scene._menu_button is not None
 
-        scene._hud.menu_button.on_click(scene._hud.menu_button)
+        scene._menu_button.on_click(scene._menu_button)
 
         assert isinstance(scene.container.get(SceneManager).current_scene, PauseScene)
 

@@ -25,6 +25,7 @@ from games.quintal_cerrado.garden_widget import GardenGridCanvas
 from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
 from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
+from games.quintal_cerrado.store import StoreOverlayScene
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.manager import AudioManager
@@ -46,7 +47,6 @@ from pyguara.prefabs.loader import PrefabCache
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
-from pyguara.ui.design_system import Skins
 from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UILayer
 
@@ -178,8 +178,8 @@ class TestTheGardenScreen:
         scene = self._entered_scene(game_container)
 
         assert scene._active_tool == "till"
-        assert scene._tool_buttons["till"].skin is Skins.SAGE
-        assert scene._tool_buttons["water"].skin is Skins.GHOST
+        assert scene._tool_buttons["till"].active
+        assert not scene._tool_buttons["water"].active
 
     def test_tool_bar_has_a_clickable_button_per_tool(
         self, game_container: DIContainer
@@ -243,8 +243,34 @@ class TestTheGardenScreen:
         )
 
         assert scene._active_tool == "plant_cagaita"
-        assert scene._tool_buttons["plant_cagaita"].skin is Skins.SAGE
-        assert scene._tool_buttons["till"].skin is Skins.GHOST
+        assert scene._tool_buttons["plant_cagaita"].active
+        assert not scene._tool_buttons["till"].active
+
+    def test_the_dock_reprices_its_slots_from_the_live_economy(
+        self, game_container: DIContainer
+    ) -> None:
+        """Badges and dimming follow Sementes every frame, not once at build."""
+        scene = self._entered_scene(game_container)
+        scene.economy.credits = 1000
+        scene.update(1 / 60)
+        assert scene._tool_buttons["spray"].affordable
+
+        scene.economy.credits = 0
+        scene.update(1 / 60)
+
+        assert not scene._tool_buttons["spray"].affordable
+        assert not scene._tool_buttons["plant_baru"].affordable
+        assert scene._tool_buttons["till"].affordable
+        assert scene._tool_buttons["plant_generic"].badge == "x0"
+
+    def test_the_store_slot_opens_the_store(self, game_container: DIContainer) -> None:
+        scene = self._entered_scene(game_container)
+        assert scene._store_button is not None
+
+        scene._store_button.on_click(scene._store_button)
+
+        current = game_container.get(SceneManager).current_scene
+        assert isinstance(current, StoreOverlayScene)
 
     def test_planting_requires_tilled_unoccupied_ground(
         self, game_container: DIContainer

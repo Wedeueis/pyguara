@@ -18,7 +18,7 @@ holds the real drawing, through the world `IRenderer` instead of
 `UIManager` hit-tests against) is entirely unaffected: nothing about
 *where a click lands* changed, only *how the result gets drawn* -- see
 `bootstrap.py` for why (the world pass is what post-process shaders can
-see; the UI pass, still true for the tool bar and the HUD, is not).
+see; the UI pass, still true for the tool dock and the HUD, is not).
 
 Also owns the plot's visual feedback: a `juice.Motes` particle burst on
 tilling, watering, harvesting, and every plant stage change (including the
@@ -167,7 +167,7 @@ class GardenGridCanvas(Canvas):
         self._alert = 0.0
         self.hover_cell: Cell | None = None
         """The last cell the cursor was over. It is kept when the cursor
-        leaves the plot for the tool bar, so the inspector still has
+        leaves the plot for the tool dock, so the inspector still has
         something to show."""
         self.darkness = 0.0
         """0.0 in daylight up to 1.0 at night; set by the scene from

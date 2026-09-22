@@ -6,10 +6,11 @@ centred column, `set_focus` on the first button) -- this demo's showcase
 is the grid and persistence, not the menu, so the title screen stays
 small on purpose.
 
-`GardenScene` owns the plot: a clickable, two-row tool bar (actions on
-one row, one seed per species on the other -- every tool also has a
-keyboard shortcut, but the bar is what makes them discoverable) and a
-`GardenGridCanvas` that turns a grid click into the active tool's action.
+`GardenScene` owns the plot: an icon dock under it (`hud_widgets.ToolDock`
+-- species, tools and the base, each slot naming its hotkey and its price,
+so every keyboard shortcut is also discoverable) and a `GardenGridCanvas`
+that turns a grid click into the active tool's action. Where each region
+sits is `layout.py`'s.
 Eight simulation systems run every fixed tick -- `SoilSystem`,
 `AutomationSystem`, `ShadeSystem`, `SyntropicSystem`, `PestSystem`,
 `PlantGrowthSystem`, `WeedSpreadSystem`, `WeatherSystem`, in that priority
@@ -42,7 +43,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from games.quintal_cerrado import art, treatments
+from games.quintal_cerrado import art, layout, treatments
 from games.quintal_cerrado.bootstrap import (
     BASE_VIGNETTE_INTENSITY,
     COLD_SNAP_VIGNETTE_INTENSITY,
@@ -75,9 +76,6 @@ from games.quintal_cerrado.events import (
     SolarIncomeEvent,
 )
 from games.quintal_cerrado.garden_grid import (
-    GRID_HEIGHT,
-    GRID_WIDTH,
-    TILE_SIZE,
     GardenGrid,
 )
 from games.quintal_cerrado.garden_states import build_conditions_ai
@@ -91,6 +89,7 @@ from games.quintal_cerrado.garden_widget import (
     GardenGridCanvas,
 )
 from games.quintal_cerrado.hud import CellInspector, Hud, WeatherPanel
+from games.quintal_cerrado.hud_widgets import DockGroup, SlotSpec, ToolDock, ToolSlot
 from games.quintal_cerrado.pause import PauseScene
 from games.quintal_cerrado.persistence_schema import (
     SAVE_KEY,
@@ -105,7 +104,6 @@ from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from games.quintal_cerrado.species import (
     SPECIES_TABLE,
     pick_generic_species,
-    sellable_species,
 )
 from games.quintal_cerrado.store import StoreOverlayScene
 from games.quintal_cerrado.structures import STRUCTURE_TABLE, place_structure
@@ -140,7 +138,7 @@ from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.manager import UIManager
-from pyguara.ui.types import LayoutDirection, TextAlign, UILayer
+from pyguara.ui.types import TextAlign, UILayer
 
 # Game systems must register at >=500 (pyguara/scene/base.py's
 # GAME_SYSTEM_PRIORITY_MIN) to stay clear of the engine's own reserved band
@@ -171,46 +169,89 @@ the soil's own colour (`art.draw_soil_tile`) for legibility."""
 
 logger = logging.getLogger(__name__)
 
-# The tool bar's two rows, top to bottom: seeds, then actions. Each maps a
-# tool id to its button's label; the order here is the row's left-to-right
-# order.
-_SEED_TOOLS = {
-    "plant_guandu": "Guandu (G)",
-    "plant_cagaita": "Cagaita (C)",
-    "plant_baru": "Baru (B)",
-    "plant_pequi": "Pequi (P)",
-    "plant_generic": "Generic (N)",
+# The dock's three groups, left to right. Each tool id maps to its slot's
+# Portuguese name, its key and that key's name; the icon is keyed by the
+# tool id itself (`icons.ICONS`).
+_SPECIES_TOOLS: dict[str, tuple[str, int, str]] = {
+    "plant_guandu": ("Guandu", G, "G"),
+    "plant_cagaita": ("Cagaita", C, "C"),
+    "plant_baru": ("Baru", B, "B"),
+    "plant_pequi": ("Pequi", P, "P"),
+    "plant_generic": ("Genérica", N, "N"),
 }
-_ACTION_TOOLS = {
-    "till": "Till (T)",
-    "water": "Water (W)",
-    "harvest": "Harvest (H)",
-    "compost": "Compost (M)",
-    "spray": "Spray (S)",
+_ACTION_TOOLS: dict[str, tuple[str, int, str]] = {
+    "till": ("Enxada", T, "T"),
+    "water": ("Regador", W, "W"),
+    "harvest": ("Colher", H, "H"),
+    "compost": ("Adubo", M, "M"),
+    "spray": ("Calda", S, "S"),
 }
-_TOOL_ROWS = (_SEED_TOOLS, _ACTION_TOOLS)
 
 _TOOL_KEYS = {
-    "till": T,
-    "water": W,
-    "harvest": H,
-    "compost": M,
-    "spray": S,
-    "plant_guandu": G,
-    "plant_cagaita": C,
-    "plant_baru": B,
-    "plant_pequi": P,
-    "plant_generic": N,
+    tool: key
+    for table in (_SPECIES_TOOLS, _ACTION_TOOLS)
+    for tool, (_label, key, _key_label) in table.items()
 }
 
 PAUSE_ACTION = "open_pause"
 STORE_ACTION = "open_store"
 """Not a tool -- it has no active state -- so it is bound and handled apart
-from `_TOOL_KEYS`, and its button is not in `_tool_buttons`."""
+from `_TOOL_KEYS`, and its slot is not in `_tool_buttons`."""
 
-_TOOL_BAR_BUTTON_SIZE = Vector2(114, 34)
-_TOOL_BAR_SPACING = 6
-_TOOL_BAR_ROW_GAP = 6
+STORE_SLOT = "store"
+MENU_SLOT = "menu"
+
+
+def _dock_groups() -> list[DockGroup]:
+    def specs(table: dict[str, tuple[str, int, str]]) -> list[SlotSpec]:
+        return [
+            SlotSpec(tool, label, key_label)
+            for tool, (label, _key, key_label) in table.items()
+        ]
+
+    return [
+        DockGroup("ESPÉCIES", "plant_generic", specs(_SPECIES_TOOLS)),
+        DockGroup("FERRAMENTAS", "till", specs(_ACTION_TOOLS)),
+        DockGroup(
+            "BASE",
+            "store",
+            [SlotSpec(STORE_SLOT, "Loja", "O"), SlotSpec(MENU_SLOT, "Menu", "Esc")],
+        ),
+    ]
+
+
+def slot_status(tool: str, economy: PlayerEconomy) -> tuple[str, bool]:
+    """What a tool's slot badge says, and whether the player can use it now.
+
+    Mirrors what `GardenScene` actually charges, so the dock can never
+    promise a price the click then disagrees with: a species spends its
+    own stocked seed before Sementes (`_plant`), Generic spends only
+    stocked generic seed (`_sow_generic`), and compost and spray cost
+    their flat price (`treatments`). Every other tool is free.
+
+    Args:
+        tool: A tool id.
+        economy: The player's economy.
+
+    Returns:
+        `(badge, affordable)` -- the badge is "" for a free tool.
+    """
+    if tool == "plant_generic":
+        stock = economy.inventory.get(GENERIC_SEED_KEY, 0)
+        return f"x{stock}", stock > 0
+    if tool.startswith("plant_"):
+        species_id = tool.removeprefix("plant_")
+        stock = economy.inventory.get(specific_seed_key(species_id), 0)
+        if stock > 0:
+            return f"x{stock}", True
+        species = SPECIES_TABLE.get(species_id)
+        cost = species.seed_cost if species is not None else 0
+        return str(cost), economy.credits >= cost
+    if tool == "compost":
+        return str(COMPOST_COST), economy.credits >= COMPOST_COST
+    if tool == "spray":
+        return str(SPRAY_COST), economy.credits >= SPRAY_COST
+    return "", True
 
 
 def _run_post_process(container: DIContainer) -> None:
@@ -336,7 +377,7 @@ class TitleScene(Scene):
 
 
 class GardenScene(Scene):
-    """The garden: the grid, the tool bar, and the whole farming loop."""
+    """The garden: the grid, the tool dock, and the whole farming loop."""
 
     def __init__(
         self,
@@ -367,7 +408,9 @@ class GardenScene(Scene):
         self._hud: Hud | None = None
         self._weather_panel: WeatherPanel | None = None
         self._inspector: CellInspector | None = None
-        self._tool_buttons: dict[str, BevelButton] = {}
+        self._tool_buttons: dict[str, ToolSlot] = {}
+        self._store_button: ToolSlot | None = None
+        self._menu_button: ToolSlot | None = None
         self._active_tool = "till"
         self._load_requested = load
         self.elapsed = 0.0
@@ -385,12 +428,12 @@ class GardenScene(Scene):
         self._soil_health_effect = self.container.get(SoilHealthEffect)
 
         self._setup_input()
-        origin = self._build_grid_widget(ui_manager)
-        self._build_tool_bar(ui_manager, origin)
-        self._build_price_hint(ui_manager, origin)
-        self._build_inspector(ui_manager, origin)
-        self._hud = Hud(ui_manager)
-        self._hud.menu_button.on_click = lambda _element: self._open_pause()
+        self._build_grid_widget(ui_manager)
+        self._build_dock(ui_manager)
+        self._build_inspector(ui_manager)
+        self._hud = Hud(
+            ui_manager, layout.GRID_RECT.y + CellInspector.HEIGHT + layout.GAP
+        )
         self._weather_panel = WeatherPanel(ui_manager)
         self._create_entities()
         self._register_systems()
@@ -471,98 +514,50 @@ class GardenScene(Scene):
             system_type=AutosaveSystem,
         )
 
-    def _build_grid_widget(self, ui_manager: UIManager) -> Vector2:
-        grid_width_px = GRID_WIDTH * TILE_SIZE
-        grid_height_px = GRID_HEIGHT * TILE_SIZE
-        # 16px below centre: the tool bar's two rows sit above the grid, and
-        # the HUD panel in the top-left corner would otherwise clip the
-        # leftmost button of the lower row.
-        origin = Vector2(
-            (WINDOW_WIDTH - grid_width_px) // 2,
-            (WINDOW_HEIGHT - grid_height_px) // 2 + 16,
-        )
+    def _build_grid_widget(self, ui_manager: UIManager) -> None:
+        """The plot, left of the right-hand column (`layout.GRID_ORIGIN`)."""
         self._canvas = GardenGridCanvas(
-            origin, self.grid, self.entity_manager, self._audio
+            layout.GRID_ORIGIN, self.grid, self.entity_manager, self._audio
         )
         self._canvas.on_cell_clicked = self._on_cell_clicked
         ui_manager.add_element(self._canvas, UILayer.CONTENT)
-        return origin
 
-    def _build_tool_bar(self, ui_manager: UIManager, origin: Vector2) -> None:
-        """Two rows of clickable tool buttons above the grid.
+    def _build_dock(self, ui_manager: UIManager) -> None:
+        """The icon dock under the grid: species, tools, and the base.
 
         Every tool also has a keyboard shortcut (`_TOOL_KEYS`), but a
-        shortcut nothing on screen names is not discoverable -- this bar
-        is what a player actually finds "water" and "harvest" through. The
-        actions sit on the row nearest the grid, and the seeds above them.
+        shortcut nothing on screen names is not discoverable -- the dock is
+        what a player actually finds "water" and "harvest" through, and
+        each slot's corner badge names its key. Costs sit on the slots
+        themselves (`slot_status`), next to the thing they buy.
         """
-        row_height = int(_TOOL_BAR_BUTTON_SIZE.y)
-        for row_index, tools in enumerate(reversed(_TOOL_ROWS)):
-            has_store = tools is _ACTION_TOOLS
-            count = len(tools) + (1 if has_store else 0)
-            width = count * _TOOL_BAR_BUTTON_SIZE.x + (count - 1) * _TOOL_BAR_SPACING
-            position = Vector2(
-                origin.x + (GRID_WIDTH * TILE_SIZE - width) / 2,
-                origin.y
-                - 12
-                - (row_index + 1) * row_height
-                - row_index * _TOOL_BAR_ROW_GAP,
-            )
-            row = BoxContainer(
-                position,
-                Vector2(width, row_height),
-                direction=LayoutDirection.HORIZONTAL,
-                spacing=_TOOL_BAR_SPACING,
-            )
-            for tool, label in tools.items():
-                button = BevelButton(
-                    label,
-                    Vector2(0, 0),
-                    _TOOL_BAR_BUTTON_SIZE,
-                    skin=Skins.SAGE if tool == self._active_tool else Skins.GHOST,
-                )
-                button.on_click = self._tool_button_handler(tool)
-                self._tool_buttons[tool] = button
-                row.add_child(button)
-            if has_store:
-                store = BevelButton(
-                    "Store (O)",
-                    Vector2(0, 0),
-                    _TOOL_BAR_BUTTON_SIZE,
-                    skin=Skins.WOOD,
-                )
-                store.on_click = lambda _element: self._open_store()
-                row.add_child(store)
-            ui_manager.add_element(row, UILayer.CONTENT)
+        dock = ToolDock(_dock_groups(), WINDOW_WIDTH)
+        for tool, slot in dock.slots.items():
+            if tool == STORE_SLOT:
+                slot.on_click = lambda _element: self._open_store()
+                self._store_button = slot
+            elif tool == MENU_SLOT:
+                slot.on_click = lambda _element: self._open_pause()
+                self._menu_button = slot
+            else:
+                slot.on_click = self._tool_button_handler(tool)
+                slot.active = tool == self._active_tool
+                self._tool_buttons[tool] = slot
+        for group in dock.groups:
+            ui_manager.add_element(group, UILayer.CONTENT)
 
-    def _build_price_hint(self, ui_manager: UIManager, origin: Vector2) -> None:
-        """One line under the grid naming what everything costs.
-
-        Built from `species.sellable_species()` and `economy.py` rather
-        than typed out, so it cannot drift from what `_plant`/`_apply_*`
-        actually charge. The weed is excluded (never bought), and Generic
-        has no fixed price -- it is spent from seed stock, not Sementes,
-        so it gets "free" instead of a number.
-        """
-        seeds = "  ".join(
-            f"{species.display_name} {species.seed_cost}"
-            for species in sellable_species()
-        )
-        hint = Label(
-            f"Seeds: {seeds}  Generic free"
-            f"   |   Compost {COMPOST_COST}   Spray {SPRAY_COST}",
-            Vector2(origin.x, origin.y + GRID_HEIGHT * TILE_SIZE + 12),
-            font_size=13,
-        )
-        ui_manager.add_element(hint, UILayer.CONTENT)
-
-    def _build_inspector(self, ui_manager: UIManager, origin: Vector2) -> None:
-        """The hover inspector, centred under the grid and its price line."""
+    def _build_inspector(self, ui_manager: UIManager) -> None:
+        """The hover inspector, at the top of the right-hand column."""
         self._inspector = CellInspector(
             ui_manager,
-            Vector2(origin.x, origin.y + GRID_HEIGHT * TILE_SIZE + 36),
-            GRID_WIDTH * TILE_SIZE,
+            Vector2(layout.COLUMN_X, layout.GRID_RECT.y),
+            layout.COLUMN_WIDTH,
         )
+
+    def _refresh_tool_slots(self) -> None:
+        """Re-read every slot's badge and affordability from the economy."""
+        for tool, slot in self._tool_buttons.items():
+            slot.badge, slot.affordable = slot_status(tool, self.economy)
 
     def _tool_button_handler(self, tool: str) -> Callable[[object], None]:
         def _handler(_element: object) -> None:
@@ -595,8 +590,8 @@ class GardenScene(Scene):
 
     def _set_active_tool(self, tool: str) -> None:
         self._active_tool = tool
-        for tool_name, button in self._tool_buttons.items():
-            button.skin = Skins.SAGE if tool_name == tool else Skins.GHOST
+        for tool_name, slot in self._tool_buttons.items():
+            slot.active = tool_name == tool
 
     def _say(self, text: str) -> None:
         if self._hud is not None:
@@ -892,6 +887,7 @@ class GardenScene(Scene):
         )
         if self._hud is not None:
             self._hud.update(dt, self.economy, self.conditions, self.elapsed, power)
+        self._refresh_tool_slots()
         weather_system = self.system_manager.get_system(WeatherSystem)
         if self._weather_panel is not None and weather_system is not None:
             self._weather_panel.update(
@@ -945,7 +941,7 @@ class GardenScene(Scene):
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Clear the world, draw the plot into it, then grade the result.
 
-        The tool bar, the HUD and every overlay still draw through the UI
+        The tool dock, the HUD and every overlay still draw through the UI
         pass as always; only the grid moved (Phase 5) -- see
         `garden_widget.py`'s module docstring for why.
         """
