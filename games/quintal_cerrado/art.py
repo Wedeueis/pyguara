@@ -129,7 +129,7 @@ def draw_plant(
     color: Color,
     stage: str,
     *,
-    pop: float = 0.0,
+    pop_scale: float = 1.0,
     sway: float = 0.0,
     elapsed: float = 0.0,
 ) -> None:
@@ -143,16 +143,18 @@ def draw_plant(
             An unrecognised stage falls back to full size rather than
             raising, the same tolerance `draw_soil_tile` gives an unknown
             tile kind.
-        pop: 1.0 right after planting or a stage change, easing to 0.0 --
-            a brief overshoot scale so a transition reads as an event, not
-            just a fact discovered a frame later.
+        pop_scale: A multiplier on top of the stage's own size, 1.0 at
+            rest. Right after planting or a stage change the caller drives
+            this from a tween that overshoots above 1.0 before settling
+            back on it, so the transition reads as an event, not just a
+            fact discovered a frame later.
         sway: A per-plant horizontal offset in pixels, so a full plot
             doesn't read as a field of static stickers.
         elapsed: Seconds since the scene entered, driving the harvestable
             stage's pulsing ring -- the same role `phase` plays in
             `guara_falcao.art.draw_guara`'s run cycle.
     """
-    scale = STAGE_SCALE.get(stage, 1.0) * (1.0 + 0.4 * pop)
+    scale = STAGE_SCALE.get(stage, 1.0) * pop_scale
     if stage == "infested":
         color = color.lerp(PEST_TINT, 0.5)
     elif stage == "dying":

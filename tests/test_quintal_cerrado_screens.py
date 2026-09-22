@@ -20,13 +20,16 @@ from unittest.mock import MagicMock
 import pytest
 
 from games.quintal_cerrado.components import PlantComponent
+from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.garden_widget import GardenGridCanvas
 from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
-from pyguara.common.types import Color
+from pyguara.audio.manager import AudioManager
+from pyguara.common.types import Color, Vector2
 from pyguara.di.container import DIContainer
+from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.input import MouseButtonEvent
 from pyguara.graphics.protocols import IRenderer, UIRenderer
@@ -86,6 +89,7 @@ def game_container(
     container.register_instance(IRenderer, MagicMock(spec=IRenderer))  # type: ignore[type-abstract]
     container.register_instance(UIRenderer, MagicMock(spec=UIRenderer))  # type: ignore[type-abstract]
     container.register_instance(IAudioSystem, MagicMock(spec=IAudioSystem))  # type: ignore[type-abstract]
+    container.register_singleton(AudioManager, AudioManager)
     input_manager = InputManager(dispatcher, MagicMock(spec=IInputBackend))
     container.register_instance(InputManager, input_manager)
     # `TitleScene._on_play` registers `GardenScene` and pushes it, which
@@ -350,6 +354,55 @@ class TestTheGardenScreen:
         assert cell not in scene.grid.plant_at
         assert scene._hud is not None
         assert "Not enough" in scene._hud.message_label.text
+
+    def test_a_stage_change_pop_grows_past_target_then_settles(
+        self, game_container: DIContainer
+    ) -> None:
+        """The pop tween overshoots 1.0 before landing on it exactly.
+
+        `EASE_OUT_BACK` is what turns a stage change into a "grew bigger
+        than its target, then returned" beat rather than a flat pop-in --
+        this pins that the overshoot, and the settle afterwards, both
+        actually happen.
+        """
+        scene = self._entered_scene(game_container)
+        assert scene._canvas is not None
+        cell = (6, 6)
+        scene.grid.till(cell)
+        scene._plant(cell, "guandu")
+        entity_id = scene.grid.plant_at[cell]
+
+        # The first update discovers the freshly planted entity and starts
+        # its pop tween.
+        scene._canvas.update(1 / 60)
+        visual = scene._canvas._visuals[entity_id]
+        assert visual.pop_tween is not None
+
+        scales: list[float] = []
+        for _ in range(30):  # well past POP_DURATION at 60fps
+            scene._canvas.update(1 / 60)
+            current = visual.pop_tween.current_value
+            assert isinstance(current, float)
+            scales.append(current)
+
+        assert max(scales) > 1.0  # it grew past its resting size...
+        assert scales[-1] == pytest.approx(1.0)  # ...and settled back on it
+
+    def test_a_canvas_with_no_audio_manager_still_celebrates(self) -> None:
+        """`audio` is optional -- every `celebrate_*` must tolerate `None`.
+
+        Every existing caller either passes a real `AudioManager` or (like
+        this test) nothing at all -- neither should ever raise.
+        """
+        canvas = GardenGridCanvas(Vector2(0, 0), GardenGrid(), EntityManager())
+        cell = (0, 0)
+
+        canvas.celebrate_till(cell)
+        canvas.celebrate_water(cell)
+        canvas.celebrate_harvest(cell, "guandu")
+        canvas.celebrate_compost(cell)
+        canvas.celebrate_spray(cell)
+        canvas.celebrate_build(cell, "solar_panel")
 
     def test_the_plot_renders_every_state_without_error(
         self, game_container: DIContainer, renderer: Any

@@ -68,6 +68,10 @@ from games.quintal_cerrado.garden_grid import (
 from games.quintal_cerrado.garden_states import build_conditions_ai
 from games.quintal_cerrado.garden_widget import (
     GAIN_COLOR,
+    SFX_DENIED,
+    SFX_OUTBREAK_RESOLVED,
+    SFX_OUTBREAK_START,
+    SFX_SOLAR_INCOME,
     WARN_COLOR,
     GardenGridCanvas,
 )
@@ -92,6 +96,7 @@ from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
 from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.syntropic_system import SyntropicSystem
+from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
@@ -282,6 +287,7 @@ class GardenScene(Scene):
         self.economy = PlayerEconomy()
         self.conditions = GardenConditions()
         self._rng = rng
+        self._audio: AudioManager | None = None
         self._canvas: GardenGridCanvas | None = None
         self._hud: Hud | None = None
         self._inspector: CellInspector | None = None
@@ -297,6 +303,7 @@ class GardenScene(Scene):
         """Build the widgets and entities, wire input, register systems."""
         ui_manager = self.container.get(UIManager)
         ui_manager.clear()
+        self._audio = self.container.get(AudioManager)
 
         self._setup_input()
         origin = self._build_grid_widget(ui_manager)
@@ -382,7 +389,9 @@ class GardenScene(Scene):
             (WINDOW_WIDTH - grid_width_px) // 2,
             (WINDOW_HEIGHT - grid_height_px) // 2 + 16,
         )
-        self._canvas = GardenGridCanvas(origin, self.grid, self.entity_manager)
+        self._canvas = GardenGridCanvas(
+            origin, self.grid, self.entity_manager, self._audio
+        )
         self._canvas.on_cell_clicked = self._on_cell_clicked
         ui_manager.add_element(self._canvas, UILayer.CONTENT)
         return origin
@@ -580,9 +589,13 @@ class GardenScene(Scene):
     def _on_outbreak_started(self, event: OutbreakStartedEvent) -> None:
         if self._canvas is not None:
             self._canvas.flash_alert()
+        if self._audio is not None:
+            self._audio.play_sfx(SFX_OUTBREAK_START)
         self._say("Pests! Treat them")
 
     def _on_outbreak_resolved(self, event: OutbreakResolvedEvent) -> None:
+        if self._audio is not None:
+            self._audio.play_sfx(SFX_OUTBREAK_RESOLVED)
         self._say(f"Pests gone ({event.method})")
 
     def _on_drone_harvest(self, event: PlantHarvestedEvent) -> None:
@@ -593,6 +606,8 @@ class GardenScene(Scene):
     def _on_solar_income(self, event: SolarIncomeEvent) -> None:
         if self._canvas is not None:
             self._canvas.spawn_label(event.cell, f"+{event.amount}", GAIN_COLOR)
+        if self._audio is not None:
+            self._audio.play_sfx(SFX_SOLAR_INCOME)
 
     def _open_store(self) -> None:
         """Push the store over the garden, freezing it while the player shops."""
@@ -650,6 +665,8 @@ class GardenScene(Scene):
         """Tell the player, at the cell they clicked, what they were short of."""
         if self._canvas is not None:
             self._canvas.spawn_label(cell, f"Need {cost}", WARN_COLOR)
+        if self._audio is not None:
+            self._audio.play_sfx(SFX_DENIED)
         self._say("Not enough Sementes")
 
     def _plant(self, cell: Cell, species_id: str) -> None:

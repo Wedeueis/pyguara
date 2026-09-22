@@ -30,6 +30,7 @@ from games.quintal_cerrado.scenes import GardenScene
 from games.quintal_cerrado.species import SPECIES_TABLE
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.manager import AudioManager
 from pyguara.common.random import RandomStream
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
@@ -68,6 +69,7 @@ def game_container(tmp_path: Path) -> DIContainer:
     container.register_instance(IRenderer, MagicMock(spec=IRenderer))  # type: ignore[type-abstract]
     container.register_instance(UIRenderer, MagicMock(spec=UIRenderer))  # type: ignore[type-abstract]
     container.register_instance(IAudioSystem, MagicMock(spec=IAudioSystem))  # type: ignore[type-abstract]
+    container.register_singleton(AudioManager, AudioManager)
     input_manager = InputManager(dispatcher, MagicMock(spec=IInputBackend))
     container.register_instance(InputManager, input_manager)
     # A real store in a temp directory: the garden saves on exit, and a test
