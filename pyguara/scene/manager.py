@@ -369,7 +369,12 @@ class SceneManager:
         return scenes_to_update
 
     def render(
-        self, world_renderer: IRenderer, ui_renderer: UIRenderer, alpha: float = 1.0
+        self,
+        world_renderer: IRenderer,
+        ui_renderer: UIRenderer,
+        alpha: float = 1.0,
+        *,
+        before_each: Callable[[], None] | None = None,
     ) -> None:
         """Render current scene and transition effects.
 
@@ -384,6 +389,14 @@ class SceneManager:
                 already overrides that exact two-parameter signature, so
                 adding a third would force a mechanical change across all of
                 them for a value only the base default combination uses.
+            before_each: Called immediately before every scene's `render()`,
+                bottom of the stack to the top. `Application` uses it to
+                re-bind the world render target: a scene that runs a
+                render-graph pass itself leaves that pass's output buffer
+                bound, and without this the scene stacked above it would
+                draw its whole frame into that buffer instead of the world
+                -- which is how a garden pushed over its title screen
+                drew nothing at all.
         """
         if self.is_transitioning():
             # Transition manager handles rendering during transition
@@ -391,11 +404,15 @@ class SceneManager:
         else:
             # Render all scenes in the stack (bottom to top)
             for entry in self._stack:
+                if before_each is not None:
+                    before_each()
                 entry.scene.render_alpha = alpha
                 entry.scene.render(world_renderer, ui_renderer)
 
             # Render current scene on top
             if self._current_scene:
+                if before_each is not None:
+                    before_each()
                 self._current_scene.render_alpha = alpha
                 self._current_scene.render(world_renderer, ui_renderer)
 

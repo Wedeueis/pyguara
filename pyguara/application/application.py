@@ -530,7 +530,11 @@ class Application:
         # drawing path (see its own docstring) that no current game
         # submits to -- every one of them draws immediately here instead,
         # which needs the "world" FBO bound first, exactly as above.
-        self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
+        # Re-bound before *each* stacked scene, not once: a scene below
+        # may still execute a pass itself and leave its output bound.
+        self._scene_manager.render(
+            self._world_renderer, self._ui_renderer, alpha, before_each=world_fbo.bind
+        )
 
         # Every other pass, in the order its bootstrap registered them --
         # light/composite/post-process (whichever exist) and finally
