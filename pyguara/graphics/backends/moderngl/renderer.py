@@ -398,6 +398,18 @@ class ModernGLRenderer:
         (rect/circle/line), issued after all of a frame's draw_rect/
         draw_circle/draw_line calls -- see the ModernGL shape shader ticket.
         """
+        self._flush_shapes()
+
+    def _flush_shapes(self) -> None:
+        """Draw and clear every queued shape bucket.
+
+        Also called before anything that draws *immediately* -- text and
+        textures -- so the frame keeps the order its caller asked for.
+        Without that, queued shapes all landed at `end_frame()`, on top of
+        every glyph and sprite drawn during the frame however early they
+        were queued: a label under a panel drawn afterwards, a tooltip's
+        text buried by the tooltip's own card.
+        """
         for shape_type, pending in self._shape_pending.items():
             count = len(pending)
             if count == 0:
@@ -453,6 +465,7 @@ class ModernGLRenderer:
         For single sprite draws. For better performance with many sprites,
         use render_batch() instead.
         """
+        self._flush_shapes()
         # Convert rotation from degrees to radians
         rot_rad = math.radians(rotation)
 
@@ -511,6 +524,7 @@ class ModernGLRenderer:
         Fine for occasional world-space text (damage numbers, prompts);
         a hot path drawing many strings a frame would want a real atlas.
         """
+        self._flush_shapes()
         if not text:
             return
 
@@ -552,6 +566,7 @@ class ModernGLRenderer:
         Args:
             batch: Collection of sprite positions and transforms sharing one texture.
         """
+        self._flush_shapes()
         count = len(batch.destinations)
         if count == 0:
             return
