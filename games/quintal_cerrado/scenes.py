@@ -10,10 +10,10 @@ small on purpose.
 one row, one seed per species on the other -- every tool also has a
 keyboard shortcut, but the bar is what makes them discoverable) and a
 `GardenGridCanvas` that turns a grid click into the active tool's action.
-Seven simulation systems run every fixed tick -- `SoilSystem`,
+Eight simulation systems run every fixed tick -- `SoilSystem`,
 `AutomationSystem`, `ShadeSystem`, `SyntropicSystem`, `PestSystem`,
-`PlantGrowthSystem`, `WeedSpreadSystem`, in that priority order (see the
-`_*_PRIORITY` constants) -- registered on
+`PlantGrowthSystem`, `WeedSpreadSystem`, `WeatherSystem`, in that priority
+order (see the `_*_PRIORITY` constants) -- registered on
 `self.system_manager`, which `SceneManager.fixed_update()` already calls
 automatically for every active scene alongside the engine's own
 `AISystem`.
@@ -85,7 +85,7 @@ from games.quintal_cerrado.garden_widget import (
     WARN_COLOR,
     GardenGridCanvas,
 )
-from games.quintal_cerrado.hud import CellInspector, Hud
+from games.quintal_cerrado.hud import CellInspector, Hud, WeatherPanel
 from games.quintal_cerrado.pause import PauseScene
 from games.quintal_cerrado.persistence_schema import (
     SAVE_KEY,
@@ -110,7 +110,9 @@ from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
 from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.syntropic_system import SyntropicSystem
+from games.quintal_cerrado.systems.weather_system import WeatherSystem
 from games.quintal_cerrado.systems.weed_spread_system import WeedSpreadSystem
+from games.quintal_cerrado.weather import WeatherState
 from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell
 from pyguara.common.random import RandomStream
@@ -142,6 +144,14 @@ _SYNTROPIC_PRIORITY = 520
 _PEST_PRIORITY = 525
 _GROWTH_PRIORITY = 530
 _WEED_SPREAD_PRIORITY = 535
+# WeatherSystem reads nothing and only ever writes WeatherState -- it runs
+# last, not first, despite SoilSystem/PestSystem/PlantGrowthSystem reading
+# that state: game systems cannot register below 500, where SoilSystem
+# already sits, so a condition change here is read by them one tick later
+# instead. See weather_system.py's own module docstring for why that lag
+# is the same one plant_growth_system.py already accepts for a stage
+# transition, and just as imperceptible at 60Hz.
+_WEATHER_PRIORITY = 536
 _AUTOSAVE_PRIORITY = 590
 
 logger = logging.getLogger(__name__)
@@ -304,10 +314,12 @@ class GardenScene(Scene):
         self.grid = GardenGrid()
         self.economy = PlayerEconomy()
         self.conditions = GardenConditions()
+        self.weather = WeatherState()
         self._rng = rng
         self._audio: AudioManager | None = None
         self._canvas: GardenGridCanvas | None = None
         self._hud: Hud | None = None
+        self._weather_panel: WeatherPanel | None = None
         self._inspector: CellInspector | None = None
         self._tool_buttons: dict[str, BevelButton] = {}
         self._active_tool = "till"
@@ -330,6 +342,7 @@ class GardenScene(Scene):
         self._build_inspector(ui_manager, origin)
         self._hud = Hud(ui_manager)
         self._hud.menu_button.on_click = lambda _element: self._open_pause()
+        self._weather_panel = WeatherPanel(ui_manager)
         self._create_entities()
         self._register_systems()
         if self._load_requested:
@@ -362,7 +375,9 @@ class GardenScene(Scene):
 
     def _register_systems(self) -> None:
         self.system_manager.register(
-            SoilSystem(self.grid), priority=_SOIL_PRIORITY, system_type=SoilSystem
+            SoilSystem(self.grid, self.weather),
+            priority=_SOIL_PRIORITY,
+            system_type=SoilSystem,
         )
         self.system_manager.register(
             AutomationSystem(
@@ -382,12 +397,12 @@ class GardenScene(Scene):
             system_type=SyntropicSystem,
         )
         self.system_manager.register(
-            PestSystem(self.entity_manager, self.grid),
+            PestSystem(self.entity_manager, self.grid, self.weather),
             priority=_PEST_PRIORITY,
             system_type=PestSystem,
         )
         self.system_manager.register(
-            PlantGrowthSystem(self.entity_manager, self.grid),
+            PlantGrowthSystem(self.entity_manager, self.grid, self.weather),
             priority=_GROWTH_PRIORITY,
             system_type=PlantGrowthSystem,
         )
@@ -395,6 +410,11 @@ class GardenScene(Scene):
             WeedSpreadSystem(self.entity_manager, self.grid),
             priority=_WEED_SPREAD_PRIORITY,
             system_type=WeedSpreadSystem,
+        )
+        self.system_manager.register(
+            WeatherSystem(self.weather),
+            priority=_WEATHER_PRIORITY,
+            system_type=WeatherSystem,
         )
         self.system_manager.register(
             AutosaveSystem(self.save_now, self.event_dispatcher),
@@ -823,6 +843,11 @@ class GardenScene(Scene):
         )
         if self._hud is not None:
             self._hud.update(dt, self.economy, self.conditions, self.elapsed, power)
+        weather_system = self.system_manager.get_system(WeatherSystem)
+        if self._weather_panel is not None and weather_system is not None:
+            self._weather_panel.update(
+                weather_system.state.condition_id, weather_system.forecast
+            )
         if self._canvas is not None:
             self._canvas.darkness = darkness(self.elapsed)
             if self._inspector is not None:

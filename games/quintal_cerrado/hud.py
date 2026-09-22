@@ -25,6 +25,7 @@ from games.quintal_cerrado.components import (
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
+from games.quintal_cerrado.weather import WEATHER_TABLE
 from pyguara.common.grid import Cell
 from pyguara.common.types import Color, Vector2
 from pyguara.ecs.manager import EntityManager
@@ -139,6 +140,51 @@ class Hud:
             self._message_left -= dt
             if self._message_left <= 0.0:
                 self.message_label.set_text("")
+
+
+WEATHER_PANEL_SIZE = Vector2(160, 64)
+
+
+class WeatherPanel:
+    """Now, and what's coming -- a short weather forecast in the corner.
+
+    A separate small panel rather than a line on the main status panel
+    (`Hud`, in the opposite corner): that one is already packed, and this
+    is meant to be glanced at ahead of an action ("rain's coming, skip
+    watering"), not read alongside credits and the clock.
+    """
+
+    def __init__(self, ui_manager: UIManager) -> None:
+        """Build the panel and add it to the HUD layer.
+
+        Args:
+            ui_manager: The manager to add it to.
+        """
+        self.now_label = Label("", Vector2(0, 0), font_size=14)
+        self.forecast_label = Label("", Vector2(0, 0), font_size=12)
+
+        panel = BevelPanel(Vector2(0, 0), WEATHER_PANEL_SIZE, border_width=2)
+        panel.constraints = create_anchored_constraints(
+            UIAnchor.TOP_RIGHT, offset_x=-GUTTER_X, offset_y=PANEL_Y
+        )
+        for label, offset_y in ((self.now_label, 10), (self.forecast_label, 36)):
+            label.constraints = create_anchored_constraints(
+                UIAnchor.TOP_LEFT, offset_x=10, offset_y=offset_y
+            )
+            panel.add_child(label)
+        ui_manager.add_element(panel, UILayer.HUD)
+
+    def update(self, condition_id: str, forecast: list[str]) -> None:
+        """Show the current condition and what is coming after it.
+
+        Args:
+            condition_id: `WeatherSystem.state.condition_id`.
+            forecast: `WeatherSystem.forecast`, nearest first.
+        """
+        current = WEATHER_TABLE.get(condition_id)
+        self.now_label.set_text(f"Weather: {current.display_name if current else '?'}")
+        names = [WEATHER_TABLE[c].display_name for c in forecast if c in WEATHER_TABLE]
+        self.forecast_label.set_text(f"Next: {' then '.join(names)}" if names else "")
 
 
 class CellInspector:
