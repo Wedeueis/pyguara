@@ -131,8 +131,8 @@ These modules correspond to the "Tutorial Series Roadmap".
   answer it with slow, cheap, organic **compost** (keeps the 2.0x organic
   sale premium) or a fast, expensive chemical **spray** (clears it at
   once and grows the crop faster, but sells for 0.5x, degrades the soil
-  and marks every plant it reaches for good). A tool bar names every tool;
-  each also has a keyboard shortcut. A **store** (a scene pushed over the
+  and marks every plant it reaches for good). An icon dock names every
+  tool, its price and its keyboard shortcut. A **store** (a scene pushed over the
   frozen garden) sells a four-step automation tech tree — solar panel →
   drip irrigation → soil sensor → harvester drone — each unlocked by
   *placing* the one before it. The garden **saves and resumes** — every 60
