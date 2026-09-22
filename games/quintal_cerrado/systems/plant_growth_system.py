@@ -36,9 +36,12 @@ DEGRADED_SOIL_GROWTH = 0.8
 """Growth multiplier on chemically degraded soil, the cost the PRD says the
 shortcut leaves in the ground."""
 
-FROZEN_STAGES = frozenset({"harvestable", "infested", "dying"})
-"""Stages that do not accumulate growth: a harvestable plant is done, and an
-infested or dying one is fighting pests, not growing."""
+FROZEN_STAGES = frozenset({"overripe", "infested", "dying"})
+"""Stages that do not accumulate growth. `"harvestable"` is deliberately
+*not* frozen: `plant_states.HarvestableState` reuses this same
+`growth_progress` accumulation as its ripeness clock, reading it against
+`OVERRIPE_THRESHOLD` to decide when to go `"overripe"` -- which then is
+frozen, the same as an infested or dying plant that is done changing."""
 
 
 class PlantGrowthSystem:

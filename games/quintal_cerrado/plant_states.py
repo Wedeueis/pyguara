@@ -38,6 +38,14 @@ accumulates it as a fraction of `Species.stage_seconds`, and each state's
 `on_enter()` resets it to 0 -- so this is a per-stage budget, not a
 cumulative total across the whole lifecycle."""
 
+OVERRIPE_THRESHOLD = 1.5
+"""`growth_progress` (in the same per-stage budget as `STAGE_THRESHOLD`) a
+harvestable plant can sit at before it goes `"overripe"` -- one and a half
+stages' worth of ripe time, so it is a real window, not a hair-trigger.
+`plant_growth_system.py` keeps accumulating `growth_progress` during
+`"harvestable"` for exactly this clock; `"overripe"` itself is frozen
+again, the same as `"infested"`/`"dying"`, once it is reached."""
+
 INFEST_THRESHOLD = 0.5
 """`PlantComponent.pest_pressure` at which a plant becomes infested."""
 
@@ -141,12 +149,28 @@ class MatureState(_PlantState):
 
 
 class HarvestableState(_PlantState):
-    """Ready to harvest. Stays put until the player does, or pests arrive."""
+    """Ready to harvest. Goes `"overripe"` if left too long, or infested."""
 
     STAGE_NAME = "harvestable"
 
     def update(self, dt: float) -> str | None:
-        """Get infested; otherwise wait for the harvest tool."""
+        """Get infested, or go overripe once the ripe window closes."""
+        if (infested := self._infestation()) is not None:
+            return infested
+        if self.plant.growth_progress >= OVERRIPE_THRESHOLD:
+            return "overripe"
+        return None
+
+
+class OverripeState(_PlantState):
+    """Left too long. The harvest tool still clears it, for a seed instead
+    of Sementes (`economy.harvest_cell`) -- not nothing, but not the sale
+    collecting it in time would have been."""
+
+    STAGE_NAME = "overripe"
+
+    def update(self, dt: float) -> str | None:
+        """Wait for the harvest tool; pests can still take hold."""
         return self._infestation()
 
 
@@ -200,6 +224,7 @@ def build_plant_ai(entity: Entity) -> AIComponent:
     machine.add_state("growing", GrowingState(entity, blackboard))
     machine.add_state("mature", MatureState(entity, blackboard))
     machine.add_state("harvestable", HarvestableState(entity, blackboard))
+    machine.add_state("overripe", OverripeState(entity, blackboard))
     machine.add_state("infested", InfestedState(entity, blackboard))
     machine.add_state("dying", DyingState(entity, blackboard))
     machine.set_initial_state("seedling")

@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from games.quintal_cerrado.components import (
+    GENERIC_SEED_KEY,
     AutomationComponent,
     GardenConditions,
     PlantComponent,
@@ -41,6 +42,7 @@ from games.quintal_cerrado.components import (
 )
 from games.quintal_cerrado.garden_grid import GRID_HEIGHT, GRID_WIDTH, GardenGrid
 from games.quintal_cerrado.plant_states import build_plant_ai
+from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
 from pyguara.ai.components import AIComponent
 from pyguara.ecs.manager import EntityManager
@@ -51,13 +53,23 @@ SAVE_KEY = "garden_save"
 rather than mangling it."""
 
 _PLANT_STAGES = frozenset(
-    {"seedling", "growing", "mature", "harvestable", "infested", "dying"}
+    {"seedling", "growing", "mature", "harvestable", "overripe", "infested", "dying"}
 )
 _PHASES = frozenset({"stable", "outbreak", "resolved_organic", "resolved_chemical"})
 
 
 class SaveFormatError(ValueError):
     """A save could not be understood, and nothing was changed."""
+
+
+def _is_known_inventory_key(key: str) -> bool:
+    """Whether `PlayerEconomy.inventory[key]` names something this build
+    understands: a structure kind, the generic seed stock, or a specific
+    species' stocked-seed key (`components.specific_seed_key`)."""
+    if key in STRUCTURE_TABLE or key == GENERIC_SEED_KEY:
+        return True
+    prefix, _, species_id = key.partition(":")
+    return prefix == "seed" and species_id in SPECIES_TABLE
 
 
 def to_save_payload(
@@ -199,7 +211,7 @@ def _parse(payload: Any) -> _Parsed:
             )
 
         player = payload["player"]
-        parsed_player = {
+        parsed_player: dict[str, Any] = {
             "credits": float(player["credits"]),
             "revenue": float(player["revenue"]),
             "organic_sales": int(player["organic_sales"]),
@@ -207,7 +219,10 @@ def _parse(payload: Any) -> _Parsed:
             "inventory": {str(k): int(v) for k, v in player["inventory"].items()},
             "unlocked_tech": {str(t) for t in player["unlocked_tech"]},
         }
-        for kind in [*parsed_player["inventory"], *parsed_player["unlocked_tech"]]:
+        for key in parsed_player["inventory"]:
+            if not _is_known_inventory_key(key):
+                raise SaveFormatError(f"unknown inventory item {key!r}")
+        for kind in parsed_player["unlocked_tech"]:
             if kind not in STRUCTURE_TABLE:
                 raise SaveFormatError(f"unknown structure {kind!r}")
 

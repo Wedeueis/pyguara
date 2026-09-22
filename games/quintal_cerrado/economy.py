@@ -9,13 +9,31 @@ premium for good, since `PlantComponent.is_chemical_boosted` never clears.
 A set of free functions rather than a ticking `economy_system.py`: unlike
 soil or shade, nothing about money changes on its own between player
 actions, so there is nothing for a system to tick.
+
+`harvest_cell()` is the one place a harvest becomes value -- Sementes, or
+a seed -- shared by the player's own harvest tool and a harvester drone,
+the same way `sell_harvest` alone used to be before the fun-improvement
+roadmap's Phase 3 gave a harvest three possible outcomes instead of one:
+a crop collected at its peak still sells for Sementes; a weed, or a crop
+left to go `"overripe"`, pays out in seed stock instead (`components.py`'s
+`grant_seed`) -- generic for a weed, specific to its own species for an
+overripe crop.
 """
 
 from __future__ import annotations
 
-from games.quintal_cerrado.components import PlantComponent, PlayerEconomy, add_credits
+from dataclasses import dataclass
+
+from games.quintal_cerrado.components import (
+    GENERIC_SEED_KEY,
+    PlantComponent,
+    PlayerEconomy,
+    add_credits,
+    grant_seed,
+    specific_seed_key,
+)
 from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.species import SPECIES_TABLE, WEED_SPECIES_ID
 from pyguara.common.grid import Cell
 from pyguara.ecs.manager import EntityManager
 
@@ -57,27 +75,56 @@ def sale_value(plant: PlantComponent) -> int:
     return max(1, round(species.base_price * sale_multiplier(plant)))
 
 
-def sell_harvest(
+CREDITS = "credits"
+GENERIC_SEED = "generic_seed"
+SPECIFIC_SEED = "specific_seed"
+"""The three ways `harvest_cell` can pay out -- `HarvestResult.kind`."""
+
+OVERRIPE_WEED_SEED_BONUS = 2
+"""Generic seed a weed pays out if pulled `"overripe"` rather than
+`"harvestable"` -- letting one go to seed on purpose is worth more than
+yanking it young, the same trade-off overripening gives a real crop."""
+
+READY_STAGES = frozenset({"harvestable", "overripe"})
+
+
+@dataclass(frozen=True)
+class HarvestResult:
+    """What harvesting one cell produced.
+
+    Attributes:
+        species_id: What was harvested.
+        kind: `CREDITS`, `GENERIC_SEED` or `SPECIFIC_SEED`.
+        amount: Sementes for `CREDITS`, a seed count for either seed kind.
+    """
+
+    species_id: str
+    kind: str
+    amount: int
+
+
+def harvest_cell(
     grid: GardenGrid,
     entity_manager: EntityManager,
     economy: PlayerEconomy,
     cell: Cell,
-) -> tuple[str, int] | None:
-    """Sell the harvestable plant at `cell`, freeing the (still tilled) cell.
+) -> HarvestResult | None:
+    """Collect whatever `cell` is ready to give up, freeing the (still
+    tilled) cell either way.
 
-    The one place a harvest becomes money, shared by the player's own
-    harvest tool and a harvester drone so the two cannot disagree on what a
-    plant is worth or how it is counted.
+    The one place a harvest becomes value -- see the module docstring for
+    the three outcomes -- shared by the player's own harvest tool and a
+    harvester drone, so the two cannot disagree on what a plant is worth.
 
     Args:
         grid: The plot.
         entity_manager: Where the plant lives.
-        economy: Who is paid.
+        economy: Who is paid, or whose seed stock grows.
         cell: The cell to harvest.
 
     Returns:
-        `(species_id, value)` if a harvestable plant was sold, else None --
-        nothing there, or not ready, or infested.
+        The `HarvestResult`, or None -- nothing there, not ready yet, or
+        infested.
     """
     entity_id = grid.plant_at.get(cell)
     if entity_id is None:
@@ -86,17 +133,28 @@ def sell_harvest(
     if entity is None or not entity.has_component(PlantComponent):
         return None
     plant = entity.get_component(PlantComponent)
-    if plant.growth_stage != "harvestable":
+    if plant.growth_stage not in READY_STAGES:
         return None
 
-    value = sale_value(plant)
-    add_credits(economy, value)
-    if plant.is_chemical_boosted:
-        economy.chemical_sales += 1
-    else:
-        economy.organic_sales += 1
-
     species_id = plant.species_id
+    is_overripe = plant.growth_stage == "overripe"
+
+    if species_id == WEED_SPECIES_ID:
+        amount = OVERRIPE_WEED_SEED_BONUS if is_overripe else 1
+        grant_seed(economy, GENERIC_SEED_KEY, amount)
+        result = HarvestResult(species_id, GENERIC_SEED, amount)
+    elif is_overripe:
+        grant_seed(economy, specific_seed_key(species_id), 1)
+        result = HarvestResult(species_id, SPECIFIC_SEED, 1)
+    else:
+        value = sale_value(plant)
+        add_credits(economy, value)
+        if plant.is_chemical_boosted:
+            economy.chemical_sales += 1
+        else:
+            economy.organic_sales += 1
+        result = HarvestResult(species_id, CREDITS, value)
+
     entity_manager.remove_entity(entity_id)
     grid.unmark_planted(cell)
-    return species_id, value
+    return result

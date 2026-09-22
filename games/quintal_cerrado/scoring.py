@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from games.quintal_cerrado.components import PlantComponent, PlayerEconomy
 from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.species import SPECIES_TABLE, sellable_species
 from pyguara.ecs.manager import EntityManager
 
 REVENUE_GOAL = 600.0
@@ -86,9 +86,12 @@ def compute_score(
         if entity is None or not entity.has_component(PlantComponent):
             continue
         plant = entity.get_component(PlantComponent)
+        species = SPECIES_TABLE.get(plant.species_id)
+        if species is None or species.is_weed:
+            continue
         if plant.growth_stage != "dying":
             living.add(plant.species_id)
-    biodiversity = len(living) / len(SPECIES_TABLE)
+    biodiversity = len(living) / len(sellable_species())
 
     revenue = min(1.0, economy.revenue / REVENUE_GOAL)
 

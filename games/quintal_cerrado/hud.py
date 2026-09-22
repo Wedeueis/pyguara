@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from games.quintal_cerrado.clock import format_clock
 from games.quintal_cerrado.components import (
+    GENERIC_SEED_KEY,
     AutomationComponent,
     GardenConditions,
     PlantComponent,
@@ -37,7 +38,7 @@ from pyguara.ui.types import UIAnchor, UILayer
 
 GUTTER_X = 14
 PANEL_Y = 158
-PANEL_SIZE = Vector2(164, 124)
+PANEL_SIZE = Vector2(164, 144)
 MESSAGE_SECONDS = 2.5
 
 _STATUS_TEXT = {
@@ -67,6 +68,7 @@ class Hud:
         self.clock_label = Label("", Vector2(0, 0), font_size=13)
         self.power_label = Label("", Vector2(0, 0), font_size=13)
         self.status_label = Label("", Vector2(0, 0), font_size=14)
+        self.seeds_label = Label("", Vector2(0, 0), font_size=13)
         self.message_label = Label("", Vector2(0, 0), font_size=13)
         self._message_left = 0.0
 
@@ -79,7 +81,8 @@ class Hud:
             (self.clock_label, 32),
             (self.power_label, 52),
             (self.status_label, 72),
-            (self.message_label, 96),
+            (self.seeds_label, 92),
+            (self.message_label, 116),
         ):
             label.constraints = create_anchored_constraints(
                 UIAnchor.TOP_LEFT, offset_x=10, offset_y=offset_y
@@ -130,6 +133,8 @@ class Hud:
             f"Power: {used}/{capacity}" if capacity else "Power: no solar"
         )
         self.status_label.set_text(_STATUS_TEXT.get(conditions.phase, conditions.phase))
+        generic_seeds = economy.inventory.get(GENERIC_SEED_KEY, 0)
+        self.seeds_label.set_text(f"Generic seed: {generic_seeds}")
         if self._message_left > 0.0:
             self._message_left -= dt
             if self._message_left <= 0.0:
