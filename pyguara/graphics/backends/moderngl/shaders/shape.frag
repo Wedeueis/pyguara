@@ -45,7 +45,13 @@ void main() {
         d = sd_segment(v_local, v_size.x - v_size.y, v_size.y);
     }
 
-    float alpha = v_width <= 0.0 ? step(d, 0.0) : step(abs(d), half_stroke);
+    // A stroke is the band [-width, 0] *inside* the edge, the same place
+    // the pygame backend draws a border. Centring it on the edge instead
+    // (abs(d) <= width / 2) put a 1px border's pixel centres exactly on
+    // the band's boundary, so rounding picked which edges drew at all.
+    float alpha = v_width <= 0.0
+        ? step(d, 0.0)
+        : step(-v_width, d) * step(d, 0.0);
 
     if (alpha <= 0.0) {
         discard;
