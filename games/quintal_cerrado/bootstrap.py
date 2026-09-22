@@ -26,7 +26,9 @@ from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.audio.manager import AudioManager
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
@@ -96,10 +98,15 @@ def configure_game_container() -> DIContainer:
     container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
     container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]
+    container.register_singleton(AudioManager, AudioManager)
     container.register_instance(ComponentRegistry, get_component_registry())
     container.register_instance(PrefabCache, PrefabCache())
     container.register_singleton(SceneManager, SceneManager)
-    container.register_singleton(ResourceManager, ResourceManager)
+
+    res_manager = ResourceManager()
+    res_manager.register_loader(PygameSoundLoader())
+    container.register_instance(ResourceManager, res_manager)
+
     container.register_singleton(UIManager, UIManager)
     set_theme(cerrado_dusk())
     container.register_singleton(SystemManager, SystemManager)
