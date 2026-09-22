@@ -12,6 +12,7 @@ No real window: builds the same minimal, mocked container
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,6 +25,7 @@ from games.quintal_cerrado.economy import (
     sale_value,
 )
 from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
+from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene
 from games.quintal_cerrado.species import SPECIES_TABLE
 from pyguara.ai.components import AIComponent
@@ -34,6 +36,9 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
+from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.migration import MigrationManager
+from pyguara.persistence.storage import FileStorageBackend
 from pyguara.prefabs.loader import PrefabCache
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.manager import ResourceManager
@@ -45,7 +50,7 @@ FIXED_DT = 1 / 60
 
 
 @pytest.fixture
-def game_container() -> DIContainer:
+def game_container(tmp_path: Path) -> DIContainer:
     """Enough of the game's container for a scene to build itself."""
     dispatcher = EventDispatcher()
     ui_manager = UIManager(dispatcher)
@@ -65,6 +70,15 @@ def game_container() -> DIContainer:
     container.register_instance(IAudioSystem, MagicMock(spec=IAudioSystem))  # type: ignore[type-abstract]
     input_manager = InputManager(dispatcher, MagicMock(spec=IInputBackend))
     container.register_instance(InputManager, input_manager)
+    # A real store in a temp directory: the garden saves on exit, and a test
+    # must never write into the repository's own `saves/`.
+    container.register_instance(
+        PersistenceManager,
+        PersistenceManager(
+            FileStorageBackend(base_path=str(tmp_path / "saves")),
+            MigrationManager(current_version=SCHEMA_VERSION),
+        ),
+    )
     scene_manager.set_container(container)
     return container
 

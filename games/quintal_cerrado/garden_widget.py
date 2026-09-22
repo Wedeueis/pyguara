@@ -54,6 +54,10 @@ WILT_BURST = Color(140, 128, 112)
 GAIN_COLOR = Color(255, 226, 140)
 WARN_COLOR = Color(236, 120, 96)
 
+NIGHT_COLOR = (16, 26, 72)
+NIGHT_MAX_ALPHA = 110
+"""Alpha of the night wash at `clock.darkness() == 1.0`."""
+
 ALERT_COLOR = (190, 50, 50)
 ALERT_MAX_ALPHA = 95
 ALERT_DECAY = 1.3
@@ -116,6 +120,13 @@ class GardenGridCanvas(Canvas):
         self._visuals: dict[str, _PlantVisual] = {}
         self._elapsed = 0.0
         self._alert = 0.0
+        self.hover_cell: Cell | None = None
+        """The last cell the cursor was over. It is kept when the cursor
+        leaves the plot for the tool bar, so the inspector still has
+        something to show."""
+        self.darkness = 0.0
+        """0.0 in daylight up to 1.0 at night; set by the scene from
+        `clock.darkness()` and drawn as a translucent wash."""
 
     def _cell_at(self, position: Vector2) -> Cell | None:
         """The cell under a screen-space `position`, or None off-grid."""
@@ -227,9 +238,16 @@ class GardenGridCanvas(Canvas):
     def _process_input(
         self, event_type: UIEventType, position: Vector2, button: int
     ) -> bool:
+        if event_type == UIEventType.MOUSE_MOVE:
+            cell = self._cell_at(position)
+            if cell is not None:
+                self.hover_cell = cell
         if event_type == UIEventType.MOUSE_DOWN and button == 1:
             cell = self._cell_at(position)
             if cell is not None:
+                # A click points the inspector at the tile too: there is no
+                # hover on a touch screen, and it is the tile you just acted on.
+                self.hover_cell = cell
                 if self.on_cell_clicked is not None:
                     self.on_cell_clicked(cell)
                 return True
@@ -321,6 +339,10 @@ class GardenGridCanvas(Canvas):
         self._draw_plants(renderer)
         self._motes.render(renderer)
         self._labels.render(renderer)
+        if self.darkness > 0.0:
+            renderer.draw_rect(
+                self.rect, Color(*NIGHT_COLOR, int(NIGHT_MAX_ALPHA * self.darkness))
+            )
         if self._alert > 0.0:
             renderer.draw_rect(
                 self.rect, Color(*ALERT_COLOR, int(ALERT_MAX_ALPHA * self._alert))

@@ -13,6 +13,7 @@ pattern `tests/test_guara_falcao_screens.py` uses.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -20,6 +21,7 @@ import pytest
 
 from games.quintal_cerrado.components import PlantComponent
 from games.quintal_cerrado.garden_widget import GardenGridCanvas
+from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
@@ -31,6 +33,9 @@ from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
+from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.migration import MigrationManager
+from pyguara.persistence.storage import FileStorageBackend
 from pyguara.prefabs.loader import PrefabCache
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.manager import ResourceManager
@@ -65,7 +70,9 @@ def renderer() -> Any:
 
 
 @pytest.fixture
-def game_container(ui: UIManager, dispatcher: EventDispatcher) -> DIContainer:
+def game_container(
+    ui: UIManager, dispatcher: EventDispatcher, tmp_path: Path
+) -> DIContainer:
     """Enough of the game's container for a scene to build itself."""
     container = DIContainer()
     container.register_instance(DIContainer, container)
@@ -84,14 +91,23 @@ def game_container(ui: UIManager, dispatcher: EventDispatcher) -> DIContainer:
     # `TitleScene._on_play` registers `GardenScene` and pushes it, which
     # only wires the new scene's `container` if the manager already knows
     # one -- `Application.__init__` does this via `set_container()` too.
+    # A real store in a temp directory: the garden saves on exit, and a test
+    # must never write into the repository's own `saves/`.
+    container.register_instance(
+        PersistenceManager,
+        PersistenceManager(
+            FileStorageBackend(base_path=str(tmp_path / "saves")),
+            MigrationManager(current_version=SCHEMA_VERSION),
+        ),
+    )
     scene_manager.set_container(container)
     return container
 
 
 class TestTheTitleScreen:
-    """The title screen's Play button leads to the garden."""
+    """The title screen's buttons lead to the garden."""
 
-    def test_play_button_is_on_the_content_layer(
+    def test_the_title_buttons_are_on_the_content_layer(
         self, game_container: DIContainer
     ) -> None:
         scene = TitleScene(game_container.get(EventDispatcher))
@@ -100,22 +116,21 @@ class TestTheTitleScreen:
 
         ui_manager = game_container.get(UIManager)
         roots = ui_manager.elements(UILayer.CONTENT)
-        buttons = [
-            child
+        labels = {
+            getattr(child, "text", None)
             for root in roots
             for child in ([root, *root.children])
-            if getattr(child, "text", None) == "Play"
-        ]
-        assert len(buttons) == 1
+        }
+        assert {"Continue", "New Garden"} <= labels
 
-    def test_play_button_registers_and_pushes_the_garden_scene(
+    def test_new_garden_registers_and_pushes_the_garden_scene(
         self, game_container: DIContainer
     ) -> None:
         scene = TitleScene(game_container.get(EventDispatcher))
         scene.resolve_dependencies(game_container)
         scene.on_enter()
 
-        scene._on_play(None)
+        scene._on_new(None)
 
         scene_manager = game_container.get(SceneManager)
         assert scene_manager.current_scene is not None

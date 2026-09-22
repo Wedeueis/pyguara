@@ -61,3 +61,14 @@ class SolarIncomeEvent:
 
     cell: Cell
     amount: int
+
+
+@dataclass
+class AutosavedEvent:
+    """Fired after the periodic autosave runs.
+
+    Attributes:
+        success: Whether the save was written.
+    """
+
+    success: bool

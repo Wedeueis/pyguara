@@ -78,11 +78,21 @@ class AutomationSystem:
         self._grid = grid
         self._economy = economy
         self._dispatcher = dispatcher
+        self.power_used = 0
+        self.power_capacity = 0
 
     def update(self, dt: float) -> None:
         """Share out power, then run every structure for one tick."""
         structures = self._structures()
         self._allocate_power(structures)
+        self.power_capacity = POWER_PER_PANEL * sum(
+            1 for _, s in structures if s.kind == "solar_panel"
+        )
+        self.power_used = sum(
+            1
+            for _, s in structures
+            if s.powered and STRUCTURE_TABLE[s.kind].needs_power
+        )
         for cell, structure in structures:
             if not structure.powered:
                 continue
