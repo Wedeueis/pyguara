@@ -123,6 +123,7 @@ from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
+from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer, UIRenderer
@@ -210,6 +211,33 @@ from `_TOOL_KEYS`, and its button is not in `_tool_buttons`."""
 _TOOL_BAR_BUTTON_SIZE = Vector2(114, 34)
 _TOOL_BAR_SPACING = 6
 _TOOL_BAR_ROW_GAP = 6
+
+
+def _run_post_process(container: DIContainer) -> None:
+    """Run the render graph's post-process pass by hand.
+
+    `Application._render_with_graph()` only ever executes the render
+    graph's own `final` pass, never anything in between -- the same gap
+    `mourisco_ressonancia.scenes`'s `_run_lighting_passes()` works around
+    for its lighting passes -- so every scene that draws through this
+    graph has to drive its one middle pass itself, leaving `final` to
+    blit the graded result to the screen.
+
+    Every scene, not just `GardenScene`: `final` always reads from
+    `"post_processed"`, so a scene that never populates that buffer (the
+    bug this fixes -- `TitleScene` used to be exactly that scene) shows
+    whatever was last left in it, which on the very first frame is
+    nothing -- a black window, real OpenGL context and all, no crash to
+    even point at it. `get_pass` is checked for None rather than assumed,
+    in case a future bootstrap change ever drops the pass.
+
+    Args:
+        container: The scene's own DI container.
+    """
+    graph = container.get(RenderGraph)
+    post_process_pass = graph.get_pass("post_process")
+    if post_process_pass is not None:
+        post_process_pass.execute(graph.ctx, graph)
 
 
 class TitleScene(Scene):
@@ -302,8 +330,9 @@ class TitleScene(Scene):
         """Nothing animates yet."""
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Clear to the world backdrop; the menu is UI on top of it."""
+        """Clear to the world backdrop, grade it, then the menu is UI on top."""
         world_renderer.clear(art.WORLD_BACKDROP)
+        _run_post_process(self.container)
 
 
 class GardenScene(Scene):
@@ -923,21 +952,4 @@ class GardenScene(Scene):
         world_renderer.clear(art.WORLD_BACKDROP)
         if self._canvas is not None:
             self._canvas.render_world(world_renderer)
-        self._run_post_process()
-
-    def _run_post_process(self) -> None:
-        """Run the post-process pass by hand.
-
-        `Application._render_with_graph()` only ever executes the render
-        graph's own `final` pass, never anything in between -- the same
-        gap `mourisco_ressonancia.scenes`'s `_run_lighting_passes()`
-        works around for its lighting passes -- so this scene drives its
-        one middle pass itself, leaving `final` to blit the graded result
-        to the screen. `get_pass` is checked for None rather than assumed
-        anyway, the same defensive shape that scene uses, in case a
-        future bootstrap change ever drops the pass.
-        """
-        graph = self.container.get(RenderGraph)
-        post_process_pass = graph.get_pass("post_process")
-        if post_process_pass is not None:
-            post_process_pass.execute(graph.ctx, graph)
+        _run_post_process(self.container)
