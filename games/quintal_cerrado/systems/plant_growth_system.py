@@ -23,10 +23,18 @@ from __future__ import annotations
 from games.quintal_cerrado.components import PlantComponent
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.weather import WeatherState
 from pyguara.ecs.manager import EntityManager
 
 MOISTURE_GROWTH_THRESHOLD = 0.15
 """Below this, a plant's growth simply does not advance this tick."""
+
+COLD_SNAP_SHADE_COVER = 0.2
+"""`SoilCell.shade_level` a cell needs to count as "covered" during a
+`WeatherState.cold_snap` -- below it, growth stalls outright this tick,
+the same way low moisture already does. A canopy tree's own shade is
+what buys an understory or ground-cover plant beneath it a pass; nothing
+protects a canopy tree itself, or anything standing alone."""
 
 CHEMICAL_GROWTH_BOOST = 1.5
 """The chemical shortcut's "fast yield boost" (PRD): a plant that was ever
@@ -47,16 +55,26 @@ frozen, the same as an infested or dying plant that is done changing."""
 class PlantGrowthSystem:
     """Advances every planted entity's `growth_progress`."""
 
-    def __init__(self, entity_manager: EntityManager, grid: GardenGrid) -> None:
+    def __init__(
+        self,
+        entity_manager: EntityManager,
+        grid: GardenGrid,
+        weather: WeatherState | None = None,
+    ) -> None:
         """Initialize the system.
 
         Args:
             entity_manager: Where planted entities live.
             grid: The plot whose `plant_at` occupancy and soil this system
                 reads.
+            weather: The live weather, if any -- its growth multiplier
+                applies on top of everything else below, and a cold snap
+                stalls an uncovered cell outright. `None` behaves as a
+                permanently favourable, snap-free 1.0.
         """
         self._entity_manager = entity_manager
         self._grid = grid
+        self._weather = weather
 
     def update(self, dt: float) -> None:
         """Advance every planted entity's `growth_progress` by one tick."""
@@ -72,10 +90,18 @@ class PlantGrowthSystem:
             soil = self._grid.soil_at(cell)
             if soil.moisture < MOISTURE_GROWTH_THRESHOLD:
                 continue
+            if (
+                self._weather is not None
+                and self._weather.cold_snap
+                and soil.shade_level < COLD_SNAP_SHADE_COVER
+            ):
+                continue
             species = SPECIES_TABLE.get(plant.species_id)
             if species is None or species.stage_seconds <= 0:
                 continue
             multiplier = plant.growth_multiplier
+            if self._weather is not None:
+                multiplier *= self._weather.growth_multiplier
             if plant.is_chemical_boosted:
                 multiplier *= CHEMICAL_GROWTH_BOOST
             if soil.is_chemically_degraded:

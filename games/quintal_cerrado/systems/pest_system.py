@@ -34,6 +34,7 @@ from games.quintal_cerrado.components import PlantComponent
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.plant_states import RECOVER_THRESHOLD
 from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.weather import WeatherState
 from pyguara.common.grid import Cell, neighbors8
 from pyguara.ecs.manager import EntityManager
 
@@ -77,15 +78,23 @@ _SNAP_TO_ZERO = 0.02
 class PestSystem:
     """Spreads, decays and applies pest pressure across the plot."""
 
-    def __init__(self, entity_manager: EntityManager, grid: GardenGrid) -> None:
+    def __init__(
+        self,
+        entity_manager: EntityManager,
+        grid: GardenGrid,
+        weather: WeatherState | None = None,
+    ) -> None:
         """Initialize the system.
 
         Args:
             entity_manager: Where planted entities live.
             grid: The plot whose `SoilCell.pest_pressure` this system owns.
+            weather: The live weather, if any -- wind's spread multiplier
+                applies on top of `SPREAD_RATE`. `None` behaves as calm.
         """
         self._entity_manager = entity_manager
         self._grid = grid
+        self._weather = weather
 
     def update(self, dt: float) -> None:
         """Move pressure around the plot, then apply it to the plants."""
@@ -114,6 +123,9 @@ class PestSystem:
 
     def _update_pressure(self, dt: float) -> None:
         deltas: dict[Cell, float] = {}
+        spread_rate = SPREAD_RATE * (
+            self._weather.pest_spread_multiplier if self._weather else 1.0
+        )
 
         for y, row in enumerate(self._grid.soil):
             for x, soil in enumerate(row):
@@ -139,7 +151,7 @@ class PestSystem:
                     target = self._plant_at(neighbor)
                     if target is None or target.growth_stage not in VULNERABLE_STAGES:
                         continue
-                    rate = SPREAD_RATE
+                    rate = spread_rate
                     if source is not None and source.species_id == target.species_id:
                         rate *= MONOCULTURE_SPREAD
                     deltas[neighbor] = deltas.get(neighbor, 0.0) + rate * pressure * dt
