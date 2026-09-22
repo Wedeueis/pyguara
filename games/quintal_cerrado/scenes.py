@@ -43,7 +43,12 @@ import logging
 from collections.abc import Callable
 
 from games.quintal_cerrado import art, treatments
-from games.quintal_cerrado.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
+from games.quintal_cerrado.bootstrap import (
+    BASE_VIGNETTE_INTENSITY,
+    COLD_SNAP_VIGNETTE_INTENSITY,
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+)
 from games.quintal_cerrado.clock import EVALUATION_TIME, darkness
 from games.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
@@ -95,7 +100,8 @@ from games.quintal_cerrado.persistence_schema import (
     to_save_payload,
 )
 from games.quintal_cerrado.plant_states import build_plant_ai
-from games.quintal_cerrado.scoring import compute_score
+from games.quintal_cerrado.scoring import compute_score, soil_health
+from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from games.quintal_cerrado.species import (
     SPECIES_TABLE,
     pick_generic_species,
@@ -112,13 +118,16 @@ from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.syntropic_system import SyntropicSystem
 from games.quintal_cerrado.systems.weather_system import WeatherSystem
 from games.quintal_cerrado.systems.weed_spread_system import WeedSpreadSystem
-from games.quintal_cerrado.weather import WeatherState
+from games.quintal_cerrado.weather import WEATHER_TABLE, WeatherState
 from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.vfx.effects.storm import StormEffect
+from pyguara.graphics.vfx.effects.vignette import VignetteEffect
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, KEY_O, B, C, G, H, M, N, P, S, T, W
 from pyguara.input.manager import InputManager
@@ -153,6 +162,11 @@ _WEED_SPREAD_PRIORITY = 535
 # transition, and just as imperceptible at 60Hz.
 _WEATHER_PRIORITY = 536
 _AUTOSAVE_PRIORITY = 590
+
+SOIL_HEALTH_GRADE_STRENGTH = 0.3
+"""How strongly `SoilHealthEffect` blends in once anything is tilled -- kept
+modest on purpose: a mood over the frame, not a filter loud enough to fight
+the soil's own colour (`art.draw_soil_tile`) for legibility."""
 
 logger = logging.getLogger(__name__)
 
@@ -317,6 +331,9 @@ class GardenScene(Scene):
         self.weather = WeatherState()
         self._rng = rng
         self._audio: AudioManager | None = None
+        self._storm: StormEffect | None = None
+        self._vignette: VignetteEffect | None = None
+        self._soil_health_effect: SoilHealthEffect | None = None
         self._canvas: GardenGridCanvas | None = None
         self._hud: Hud | None = None
         self._weather_panel: WeatherPanel | None = None
@@ -334,6 +351,9 @@ class GardenScene(Scene):
         ui_manager = self.container.get(UIManager)
         ui_manager.clear()
         self._audio = self.container.get(AudioManager)
+        self._storm = self.container.get(StormEffect)
+        self._vignette = self.container.get(VignetteEffect)
+        self._soil_health_effect = self.container.get(SoilHealthEffect)
 
         self._setup_input()
         origin = self._build_grid_widget(ui_manager)
@@ -854,10 +874,70 @@ class GardenScene(Scene):
                 self._inspector.update(
                     self.grid, self.entity_manager, self._canvas.hover_cell
                 )
+        self._update_weather_effects(dt)
         if self.elapsed >= EVALUATION_TIME and not self._evaluation_offered:
             self._evaluation_offered = True
             self.open_evaluation()
 
+    def _update_weather_effects(self, dt: float) -> None:
+        """Drive the post-process shaders from real state, every frame.
+
+        Nothing here decides what the weather or the soil *is* --
+        `WeatherSystem` and `scoring.soil_health` already did that. This
+        only ever translates their numbers into a shader's own uniforms,
+        so the visual can never disagree with what the HUD or the
+        evaluation screen says about the same plot.
+        """
+        if self._storm is not None:
+            rain_reference = WEATHER_TABLE["rainy"].moisture_gain_per_second
+            self._storm.rain = (
+                min(1.0, self.weather.moisture_gain_per_second / rain_reference)
+                if rain_reference > 0.0
+                else 0.0
+            )
+            self._storm.update(dt)
+        if self._vignette is not None:
+            self._vignette.intensity = (
+                COLD_SNAP_VIGNETTE_INTENSITY
+                if self.weather.cold_snap
+                else BASE_VIGNETTE_INTENSITY
+            )
+        if self._soil_health_effect is not None:
+            any_tilled = any(
+                soil.soil_type == "tilled_dirt"
+                for row in self.grid.soil
+                for soil in row
+            )
+            self._soil_health_effect.health = soil_health(self.grid)
+            self._soil_health_effect.strength = (
+                SOIL_HEALTH_GRADE_STRENGTH if any_tilled else 0.0
+            )
+
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Clear the world; the grid itself draws as UI (`GardenGridCanvas`)."""
+        """Clear the world, draw the plot into it, then grade the result.
+
+        The tool bar, the HUD and every overlay still draw through the UI
+        pass as always; only the grid moved (Phase 5) -- see
+        `garden_widget.py`'s module docstring for why.
+        """
         world_renderer.clear(art.WORLD_BACKDROP)
+        if self._canvas is not None:
+            self._canvas.render_world(world_renderer)
+        self._run_post_process()
+
+    def _run_post_process(self) -> None:
+        """Run the post-process pass by hand.
+
+        `Application._render_with_graph()` only ever executes the render
+        graph's own `final` pass, never anything in between -- the same
+        gap `mourisco_ressonancia.scenes`'s `_run_lighting_passes()`
+        works around for its lighting passes -- so this scene drives its
+        one middle pass itself, leaving `final` to blit the graded result
+        to the screen. `get_pass` is checked for None rather than assumed
+        anyway, the same defensive shape that scene uses, in case a
+        future bootstrap change ever drops the pass.
+        """
+        graph = self.container.get(RenderGraph)
+        post_process_pass = graph.get_pass("post_process")
+        if post_process_pass is not None:
+            post_process_pass.execute(graph.ctx, graph)

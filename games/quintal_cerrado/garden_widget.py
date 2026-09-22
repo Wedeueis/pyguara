@@ -1,4 +1,4 @@
-"""GardenGridCanvas: the plot's own drawing surface, click input and juice.
+"""GardenGridCanvas: the plot's click input and juice; drawing is elsewhere.
 
 A deliberate, novel combination: no existing capstone clicks on *world*
 content through the UI system. `pyguara.ui.components.canvas.Canvas`
@@ -9,6 +9,16 @@ focus-stack-aware mouse input for free by being a `Canvas` subclass,
 instead of adding a second, unexercised raw-`InputManager` mouse path.
 `Slider._process_input` is the closest existing precedent for the pattern,
 not an exact one: nothing else turns a click into *game* state this way.
+
+Rendering itself moved out of the UI pass in the fun-improvement roadmap's
+Phase 5: `render()` (what `UIManager` calls) is a deliberate no-op, and
+`render_world()` -- called directly by `scenes.GardenScene.render()` --
+holds the real drawing, through the world `IRenderer` instead of
+`UIRenderer`. Input routing (`_process_input`, `hover_cell`, the rect
+`UIManager` hit-tests against) is entirely unaffected: nothing about
+*where a click lands* changed, only *how the result gets drawn* -- see
+`bootstrap.py` for why (the world pass is what post-process shaders can
+see; the UI pass, still true for the tool bar and the HUD, is not).
 
 Also owns the plot's visual feedback: a `juice.Motes` particle burst on
 tilling, watering, harvesting, and every plant stage change (including the
@@ -44,7 +54,7 @@ from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell, cell_to_world, neighbors8
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.ui.components.canvas import Canvas
 from pyguara.ui.types import UIEventType
 
@@ -399,7 +409,15 @@ class GardenGridCanvas(Canvas):
         self._play(sfx)
 
     def render(self, renderer: UIRenderer) -> None:
-        """Draw every soil cell, then whatever occupies it, then particles."""
+        """Do nothing -- `UIManager` still calls this, but drawing itself
+        happens in `render_world()`. See the module docstring for why."""
+
+    def render_world(self, renderer: IRenderer) -> None:
+        """Draw every soil cell, then whatever occupies it, then particles.
+
+        Called directly by `scenes.GardenScene.render()`, not by
+        `UIManager` -- see the module docstring.
+        """
         terrain = self.grid.tilemap.layers["terrain"]
         for y in range(GRID_HEIGHT):
             for x in range(GRID_WIDTH):
@@ -436,12 +454,12 @@ class GardenGridCanvas(Canvas):
             renderer.draw_rect(
                 self.rect, Color(*ALERT_COLOR, int(ALERT_MAX_ALPHA * self._alert))
             )
+        # No `for child in self.children: child.render(...)` here: nothing
+        # ever adds a child to this canvas (it draws the whole plot itself),
+        # and a generic UI child would expect `UIRenderer` regardless.
+        renderer.end_frame()
 
-        for child in self.children:
-            if child.visible:
-                child.render(renderer)
-
-    def _draw_plants(self, renderer: UIRenderer) -> None:
+    def _draw_plants(self, renderer: IRenderer) -> None:
         """Draw every planted cell's plant, at its current growth stage.
 
         Reads each occupant's `PlantComponent` fresh rather than caching a
@@ -489,7 +507,7 @@ class GardenGridCanvas(Canvas):
             return None
         return entity.get_component(AutomationComponent)
 
-    def _draw_structures(self, renderer: UIRenderer) -> None:
+    def _draw_structures(self, renderer: IRenderer) -> None:
         """Draw every placed structure, then each sensor's readout bars.
 
         The readouts go under the plants but over the soil, on every cell

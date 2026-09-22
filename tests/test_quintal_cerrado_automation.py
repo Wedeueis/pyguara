@@ -523,9 +523,9 @@ class TestRendering:
     ) -> None:
         from unittest.mock import MagicMock
 
-        from pyguara.graphics.protocols import UIRenderer
+        from pyguara.graphics.protocols import IRenderer
 
-        renderer = MagicMock(spec=UIRenderer)
+        renderer = MagicMock(spec=IRenderer)
         _place(scene, "solar_panel", (0, 0))
         _place(scene, "drip_irrigation", (2, 0))
         _place(scene, "soil_sensor", (4, 0))
@@ -535,11 +535,11 @@ class TestRendering:
 
         _tick(scene, 0.1)
         scene._canvas.update(1 / 60)
-        scene._canvas.render(renderer)
+        scene._canvas.render_world(renderer)
         scene.entity_manager.get_entity(scene.grid.automation_at[(2, 0)]).get_component(
             AutomationComponent
         ).powered = False
-        scene._canvas.render(renderer)
+        scene._canvas.render_world(renderer)
 
         assert renderer.draw_circle.called
         assert renderer.draw_line.called

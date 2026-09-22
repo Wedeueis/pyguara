@@ -33,6 +33,7 @@ from games.quintal_cerrado.economy import (
 from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
 from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene
+from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.systems import weed_spread_system as weed_module
 from games.quintal_cerrado.systems.weed_spread_system import (
@@ -46,6 +47,8 @@ from pyguara.common.random import RandomStream
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.vfx.effects.storm import StormEffect
+from pyguara.graphics.vfx.effects.vignette import VignetteEffect
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
 from pyguara.persistence.manager import PersistenceManager
@@ -81,6 +84,11 @@ def game_container(tmp_path: Path) -> DIContainer:
     container.register_instance(UIRenderer, MagicMock(spec=UIRenderer))  # type: ignore[type-abstract]
     container.register_instance(IAudioSystem, MagicMock(spec=IAudioSystem))  # type: ignore[type-abstract]
     container.register_singleton(AudioManager, AudioManager)
+    # GPU-owning effects: see the identical comment in
+    # test_quintal_cerrado_screens.py's `game_container` fixture.
+    container.register_instance(StormEffect, MagicMock(spec=StormEffect))
+    container.register_instance(VignetteEffect, MagicMock(spec=VignetteEffect))
+    container.register_instance(SoilHealthEffect, MagicMock(spec=SoilHealthEffect))
     input_manager = InputManager(dispatcher, MagicMock(spec=IInputBackend))
     container.register_instance(InputManager, input_manager)
     # A real store in a temp directory: the garden saves on exit, and a test

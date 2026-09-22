@@ -1,12 +1,14 @@
 """Lightweight visual feedback for the plot: dirt/pollen particle motes.
 
 Adapted from the pooled-particle pattern `pyguara.graphics.vfx.sparks.Sparks`
-uses, but typed against `UIRenderer` rather than `IRenderer`: the plot has
-no camera or world space at all (Phase 1's bootstrap deliberately registers
-neither -- see `bootstrap.py`), and everything here draws straight in the
-screen-space coordinates `GardenGridCanvas` already computes for a cell, so
-reusing `Sparks` itself would mean satisfying a renderer type it was never
-meant to take.
+uses, rather than reused outright: `Sparks` expects a `Camera2D`-driven
+world, and this plot still has no camera (the fun-improvement roadmap's
+Phase 5 put the grid's own drawing through `IRenderer` -- see
+`bootstrap.py`/`garden_widget.py` -- but never gave it a scrolling world
+to need a camera for), so the type this module now shares with `Sparks`
+is `IRenderer`, but not the camera plumbing that comes with it. Everything
+here still draws straight in the screen-space coordinates
+`GardenGridCanvas` already computes for a cell.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from dataclasses import dataclass, field
 
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
-from pyguara.graphics.protocols import UIRenderer
+from pyguara.graphics.protocols import IRenderer
 
 
 @dataclass(slots=True)
@@ -100,7 +102,7 @@ class Motes:
             )
             mote.position = mote.position + mote.velocity * dt
 
-    def render(self, renderer: UIRenderer) -> None:
+    def render(self, renderer: IRenderer) -> None:
         """Draw every live particle."""
         for mote in self._pool:
             if not mote.active:
@@ -191,7 +193,7 @@ class FloatingLabels:
                 continue
             label.position = label.position + self.DRIFT * dt
 
-    def render(self, renderer: UIRenderer) -> None:
+    def render(self, renderer: IRenderer) -> None:
         """Draw every live label, faded by its remaining life."""
         for label in self._pool:
             if not label.active:

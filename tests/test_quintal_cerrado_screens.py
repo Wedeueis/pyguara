@@ -24,6 +24,7 @@ from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.garden_widget import GardenGridCanvas
 from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
+from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.manager import AudioManager
@@ -33,6 +34,8 @@ from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.input import MouseButtonEvent
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.vfx.effects.storm import StormEffect
+from pyguara.graphics.vfx.effects.vignette import VignetteEffect
 from pyguara.input.events import OnActionEvent
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
@@ -67,9 +70,8 @@ def ui(dispatcher: EventDispatcher) -> UIManager:
 
 @pytest.fixture
 def renderer() -> Any:
-    mock = MagicMock(spec=UIRenderer)
-    mock.get_text_size.return_value = (40, 16)
-    return mock
+    """A world renderer -- `render_world()` (Phase 5) is what this feeds."""
+    return MagicMock(spec=IRenderer)
 
 
 @pytest.fixture
@@ -90,6 +92,14 @@ def game_container(
     container.register_instance(UIRenderer, MagicMock(spec=UIRenderer))  # type: ignore[type-abstract]
     container.register_instance(IAudioSystem, MagicMock(spec=IAudioSystem))  # type: ignore[type-abstract]
     container.register_singleton(AudioManager, AudioManager)
+    # GPU-owning effects: real ones need a live moderngl context this
+    # headless suite never has (see `bootstrap.py`), so every scene test
+    # gets a mock instead -- `scenes.py` only ever sets plain attributes
+    # on these (`.rain`, `.intensity`, `.health`, `.strength`) and calls
+    # `.update(dt)`, none of which needs a real shader program behind it.
+    container.register_instance(StormEffect, MagicMock(spec=StormEffect))
+    container.register_instance(VignetteEffect, MagicMock(spec=VignetteEffect))
+    container.register_instance(SoilHealthEffect, MagicMock(spec=SoilHealthEffect))
     input_manager = InputManager(dispatcher, MagicMock(spec=IInputBackend))
     container.register_instance(InputManager, input_manager)
     # `TitleScene._on_play` registers `GardenScene` and pushes it, which
@@ -437,7 +447,7 @@ class TestTheGardenScreen:
         scene._canvas.celebrate_compost((3, 3))
 
         scene._canvas.update(1 / 60)
-        scene._canvas.render(renderer)
+        scene._canvas.render_world(renderer)
 
         assert renderer.draw_rect.called
         assert renderer.draw_text.called
