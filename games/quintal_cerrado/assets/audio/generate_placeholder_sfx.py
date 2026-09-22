@@ -110,6 +110,32 @@ def _mix(*segments: Samples) -> Samples:
     return out
 
 
+def _transient(duration: float, amplitude: float, rng: random.Random) -> Samples:
+    """A very short, sharply-decaying burst of noise.
+
+    A pure tone's onset reads as sluggish no matter how fast its own
+    attack ramps -- the ear judges "instant" by a broadband, noise-like
+    rise, not a single frequency fading in. Mixed under a low tone's own
+    attack (and pre-decayed here so `_mix`'s zero-padding doesn't truncate
+    it into an audible click of its own), this is what turns a soft thud
+    into something that feels like it landed the moment the click did,
+    instead of arriving a beat late.
+    """
+    return _envelope(_noise(duration, amplitude, rng), attack=0.0005, decay_rate=90.0)
+
+
+def _rng_for(name: str) -> random.Random:
+    """A fresh, independent stream for one sound's noise, seeded by its name.
+
+    Every noise-using sound used to share one `random.Random`, threaded
+    through `_build_sounds` in dict order -- editing (or adding a noise
+    call to) an earlier sound shifted every later one's draws too, so an
+    unrelated sound's bytes changed on a re-run for no audible reason. A
+    per-name seed makes each sound's noise depend only on its own code.
+    """
+    return random.Random(f"{_RNG_SEED}:{name}")
+
+
 def _write_wav(path: Path, samples: Samples) -> None:
     """Clamp to [-1, 1], convert to 16-bit PCM, and write a mono `.wav`."""
     frames = struct.pack(
@@ -123,11 +149,21 @@ def _write_wav(path: Path, samples: Samples) -> None:
         wav_file.writeframes(frames)
 
 
-def _build_sounds(rng: random.Random) -> dict[str, Samples]:
-    """The full placeholder catalogue, keyed by filename stem."""
+def _build_sounds() -> dict[str, Samples]:
+    """The full placeholder catalogue, keyed by filename stem.
+
+    Each entry that needs noise draws from its own `_rng_for(name)` stream,
+    so editing one sound never perturbs another's bytes on a re-run.
+    """
     return {
-        # Tilling: a dull, low thud -- turning dirt, not a bell.
-        "till": _envelope(_sine(110.0, 0.14, 0.6), decay_rate=14.0),
+        # Tilling: a dull, low thud with a sharp crack of dirt breaking on
+        # top -- the crack is what makes it read as landing on the click,
+        # not a beat after it (a pure low tone's onset alone feels soft).
+        "till": _envelope(
+            _mix(_transient(0.05, 0.55, _rng_for("till")), _sine(110.0, 0.14, 0.6)),
+            attack=0.001,
+            decay_rate=14.0,
+        ),
         # Watering: a quick downward droplet.
         "water": _envelope(_sweep(900.0, 380.0, 0.16, 0.5), decay_rate=10.0),
         # Planting: a soft, small pop.
@@ -145,10 +181,13 @@ def _build_sounds(rng: random.Random) -> dict[str, Samples]:
         ),
         # Compost: a soft organic rustle -- noise, not a tone.
         "compost": _envelope(
-            _mix(_noise(0.16, 0.35, rng), _sine(180.0, 0.16, 0.2)), decay_rate=9.0
+            _mix(_noise(0.16, 0.35, _rng_for("compost")), _sine(180.0, 0.16, 0.2)),
+            decay_rate=9.0,
         ),
         # Chemical spray: a thin hiss.
-        "spray": _envelope(_noise(0.18, 0.4, rng), attack=0.01, decay_rate=8.0),
+        "spray": _envelope(
+            _noise(0.18, 0.4, _rng_for("spray")), attack=0.01, decay_rate=8.0
+        ),
         # Infestation: a low, dissonant beat between two close frequencies.
         "infested": _envelope(
             _mix(_sine(110.0, 0.32, 0.35), _sine(116.0, 0.32, 0.35)), decay_rate=5.0
@@ -162,7 +201,7 @@ def _build_sounds(rng: random.Random) -> dict[str, Samples]:
         # Placing a structure: a short mechanical click.
         "build": _concat(
             _envelope(_square(200.0, 0.03, 0.35), decay_rate=40.0),
-            _envelope(_noise(0.03, 0.2, rng), decay_rate=40.0),
+            _envelope(_noise(0.03, 0.2, _rng_for("build")), decay_rate=40.0),
         ),
         # Outbreak starting: an urgent two-tone alarm.
         "outbreak_start": _concat(
@@ -184,8 +223,7 @@ def _build_sounds(rng: random.Random) -> dict[str, Samples]:
 def main() -> None:
     """Regenerate every placeholder `.wav` next to this script."""
     out_dir = Path(__file__).parent
-    rng = random.Random(_RNG_SEED)
-    for name, samples in _build_sounds(rng).items():
+    for name, samples in _build_sounds().items():
         _write_wav(out_dir / f"{name}.wav", samples)
         print(f"wrote {name}.wav ({len(samples) / SAMPLE_RATE:.2f}s)")
 
