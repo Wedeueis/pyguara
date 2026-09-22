@@ -273,7 +273,7 @@ class MenuScene(_ClearingScene):
             size=18,
         )
 
-        fx.run_pipeline(self.camera)
+        fx.configure_pipeline(self.camera)
 
 
 class ArenaScene(_ClearingScene):
@@ -822,7 +822,7 @@ class ArenaScene(_ClearingScene):
         self._draw_hud_text(world_renderer)
         fx.popups.render(world_renderer, self.camera)
 
-        fx.run_pipeline(self.camera)
+        fx.configure_pipeline(self.camera)
 
     def _draw_player(self, renderer: IRenderer, offset: Vector2) -> None:
         """Draw the anteater and whatever is coming out of its snout."""
@@ -1049,4 +1049,4 @@ class GameOverScene(_ClearingScene):
             size=18,
         )
 
-        self.fx.run_pipeline(self.camera)
+        self.fx.configure_pipeline(self.camera)

@@ -132,13 +132,15 @@ def begin_world(container: DIContainer) -> None:
     container.get(RenderGraph).fbo_manager.get_or_create("world").bind()
 
 
-def run_pipeline(container: DIContainer, camera: Camera2D) -> None:
-    """Execute light -> composite -> post-process for this frame.
+def configure_pipeline(container: DIContainer, camera: Camera2D) -> None:
+    """Point the light pass at this frame's camera.
 
-    `Application` binds the world buffer, lets the scene draw into it, and
-    then runs only the graph's `final` pass -- so everything between the
-    world buffer and the screen happens here, at the end of a scene's
-    `render()`. Both scenes that draw a world call it.
+    `Application._render_with_graph()` executes every pass in the graph
+    itself (in registration order, skipping only `"world"`, which it
+    binds, clears and lets the scene draw into first) -- this only
+    configures the one piece of per-frame state execution alone cannot
+    know: where the camera is this frame. Both scenes that draw a world
+    call it, at the end of their own `render()`.
 
     Args:
         container: The game's DI container.
@@ -146,13 +148,9 @@ def run_pipeline(container: DIContainer, camera: Camera2D) -> None:
             geometry the scene just drew.
     """
     graph = container.get(RenderGraph)
-    for name in ("light", "composite", "post_process"):
-        render_pass = graph.get_pass(name)
-        if render_pass is None:
-            continue
-        if name == "light":
-            render_pass.set_camera(camera)
-        render_pass.execute(graph.ctx, graph)
+    light_pass = graph.get_pass("light")
+    if light_pass is not None:
+        light_pass.set_camera(camera)
 
 
 def configure_game_container() -> DIContainer:

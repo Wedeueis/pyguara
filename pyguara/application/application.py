@@ -497,8 +497,20 @@ class Application:
     def _render_with_graph(self, alpha: float) -> None:
         """Draw through the multi-pass render graph (ModernGL backend).
 
-        The world is drawn into an offscreen buffer, the final pass blits it to
-        the screen, and UI is drawn on top.
+        The world is drawn into an offscreen buffer, every other registered
+        pass then runs in registration order (light, composite,
+        post-process, final -- whatever a bootstrap actually assembled),
+        and UI is drawn on top.
+
+        Before this, only the graph's `"final"` pass ever ran here -- a
+        game whose graph had passes in between (lighting, post-processing)
+        had to execute them itself, which every ModernGL demo in this repo
+        (`true_coral`, `protocolo_bandeira`, `mourisco_ressonancia`) did,
+        each hand-rolling the identical `for name in (...): pass.execute()`
+        loop from its own scene code. That workaround still configures
+        each pass's per-frame state (a camera, a set of lights) that only
+        the scene knows -- this loop cannot invent that -- but the
+        executing itself belongs here, once, not once per game.
 
         Args:
             alpha: Interpolation factor between the last two fixed steps.
@@ -513,13 +525,20 @@ class Application:
         world_fbo.bind()
         world_fbo.clear(self._config_manager.config.display.default_color)
 
-        # Render scenes to the world FBO
+        # Render scenes to the world FBO. `WorldPass` itself is not run:
+        # its own camera-gated `Renderable` queue is a second, unrelated
+        # drawing path (see its own docstring) that no current game
+        # submits to -- every one of them draws immediately here instead,
+        # which needs the "world" FBO bound first, exactly as above.
         self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
 
-        # Execute final pass to blit world FBO to screen
-        final_pass = self._render_graph.get_pass("final")
-        if final_pass is not None:
-            final_pass.execute(self._render_graph.ctx, self._render_graph)
+        # Every other pass, in the order its bootstrap registered them --
+        # light/composite/post-process (whichever exist) and finally
+        # `"final"`, which blits the result to the screen.
+        for render_pass in self._render_graph.passes:
+            if render_pass.name == "world" or not render_pass.enabled:
+                continue
+            render_pass.execute(self._render_graph.ctx, self._render_graph)
 
         # Render UI on top (directly to screen)
         self._ui_manager.render(self._ui_renderer)
