@@ -123,9 +123,7 @@ from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
-from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.vfx.effects.storm import StormEffect
 from pyguara.graphics.vfx.effects.vignette import VignetteEffect
@@ -211,33 +209,6 @@ from `_TOOL_KEYS`, and its button is not in `_tool_buttons`."""
 _TOOL_BAR_BUTTON_SIZE = Vector2(114, 34)
 _TOOL_BAR_SPACING = 6
 _TOOL_BAR_ROW_GAP = 6
-
-
-def _run_post_process(container: DIContainer) -> None:
-    """Run the render graph's post-process pass by hand.
-
-    `Application._render_with_graph()` only ever executes the render
-    graph's own `final` pass, never anything in between -- the same gap
-    `mourisco_ressonancia.scenes`'s `_run_lighting_passes()` works around
-    for its lighting passes -- so every scene that draws through this
-    graph has to drive its one middle pass itself, leaving `final` to
-    blit the graded result to the screen.
-
-    Every scene, not just `GardenScene`: `final` always reads from
-    `"post_processed"`, so a scene that never populates that buffer (the
-    bug this fixes -- `TitleScene` used to be exactly that scene) shows
-    whatever was last left in it, which on the very first frame is
-    nothing -- a black window, real OpenGL context and all, no crash to
-    even point at it. `get_pass` is checked for None rather than assumed,
-    in case a future bootstrap change ever drops the pass.
-
-    Args:
-        container: The scene's own DI container.
-    """
-    graph = container.get(RenderGraph)
-    post_process_pass = graph.get_pass("post_process")
-    if post_process_pass is not None:
-        post_process_pass.execute(graph.ctx, graph)
 
 
 class TitleScene(Scene):
@@ -330,9 +301,13 @@ class TitleScene(Scene):
         """Nothing animates yet."""
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Clear to the world backdrop, grade it, then the menu is UI on top."""
+        """Clear to the world backdrop; the menu is UI on top of it.
+
+        The post-process pass that grades this is not run from here:
+        `Application` executes every render-graph pass itself, after all
+        scenes have drawn.
+        """
         world_renderer.clear(art.WORLD_BACKDROP)
-        _run_post_process(self.container)
 
 
 class GardenScene(Scene):
@@ -943,7 +918,7 @@ class GardenScene(Scene):
             )
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Clear the world, draw the plot into it, then grade the result.
+        """Clear the world and draw the plot into it; `Application` grades it.
 
         The tool bar, the HUD and every overlay still draw through the UI
         pass as always; only the grid moved (Phase 5) -- see
@@ -952,4 +927,3 @@ class GardenScene(Scene):
         world_renderer.clear(art.WORLD_BACKDROP)
         if self._canvas is not None:
             self._canvas.render_world(world_renderer)
-        _run_post_process(self.container)
