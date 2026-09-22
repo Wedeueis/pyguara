@@ -136,6 +136,7 @@ class Script:
     shots: set[int] = field(default_factory=set)
     keys: list[tuple[int, int]] = field(default_factory=list)
     clicks: list[tuple[int, int, int]] = field(default_factory=list)
+    moves: list[tuple[int, int, int]] = field(default_factory=list)
 
 
 def parse_at(value: str, what: str) -> tuple[str, int]:
@@ -367,6 +368,11 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
         for at, key in script.keys:
             if at == tick:
                 pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=key))
+        for at, x, y in script.moves:
+            if at == tick:
+                pygame.event.post(
+                    pygame.event.Event(pygame.MOUSEMOTION, pos=(x, y), rel=(0, 0))
+                )
         for at, x, y in script.clicks:
             if at == tick:
                 pygame.event.post(
@@ -437,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
             "  agent_view.py guara_falcao --frames 120 --shot 1 --shot 119\n"
             "  agent_view.py guara_falcao --press RETURN@20 --shot 40\n"
             "  agent_view.py ui_scene_graph --click 400,300@30 --shot 45\n"
+            "  agent_view.py quintal_cerrado --move 200,200@30 --shot 60\n"
             "  agent_view.py physics_integration --every 30\n"
         ),
     )
@@ -465,6 +472,15 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         metavar="X,Y@TICK",
         help="click a point on a frame, e.g. 400,300@30; repeatable",
+    )
+    parser.add_argument(
+        "--move",
+        action="append",
+        default=[],
+        metavar="X,Y@TICK",
+        help="move the cursor to a point on a frame, e.g. 400,300@30; "
+        "repeatable. What hover states and tooltips need: a click alone "
+        "never tells the UI where the cursor is",
     )
     parser.add_argument(
         "--out", type=Path, default=DEFAULT_OUT, help=f"output dir ({DEFAULT_OUT.name})"
@@ -504,13 +520,17 @@ def main(argv: list[str] | None = None) -> int:
     for raw in args.press:
         name, at = parse_at(raw, "press")
         script.keys.append((at, resolve_key(name)))
-    for raw in args.click:
-        point, at = parse_at(raw, "click")
-        try:
-            x_str, y_str = point.split(",")
-            script.clicks.append((at, int(x_str), int(y_str)))
-        except ValueError:
-            raise SystemExit(f"--click: expected X,Y@TICK, got {raw!r}") from None
+    for flag, raw_values, target in (
+        ("click", args.click, script.clicks),
+        ("move", args.move, script.moves),
+    ):
+        for raw in raw_values:
+            point, at = parse_at(raw, flag)
+            try:
+                x_str, y_str = point.split(",")
+                target.append((at, int(x_str), int(y_str)))
+            except ValueError:
+                raise SystemExit(f"--{flag}: expected X,Y@TICK, got {raw!r}") from None
 
     return run(args.demo, script, args.out)
 
