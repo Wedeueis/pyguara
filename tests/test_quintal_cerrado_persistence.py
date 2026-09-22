@@ -899,7 +899,7 @@ class TestTheHud:
         scene.update(1 / 60)
         assert scene._hud is not None
         assert scene._hud.clock_label.text == "Day 2  07:05/15:00"
-        assert scene._hud.power_label.text == "Power: no solar"
+        assert scene._hud.resources.power == (0, 0)
 
         scene.economy.inventory["solar_panel"] = 1
         structures.place_structure(
@@ -912,7 +912,7 @@ class TestTheHud:
         _tick(scene, 0.1)
         scene.update(1 / 60)
 
-        assert scene._hud.power_label.text == "Power: 1/3"
+        assert scene._hud.resources.power == (1, 3)
 
     def test_the_inspector_prompts_until_something_is_hovered(
         self, scene: GardenScene

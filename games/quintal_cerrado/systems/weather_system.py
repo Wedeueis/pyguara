@@ -91,6 +91,15 @@ class WeatherSystem:
         """The upcoming `condition_id`s, nearest first."""
         return list(self._queue)
 
+    @property
+    def condition_progress(self) -> float:
+        """How far the current condition has run, 0.0 to 1.0.
+
+        What the HUD's weather card fills its bar from, so "how long is
+        this rain going to last" is answerable without counting seconds.
+        """
+        return min(1.0, self._timer / CONDITION_DURATION)
+
     def update(self, dt: float) -> None:
         """Advance the clock, and change condition once it comes due."""
         self._timer += dt

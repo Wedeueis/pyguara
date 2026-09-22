@@ -88,7 +88,7 @@ from games.quintal_cerrado.garden_widget import (
     WARN_COLOR,
     GardenGridCanvas,
 )
-from games.quintal_cerrado.hud import CellInspector, Hud, WeatherPanel
+from games.quintal_cerrado.hud import CellInspector, Hud
 from games.quintal_cerrado.hud_widgets import DockGroup, SlotSpec, ToolDock, ToolSlot
 from games.quintal_cerrado.pause import PauseScene
 from games.quintal_cerrado.persistence_schema import (
@@ -99,7 +99,7 @@ from games.quintal_cerrado.persistence_schema import (
     to_save_payload,
 )
 from games.quintal_cerrado.plant_states import build_plant_ai
-from games.quintal_cerrado.scoring import compute_score, soil_health
+from games.quintal_cerrado.scoring import Score, compute_score, soil_health
 from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from games.quintal_cerrado.species import (
     SPECIES_TABLE,
@@ -406,7 +406,6 @@ class GardenScene(Scene):
         self._soil_health_effect: SoilHealthEffect | None = None
         self._canvas: GardenGridCanvas | None = None
         self._hud: Hud | None = None
-        self._weather_panel: WeatherPanel | None = None
         self._inspector: CellInspector | None = None
         self._tool_buttons: dict[str, ToolSlot] = {}
         self._store_button: ToolSlot | None = None
@@ -434,7 +433,6 @@ class GardenScene(Scene):
         self._hud = Hud(
             ui_manager, layout.GRID_RECT.y + CellInspector.HEIGHT + layout.GAP
         )
-        self._weather_panel = WeatherPanel(ui_manager)
         self._create_entities()
         self._register_systems()
         if self._load_requested:
@@ -651,6 +649,14 @@ class GardenScene(Scene):
             )
         )
         scene_manager.push_scene("PauseScene", pause_below=True)
+
+    def _score(self) -> Score:
+        """Score the plot as it stands, for the resilience bar.
+
+        The same call `open_evaluation` grades with, so the ribbon and the
+        evaluation screen can never disagree about the same garden.
+        """
+        return compute_score(self.grid, self.entity_manager, self.economy)
 
     def open_evaluation(self) -> None:
         """Save, then show the Agroecological Score over the garden.
@@ -886,12 +892,22 @@ class GardenScene(Scene):
             else (0, 0)
         )
         if self._hud is not None:
-            self._hud.update(dt, self.economy, self.conditions, self.elapsed, power)
+            self._hud.update(
+                dt,
+                self.economy,
+                self.conditions,
+                self.elapsed,
+                power,
+                self._score,
+            )
         self._refresh_tool_slots()
         weather_system = self.system_manager.get_system(WeatherSystem)
-        if self._weather_panel is not None and weather_system is not None:
-            self._weather_panel.update(
-                weather_system.state.condition_id, weather_system.forecast
+        if self._hud is not None and weather_system is not None:
+            self._hud.update_weather(
+                weather_system.state.condition_id,
+                weather_system.forecast,
+                weather_system.condition_progress,
+                self.elapsed,
             )
         if self._canvas is not None:
             self._canvas.darkness = darkness(self.elapsed)
