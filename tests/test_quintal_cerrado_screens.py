@@ -365,7 +365,30 @@ class TestTheGardenScreen:
         scene.update(1 / 60)
 
         assert scene._hud is not None
-        assert scene._hud.credits_label.text == "Sementes: 42"
+        # The pouch icon beside it says what the number counts.
+        assert scene._hud.credits_label.text == "42"
+
+    def test_a_whole_ui_frame_updates_and_renders(
+        self, game_container: DIContainer
+    ) -> None:
+        """Drive the real `UIManager` lifecycle over the ribbon and dock.
+
+        The cards take their values through `refresh()`, never `update()`:
+        `UIElement.update(dt)` is the engine's own per-frame hook, which
+        `UIManager` calls on every element, so a card that overrode it
+        with its own arguments crashed the first frame -- which no test of
+        a card in isolation could see.
+        """
+        scene = self._entered_scene(game_container)
+        scene.update(1 / 60)
+        ui_manager = game_container.get(UIManager)
+        renderer = MagicMock(spec=UIRenderer)
+        renderer.get_text_size.return_value = (20, 12)
+
+        ui_manager.update(1 / 60)
+        ui_manager.render(renderer)
+
+        assert renderer.draw_rect.called
 
     def test_hud_shows_an_outbreak(self, game_container: DIContainer) -> None:
         scene = self._entered_scene(game_container)

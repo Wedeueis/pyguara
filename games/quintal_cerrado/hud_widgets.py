@@ -82,11 +82,14 @@ def draw_badge(
     """
     text_w, text_h = renderer.get_text_size(text, size)
     icon_w = text_h if icon_id else 0
-    rect = Rect(int(position.x), int(position.y), text_w + icon_w + 6, text_h + 2)
+    gap = 3 if icon_id else 0
+    rect = Rect(int(position.x), int(position.y), text_w + icon_w + gap + 8, text_h + 2)
     renderer.draw_rect(rect, BADGE_FILL, border_radius=3)
     if icon_id:
-        draw_icon(renderer, icon_id, Rect(rect.x + 2, rect.y + 1, icon_w, text_h))
-    renderer.draw_text(text, Vector2(rect.x + 3 + icon_w, rect.y + 1), color, size)
+        draw_icon(renderer, icon_id, Rect(rect.x + 3, rect.y + 1, icon_w, text_h))
+    renderer.draw_text(
+        text, Vector2(rect.x + 4 + icon_w + gap, rect.y + 1), color, size
+    )
     return rect
 
 

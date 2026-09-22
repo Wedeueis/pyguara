@@ -1,23 +1,22 @@
-"""The garden HUD: a status card, a weather card, a toast and an inspector.
+"""The garden HUD: the ribbon's three cards, a toast, and the inspector.
 
-Each is a `hud_widgets.CardPanel` holding stock widgets -- `ProgressBar`
-and `Label`, skinned by the theme -- plus `icons.py` glyphs, with nothing
-invented. Everything shown is real state: Sementes are `PlayerEconomy.credits`,
-the clock is the scene's own, power is `AutomationSystem`'s real budget, the
-status line is `GardenConditions.phase`, and the inspector reads the
-`SoilCell` and plant under the cursor.
+`Hud` owns the top ribbon (`ribbon.py` -- resources, weather, resilience)
+and the message toast; `CellInspector` is the card under them in the right
+column. Everything shown is real state: Sementes are
+`PlayerEconomy.credits`, the clock is the scene's own, power is
+`AutomationSystem`'s real budget, the status line is
+`GardenConditions.phase`, the resilience bar is `scoring.compute_score`,
+and the inspector reads the `SoilCell` and plant under the cursor.
 
-Where each piece sits is `layout.py`'s call: the status card and the
-weather card open the top ribbon, and the inspector and the message toast
-share the column right of the grid.
+Where each piece sits is `layout.py`'s call.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from games.quintal_cerrado import layout
-from games.quintal_cerrado.clock import format_clock
 from games.quintal_cerrado.components import (
-    GENERIC_SEED_KEY,
     AutomationComponent,
     GardenConditions,
     PlantComponent,
@@ -26,9 +25,10 @@ from games.quintal_cerrado.components import (
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.hud_widgets import CardPanel
 from games.quintal_cerrado.icons import draw_icon
+from games.quintal_cerrado.ribbon import ResilienceCard, ResourceCard, WeatherCard
+from games.quintal_cerrado.scoring import Score
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
-from games.quintal_cerrado.weather import WEATHER_TABLE
 from pyguara.common.grid import Cell
 from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.manager import EntityManager
@@ -43,12 +43,6 @@ from pyguara.ui.types import UILayer
 MESSAGE_SECONDS = 2.5
 TOAST_HEIGHT = 34
 
-_STATUS_TEXT = {
-    "stable": "Garden: calm",
-    "outbreak": "PEST OUTBREAK!",
-    "resolved_organic": "Organic recovery",
-    "resolved_chemical": "Chemical recovery",
-}
 _SOIL_NAMES = {
     "raw_dirt": "Raw dirt",
     "tilled_dirt": "Tilled soil",
@@ -58,36 +52,22 @@ _SOIL_NAMES = {
 
 
 class Hud:
-    """Builds the status card and the message toast, and keeps them current."""
+    """Owns the ribbon's three cards and the message toast."""
 
     def __init__(self, ui_manager: UIManager, toast_y: int) -> None:
-        """Build the status card and the message toast.
+        """Build the ribbon and the toast.
 
         Args:
             ui_manager: The manager to add them to.
             toast_y: Where the toast's top edge sits in the right column.
         """
-        self.credits_label = Label("", Vector2(0, 0), font_size=20, color=Sand.C200)
-        self.clock_label = Label("", Vector2(0, 0), font_size=12)
-        self.power_label = Label("", Vector2(0, 0), font_size=12)
-        self.status_label = Label("", Vector2(0, 0), font_size=12)
-        self.seeds_label = Label("", Vector2(0, 0), font_size=12)
+        self.resources = ResourceCard()
+        self.weather = WeatherCard()
+        self.resilience = ResilienceCard()
+        for card in (self.resources, self.weather, self.resilience):
+            ui_manager.add_element(card, UILayer.HUD)
+
         self.message_label = Label("", Vector2(0, 0), font_size=13)
-        self._message_left = 0.0
-
-        card = layout.RESOURCE_CARD
-        panel = CardPanel(Vector2(card.x, card.y), Vector2(card.width, card.height))
-        for label, x, y in (
-            (self.credits_label, 12, 10),
-            (self.status_label, 12, 40),
-            (self.clock_label, 150, 10),
-            (self.power_label, 150, 27),
-            (self.seeds_label, 150, 44),
-        ):
-            label.rect.x, label.rect.y = card.x + x, card.y + y
-            panel.add_child(label)
-        ui_manager.add_element(panel, UILayer.HUD)
-
         self.toast = CardPanel(
             Vector2(layout.COLUMN_X, toast_y),
             Vector2(layout.COLUMN_WIDTH, TOAST_HEIGHT),
@@ -97,12 +77,28 @@ class Hud:
         self.toast.add_child(self.message_label)
         self.toast.visible = False
         ui_manager.add_element(self.toast, UILayer.HUD)
+        self._message_left = 0.0
+
+    @property
+    def credits_label(self) -> Label:
+        """The Sementes count, on the resource card."""
+        return self.resources.credits_label
+
+    @property
+    def status_label(self) -> Label:
+        """The pest status line, on the resource card."""
+        return self.resources.status_label
+
+    @property
+    def clock_label(self) -> Label:
+        """Day and time, on the weather card."""
+        return self.weather.clock_label
 
     def show_message(self, text: str) -> None:
-        """Show `text` on the message line for `MESSAGE_SECONDS`.
+        """Show `text` in the toast for `MESSAGE_SECONDS`.
 
         Args:
-            text: A short line -- the panel is not wide.
+            text: A short line -- the toast is one line tall.
         """
         self.message_label.set_text(text)
         self.toast.visible = bool(text)
@@ -115,67 +111,42 @@ class Hud:
         conditions: GardenConditions,
         elapsed: float,
         power: tuple[int, int],
+        compute_score: Callable[[], Score] | None = None,
     ) -> None:
         """Pull this frame's numbers out of the game.
 
         Args:
-            dt: Seconds since the last frame, for the message timer.
+            dt: Seconds since the last frame, for the message and score
+                timers.
             economy: The player's economy.
             conditions: The garden's pest situation.
-            elapsed: Seconds of play, for the clock.
+            elapsed: Seconds of play, for the clock and the day arc.
             power: `(devices powered, capacity)` from the solar panels.
+            compute_score: Returns a fresh `scoring.Score` for the
+                resilience bar. Called at most every
+                `ribbon.SCORE_INTERVAL` seconds, never per frame.
         """
-        self.credits_label.set_text(f"Sementes: {int(economy.credits)}")
-        self.clock_label.set_text(format_clock(elapsed))
-        used, capacity = power
-        self.power_label.set_text(
-            f"Power: {used}/{capacity}" if capacity else "Power: no solar"
-        )
-        self.status_label.set_text(_STATUS_TEXT.get(conditions.phase, conditions.phase))
-        generic_seeds = economy.inventory.get(GENERIC_SEED_KEY, 0)
-        self.seeds_label.set_text(f"Generic seed: {generic_seeds}")
+        self.resources.refresh(economy, conditions, power)
+        if compute_score is not None:
+            self.resilience.refresh(dt, compute_score)
         if self._message_left > 0.0:
             self._message_left -= dt
             if self._message_left <= 0.0:
                 self.message_label.set_text("")
                 self.toast.visible = False
 
-
-class WeatherPanel:
-    """Now, and what's coming -- a short weather forecast in the corner.
-
-    A separate card rather than a line on the status card (`Hud`, beside
-    it): that one is already packed, and this is meant to be glanced at ahead of an action ("rain's coming, skip
-    watering"), not read alongside credits and the clock.
-    """
-
-    def __init__(self, ui_manager: UIManager) -> None:
-        """Build the panel and add it to the HUD layer.
-
-        Args:
-            ui_manager: The manager to add it to.
-        """
-        self.now_label = Label("", Vector2(0, 0), font_size=14)
-        self.forecast_label = Label("", Vector2(0, 0), font_size=12)
-
-        card = layout.WEATHER_CARD
-        panel = CardPanel(Vector2(card.x, card.y), Vector2(card.width, card.height))
-        for label, offset_y in ((self.now_label, 12), (self.forecast_label, 38)):
-            label.rect.x, label.rect.y = card.x + 12, card.y + offset_y
-            panel.add_child(label)
-        ui_manager.add_element(panel, UILayer.HUD)
-
-    def update(self, condition_id: str, forecast: list[str]) -> None:
-        """Show the current condition and what is coming after it.
+    def update_weather(
+        self, condition_id: str, forecast: list[str], progress: float, elapsed: float
+    ) -> None:
+        """Hand the weather card the sky's state and the clock.
 
         Args:
             condition_id: `WeatherSystem.state.condition_id`.
             forecast: `WeatherSystem.forecast`, nearest first.
+            progress: `WeatherSystem.condition_progress`.
+            elapsed: Seconds of play.
         """
-        current = WEATHER_TABLE.get(condition_id)
-        self.now_label.set_text(f"Weather: {current.display_name if current else '?'}")
-        names = [WEATHER_TABLE[c].display_name for c in forecast if c in WEATHER_TABLE]
-        self.forecast_label.set_text(f"Next: {' then '.join(names)}" if names else "")
+        self.weather.refresh(condition_id, forecast, progress, elapsed)
 
 
 class CellInspector:

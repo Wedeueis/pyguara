@@ -75,6 +75,25 @@ class Label(Widget):
             self.text, Vector2(x, self.rect.y), final_color, self.font_size
         )
 
+    @property
+    def custom_color(self) -> Color | None:
+        """The colour set on this label, or None if it follows the theme."""
+        return self._custom_color
+
+    def set_color(self, color: Color | None) -> None:
+        """Change the text colour, or pass None to follow the theme again.
+
+        A label's colour was settable only at construction, so anything
+        that recolours live -- a status line turning red during a pest
+        outbreak, a value going negative -- had to reach into
+        `_custom_color`. No layout is invalidated: a colour does not
+        change the text's size.
+
+        Args:
+            color: The new colour, or None for the theme's body text.
+        """
+        self._custom_color = color
+
     def set_text(self, text: str) -> None:
         """Update the text and force a layout recalculation.
 
