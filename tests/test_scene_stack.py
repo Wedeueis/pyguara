@@ -191,6 +191,37 @@ class TestSceneStack:
         assert scene1.updated
         assert scene2.updated
 
+    def test_before_each_runs_immediately_before_every_stacked_scene(self):
+        """A scene below must not leave its render target to the one above.
+
+        `Application` passes `before_each` to re-bind the world buffer.
+        Without it, a title screen that ran a render-graph pass itself
+        left that pass's output bound, and the garden pushed over it drew
+        its entire plot into the wrong buffer -- nothing on screen.
+        """
+        manager = SceneManager()
+        order: list[str] = []
+
+        class RecordingScene(MockScene):
+            def render(
+                self, world_renderer: IRenderer, ui_renderer: UIRenderer
+            ) -> None:
+                order.append(self.name)
+
+        for name in ("below", "middle", "top"):
+            manager.register(RecordingScene(name))
+        manager.switch_to("below")
+        manager.push_scene("middle")
+        manager.push_scene("top")
+
+        manager.render(
+            Mock(spec=IRenderer),
+            Mock(spec=UIRenderer),
+            before_each=lambda: order.append("bind"),
+        )
+
+        assert order == ["bind", "below", "bind", "middle", "bind", "top"]
+
     def test_render_all_scenes_in_stack(self):
         """Rendering should draw all scenes from bottom to top."""
         manager = SceneManager()
