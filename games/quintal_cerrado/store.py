@@ -18,15 +18,10 @@ from collections.abc import Callable
 
 from games.quintal_cerrado import structures
 from games.quintal_cerrado.components import PlayerEconomy
-from pyguara.common.types import Color, Rect, Vector2
+from games.quintal_cerrado.overlay import OverlayScene, Scrim
+from pyguara.common.types import Vector2
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, KEY_O
-from pyguara.input.manager import InputManager
-from pyguara.input.types import ActionType, InputDevice
-from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.ui.base import UIElement
 from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
@@ -37,31 +32,9 @@ PANEL_WIDTH = 620
 CARD_WIDTH = 588
 CARD_HEIGHT = 66
 CARD_GAP = 8
-CLOSE_ACTION = "store_close"
 
 
-class Scrim(UIElement):
-    """A full-screen wash over the frozen garden behind the store."""
-
-    def __init__(self, width: int, height: int) -> None:
-        """Initialize the scrim.
-
-        Args:
-            width: Screen width.
-            height: Screen height.
-        """
-        super().__init__(Vector2(0, 0), Vector2(width, height))
-
-    def render(self, renderer: UIRenderer) -> None:
-        """Wash the frame in the theme's scrim colour (which carries alpha)."""
-        scrim = self.theme.colors.surface_scrim
-        renderer.draw_rect(
-            Rect(0, 0, self.rect.width, self.rect.height),
-            Color(scrim.r, scrim.g, scrim.b, scrim.a),
-        )
-
-
-class StoreOverlayScene(Scene):
+class StoreOverlayScene(OverlayScene):
     """Lists every structure, and sells the ones the player has unlocked."""
 
     def __init__(
@@ -82,33 +55,18 @@ class StoreOverlayScene(Scene):
             width: Screen width.
             height: Screen height.
         """
-        super().__init__("StoreOverlayScene", event_dispatcher)
+        super().__init__(
+            "StoreOverlayScene", event_dispatcher, close_keys=(ESCAPE, KEY_O)
+        )
         self._economy = economy
         self._on_bought = on_bought
         self._width = width
         self._height = height
         self.buy_buttons: dict[str, BevelButton] = {}
         self._message: Label | None = None
-        # `O` both opens and closes the store. `on_enter()` binds the close
-        # key *inside* the dispatch of the very key press that opened it, so
-        # without this that same press would close the store again in the
-        # same instant. Close input is ignored until the first frame has run.
-        self._armed = False
-
-    def on_enter(self) -> None:
-        """Build the store and listen for its close key."""
-        input_manager = self.container.get(InputManager)
-        input_manager.register_action(CLOSE_ACTION, ActionType.PRESS)
-        input_manager.bind_input(InputDevice.KEYBOARD, ESCAPE, CLOSE_ACTION)
-        input_manager.bind_input(InputDevice.KEYBOARD, KEY_O, CLOSE_ACTION)
-        self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
-        self._build()
-
-    def on_exit(self) -> None:
-        """Stop listening -- a new store is a new scene, with its own handler."""
-        self.event_dispatcher.unsubscribe(OnActionEvent, self._on_action)
 
     def _build(self) -> None:
+        """Build the store's panel, one card per structure, and Close."""
         ui_manager = self.container.get(UIManager)
         ui_manager.clear(UILayer.OVERLAY)
         ui_manager.add_element(Scrim(self._width, self._height), UILayer.OVERLAY)
@@ -202,26 +160,3 @@ class StoreOverlayScene(Scene):
             return
         self._close()
         self._on_bought(kind)
-
-    def _on_action(self, event: OnActionEvent) -> None:
-        if self._armed and event.action_name == CLOSE_ACTION and event.value > 0:
-            self._close()
-
-    def _close(self) -> None:
-        """Hand control back to the garden.
-
-        A no-op unless this store is the current scene: a key bound twice
-        fires twice, and the second `pop_scene()` would close the garden.
-        """
-        scene_manager = self.container.get(SceneManager)
-        if scene_manager.current_scene is not self:
-            return
-        self.container.get(UIManager).clear(UILayer.OVERLAY)
-        scene_manager.pop_scene()
-
-    def update(self, dt: float) -> None:
-        """Arm the close key once the frame that opened the store is over."""
-        self._armed = True
-
-    def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Draw nothing: the garden underneath is still rendering."""

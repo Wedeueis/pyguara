@@ -10,10 +10,11 @@ physics to be wired, and this game has no falling body and no scrolling
 world for a camera to follow -- both are scope this demo genuinely does
 not need, not omissions.
 
-`PersistenceManager` is wired here even though Phase 1 does not call it
-yet, mirroring `pyguara/application/bootstrap.py`'s own reference wiring
--- which, notably, no other capstone actually exercises for real gameplay.
-`FileStorageBackend.base_path` is CWD-relative, not an OS user-data
+`PersistenceManager` is wired the way `pyguara/application/bootstrap.py`'s
+own reference wiring does it -- a `FileStorageBackend` plus a
+`MigrationManager` at the schema's version -- and, unlike there, is actually
+used: `scenes.GardenScene` saves and loads through it (see
+`persistence_schema.py`). `FileStorageBackend.base_path` is CWD-relative, not an OS user-data
 directory (a known engine gap, tracked as issue #43) -- fine for a demo
 run from the repo root via `uv run python -m games.quintal_cerrado.main`,
 but not a real per-user save location.
@@ -21,6 +22,7 @@ but not a real per-user save location.
 
 from __future__ import annotations
 
+from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
@@ -56,7 +58,6 @@ WINDOW_WIDTH = 960
 WINDOW_HEIGHT = 640
 
 SAVE_DIRECTORY = "saves/quintal_cerrado"
-SAVE_SCHEMA_VERSION = 1
 
 
 def configure_game_container() -> DIContainer:
@@ -105,7 +106,7 @@ def configure_game_container() -> DIContainer:
     container.register_singleton(CoroutineManager, CoroutineManager)
 
     storage = FileStorageBackend(base_path=SAVE_DIRECTORY)
-    migration_manager = MigrationManager(current_version=SAVE_SCHEMA_VERSION)
+    migration_manager = MigrationManager(current_version=SCHEMA_VERSION)
     persistence = PersistenceManager(storage, migration_manager)
     container.register_instance(PersistenceManager, persistence)
 

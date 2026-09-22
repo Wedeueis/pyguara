@@ -135,8 +135,13 @@ These modules correspond to the "Tutorial Series Roadmap".
   each also has a keyboard shortcut. A **store** (a scene pushed over the
   frozen garden) sells a four-step automation tech tree — solar panel →
   drip irrigation → soil sensor → harvester drone — each unlocked by
-  *placing* the one before it. **Status: Phase 4 of 5** (see the PRD) —
-  real persistence and the scoring screen land in the last phase.
+  *placing* the one before it. The garden **saves and resumes** — every 60
+  seconds of play and whenever you leave it (which includes closing the
+  window) — through `pyguara.persistence`; the title offers Continue / New
+  Garden, Esc opens a pause menu, and a fifteen-minute session ends in an
+  **evaluation**: an Agroecological Score from soil health, biodiversity,
+  revenue and how much of it was sold organically. **Status: complete**
+  (all five phases of the PRD).
 * **Key Concepts:** the first real adopter of `pyguara.tilemap`
   (`Tilemap`/`TileLayer`/`Tileset`, built procedurally rather than from a
   `.tmx` — the plot is simulation state, not level art);
@@ -154,7 +159,12 @@ These modules correspond to the "Tutorial Series Roadmap".
   (`systems/pest_system.py`) where pressure spreads between plants (faster
   through a monoculture), decays with organic matter, dies off without a
   host, and is suppressed by a grown Pequi; soil moisture that evaporates
-  and gates growth; the automation tree (`structures.py`,
+  and gates growth; the first real adopter of `pyguara.persistence` by any
+  demo (`persistence_schema.py`) — the serializer does not round-trip
+  dataclasses, so the payload is hand-built plain data, and loading is
+  *parse, then apply* so a corrupt or hand-edited save is refused without
+  ever half-loading the plot; a day/night clock and a hover cell inspector
+  built from stock `ProgressBar`s; the automation tree (`structures.py`,
   `systems/automation_system.py`), where one solar panel powers three
   devices handed out in placement order, drip irrigation holds the soil
   above the moisture line, a sensor prints moisture/humus/pest bars on the

@@ -77,6 +77,9 @@ class PlayerEconomy(BaseComponent):
         chemical_sales: Harvests sold at the chemical discount. Both counts
             are what a later evaluation screen scores the player's
             agroecology on.
+        revenue: Sementes earned from harvests and solar since the start --
+            the money-in half of the evaluation score, kept apart from
+            `credits` because spending must not lower it.
         inventory: Structures bought from the store and not yet placed,
             by kind.
         unlocked_tech: Structure kinds the player has placed at least once
@@ -85,6 +88,7 @@ class PlayerEconomy(BaseComponent):
     """
 
     credits: float = STARTING_CREDITS
+    revenue: float = 0.0
     organic_sales: int = 0
     chemical_sales: int = 0
     inventory: dict[str, int] = field(default_factory=dict)
@@ -145,13 +149,17 @@ class AutomationComponent(BaseComponent):
 
 
 def add_credits(economy: PlayerEconomy, amount: float) -> None:
-    """Credit `amount` Sementes to `economy`.
+    """Credit `amount` Sementes to `economy`, counting it as revenue.
+
+    Every way of *earning* goes through here -- a harvest, a drone's sale,
+    a solar payout -- so `revenue` can be trusted as total income.
 
     Args:
         economy: The economy to credit.
         amount: How many Sementes to add.
     """
     economy.credits += amount
+    economy.revenue += amount
 
 
 def spend_credits(economy: PlayerEconomy, amount: float) -> bool:

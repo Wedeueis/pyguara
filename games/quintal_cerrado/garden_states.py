@@ -88,6 +88,18 @@ class _ConditionState(State):
         """The garden's `GardenConditions` component."""
         return self.entity.get_component(GardenConditions)
 
+    @property
+    def restoring(self) -> bool:
+        """Whether this state is being entered by loading a save.
+
+        Entering `outbreak` seeds pests and entering a `resolved_*` state
+        counts a resolution and announces it. Loading a save that was
+        *saved* in one of those phases must put the machine back in it
+        without doing any of that a second time -- the pests are already in
+        the saved soil, and the counters already in the saved conditions.
+        """
+        return bool(self.blackboard.get("restoring", False))
+
     def on_enter(self) -> None:
         """Mirror the phase name onto `GardenConditions`."""
         self.conditions.phase = self.PHASE
@@ -141,6 +153,8 @@ class OutbreakState(_ConditionState):
     def on_enter(self) -> None:
         """Seed pest pressure on a few established plants and announce it."""
         super().on_enter()
+        if self.restoring:
+            return
         self.conditions.last_treatment = ""
 
         candidates = self._established_plants()
@@ -167,6 +181,8 @@ class ResolvedOrganicState(_ConditionState):
     def on_enter(self) -> None:
         """Count the resolution and announce it."""
         super().on_enter()
+        if self.restoring:
+            return
         self.conditions.organic_resolutions += 1
         self.dispatcher.dispatch(OutbreakResolvedEvent(method="organic"))
 
@@ -183,6 +199,8 @@ class ResolvedChemicalState(_ConditionState):
     def on_enter(self) -> None:
         """Count the resolution and announce it."""
         super().on_enter()
+        if self.restoring:
+            return
         self.conditions.chemical_resolutions += 1
         self.dispatcher.dispatch(OutbreakResolvedEvent(method="chemical"))
 

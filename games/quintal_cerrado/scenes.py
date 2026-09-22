@@ -25,6 +25,12 @@ back -- double for an organically grown plant, half for one that was
 ever sprayed (`economy.py`). That is the PRD's dilemma: the spray fixes an
 outbreak at once, and the compost is what keeps the premium.
 
+The garden is saved through `pyguara.persistence` -- every 60 seconds of
+play (`AutosaveSystem`), and whenever the scene exits, which is also what
+closing the window does. The title screen's Continue loads it. The pause
+menu (`pause.py`, Esc) and the evaluation (`evaluation.py`, which offers
+itself at 15:00 of play) are overlays like the store.
+
 The store (`store.py`) is a scene pushed over this one. Buying a structure
 puts it in the player's inventory and hands them a `build_<kind>` tool;
 the next click on a free cell places it, and `AutomationSystem` takes over.
@@ -32,10 +38,12 @@ the next click on a free cell places it, and `AutomationSystem` takes over.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from games.quintal_cerrado import art, treatments
 from games.quintal_cerrado.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
+from games.quintal_cerrado.clock import EVALUATION_TIME, darkness
 from games.quintal_cerrado.components import (
     GardenConditions,
     PlantComponent,
@@ -43,7 +51,9 @@ from games.quintal_cerrado.components import (
     spend_credits,
 )
 from games.quintal_cerrado.economy import COMPOST_COST, SPRAY_COST, sell_harvest
+from games.quintal_cerrado.evaluation import EvaluationScene
 from games.quintal_cerrado.events import (
+    AutosavedEvent,
     OutbreakResolvedEvent,
     OutbreakStartedEvent,
     PlantHarvestedEvent,
@@ -61,12 +71,22 @@ from games.quintal_cerrado.garden_widget import (
     WARN_COLOR,
     GardenGridCanvas,
 )
-from games.quintal_cerrado.hud import Hud
+from games.quintal_cerrado.hud import CellInspector, Hud
+from games.quintal_cerrado.pause import PauseScene
+from games.quintal_cerrado.persistence_schema import (
+    SAVE_KEY,
+    SCHEMA_VERSION,
+    SaveFormatError,
+    apply_save_payload,
+    to_save_payload,
+)
 from games.quintal_cerrado.plant_states import build_plant_ai
+from games.quintal_cerrado.scoring import compute_score
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.store import StoreOverlayScene
 from games.quintal_cerrado.structures import STRUCTURE_TABLE, place_structure
 from games.quintal_cerrado.systems.automation_system import AutomationSystem
+from games.quintal_cerrado.systems.autosave_system import AutosaveSystem
 from games.quintal_cerrado.systems.pest_system import PestSystem
 from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
@@ -78,9 +98,10 @@ from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import KEY_O, B, C, G, H, M, P, S, T, W
+from pyguara.input.keys import ESCAPE, KEY_O, B, C, G, H, M, P, S, T, W
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
+from pyguara.persistence.manager import PersistenceManager
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.ui.components.text import Label
@@ -100,6 +121,9 @@ _SHADE_PRIORITY = 510
 _SYNTROPIC_PRIORITY = 520
 _PEST_PRIORITY = 525
 _GROWTH_PRIORITY = 530
+_AUTOSAVE_PRIORITY = 590
+
+logger = logging.getLogger(__name__)
 
 # The tool bar's two rows, top to bottom: seeds, then actions. Each maps a
 # tool id to its button's label; the order here is the row's left-to-right
@@ -131,6 +155,7 @@ _TOOL_KEYS = {
     "plant_pequi": P,
 }
 
+PAUSE_ACTION = "open_pause"
 STORE_ACTION = "open_store"
 """Not a tool -- it has no active state -- so it is bound and handled apart
 from `_TOOL_KEYS`, and its button is not in `_tool_buttons`."""
@@ -185,19 +210,42 @@ class TitleScene(Scene):
         )
         ui_manager.add_element(plate, UILayer.CONTENT)
 
-        column = BoxContainer(
-            Vector2((WINDOW_WIDTH - 240) // 2, 280), Vector2(240, 56), spacing=14
+        has_save = (
+            SAVE_KEY in self.container.get(PersistenceManager).storage.list_keys()
         )
-        button = BevelButton("Play", Vector2(0, 0), Vector2(240, 52), skin=Skins.SAGE)
-        button.on_click = self._on_play
-        column.add_child(button)
+        column = BoxContainer(
+            Vector2((WINDOW_WIDTH - 240) // 2, 280), Vector2(240, 118), spacing=14
+        )
+        continue_button = BevelButton(
+            "Continue",
+            Vector2(0, 0),
+            Vector2(240, 52),
+            skin=Skins.SAGE if has_save else Skins.GHOST,
+        )
+        continue_button.set_enabled(has_save)
+        continue_button.on_click = self._on_continue
+        new_button = BevelButton(
+            "New Garden",
+            Vector2(0, 0),
+            Vector2(240, 52),
+            skin=Skins.WOOD if has_save else Skins.SAGE,
+        )
+        new_button.on_click = self._on_new
+        column.add_child(continue_button)
+        column.add_child(new_button)
         ui_manager.add_element(column, UILayer.CONTENT)
 
-        ui_manager.set_focus(button)
+        ui_manager.set_focus(continue_button if has_save else new_button)
 
-    def _on_play(self, _element: object) -> None:
+    def _on_continue(self, _element: object) -> None:
+        self._start(load=True)
+
+    def _on_new(self, _element: object) -> None:
+        self._start(load=False)
+
+    def _start(self, *, load: bool) -> None:
         scene_manager = self.container.get(SceneManager)
-        scene_manager.register(GardenScene(self.event_dispatcher))
+        scene_manager.register(GardenScene(self.event_dispatcher, load=load))
         scene_manager.push_scene("GardenScene")
 
     def on_exit(self) -> None:
@@ -215,7 +263,11 @@ class GardenScene(Scene):
     """The garden: the grid, the tool bar, and the whole farming loop."""
 
     def __init__(
-        self, event_dispatcher: EventDispatcher, rng: RandomStream | None = None
+        self,
+        event_dispatcher: EventDispatcher,
+        rng: RandomStream | None = None,
+        *,
+        load: bool = False,
     ) -> None:
         """Initialize the garden scene.
 
@@ -223,6 +275,7 @@ class GardenScene(Scene):
             event_dispatcher: The game's dispatcher.
             rng: Randomness for picking where an outbreak starts. Pass a
                 seeded stream for a reproducible one.
+            load: Resume the saved garden instead of starting a new one.
         """
         super().__init__("GardenScene", event_dispatcher)
         self.grid = GardenGrid()
@@ -231,8 +284,14 @@ class GardenScene(Scene):
         self._rng = rng
         self._canvas: GardenGridCanvas | None = None
         self._hud: Hud | None = None
+        self._inspector: CellInspector | None = None
         self._tool_buttons: dict[str, BevelButton] = {}
         self._active_tool = "till"
+        self._load_requested = load
+        self.elapsed = 0.0
+        """Seconds of play: advanced by `fixed_update`, so it stops while an
+        overlay is up, and saved so Continue resumes the same day."""
+        self._evaluation_offered = False
 
     def on_enter(self) -> None:
         """Build the widgets and entities, wire input, register systems."""
@@ -243,9 +302,13 @@ class GardenScene(Scene):
         origin = self._build_grid_widget(ui_manager)
         self._build_tool_bar(ui_manager, origin)
         self._build_price_hint(ui_manager, origin)
+        self._build_inspector(ui_manager, origin)
         self._hud = Hud(ui_manager)
+        self._hud.menu_button.on_click = lambda _element: self._open_pause()
         self._create_entities()
         self._register_systems()
+        if self._load_requested:
+            self._load()
 
         self.event_dispatcher.subscribe(OutbreakStartedEvent, self._on_outbreak_started)
         self.event_dispatcher.subscribe(
@@ -253,6 +316,7 @@ class GardenScene(Scene):
         )
         self.event_dispatcher.subscribe(PlantHarvestedEvent, self._on_drone_harvest)
         self.event_dispatcher.subscribe(SolarIncomeEvent, self._on_solar_income)
+        self.event_dispatcher.subscribe(AutosavedEvent, self._on_autosaved)
 
     def _create_entities(self) -> None:
         """The two non-plant entities: the player, and the garden's conditions."""
@@ -301,6 +365,11 @@ class GardenScene(Scene):
             PlantGrowthSystem(self.entity_manager, self.grid),
             priority=_GROWTH_PRIORITY,
             system_type=PlantGrowthSystem,
+        )
+        self.system_manager.register(
+            AutosaveSystem(self.save_now, self.event_dispatcher),
+            priority=_AUTOSAVE_PRIORITY,
+            system_type=AutosaveSystem,
         )
 
     def _build_grid_widget(self, ui_manager: UIManager) -> Vector2:
@@ -382,6 +451,14 @@ class GardenScene(Scene):
         )
         ui_manager.add_element(hint, UILayer.CONTENT)
 
+    def _build_inspector(self, ui_manager: UIManager, origin: Vector2) -> None:
+        """The hover inspector, centred under the grid and its price line."""
+        self._inspector = CellInspector(
+            ui_manager,
+            Vector2(origin.x, origin.y + GRID_HEIGHT * TILE_SIZE + 36),
+            GRID_WIDTH * TILE_SIZE,
+        )
+
     def _tool_button_handler(self, tool: str) -> Callable[[object], None]:
         def _handler(_element: object) -> None:
             self._set_active_tool(tool)
@@ -395,6 +472,8 @@ class GardenScene(Scene):
             input_manager.bind_input(InputDevice.KEYBOARD, key, tool)
         input_manager.register_action(STORE_ACTION, ActionType.PRESS)
         input_manager.bind_input(InputDevice.KEYBOARD, KEY_O, STORE_ACTION)
+        input_manager.register_action(PAUSE_ACTION, ActionType.PRESS)
+        input_manager.bind_input(InputDevice.KEYBOARD, ESCAPE, PAUSE_ACTION)
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
 
     def _on_action(self, event: OnActionEvent) -> None:
@@ -406,6 +485,8 @@ class GardenScene(Scene):
             self._set_active_tool(event.action_name)
         elif event.action_name == STORE_ACTION:
             self._open_store()
+        elif event.action_name == PAUSE_ACTION:
+            self._open_pause()
 
     def _set_active_tool(self, tool: str) -> None:
         self._active_tool = tool
@@ -415,6 +496,86 @@ class GardenScene(Scene):
     def _say(self, text: str) -> None:
         if self._hud is not None:
             self._hud.show_message(text)
+
+    def save_now(self) -> bool:
+        """Write the garden to disk.
+
+        The payload is plain dicts and lists (see `persistence_schema.py`
+        for why it must be), saved with the schema version so the engine's
+        `MigrationManager` can tell one build's saves from another's.
+
+        Returns:
+            Whether the save was written.
+        """
+        payload = to_save_payload(
+            self.grid, self.entity_manager, self.economy, self.conditions, self.elapsed
+        )
+        return self.container.get(PersistenceManager).save_data(
+            SAVE_KEY, payload, save_version=SCHEMA_VERSION
+        )
+
+    def _load(self) -> None:
+        """Resume the saved garden, or say why a new one started instead."""
+        payload = self.container.get(PersistenceManager).load_data(SAVE_KEY)
+        if payload is None:
+            self._say("No usable save")
+            return
+        try:
+            self.elapsed = apply_save_payload(
+                payload, self.grid, self.entity_manager, self.economy, self.conditions
+            )
+        except SaveFormatError as error:
+            logger.warning("Ignoring an unreadable save: %s", error)
+            self._say("Save unreadable")
+            return
+        # Loading a session already past the evaluation must not re-offer it.
+        self._evaluation_offered = self.elapsed >= EVALUATION_TIME
+        self._say("Garden loaded")
+
+    def _on_autosaved(self, event: AutosavedEvent) -> None:
+        self._say("Garden saved" if event.success else "Autosave failed!")
+
+    def _open_pause(self) -> None:
+        """Push the pause menu over the garden."""
+        scene_manager = self.container.get(SceneManager)
+        if scene_manager.current_scene is not self:
+            return
+        scene_manager.register(
+            PauseScene(
+                self.event_dispatcher,
+                self.save_now,
+                self.open_evaluation,
+                self._quit_to_title,
+                WINDOW_WIDTH,
+                WINDOW_HEIGHT,
+            )
+        )
+        scene_manager.push_scene("PauseScene", pause_below=True)
+
+    def open_evaluation(self) -> None:
+        """Save, then show the Agroecological Score over the garden.
+
+        Saved first, so what is scored is exactly what is on disk.
+        """
+        scene_manager = self.container.get(SceneManager)
+        if scene_manager.current_scene is not self:
+            return
+        self.save_now()
+        score = compute_score(self.grid, self.entity_manager, self.economy)
+        scene_manager.register(
+            EvaluationScene(
+                self.event_dispatcher,
+                score,
+                self._quit_to_title,
+                WINDOW_WIDTH,
+                WINDOW_HEIGHT,
+            )
+        )
+        scene_manager.push_scene("EvaluationScene", pause_below=True)
+
+    def _quit_to_title(self) -> None:
+        """Unwind to the title screen. Leaving this scene saves it."""
+        self.container.get(SceneManager).switch_to("TitleScene")
 
     def _on_outbreak_started(self, event: OutbreakStartedEvent) -> None:
         if self._canvas is not None:
@@ -553,12 +714,37 @@ class GardenScene(Scene):
         self._canvas.spawn_label(cell, f"+{value}", GAIN_COLOR)
 
     def on_exit(self) -> None:
-        """Nothing to clean up yet."""
+        """Save the garden.
+
+        Every way out of this scene runs through here -- quitting to the
+        title, and the window being closed, which `Application` turns into a
+        `SceneManager.cleanup()` -- so this is the one "save on exit".
+        """
+        self.save_now()
+
+    def fixed_update(self, fixed_dt: float) -> None:
+        """Advance the play clock. The engine pauses this while an overlay is up."""
+        self.elapsed += fixed_dt
 
     def update(self, dt: float) -> None:
-        """Refresh the HUD; the grid widget drives its own juice."""
+        """Refresh the HUD and inspector, and offer the evaluation at 15:00."""
+        automation = self.system_manager.get_system(AutomationSystem)
+        power = (
+            (automation.power_used, automation.power_capacity)
+            if automation is not None
+            else (0, 0)
+        )
         if self._hud is not None:
-            self._hud.update(dt, self.economy, self.conditions)
+            self._hud.update(dt, self.economy, self.conditions, self.elapsed, power)
+        if self._canvas is not None:
+            self._canvas.darkness = darkness(self.elapsed)
+            if self._inspector is not None:
+                self._inspector.update(
+                    self.grid, self.entity_manager, self._canvas.hover_cell
+                )
+        if self.elapsed >= EVALUATION_TIME and not self._evaluation_offered:
+            self._evaluation_offered = True
+            self.open_evaluation()
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Clear the world; the grid itself draws as UI (`GardenGridCanvas`)."""
