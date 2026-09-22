@@ -97,6 +97,15 @@ ALERT_MAX_ALPHA = 95
 ALERT_DECAY = 1.3
 """Per-second decay of the outbreak alert flash; ~0.75s to clear."""
 
+TOOLTIP_DELAY = 0.35
+"""Seconds the cursor must rest on one tile before the tooltip appears."""
+
+TOOLTIP_SIZE = Vector2(132, 38)
+TOOLTIP_FILL = Color(35, 28, 38, 232)
+TOOLTIP_EDGE = Color(187, 108, 62)
+TOOLTIP_TRACK = Color(24, 18, 26)
+TOOLTIP_TEXT = Color(253, 236, 190)
+
 SWAY_SPEED = 1.6
 """Radians per second the idle sway's sine advances at."""
 
@@ -169,6 +178,11 @@ class GardenGridCanvas(Canvas):
         """The last cell the cursor was over. It is kept when the cursor
         leaves the plot for the tool dock, so the inspector still has
         something to show."""
+        self._cursor_on_grid = False
+        """Whether the cursor is over the plot *now* -- unlike `hover_cell`,
+        which deliberately persists. Only the tooltip needs the difference:
+        it must not hang over a tile the cursor has left."""
+        self._dwell = 0.0
         self.darkness = 0.0
         """0.0 in daylight up to 1.0 at night; set by the scene from
         `clock.darkness()` and drawn as a translucent wash."""
@@ -315,8 +329,14 @@ class GardenGridCanvas(Canvas):
     ) -> bool:
         if event_type == UIEventType.MOUSE_MOVE:
             cell = self._cell_at(position)
+            was_on = self._cursor_on_grid
+            self._cursor_on_grid = cell is not None
             if cell is not None:
+                if not was_on or cell != self.hover_cell:
+                    self._dwell = 0.0
                 self.hover_cell = cell
+            else:
+                self._dwell = 0.0
         if event_type == UIEventType.MOUSE_DOWN and button == 1:
             cell = self._cell_at(position)
             if cell is not None:
@@ -332,6 +352,8 @@ class GardenGridCanvas(Canvas):
         """Advance particles and every planted entity's pop/sway animation."""
         super().update(dt)
         self._elapsed += dt
+        if self._cursor_on_grid:
+            self._dwell += dt
         self._motes.update(dt)
         self._labels.update(dt)
         self._alert = max(0.0, self._alert - dt * ALERT_DECAY)
@@ -454,10 +476,63 @@ class GardenGridCanvas(Canvas):
             renderer.draw_rect(
                 self.rect, Color(*ALERT_COLOR, int(ALERT_MAX_ALPHA * self._alert))
             )
+        self._draw_tooltip(renderer)
         # No `for child in self.children: child.render(...)` here: nothing
         # ever adds a child to this canvas (it draws the whole plot itself),
         # and a generic UI child would expect `UIRenderer` regardless.
         renderer.end_frame()
+
+    def tooltip_visible(self) -> bool:
+        """Whether the hover tooltip should be showing right now.
+
+        Only while the cursor is actually over the plot, and only once it
+        has rested on one tile for `TOOLTIP_DELAY` -- a card that appeared
+        under a cursor merely crossing the grid would be noise.
+        """
+        return (
+            self._cursor_on_grid
+            and self.hover_cell is not None
+            and self._dwell >= TOOLTIP_DELAY
+        )
+
+    def _draw_tooltip(self, renderer: IRenderer) -> None:
+        """A small card over the hovered tile: moisture and pests.
+
+        The two a player acts on mid-gesture -- whether to water, whether
+        to treat -- so they are worth having under the cursor instead of
+        in the inspector across the screen. Everything else stays there.
+        """
+        if not self.tooltip_visible() or self.hover_cell is None:
+            return
+        soil = self.grid.soil_at(self.hover_cell)
+        center = self._cell_screen_center(self.hover_cell)
+        card = Rect(
+            int(center.x - TOOLTIP_SIZE.x / 2),
+            int(center.y - TILE_SIZE / 2 - TOOLTIP_SIZE.y - 6),
+            int(TOOLTIP_SIZE.x),
+            int(TOOLTIP_SIZE.y),
+        )
+        # Clamped inside the plot, so a tile on an edge does not push the
+        # card off the grid (or, at the top row, off the screen).
+        card.x = max(self.rect.x, min(card.x, self.rect.right - card.width))
+        if card.y < self.rect.y:
+            card.y = int(center.y + TILE_SIZE / 2 + 6)
+
+        renderer.draw_rect(card, TOOLTIP_FILL)
+        renderer.draw_rect(card, TOOLTIP_EDGE, width=1)
+        for row, (label, value, color) in enumerate(
+            (
+                ("Umidade", soil.moisture, art.MOISTURE_TINT),
+                ("Pragas", soil.pest_pressure, art.PEST_TINT),
+            )
+        ):
+            y = card.y + 7 + row * 16
+            renderer.draw_text(label, Vector2(card.x + 8, y), TOOLTIP_TEXT, 10)
+            track = Rect(card.x + 58, y + 3, card.width - 68, 6)
+            renderer.draw_rect(track, TOOLTIP_TRACK)
+            filled = int(track.width * max(0.0, min(1.0, value)))
+            if filled:
+                renderer.draw_rect(Rect(track.x, track.y, filled, track.height), color)
 
     def _draw_plants(self, renderer: IRenderer) -> None:
         """Draw every planted cell's plant, at its current growth stage.

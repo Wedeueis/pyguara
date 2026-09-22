@@ -960,8 +960,12 @@ class TestTheHud:
         scene.update(1 / 60)
 
         assert scene._inspector is not None
-        assert "Baru: mature" in scene._inspector.title.text
+        # The title carries the tile; the plant sits on its own line under
+        # the portrait.
         assert "Tilled soil" in scene._inspector.title.text
+        assert "Baru" in scene._inspector.panel.detail
+        assert "mature" in scene._inspector.panel.detail
+        assert scene._inspector.panel.plant is not None
         assert scene._inspector.bars["moisture"].value == pytest.approx(0.5, abs=0.02)
         assert scene._inspector.bars["pest_pressure"].value == pytest.approx(0.25)
 
@@ -990,7 +994,7 @@ class TestTheHud:
         scene.update(1 / 60)
 
         assert scene._inspector is not None
-        assert "Solar Micro-Panel" in scene._inspector.title.text
+        assert "Solar Micro-Panel" in scene._inspector.panel.detail
 
     def test_the_garden_darkens_with_the_clock(self, scene: GardenScene) -> None:
         assert scene._canvas is not None
