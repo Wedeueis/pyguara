@@ -1,6 +1,6 @@
 """Every protocol in `pyguara.graphics.protocols` is checkable at runtime.
 
-Five of the seven carried `@runtime_checkable` and two -- `IFramebuffer` and
+Five of the then-seven carried `@runtime_checkable` and two -- `IFramebuffer` and
 `IRenderPass` -- did not, for no reason the module recorded. The cost was not
 theoretical: the parity tests added by the backends audit assert a shipped
 implementation satisfies its protocol via `isinstance`, and those two were the
@@ -35,7 +35,7 @@ def graphics_protocols() -> list[type]:
 
 
 class TestEveryProtocolIsRuntimeCheckable:
-    def test_the_module_defines_the_seven_expected_protocols(self) -> None:
+    def test_the_module_defines_the_expected_protocols(self) -> None:
         """A new protocol should fail this until it is added below -- which is
         the prompt to decide whether it is runtime-checkable too."""
         assert {p.__name__ for p in graphics_protocols()} == {
@@ -44,6 +44,7 @@ class TestEveryProtocolIsRuntimeCheckable:
             "IRenderer",
             "IWindowBackend",
             "Renderable",
+            "ShapeRenderer",
             "TextureFactory",
             "UIRenderer",
         }
