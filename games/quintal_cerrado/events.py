@@ -34,7 +34,7 @@ class OutbreakResolvedEvent:
 
 @dataclass
 class PlantHarvestedEvent:
-    """Fired when a harvester drone sells a plant on its own.
+    """Fired when a harvester drone collects a plant on its own.
 
     A player's own harvest is handled where it is clicked; a drone acts on
     its own schedule, so the scene learns of it through this.
@@ -42,12 +42,16 @@ class PlantHarvestedEvent:
     Attributes:
         cell: Where the plant was.
         species_id: What it was.
-        value: Sementes it sold for.
+        value: Sementes it sold for, or a seed count -- see `kind`.
+        kind: `economy.CREDITS`, `economy.GENERIC_SEED` or
+            `economy.SPECIFIC_SEED` -- which of `HarvestResult`'s outcomes
+            this was, so the scene knows whether to float "+16" or "+1 seed".
     """
 
     cell: Cell
     species_id: str
     value: int
+    kind: str = "credits"
 
 
 @dataclass

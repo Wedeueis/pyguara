@@ -16,10 +16,12 @@ Then the work:
 - **Drip irrigation** -- raises the moisture of every cell in reach towards
   `DRIP_TARGET`, the PRD's "above 60%", and no further: it maintains, it
   does not flood.
-- **Harvester drone** -- every `DRONE_INTERVAL` seconds, sells one ready
-  plant in reach through `economy.sell_harvest`, the same function the
+- **Harvester drone** -- every `DRONE_INTERVAL` seconds, collects one ready
+  plant in reach through `economy.harvest_cell`, the same function the
   harvest tool uses, and announces it with a `PlantHarvestedEvent`. An
-  infested plant is not "ready": `sell_harvest` refuses it.
+  infested plant is not "ready": `harvest_cell` refuses it. A drone pulls
+  weeds and collects overripe seed the same as it sells a ready crop --
+  `harvest_cell` decides which, this system just reports what it got.
 
 Registered right after `SoilSystem` (see `scenes.py`), so the soil has
 evaporated for the tick before drip irrigation tops it back up.
@@ -32,7 +34,7 @@ from games.quintal_cerrado.components import (
     PlayerEconomy,
     add_credits,
 )
-from games.quintal_cerrado.economy import sell_harvest
+from games.quintal_cerrado.economy import harvest_cell
 from games.quintal_cerrado.events import PlantHarvestedEvent, SolarIncomeEvent
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.structures import POWER_PER_PANEL, STRUCTURE_TABLE, area
@@ -144,12 +146,18 @@ class AutomationSystem:
         if structure.timer > 0.0:
             return
         for target in area(self._grid, cell, STRUCTURE_TABLE["auto_harvester"].radius):
-            sold = sell_harvest(self._grid, self._entity_manager, self._economy, target)
-            if sold is None:
+            result = harvest_cell(
+                self._grid, self._entity_manager, self._economy, target
+            )
+            if result is None:
                 continue
-            species_id, value = sold
             structure.timer = DRONE_INTERVAL
             self._dispatcher.dispatch(
-                PlantHarvestedEvent(cell=target, species_id=species_id, value=value)
+                PlantHarvestedEvent(
+                    cell=target,
+                    species_id=result.species_id,
+                    value=result.amount,
+                    kind=result.kind,
+                )
             )
             return

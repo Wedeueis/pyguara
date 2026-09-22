@@ -188,6 +188,7 @@ class TestTheGardenScreen:
             "plant_cagaita",
             "plant_baru",
             "plant_pequi",
+            "plant_generic",
             "water",
             "harvest",
             "compost",

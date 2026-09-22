@@ -162,6 +162,52 @@ def add_credits(economy: PlayerEconomy, amount: float) -> None:
     economy.revenue += amount
 
 
+GENERIC_SEED_KEY = "generic_seed"
+"""`PlayerEconomy.inventory` key for seed stock that grows a random species
+(`species.pick_generic_species`) -- what pulling a weed pays out."""
+
+
+def specific_seed_key(species_id: str) -> str:
+    """The inventory key a free seed of `species_id` is stocked under.
+
+    A plant left to go `"overripe"` pays out one of these instead of
+    Sementes (see `economy.harvest_cell`); `_plant()` spends one before
+    ever charging `seed_cost`.
+    """
+    return f"seed:{species_id}"
+
+
+def grant_seed(economy: PlayerEconomy, key: str, amount: int = 1) -> None:
+    """Add `amount` to `economy.inventory[key]`.
+
+    Shared by generic and specific seed grants -- both are just stock
+    under a different key, the same idiom `structures.buy_structure`
+    already uses for a bought-not-yet-placed structure.
+
+    Args:
+        economy: Whose inventory grows.
+        key: `GENERIC_SEED_KEY` or a `specific_seed_key()`.
+        amount: How many to add.
+    """
+    economy.inventory[key] = economy.inventory.get(key, 0) + amount
+
+
+def consume_seed(economy: PlayerEconomy, key: str) -> bool:
+    """Spend one `key` from inventory, if there is one.
+
+    Args:
+        economy: Whose inventory is spent from.
+        key: `GENERIC_SEED_KEY` or a `specific_seed_key()`.
+
+    Returns:
+        Whether one was available and spent. Nothing changes on False.
+    """
+    if economy.inventory.get(key, 0) <= 0:
+        return False
+    economy.inventory[key] -= 1
+    return True
+
+
 def spend_credits(economy: PlayerEconomy, amount: float) -> bool:
     """Debit `amount` Sementes, if the player can afford it.
 

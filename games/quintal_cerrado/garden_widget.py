@@ -61,6 +61,7 @@ SFX_SPRAY = f"{_ASSETS}/spray.wav"
 SFX_INFESTED = f"{_ASSETS}/infested.wav"
 SFX_DYING = f"{_ASSETS}/dying.wav"
 SFX_BUILD = f"{_ASSETS}/build.wav"
+SFX_SEED = f"{_ASSETS}/seed.wav"
 SFX_DENIED = f"{_ASSETS}/denied.wav"
 SFX_OUTBREAK_START = f"{_ASSETS}/outbreak_start.wav"
 SFX_OUTBREAK_RESOLVED = f"{_ASSETS}/outbreak_resolved.wav"
@@ -69,6 +70,7 @@ SFX_SOLAR_INCOME = f"{_ASSETS}/solar_income.wav"
 TILL_DUST = Color(196, 158, 110)
 WATER_DROPLET = Color(120, 180, 200)
 HARVEST_GOLD = Color(240, 210, 130)
+SEED_COLOR = Color(196, 176, 128)
 COMPOST_COLOR = Color(126, 150, 88)
 SPRAY_COLOR = Color(214, 226, 170)
 PEST_BURST = Color(120, 76, 158)
@@ -219,6 +221,25 @@ class GardenGridCanvas(Canvas):
         self._motes.burst(center, color, count=16, speed=70.0, life=0.7)
         self._motes.burst(center, HARVEST_GOLD, count=8, speed=90.0, life=0.5)
         self._play(SFX_HARVEST)
+
+    def celebrate_seed(self, cell: Cell, species_id: str) -> None:
+        """A quieter beat than a sale -- collecting a seed, not Sementes.
+
+        Covers both of `economy.harvest_cell`'s non-credit outcomes: a
+        weed pulled for generic seed stock, and a crop left `"overripe"`
+        for a specific one. Deliberately not `celebrate_harvest`'s bigger,
+        gold-accented burst -- a seed is a smaller, different kind of win.
+
+        Args:
+            cell: The cell that was just collected.
+            species_id: The collected plant's species, for its colour.
+        """
+        species = SPECIES_TABLE.get(species_id)
+        color = species.color if species is not None else Color.WHITE
+        center = self._cell_screen_center(cell)
+        self._motes.burst(center, color, count=6, speed=35.0, life=0.5)
+        self._motes.burst(center, SEED_COLOR, count=6, speed=40.0, life=0.5)
+        self._play(SFX_SEED)
 
     def celebrate_compost(self, cell: Cell) -> None:
         """Turn over some rich earth -- call right after a successful compost.

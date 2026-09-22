@@ -10,9 +10,10 @@ small on purpose.
 one row, one seed per species on the other -- every tool also has a
 keyboard shortcut, but the bar is what makes them discoverable) and a
 `GardenGridCanvas` that turns a grid click into the active tool's action.
-Six simulation systems run every fixed tick -- `SoilSystem`,
+Seven simulation systems run every fixed tick -- `SoilSystem`,
 `AutomationSystem`, `ShadeSystem`, `SyntropicSystem`, `PestSystem`,
-`PlantGrowthSystem`, in that priority order (see the `_*_PRIORITY` constants) -- registered on
+`PlantGrowthSystem`, `WeedSpreadSystem`, in that priority order (see the
+`_*_PRIORITY` constants) -- registered on
 `self.system_manager`, which `SceneManager.fixed_update()` already calls
 automatically for every active scene alongside the engine's own
 `AISystem`.
@@ -45,12 +46,21 @@ from games.quintal_cerrado import art, treatments
 from games.quintal_cerrado.bootstrap import WINDOW_HEIGHT, WINDOW_WIDTH
 from games.quintal_cerrado.clock import EVALUATION_TIME, darkness
 from games.quintal_cerrado.components import (
+    GENERIC_SEED_KEY,
     GardenConditions,
     PlantComponent,
     PlayerEconomy,
+    consume_seed,
+    specific_seed_key,
     spend_credits,
 )
-from games.quintal_cerrado.economy import COMPOST_COST, SPRAY_COST, sell_harvest
+from games.quintal_cerrado.economy import (
+    COMPOST_COST,
+    CREDITS,
+    GENERIC_SEED,
+    SPRAY_COST,
+    harvest_cell,
+)
 from games.quintal_cerrado.evaluation import EvaluationScene
 from games.quintal_cerrado.events import (
     AutosavedEvent,
@@ -86,7 +96,11 @@ from games.quintal_cerrado.persistence_schema import (
 )
 from games.quintal_cerrado.plant_states import build_plant_ai
 from games.quintal_cerrado.scoring import compute_score
-from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.species import (
+    SPECIES_TABLE,
+    pick_generic_species,
+    sellable_species,
+)
 from games.quintal_cerrado.store import StoreOverlayScene
 from games.quintal_cerrado.structures import STRUCTURE_TABLE, place_structure
 from games.quintal_cerrado.systems.automation_system import AutomationSystem
@@ -96,6 +110,7 @@ from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
 from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.syntropic_system import SyntropicSystem
+from games.quintal_cerrado.systems.weed_spread_system import WeedSpreadSystem
 from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell
 from pyguara.common.random import RandomStream
@@ -103,7 +118,7 @@ from pyguara.common.types import Color, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import ESCAPE, KEY_O, B, C, G, H, M, P, S, T, W
+from pyguara.input.keys import ESCAPE, KEY_O, B, C, G, H, M, N, P, S, T, W
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.persistence.manager import PersistenceManager
@@ -126,6 +141,7 @@ _SHADE_PRIORITY = 510
 _SYNTROPIC_PRIORITY = 520
 _PEST_PRIORITY = 525
 _GROWTH_PRIORITY = 530
+_WEED_SPREAD_PRIORITY = 535
 _AUTOSAVE_PRIORITY = 590
 
 logger = logging.getLogger(__name__)
@@ -138,6 +154,7 @@ _SEED_TOOLS = {
     "plant_cagaita": "Cagaita (C)",
     "plant_baru": "Baru (B)",
     "plant_pequi": "Pequi (P)",
+    "plant_generic": "Generic (N)",
 }
 _ACTION_TOOLS = {
     "till": "Till (T)",
@@ -158,6 +175,7 @@ _TOOL_KEYS = {
     "plant_cagaita": C,
     "plant_baru": B,
     "plant_pequi": P,
+    "plant_generic": N,
 }
 
 PAUSE_ACTION = "open_pause"
@@ -374,6 +392,11 @@ class GardenScene(Scene):
             system_type=PlantGrowthSystem,
         )
         self.system_manager.register(
+            WeedSpreadSystem(self.entity_manager, self.grid),
+            priority=_WEED_SPREAD_PRIORITY,
+            system_type=WeedSpreadSystem,
+        )
+        self.system_manager.register(
             AutosaveSystem(self.save_now, self.event_dispatcher),
             priority=_AUTOSAVE_PRIORITY,
             system_type=AutosaveSystem,
@@ -446,15 +469,19 @@ class GardenScene(Scene):
     def _build_price_hint(self, ui_manager: UIManager, origin: Vector2) -> None:
         """One line under the grid naming what everything costs.
 
-        Built from `SPECIES_TABLE` and `economy.py` rather than typed out, so
-        it cannot drift from what `_plant`/`_apply_*` actually charge.
+        Built from `species.sellable_species()` and `economy.py` rather
+        than typed out, so it cannot drift from what `_plant`/`_apply_*`
+        actually charge. The weed is excluded (never bought), and Generic
+        has no fixed price -- it is spent from seed stock, not Sementes,
+        so it gets "free" instead of a number.
         """
         seeds = "  ".join(
             f"{species.display_name} {species.seed_cost}"
-            for species in SPECIES_TABLE.values()
+            for species in sellable_species()
         )
         hint = Label(
-            f"Seeds: {seeds}   |   Compost {COMPOST_COST}   Spray {SPRAY_COST}",
+            f"Seeds: {seeds}  Generic free"
+            f"   |   Compost {COMPOST_COST}   Spray {SPRAY_COST}",
             Vector2(origin.x, origin.y + GRID_HEIGHT * TILE_SIZE + 12),
             font_size=13,
         )
@@ -599,9 +626,15 @@ class GardenScene(Scene):
         self._say(f"Pests gone ({event.method})")
 
     def _on_drone_harvest(self, event: PlantHarvestedEvent) -> None:
-        if self._canvas is not None:
+        if self._canvas is None:
+            return
+        if event.kind == CREDITS:
             self._canvas.celebrate_harvest(event.cell, event.species_id)
             self._canvas.spawn_label(event.cell, f"+{event.value}", GAIN_COLOR)
+        else:
+            self._canvas.celebrate_seed(event.cell, event.species_id)
+            label = "Generic seed" if event.kind == GENERIC_SEED else "Seed"
+            self._canvas.spawn_label(event.cell, f"+{event.value} {label}", GAIN_COLOR)
 
     def _on_solar_income(self, event: SolarIncomeEvent) -> None:
         if self._canvas is not None:
@@ -656,6 +689,8 @@ class GardenScene(Scene):
             self._compost(cell)
         elif tool == "spray":
             self._spray(cell)
+        elif tool == "plant_generic":
+            self._sow_generic(cell)
         elif tool.startswith("plant_"):
             self._plant(cell, tool.removeprefix("plant_"))
         elif tool.startswith("build_"):
@@ -670,12 +705,41 @@ class GardenScene(Scene):
         self._say("Not enough Sementes")
 
     def _plant(self, cell: Cell, species_id: str) -> None:
+        """Plant a specific species, spending stocked seed before Sementes.
+
+        An overripe harvest stocks a free seed of its own species
+        (`economy.harvest_cell`) -- `consume_seed` spends one of those
+        first, and only charges `seed_cost` once that stock is empty, so
+        a stocked seed is never wasted paying for one you didn't need to.
+        """
         species = SPECIES_TABLE.get(species_id)
         if species is None or not self.grid.can_plant(cell):
             return
-        if not spend_credits(self.economy, species.seed_cost):
+        if not consume_seed(self.economy, specific_seed_key(species_id)) and (
+            not spend_credits(self.economy, species.seed_cost)
+        ):
             self._cant_afford(cell, species.seed_cost)
             return
+        entity = self.entity_manager.create_entity()
+        entity.add_component(PlantComponent(species_id=species_id))
+        entity.add_component(build_plant_ai(entity))
+        self.grid.mark_planted(cell, entity.id)
+
+    def _sow_generic(self, cell: Cell) -> None:
+        """Sow one generic seed, if there is one, as a random common species.
+
+        `pick_generic_species` weights towards cheap species -- a free
+        seed pulled off a weed is a worse bet at a valuable canopy tree
+        than paying for one outright, on purpose.
+        """
+        if not self.grid.can_plant(cell):
+            return
+        if not consume_seed(self.economy, GENERIC_SEED_KEY):
+            if self._canvas is not None:
+                self._canvas.spawn_label(cell, "No generic seed", WARN_COLOR)
+            self._say("Pull a weed for a generic seed")
+            return
+        species_id = pick_generic_species(self._rng or RandomStream())
         entity = self.entity_manager.create_entity()
         entity.add_component(PlantComponent(species_id=species_id))
         entity.add_component(build_plant_ai(entity))
@@ -700,11 +764,13 @@ class GardenScene(Scene):
             self._cant_afford(cell, SPRAY_COST)
 
     def _harvest(self, cell: Cell) -> None:
-        """Sell a harvestable plant, or clear a dead one, freeing its cell.
+        """Collect a harvestable or overripe plant, or clear a dead one.
 
         The cell stays tilled either way, ready to replant. An infested
         plant is refused -- treating the pests first is the point of the
-        outbreak -- and a plant still growing is left alone.
+        outbreak -- and a plant still growing is left alone. What a
+        collectable plant is worth (Sementes, or a seed) is entirely
+        `economy.harvest_cell`'s call; this only reports the result.
         """
         entity_id = self.grid.plant_at.get(cell)
         if entity_id is None:
@@ -723,12 +789,16 @@ class GardenScene(Scene):
             if self._canvas is not None:
                 self._canvas.spawn_label(cell, "Cleared", Color(190, 180, 168))
             return
-        sold = sell_harvest(self.grid, self.entity_manager, self.economy, cell)
-        if sold is None or self._canvas is None:
+        result = harvest_cell(self.grid, self.entity_manager, self.economy, cell)
+        if result is None or self._canvas is None:
             return
-        species_id, value = sold
-        self._canvas.celebrate_harvest(cell, species_id)
-        self._canvas.spawn_label(cell, f"+{value}", GAIN_COLOR)
+        if result.kind == CREDITS:
+            self._canvas.celebrate_harvest(cell, result.species_id)
+            self._canvas.spawn_label(cell, f"+{result.amount}", GAIN_COLOR)
+        else:
+            self._canvas.celebrate_seed(cell, result.species_id)
+            label = "Generic seed" if result.kind == GENERIC_SEED else "Seed"
+            self._canvas.spawn_label(cell, f"+{result.amount} {label}", GAIN_COLOR)
 
     def on_exit(self) -> None:
         """Save the garden.

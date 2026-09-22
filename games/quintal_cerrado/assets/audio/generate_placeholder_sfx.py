@@ -132,6 +132,13 @@ def _build_sounds(rng: random.Random) -> dict[str, Samples]:
         "water": _envelope(_sweep(900.0, 380.0, 0.16, 0.5), decay_rate=10.0),
         # Planting: a soft, small pop.
         "plant": _envelope(_sweep(320.0, 520.0, 0.09, 0.45), decay_rate=18.0),
+        # Collecting a seed instead of a sale (a pulled weed, an overripe
+        # crop): a soft two-note descent -- smaller and quieter than the
+        # "harvest" cha-ching, since it is a smaller, different kind of win.
+        "seed": _concat(
+            _envelope(_sine(660.0, 0.06, 0.35), decay_rate=20.0),
+            _envelope(_sine(495.0, 0.09, 0.3), decay_rate=14.0),
+        ),
         # A growth-stage advance: a cheerful two-note rise.
         "grow_stage": _concat(
             _envelope(_sine(523.25, 0.08, 0.4), decay_rate=16.0),

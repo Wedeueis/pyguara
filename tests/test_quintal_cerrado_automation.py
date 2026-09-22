@@ -292,7 +292,11 @@ class TestDrip:
         scene.grid.till((5, 6))
         scene._plant((5, 6), "guandu")
 
-        _tick(scene, SPECIES_TABLE["guandu"].stage_seconds * 3 + 5.0)
+        # +2s past the three stages to harvestable, not +5s: sitting
+        # harvestable now also accumulates (it is the ripeness clock --
+        # see `TestOverripening` in `test_quintal_cerrado_growth.py`), and
+        # guandu goes "overripe" ~4.5s after reaching it.
+        _tick(scene, SPECIES_TABLE["guandu"].stage_seconds * 3 + 2.0)
 
         plant = scene.entity_manager.get_entity(scene.grid.plant_at[(5, 6)])
         assert plant.get_component(PlantComponent).growth_stage == "harvestable"

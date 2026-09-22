@@ -283,6 +283,29 @@ class TestRoundTrip:
 
         assert _plant(loaded, (1, 1)).growth_progress > before
 
+    def test_an_overripe_plant_and_seed_stock_come_back(
+        self, scene: GardenScene
+    ) -> None:
+        """The fun-improvement roadmap's Phase 3: a stage this build's
+        `_PLANT_STAGES` only just learned, and inventory keys shaped
+        nothing like a structure kind -- both need their own coverage
+        beyond `_lived_in_garden`'s fixed scenario."""
+        _plant_at(scene, (1, 1), "baru", stage="overripe")
+        scene.economy.inventory = {
+            "soil_sensor": 1,
+            "generic_seed": 3,
+            "seed:baru": 2,
+        }
+
+        loaded = _reload(scene)
+
+        assert _plant(loaded, (1, 1)).growth_stage == "overripe"
+        assert loaded.economy.inventory == {
+            "soil_sensor": 1,
+            "generic_seed": 3,
+            "seed:baru": 2,
+        }
+
 
 class TestLoadingAnOutbreak:
     def _mid_outbreak(self, scene: GardenScene) -> None:
@@ -633,6 +656,19 @@ class TestScoring:
         _plant_at(scene, (0, 0), "guandu")
         _plant_at(scene, (1, 0), "baru")
         _force_stage(scene, (1, 0), "dying")
+
+        score = compute_score(scene.grid, scene.entity_manager, scene.economy)
+
+        assert score.biodiversity == pytest.approx(1 / 4)
+
+    def test_a_weed_infested_plot_does_not_count_towards_biodiversity(
+        self, scene: GardenScene
+    ) -> None:
+        """A weed is not a "species" the player is growing on purpose --
+        an overrun plot must not score as thriving biodiversity for it."""
+        _plant_at(scene, (0, 0), "guandu")
+        _plant_at(scene, (1, 0), "weed")
+        _plant_at(scene, (2, 0), "weed")
 
         score = compute_score(scene.grid, scene.entity_manager, scene.economy)
 

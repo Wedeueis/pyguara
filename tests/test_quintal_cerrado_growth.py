@@ -12,15 +12,21 @@ No real window: builds the same minimal, mocked container
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from games.quintal_cerrado import garden_states, treatments
-from games.quintal_cerrado.components import PlantComponent
+from games.quintal_cerrado.components import (
+    GENERIC_SEED_KEY,
+    PlantComponent,
+    specific_seed_key,
+)
 from games.quintal_cerrado.economy import (
     COMPOST_COST,
+    OVERRIPE_WEED_SEED_BONUS,
     SPRAY_COST,
     sale_value,
 )
@@ -28,6 +34,11 @@ from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedE
 from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene
 from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.systems import weed_spread_system as weed_module
+from games.quintal_cerrado.systems.weed_spread_system import (
+    PROPAGATION_INTERVAL,
+    WeedSpreadSystem,
+)
 from pyguara.ai.components import AIComponent
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.manager import AudioManager
@@ -113,8 +124,12 @@ class TestGrowthProgression:
         scene._plant(cell, "guandu")
         scene.grid.water(cell)
 
+        # 12s: guandu (stage_seconds=3.0) reaches harvestable in ~9s and
+        # would not go "overripe" for another ~4.5s after that -- comfortable
+        # margin to see every growth stage without also seeing the ripening
+        # one, which `TestOverripening` covers on its own.
         seen_stages = set()
-        for _ in range(round(30 / FIXED_DT)):
+        for _ in range(round(12 / FIXED_DT)):
             scene.system_manager.update(FIXED_DT)
             scene.entity_manager.flush_pending_removals()
             seen_stages.add(_plant_component(scene, cell).growth_stage)
@@ -130,21 +145,27 @@ class TestGrowthProgression:
 
         assert _plant_component(scene, cell).growth_multiplier == 1.0
 
-    def test_harvestable_growth_progress_does_not_climb_unbounded(
+    def test_overripe_growth_progress_does_not_climb_unbounded(
         self, scene: GardenScene
     ) -> None:
+        """`"harvestable"` itself is meant to keep accumulating now -- that
+        is its ripeness clock (`TestOverripening`) -- but `"overripe"`,
+        what it reaches once that clock runs out, must freeze the same as
+        `"infested"`/`"dying"` always have, or a save would carry an
+        ever-growing number for no reason."""
         cell = (0, 0)
         scene.grid.till(cell)
         scene._plant(cell, "guandu")
         scene.grid.water(cell)
 
-        _tick(scene, SPECIES_TABLE["guandu"].stage_seconds * 3 + 1.0)
+        # ~9s to harvestable, ~4.5s more to overripe: 16s is comfortably past.
+        _tick(scene, 16.0)
         plant = _plant_component(scene, cell)
-        assert plant.growth_stage == "harvestable"
-        progress_at_harvest = plant.growth_progress
+        assert plant.growth_stage == "overripe"
+        progress_at_overripe = plant.growth_progress
 
         _tick(scene, 5.0)
-        assert _plant_component(scene, cell).growth_progress == progress_at_harvest
+        assert _plant_component(scene, cell).growth_progress == progress_at_overripe
 
     def test_growth_stalls_below_the_moisture_threshold(
         self, scene: GardenScene
@@ -654,6 +675,166 @@ class TestEconomy:
         assert (2, 2) not in scene.grid.plant_at
         assert scene.economy.credits == credits
         assert scene.grid.can_plant((2, 2))
+
+
+class TestOverripening:
+    """Left too long, a harvestable plant goes `"overripe"` -- and pays out
+    a seed of its own species instead of Sementes when finally collected."""
+
+    def test_a_harvestable_plant_left_too_long_goes_overripe(
+        self, scene: GardenScene
+    ) -> None:
+        cell = (2, 2)
+        scene.grid.till(cell)
+        scene._plant(cell, "guandu")
+        scene.grid.water(cell)
+
+        # ~9s to harvestable, ~4.5s more to overripe: 16s is comfortably past.
+        _tick(scene, 16.0)
+
+        assert _plant_component(scene, cell).growth_stage == "overripe"
+
+    def test_collecting_it_overripe_stocks_a_seed_instead_of_selling(
+        self, scene: GardenScene
+    ) -> None:
+        _plant_at(scene, (2, 2), "baru", stage="overripe")
+        credits = scene.economy.credits
+
+        scene._harvest((2, 2))
+
+        assert scene.economy.credits == credits
+        assert scene.economy.inventory[specific_seed_key("baru")] == 1
+        assert (2, 2) not in scene.grid.plant_at
+
+    def test_collecting_it_at_its_peak_still_sells_normally(
+        self, scene: GardenScene
+    ) -> None:
+        """The unchanged, `"harvestable"` half of the same tool."""
+        _plant_at(scene, (2, 2), "baru", stage="harvestable")
+        credits = scene.economy.credits
+
+        scene._harvest((2, 2))
+
+        assert scene.economy.credits > credits
+        assert specific_seed_key("baru") not in scene.economy.inventory
+
+    def test_a_stocked_seed_is_spent_before_sementes(self, scene: GardenScene) -> None:
+        scene.economy.inventory[specific_seed_key("baru")] = 1
+        credits = scene.economy.credits
+        scene.grid.till((3, 3))
+
+        scene._plant((3, 3), "baru")
+
+        assert scene.economy.credits == credits
+        assert scene.economy.inventory[specific_seed_key("baru")] == 0
+        assert (3, 3) in scene.grid.plant_at
+
+    def test_planting_falls_back_to_sementes_once_stock_is_empty(
+        self, scene: GardenScene
+    ) -> None:
+        scene.grid.till((3, 3))
+        credits = scene.economy.credits
+
+        scene._plant((3, 3), "baru")
+
+        assert scene.economy.credits == credits - SPECIES_TABLE["baru"].seed_cost
+
+
+class TestWeeds:
+    """The plot acting on its own, and the generic-seed economy it feeds."""
+
+    def test_pulling_a_weed_grants_a_generic_seed_not_credits(
+        self, scene: GardenScene
+    ) -> None:
+        _plant_at(scene, (2, 2), "weed", stage="harvestable")
+        credits = scene.economy.credits
+
+        scene._harvest((2, 2))
+
+        assert scene.economy.credits == credits
+        assert scene.economy.inventory[GENERIC_SEED_KEY] == 1
+        assert (2, 2) not in scene.grid.plant_at
+
+    def test_pulling_an_overripe_weed_grants_a_bonus(self, scene: GardenScene) -> None:
+        _plant_at(scene, (2, 2), "weed", stage="overripe")
+
+        scene._harvest((2, 2))
+
+        assert scene.economy.inventory[GENERIC_SEED_KEY] == OVERRIPE_WEED_SEED_BONUS
+
+    def test_sowing_a_generic_seed_spends_stock_and_plants_a_sellable_species(
+        self, scene: GardenScene
+    ) -> None:
+        scene.economy.inventory[GENERIC_SEED_KEY] = 1
+        scene.grid.till((3, 3))
+
+        scene._sow_generic((3, 3))
+
+        assert scene.economy.inventory[GENERIC_SEED_KEY] == 0
+        assert (3, 3) in scene.grid.plant_at
+        planted = SPECIES_TABLE[_plant_component(scene, (3, 3)).species_id]
+        assert not planted.is_weed
+
+    def test_sowing_with_no_stock_plants_nothing(self, scene: GardenScene) -> None:
+        scene.grid.till((3, 3))
+
+        scene._sow_generic((3, 3))
+
+        assert (3, 3) not in scene.grid.plant_at
+
+    def test_a_check_below_the_propagation_interval_does_nothing(
+        self, scene: GardenScene
+    ) -> None:
+        """A short tick (most of this suite's own ticks) must never trigger
+        a check -- the whole reason it is timer-gated, not per-tick."""
+        scene.grid.till((2, 2))
+        system = WeedSpreadSystem(scene.entity_manager, scene.grid, RandomStream(1))
+
+        system.update(PROPAGATION_INTERVAL - 0.1)
+
+        assert not scene.grid.plant_at
+
+    def test_a_mature_plant_can_spread_to_a_free_neighbour(
+        self, scene: GardenScene, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setitem(
+            SPECIES_TABLE, "guandu", replace(SPECIES_TABLE["guandu"], spread_chance=1.0)
+        )
+        _plant_at(scene, (5, 5), "guandu", stage="mature")
+        scene.grid.till((5, 6))  # the only free neighbour
+        system = WeedSpreadSystem(scene.entity_manager, scene.grid, RandomStream(3))
+
+        system.update(PROPAGATION_INTERVAL)
+
+        assert (5, 6) in scene.grid.plant_at
+        assert _plant_component(scene, (5, 6)).species_id == "guandu"
+
+    def test_a_growing_plant_does_not_spread(
+        self, scene: GardenScene, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Too young to have anything to spare -- see `SPREADING_STAGES`."""
+        monkeypatch.setitem(
+            SPECIES_TABLE, "guandu", replace(SPECIES_TABLE["guandu"], spread_chance=1.0)
+        )
+        _plant_at(scene, (5, 5), "guandu", stage="growing")
+        scene.grid.till((5, 6))
+        system = WeedSpreadSystem(scene.entity_manager, scene.grid, RandomStream(3))
+
+        system.update(PROPAGATION_INTERVAL)
+
+        assert (5, 6) not in scene.grid.plant_at
+
+    def test_a_bare_tilled_cell_can_spontaneously_grow_a_weed(
+        self, scene: GardenScene, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(weed_module, "SPONTANEOUS_WEED_CHANCE", 1.0)
+        scene.grid.till((4, 4))
+        system = WeedSpreadSystem(scene.entity_manager, scene.grid, RandomStream(5))
+
+        system.update(PROPAGATION_INTERVAL)
+
+        assert (4, 4) in scene.grid.plant_at
+        assert _plant_component(scene, (4, 4)).species_id == "weed"
 
 
 class TestOutbreakFsm:

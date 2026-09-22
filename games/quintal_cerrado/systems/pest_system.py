@@ -63,11 +63,14 @@ HEALTH_DRAIN = 0.08
 HEALTH_REGEN = 0.02
 """Health a plant under `RECOVER_THRESHOLD` pressure regains per second."""
 
-VULNERABLE_STAGES = frozenset({"growing", "mature", "harvestable", "infested"})
+VULNERABLE_STAGES = frozenset(
+    {"growing", "mature", "harvestable", "overripe", "infested"}
+)
 """Stages pests can reach. Seedlings are immune, and a dying plant has
-nothing left to lose."""
+nothing left to lose. `"overripe"` counts too -- otherwise leaving a plant
+past its ripe window would be a free way to dodge an outbreak."""
 
-_GROWN_STAGES = frozenset({"mature", "harvestable"})
+_GROWN_STAGES = frozenset({"mature", "harvestable", "overripe"})
 _SNAP_TO_ZERO = 0.02
 
 
