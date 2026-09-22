@@ -1,19 +1,20 @@
-"""The garden HUD: a status panel, a menu button, and a hover cell inspector.
+"""The garden HUD: a status card, a weather card, a toast and an inspector.
 
-Both use the same `BevelPanel` + stock widget pattern `guara_falcao/hud.py`
-does -- `ProgressBar` and `Label`, skinned by the theme, with nothing
+Each is a `hud_widgets.CardPanel` holding stock widgets -- `ProgressBar`
+and `Label`, skinned by the theme -- plus `icons.py` glyphs, with nothing
 invented. Everything shown is real state: Sementes are `PlayerEconomy.credits`,
 the clock is the scene's own, power is `AutomationSystem`'s real budget, the
 status line is `GardenConditions.phase`, and the inspector reads the
 `SoilCell` and plant under the cursor.
 
-The status panel lives in the left gutter beside the grid, not the top-left
-corner: the tool bar's two rows start at x~123, and a panel anchored to the
-corner would sit on top of the leftmost button.
+Where each piece sits is `layout.py`'s call: the status card and the
+weather card open the top ribbon, and the inspector and the message toast
+share the column right of the grid.
 """
 
 from __future__ import annotations
 
+from games.quintal_cerrado import layout
 from games.quintal_cerrado.clock import format_clock
 from games.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
@@ -23,24 +24,24 @@ from games.quintal_cerrado.components import (
     PlayerEconomy,
 )
 from games.quintal_cerrado.garden_grid import GardenGrid
+from games.quintal_cerrado.hud_widgets import CardPanel
+from games.quintal_cerrado.icons import draw_icon
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
 from games.quintal_cerrado.weather import WEATHER_TABLE
 from pyguara.common.grid import Cell
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.manager import EntityManager
+from pyguara.graphics.protocols import UIRenderer
+from pyguara.ui.base import UIElement
 from pyguara.ui.components.progress_bar import ProgressBar
 from pyguara.ui.components.text import Label
-from pyguara.ui.constraints import create_anchored_constraints
-from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
-from pyguara.ui.design_system.tokens import Verdant, Water
+from pyguara.ui.design_system.tokens import Guara, Sand, Verdant, Water
 from pyguara.ui.manager import UIManager
-from pyguara.ui.types import UIAnchor, UILayer
+from pyguara.ui.types import UILayer
 
-GUTTER_X = 14
-PANEL_Y = 158
-PANEL_SIZE = Vector2(164, 144)
 MESSAGE_SECONDS = 2.5
+TOAST_HEIGHT = 34
 
 _STATUS_TEXT = {
     "stable": "Garden: calm",
@@ -57,49 +58,45 @@ _SOIL_NAMES = {
 
 
 class Hud:
-    """Builds the status panel and Menu button, and keeps them current."""
+    """Builds the status card and the message toast, and keeps them current."""
 
-    def __init__(self, ui_manager: UIManager) -> None:
-        """Build the panel and button and add them to the HUD layer.
+    def __init__(self, ui_manager: UIManager, toast_y: int) -> None:
+        """Build the status card and the message toast.
 
         Args:
             ui_manager: The manager to add them to.
+            toast_y: Where the toast's top edge sits in the right column.
         """
-        self.credits_label = Label("", Vector2(0, 0), font_size=18)
-        self.clock_label = Label("", Vector2(0, 0), font_size=13)
-        self.power_label = Label("", Vector2(0, 0), font_size=13)
-        self.status_label = Label("", Vector2(0, 0), font_size=14)
-        self.seeds_label = Label("", Vector2(0, 0), font_size=13)
+        self.credits_label = Label("", Vector2(0, 0), font_size=20, color=Sand.C200)
+        self.clock_label = Label("", Vector2(0, 0), font_size=12)
+        self.power_label = Label("", Vector2(0, 0), font_size=12)
+        self.status_label = Label("", Vector2(0, 0), font_size=12)
+        self.seeds_label = Label("", Vector2(0, 0), font_size=12)
         self.message_label = Label("", Vector2(0, 0), font_size=13)
         self._message_left = 0.0
 
-        panel = BevelPanel(Vector2(0, 0), PANEL_SIZE, border_width=2)
-        panel.constraints = create_anchored_constraints(
-            UIAnchor.TOP_LEFT, offset_x=GUTTER_X, offset_y=PANEL_Y
-        )
-        for label, offset_y in (
-            (self.credits_label, 8),
-            (self.clock_label, 32),
-            (self.power_label, 52),
-            (self.status_label, 72),
-            (self.seeds_label, 92),
-            (self.message_label, 116),
+        card = layout.RESOURCE_CARD
+        panel = CardPanel(Vector2(card.x, card.y), Vector2(card.width, card.height))
+        for label, x, y in (
+            (self.credits_label, 12, 10),
+            (self.status_label, 12, 40),
+            (self.clock_label, 150, 10),
+            (self.power_label, 150, 27),
+            (self.seeds_label, 150, 44),
         ):
-            label.constraints = create_anchored_constraints(
-                UIAnchor.TOP_LEFT, offset_x=10, offset_y=offset_y
-            )
+            label.rect.x, label.rect.y = card.x + x, card.y + y
             panel.add_child(label)
         ui_manager.add_element(panel, UILayer.HUD)
 
-        self.menu_button = BevelButton(
-            "Menu (Esc)", Vector2(0, 0), Vector2(int(PANEL_SIZE.x), 34), skin=Skins.WOOD
+        self.toast = CardPanel(
+            Vector2(layout.COLUMN_X, toast_y),
+            Vector2(layout.COLUMN_WIDTH, TOAST_HEIGHT),
         )
-        self.menu_button.constraints = create_anchored_constraints(
-            UIAnchor.TOP_LEFT,
-            offset_x=GUTTER_X,
-            offset_y=PANEL_Y + int(PANEL_SIZE.y) + 8,
-        )
-        ui_manager.add_element(self.menu_button, UILayer.HUD)
+        self.message_label.rect.x = layout.COLUMN_X + 12
+        self.message_label.rect.y = toast_y + 9
+        self.toast.add_child(self.message_label)
+        self.toast.visible = False
+        ui_manager.add_element(self.toast, UILayer.HUD)
 
     def show_message(self, text: str) -> None:
         """Show `text` on the message line for `MESSAGE_SECONDS`.
@@ -108,6 +105,7 @@ class Hud:
             text: A short line -- the panel is not wide.
         """
         self.message_label.set_text(text)
+        self.toast.visible = bool(text)
         self._message_left = MESSAGE_SECONDS
 
     def update(
@@ -140,17 +138,14 @@ class Hud:
             self._message_left -= dt
             if self._message_left <= 0.0:
                 self.message_label.set_text("")
-
-
-WEATHER_PANEL_SIZE = Vector2(160, 64)
+                self.toast.visible = False
 
 
 class WeatherPanel:
     """Now, and what's coming -- a short weather forecast in the corner.
 
-    A separate small panel rather than a line on the main status panel
-    (`Hud`, in the opposite corner): that one is already packed, and this
-    is meant to be glanced at ahead of an action ("rain's coming, skip
+    A separate card rather than a line on the status card (`Hud`, beside
+    it): that one is already packed, and this is meant to be glanced at ahead of an action ("rain's coming, skip
     watering"), not read alongside credits and the clock.
     """
 
@@ -163,14 +158,10 @@ class WeatherPanel:
         self.now_label = Label("", Vector2(0, 0), font_size=14)
         self.forecast_label = Label("", Vector2(0, 0), font_size=12)
 
-        panel = BevelPanel(Vector2(0, 0), WEATHER_PANEL_SIZE, border_width=2)
-        panel.constraints = create_anchored_constraints(
-            UIAnchor.TOP_RIGHT, offset_x=-GUTTER_X, offset_y=PANEL_Y
-        )
-        for label, offset_y in ((self.now_label, 10), (self.forecast_label, 36)):
-            label.constraints = create_anchored_constraints(
-                UIAnchor.TOP_LEFT, offset_x=10, offset_y=offset_y
-            )
+        card = layout.WEATHER_CARD
+        panel = CardPanel(Vector2(card.x, card.y), Vector2(card.width, card.height))
+        for label, offset_y in ((self.now_label, 12), (self.forecast_label, 38)):
+            label.rect.x, label.rect.y = card.x + 12, card.y + offset_y
             panel.add_child(label)
         ui_manager.add_element(panel, UILayer.HUD)
 
@@ -191,33 +182,37 @@ class CellInspector:
     """Shows the soil and plant under the cursor: a title and four meters."""
 
     METRICS = (
-        ("Moisture", "moisture", Water.C300),
-        ("Humus", "organic_matter", Verdant.COLONIAL_500),
-        ("Shade", "shade_level", Color(140, 150, 190)),
-        ("Pests", "pest_pressure", Color(210, 90, 200)),
+        ("Umidade", "moisture", "moisture", Water.C300),
+        ("Húmus", "organic_matter", "humus", Verdant.COLONIAL_500),
+        ("Sombra", "shade_level", "shade", Sand.C500),
+        ("Pragas", "pest_pressure", "pests", Guara.C400),
     )
-    HEIGHT = 64
+    ROW_HEIGHT = 30
+    TOP = 34
+    HEIGHT = TOP + ROW_HEIGHT * len(METRICS) + 8
 
     def __init__(self, ui_manager: UIManager, position: Vector2, width: int) -> None:
-        """Build the panel and add it to the HUD layer.
+        """Build the card and add it to the HUD layer.
 
         Args:
-            ui_manager: The manager to add the panel to.
+            ui_manager: The manager to add the card to.
             position: Top-left corner, in screen space.
-            width: Panel width.
+            width: Card width.
         """
-        panel = BevelPanel(position, Vector2(width, self.HEIGHT), border_width=2)
-        self.title = Label("", Vector2(position.x + 12, position.y + 7), font_size=13)
+        panel = CardPanel(position, Vector2(width, self.HEIGHT))
+        self.title = Label("", Vector2(position.x + 12, position.y + 10), font_size=13)
         panel.add_child(self.title)
 
-        column = (width - 24) // len(self.METRICS)
         self.bars: dict[str, ProgressBar] = {}
-        for index, (name, key, color) in enumerate(self.METRICS):
-            x = position.x + 12 + index * column
-            panel.add_child(Label(name, Vector2(x, position.y + 27), font_size=11))
+        for index, (name, key, icon_id, color) in enumerate(self.METRICS):
+            y = position.y + self.TOP + index * self.ROW_HEIGHT
+            panel.add_child(
+                _IconMark(icon_id, Rect(int(position.x) + 12, int(y), 20, 20))
+            )
+            panel.add_child(Label(name, Vector2(position.x + 40, y + 3), font_size=12))
             bar = ProgressBar(
-                Vector2(x, position.y + 44),
-                Vector2(column - 14, 9),
+                Vector2(position.x + 110, y + 6),
+                Vector2(width - 126, 9),
                 value=0.0,
                 fill_color=color,
             )
@@ -249,7 +244,7 @@ class CellInspector:
         plant_text = self._plant_text(grid, entity_manager, cell)
         if plant_text:
             parts.append(plant_text)
-        self.title.set_text("  |  ".join(parts))
+        self.title.set_text(" | ".join(parts))
         for key, bar in self.bars.items():
             bar.set_value(float(getattr(soil, key)))
 
@@ -270,3 +265,14 @@ class CellInspector:
                 kind = entity.get_component(AutomationComponent).kind
                 return STRUCTURE_TABLE[kind].display_name
         return ""
+
+
+class _IconMark(UIElement):
+    """A static icon as a UI child, so a card can hold one like a label."""
+
+    def __init__(self, icon_id: str, rect: Rect) -> None:
+        super().__init__(Vector2(rect.x, rect.y), Vector2(rect.width, rect.height))
+        self.icon_id = icon_id
+
+    def render(self, renderer: UIRenderer) -> None:
+        draw_icon(renderer, self.icon_id, self.rect)
