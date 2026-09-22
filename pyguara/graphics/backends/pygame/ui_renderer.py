@@ -5,7 +5,12 @@ from typing import Any
 import pygame
 
 from pyguara.common.types import Color, Rect, Vector2
-from pyguara.graphics.backends.surface_blending import blit_blended_rect
+from pyguara.graphics.backends.surface_blending import (
+    blit_blended_circle,
+    blit_blended_line,
+    blit_blended_polygon,
+    blit_blended_rect,
+)
 
 
 class PygameUIRenderer:
@@ -61,31 +66,35 @@ class PygameUIRenderer:
     def draw_circle(
         self, center: Vector2, radius: float, color: Color, width: int = 0
     ) -> None:
-        """Draw a filled or outlined circle."""
+        """Draw a filled or outlined circle, blending a translucent colour."""
         rgba = self._to_pygame_color(color)
-        pygame.draw.circle(
-            self._surface, rgba, (int(center.x), int(center.y)), int(radius), width
-        )
+        position = (int(center.x), int(center.y))
+        if rgba[3] < 255:
+            blit_blended_circle(self._surface, position, int(radius), rgba, width)
+        else:
+            pygame.draw.circle(self._surface, rgba, position, int(radius), width)
 
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
-        """Draw a line."""
+        """Draw a line, blending a translucent colour."""
         rgba = self._to_pygame_color(color)
-        pygame.draw.line(
-            self._surface,
-            rgba,
-            (int(start.x), int(start.y)),
-            (int(end.x), int(end.y)),
-            width,
-        )
+        a = (int(start.x), int(start.y))
+        b = (int(end.x), int(end.y))
+        if rgba[3] < 255:
+            blit_blended_line(self._surface, a, b, rgba, width)
+        else:
+            pygame.draw.line(self._surface, rgba, a, b, width)
 
     def draw_polygon(
         self, points: list[tuple[int, int]], color: Color, width: int = 0
     ) -> None:
-        """Draw a filled or outlined polygon."""
+        """Draw a filled or outlined polygon, blending a translucent colour."""
         rgba = self._to_pygame_color(color)
-        pygame.draw.polygon(self._surface, rgba, points, width)
+        if rgba[3] < 255:
+            blit_blended_polygon(self._surface, points, rgba, width)
+        else:
+            pygame.draw.polygon(self._surface, rgba, points, width)
 
     def draw_text(
         self, text: str, position: Vector2, color: Color, size: int = 16
