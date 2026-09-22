@@ -21,7 +21,7 @@ from games.guara_falcao.bootstrap import (
     WINDOW_WIDTH,
     attach_lighting,
     begin_world,
-    run_pipeline,
+    configure_pipeline,
 )
 from games.guara_falcao.components import (
     CharacterSprite,
@@ -298,7 +298,7 @@ class TitleScene(Scene):
         )
 
         world_renderer.end_frame()
-        run_pipeline(self.container, self._camera)
+        configure_pipeline(self.container, self._camera)
 
 
 class GameScene(Scene):
@@ -801,7 +801,7 @@ class GameScene(Scene):
         # lands on top of them. The HUD is widgets on the UI layer, which
         # composites later still.
         world_renderer.end_frame()
-        run_pipeline(
+        configure_pipeline(
             self.container, self._camera or Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
         )
 

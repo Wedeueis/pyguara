@@ -4,11 +4,12 @@ The `arena_fx.py` analogue: lighting, backdrop, sparks, shake, hit-stop
 and floating text wired together once, so the menu and the run are the
 same patch of cerrado rather than two unrelated screens.
 
-It also drives the half of the render graph the application does not.
-`Application._render_with_graph()` executes only the graph's `final` pass;
-everything between the world buffer and that blit -- lighting,
-compositing, post-processing -- is the scene's to run, so it is run here
-rather than copied into every scene.
+It also owns the one piece of the render graph `Application` cannot
+configure itself: the light pass's camera. `Application._render_with_graph()`
+executes every pass in the graph (lighting, compositing, post-processing,
+final) automatically now, in registration order -- but only a scene knows
+where its own camera is each frame, so `configure_pipeline()` sets that
+one thing here rather than being copied into every scene.
 
 **Hit-stop** lives here because it is the one piece of feedback that is
 not purely visual: a kill freezes the simulation for a few frames while
@@ -298,27 +299,25 @@ class CerradoFX:
         """Paint the clearing. Call first, before anything standing on it."""
         self.backdrop.draw(renderer)
 
-    def run_pipeline(self, camera: Camera2D) -> None:
-        """Execute light -> composite -> post-process for this frame.
+    def configure_pipeline(self, camera: Camera2D) -> None:
+        """Point the light pass at this frame's camera.
 
-        Named explicitly rather than "every pass except final". The world
-        pass is in the graph too, and it *clears* the world buffer before
-        drawing its own queue -- running it here would erase everything
-        the scene just drew immediately into that buffer, which is a blank
-        frame and no error.
+        `Application._render_with_graph()` executes every pass in the
+        graph itself now (in registration order, skipping only `"world"`
+        -- it *clears* the world buffer before drawing its own queue, and
+        running it again here would erase everything the scene just drew
+        immediately into that buffer, a blank frame and no error to point
+        at) -- this only configures the one piece of per-frame state
+        execution alone cannot know: where the camera is this frame.
 
         Args:
             camera: The scene's camera, so the light map lines up with
                 geometry the scene drew shaken.
         """
         graph = self._container.get(RenderGraph)
-        for name in ("light", "composite", "post_process"):
-            render_pass = graph.get_pass(name)
-            if render_pass is None:
-                continue
-            if name == "light":
-                render_pass.set_camera(camera)
-            render_pass.execute(graph.ctx, graph)
+        light_pass = graph.get_pass("light")
+        if light_pass is not None:
+            light_pass.set_camera(camera)
 
     def bind_finished_frame(self) -> None:
         """Bind the buffer the final blit reads, for drawing over it.

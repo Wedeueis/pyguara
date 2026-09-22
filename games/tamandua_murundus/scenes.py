@@ -693,7 +693,7 @@ class ClearingScene(Scene):
         self.fx.popups.render(world_renderer, self._camera)
 
         self.fx.set_dynamic_lights(self._lights())
-        self.fx.run_pipeline(self._camera)
+        self.fx.configure_pipeline(self._camera)
 
         # The HUD does not go in the world. D1 drew it there, so it picked
         # up the light map -- which read well at a fixed dusk, but the

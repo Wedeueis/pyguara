@@ -318,18 +318,20 @@ class CaveScene(Scene):
         self._draw_hud(world_renderer)
         world_renderer.end_frame()
 
-        self._run_lighting_passes()
+        self._configure_lighting_passes()
 
     def _camera_offset(self) -> Vector2:
         assert self.camera is not None
         return self.camera.position - Vector2(WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)
 
-    def _run_lighting_passes(self) -> None:
-        """Execute light -> pulse -> composite -> post.
+    def _configure_lighting_passes(self) -> None:
+        """Point the light and pulse passes at this frame's camera and rings.
 
-        `Application._render_with_graph()` runs only the graph's `final`
-        pass, never the middle, so the scene drives the rest itself and
-        leaves `final` to blit the composed result to the screen.
+        `Application._render_with_graph()` executes every pass in the
+        graph itself (in registration order, skipping only `"world"`,
+        which it binds, clears and lets the scene draw into first) -- this
+        only configures the per-frame state execution alone cannot know:
+        where the camera is, and which wavefronts are active this frame.
         """
         graph = self.container.get(RenderGraph)
         assert self.camera is not None
@@ -345,16 +347,13 @@ class CaveScene(Scene):
             for pulse in self._pulses.active
         ]
 
-        for name in ("light", "pulse", "composite", "post_process"):
-            render_pass = graph.get_pass(name)
-            if render_pass is None:
-                continue
-            if name == "light":
-                render_pass.set_camera(self.camera)
-            elif name == "pulse":
-                render_pass.set_camera(self.camera)
-                render_pass.set_rings(rings)
-            render_pass.execute(graph.ctx, graph)
+        light_pass = graph.get_pass("light")
+        if light_pass is not None:
+            light_pass.set_camera(self.camera)
+        pulse_pass = graph.get_pass("pulse")
+        if pulse_pass is not None:
+            pulse_pass.set_camera(self.camera)
+            pulse_pass.set_rings(rings)
 
     # ---- HUD ----------------------------------------------------------
 

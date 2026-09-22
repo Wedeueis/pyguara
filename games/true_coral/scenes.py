@@ -250,7 +250,7 @@ class MenuScene(_AtmosphericScene):
             size=18,
         )
 
-        atmosphere.run_pipeline(self.camera)
+        atmosphere.configure_pipeline(self.camera)
 
     # Segment spacing for the menu snake. Well under a body's diameter,
     # because the body is drawn as capsules between consecutive centres
@@ -574,7 +574,7 @@ class GameScene(_AtmosphericScene):
         )
         self._popups.render(world_renderer, self.camera)
 
-        atmosphere.run_pipeline(self.camera)
+        atmosphere.configure_pipeline(self.camera)
 
     def _food_snapshot(self) -> list[tuple[str, Vector2, float]]:
         """Return `(type, centre, phase)` for every piece of prey on the board."""
@@ -763,4 +763,4 @@ class GameOverScene(_AtmosphericScene):
             size=24,
         )
 
-        atmosphere.run_pipeline(self.camera)
+        atmosphere.configure_pipeline(self.camera)

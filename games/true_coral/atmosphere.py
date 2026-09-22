@@ -4,11 +4,12 @@ Weather, lighting, backdrop, sparks and shake, wired together once and
 reused by the menu, the arena and the game-over screen, so all three are
 the same rainy patch of forest floor rather than three unrelated screens.
 
-It also owns the half of the render graph the application does not run.
-`Application._render_with_graph()` executes only the graph's `final` pass;
-everything between the world buffer and that blit -- lighting, compositing,
-post-processing -- is the scene's to drive, so it is driven here rather
-than copied into three scenes.
+It also owns the one piece of the render graph `Application` cannot
+configure itself: the light pass's camera. `Application._render_with_graph()`
+executes every pass in the graph (lighting, compositing, post-processing,
+final) automatically now, in registration order -- but only a scene knows
+where its own camera is each frame, so `configure_pipeline()` sets that
+one thing here rather than being copied into three scenes.
 """
 
 from __future__ import annotations
@@ -227,11 +228,14 @@ class Atmosphere:
         draw_litter(renderer, self.backdrop, time=self.time, offset=self.offset)
         draw_owl(renderer, self.backdrop, time=self.time, offset=self.offset)
 
-    def run_pipeline(self, camera: Camera2D) -> None:
-        """Execute light -> composite -> post-process for this frame.
+    def configure_pipeline(self, camera: Camera2D) -> None:
+        """Point the light pass at this frame's camera.
 
-        The application runs only the graph's `final` pass, so everything
-        between the world buffer and the screen happens here.
+        `Application._render_with_graph()` executes every pass in the
+        graph itself (in registration order, skipping only `"world"`,
+        which it binds, clears and lets the scene draw into first) -- this
+        only configures the one piece of per-frame state execution alone
+        cannot know: where the camera is this frame.
 
         Args:
             camera: The scene's camera, already positioned by `update()`
@@ -239,10 +243,6 @@ class Atmosphere:
                 shaken.
         """
         graph = self._container.get(RenderGraph)
-        for name in ("light", "composite", "post_process"):
-            render_pass = graph.get_pass(name)
-            if render_pass is None:
-                continue
-            if name == "light":
-                render_pass.set_camera(camera)
-            render_pass.execute(graph.ctx, graph)
+        light_pass = graph.get_pass("light")
+        if light_pass is not None:
+            light_pass.set_camera(camera)
