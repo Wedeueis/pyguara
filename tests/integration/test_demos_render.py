@@ -32,18 +32,19 @@ from tools.agent_view import DEMOS, is_blank  # noqa: E402
 # boot_process only opens a window and draws nothing; that is its whole point
 # as tutorial module 1, so a flat frame there is correct rather than a defect.
 #
-# mourisco_ressonancia, true_coral and protocolo_bandeira run on the
-# ModernGL backend, and these tests run under SDL's dummy video driver,
-# which provides no OpenGL at all -- none of them can even create a
-# context, let alone draw. They are covered instead by
-# `tools/agent_view.py <demo> --gl`, which uses SDL's offscreen driver and
-# reads the GL framebuffer.
+# mourisco_ressonancia, true_coral, protocolo_bandeira and quintal_cerrado
+# (the fun-improvement roadmap's Phase 5) run on the ModernGL backend, and
+# these tests run under SDL's dummy video driver, which provides no OpenGL
+# at all -- none of them can even create a context, let alone draw. They
+# are covered instead by `tools/agent_view.py <demo> --gl`, which uses
+# SDL's offscreen driver and reads the GL framebuffer.
 GL_ONLY_DEMOS = {
     "mourisco_ressonancia",
     "true_coral",
     "protocolo_bandeira",
     "tamandua_murundus",
     "guara_falcao",
+    "quintal_cerrado",
 }
 DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"} - GL_ONLY_DEMOS)
 

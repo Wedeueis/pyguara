@@ -1,14 +1,35 @@
 """Quintal do Cerrado - Bootstrap.
 
-Runs on the plain pygame backend, not ModernGL -- the plot is a static
-12x8 grid drawn head-on through the UI system (see `garden_widget.py`), so
-there is nothing here that needs lighting, bloom or a shader pass.
+Runs on the **ModernGL** backend, since the fun-improvement roadmap's
+Phase 5 asked for the soil and the weather to actually look like they
+were affecting a living plot, not a sterile grid of flat colours -- and
+that meant a shader pass, which the plain pygame backend cannot give.
 
-No `IPhysicsEngine`/`CollisionSystem`/`Camera2D` are registered either:
+The graph assembled here is deliberately smaller than the other ModernGL
+demos' (`true_coral`, `protocolo_bandeira`, `mourisco_ressonancia`), which
+all run a full `WorldPass -> LightPass -> CompositePass -> PostProcessPass
+-> FinalPass` chain for dynamic lighting this game does not need -- the
+plot is lit flat, head-on, all the time. This one skips straight from the
+world to post-processing::
+
+    WorldPass       -- the scene draws the plot into the "world" FBO
+    PostProcessPass -- the soil-health grade, then rain, then a vignette
+    FinalPass       -- blit to the screen
+
+Order inside the post stack: soil health grades the frame's base colours
+first, so rain and the vignette are drawn over an already-graded scene
+rather than under it, the same way the other demos' vignette always runs
+last, over everything, because it is a lens, not part of the world.
+
+`IPhysicsEngine`/`CollisionSystem`/`Camera2D` are still not registered:
 `Scene.resolve_dependencies()` (`pyguara/scene/base.py`) does not require
 physics to be wired, and this game has no falling body and no scrolling
-world for a camera to follow -- both are scope this demo genuinely does
-not need, not omissions.
+world for a camera to follow. The grid itself no longer needs a camera to
+draw through the world pass either -- `garden_widget.py`'s
+`GardenGridCanvas.render_world()` draws in the same raw screen-pixel
+coordinates `IRenderer`'s primitives always have (see its own module
+docstring): there is no world/screen transform to get right, because
+there never was one to begin with.
 
 `PersistenceManager` is wired the way `pyguara/application/bootstrap.py`'s
 own reference wiring does it -- a `FileStorageBackend` plus a
@@ -23,6 +44,7 @@ but not a real per-user save location.
 from __future__ import annotations
 
 from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
+from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
@@ -32,11 +54,20 @@ from pyguara.audio.manager import AudioManager
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.backends.moderngl import (
+    GLTextureFactory,
+    GLUIRenderer,
+    ModernGLRenderer,
+    PygameGLWindow,
+)
 from pyguara.graphics.backends.pygame.clock import PygameClock
-from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
-from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
-from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
-from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.graphics.pipeline.framebuffer import FramebufferManager
+from pyguara.graphics.pipeline.graph import RenderGraph
+from pyguara.graphics.pipeline.passes import FinalPass, PostProcessPass, WorldPass
+from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
+from pyguara.graphics.vfx.effects.storm import StormEffect
+from pyguara.graphics.vfx.effects.vignette import VignetteEffect
+from pyguara.graphics.vfx.post_process import PostProcessStack
 from pyguara.graphics.window import Window, WindowConfig
 from pyguara.input.backends.pygame_backend import PygameInputBackend
 from pyguara.input.manager import InputManager
@@ -61,6 +92,15 @@ WINDOW_HEIGHT = 640
 
 SAVE_DIRECTORY = "saves/quintal_cerrado"
 
+# A mild, permanent frame -- the same reason every other ModernGL demo in
+# this repo runs one -- strengthened a little (not swapped for a
+# different effect) when `WeatherState.cold_snap` is true, so a cold
+# snap reads as a colder, tighter frame rather than a different filter
+# appearing out of nowhere. See `scenes.py`'s per-frame effect wiring.
+BASE_VIGNETTE_INTENSITY = 0.28
+BASE_VIGNETTE_RADIUS = 0.85
+COLD_SNAP_VIGNETTE_INTENSITY = 0.5
+
 
 def configure_game_container() -> DIContainer:
     """Initialize and configure the DI container for Quintal do Cerrado."""
@@ -83,16 +123,41 @@ def configure_game_container() -> DIContainer:
         screen_width=WINDOW_WIDTH,
         screen_height=WINDOW_HEIGHT,
     )
-    window_backend = PygameWindow()
-    window = Window(win_config, window_backend)
+    gl_window = PygameGLWindow()
+    window = Window(win_config, gl_window)
     window.create()
     container.register_instance(Window, window)
 
-    renderer = PygameBackend(window.native_handle)
-    container.register_instance(IRenderer, renderer)  # type: ignore[type-abstract]
+    ctx = gl_window.get_screen()
 
-    ui_renderer = PygameUIRenderer(window.native_handle)
+    renderer = ModernGLRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
+    container.register_instance(IRenderer, renderer)  # type: ignore[type-abstract]
+    ui_renderer = GLUIRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
     container.register_instance(UIRenderer, ui_renderer)  # type: ignore[type-abstract]
+    container.register_instance(TextureFactory, GLTextureFactory(ctx))  # type: ignore[type-abstract]
+
+    render_graph = RenderGraph(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
+    fbo_manager = render_graph.fbo_manager
+    container.register_instance(FramebufferManager, fbo_manager)
+
+    soil_health_effect = SoilHealthEffect(ctx)
+    storm = StormEffect(ctx)
+    vignette = VignetteEffect(
+        ctx, intensity=BASE_VIGNETTE_INTENSITY, radius=BASE_VIGNETTE_RADIUS
+    )
+    stack = PostProcessStack(ctx, fbo_manager)
+    stack.add_effect(soil_health_effect)
+    stack.add_effect(storm)
+    stack.add_effect(vignette)
+
+    render_graph.add_pass(WorldPass(renderer))
+    render_graph.add_pass(PostProcessPass(stack, input_fbo_name="world"))
+    render_graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
+
+    container.register_instance(RenderGraph, render_graph)
+    container.register_instance(SoilHealthEffect, soil_health_effect)
+    container.register_instance(StormEffect, storm)
+    container.register_instance(VignetteEffect, vignette)
 
     container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
     container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]

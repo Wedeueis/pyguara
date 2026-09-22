@@ -52,6 +52,7 @@ PROGRAMS: dict[str, tuple[str, ...]] = {
         "blur.frag",
         "composite.frag",
         "heat_haze.frag",
+        "soil_health.frag",
         "storm.frag",
         "vignette.frag",
     ),

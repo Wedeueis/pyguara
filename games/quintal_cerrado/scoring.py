@@ -56,6 +56,33 @@ class Score:
     grade: str
 
 
+def soil_health(grid: GardenGrid) -> float:
+    """Mean organic matter of the tilled soil, halved where degraded.
+
+    Its own function rather than inlined in `compute_score`: the
+    fun-improvement roadmap's Phase 5 drives a soil-health shader
+    (`games/quintal_cerrado/soil_health_effect.py`) from this exact
+    number, and it must never drift from what the evaluation screen
+    shows for the same plot.
+
+    Args:
+        grid: The plot.
+
+    Returns:
+        A 0-1 fraction. 0.0 if nothing is tilled yet.
+    """
+    tilled = [
+        soil for row in grid.soil for soil in row if soil.soil_type == "tilled_dirt"
+    ]
+    if not tilled:
+        return 0.0
+    return sum(
+        min(1.0, soil.organic_matter)
+        * (DEGRADED_SOIL_PENALTY if soil.is_chemically_degraded else 1.0)
+        for soil in tilled
+    ) / len(tilled)
+
+
 def compute_score(
     grid: GardenGrid, entity_manager: EntityManager, economy: PlayerEconomy
 ) -> Score:
@@ -69,16 +96,7 @@ def compute_score(
     Returns:
         The `Score`.
     """
-    tilled = [
-        soil for row in grid.soil for soil in row if soil.soil_type == "tilled_dirt"
-    ]
-    soil_health = 0.0
-    if tilled:
-        soil_health = sum(
-            min(1.0, soil.organic_matter)
-            * (DEGRADED_SOIL_PENALTY if soil.is_chemically_degraded else 1.0)
-            for soil in tilled
-        ) / len(tilled)
+    health = soil_health(grid)
 
     living: set[str] = set()
     for entity_id in grid.plant_at.values():
@@ -101,11 +119,11 @@ def compute_score(
     total = round(
         1000
         * (
-            _WEIGHTS["soil"] * soil_health
+            _WEIGHTS["soil"] * health
             + _WEIGHTS["biodiversity"] * biodiversity
             + _WEIGHTS["revenue"] * revenue
             + _WEIGHTS["organic"] * organic
         )
     )
     grade = next(name for floor, name in _GRADES if total >= floor)
-    return Score(soil_health, biodiversity, revenue, organic, total, grade)
+    return Score(health, biodiversity, revenue, organic, total, grade)
