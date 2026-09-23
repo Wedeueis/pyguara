@@ -1,7 +1,7 @@
 ## **Project Name:** _Quintal do Cerrado_ (Working Title)
 
 **Module Path:** `games/quintal_cerrado/`
-**Target Duration:** 15-Minute Playable Capstone Demo
+**Target Duration:** a twelve-day playable capstone demo, played turn by turn
 **Engine:** PyGuara 2D (`pyguara`)
 **Theme:** Agroforestry, Syntropic Agriculture, Cozy Incremental Gardening
 ## 1. Executive Summary & Vision
@@ -89,7 +89,7 @@ games/quintal_cerrado/
 
 ### B. Persistence & Serialization Specification (`pyguara.persistence`)
 
-To validate engine save/load capabilities, the game state must save automatically every 60 seconds or on manual exit:
+To validate engine save/load capabilities, the game state must save automatically at the end of every day (when the player sleeps) or on manual exit. Between two mornings nothing changes that a save could miss, so there is no periodic autosave:
 
 Python
 
@@ -123,17 +123,41 @@ SAVE_SCHEMA = {
 }
 ```
 
-## 6. 15-Minute Playable Loop (Demo Script)
+## 6. Twelve-Day Playable Loop (Demo Script)
 
-- **0:00 – 2:00 (Onboarding):** Player starts with a barren $12 \times 8$ dirt plot and a few legume seeds (_Guandu_). Learns basic tilling, planting, and watering.
-- **2:00 – 5:00 (Stratification):** Unlocks _Baru_ and _Cagaita_. Discovers that planting _Cagaita_ under the shade of _Baru_ with _Guandu_ at the base boosts growth speed by $40\%$.
-- **5:00 – 8:00 (The Fork in the Road):** Pest infestation arrives. Player chooses:
-    - _Option A:_ Buy expensive NPK & Chemical Pesticide (Instant recovery, but soil turns dusty red; crop sell value drops).
-    - _Option B:_ Plant _Pequi_ and add organic compost (Slower recovery, but unlocks premium organic market pricing).
+The garden is **turn-based**. A day is the turn, and nothing in the
+simulation moves while the player is in one: plants grow, soil dries, pests
+spread and the sky turns only when they sleep. **Stamina** is what makes a
+day finite — twelve points, spent per action (till 2, plant 1, water 1,
+compost 2, spray 3, harvest 1); choosing a tool, reading the inspector and
+shopping are free. Sleeping restores the pool, advances the day, resolves
+the night and opens a **morning report** of what happened while the player
+slept.
 
-- **8:00 – 12:00 (Automation Expansion):** Credits allow purchasing the Solar Panel and Drip Irrigation. The garden runs partially hands-free.
+- **Days 1–2 (Onboarding):** A barren $12 \times 8$ dirt plot and a few
+  legume seeds (_Guandu_). The player learns tilling, planting and
+  watering, and finds that a day runs out.
+- **Days 2–4 (Stratification):** _Baru_ and _Cagaita_ unlock. Planting
+  _Cagaita_ under the shade of _Baru_ with _Guandu_ at the base boosts
+  growth speed by $40\%$ — which now reads as "a stage a night sooner".
+- **Day 3 onward (The Fork in the Road):** A pest infestation arrives once
+  the plot has enough established plants. The player chooses:
+    - _Option A:_ chemical spray (clears it at once and grows the crop
+      faster, but the soil turns dusty red and the crop sells at 0.5x).
+    - _Option B:_ plant _Pequi_ and add organic compost (slower recovery,
+      keeps the 2.0x organic premium).
 
-- **12:00 – 15:00 (Evaluation & Save Test):** System calculates the **Agroecological Score** (Soil Health + Biodiversity Index + Total Revenue). Automatically triggers `PersistenceManager.save("garden_slot_1")` and displays victory metrics.
+- **Days 4–10 (Automation Expansion):** Revenue allows the Solar Panel and
+  Drip Irrigation. Each night the panel pays, the drip keeps its cells off
+  the dry line, and the drone collects a couple of ready plants — the
+  garden does part of the work while the player sleeps, which is what buys
+  back stamina for everything else.
+
+- **Day 12 (Evaluation & Save Test):** Sleeping on the last day calculates
+  the **Agroecological Score** (Soil Health + Biodiversity Index + Total
+  Revenue + the organic share), saves through `PersistenceManager`, and
+  displays victory metrics.
+
 ## 7. Implementation Tasks for Agent Team
 
 1. **Agent 1 (Data & Components):** Define `SoilComponent`, `PlantComponent`, `AutomationComponent`, and the `SAVE_SCHEMA` inside `components.py` and `events.py`.

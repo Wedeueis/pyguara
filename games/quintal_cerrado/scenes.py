@@ -27,11 +27,13 @@ back -- double for an organically grown plant, half for one that was
 ever sprayed (`economy.py`). That is the PRD's dilemma: the spray fixes an
 outbreak at once, and the compost is what keeps the premium.
 
-The garden is saved through `pyguara.persistence` -- every 60 seconds of
-play (`AutosaveSystem`), and whenever the scene exits, which is also what
-closing the window does. The title screen's Continue loads it. The pause
-menu (`pause.py`, Esc) and the evaluation (`evaluation.py`, which offers
-itself at 15:00 of play) are overlays like the store.
+The garden is saved through `pyguara.persistence` -- every night, as part
+of `end_day`, and whenever the scene exits, which is also what closing the
+window does. There is no periodic autosave: between two mornings nothing
+changes that a save could miss. The title screen's Continue loads it. The
+pause menu (`pause.py`, Esc), the morning report (`morning.py`, after every
+night) and the evaluation (`evaluation.py`, after the last one) are
+overlays like the store.
 
 The store (`store.py`) is a scene pushed over this one. Buying a structure
 puts it in the player's inventory and hands them a `build_<kind>` tool;

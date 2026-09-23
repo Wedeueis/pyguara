@@ -44,9 +44,10 @@ class Species:
         color: The plant's fill colour (this demo ships no textures).
         stage_days: Days `systems/plant_growth_system.py` needs, at a
             growth multiplier of 1.0, to fill one stage's growth budget.
-            Demo-paced, not realistic -- a canopy tree taking real years to
-            mature would leave a 15-minute playable loop with nothing to
-            show for it.
+            Demo-paced, not realistic -- a canopy tree taking real years
+            to mature would leave a twelve-day session with nothing to show
+            for it. Guandu takes a day a stage and baru two, so a crop is
+            three to six nights of commitment.
         seed_cost: Sementes (the game's currency) one seed costs. Meaningless
             for a weed, which is never bought.
         base_price: Sementes a harvested plant sells for at the normal

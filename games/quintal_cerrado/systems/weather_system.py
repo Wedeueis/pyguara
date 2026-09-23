@@ -22,18 +22,15 @@ next, `FORECAST_LENGTH` of them, so a HUD panel can tell the player "rain's
 coming" before it arrives -- the PRD's whole reason for a forecast over an
 outbreak-style ambush.
 
-Registered *after* `PlantGrowthSystem`/`WeedSpreadSystem` (see
-`scenes.py`), not before, even though its `WeatherState` feeds systems
-that run earlier in the same tick -- game systems cannot register below
-priority 500, where `SoilSystem` already sits. The state a condition
-change writes here is read by everything else one tick later, the same
-one-frame lag `plant_growth_system.py`'s own docstring already accepts
-for a stage transition; at 60Hz it is imperceptible.
+Advanced once a night by `systems/day_resolver.py`, last of all: the sky
+that was overhead tonight is the one the player saw forecast yesterday,
+and `advance_day()` rolls tomorrow's. Nothing turns mid-day, because
+nothing grows or dries mid-day either.
 
-Weather state is not saved: like `WeedSpreadSystem`'s check timer, a
-loaded garden simply rolls a fresh condition and forecast from the load
-moment, rather than round-tripping through the save schema for a value
-a few seconds of play makes irrelevant again anyway.
+Weather *is* saved (`persistence_schema.WeatherSnapshot`), unlike in the
+real-time build where a fresh roll on load cost nothing. A condition now
+lasts a whole day and the forecast is two days of planning, so re-rolling
+it would quietly rewrite a decision the player had already made.
 """
 
 from __future__ import annotations
