@@ -137,6 +137,7 @@ class Script:
     keys: list[tuple[int, int]] = field(default_factory=list)
     clicks: list[tuple[int, int, int]] = field(default_factory=list)
     moves: list[tuple[int, int, int]] = field(default_factory=list)
+    require_world: bool = False
 
 
 def parse_at(value: str, what: str) -> tuple[str, int]:
@@ -300,6 +301,32 @@ def _capture(graph: object | None) -> pygame.Surface | None:
     return pygame.transform.flip(frame, False, True)
 
 
+def _capture_world(graph: object | None) -> pygame.Surface | None:
+    """Return the world pass's own buffer, before any UI is composited.
+
+    `_capture` reads the *composed* frame, which on a ModernGL demo also
+    carries the UI overlay. That makes `is_blank` useless for the failure
+    it was built to catch: a dead world render path still leaves a HUD on
+    screen, so the frame is never a single flat colour. Reading "world"
+    alone is what can tell whether the scene itself drew anything.
+
+    Args:
+        graph: The render graph, or None for a non-GL backend.
+
+    Returns:
+        The world buffer as a surface, or None when there is no graph.
+    """
+    if graph is None:
+        return None
+    fbo = graph.fbo_manager.get("world")  # type: ignore[attr-defined]
+    if fbo is None:
+        return None
+    frame = pygame.image.frombuffer(
+        fbo.fbo.read(components=3), (fbo.width, fbo.height), "RGB"
+    )
+    return pygame.transform.flip(frame, False, True)
+
+
 def is_blank(surface: pygame.Surface) -> bool:
     """Report whether a frame is a single flat colour.
 
@@ -351,6 +378,7 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
 
     tick = 0
     saved: list[tuple[Path, bool]] = []
+    flat_world: list[Path] = []
     original_render = app._render
 
     # Flipped on for the frames being captured, so the UI composites into
@@ -390,6 +418,10 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
                 path = out_dir / f"{demo}_{tick:04d}.png"
                 pygame.image.save(captured, str(path))
                 saved.append((path, is_blank(captured)))
+                if script.require_world:
+                    world = _capture_world(graph)
+                    if world is not None and is_blank(world):
+                        flat_world.append(path)
 
         if tick >= script.frames:
             app._is_running = False
@@ -420,6 +452,15 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
         print(
             "\nEvery captured frame is a single flat colour. The render path "
             "produced nothing; this is not a display problem."
+        )
+        return 1
+
+    if flat_world and len(flat_world) == len(saved):
+        print(
+            "\nThe world pass drew nothing: its own buffer is a single flat "
+            "colour on every captured frame. The frame above only looks fine "
+            "because the UI overlay is composited over it, and that is drawn "
+            "by a different renderer -- it proves nothing about the world."
         )
         return 1
     return 0
@@ -483,6 +524,13 @@ def main(argv: list[str] | None = None) -> int:
         "never tells the UI where the cursor is",
     )
     parser.add_argument(
+        "--require-world",
+        action="store_true",
+        help="fail if the world pass drew nothing, even when the UI overlay "
+        "keeps the composed frame from looking blank. For a run driven into "
+        "gameplay -- a menu's world legitimately is a flat clear",
+    )
+    parser.add_argument(
         "--out", type=Path, default=DEFAULT_OUT, help=f"output dir ({DEFAULT_OUT.name})"
     )
     parser.add_argument(
@@ -520,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
     for raw in args.press:
         name, at = parse_at(raw, "press")
         script.keys.append((at, resolve_key(name)))
+    script.require_world = args.require_world
     for flag, raw_values, target in (
         ("click", args.click, script.clicks),
         ("move", args.move, script.moves),
