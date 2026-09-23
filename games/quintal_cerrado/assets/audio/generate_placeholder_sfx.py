@@ -224,6 +224,18 @@ def _build_sounds() -> dict[str, Samples]:
         ),
         # Solar income ticking in: a tiny, quiet high blip.
         "solar_income": _envelope(_sine(1046.5, 0.05, 0.25), decay_rate=30.0),
+        # Going to sleep: a slow settling sigh, falling away. Longer and
+        # softer than any action sound -- it is the end of a day, not a
+        # click landing.
+        "sleep": _envelope(_sweep(430.0, 180.0, 0.5, 0.3), attack=0.04, decay_rate=4.0),
+        # Waking to the morning report: a gentle three-note rise, quieter
+        # than "harvest" -- a good morning, not a prize.
+        "morning": _concat(
+            _envelope(_sine(392.0, 0.11, 0.26), attack=0.02, decay_rate=9.0),
+            _envelope(_sine(523.25, 0.11, 0.28), attack=0.02, decay_rate=9.0),
+            _envelope(_sine(659.25, 0.2, 0.3), attack=0.02, decay_rate=6.0),
+            gap=0.02,
+        ),
     }
 
 

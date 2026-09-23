@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from games.quintal_cerrado.components import PlantComponent
+from games.quintal_cerrado.evaluation import EvaluationScene
 from games.quintal_cerrado.scenes import GardenScene, slot_status
 from games.quintal_cerrado.systems.day_resolver import DayReport
 from games.quintal_cerrado.turn import (
@@ -242,4 +243,4 @@ class TestASessionEnds:
 
         scene.end_day()
 
-        assert manager.current_scene is scene
+        assert not isinstance(manager.current_scene, EvaluationScene)

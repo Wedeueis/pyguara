@@ -79,15 +79,20 @@ from games.quintal_cerrado.garden_grid import (
 from games.quintal_cerrado.garden_states import build_conditions_ai
 from games.quintal_cerrado.garden_widget import (
     GAIN_COLOR,
+    NIGHT_DARKNESS,
     SFX_DENIED,
+    SFX_MORNING,
     SFX_OUTBREAK_RESOLVED,
     SFX_OUTBREAK_START,
+    SFX_SLEEP,
     SFX_SOLAR_INCOME,
+    SUNRISE_SECONDS,
     WARN_COLOR,
     GardenGridCanvas,
 )
 from games.quintal_cerrado.hud import CellInspector, Hud
 from games.quintal_cerrado.hud_widgets import DockGroup, SlotSpec, ToolDock, ToolSlot
+from games.quintal_cerrado.morning import MorningScene
 from games.quintal_cerrado.pause import PauseScene
 from games.quintal_cerrado.persistence_schema import (
     SAVE_KEY,
@@ -415,6 +420,9 @@ class GardenScene(Scene):
         """Which day it is and what energy is left in it (`turn.py`)."""
         self._resolver: DayResolver | None = None
         self._last_report: DayReport | None = None
+        self._sunrise = 0.0
+        """Seconds of sunrise left. The plot wakes dark and brightens once
+        the morning report is dismissed."""
         self._evaluation_offered = False
 
     def on_enter(self) -> None:
@@ -962,11 +970,15 @@ class GardenScene(Scene):
 
         The one place the simulation moves. Saving here replaces the old
         60-second autosave -- between two mornings nothing can have changed
-        that a save would capture.
+        that a save would capture. The morning report is what tells the
+        player about it (`morning.py`); the plot itself wakes up dark and
+        brightens once they have read it.
 
         Returns:
             What happened overnight.
         """
+        if self._audio is not None:
+            self._audio.play_sfx(SFX_SLEEP)
         report = DayReport(day=self.turn.day)
         if self._resolver is not None:
             report = self._resolver.resolve(self.turn.day)
@@ -974,26 +986,37 @@ class GardenScene(Scene):
         final = self.turn.is_final_day
         self.turn.sleep()
         self.save_now()
+        if self._canvas is not None:
+            self._canvas.darkness = NIGHT_DARKNESS
         if final and not self._evaluation_offered:
             self._evaluation_offered = True
             self.open_evaluation()
         else:
-            self._say(self._night_summary(report))
+            self._open_morning(report)
         return report
 
-    @staticmethod
-    def _night_summary(report: DayReport) -> str:
-        """One line for the toast until the morning report lands (PR3)."""
-        if report.outbreak_started:
-            return "Pests broke out overnight"
-        parts = []
-        if report.ripened:
-            parts.append(f"{len(report.ripened)} ready to harvest")
-        if report.stages_grown:
-            parts.append(f"{len(report.stages_grown)} grew")
-        if report.solar_income:
-            parts.append(f"+{report.solar_income} solar")
-        return "  ".join(parts) if parts else "A quiet night"
+    def _open_morning(self, report: DayReport) -> None:
+        """Push the morning report over the sleeping garden."""
+        scene_manager = self.container.get(SceneManager)
+        if scene_manager.current_scene is not self:
+            return
+        if self._audio is not None:
+            self._audio.play_sfx(SFX_MORNING)
+        scene_manager.register(
+            MorningScene(
+                self.event_dispatcher,
+                report,
+                self.turn.day,
+                self._wake_up,
+                WINDOW_WIDTH,
+                WINDOW_HEIGHT,
+            )
+        )
+        scene_manager.push_scene("MorningScene", pause_below=True)
+
+    def _wake_up(self) -> None:
+        """Start the sunrise the report was read over."""
+        self._sunrise = SUNRISE_SECONDS
 
     def on_exit(self) -> None:
         """Save the garden.
@@ -1032,11 +1055,25 @@ class GardenScene(Scene):
             self._hud.update_weather(
                 weather.state.condition_id, weather.forecast, self.turn.day
             )
-        if self._canvas is not None and self._inspector is not None:
-            self._inspector.update(
-                self.grid, self.entity_manager, self._canvas.hover_cell
-            )
+        if self._canvas is not None:
+            self._advance_sunrise(dt)
+            if self._inspector is not None:
+                self._inspector.update(
+                    self.grid, self.entity_manager, self._canvas.hover_cell
+                )
         self._update_weather_effects(dt)
+
+    def _advance_sunrise(self, dt: float) -> None:
+        """Fade the night wash off the plot after a morning report.
+
+        The only animation left that the clock used to drive: night is now
+        something the player chose by sleeping, so it lifts when they are
+        done reading about it rather than on a schedule.
+        """
+        if self._canvas is None or self._sunrise <= 0.0:
+            return
+        self._sunrise = max(0.0, self._sunrise - dt)
+        self._canvas.darkness = NIGHT_DARKNESS * (self._sunrise / SUNRISE_SECONDS)
 
     def _update_weather_effects(self, dt: float) -> None:
         """Drive the post-process shaders from real state, every frame.
