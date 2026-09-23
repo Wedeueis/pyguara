@@ -50,7 +50,6 @@ from games.quintal_cerrado.bootstrap import (
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
-from games.quintal_cerrado.clock import EVALUATION_TIME, darkness
 from games.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
     GardenConditions,
@@ -69,7 +68,6 @@ from games.quintal_cerrado.economy import (
 )
 from games.quintal_cerrado.evaluation import EvaluationScene
 from games.quintal_cerrado.events import (
-    AutosavedEvent,
     OutbreakResolvedEvent,
     OutbreakStartedEvent,
     PlantHarvestedEvent,
@@ -95,6 +93,7 @@ from games.quintal_cerrado.persistence_schema import (
     SAVE_KEY,
     SCHEMA_VERSION,
     SaveFormatError,
+    WeatherSnapshot,
     apply_save_payload,
     to_save_payload,
 )
@@ -108,7 +107,7 @@ from games.quintal_cerrado.species import (
 from games.quintal_cerrado.store import StoreOverlayScene
 from games.quintal_cerrado.structures import STRUCTURE_TABLE, place_structure
 from games.quintal_cerrado.systems.automation_system import AutomationSystem
-from games.quintal_cerrado.systems.autosave_system import AutosaveSystem
+from games.quintal_cerrado.systems.day_resolver import DayReport, DayResolver
 from games.quintal_cerrado.systems.pest_system import PestSystem
 from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
@@ -116,7 +115,9 @@ from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.syntropic_system import SyntropicSystem
 from games.quintal_cerrado.systems.weather_system import WeatherSystem
 from games.quintal_cerrado.systems.weed_spread_system import WeedSpreadSystem
+from games.quintal_cerrado.turn import SESSION_DAYS, DayCycle, action_cost
 from games.quintal_cerrado.weather import WEATHER_TABLE, WeatherState
+from pyguara.ai.ai_system import AISystem
 from pyguara.audio.manager import AudioManager
 from pyguara.common.grid import Cell
 from pyguara.common.random import RandomStream
@@ -126,7 +127,7 @@ from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.vfx.effects.storm import StormEffect
 from pyguara.graphics.vfx.effects.vignette import VignetteEffect
 from pyguara.input.events import OnActionEvent
-from pyguara.input.keys import ESCAPE, KEY_O, B, C, G, H, M, N, P, S, T, W
+from pyguara.input.keys import ESCAPE, KEY_O, B, C, G, H, M, N, P, S, T, W, Z
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.persistence.manager import PersistenceManager
@@ -192,12 +193,14 @@ _TOOL_KEYS = {
 }
 
 PAUSE_ACTION = "open_pause"
+SLEEP_ACTION = "sleep"
 STORE_ACTION = "open_store"
 """Not a tool -- it has no active state -- so it is bound and handled apart
 from `_TOOL_KEYS`, and its slot is not in `_tool_buttons`."""
 
 STORE_SLOT = "store"
 MENU_SLOT = "menu"
+SLEEP_SLOT = "sleep"
 
 
 def _dock_groups() -> list[DockGroup]:
@@ -213,12 +216,18 @@ def _dock_groups() -> list[DockGroup]:
         DockGroup(
             "BASE",
             "store",
-            [SlotSpec(STORE_SLOT, "Loja", "O"), SlotSpec(MENU_SLOT, "Menu", "Esc")],
+            [
+                SlotSpec(SLEEP_SLOT, "Dormir", "Z"),
+                SlotSpec(STORE_SLOT, "Loja", "O"),
+                SlotSpec(MENU_SLOT, "Menu", "Esc"),
+            ],
         ),
     ]
 
 
-def slot_status(tool: str, economy: PlayerEconomy) -> tuple[str, bool]:
+def slot_status(
+    tool: str, economy: PlayerEconomy, turn: DayCycle | None = None
+) -> tuple[str, bool]:
     """What a tool's slot badge says, and whether the player can use it now.
 
     Mirrors what `GardenScene` actually charges, so the dock can never
@@ -227,13 +236,26 @@ def slot_status(tool: str, economy: PlayerEconomy) -> tuple[str, bool]:
     stocked generic seed (`_sow_generic`), and compost and spray cost
     their flat price (`treatments`). Every other tool is free.
 
+    Stamina is the second gate. A tool you have the Sementes for but not
+    the energy dims the same way, because from the player's side it is the
+    same answer: not today.
+
     Args:
         tool: A tool id.
         economy: The player's economy.
+        turn: The day's stamina, or None to ignore energy entirely.
 
     Returns:
         `(badge, affordable)` -- the badge is "" for a free tool.
     """
+    badge, affordable = _price_status(tool, economy)
+    if turn is not None and not turn.can_afford(action_cost(tool)):
+        return badge, False
+    return badge, affordable
+
+
+def _price_status(tool: str, economy: PlayerEconomy) -> tuple[str, bool]:
+    """What a tool costs in Sementes or stocked seed, ignoring stamina."""
     if tool == "plant_generic":
         stock = economy.inventory.get(GENERIC_SEED_KEY, 0)
         return f"x{stock}", stock > 0
@@ -386,15 +408,17 @@ class GardenScene(Scene):
         self._tool_buttons: dict[str, ToolSlot] = {}
         self._store_button: ToolSlot | None = None
         self._menu_button: ToolSlot | None = None
+        self._sleep_button: ToolSlot | None = None
         self._active_tool = "till"
         self._load_requested = load
-        self.elapsed = 0.0
-        """Seconds of play: advanced by `fixed_update`, so it stops while an
-        overlay is up, and saved so Continue resumes the same day."""
+        self.turn = DayCycle()
+        """Which day it is and what energy is left in it (`turn.py`)."""
+        self._resolver: DayResolver | None = None
+        self._last_report: DayReport | None = None
         self._evaluation_offered = False
 
     def on_enter(self) -> None:
-        """Build the widgets and entities, wire input, register systems."""
+        """Build the widgets and entities, wire input, own the systems."""
         ui_manager = self.container.get(UIManager)
         ui_manager.clear()
         self._audio = self.container.get(AudioManager)
@@ -410,7 +434,7 @@ class GardenScene(Scene):
             ui_manager, layout.GRID_RECT.y + CellInspector.HEIGHT + layout.GAP
         )
         self._create_entities()
-        self._register_systems()
+        self._resolver = self._build_resolver()
         if self._load_requested:
             self._load()
 
@@ -420,7 +444,6 @@ class GardenScene(Scene):
         )
         self.event_dispatcher.subscribe(PlantHarvestedEvent, self._on_drone_harvest)
         self.event_dispatcher.subscribe(SolarIncomeEvent, self._on_solar_income)
-        self.event_dispatcher.subscribe(AutosavedEvent, self._on_autosaved)
 
     def _create_entities(self) -> None:
         """The two non-plant entities: the player, and the garden's conditions."""
@@ -439,53 +462,31 @@ class GardenScene(Scene):
             )
         )
 
-    def _register_systems(self) -> None:
-        self.system_manager.register(
-            SoilSystem(self.grid, self.weather),
-            priority=_SOIL_PRIORITY,
-            system_type=SoilSystem,
-        )
-        self.system_manager.register(
-            AutomationSystem(
+    def _build_resolver(self) -> DayResolver:
+        """Own the simulation systems instead of registering them.
+
+        None of them tick any more: the garden is turn-based, and a night is
+        the only thing that moves the plot (`systems/day_resolver.py`). The
+        engine's own `AISystem` is dropped for the same reason -- it would
+        drive the plant and garden FSMs on real seconds between actions --
+        and the resolver drives those FSMs itself.
+        """
+        self.system_manager.unregister(AISystem)
+        return DayResolver(
+            self.entity_manager,
+            self.grid,
+            self.conditions,
+            self.event_dispatcher,
+            soil=SoilSystem(self.grid, self.weather),
+            automation=AutomationSystem(
                 self.entity_manager, self.grid, self.economy, self.event_dispatcher
             ),
-            priority=_AUTOMATION_PRIORITY,
-            system_type=AutomationSystem,
-        )
-        self.system_manager.register(
-            ShadeSystem(self.entity_manager, self.grid),
-            priority=_SHADE_PRIORITY,
-            system_type=ShadeSystem,
-        )
-        self.system_manager.register(
-            SyntropicSystem(self.entity_manager, self.grid),
-            priority=_SYNTROPIC_PRIORITY,
-            system_type=SyntropicSystem,
-        )
-        self.system_manager.register(
-            PestSystem(self.entity_manager, self.grid, self.weather),
-            priority=_PEST_PRIORITY,
-            system_type=PestSystem,
-        )
-        self.system_manager.register(
-            PlantGrowthSystem(self.entity_manager, self.grid, self.weather),
-            priority=_GROWTH_PRIORITY,
-            system_type=PlantGrowthSystem,
-        )
-        self.system_manager.register(
-            WeedSpreadSystem(self.entity_manager, self.grid),
-            priority=_WEED_SPREAD_PRIORITY,
-            system_type=WeedSpreadSystem,
-        )
-        self.system_manager.register(
-            WeatherSystem(self.weather),
-            priority=_WEATHER_PRIORITY,
-            system_type=WeatherSystem,
-        )
-        self.system_manager.register(
-            AutosaveSystem(self.save_now, self.event_dispatcher),
-            priority=_AUTOSAVE_PRIORITY,
-            system_type=AutosaveSystem,
+            shade=ShadeSystem(self.entity_manager, self.grid),
+            syntropic=SyntropicSystem(self.entity_manager, self.grid),
+            pest=PestSystem(self.entity_manager, self.grid, self.weather),
+            growth=PlantGrowthSystem(self.entity_manager, self.grid, self.weather),
+            weeds=WeedSpreadSystem(self.entity_manager, self.grid, self._rng),
+            weather=WeatherSystem(self.weather, self._rng),
         )
 
     def _build_grid_widget(self, ui_manager: UIManager) -> None:
@@ -508,7 +509,10 @@ class GardenScene(Scene):
         """
         dock = ToolDock(_dock_groups(), WINDOW_WIDTH)
         for tool, slot in dock.slots.items():
-            if tool == STORE_SLOT:
+            if tool == SLEEP_SLOT:
+                slot.on_click = lambda _element: self.end_day()
+                self._sleep_button = slot
+            elif tool == STORE_SLOT:
                 slot.on_click = lambda _element: self._open_store()
                 self._store_button = slot
             elif tool == MENU_SLOT:
@@ -532,7 +536,7 @@ class GardenScene(Scene):
     def _refresh_tool_slots(self) -> None:
         """Re-read every slot's badge and affordability from the economy."""
         for tool, slot in self._tool_buttons.items():
-            slot.badge, slot.affordable = slot_status(tool, self.economy)
+            slot.badge, slot.affordable = slot_status(tool, self.economy, self.turn)
 
     def _tool_allows(self, cell: Cell) -> bool:
         """Whether the active tool would actually do something on `cell`.
@@ -552,7 +556,7 @@ class GardenScene(Scene):
         tool = self._active_tool
         if not self.grid.in_bounds(cell):
             return False
-        if not slot_status(tool, self.economy)[1]:
+        if not slot_status(tool, self.economy, self.turn)[1]:
             return False
         soil = self.grid.soil_at(cell)
         if tool == "till":
@@ -584,6 +588,8 @@ class GardenScene(Scene):
             input_manager.bind_input(InputDevice.KEYBOARD, key, tool)
         input_manager.register_action(STORE_ACTION, ActionType.PRESS)
         input_manager.bind_input(InputDevice.KEYBOARD, KEY_O, STORE_ACTION)
+        input_manager.register_action(SLEEP_ACTION, ActionType.PRESS)
+        input_manager.bind_input(InputDevice.KEYBOARD, Z, SLEEP_ACTION)
         input_manager.register_action(PAUSE_ACTION, ActionType.PRESS)
         input_manager.bind_input(InputDevice.KEYBOARD, ESCAPE, PAUSE_ACTION)
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
@@ -595,6 +601,8 @@ class GardenScene(Scene):
             return
         if event.action_name in _TOOL_KEYS:
             self._set_active_tool(event.action_name)
+        elif event.action_name == SLEEP_ACTION:
+            self.end_day()
         elif event.action_name == STORE_ACTION:
             self._open_store()
         elif event.action_name == PAUSE_ACTION:
@@ -619,8 +627,16 @@ class GardenScene(Scene):
         Returns:
             Whether the save was written.
         """
+        weather = self._resolver.weather if self._resolver is not None else None
         payload = to_save_payload(
-            self.grid, self.entity_manager, self.economy, self.conditions, self.elapsed
+            self.grid,
+            self.entity_manager,
+            self.economy,
+            self.conditions,
+            self.turn,
+            WeatherSnapshot(weather.state.condition_id, weather.forecast)
+            if weather is not None
+            else None,
         )
         return self.container.get(PersistenceManager).save_data(
             SAVE_KEY, payload, save_version=SCHEMA_VERSION
@@ -633,19 +649,18 @@ class GardenScene(Scene):
             self._say("No usable save")
             return
         try:
-            self.elapsed = apply_save_payload(
+            self.turn, weather = apply_save_payload(
                 payload, self.grid, self.entity_manager, self.economy, self.conditions
             )
         except SaveFormatError as error:
             logger.warning("Ignoring an unreadable save: %s", error)
-            self._say("Save unreadable")
+            self._say("Save unreadable -- it is from an older build")
             return
-        # Loading a session already past the evaluation must not re-offer it.
-        self._evaluation_offered = self.elapsed >= EVALUATION_TIME
-        self._say("Garden loaded")
-
-    def _on_autosaved(self, event: AutosavedEvent) -> None:
-        self._say("Garden saved" if event.success else "Autosave failed!")
+        if self._resolver is not None:
+            self._resolver.weather.restore(weather.condition_id, weather.forecast)
+        # A session already past its last day must not re-offer the evaluation.
+        self._evaluation_offered = self.turn.day > SESSION_DAYS
+        self._say(f"Garden loaded -- day {self.turn.day}")
 
     def _open_pause(self) -> None:
         """Push the pause menu over the garden."""
@@ -747,38 +762,83 @@ class GardenScene(Scene):
         self._set_active_tool(f"build_{kind}")
         self._say(f"Place your {STRUCTURE_TABLE[kind].display_name}")
 
-    def _build(self, cell: Cell, kind: str) -> None:
-        """Place a structure from the inventory, and drop the tool when it runs out."""
+    def _build(self, cell: Cell, kind: str) -> bool:
+        """Place a structure from the inventory, and drop the tool when it runs out.
+
+        Returns:
+            Whether the structure was placed.
+        """
         if (
             place_structure(self.grid, self.entity_manager, self.economy, kind, cell)
             != "ok"
         ):
-            return
+            return False
         if self._canvas is not None:
             self._canvas.celebrate_build(cell, kind)
         if self.economy.inventory.get(kind, 0) <= 0:
             self._set_active_tool("till")
+        return True
 
     def _on_cell_clicked(self, cell: Cell) -> None:
+        """Act on `cell` with the active tool, if the day has the energy.
+
+        Stamina is spent only once the action has actually happened: a
+        click refused for any other reason -- untilled ground, no Sementes,
+        nothing to harvest -- must cost nothing, or a day drains on clicks
+        that did nothing.
+        """
         tool = self._active_tool
+        cost = action_cost(tool)
+        if not self.turn.can_afford(cost):
+            self._no_energy(cell)
+            return
+        if self._perform(tool, cell):
+            self.turn.spend(cost)
+
+    def _perform(self, tool: str, cell: Cell) -> bool:
+        """Run `tool` on `cell`.
+
+        Args:
+            tool: The active tool id.
+            cell: The clicked cell.
+
+        Returns:
+            Whether anything actually happened -- which is what decides if
+            the day is charged for it.
+        """
         if tool == "till":
-            if self.grid.till(cell) and self._canvas is not None:
+            if not self.grid.till(cell):
+                return False
+            if self._canvas is not None:
                 self._canvas.celebrate_till(cell)
-        elif tool == "water":
-            if self.grid.water(cell) and self._canvas is not None:
+            return True
+        if tool == "water":
+            if not self.grid.water(cell):
+                return False
+            if self._canvas is not None:
                 self._canvas.celebrate_water(cell)
-        elif tool == "harvest":
-            self._harvest(cell)
-        elif tool == "compost":
-            self._compost(cell)
-        elif tool == "spray":
-            self._spray(cell)
-        elif tool == "plant_generic":
-            self._sow_generic(cell)
-        elif tool.startswith("plant_"):
-            self._plant(cell, tool.removeprefix("plant_"))
-        elif tool.startswith("build_"):
-            self._build(cell, tool.removeprefix("build_"))
+            return True
+        if tool == "harvest":
+            return self._harvest(cell)
+        if tool == "compost":
+            return self._compost(cell)
+        if tool == "spray":
+            return self._spray(cell)
+        if tool == "plant_generic":
+            return self._sow_generic(cell)
+        if tool.startswith("plant_"):
+            return self._plant(cell, tool.removeprefix("plant_"))
+        if tool.startswith("build_"):
+            return self._build(cell, tool.removeprefix("build_"))
+        return False
+
+    def _no_energy(self, cell: Cell) -> None:
+        """Say why the click did nothing, where it was clicked."""
+        if self._canvas is not None:
+            self._canvas.spawn_label(cell, "Sem energia", WARN_COLOR)
+        if self._audio is not None:
+            self._audio.play_sfx(SFX_DENIED)
+        self._say("No energy left -- sleep to start a new day")
 
     def _cant_afford(self, cell: Cell, cost: int) -> None:
         """Tell the player, at the cell they clicked, what they were short of."""
@@ -788,7 +848,7 @@ class GardenScene(Scene):
             self._audio.play_sfx(SFX_DENIED)
         self._say("Not enough Sementes")
 
-    def _plant(self, cell: Cell, species_id: str) -> None:
+    def _plant(self, cell: Cell, species_id: str) -> bool:
         """Plant a specific species, spending stocked seed before Sementes.
 
         An overripe harvest stocks a free seed of its own species
@@ -798,18 +858,19 @@ class GardenScene(Scene):
         """
         species = SPECIES_TABLE.get(species_id)
         if species is None or not self.grid.can_plant(cell):
-            return
+            return False
         if not consume_seed(self.economy, specific_seed_key(species_id)) and (
             not spend_credits(self.economy, species.seed_cost)
         ):
             self._cant_afford(cell, species.seed_cost)
-            return
+            return False
         entity = self.entity_manager.create_entity()
         entity.add_component(PlantComponent(species_id=species_id))
         entity.add_component(build_plant_ai(entity))
         self.grid.mark_planted(cell, entity.id)
+        return True
 
-    def _sow_generic(self, cell: Cell) -> None:
+    def _sow_generic(self, cell: Cell) -> bool:
         """Sow one generic seed, if there is one, as a random common species.
 
         `pick_generic_species` weights towards cheap species -- a free
@@ -817,37 +878,46 @@ class GardenScene(Scene):
         than paying for one outright, on purpose.
         """
         if not self.grid.can_plant(cell):
-            return
+            return False
         if not consume_seed(self.economy, GENERIC_SEED_KEY):
             if self._canvas is not None:
                 self._canvas.spawn_label(cell, "No generic seed", WARN_COLOR)
             self._say("Pull a weed for a generic seed")
-            return
+            return False
         species_id = pick_generic_species(self._rng or RandomStream())
         entity = self.entity_manager.create_entity()
         entity.add_component(PlantComponent(species_id=species_id))
         entity.add_component(build_plant_ai(entity))
         self.grid.mark_planted(cell, entity.id)
+        return True
 
-    def _compost(self, cell: Cell) -> None:
+    def _compost(self, cell: Cell) -> bool:
+        """Compost `cell`, and report whether it took."""
         result = treatments.apply_compost(
             self.grid, self.economy, self.conditions, cell
         )
-        if result == treatments.OK and self._canvas is not None:
-            self._canvas.celebrate_compost(cell)
-        elif result == treatments.BROKE:
+        if result == treatments.OK:
+            if self._canvas is not None:
+                self._canvas.celebrate_compost(cell)
+            return True
+        if result == treatments.BROKE:
             self._cant_afford(cell, COMPOST_COST)
+        return False
 
-    def _spray(self, cell: Cell) -> None:
+    def _spray(self, cell: Cell) -> bool:
+        """Spray `cell` and its neighbours, and report whether it took."""
         result = treatments.apply_spray(
             self.grid, self.entity_manager, self.economy, self.conditions, cell
         )
-        if result == treatments.OK and self._canvas is not None:
-            self._canvas.celebrate_spray(cell)
-        elif result == treatments.BROKE:
+        if result == treatments.OK:
+            if self._canvas is not None:
+                self._canvas.celebrate_spray(cell)
+            return True
+        if result == treatments.BROKE:
             self._cant_afford(cell, SPRAY_COST)
+        return False
 
-    def _harvest(self, cell: Cell) -> None:
+    def _harvest(self, cell: Cell) -> bool:
         """Collect a harvestable or overripe plant, or clear a dead one.
 
         The cell stays tilled either way, ready to replant. An infested
@@ -858,24 +928,26 @@ class GardenScene(Scene):
         """
         entity_id = self.grid.plant_at.get(cell)
         if entity_id is None:
-            return
+            return False
         entity = self.entity_manager.get_entity(entity_id)
         if entity is None or not entity.has_component(PlantComponent):
-            return
+            return False
         plant = entity.get_component(PlantComponent)
 
         if plant.growth_stage == "infested":
             self._say("Treat the pests first")
-            return
+            return False
         if plant.growth_stage == "dying":
             self.entity_manager.remove_entity(entity_id)
             self.grid.unmark_planted(cell)
             if self._canvas is not None:
                 self._canvas.spawn_label(cell, "Cleared", Color(190, 180, 168))
-            return
+            return True
         result = harvest_cell(self.grid, self.entity_manager, self.economy, cell)
-        if result is None or self._canvas is None:
-            return
+        if result is None:
+            return False
+        if self._canvas is None:
+            return True
         if result.kind == CREDITS:
             self._canvas.celebrate_harvest(cell, result.species_id)
             self._canvas.spawn_label(cell, f"+{result.amount}", GAIN_COLOR)
@@ -883,6 +955,45 @@ class GardenScene(Scene):
             self._canvas.celebrate_seed(cell, result.species_id)
             label = "Generic seed" if result.kind == GENERIC_SEED else "Seed"
             self._canvas.spawn_label(cell, f"+{result.amount} {label}", GAIN_COLOR)
+        return True
+
+    def end_day(self) -> DayReport:
+        """Sleep: resolve the night, wake on the next morning, save.
+
+        The one place the simulation moves. Saving here replaces the old
+        60-second autosave -- between two mornings nothing can have changed
+        that a save would capture.
+
+        Returns:
+            What happened overnight.
+        """
+        report = DayReport(day=self.turn.day)
+        if self._resolver is not None:
+            report = self._resolver.resolve(self.turn.day)
+        self._last_report = report
+        final = self.turn.is_final_day
+        self.turn.sleep()
+        self.save_now()
+        if final and not self._evaluation_offered:
+            self._evaluation_offered = True
+            self.open_evaluation()
+        else:
+            self._say(self._night_summary(report))
+        return report
+
+    @staticmethod
+    def _night_summary(report: DayReport) -> str:
+        """One line for the toast until the morning report lands (PR3)."""
+        if report.outbreak_started:
+            return "Pests broke out overnight"
+        parts = []
+        if report.ripened:
+            parts.append(f"{len(report.ripened)} ready to harvest")
+        if report.stages_grown:
+            parts.append(f"{len(report.stages_grown)} grew")
+        if report.solar_income:
+            parts.append(f"+{report.solar_income} solar")
+        return "  ".join(parts) if parts else "A quiet night"
 
     def on_exit(self) -> None:
         """Save the garden.
@@ -893,13 +1004,14 @@ class GardenScene(Scene):
         """
         self.save_now()
 
-    def fixed_update(self, fixed_dt: float) -> None:
-        """Advance the play clock. The engine pauses this while an overlay is up."""
-        self.elapsed += fixed_dt
-
     def update(self, dt: float) -> None:
-        """Refresh the HUD and inspector, and offer the evaluation at 15:00."""
-        automation = self.system_manager.get_system(AutomationSystem)
+        """Refresh the HUD and the inspector. Nothing simulates here.
+
+        The plot only changes when the player sleeps (`end_day`), so this
+        is presentation only: the cards, the dock's affordability, the
+        hovered cell, and the post-process shaders.
+        """
+        automation = self._resolver.automation if self._resolver is not None else None
         power = (
             (automation.power_used, automation.power_capacity)
             if automation is not None
@@ -910,29 +1022,21 @@ class GardenScene(Scene):
                 dt,
                 self.economy,
                 self.conditions,
-                self.elapsed,
+                self.turn,
                 power,
                 self._score,
             )
         self._refresh_tool_slots()
-        weather_system = self.system_manager.get_system(WeatherSystem)
-        if self._hud is not None and weather_system is not None:
+        weather = self._resolver.weather if self._resolver is not None else None
+        if self._hud is not None and weather is not None:
             self._hud.update_weather(
-                weather_system.state.condition_id,
-                weather_system.forecast,
-                weather_system.condition_progress,
-                self.elapsed,
+                weather.state.condition_id, weather.forecast, self.turn.day
             )
-        if self._canvas is not None:
-            self._canvas.darkness = darkness(self.elapsed)
-            if self._inspector is not None:
-                self._inspector.update(
-                    self.grid, self.entity_manager, self._canvas.hover_cell
-                )
+        if self._canvas is not None and self._inspector is not None:
+            self._inspector.update(
+                self.grid, self.entity_manager, self._canvas.hover_cell
+            )
         self._update_weather_effects(dt)
-        if self.elapsed >= EVALUATION_TIME and not self._evaluation_offered:
-            self._evaluation_offered = True
-            self.open_evaluation()
 
     def _update_weather_effects(self, dt: float) -> None:
         """Drive the post-process shaders from real state, every frame.

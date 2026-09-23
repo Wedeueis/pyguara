@@ -46,13 +46,13 @@ from games.quintal_cerrado.weather import (
 )
 from pyguara.common.random import RandomStream
 
-CONDITION_DURATION = 90.0
-"""Seconds one condition lasts. A 900s (15-minute) session sees roughly
-ten changes -- "a few hours ahead" reads as true without being so frequent
-it feels arbitrary."""
+CONDITION_DURATION = 1.0
+"""Days one condition lasts: exactly one. The garden is turn-based, and a
+sky that changed in the middle of a day would change nothing, since nothing
+grows or dries until the night resolves it."""
 
 FORECAST_LENGTH = 2
-"""How many conditions ahead `forecast` names."""
+"""How many days ahead `forecast` names."""
 
 
 class WeatherSystem:
@@ -90,6 +90,21 @@ class WeatherSystem:
     def forecast(self) -> list[str]:
         """The upcoming `condition_id`s, nearest first."""
         return list(self._queue)
+
+    def restore(self, condition_id: str, forecast: list[str]) -> None:
+        """Put back a saved sky, instead of the one this system rolled.
+
+        A condition lasts a whole day now, so re-rolling on load would
+        quietly rewrite the forecast the player planned around.
+
+        Args:
+            condition_id: The condition to put back in force.
+            forecast: The upcoming conditions, nearest first.
+        """
+        self._timer = 0.0
+        if forecast:
+            self._queue = list(forecast)
+        self._apply(condition_id)
 
     @property
     def condition_progress(self) -> float:

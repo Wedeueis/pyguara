@@ -3,7 +3,7 @@
 `Hud` owns the top ribbon (`ribbon.py` -- resources, weather, resilience)
 and the message toast; `CellInspector` is the card under them in the right
 column. Everything shown is real state: Sementes are
-`PlayerEconomy.credits`, the clock is the scene's own, power is
+`PlayerEconomy.credits`, the day is the turn's own, power is
 `AutomationSystem`'s real budget, the status line is
 `GardenConditions.phase`, the resilience bar is `scoring.compute_score`,
 and the inspector reads the `SoilCell` and plant under the cursor.
@@ -29,6 +29,7 @@ from games.quintal_cerrado.ribbon import ResilienceCard, ResourceCard, WeatherCa
 from games.quintal_cerrado.scoring import Score
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
+from games.quintal_cerrado.turn import DayCycle
 from pyguara.common.grid import Cell
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
@@ -102,9 +103,9 @@ class Hud:
         return self.resources.status_label
 
     @property
-    def clock_label(self) -> Label:
-        """Day and time, on the weather card."""
-        return self.weather.clock_label
+    def day_label(self) -> Label:
+        """Which day it is, on the weather card."""
+        return self.weather.day_label
 
     def show_message(self, text: str) -> None:
         """Show `text` in the toast for `MESSAGE_SECONDS`.
@@ -121,7 +122,7 @@ class Hud:
         dt: float,
         economy: PlayerEconomy,
         conditions: GardenConditions,
-        elapsed: float,
+        turn: DayCycle,
         power: tuple[int, int],
         compute_score: Callable[[], Score] | None = None,
     ) -> None:
@@ -132,13 +133,13 @@ class Hud:
                 timers.
             economy: The player's economy.
             conditions: The garden's pest situation.
-            elapsed: Seconds of play, for the clock and the day arc.
+            turn: The day and the stamina left in it.
             power: `(devices powered, capacity)` from the solar panels.
             compute_score: Returns a fresh `scoring.Score` for the
                 resilience bar. Called at most every
                 `ribbon.SCORE_INTERVAL` seconds, never per frame.
         """
-        self.resources.refresh(economy, conditions, power)
+        self.resources.refresh(economy, conditions, power, turn)
         if compute_score is not None:
             self.resilience.refresh(dt, compute_score)
         if self._message_left > 0.0:
@@ -147,18 +148,15 @@ class Hud:
                 self.message_label.set_text("")
                 self.toast.visible = False
 
-    def update_weather(
-        self, condition_id: str, forecast: list[str], progress: float, elapsed: float
-    ) -> None:
-        """Hand the weather card the sky's state and the clock.
+    def update_weather(self, condition_id: str, forecast: list[str], day: int) -> None:
+        """Hand the weather card the sky and the calendar.
 
         Args:
             condition_id: `WeatherSystem.state.condition_id`.
             forecast: `WeatherSystem.forecast`, nearest first.
-            progress: `WeatherSystem.condition_progress`.
-            elapsed: Seconds of play.
+            day: The current day, 1-based.
         """
-        self.weather.refresh(condition_id, forecast, progress, elapsed)
+        self.weather.refresh(condition_id, forecast, day)
 
 
 LAYER_RUNGS = (

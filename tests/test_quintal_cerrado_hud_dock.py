@@ -22,6 +22,7 @@ from games.quintal_cerrado.icons import DIM_TARGET, ICONS, draw_icon
 from games.quintal_cerrado.scenes import (
     _TOOL_KEYS,
     MENU_SLOT,
+    SLEEP_SLOT,
     STORE_SLOT,
     _dock_groups,
     slot_status,
@@ -180,8 +181,12 @@ class TestLayout:
     def _dock(self) -> ToolDock:
         return ToolDock(_dock_groups(), WINDOW_WIDTH)
 
-    def test_the_dock_has_every_tool_plus_the_store_and_menu(self) -> None:
-        assert set(self._dock().slots) == set(_TOOL_KEYS) | {STORE_SLOT, MENU_SLOT}
+    def test_the_dock_has_every_tool_plus_the_base_slots(self) -> None:
+        assert set(self._dock().slots) == set(_TOOL_KEYS) | {
+            SLEEP_SLOT,
+            STORE_SLOT,
+            MENU_SLOT,
+        }
 
     def test_dock_groups_fit_on_screen_below_the_grid_without_overlap(self) -> None:
         groups = [group.rect for group in self._dock().groups]

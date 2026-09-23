@@ -30,7 +30,7 @@ refused rather than guessed at.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from games.quintal_cerrado.components import (
@@ -44,10 +44,12 @@ from games.quintal_cerrado.garden_grid import GRID_HEIGHT, GRID_WIDTH, GardenGri
 from games.quintal_cerrado.plant_states import build_plant_ai
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
+from games.quintal_cerrado.turn import DayCycle
+from games.quintal_cerrado.weather import CALM_CONDITION_ID, WEATHER_TABLE
 from pyguara.ai.components import AIComponent
 from pyguara.ecs.manager import EntityManager
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SAVE_KEY = "garden_save"
 """Alphanumerics, `_` and `-` only: `FileStorageBackend` rejects any other key
 rather than mangling it."""
@@ -77,7 +79,8 @@ def to_save_payload(
     entity_manager: EntityManager,
     economy: PlayerEconomy,
     conditions: GardenConditions,
-    elapsed: float,
+    turn: DayCycle,
+    weather: WeatherSnapshot | None = None,
 ) -> dict[str, Any]:
     """Describe the whole garden as plain data.
 
@@ -86,7 +89,10 @@ def to_save_payload(
         entity_manager: Where the plants and structures live.
         economy: The player's economy.
         conditions: The garden's pest situation.
-        elapsed: Seconds of play so far.
+        turn: Which day it is and what energy is left in it.
+        weather: The current condition and its forecast. Saved now that a
+            condition lasts a whole day: rolling a fresh sky on load would
+            silently rewrite the forecast the player planned around.
 
     Returns:
         A dict of dicts, lists, strings and numbers only -- see the module
@@ -115,11 +121,18 @@ def to_save_payload(
     phase_timer = 0.0
     conditions_ai = _conditions_ai(conditions)
     if conditions_ai is not None:
+        # Days the current phase has lasted -- `garden_states` counts days
+        # now, and the resolver advances it one per night.
         phase_timer = float(conditions_ai.blackboard.get("elapsed", 0.0))
 
     return {
         "version": SCHEMA_VERSION,
-        "elapsed": elapsed,
+        "day": turn.day,
+        "stamina": turn.stamina,
+        "weather": {
+            "condition_id": weather.condition_id if weather else CALM_CONDITION_ID,
+            "forecast": list(weather.forecast) if weather else [],
+        },
         "player": {
             "credits": economy.credits,
             "revenue": economy.revenue,
@@ -133,7 +146,7 @@ def to_save_payload(
             "last_treatment": conditions.last_treatment,
             "organic_resolutions": conditions.organic_resolutions,
             "chemical_resolutions": conditions.chemical_resolutions,
-            "phase_elapsed": phase_timer,
+            "days_in_phase": phase_timer,
         },
         "grid": cells,
     }
@@ -177,18 +190,38 @@ def _automation_record(
     if entity is None or not entity.has_component(AutomationComponent):
         return None
     structure = entity.get_component(AutomationComponent)
+    # No timer: a structure's countdown only ever runs *inside* one night's
+    # resolution (`systems/day_resolver.py`), so between two mornings there
+    # is never a partial one to preserve.
     return {
         "kind": structure.kind,
         "powered": structure.powered,
-        "timer": structure.timer,
     }
+
+
+@dataclass
+class WeatherSnapshot:
+    """The sky a save recorded: what is overhead, and what follows it.
+
+    Worth saving now that a condition lasts a whole day -- rolling a fresh
+    one on load would quietly rewrite the forecast the player planned
+    around.
+
+    Attributes:
+        condition_id: The condition in force.
+        forecast: The upcoming conditions, nearest first.
+    """
+
+    condition_id: str = CALM_CONDITION_ID
+    forecast: list[str] = field(default_factory=list)
 
 
 @dataclass
 class _Parsed:
     """A payload that has been fully validated, as plain values."""
 
-    elapsed: float
+    turn: DayCycle
+    weather: WeatherSnapshot
     player: dict[str, Any]
     conditions: dict[str, Any]
     cells: list[dict[str, Any]]
@@ -234,14 +267,30 @@ def _parse(payload: Any) -> _Parsed:
             "last_treatment": str(cond["last_treatment"]),
             "organic_resolutions": int(cond["organic_resolutions"]),
             "chemical_resolutions": int(cond["chemical_resolutions"]),
-            "phase_elapsed": float(cond["phase_elapsed"]),
+            "days_in_phase": float(cond["days_in_phase"]),
         }
 
         cells = [_parse_cell(record) for record in payload["grid"]]
         if len(cells) != GRID_WIDTH * GRID_HEIGHT:
             raise SaveFormatError(f"expected {GRID_WIDTH * GRID_HEIGHT} cells")
 
-        return _Parsed(float(payload["elapsed"]), parsed_player, parsed_cond, cells)
+        day = int(payload["day"])
+        stamina = int(payload["stamina"])
+        if day < 1 or stamina < 0:
+            raise SaveFormatError(f"day {day} with stamina {stamina} is not a save")
+        sky = payload["weather"]
+        condition_id = str(sky["condition_id"])
+        forecast = [str(c) for c in sky["forecast"]]
+        for candidate in [condition_id, *forecast]:
+            if candidate not in WEATHER_TABLE:
+                raise SaveFormatError(f"unknown weather {candidate!r}")
+        return _Parsed(
+            DayCycle(day=day, stamina=stamina),
+            WeatherSnapshot(condition_id, forecast),
+            parsed_player,
+            parsed_cond,
+            cells,
+        )
     except (KeyError, TypeError, ValueError, AttributeError) as error:
         if isinstance(error, SaveFormatError):
             raise
@@ -291,7 +340,6 @@ def _parse_cell(record: dict[str, Any]) -> dict[str, Any]:
         cell["automation"] = {
             "kind": str(automation["kind"]),
             "powered": bool(automation["powered"]),
-            "timer": float(automation["timer"]),
         }
     return cell
 
@@ -317,7 +365,9 @@ def apply_save_payload(
             its `AIComponent`.
 
     Returns:
-        Seconds of play the save recorded.
+        `(turn, weather)` -- the day and stamina to resume on, and the sky
+        that was overhead, which the caller pushes back into its
+        `WeatherSystem`.
 
     Raises:
         SaveFormatError: If the payload is not a valid save. Nothing has
@@ -345,7 +395,7 @@ def apply_save_payload(
             _restore_structure(grid, entity_manager, cell, record["automation"])
 
     _restore_conditions(conditions, parsed.conditions)
-    return parsed.elapsed
+    return parsed.turn, parsed.weather
 
 
 def _restore_plant(
@@ -380,9 +430,7 @@ def _restore_structure(
 ) -> None:
     entity = entity_manager.create_entity()
     entity.add_component(
-        AutomationComponent(
-            kind=saved["kind"], powered=saved["powered"], timer=saved["timer"]
-        )
+        AutomationComponent(kind=saved["kind"], powered=saved["powered"])
     )
     grid.mark_built(cell, entity.id)
 
@@ -395,7 +443,7 @@ def _restore_conditions(conditions: GardenConditions, saved: dict[str, Any]) -> 
         ai.blackboard.set("restoring", True)
         ai.fsm.set_initial_state(saved["phase"])
         ai.blackboard.set("restoring", False)
-        ai.blackboard.set("elapsed", saved["phase_elapsed"])
+        ai.blackboard.set("elapsed", saved["days_in_phase"])
     conditions.phase = saved["phase"]
     conditions.last_treatment = saved["last_treatment"]
     conditions.organic_resolutions = saved["organic_resolutions"]

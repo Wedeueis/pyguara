@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from games.quintal_cerrado.clock import DAY_LENGTH
 from games.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
     GardenConditions,
@@ -15,7 +14,6 @@ from games.quintal_cerrado.components import (
 )
 from games.quintal_cerrado.ribbon import (
     ALERT,
-    ARC_SEGMENTS,
     SCORE_INTERVAL,
     ResilienceCard,
     ResourceCard,
@@ -26,7 +24,9 @@ from games.quintal_cerrado.systems.weather_system import (
     CONDITION_DURATION,
     WeatherSystem,
 )
+from games.quintal_cerrado.turn import SESSION_DAYS
 from games.quintal_cerrado.weather import WEATHER_TABLE
+from pyguara.common.random import RandomStream
 from pyguara.graphics.protocols import UIRenderer
 
 
@@ -80,76 +80,66 @@ class TestResourceCard:
 
 
 class TestWeatherCard:
-    """The condition, the forecast, the progress bar and the day arc."""
+    """Today's condition, which day it is, and the days to come."""
 
     def test_it_names_the_condition_and_keeps_the_forecast(self) -> None:
         card = WeatherCard()
 
-        card.refresh("rainy", ["cold_snap", "clear", "windy"], 0.25, 0.0)
+        card.refresh("rainy", ["cold_snap", "clear", "windy"], day=3)
 
         assert card.now_label.text == WEATHER_TABLE["rainy"].display_name
-        assert card.forecast == ["cold_snap", "clear"], "two fit on the card"
-        assert card.progress == 0.25
+        assert card.forecast == ["cold_snap", "clear"], "two days fit on the card"
+
+    def test_it_shows_the_day_out_of_the_session(self) -> None:
+        card = WeatherCard()
+
+        card.refresh("calm", [], day=3)
+
+        assert card.day_label.text == f"Dia 3 / {SESSION_DAYS}"
 
     def test_an_unknown_condition_does_not_raise(self) -> None:
         card = WeatherCard()
 
-        card.refresh("no_such_weather", ["also_not_real"], 0.0, 0.0)
+        card.refresh("no_such_weather", ["also_not_real"], day=1)
 
         assert card.now_label.text == "?"
         assert card.forecast == []
 
-    @pytest.mark.parametrize(
-        ("elapsed", "expected_phase"),
-        [(0.0, 0.0), (DAY_LENGTH / 4, 0.25), (DAY_LENGTH * 1.5, 0.5)],
-    )
-    def test_the_day_phase_wraps_with_the_clock(
-        self, elapsed: float, expected_phase: float
-    ) -> None:
+    def test_it_draws_today_and_the_forecast(self) -> None:
         card = WeatherCard()
-
-        card.refresh("calm", [], 0.0, elapsed)
-
-        assert card.day_phase == pytest.approx(expected_phase)
-
-    def test_the_arc_marker_is_the_sun_by_day_and_the_moon_by_night(self) -> None:
-        card = WeatherCard()
-
-        card.refresh("calm", [], 0.0, DAY_LENGTH * 0.25)
-        assert card.marker_icon == "sun"
-
-        card.refresh("calm", [], 0.0, DAY_LENGTH * 0.75)
-        assert card.marker_icon == "moon"
-
-    def test_the_arc_itself_is_drawn(self) -> None:
-        card = WeatherCard()
-        card.refresh("calm", [], 0.5, 0.0)
+        card.refresh("rainy", ["clear", "windy"], day=2)
         renderer = _renderer()
 
         card.render(renderer)
 
-        assert renderer.draw_line.call_count >= ARC_SEGMENTS
+        assert renderer.draw_rect.called
+        drawn = [call.args[0] for call in renderer.draw_text.call_args_list]
+        assert "a seguir" in drawn
+        assert "d1" in drawn and "d2" in drawn
 
 
-class TestWeatherSystemProgress:
-    """The bar's fill is the system's own timer."""
+class TestTheWeatherTurnsOncePerDay:
+    """One condition a day: nothing moves mid-day, so nothing may change."""
 
-    def test_progress_runs_from_zero_to_one_and_resets(self) -> None:
-        system = WeatherSystem()
-        assert system.condition_progress == 0.0
+    def test_a_night_advances_exactly_one_condition(self) -> None:
+        system = WeatherSystem(rng=RandomStream(4))
+        queued = system.forecast
 
-        system.update(CONDITION_DURATION / 2)
-        assert system.condition_progress == pytest.approx(0.5)
+        system.update(CONDITION_DURATION)
 
-        system.update(CONDITION_DURATION / 2)
-        assert system.condition_progress == pytest.approx(0.0, abs=1e-6)
+        assert system.state.condition_id == queued[0]
+        assert system.forecast[0] == queued[1]
 
-    def test_progress_never_exceeds_one(self) -> None:
-        system = WeatherSystem()
+    def test_a_saved_sky_is_restored_rather_than_rerolled(self) -> None:
+        """The forecast is something the player plans around -- reloading
+        must not quietly deal a different one."""
+        system = WeatherSystem(rng=RandomStream(4))
 
-        system.update(CONDITION_DURATION * 0.99)
+        system.restore("cold_snap", ["rainy", "clear"])
 
-        assert 0.0 <= system.condition_progress <= 1.0
+        assert system.state.condition_id == "cold_snap"
+        assert system.state.cold_snap
+        assert system.forecast == ["rainy", "clear"]
 
 
 class TestResilienceCard:

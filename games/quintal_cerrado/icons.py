@@ -228,6 +228,18 @@ def _store(pen: _Pen) -> None:
     pen.line(0.1, 0.24, 0.9, 0.24, Wood.C700, 0.04)
 
 
+def _sleep(pen: _Pen) -> None:
+    """Dormir: a bed under a crescent moon."""
+    pen.box(0.08, 0.6, 0.84, 0.1, Wood.C500, radius=0.03)
+    pen.box(0.08, 0.7, 0.1, 0.18, Wood.C500)
+    pen.box(0.82, 0.7, 0.1, 0.18, Wood.C500)
+    pen.box(0.16, 0.48, 0.32, 0.14, Sand.C100, radius=0.04)
+    pen.box(0.46, 0.44, 0.44, 0.18, Verdant.SAGE_500, radius=0.05)
+    outer = _arc(0.72, 0.22, 0.16, math.radians(70), math.radians(290), steps=12)
+    inner = _arc(0.78, 0.18, 0.12, math.radians(250), math.radians(110), steps=12)
+    pen.poly(outer + inner, Sand.C300)
+
+
 def _menu(pen: _Pen) -> None:
     """Menu: three bars."""
     for v in (0.24, 0.46, 0.68):
@@ -439,6 +451,7 @@ ICONS: dict[str, Callable[[_Pen], None]] = {
     "spray": _spray,
     "store": _store,
     "menu": _menu,
+    "sleep": _sleep,
     "seed": _seed,
     "seed_pouch": _seed_pouch,
     "plant_guandu": _plant_guandu,

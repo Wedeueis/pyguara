@@ -24,9 +24,10 @@ from games.quintal_cerrado.systems.weather_system import (
 from games.quintal_cerrado.weather import CALM_CONDITION_ID, WeatherState
 from pyguara.common.random import RandomStream
 from tests.test_quintal_cerrado_growth import (  # noqa: F401
+    _nights,
     _plant_at,
     _plant_component,
-    _tick,
+    _resolve,
     game_container,
     scene,
 )
@@ -72,16 +73,15 @@ class TestWeatherSystem:
 
         assert forecast_for(9) == forecast_for(9)
 
-    def test_weather_changes_after_the_first_condition_duration(
-        self, scene: GardenScene
-    ) -> None:
-        """The scene's own registered system, not a standalone one --
-        pins that `_register_systems` actually wires `scene.weather` in."""
-        weather_system = scene.system_manager.get_system(WeatherSystem)
-        assert weather_system is not None
+    def test_a_night_turns_the_scene_own_sky(self, scene: GardenScene) -> None:
+        """The scene's own system, not a standalone one -- pins that
+        `_build_resolver` wires `scene.weather` in, and that exactly one
+        condition passes per night."""
+        assert scene._resolver is not None
+        weather_system = scene._resolver.weather
         expected_next = weather_system.forecast[0]
 
-        _tick(scene, CONDITION_DURATION + 0.5)
+        _nights(scene)
 
         assert weather_system.state.condition_id == expected_next
         assert scene.weather.condition_id == expected_next
