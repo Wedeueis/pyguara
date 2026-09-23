@@ -45,8 +45,10 @@ from pyguara.events.dispatcher import EventDispatcher
 SOLAR_INTERVAL = 4.0
 """Seconds between a panel's payouts."""
 
-SOLAR_YIELD = 2
-"""Sementes per payout: 0.5 a second, so a panel repays its 50 in ~100s."""
+SOLAR_YIELD = 6
+"""Sementes one panel pays per payout. Retuned for the turn-based build: a
+panel now earns roughly a cheap seed's worth a night, so the first rung of
+the automation tree pays for itself over a session rather than a minute."""
 
 DRIP_TARGET = 0.65
 """The moisture drip irrigation holds a cell at (PRD: "above 60%")."""

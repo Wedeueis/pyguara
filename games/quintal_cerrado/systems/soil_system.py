@@ -14,12 +14,13 @@ from __future__ import annotations
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.weather import WeatherState
 
-EVAPORATION_RATE = 0.015
-"""Moisture lost per second at `WeatherState.evaporation_multiplier` 1.0. A
-single watering (+0.4, see `components.WATER_AMOUNT`) buys roughly
-0.4 / EVAPORATION_RATE =~ 27 seconds above zero -- long enough to outlast
-Guandu's whole lifecycle, short enough that Baru's slower one needs a
-second pass."""
+EVAPORATION_RATE = 0.05
+"""Moisture a cell loses per simulated second at multiplier 1.0.
+
+Retuned for the turn-based build: a night is `day_resolver.DAY_SIM_SECONDS`
+of this, so a watering (`components.WATER_AMOUNT`, 0.4) carries a cell about
+two and a half days. At the old rate it lasted over a week, and watering
+stopped being a decision."""
 
 
 class SoilSystem:

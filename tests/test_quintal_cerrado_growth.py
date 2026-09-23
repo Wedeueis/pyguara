@@ -1,6 +1,6 @@
 """Plant growth, shade, pests, treatments and the economy, headless.
 
-Drives `GardenScene.system_manager.update(dt)` directly -- the same call
+Drives the day resolver's own systems directly -- the same call
 `SceneManager.fixed_update()` makes automatically for every active scene
 -- rather than a full `Application.run()` loop, so a stage transition
 that should take a few seconds of simulated ticks stays a fast test.
@@ -36,6 +36,7 @@ from games.quintal_cerrado.scenes import GardenScene
 from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.systems import weed_spread_system as weed_module
+from games.quintal_cerrado.systems.day_resolver import SUB_STEP
 from games.quintal_cerrado.systems.weed_spread_system import (
     PROPAGATION_INTERVAL,
     WeedSpreadSystem,
@@ -112,10 +113,50 @@ def scene(game_container: DIContainer) -> GardenScene:
     return garden
 
 
-def _tick(scene: GardenScene, seconds: float) -> None:
-    for _ in range(round(seconds / FIXED_DT)):
-        scene.system_manager.update(FIXED_DT)
+def _nights(scene: GardenScene, count: int = 1) -> None:
+    """Sleep `count` times -- the only thing that moves the simulation.
+
+    The garden is turn-based: no system ticks between actions, so a test
+    that wants the plot to change asks for nights, not seconds.
+    """
+    for _ in range(count):
+        scene.end_day()
+
+
+def _resolve(scene: GardenScene, seconds: float) -> None:
+    """Run the day resolver's systems for `seconds` of simulated time.
+
+    For the tests that want a system's own arithmetic rather than a whole
+    night: it drives exactly what `DayResolver.resolve` drives, in the same
+    order, without the FSM and weather work a night also does.
+    """
+    resolver = scene._resolver
+    assert resolver is not None
+    for _ in range(round(seconds / SUB_STEP)):
+        resolver.soil.update(SUB_STEP)
+        resolver.automation.update(SUB_STEP)
+        resolver.shade.update(SUB_STEP)
+        resolver.syntropic.update(SUB_STEP)
+        resolver.pest.update(SUB_STEP)
+        resolver.growth.update(SUB_STEP)
+        resolver.weeds.update(SUB_STEP)
+        resolver._drive_plants(SUB_STEP)
         scene.entity_manager.flush_pending_removals()
+
+
+def _tend(
+    scene: GardenScene, cells: tuple[tuple[int, int], ...], seconds: float
+) -> None:
+    """Resolve `seconds` of simulation, keeping `cells` watered throughout.
+
+    Growth stalls below `MOISTURE_GROWTH_THRESHOLD`, and a watering now
+    only carries a cell two or three days, so a test that wants to watch
+    something grow has to tend it exactly as a player would.
+    """
+    for _ in range(round(seconds / SUB_STEP)):
+        for cell in cells:
+            scene.grid.water(cell)
+        _resolve(scene, SUB_STEP)
 
 
 def _plant_component(scene: GardenScene, cell: tuple[int, int]) -> PlantComponent:
@@ -137,9 +178,8 @@ class TestGrowthProgression:
         # margin to see every growth stage without also seeing the ripening
         # one, which `TestOverripening` covers on its own.
         seen_stages = set()
-        for _ in range(round(12 / FIXED_DT)):
-            scene.system_manager.update(FIXED_DT)
-            scene.entity_manager.flush_pending_removals()
+        for _ in range(round(12 / SUB_STEP)):
+            _resolve(scene, SUB_STEP)
             seen_stages.add(_plant_component(scene, cell).growth_stage)
 
         assert seen_stages == {"seedling", "growing", "mature", "harvestable"}
@@ -149,7 +189,7 @@ class TestGrowthProgression:
         scene.grid.till(cell)
         scene._plant(cell, "guandu")
 
-        scene.system_manager.update(FIXED_DT)
+        _resolve(scene, SUB_STEP)
 
         assert _plant_component(scene, cell).growth_multiplier == 1.0
 
@@ -166,13 +206,14 @@ class TestGrowthProgression:
         scene._plant(cell, "guandu")
         scene.grid.water(cell)
 
-        # ~9s to harvestable, ~4.5s more to overripe: 16s is comfortably past.
-        _tick(scene, 16.0)
+        # ~9s to harvestable, ~4.5s more to overripe: 16s is comfortably
+        # past, watered throughout so nothing stalls dry.
+        _tend(scene, (cell,), 16.0)
         plant = _plant_component(scene, cell)
         assert plant.growth_stage == "overripe"
         progress_at_overripe = plant.growth_progress
 
-        _tick(scene, 5.0)
+        _resolve(scene, 5.0)
         assert _plant_component(scene, cell).growth_progress == progress_at_overripe
 
     def test_growth_stalls_below_the_moisture_threshold(
@@ -183,7 +224,7 @@ class TestGrowthProgression:
         scene._plant(cell, "guandu")
         scene.grid.soil_at(cell).moisture = 0.0
 
-        _tick(scene, 5.0)
+        _resolve(scene, 5.0)
 
         assert _plant_component(scene, cell).growth_progress == 0.0
         assert _plant_component(scene, cell).growth_stage == "seedling"
@@ -193,11 +234,11 @@ class TestGrowthProgression:
         scene.grid.till(cell)
         scene._plant(cell, "guandu")
         scene.grid.soil_at(cell).moisture = 0.0
-        _tick(scene, 2.0)
+        _resolve(scene, 2.0)
         assert _plant_component(scene, cell).growth_progress == 0.0
 
         scene.grid.water(cell)
-        _tick(scene, 2.0)
+        _resolve(scene, 2.0)
 
         assert _plant_component(scene, cell).growth_progress > 0.0
 
@@ -211,7 +252,7 @@ class TestStratificationBonus:
         scene.grid.till((5, 6))
         scene._plant((5, 6), "guandu")
 
-        scene.system_manager.update(FIXED_DT)
+        _resolve(scene, SUB_STEP)
 
         assert _plant_component(scene, (5, 6)).growth_multiplier > 1.0
 
@@ -223,7 +264,7 @@ class TestStratificationBonus:
         scene.grid.till((5, 6))
         scene._plant((5, 6), "guandu")
 
-        scene.system_manager.update(FIXED_DT)
+        _resolve(scene, SUB_STEP)
 
         assert _plant_component(scene, (5, 6)).growth_multiplier == 1.0
 
@@ -237,20 +278,19 @@ class TestStratificationBonus:
         scene._plant((3, 4), "cagaita")
 
         # Baru has not matured yet -- no shade, no bonus.
-        scene.system_manager.update(FIXED_DT)
+        _resolve(scene, SUB_STEP)
         assert _plant_component(scene, (3, 4)).growth_multiplier == 1.0
 
         # Run until Baru (the slower canopy species) reaches "mature".
-        for _ in range(round(60 / FIXED_DT)):
-            scene.system_manager.update(FIXED_DT)
-            scene.entity_manager.flush_pending_removals()
+        for _ in range(round(60 / SUB_STEP)):
+            _tend(scene, ((3, 3), (3, 4)), SUB_STEP)
             if _plant_component(scene, (3, 3)).growth_stage in (
                 "mature",
                 "harvestable",
             ):
                 break
 
-        scene.system_manager.update(FIXED_DT)
+        _resolve(scene, SUB_STEP)
         assert scene.grid.soil_at((3, 4)).shade_level > 0.0
         assert _plant_component(scene, (3, 4)).growth_multiplier > 1.0
 
@@ -260,7 +300,7 @@ class TestStratificationBonus:
         scene.grid.till((5, 6))
         scene._plant((5, 6), "guandu")
 
-        scene.system_manager.update(FIXED_DT)
+        _resolve(scene, SUB_STEP)
 
         assert _plant_component(scene, (5, 5)).growth_multiplier == 1.0
 
@@ -271,7 +311,7 @@ class TestMoisture:
         scene.grid.water(cell)
         after_watering = scene.grid.soil_at(cell).moisture
 
-        _tick(scene, 10.0)
+        _resolve(scene, 10.0)
 
         assert scene.grid.soil_at(cell).moisture < after_watering
 
@@ -279,7 +319,7 @@ class TestMoisture:
         cell = (0, 0)
         scene.grid.soil_at(cell).moisture = 0.01
 
-        _tick(scene, 5.0)
+        _resolve(scene, 5.0)
 
         assert scene.grid.soil_at(cell).moisture == 0.0
 
@@ -317,7 +357,7 @@ class TestPestPressure:
         _plant_at(scene, (5, 6), "cagaita")
         scene.grid.soil_at((5, 5)).pest_pressure = 0.8
 
-        _tick(scene, 3.0)
+        _resolve(scene, 3.0)
 
         assert scene.grid.soil_at((5, 6)).pest_pressure > 0.0
 
@@ -328,7 +368,7 @@ class TestPestPressure:
         scene.grid.soil_at((5, 6)).moisture = 0.0
         scene.grid.soil_at((5, 5)).pest_pressure = 0.8
 
-        _tick(scene, 5.0)
+        _resolve(scene, 5.0)
 
         assert scene.grid.soil_at((5, 6)).pest_pressure == 0.0
         assert _plant_component(scene, (5, 6)).health == 1.0
@@ -343,7 +383,7 @@ class TestPestPressure:
         scene.grid.soil_at((2, 2)).pest_pressure = 0.8
         scene.grid.soil_at((8, 2)).pest_pressure = 0.8
 
-        _tick(scene, 2.0)
+        _resolve(scene, 2.0)
 
         assert (
             scene.grid.soil_at((2, 3)).pest_pressure
@@ -357,7 +397,7 @@ class TestPestPressure:
         scene.grid.soil_at(rich).pest_pressure = 0.6
         scene.grid.soil_at(poor).pest_pressure = 0.6
 
-        _tick(scene, 3.0)
+        _resolve(scene, 3.0)
 
         assert (
             scene.grid.soil_at(rich).pest_pressure
@@ -370,7 +410,7 @@ class TestPestPressure:
         scene.grid.soil_at(hosted).pest_pressure = 0.4
         scene.grid.soil_at(empty).pest_pressure = 0.4
 
-        _tick(scene, 3.0)
+        _resolve(scene, 3.0)
 
         assert (
             scene.grid.soil_at(empty).pest_pressure
@@ -383,7 +423,7 @@ class TestPestPressure:
         scene.grid.soil_at(near).pest_pressure = 0.6
         scene.grid.soil_at(far).pest_pressure = 0.6
 
-        _tick(scene, 3.0)
+        _resolve(scene, 3.0)
 
         assert (
             scene.grid.soil_at(near).pest_pressure
@@ -396,7 +436,7 @@ class TestPestPressure:
         scene.grid.soil_at(near).pest_pressure = 0.6
         scene.grid.soil_at(far).pest_pressure = 0.6
 
-        _tick(scene, 3.0)
+        _resolve(scene, 3.0)
 
         assert scene.grid.soil_at(near).pest_pressure == pytest.approx(
             scene.grid.soil_at(far).pest_pressure
@@ -408,7 +448,7 @@ class TestInfestation:
         _plant_at(scene, (3, 3), "baru", stage="mature")
         scene.grid.soil_at((3, 3)).pest_pressure = 0.8
 
-        _tick(scene, 0.2)
+        _resolve(scene, 0.2)
 
         assert _plant_component(scene, (3, 3)).growth_stage == "infested"
 
@@ -417,7 +457,7 @@ class TestInfestation:
         scene._plant((3, 3), "baru")
         scene.grid.soil_at((3, 3)).pest_pressure = 0.9
 
-        _tick(scene, 3.0)
+        _resolve(scene, 3.0)
 
         assert _plant_component(scene, (3, 3)).growth_stage == "seedling"
 
@@ -426,11 +466,11 @@ class TestInfestation:
         scene.grid.soil_at((3, 3)).organic_matter = 0.0
         scene.grid.soil_at((3, 3)).pest_pressure = 0.8
         scene.grid.water((3, 3))
-        _tick(scene, 0.2)
+        _resolve(scene, 0.2)
         assert _plant_component(scene, (3, 3)).growth_stage == "infested"
         progress = _plant_component(scene, (3, 3)).growth_progress
 
-        _tick(scene, 3.0)
+        _resolve(scene, 3.0)
 
         assert _plant_component(scene, (3, 3)).growth_progress == progress
 
@@ -440,11 +480,11 @@ class TestInfestation:
         _plant_at(scene, (3, 3), "baru", stage="mature")
         _plant_component(scene, (3, 3)).growth_progress = 0.6
         scene.grid.soil_at((3, 3)).pest_pressure = 0.8
-        _tick(scene, 0.2)
+        _resolve(scene, 0.2)
         assert _plant_component(scene, (3, 3)).growth_stage == "infested"
 
         scene.grid.soil_at((3, 3)).pest_pressure = 0.0
-        _tick(scene, 0.2)
+        _resolve(scene, 0.2)
 
         plant = _plant_component(scene, (3, 3))
         assert plant.growth_stage == "mature"
@@ -456,7 +496,7 @@ class TestInfestation:
         soil.organic_matter = 0.0
         soil.pest_pressure = 0.9
 
-        _tick(scene, 45.0)
+        _resolve(scene, 45.0)
 
         assert _plant_component(scene, (3, 3)).growth_stage == "dying"
 
@@ -464,7 +504,7 @@ class TestInfestation:
         _plant_at(scene, (3, 3), "baru", stage="mature")
         _force_stage(scene, (3, 3), "dying")
 
-        _tick(scene, 5.0)
+        _resolve(scene, 5.0)
 
         assert _plant_component(scene, (3, 3)).growth_stage == "dying"
 
@@ -604,7 +644,7 @@ class TestTreatments:
             sprayed,
         )
 
-        _tick(scene, 1.0)
+        _resolve(scene, 1.0)
 
         # +50% for the chemical boost, -20% for the degraded soil: net faster.
         assert (
@@ -697,8 +737,9 @@ class TestOverripening:
         scene._plant(cell, "guandu")
         scene.grid.water(cell)
 
-        # ~9s to harvestable, ~4.5s more to overripe: 16s is comfortably past.
-        _tick(scene, 16.0)
+        # ~9s to harvestable, ~4.5s more to overripe: 16s is comfortably
+        # past, watered throughout so nothing stalls dry.
+        _tend(scene, (cell,), 16.0)
 
         assert _plant_component(scene, cell).growth_stage == "overripe"
 
@@ -848,6 +889,7 @@ class TestWeeds:
 class TestOutbreakFsm:
     @pytest.fixture(autouse=True)
     def _fast_outbreaks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """One night to an outbreak, one to recover -- in days now."""
         monkeypatch.setattr(garden_states, "OUTBREAK_DELAY", 1.0)
         monkeypatch.setattr(garden_states, "RESOLVED_COOLDOWN", 1.0)
 
@@ -861,7 +903,7 @@ class TestOutbreakFsm:
         _plant_at(scene, (2, 2), "guandu")
         _plant_at(scene, (5, 5), "guandu")
 
-        _tick(scene, 5.0)
+        _nights(scene, 2)
 
         assert scene.conditions.phase == "stable"
 
@@ -871,7 +913,7 @@ class TestOutbreakFsm:
             # Dry, so they stay seedlings for the whole test.
             scene.grid.soil_at(cell).moisture = 0.0
 
-        _tick(scene, 5.0)
+        _nights(scene, 2)
 
         assert scene.conditions.phase == "stable"
 
@@ -880,7 +922,7 @@ class TestOutbreakFsm:
         scene.event_dispatcher.subscribe(OutbreakStartedEvent, started.append)
         self._three_plants(scene)
 
-        _tick(scene, 3.0)
+        _nights(scene)
 
         assert scene.conditions.phase == "outbreak"
         assert len(started) == 1
@@ -890,7 +932,7 @@ class TestOutbreakFsm:
 
     def test_an_outbreak_only_starts_on_plants(self, scene: GardenScene) -> None:
         self._three_plants(scene)
-        _tick(scene, 3.0)
+        _nights(scene)
 
         infested = [
             (x, y)
@@ -915,7 +957,7 @@ class TestOutbreakFsm:
                 _plant_at(garden, cell, "guandu")
             started: list[OutbreakStartedEvent] = []
             garden.event_dispatcher.subscribe(OutbreakStartedEvent, started.append)
-            _tick(garden, 3.0)
+            _nights(garden)
             return started[-1].cells
 
         assert cells_for(7) == cells_for(7)
@@ -926,13 +968,13 @@ class TestOutbreakFsm:
         resolved: list[OutbreakResolvedEvent] = []
         scene.event_dispatcher.subscribe(OutbreakResolvedEvent, resolved.append)
         self._three_plants(scene)
-        _tick(scene, 3.0)
+        _nights(scene)
         assert scene.conditions.phase == "outbreak"
 
         for row in scene.grid.soil:
             for soil in row:
                 soil.pest_pressure = 0.0
-        _tick(scene, 0.2)
+        _nights(scene)
 
         assert scene.conditions.phase == "resolved_organic"
         assert scene.conditions.organic_resolutions == 1
@@ -940,27 +982,27 @@ class TestOutbreakFsm:
 
     def test_it_resolves_chemically_after_a_spray(self, scene: GardenScene) -> None:
         self._three_plants(scene)
-        _tick(scene, 3.0)
+        _nights(scene)
         assert scene.conditions.phase == "outbreak"
 
         for row in scene.grid.soil:
             for soil in row:
                 soil.pest_pressure = 0.0
         scene.conditions.last_treatment = "chemical"
-        _tick(scene, 0.2)
+        _nights(scene)
 
         assert scene.conditions.phase == "resolved_chemical"
         assert scene.conditions.chemical_resolutions == 1
 
     def test_it_returns_to_stable_after_the_cooldown(self, scene: GardenScene) -> None:
         self._three_plants(scene)
-        _tick(scene, 3.0)
+        _nights(scene)
         for row in scene.grid.soil:
             for soil in row:
                 soil.pest_pressure = 0.0
-        _tick(scene, 0.2)
+        _nights(scene)
         assert scene.conditions.phase == "resolved_organic"
 
-        _tick(scene, 1.5)
+        _nights(scene)
 
         assert scene.conditions.phase in ("stable", "outbreak")

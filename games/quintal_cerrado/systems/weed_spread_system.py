@@ -37,10 +37,10 @@ from pyguara.common.grid import Cell, neighbors8
 from pyguara.common.random import RandomStream
 from pyguara.ecs.manager import EntityManager
 
-PROPAGATION_INTERVAL = 6.0
-"""Seconds between spread checks. A real 15-minute session gets ~150 of
-them per eligible plant -- enough for "weeds fast, crops rare" to read as
-true without needing a per-tick probability."""
+PROPAGATION_INTERVAL = 3.0
+"""Simulated seconds between spread checks -- one night's worth
+(`day_resolver.DAY_SIM_SECONDS`), so a weed gets exactly one chance to take
+new ground per day and the plot never changes while you are looking at it."""
 
 SPONTANEOUS_WEED_CHANCE = 0.06
 """Chance, per check, that *some* empty tilled cell on the whole plot

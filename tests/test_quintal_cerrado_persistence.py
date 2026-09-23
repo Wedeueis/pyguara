@@ -24,7 +24,7 @@ from games.quintal_cerrado.components import (
     PlayerEconomy,
 )
 from games.quintal_cerrado.evaluation import EvaluationScene
-from games.quintal_cerrado.events import AutosavedEvent, OutbreakStartedEvent
+from games.quintal_cerrado.events import OutbreakStartedEvent
 from games.quintal_cerrado.pause import PauseScene
 from games.quintal_cerrado.persistence_schema import (
     SAVE_KEY,
@@ -35,10 +35,10 @@ from games.quintal_cerrado.persistence_schema import (
 )
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
 from games.quintal_cerrado.scoring import compute_score
-from games.quintal_cerrado.systems.autosave_system import AutosaveSystem
+from games.quintal_cerrado.systems.day_resolver import SUB_STEP
+from games.quintal_cerrado.turn import SESSION_DAYS, DayCycle
 from pyguara.ai.components import AIComponent
 from pyguara.common.types import Vector2
-from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.input import KeyDownEvent, MouseMotionEvent
 from pyguara.input.keys import ESCAPE
 from pyguara.input.manager import InputManager
@@ -48,8 +48,9 @@ from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UIEventType
 from tests.test_quintal_cerrado_growth import (  # noqa: F401
     _force_stage,
+    _nights,
     _plant_at,
-    _tick,
+    _resolve,
     game_container,
     scene,
 )
@@ -85,17 +86,13 @@ def _lived_in_garden(scene: GardenScene) -> None:
     # An infested plant that remembers it was mature at 0.6.
     _plant(scene, (5, 1)).growth_progress = 0.6
     scene.grid.soil_at((5, 1)).pest_pressure = 0.8
-    _tick(scene, 0.2)
+    _resolve(scene, 0.2)
     assert _plant(scene, (5, 1)).growth_stage == "infested"
 
     structures.buy_structure(scene.economy, "solar_panel")
     structures.place_structure(
         scene.grid, scene.entity_manager, scene.economy, "solar_panel", (9, 5)
     )
-    scene.entity_manager.get_entity(scene.grid.automation_at[(9, 5)]).get_component(
-        AutomationComponent
-    ).timer = 2.5
-
     _plant(scene, (1, 1)).growth_progress = 0.42
     _plant(scene, (1, 1)).health = 0.7
     _plant(scene, (2, 1)).is_chemical_boosted = True
@@ -114,7 +111,7 @@ def _lived_in_garden(scene: GardenScene) -> None:
 
     scene.conditions.organic_resolutions = 3
     scene.conditions.chemical_resolutions = 1
-    scene.elapsed = 123.4
+    scene.turn = DayCycle(day=4, stamina=7)
 
 
 def _reload(scene: GardenScene) -> GardenScene:
@@ -133,7 +130,11 @@ class TestThePayload:
     ) -> None:
         _lived_in_garden(scene)
         payload = to_save_payload(
-            scene.grid, scene.entity_manager, scene.economy, scene.conditions, 1.0
+            scene.grid,
+            scene.entity_manager,
+            scene.economy,
+            scene.conditions,
+            scene.turn,
         )
 
         assert json.loads(json.dumps(payload)) == payload
@@ -169,7 +170,7 @@ class TestThePayload:
 
 
 class TestRoundTrip:
-    def test_the_economy_and_clock_come_back(self, scene: GardenScene) -> None:
+    def test_the_economy_and_the_calendar_come_back(self, scene: GardenScene) -> None:
         _lived_in_garden(scene)
 
         loaded = _reload(scene)
@@ -180,7 +181,8 @@ class TestRoundTrip:
         assert loaded.economy.chemical_sales == 2
         assert loaded.economy.inventory == {"soil_sensor": 2}
         assert loaded.economy.unlocked_tech >= {"solar_panel", "drip_irrigation"}
-        assert loaded.elapsed == pytest.approx(123.4, abs=0.05)
+        assert loaded.turn.day == 4
+        assert loaded.turn.stamina == 7
 
     def test_the_soil_comes_back(self, scene: GardenScene) -> None:
         _lived_in_garden(scene)
@@ -246,12 +248,12 @@ class TestRoundTrip:
         assert _plant(loaded, (5, 1)).growth_stage == "infested"
 
         loaded.grid.soil_at((5, 1)).pest_pressure = 0.0
-        _tick(loaded, 0.3)
+        _resolve(loaded, 0.3)
 
         assert _plant(loaded, (5, 1)).growth_stage == "mature"
         assert _plant(loaded, (5, 1)).growth_progress >= 0.59
 
-    def test_structures_come_back_with_their_timers(self, scene: GardenScene) -> None:
+    def test_structures_come_back(self, scene: GardenScene) -> None:
         _lived_in_garden(scene)
 
         loaded = _reload(scene)
@@ -259,7 +261,8 @@ class TestRoundTrip:
         entity = loaded.entity_manager.get_entity(loaded.grid.automation_at[(9, 5)])
         structure = entity.get_component(AutomationComponent)
         assert structure.kind == "solar_panel"
-        assert structure.timer == pytest.approx(2.5, abs=0.05)
+        assert structure.powered is True
+        assert loaded.grid.automation_at[(9, 5)] == entity.id
         assert not loaded.grid.can_plant((9, 5))
 
     def test_the_tilemap_layers_are_rebuilt(self, scene: GardenScene) -> None:
@@ -279,7 +282,7 @@ class TestRoundTrip:
         loaded.grid.water((1, 1))
         before = _plant(loaded, (1, 1)).growth_progress
 
-        _tick(loaded, 0.5)
+        _resolve(loaded, 0.5)
 
         assert _plant(loaded, (1, 1)).growth_progress > before
 
@@ -351,7 +354,11 @@ class TestARefusedSave:
     def _valid(self, scene: GardenScene) -> dict[str, Any]:
         _lived_in_garden(scene)
         return to_save_payload(
-            scene.grid, scene.entity_manager, scene.economy, scene.conditions, 5.0
+            scene.grid,
+            scene.entity_manager,
+            scene.economy,
+            scene.conditions,
+            scene.turn,
         )
 
     def _blank(self, scene: GardenScene) -> GardenScene:
@@ -374,9 +381,7 @@ class TestARefusedSave:
             lambda p: p["grid"][7]["plant"].update(growth_stage="zombie")
             if p["grid"][7]["plant"]
             else p["grid"][13]["plant"].update(growth_stage="zombie"),
-            lambda p: p["grid"][0].update(
-                automation={"kind": "mine", "powered": 1, "timer": 0}
-            ),
+            lambda p: p["grid"][0].update(automation={"kind": "mine", "powered": 1}),
         ],
         ids=[
             "newer-version",
@@ -474,7 +479,7 @@ class TestARefusedSave:
 
         assert fresh.grid.plant_at == {}
         assert fresh._hud is not None
-        assert fresh._hud.message_label.text == "Save unreadable"
+        assert "unreadable" in fresh._hud.message_label.text
 
 
 class TestWhenItSaves:
@@ -487,56 +492,24 @@ class TestWhenItSaves:
 
         assert SAVE_KEY in storage.list_keys()
 
-    def test_the_autosave_waits_for_its_interval(self) -> None:
-        saves: list[int] = []
-        system = AutosaveSystem(
-            lambda: saves.append(1) or True, EventDispatcher(), interval=10.0
-        )
-
-        system.update(9.9)
-        assert saves == []
-
-        system.update(0.2)
-        assert saves == [1]
-
-        system.update(9.0)
-        assert saves == [1]
-
-    def test_the_autosave_announces_success_and_failure(self) -> None:
-        dispatcher = EventDispatcher()
-        seen: list[bool] = []
-        dispatcher.subscribe(AutosavedEvent, lambda e: seen.append(e.success))
-        outcomes = iter([True, False])
-        system = AutosaveSystem(lambda: next(outcomes), dispatcher, interval=1.0)
-
-        system.update(1.0)
-        system.update(1.0)
-
-        assert seen == [True, False]
-
-    def test_the_garden_autosaves_after_a_minute_of_play(
-        self, scene: GardenScene
-    ) -> None:
+    def test_sleeping_saves_the_garden(self, scene: GardenScene) -> None:
+        """Replaces the old 60-second autosave: between two mornings there
+        is nothing a save could have missed."""
         storage = _persistence(scene).storage
         for key in storage.list_keys():
             storage.delete(key)
 
-        _tick(scene, 59.0)
-        assert SAVE_KEY not in storage.list_keys()
-        _tick(scene, 2.0)
+        scene.end_day()
 
         assert SAVE_KEY in storage.list_keys()
-        scene.update(1 / 60)
-        assert scene._hud is not None
-        assert "saved" in scene._hud.message_label.text
 
-    def test_a_paused_garden_does_not_autosave(self, scene: GardenScene) -> None:
+    def test_nothing_is_saved_just_for_time_passing(self, scene: GardenScene) -> None:
         storage = _persistence(scene).storage
         for key in storage.list_keys():
             storage.delete(key)
-        scene._open_pause()
 
-        _tick(scene, 70.0)
+        for _ in range(600):
+            scene.update(1 / 60)
 
         assert SAVE_KEY not in storage.list_keys()
 
@@ -760,24 +733,23 @@ class TestTheOverlays:
         assert scene.container.get(SceneManager).current_scene is scene
         assert scene.system_manager.enabled
 
-    def test_the_evaluation_offers_itself_at_fifteen_minutes_once(
+    def test_the_evaluation_arrives_after_the_last_night_once(
         self, scene: GardenScene
     ) -> None:
         manager = scene.container.get(SceneManager)
-        scene.elapsed = clock.EVALUATION_TIME - 0.01
+        scene.turn = DayCycle(day=SESSION_DAYS, stamina=0)
 
-        scene.fixed_update(1 / 60)
-        scene.update(1 / 60)
+        scene.end_day()
         assert isinstance(manager.current_scene, EvaluationScene)
 
         manager.current_scene._close()
-        scene.update(1 / 60)
-        assert manager.current_scene is scene
+        scene.end_day()
+        assert manager.current_scene is scene, "it is offered once, not nightly"
 
-    def test_a_session_loaded_past_fifteen_minutes_is_not_evaluated_again(
+    def test_a_session_loaded_past_its_last_day_is_not_evaluated_again(
         self, scene: GardenScene
     ) -> None:
-        scene.elapsed = clock.EVALUATION_TIME + 30
+        scene.turn = DayCycle(day=SESSION_DAYS + 1, stamina=4)
         loaded = _reload(scene)
 
         loaded.update(1 / 60)
@@ -856,49 +828,41 @@ class TestTheOverlays:
         assert SAVE_KEY in storage.list_keys()
 
 
-class TestTheClock:
-    def test_the_readout(self) -> None:
-        assert clock.format_clock(0) == "Day 1  00:00/15:00"
-        assert clock.format_clock(425) == "Day 2  07:05/15:00"
+class TestTheCalendar:
+    """There is no clock any more: a day ends when the player sleeps."""
 
-    def test_days_are_five_minutes(self) -> None:
-        assert clock.day_number(0) == 1
-        assert clock.day_number(299) == 1
-        assert clock.day_number(300) == 2
-        assert clock.day_number(clock.EVALUATION_TIME - 1) == 3
+    def test_the_readout_counts_days_of_the_session(self) -> None:
+        assert clock.format_day(1) == f"Dia 1 / {SESSION_DAYS}"
+        assert clock.format_day(SESSION_DAYS) == f"Dia {SESSION_DAYS} / {SESSION_DAYS}"
 
-    def test_it_is_light_by_day_and_dark_at_night(self) -> None:
-        assert clock.darkness(0) == 0.0
-        assert clock.darkness(clock.DAY_LENGTH * 0.25) == 0.0
-        assert clock.darkness(clock.DAY_LENGTH * 0.75) == pytest.approx(
-            clock.MAX_DARKNESS
-        )
+    def test_days_left_never_goes_negative(self) -> None:
+        assert clock.days_left(1) == SESSION_DAYS - 1
+        assert clock.days_left(SESSION_DAYS) == 0
+        assert clock.days_left(SESSION_DAYS + 5) == 0
 
-    def test_darkness_never_leaves_its_range(self) -> None:
-        for second in range(0, 900, 7):
-            assert 0.0 <= clock.darkness(second) <= clock.MAX_DARKNESS
+    def test_nothing_moves_the_day_but_sleeping(self, scene: GardenScene) -> None:
+        for _ in range(120):
+            scene.update(1 / 60)
+        assert scene.turn.day == 1
 
-    def test_the_garden_clock_advances_with_play(self, scene: GardenScene) -> None:
-        _tick(scene, 1.0)
-        scene.fixed_update(0.5)
+        scene.end_day()
 
-        assert scene.elapsed == pytest.approx(0.5)
+        assert scene.turn.day == 2
 
-    def test_the_clock_stops_while_an_overlay_is_up(self, scene: GardenScene) -> None:
-        manager = scene.container.get(SceneManager)
-        scene._open_store()
+    def test_a_night_restores_the_pool(self, scene: GardenScene) -> None:
+        scene.turn.stamina = 1
 
-        manager.fixed_update(1.0)
+        scene.end_day()
 
-        assert scene.elapsed == 0.0
+        assert scene.turn.stamina == scene.turn.max_stamina
 
 
 class TestTheHud:
     def test_it_shows_the_day_and_the_power_budget(self, scene: GardenScene) -> None:
-        scene.elapsed = 425.0
+        scene.turn = DayCycle(day=2, stamina=5)
         scene.update(1 / 60)
         assert scene._hud is not None
-        assert scene._hud.clock_label.text == "Day 2  07:05/15:00"
+        assert scene._hud.day_label.text == f"Dia 2 / {SESSION_DAYS}"
         assert scene._hud.resources.power == (0, 0)
 
         scene.economy.inventory["solar_panel"] = 1
@@ -909,7 +873,7 @@ class TestTheHud:
         structures.place_structure(
             scene.grid, scene.entity_manager, scene.economy, "drip_irrigation", (2, 0)
         )
-        _tick(scene, 0.1)
+        _resolve(scene, SUB_STEP)
         scene.update(1 / 60)
 
         assert scene._hud.resources.power == (1, 3)
@@ -996,10 +960,14 @@ class TestTheHud:
         assert scene._inspector is not None
         assert "Solar Micro-Panel" in scene._inspector.panel.detail
 
-    def test_the_garden_darkens_with_the_clock(self, scene: GardenScene) -> None:
+    def test_the_plot_is_not_dimmed_by_a_clock_any_more(
+        self, scene: GardenScene
+    ) -> None:
+        """Night is something the player chooses by sleeping, not a wash
+        that creeps over the plot while they read it."""
         assert scene._canvas is not None
-        scene.elapsed = clock.DAY_LENGTH * 0.75
 
-        scene.update(1 / 60)
+        for _ in range(120):
+            scene.update(1 / 60)
 
-        assert scene._canvas.darkness == pytest.approx(clock.MAX_DARKNESS)
+        assert scene._canvas.darkness == 0.0

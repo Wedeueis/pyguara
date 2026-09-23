@@ -28,8 +28,13 @@ from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 
-OUTBREAK_DELAY = 20.0
-"""Seconds `stable` waits, with enough plants established, before an outbreak."""
+OUTBREAK_DELAY = 3.0
+"""Days `stable` waits, with enough plants established, before an outbreak.
+
+Days, not seconds: this machine is driven once a night by
+`systems/day_resolver.py`, not every frame. Three of a twelve-day session,
+so the PRD's fork arrives with a garden worth defending and time left to
+answer it either way."""
 
 OUTBREAK_MIN_PLANTS = 3
 """Established plants the plot needs before an outbreak is worth having."""
@@ -41,8 +46,8 @@ OUTBREAK_SEED_PRESSURE = 0.8
 """Pest pressure an outbreak starts its cells at -- well past
 `plant_states.INFEST_THRESHOLD`, so the plant is infested at once."""
 
-RESOLVED_COOLDOWN = 15.0
-"""Seconds a `resolved_*` state rests before the next outbreak can begin."""
+RESOLVED_COOLDOWN = 2.0
+"""Days a `resolved_*` state rests before the next outbreak can begin."""
 
 CLEAR_PRESSURE = 0.05
 """Highest pest pressure anywhere on the plot at which an outbreak counts as
@@ -108,9 +113,9 @@ class _ConditionState(State):
     def on_exit(self) -> None:
         """Nothing to release."""
 
-    def _tick(self, dt: float) -> float:
-        """Advance and return this state's own clock, in seconds."""
-        elapsed = float(self.blackboard.get("elapsed", 0.0)) + dt
+    def _tick(self, days: float) -> float:
+        """Advance and return how long this phase has lasted, in days."""
+        elapsed = float(self.blackboard.get("elapsed", 0.0)) + days
         self.blackboard.set("elapsed", elapsed)
         return elapsed
 
@@ -136,7 +141,10 @@ class StableState(_ConditionState):
     PHASE = "stable"
 
     def update(self, dt: float) -> str | None:
-        """Begin an outbreak once the plot has been established long enough."""
+        """Begin an outbreak once the plot has been established long enough.
+
+        `dt` is days here, not seconds -- see `_ConditionState._tick`.
+        """
         if len(self._established_plants()) < OUTBREAK_MIN_PLANTS:
             self.blackboard.set("elapsed", 0.0)
             return None
