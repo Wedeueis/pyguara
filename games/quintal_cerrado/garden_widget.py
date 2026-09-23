@@ -97,6 +97,12 @@ ALERT_MAX_ALPHA = 95
 ALERT_DECAY = 1.3
 """Per-second decay of the outbreak alert flash; ~0.75s to clear."""
 
+CURSOR_OK = Color(150, 220, 150)
+CURSOR_BLOCKED = Color(226, 110, 92)
+CURSOR_TINT_ALPHA = 34
+CURSOR_PULSE = 3.0
+"""Radians per second the cursor ring's glow breathes at."""
+
 TOOLTIP_DELAY = 0.35
 """Seconds the cursor must rest on one tile before the tooltip appears."""
 
@@ -186,6 +192,11 @@ class GardenGridCanvas(Canvas):
         self.darkness = 0.0
         """0.0 in daylight up to 1.0 at night; set by the scene from
         `clock.darkness()` and drawn as a translucent wash."""
+        self.tool_allows: Callable[[Cell], bool] | None = None
+        """Whether the active tool can act on a cell. Set by the owning
+        scene, the same `on_click`-after-construction pattern
+        `on_cell_clicked` uses -- only the scene knows what is selected or
+        what it costs. None leaves the cursor uncoloured."""
 
     def _cell_at(self, position: Vector2) -> Cell | None:
         """The cell under a screen-space `position`, or None off-grid."""
@@ -195,6 +206,15 @@ class GardenGridCanvas(Canvas):
             return None
         cell = (int(local_x // TILE_SIZE), int(local_y // TILE_SIZE))
         return cell if self.grid.in_bounds(cell) else None
+
+    def _cell_rect(self, cell: Cell) -> Rect:
+        """The screen rectangle of `cell`."""
+        return Rect(
+            self.rect.x + cell[0] * TILE_SIZE,
+            self.rect.y + cell[1] * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE,
+        )
 
     def _cell_screen_center(self, cell: Cell) -> Vector2:
         """The screen-space centre of `cell`."""
@@ -476,11 +496,35 @@ class GardenGridCanvas(Canvas):
             renderer.draw_rect(
                 self.rect, Color(*ALERT_COLOR, int(ALERT_MAX_ALPHA * self._alert))
             )
+        self._draw_cursor(renderer)
         self._draw_tooltip(renderer)
         # No `for child in self.children: child.render(...)` here: nothing
         # ever adds a child to this canvas (it draws the whole plot itself),
         # and a generic UI child would expect `UIRenderer` regardless.
         renderer.end_frame()
+
+    def _draw_cursor(self, renderer: IRenderer) -> None:
+        """Ring the hovered cell, tinted by whether the tool would work.
+
+        Answers "will this click do anything?" before it is spent --
+        planting on untilled ground, tilling worked soil and composting
+        an unaffordable cell all used to look identical until the click
+        came back with nothing.
+        """
+        if not self._cursor_on_grid or self.hover_cell is None:
+            return
+        rect = self._cell_rect(self.hover_cell)
+        if self.tool_allows is not None:
+            base = CURSOR_OK if self.tool_allows(self.hover_cell) else CURSOR_BLOCKED
+            renderer.draw_rect(rect, Color(base.r, base.g, base.b, CURSOR_TINT_ALPHA))
+        pulse = 0.5 + 0.5 * math.sin(self._elapsed * CURSOR_PULSE)
+        renderer.draw_rect(
+            rect,
+            Color(
+                HARVEST_GOLD.r, HARVEST_GOLD.g, HARVEST_GOLD.b, int(150 + 80 * pulse)
+            ),
+            width=2,
+        )
 
     def tooltip_visible(self) -> bool:
         """Whether the hover tooltip should be showing right now.
