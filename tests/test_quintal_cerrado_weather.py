@@ -17,7 +17,6 @@ from games.quintal_cerrado.systems.plant_growth_system import (
 )
 from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.weather_system import (
-    CONDITION_DURATION,
     FORECAST_LENGTH,
     WeatherSystem,
 )
@@ -43,7 +42,7 @@ class TestWeatherSystem:
 
         assert system.state.condition_id == CALM_CONDITION_ID
         assert system.state.growth_multiplier == 1.0
-        assert system.state.moisture_gain_per_second == 0.0
+        assert system.state.moisture_gain_per_day == 0.0
         assert system.state.evaporation_multiplier == 1.0
         assert system.state.pest_spread_multiplier == 1.0
         assert not system.state.cold_snap
@@ -51,10 +50,9 @@ class TestWeatherSystem:
     def test_the_forecast_starts_at_the_configured_length(self) -> None:
         assert len(WeatherSystem().forecast) == FORECAST_LENGTH
 
-    def test_a_short_tick_does_not_change_the_condition(self) -> None:
+    def test_the_sky_holds_until_a_night_advances_it(self) -> None:
+        """Nothing turns mid-day: a day is the unit."""
         system = WeatherSystem(rng=RandomStream(1))
-
-        system.update(CONDITION_DURATION - 0.1)
 
         assert system.state.condition_id == CALM_CONDITION_ID
 
@@ -62,7 +60,7 @@ class TestWeatherSystem:
         system = WeatherSystem(rng=RandomStream(1))
         expected = system.forecast[0]
 
-        system.update(CONDITION_DURATION)
+        system.advance_day()
 
         assert system.state.condition_id == expected
         assert len(system.forecast) == FORECAST_LENGTH  # refilled, not shrunk
@@ -94,7 +92,7 @@ class TestWeatherEffects:
         grid = GardenGrid()
         grid.till((0, 0))
         grid.soil_at((0, 0)).moisture = 0.1
-        weather = WeatherState(moisture_gain_per_second=0.5)
+        weather = WeatherState(moisture_gain_per_day=0.5)
 
         SoilSystem(grid, weather).update(1.0)
 
@@ -103,7 +101,7 @@ class TestWeatherEffects:
     def test_rain_does_not_wet_untilled_ground(self) -> None:
         grid = GardenGrid()  # (0, 0) stays raw dirt
         grid.soil_at((0, 0)).moisture = 0.0  # already at the evaporation floor
-        weather = WeatherState(moisture_gain_per_second=0.5)
+        weather = WeatherState(moisture_gain_per_day=0.5)
 
         SoilSystem(grid, weather).update(1.0)
 

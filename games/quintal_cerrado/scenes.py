@@ -1048,9 +1048,9 @@ class GardenScene(Scene):
         evaluation screen says about the same plot.
         """
         if self._storm is not None:
-            rain_reference = WEATHER_TABLE["rainy"].moisture_gain_per_second
+            rain_reference = WEATHER_TABLE["rainy"].moisture_gain_per_day
             self._storm.rain = (
-                min(1.0, self.weather.moisture_gain_per_second / rain_reference)
+                min(1.0, self.weather.moisture_gain_per_day / rain_reference)
                 if rain_reference > 0.0
                 else 0.0
             )

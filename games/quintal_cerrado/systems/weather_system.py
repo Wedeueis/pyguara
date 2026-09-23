@@ -49,7 +49,8 @@ from pyguara.common.random import RandomStream
 CONDITION_DURATION = 1.0
 """Days one condition lasts: exactly one. The garden is turn-based, and a
 sky that changed in the middle of a day would change nothing, since nothing
-grows or dries until the night resolves it."""
+grows or dries until the night resolves it. Kept as a named constant
+because it is what makes `forecast` mean "the next two days"."""
 
 FORECAST_LENGTH = 2
 """How many days ahead `forecast` names."""
@@ -78,7 +79,6 @@ class WeatherSystem:
         """
         self.state = state if state is not None else WeatherState()
         self._rng = rng if rng is not None else RandomStream()
-        self._timer = 0.0
         # Starts on CALM_CONDITION_ID deliberately, not a roll -- see the
         # module docstring's second paragraph. Only the *forecast* is
         # rolled up front; the active condition only ever changes at a
@@ -101,26 +101,16 @@ class WeatherSystem:
             condition_id: The condition to put back in force.
             forecast: The upcoming conditions, nearest first.
         """
-        self._timer = 0.0
         if forecast:
             self._queue = list(forecast)
         self._apply(condition_id)
 
-    @property
-    def condition_progress(self) -> float:
-        """How far the current condition has run, 0.0 to 1.0.
+    def advance_day(self) -> None:
+        """Move to tomorrow's condition and queue one more behind it.
 
-        What the HUD's weather card fills its bar from, so "how long is
-        this rain going to last" is answerable without counting seconds.
+        Called once a night by `systems/day_resolver.py`. There is no timer
+        any more: a condition lasts a day because a day is the unit.
         """
-        return min(1.0, self._timer / CONDITION_DURATION)
-
-    def update(self, dt: float) -> None:
-        """Advance the clock, and change condition once it comes due."""
-        self._timer += dt
-        if self._timer < CONDITION_DURATION:
-            return
-        self._timer -= CONDITION_DURATION
         self._queue.append(roll_condition(self._rng))
         self._apply(self._queue.pop(0))
 
@@ -128,7 +118,7 @@ class WeatherSystem:
         condition = WEATHER_TABLE[condition_id]
         self.state.condition_id = condition_id
         self.state.growth_multiplier = condition.growth_multiplier
-        self.state.moisture_gain_per_second = condition.moisture_gain_per_second
+        self.state.moisture_gain_per_day = condition.moisture_gain_per_day
         self.state.evaporation_multiplier = condition.evaporation_multiplier
         self.state.pest_spread_multiplier = condition.pest_spread_multiplier
         self.state.cold_snap = condition.cold_snap

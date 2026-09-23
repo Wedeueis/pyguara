@@ -20,10 +20,7 @@ from games.quintal_cerrado.ribbon import (
     WeatherCard,
 )
 from games.quintal_cerrado.scoring import Score
-from games.quintal_cerrado.systems.weather_system import (
-    CONDITION_DURATION,
-    WeatherSystem,
-)
+from games.quintal_cerrado.systems.weather_system import WeatherSystem
 from games.quintal_cerrado.turn import SESSION_DAYS
 from games.quintal_cerrado.weather import WEATHER_TABLE
 from pyguara.common.random import RandomStream
@@ -125,7 +122,7 @@ class TestTheWeatherTurnsOncePerDay:
         system = WeatherSystem(rng=RandomStream(4))
         queued = system.forecast
 
-        system.update(CONDITION_DURATION)
+        system.advance_day()
 
         assert system.state.condition_id == queued[0]
         assert system.forecast[0] == queued[1]

@@ -13,13 +13,11 @@ from games.quintal_cerrado import structures
 from games.quintal_cerrado.components import AutomationComponent, PlantComponent
 from games.quintal_cerrado.events import PlantHarvestedEvent, SolarIncomeEvent
 from games.quintal_cerrado.scenes import GardenScene
-from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.store import StoreOverlayScene
 from games.quintal_cerrado.systems import automation_system as auto
 from games.quintal_cerrado.systems.automation_system import (
     DRIP_TARGET,
-    DRONE_INTERVAL,
-    SOLAR_INTERVAL,
+    DRONE_HARVESTS_PER_NIGHT,
     SOLAR_YIELD,
 )
 from games.quintal_cerrado.systems.day_resolver import SUB_STEP
@@ -39,6 +37,17 @@ from tests.test_quintal_cerrado_growth import (  # noqa: F401
     game_container,
     scene,
 )
+
+
+def _machines(scene: GardenScene) -> None:
+    """Run one night of the machines: power, solar, drip and the drone.
+
+    They act once a night now, not on interval timers, so a test asks for
+    a night's worth rather than a number of seconds.
+    """
+    assert scene._resolver is not None
+    scene._resolver.automation.resolve_night()
+    scene.entity_manager.flush_pending_removals()
 
 
 def _place(scene: GardenScene, kind: str, cell: tuple[int, int]) -> AutomationComponent:
@@ -191,7 +200,7 @@ class TestPower:
             _place(scene, "drip_irrigation", (8, 0)),
         ]
 
-        _resolve(scene, SUB_STEP)
+        _machines(scene)
 
         assert [d.powered for d in devices] == [True, True, True, False]
 
@@ -200,42 +209,50 @@ class TestPower:
         devices = [_place(scene, "drip_irrigation", (2 + i * 2, 0)) for i in range(4)]
         _place(scene, "solar_panel", (0, 2))
 
-        _resolve(scene, SUB_STEP)
+        _machines(scene)
 
         assert all(d.powered for d in devices)
 
     def test_a_device_with_no_panel_is_unpowered(self, scene: GardenScene) -> None:
         drip = _place(scene, "drip_irrigation", (2, 2))
 
-        _resolve(scene, SUB_STEP)
+        _machines(scene)
 
         assert not drip.powered
 
     def test_a_sensor_needs_no_power(self, scene: GardenScene) -> None:
         sensor = _place(scene, "soil_sensor", (2, 2))
 
-        _resolve(scene, SUB_STEP)
+        _machines(scene)
 
         assert sensor.powered
 
 
 class TestSolar:
-    def test_a_panel_pays_out_on_its_interval(self, scene: GardenScene) -> None:
+    def test_a_panel_pays_once_a_night(self, scene: GardenScene) -> None:
         _place(scene, "solar_panel", (0, 0))
         credits = scene.economy.credits
 
-        _resolve(scene, SOLAR_INTERVAL - 0.5)
-        assert scene.economy.credits == credits
+        _machines(scene)
 
-        _resolve(scene, 1.0)
         assert scene.economy.credits == credits + SOLAR_YIELD
+
+    def test_nothing_is_paid_for_time_passing(self, scene: GardenScene) -> None:
+        """A panel earns a night's work, not a frame's."""
+        _place(scene, "solar_panel", (0, 0))
+        credits = scene.economy.credits
+
+        for _ in range(600):
+            scene.update(1 / 60)
+
+        assert scene.economy.credits == credits
 
     def test_a_payout_is_announced(self, scene: GardenScene) -> None:
         paid: list[SolarIncomeEvent] = []
         scene.event_dispatcher.subscribe(SolarIncomeEvent, paid.append)
         _place(scene, "solar_panel", (3, 4))
 
-        _resolve(scene, SOLAR_INTERVAL + 0.2)
+        _machines(scene)
 
         assert len(paid) == 1
         assert paid[0].cell == (3, 4)
@@ -246,7 +263,7 @@ class TestSolar:
         _place(scene, "solar_panel", (2, 0))
         credits = scene.economy.credits
 
-        _resolve(scene, SOLAR_INTERVAL + 0.2)
+        _machines(scene)
 
         assert scene.economy.credits == credits + 2 * SOLAR_YIELD
 
@@ -257,51 +274,54 @@ class TestDrip:
     ) -> None:
         _place(scene, "solar_panel", (0, 0))
         _place(scene, "drip_irrigation", (5, 5))
-        scene.grid.soil_at((5, 5)).moisture = 0.0
-        scene.grid.soil_at((6, 6)).moisture = 0.0
-        scene.grid.soil_at((8, 5)).moisture = 0.0
+        for cell in ((5, 5), (6, 6), (8, 5)):
+            scene.grid.soil_at(cell).moisture = 0.0
 
-        _resolve(scene, 4.0)
+        _machines(scene)
 
         assert scene.grid.soil_at((5, 5)).moisture == pytest.approx(DRIP_TARGET)
         assert scene.grid.soil_at((6, 6)).moisture == pytest.approx(DRIP_TARGET)
         assert scene.grid.soil_at((8, 5)).moisture < DRIP_TARGET
 
-    def test_it_maintains_the_target_and_does_not_flood(
-        self, scene: GardenScene
-    ) -> None:
+    def test_it_does_not_flood_a_wetter_cell(self, scene: GardenScene) -> None:
         _place(scene, "solar_panel", (0, 0))
         _place(scene, "drip_irrigation", (5, 5))
         scene.grid.soil_at((5, 6)).moisture = 0.9
 
-        _resolve(scene, 2.0)
+        _machines(scene)
 
-        assert scene.grid.soil_at((5, 6)).moisture <= 0.9
+        assert scene.grid.soil_at((5, 6)).moisture == pytest.approx(0.9)
 
     def test_an_unpowered_nozzle_waters_nothing(self, scene: GardenScene) -> None:
         _place(scene, "drip_irrigation", (5, 5))
         scene.grid.soil_at((5, 5)).moisture = 0.0
 
-        _resolve(scene, 3.0)
+        _machines(scene)
 
         assert scene.grid.soil_at((5, 5)).moisture == 0.0
 
     def test_drip_keeps_a_plant_growing_with_no_hand_watering(
         self, scene: GardenScene
     ) -> None:
+        """The point of the second rung: a drip cell is never dry in the
+        morning, so it grows without the watering can."""
         _place(scene, "solar_panel", (0, 0))
         _place(scene, "drip_irrigation", (5, 5))
         scene.grid.till((5, 6))
         scene._plant((5, 6), "guandu")
+        scene.grid.soil_at((5, 6)).moisture = 0.0
 
-        # +2s past the three stages to harvestable, not +5s: sitting
-        # harvestable now also accumulates (it is the ripeness clock --
-        # see `TestOverripening` in `test_quintal_cerrado_growth.py`), and
-        # guandu goes "overripe" ~4.5s after reaching it.
-        _resolve(scene, SPECIES_TABLE["guandu"].stage_seconds * 3 + 2.0)
+        _nights(scene, 3)
 
+        # Which stage exactly depends on the nights' weather (a cloudy or
+        # cold night grows less); what this pins is that it kept growing
+        # with no watering can, which is the second rung's whole point.
         plant = scene.entity_manager.get_entity(scene.grid.plant_at[(5, 6)])
-        assert plant.get_component(PlantComponent).growth_stage == "harvestable"
+        assert plant.get_component(PlantComponent).growth_stage in (
+            "mature",
+            "harvestable",
+        )
+        assert scene.grid.soil_at((5, 6)).moisture > 0.0
 
 
 class TestDrone:
@@ -316,19 +336,20 @@ class TestDrone:
         self._ready_plant(scene, (5, 6))
         credits = scene.economy.credits
 
-        _resolve(scene, 0.2)
+        _machines(scene)
 
         assert (5, 6) not in scene.grid.plant_at
-        assert scene.economy.credits == credits + sold[0].value
+        # The same night also pays the panel that powers the drone.
+        assert scene.economy.credits == credits + sold[0].value + SOLAR_YIELD
         assert sold[0].species_id == "baru"
         assert scene.economy.organic_sales == 1
 
     def test_a_drone_ignores_plants_out_of_reach(self, scene: GardenScene) -> None:
         _place(scene, "solar_panel", (0, 0))
         _place(scene, "auto_harvester", (5, 5))
-        self._ready_plant(scene, (5, 8 - 1))  # two cells away
+        self._ready_plant(scene, (5, 7))  # two cells away
 
-        _resolve(scene, 0.5)
+        _machines(scene)
 
         assert (5, 7) in scene.grid.plant_at
 
@@ -337,7 +358,7 @@ class TestDrone:
         _place(scene, "auto_harvester", (5, 5))
         _plant_at(scene, (5, 6), "baru", stage="mature")
 
-        _resolve(scene, 0.5)
+        _machines(scene)
 
         assert (5, 6) in scene.grid.plant_at
 
@@ -349,33 +370,32 @@ class TestDrone:
         self._ready_plant(scene, (5, 6))
         _force_stage(scene, (5, 6), "infested")
 
-        _resolve(scene, 0.5)
+        _machines(scene)
 
         assert (5, 6) in scene.grid.plant_at
 
-    def test_a_drone_harvests_one_plant_per_interval(self, scene: GardenScene) -> None:
+    def test_a_drone_collects_only_so_many_a_night(self, scene: GardenScene) -> None:
+        """A pair of extra hands, not a replacement for tending the plot."""
         _place(scene, "solar_panel", (0, 0))
         _place(scene, "auto_harvester", (5, 5))
-        self._ready_plant(scene, (4, 5))
-        self._ready_plant(scene, (6, 5))
+        ready = [(4, 5), (6, 5), (5, 4), (5, 6)]
+        for cell in ready:
+            self._ready_plant(scene, cell)
 
-        # Counted on the drone's own two cells, not plot-wide: a
-        # spontaneous weed may sprout anywhere on tilled ground during the
-        # window, and it has nothing to do with what the drone did.
-        _resolve(scene, 0.3)
-        assert [(4, 5) in scene.grid.plant_at, (6, 5) in scene.grid.plant_at].count(
-            True
-        ) == 1
+        _machines(scene)
 
-        _resolve(scene, DRONE_INTERVAL + 0.3)
-        assert (4, 5) not in scene.grid.plant_at
-        assert (6, 5) not in scene.grid.plant_at
+        left = [cell for cell in ready if cell in scene.grid.plant_at]
+        assert len(left) == len(ready) - DRONE_HARVESTS_PER_NIGHT
+
+        _machines(scene)
+
+        assert not [cell for cell in ready if cell in scene.grid.plant_at]
 
     def test_an_unpowered_drone_does_nothing(self, scene: GardenScene) -> None:
         _place(scene, "auto_harvester", (5, 5))
         self._ready_plant(scene, (5, 6))
 
-        _resolve(scene, 1.0)
+        _machines(scene)
 
         assert (5, 6) in scene.grid.plant_at
 
@@ -389,7 +409,7 @@ class TestDrone:
             PlantComponent
         ).is_chemical_boosted = True
 
-        _resolve(scene, 0.2)
+        _machines(scene)
 
         assert scene.economy.chemical_sales == 1
         assert scene.economy.organic_sales == 0
@@ -454,7 +474,10 @@ class TestTheStore:
 
         assert scene.container.get(SceneManager).current_scene is scene
         assert scene.economy.inventory["solar_panel"] == 1
-        assert scene.economy.credits == credits - 50
+        assert (
+            scene.economy.credits
+            == credits - structures.STRUCTURE_TABLE["solar_panel"].cost
+        )
         assert scene._active_tool == "build_solar_panel"
 
     def test_a_purchase_you_cannot_afford_keeps_the_store_open(
@@ -555,4 +578,4 @@ class TestRendering:
 
 def test_the_dispatcher_fixture_is_shared(scene: GardenScene) -> None:
     assert scene.event_dispatcher is scene.container.get(EventDispatcher)
-    assert auto.SOLAR_INTERVAL > 0 and FIXED_DT > 0
+    assert auto.SOLAR_YIELD > 0 and FIXED_DT > 0
