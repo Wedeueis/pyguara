@@ -135,6 +135,45 @@ class Renderable(Protocol):
 
 
 @runtime_checkable
+class ShapeRenderer(Protocol):
+    """The primitives `IRenderer` and `UIRenderer` both draw.
+
+    The two renderers are separate for good reason -- one draws the world
+    through the render graph, the other the UI overlay on top of it -- but
+    a rectangle, a circle and a line are drawn identically through either,
+    in the same screen-pixel coordinates. Art helpers that are nothing but
+    those primitives (a plant silhouette, an icon) take this instead, so
+    the same drawing serves the plot *and* a portrait of it in the HUD
+    rather than existing twice, once per renderer type.
+
+    Neither renderer implements this protocol by name: both already
+    satisfy it structurally, which is the whole point of `Protocol`.
+    """
+
+    def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
+        """Draw a filled or outlined rectangle."""
+        ...
+
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """Draw a filled or outlined circle."""
+        ...
+
+    def draw_line(
+        self, start: Vector2, end: Vector2, color: Color, width: int = 1
+    ) -> None:
+        """Draw a line."""
+        ...
+
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        """Draw a text string."""
+        ...
+
+
+@runtime_checkable
 class IRenderer(Protocol):
     """
     The Hardware Abstraction Layer (HAL) for rendering.

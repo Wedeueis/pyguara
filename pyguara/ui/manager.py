@@ -246,9 +246,15 @@ class UIManager:
         clicked_element: UIElement | None = None
 
         # Front-to-back across every layer, so an overlay takes the click
-        # before the HUD underneath it does.
+        # before the HUD underneath it does. Motion is not stopped at the
+        # first root that takes it -- see `UIElement.handle_event`: every
+        # root has to hear where the cursor is, or the one it just left
+        # keeps a stale hover.
         for _, element in reversed(self._ordered_roots()):
-            if element.handle_event(event_type, pos, event.button):
+            consumed_here = element.handle_event(event_type, pos, event.button)
+            if consumed_here and event_type == UIEventType.MOUSE_MOVE:
+                continue
+            if consumed_here:
                 if event_type == UIEventType.MOUSE_DOWN:
                     # `element` is only the root the event bubbled up
                     # through -- a click on a button inside a BoxContainer

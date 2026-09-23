@@ -5,16 +5,17 @@ house style `guara_falcao`/`tamandua_murundus`/`protocolo_bandeira` use.
 Colours come from the brand palette (`pyguara.ui.design_system.tokens`),
 so the grid sits in the same Cerrado as the rest of the design system.
 
-Draws through the world `IRenderer`, not `UIRenderer`, since the
+Draws through `ShapeRenderer`, the primitives both renderers share, since the
 fun-improvement roadmap's Phase 5: `garden_widget.GardenGridCanvas` still
 turns a click into a cell as a `Canvas`-derived UI widget, but its own
 *rendering* now happens through `render_world()`, called directly from
 `scenes.GardenScene.render()`, so the plot draws into the pipeline's
 world pass and picks up its post-process shaders (`bootstrap.py`) --
 `UIRenderer`'s draw calls, and everything else still built from them
-(the tool bar, the HUD), do not. `IRenderer`'s primitives take the exact
-same screen-pixel coordinates `UIRenderer`'s always did (see its own
-protocol docstring), so nothing here needed to change beyond the type.
+(the tool dock, the HUD), do not. Both renderers take the exact same
+screen-pixel coordinates, which is what lets one drawing serve both: the
+inspector draws a portrait of a plant with `draw_plant`, through the UI
+renderer, and gets the same silhouette that is growing on the plot.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from __future__ import annotations
 import math
 
 from pyguara.common.types import Color, Rect, Vector2
-from pyguara.graphics.protocols import IRenderer
+from pyguara.graphics.protocols import ShapeRenderer
 from pyguara.ui.design_system.tokens import Rock, Roxo, Sand, Verdant, Water, Wood
 
 WORLD_BACKDROP = Verdant.COLONIAL_700
@@ -59,7 +60,7 @@ DYING_TINT = Color(112, 102, 92)
 
 
 def draw_soil_tile(
-    renderer: IRenderer,
+    renderer: ShapeRenderer,
     rect: Rect,
     kind: str,
     *,
@@ -69,7 +70,9 @@ def draw_soil_tile(
     """Fill one cell with its soil kind's colour, plus a grid line.
 
     Args:
-        renderer: The world renderer to draw through.
+        renderer: Anything that draws the shared primitives -- the
+            world renderer on the plot, the UI renderer for a portrait of
+            the same plant in the HUD.
         rect: The cell's screen rectangle.
         kind: A `Tilemap.properties_for(gid)["kind"]` value; unknown kinds
             fall back to raw dirt rather than raising, so a gid a future
@@ -92,12 +95,14 @@ def draw_soil_tile(
 
 
 def draw_pest_marks(
-    renderer: IRenderer, rect: Rect, pressure: float, elapsed: float
+    renderer: ShapeRenderer, rect: Rect, pressure: float, elapsed: float
 ) -> None:
     """Scatter small crawling dots over a cell, more of them the worse it is.
 
     Args:
-        renderer: The world renderer to draw through.
+        renderer: Anything that draws the shared primitives -- the
+            world renderer on the plot, the UI renderer for a portrait of
+            the same plant in the HUD.
         rect: The cell's screen rectangle.
         pressure: `SoilCell.pest_pressure`, 0.0-1.0.
         elapsed: Seconds since the scene entered, so the dots crawl.
@@ -130,7 +135,7 @@ HARVEST_FRUIT = Sand.C300
 
 
 def draw_plant(
-    renderer: IRenderer,
+    renderer: ShapeRenderer,
     center: Vector2,
     color: Color,
     stage: str,
@@ -142,7 +147,9 @@ def draw_plant(
     """Draw a plant at its growth stage, with a pop-in bounce and idle sway.
 
     Args:
-        renderer: The world renderer to draw through.
+        renderer: Anything that draws the shared primitives -- the
+            world renderer on the plot, the UI renderer for a portrait of
+            the same plant in the HUD.
         center: The cell's centre, in screen space.
         color: The species' colour.
         stage: `PlantComponent.growth_stage` -- picks the silhouette size.
@@ -209,7 +216,7 @@ SENSOR_TRACK = Color(24, 20, 20, 150)
 
 
 def draw_structure(
-    renderer: IRenderer,
+    renderer: ShapeRenderer,
     rect: Rect,
     kind: str,
     *,
@@ -219,7 +226,9 @@ def draw_structure(
     """Draw one placed structure inside its cell.
 
     Args:
-        renderer: The world renderer to draw through.
+        renderer: Anything that draws the shared primitives -- the
+            world renderer on the plot, the UI renderer for a portrait of
+            the same plant in the HUD.
         rect: The cell's screen rectangle.
         kind: A key of `structures.STRUCTURE_TABLE`. An unknown kind draws
             nothing, the same tolerance `draw_soil_tile` gives an unknown
@@ -299,12 +308,14 @@ def draw_structure(
 
 
 def draw_sensor_readout(
-    renderer: IRenderer, rect: Rect, moisture: float, organic: float, pest: float
+    renderer: ShapeRenderer, rect: Rect, moisture: float, organic: float, pest: float
 ) -> None:
     """Draw three thin bars along the bottom of a cell a soil sensor covers.
 
     Args:
-        renderer: The world renderer to draw through.
+        renderer: Anything that draws the shared primitives -- the
+            world renderer on the plot, the UI renderer for a portrait of
+            the same plant in the HUD.
         rect: The cell's screen rectangle.
         moisture: `SoilCell.moisture`, 0.0-1.0 (blue).
         organic: `SoilCell.organic_matter`, 0.0-1.0 (green).

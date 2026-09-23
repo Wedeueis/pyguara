@@ -112,6 +112,80 @@ class TestHitTesting:
         assert clicks == ["overlay"]
 
 
+class TestHoverTracking:
+    """Hover follows the cursor; a click still goes to one element only."""
+
+    def _move(self, manager: UIManager, x: int, y: int) -> None:
+        manager._on_mouse_event(
+            OnMouseEvent(position=(x, y), button=0, is_down=False, is_motion=True)
+        )
+
+    def test_leaving_an_element_for_another_clears_the_first(
+        self, manager: UIManager
+    ) -> None:
+        """Motion stopped at the first element that took it, so the one the
+        cursor had just left stayed lit -- two neighbouring buttons both
+        looked hovered until the cursor reached empty space."""
+        left, right = _button("left", 0, 0), _button("right", 200, 0)
+        manager.add_element(left, UILayer.CONTENT)
+        manager.add_element(right, UILayer.CONTENT)
+
+        self._move(manager, 50, 20)
+        assert left.state == UIElementState.HOVERED
+        assert right.state == UIElementState.NORMAL
+
+        self._move(manager, 250, 20)
+
+        assert left.state == UIElementState.NORMAL
+        assert right.state == UIElementState.HOVERED
+
+    def test_it_clears_across_layers_too(self, manager: UIManager) -> None:
+        content, hud = _button("content", 0, 0), _button("hud", 200, 0)
+        manager.add_element(content, UILayer.CONTENT)
+        manager.add_element(hud, UILayer.HUD)
+
+        self._move(manager, 50, 20)
+        self._move(manager, 250, 20)
+
+        assert content.state == UIElementState.NORMAL
+        assert hud.state == UIElementState.HOVERED
+
+    def test_siblings_inside_one_container_clear_each_other(
+        self, manager: UIManager
+    ) -> None:
+        panel = Panel(Vector2(0, 0), Vector2(400, 100))
+        first, second = _button("first", 0, 0), _button("second", 200, 0)
+        panel.add_child(first)
+        panel.add_child(second)
+        manager.add_element(panel, UILayer.CONTENT)
+
+        self._move(manager, 50, 20)
+        self._move(manager, 250, 20)
+
+        assert first.state == UIElementState.NORMAL
+        assert second.state == UIElementState.HOVERED
+
+    def test_a_click_still_reaches_only_the_top_element(
+        self, manager: UIManager
+    ) -> None:
+        """Motion is broadcast; a press is not."""
+        hud, overlay = _button("hud"), _button("overlay")
+        clicks: list[str] = []
+        hud.on_click = lambda _el: clicks.append("hud")
+        overlay.on_click = lambda _el: clicks.append("overlay")
+        manager.add_element(hud, UILayer.HUD)
+        manager.add_element(overlay, UILayer.OVERLAY)
+
+        for is_down in (True, False):
+            manager._on_mouse_event(
+                OnMouseEvent(
+                    position=(10, 10), button=1, is_down=is_down, is_motion=False
+                )
+            )
+
+        assert clicks == ["overlay"]
+
+
 class TestRemoval:
     def test_remove_element_takes_it_out(self, manager: UIManager) -> None:
         element = _button()

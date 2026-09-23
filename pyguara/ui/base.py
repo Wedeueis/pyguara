@@ -119,6 +119,19 @@ class UIElement(ABC):
         if not self.visible or not self.enabled:
             return False
 
+        # Motion reaches *every* child, and a click only the first that
+        # takes it. A click is exclusive -- one press, one button -- but
+        # hover is a fact about where the cursor is, which every element
+        # needs to hear whether or not it is the one under it. Stopping
+        # motion at the first consumer left the element the cursor just
+        # came *off* believing it was still hovered, so two neighbouring
+        # buttons both sat lit until the cursor landed on empty space.
+        if event_type == UIEventType.MOUSE_MOVE:
+            consumed = False
+            for child in reversed(self.children):
+                consumed |= child.handle_event(event_type, position, button)
+            return self._process_input(event_type, position, button) or consumed
+
         # 1. Bubbling: Children get first dibs (reverse order for z-index)
         for child in reversed(self.children):
             if child.handle_event(event_type, position, button):
@@ -155,7 +168,7 @@ class UIElement(ABC):
         self.state = self._resting_state()
 
     def _resting_state(self) -> UIElementState:
-        """What this element looks like when it is neither hovered nor held."""
+        """Return the state for an element neither hovered nor held."""
         if not self.enabled:
             return UIElementState.DISABLED
         if self._focused:
@@ -216,7 +229,7 @@ class UIElement(ABC):
         self.children.append(child)
 
     def hit_test(self, position: Vector2) -> "UIElement":
-        """The deepest visible, enabled descendant under `position`.
+        """Return the deepest visible, enabled descendant under `position`.
 
         Front-to-back, mirroring the order `handle_event()` bubbles in.
         Used to find *what was actually clicked* -- `handle_event()` only

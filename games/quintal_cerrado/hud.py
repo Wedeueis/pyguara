@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from games.quintal_cerrado import layout
+from games.quintal_cerrado import art, layout
 from games.quintal_cerrado.components import (
     AutomationComponent,
     GardenConditions,
@@ -23,22 +23,34 @@ from games.quintal_cerrado.components import (
     PlayerEconomy,
 )
 from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.hud_widgets import CardPanel
+from games.quintal_cerrado.hud_widgets import MUTED_TEXT, TEXT_COLOR, CardPanel
 from games.quintal_cerrado.icons import draw_icon
 from games.quintal_cerrado.ribbon import ResilienceCard, ResourceCard, WeatherCard
 from games.quintal_cerrado.scoring import Score
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
 from pyguara.common.grid import Cell
-from pyguara.common.types import Rect, Vector2
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.base import UIElement
 from pyguara.ui.components.progress_bar import ProgressBar
 from pyguara.ui.components.text import Label
-from pyguara.ui.design_system.tokens import Guara, Sand, Verdant, Water
+from pyguara.ui.design_system.tokens import (
+    Falcao,
+    Guara,
+    Roxo,
+    Sand,
+    Verdant,
+    Water,
+)
 from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UILayer
+
+PORTRAIT_FILL = Roxo.C900.lerp(Color(0, 0, 0), 0.25)
+PORTRAIT_EDGE = Sand.C500.lerp(Roxo.C900, 0.55)
+RUNG_OFF = Falcao.C400.lerp(Roxo.C900, 0.55)
+DEGRADED_TEXT = Color(206, 132, 96)
 
 MESSAGE_SECONDS = 2.5
 TOAST_HEIGHT = 34
@@ -149,8 +161,54 @@ class Hud:
         self.weather.refresh(condition_id, forecast, progress, elapsed)
 
 
+LAYER_RUNGS = (
+    ("Alto", "canopy"),
+    ("Médio", "understory"),
+    ("Baixo", "ground_cover"),
+)
+"""The syntropic ladder, top down. Three rungs because `Species` has three
+canopy layers -- the mockup's fourth, "Emergente", has nothing behind it."""
+
+PEST_STEPS = (
+    (0.66, Color(214, 96, 80)),
+    (0.33, Sand.C500),
+)
+"""Pest fill by severity, worst first: crimson, then amber, then the calm
+colour below them. A gauge that stays one colour makes "some pests" and
+"lose the crop" look alike."""
+PEST_CALM = Falcao.C400
+
+PORTRAIT = 84
+"""Side of the square the plant's portrait is drawn in."""
+
+PORTRAIT_SCALE = 4.5
+"""How much bigger the portrait draws a plant than the plot does. The plot
+draws at 1.0 into a 48px tile; this fills an 84px box instead, so a
+seedling still reads as a seedling and a mature tree fills the frame."""
+
+
+def pest_color(pressure: float) -> Color:
+    """The fill colour for `pressure`, 0.0-1.0.
+
+    Args:
+        pressure: `SoilCell.pest_pressure`.
+
+    Returns:
+        Crimson above 0.66, amber above 0.33, muted below.
+    """
+    for floor, color in PEST_STEPS:
+        if pressure >= floor:
+            return color
+    return PEST_CALM
+
+
 class CellInspector:
-    """Shows the soil and plant under the cursor: a title and four meters."""
+    """The soil and plant under the cursor: a portrait, a ladder, four gauges.
+
+    The portrait is `art.draw_plant` -- the very function the plot draws
+    with (through `ShapeRenderer`, which both renderers satisfy), so the
+    card cannot show a different plant from the one in the ground.
+    """
 
     METRICS = (
         ("Umidade", "moisture", "moisture", Water.C300),
@@ -158,9 +216,11 @@ class CellInspector:
         ("Sombra", "shade_level", "shade", Sand.C500),
         ("Pragas", "pest_pressure", "pests", Guara.C400),
     )
-    ROW_HEIGHT = 30
-    TOP = 34
-    HEIGHT = TOP + ROW_HEIGHT * len(METRICS) + 8
+    ROW_HEIGHT = 26
+    TOP = PORTRAIT + 62
+    """Where the gauges start: below the portrait box *and* the detail line
+    under it, which is what pushed this past the portrait's own height."""
+    HEIGHT = TOP + ROW_HEIGHT * len(METRICS) + 10
 
     def __init__(self, ui_manager: UIManager, position: Vector2, width: int) -> None:
         """Build the card and add it to the HUD layer.
@@ -170,26 +230,29 @@ class CellInspector:
             position: Top-left corner, in screen space.
             width: Card width.
         """
-        panel = CardPanel(position, Vector2(width, self.HEIGHT))
+        self.panel = _InspectorCard(position, Vector2(width, self.HEIGHT))
         self.title = Label("", Vector2(position.x + 12, position.y + 10), font_size=13)
-        panel.add_child(self.title)
+        self.panel.add_child(self.title)
 
+        bar_x = position.x + 100
         self.bars: dict[str, ProgressBar] = {}
         for index, (name, key, icon_id, color) in enumerate(self.METRICS):
             y = position.y + self.TOP + index * self.ROW_HEIGHT
-            panel.add_child(
-                _IconMark(icon_id, Rect(int(position.x) + 12, int(y), 20, 20))
+            self.panel.add_child(
+                _IconMark(icon_id, Rect(int(position.x) + 12, int(y), 18, 18))
             )
-            panel.add_child(Label(name, Vector2(position.x + 40, y + 3), font_size=12))
+            self.panel.add_child(
+                Label(name, Vector2(position.x + 36, y + 3), font_size=12)
+            )
             bar = ProgressBar(
-                Vector2(position.x + 110, y + 6),
-                Vector2(width - 126, 9),
+                Vector2(bar_x, y + 5),
+                Vector2(width - (bar_x - position.x) - 14, 9),
                 value=0.0,
                 fill_color=color,
             )
             self.bars[key] = bar
-            panel.add_child(bar)
-        ui_manager.add_element(panel, UILayer.HUD)
+            self.panel.add_child(bar)
+        ui_manager.add_element(self.panel, UILayer.HUD)
 
     def update(
         self, grid: GardenGrid, entity_manager: EntityManager, cell: Cell | None
@@ -204,38 +267,151 @@ class CellInspector:
         """
         if cell is None or not grid.in_bounds(cell):
             self.title.set_text("Hover a tile to inspect it")
+            self.panel.show_plant(None, 0.0)
+            self.panel.detail = ""
+            self.panel.degraded = False
             for bar in self.bars.values():
                 bar.set_value(0.0)
             return
 
         soil = grid.soil_at(cell)
-        parts = [f"({cell[0]},{cell[1]}) {_SOIL_NAMES.get(soil.soil_type, '?')}"]
-        if soil.is_chemically_degraded:
-            parts.append("degraded")
-        plant_text = self._plant_text(grid, entity_manager, cell)
-        if plant_text:
-            parts.append(plant_text)
-        self.title.set_text(" | ".join(parts))
+        self.title.set_text(
+            f"({cell[0]},{cell[1]}) {_SOIL_NAMES.get(soil.soil_type, '?')}"
+        )
+        self.panel.degraded = soil.is_chemically_degraded
+        plant = self._plant_at(grid, entity_manager, cell)
+        if plant is not None:
+            species = SPECIES_TABLE.get(plant.species_id)
+            name = species.display_name if species else plant.species_id
+            self.panel.show_plant(plant, 0.0)
+            detail = f"{name} - {plant.growth_stage} {round(plant.health * 100)}%"
+            self.panel.detail = detail + (
+                " - pulverizado" if plant.is_chemical_boosted else ""
+            )
+        else:
+            self.panel.show_plant(None, 0.0)
+            self.panel.detail = self._structure_name(grid, entity_manager, cell)
         for key, bar in self.bars.items():
-            bar.set_value(float(getattr(soil, key)))
+            value = float(getattr(soil, key))
+            bar.set_value(value)
+            if key == "pest_pressure":
+                bar.fill_color = pest_color(value)
 
     @staticmethod
-    def _plant_text(grid: GardenGrid, entity_manager: EntityManager, cell: Cell) -> str:
+    def _plant_at(
+        grid: GardenGrid, entity_manager: EntityManager, cell: Cell
+    ) -> PlantComponent | None:
         entity_id = grid.plant_at.get(cell)
-        if entity_id is not None:
-            entity = entity_manager.get_entity(entity_id)
-            if entity is not None and entity.has_component(PlantComponent):
-                plant = entity.get_component(PlantComponent)
-                species = SPECIES_TABLE.get(plant.species_id)
-                name = species.display_name if species else plant.species_id
-                text = f"{name}: {plant.growth_stage} ({round(plant.health * 100)}%)"
-                return text + (" - sprayed" if plant.is_chemical_boosted else "")
+        if entity_id is None:
+            return None
+        entity = entity_manager.get_entity(entity_id)
+        if entity is None or not entity.has_component(PlantComponent):
+            return None
+        return entity.get_component(PlantComponent)
+
+    @staticmethod
+    def _structure_name(
+        grid: GardenGrid, entity_manager: EntityManager, cell: Cell
+    ) -> str:
         if cell in grid.automation_at:
             entity = entity_manager.get_entity(grid.automation_at[cell])
             if entity is not None and entity.has_component(AutomationComponent):
                 kind = entity.get_component(AutomationComponent).kind
                 return STRUCTURE_TABLE[kind].display_name
         return ""
+
+
+class _InspectorCard(CardPanel):
+    """The inspector's own drawing: the portrait box and the layer ladder.
+
+    Attributes:
+        plant: What to draw a portrait of, or None for an empty plot.
+        detail: The line under the portrait -- a species and stage, or a
+            structure's name.
+        degraded: Whether to say the soil is chemically degraded.
+    """
+
+    def __init__(self, position: Vector2, size: Vector2) -> None:
+        """Initialize the card.
+
+        Args:
+            position: Top-left corner.
+            size: Width and height.
+        """
+        super().__init__(position, size)
+        self.plant: PlantComponent | None = None
+        self.detail = ""
+        self.degraded = False
+        self._elapsed = 0.0
+
+    def show_plant(self, plant: PlantComponent | None, elapsed: float) -> None:
+        """Set the plant the portrait draws.
+
+        Args:
+            plant: The hovered cell's plant, or None.
+            elapsed: Seconds of play, for the harvestable pulse.
+        """
+        self.plant = plant
+        self._elapsed = elapsed
+
+    def render(self, renderer: UIRenderer) -> None:
+        """Draw the card, the portrait box, the ladder, then the children."""
+        super().render(renderer)
+        box = Rect(self.rect.x + 12, self.rect.y + 32, PORTRAIT, PORTRAIT)
+        renderer.draw_rect(box, PORTRAIT_FILL, border_radius=6)
+        renderer.draw_rect(box, PORTRAIT_EDGE, width=1, border_radius=6)
+        self._draw_portrait(renderer, box)
+        self._draw_ladder(renderer, box)
+        if self.detail:
+            renderer.draw_text(
+                self.detail,
+                Vector2(self.rect.x + 12, box.bottom + 8),
+                TEXT_COLOR,
+                12,
+            )
+        if self.degraded:
+            renderer.draw_text(
+                "solo degradado",
+                Vector2(self.rect.x + 12, self.rect.y + 12),
+                DEGRADED_TEXT,
+                11,
+            )
+
+    def _draw_portrait(self, renderer: UIRenderer, box: Rect) -> None:
+        if self.plant is None:
+            return
+        species = SPECIES_TABLE.get(self.plant.species_id)
+        # Scaled up from the 1.0 the plot draws at, so the same silhouette
+        # fills a portrait box instead of a 48px tile.
+        art.draw_plant(
+            renderer,
+            Vector2(box.centerx, box.centery + PORTRAIT * 0.16),
+            species.color if species else Verdant.COLONIAL_500,
+            self.plant.growth_stage,
+            pop_scale=PORTRAIT_SCALE,
+            elapsed=self._elapsed,
+        )
+
+    def _draw_ladder(self, renderer: UIRenderer, box: Rect) -> None:
+        """Three rungs, the plant's own lit -- where it sits in the canopy."""
+        species = (
+            SPECIES_TABLE.get(self.plant.species_id) if self.plant is not None else None
+        )
+        x = box.right + 14
+        renderer.draw_text("Camada", Vector2(x, box.y + 2), MUTED_TEXT, 10)
+        for index, (name, layer) in enumerate(LAYER_RUNGS):
+            y = box.y + 20 + index * 22
+            lit = species is not None and species.canopy_layer == layer
+            rung = Rect(x, y, 10, 10)
+            renderer.draw_rect(
+                rung, Verdant.COLONIAL_500 if lit else RUNG_OFF, border_radius=2
+            )
+            renderer.draw_text(
+                name,
+                Vector2(x + 16, y - 2),
+                TEXT_COLOR if lit else MUTED_TEXT,
+                11,
+            )
 
 
 class _IconMark(UIElement):
