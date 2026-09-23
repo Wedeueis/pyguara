@@ -7,18 +7,21 @@ engine's `AISystem` too); this resolver owns them and runs them once, in the
 same order their old priorities gave them: soil, automation, shade,
 syntropic, pest, growth, weeds -- then the weather turns for tomorrow.
 
-**Why a night is replayed in sub-steps** rather than one big `update(day)`:
-`PestSystem` integrates a coupled non-linear system -- spread is
-proportional to current pressure, and health drain is the product of two
-quantities that move together. A single step of a whole day's length makes
-one infested cell deposit several times full pressure on each neighbour and
-drain many times full health. Twelve short steps leave every calibrated
-constant meaning exactly what it means today, at a cost of about a
-millisecond a night.
+Every constant these systems own is now expressed **per day** -- a species
+grows in `stage_days`, soil loses `EVAPORATION_RATE` a day, a panel pays
+`SOLAR_YIELD` a night. The old per-second numbers are gone, and with them
+the fiction that a day was worth some number of simulated seconds.
 
-The plant FSMs are driven inside that loop rather than after it, for the
-same reason they used to be driven every tick: `StateMachine.update` applies
-at most one transition per call and each `on_enter` resets
+Three systems act **once** a night, because what they do is an event and
+not an accumulation: automation (solar pays, drip fills, the drone
+collects), weeds (one spread roll each), and the weather (tomorrow's sky).
+
+The rest are still stepped `SUB_STEPS` times across the night, for two
+reasons. `PestSystem` integrates a coupled non-linear system -- spread is
+proportional to current pressure, health drain is the product of two
+quantities that move together -- so one whole-day step overshoots badly.
+And the plant FSMs have to be driven between steps: `StateMachine.update`
+applies at most one transition per call and each `on_enter` resets
 `growth_progress`, so a night's growth applied in one lump would be thrown
 away above the first stage boundary.
 """
@@ -42,28 +45,24 @@ from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
 from games.quintal_cerrado.systems.soil_system import SoilSystem
 from games.quintal_cerrado.systems.syntropic_system import SyntropicSystem
-from games.quintal_cerrado.systems.weather_system import (
-    CONDITION_DURATION,
-    WeatherSystem,
-)
+from games.quintal_cerrado.systems.weather_system import WeatherSystem
 from games.quintal_cerrado.systems.weed_spread_system import WeedSpreadSystem
 from pyguara.ai.components import AIComponent
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 
-DAY_SIM_SECONDS = 3.0
-"""How much of the old per-second simulation one night is worth. Chosen from
-`Species.stage_seconds`: guandu (3.0) gains one stage a night and baru (6.0)
-one every two, so a crop is a multi-day commitment rather than a click."""
+SUB_STEPS = 4
+"""How many steps a night's continuous systems are advanced in. Four is
+enough that a plant crosses at most one stage boundary per step at any
+realistic multiplier, which is what keeps the FSM from discarding growth,
+and that the pest integration stays well-behaved."""
 
-SUB_STEP = 0.25
-"""Length of one sub-step. Small enough that a plant crosses at most one
-stage boundary in it, which is what keeps the FSM from discarding growth."""
+SUB_STEP = 1.0 / SUB_STEPS
+"""One step, in days."""
 
-ECONOMY_SETTLE_DAYS = 1.0
-"""What one night advances the garden-conditions FSM by. That machine now
-counts days, not seconds (`garden_states.py`)."""
+ONE_DAY = 1.0
+"""What a night advances the garden-conditions FSM by (`garden_states.py`)."""
 
 
 @dataclass
@@ -169,11 +168,6 @@ class DayResolver:
         event_dispatcher.subscribe(OutbreakStartedEvent, self._on_outbreak_started)
         event_dispatcher.subscribe(OutbreakResolvedEvent, self._on_outbreak_resolved)
 
-    @property
-    def steps(self) -> int:
-        """How many sub-steps one night is replayed in."""
-        return round(DAY_SIM_SECONDS / SUB_STEP)
-
     def resolve(self, day: int) -> DayReport:
         """Run one night and report what it did.
 
@@ -190,22 +184,28 @@ class DayResolver:
         before = self._snapshot()
         weather_id = self.weather.state.condition_id
 
-        for _ in range(self.steps):
+        # The machines first: a panel pays, the drip fills its cells and the
+        # drone collects, all before the night's own weather and growth run
+        # against the soil they just changed.
+        self.automation.resolve_night()
+
+        for _ in range(SUB_STEPS):
             self.soil.update(SUB_STEP)
-            self.automation.update(SUB_STEP)
             self.shade.update(SUB_STEP)
             self.syntropic.update(SUB_STEP)
             self.pest.update(SUB_STEP)
             self.growth.update(SUB_STEP)
-            self.weeds.update(SUB_STEP)
             self._drive_plants(SUB_STEP)
             self.entity_manager.flush_pending_removals()
 
-        # The conditions FSM counts days now, and the weather turns exactly
-        # once: what was overhead tonight is what the player saw forecast
-        # yesterday, and the roll below is tomorrow's.
-        self._drive_conditions(ECONOMY_SETTLE_DAYS)
-        self.weather.update(CONDITION_DURATION)
+        # After growth, so a plant that matured tonight can seed tonight.
+        self.weeds.resolve_night()
+        self.entity_manager.flush_pending_removals()
+
+        # What was overhead tonight is the sky the player saw forecast
+        # yesterday; this rolls tomorrow's.
+        self._drive_conditions(ONE_DAY)
+        self.weather.advance_day()
 
         return self._report(day, weather_id, before)
 

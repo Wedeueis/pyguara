@@ -42,7 +42,7 @@ class Species:
             what `systems/syntropic_system.py`'s stratification bonus and
             `systems/shade_system.py`'s shade-casting key off.
         color: The plant's fill colour (this demo ships no textures).
-        stage_seconds: Seconds `systems/plant_growth_system.py` needs, at a
+        stage_days: Days `systems/plant_growth_system.py` needs, at a
             growth multiplier of 1.0, to fill one stage's growth budget.
             Demo-paced, not realistic -- a canopy tree taking real years to
             mature would leave a 15-minute playable loop with nothing to
@@ -75,7 +75,7 @@ class Species:
     display_name: str
     canopy_layer: str
     color: Color
-    stage_seconds: float = 4.0
+    stage_days: float = 1.5
     seed_cost: int = 5
     base_price: int = 8
     repels_pests: bool = False
@@ -89,9 +89,9 @@ SPECIES_TABLE: dict[str, Species] = {
         display_name="Guandu",
         canopy_layer="ground_cover",
         color=Verdant.SAGE_500,
-        stage_seconds=3.0,
+        stage_days=1.0,
         seed_cost=5,
-        base_price=8,
+        base_price=10,
         spread_chance=0.03,
     ),
     "cagaita": Species(
@@ -99,9 +99,9 @@ SPECIES_TABLE: dict[str, Species] = {
         display_name="Cagaita",
         canopy_layer="understory",
         color=Sand.C400,
-        stage_seconds=4.5,
+        stage_days=1.5,
         seed_cost=10,
-        base_price=16,
+        base_price=20,
         spread_chance=0.02,
     ),
     "baru": Species(
@@ -109,9 +109,9 @@ SPECIES_TABLE: dict[str, Species] = {
         display_name="Baru",
         canopy_layer="canopy",
         color=Verdant.COLONIAL_500,
-        stage_seconds=6.0,
+        stage_days=2.0,
         seed_cost=15,
-        base_price=24,
+        base_price=30,
         spread_chance=0.008,
     ),
     "pequi": Species(
@@ -119,9 +119,9 @@ SPECIES_TABLE: dict[str, Species] = {
         display_name="Pequi",
         canopy_layer="canopy",
         color=Guara.C500,
-        stage_seconds=5.0,
+        stage_days=1.7,
         seed_cost=12,
-        base_price=20,
+        base_price=26,
         repels_pests=True,
         spread_chance=0.008,
     ),
@@ -130,7 +130,7 @@ SPECIES_TABLE: dict[str, Species] = {
         display_name="Weed",
         canopy_layer="ground_cover",
         color=Verdant.COLONIAL_700,
-        stage_seconds=2.0,
+        stage_days=0.7,
         seed_cost=0,
         base_price=0,
         spread_chance=0.35,

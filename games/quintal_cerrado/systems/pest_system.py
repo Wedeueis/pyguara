@@ -38,9 +38,11 @@ from games.quintal_cerrado.weather import WeatherState
 from pyguara.common.grid import Cell, neighbors8
 from pyguara.ecs.manager import EntityManager
 
-SPREAD_RATE = 0.04
-"""Fraction of a source cell's pressure each neighbouring plant receives per
-second."""
+SPREAD_RATE = 0.45
+"""Fraction of a source cell's pressure each neighbouring plant receives in
+a day. A freshly seeded outbreak (0.8) pushes a neighbour past
+`plant_states.INFEST_THRESHOLD` in under two nights, so an untreated
+outbreak is a real emergency without being unanswerable."""
 
 SPREAD_MIN_PRESSURE = 0.3
 """Below this a cell is too mild to pass anything on."""
@@ -48,21 +50,25 @@ SPREAD_MIN_PRESSURE = 0.3
 MONOCULTURE_SPREAD = 1.5
 """Spread multiplier when source and target plants are the same species."""
 
-ORGANIC_DECAY = 0.06
-"""Pressure lost per second per unit of organic matter."""
+ORGANIC_DECAY = 0.5
+"""Pressure lost in a day per unit of organic matter. Composted ground
+(`components.COMPOST_AMOUNT`) sheds roughly a third of an outbreak a night,
+which is what makes the slow answer to the PRD's dilemma a real one."""
 
-PEQUI_DECAY = 0.04
-"""Extra pressure lost per second where a grown Pequi is on or beside a cell."""
+PEQUI_DECAY = 0.35
+"""Extra pressure lost in a day where a grown Pequi is on or beside a cell."""
 
-NO_HOST_DECAY = 0.05
-"""Extra pressure lost per second on a cell with no vulnerable plant: pests
+NO_HOST_DECAY = 0.4
+"""Extra pressure lost in a day on a cell with no vulnerable plant: pests
 with nothing to feed on die off, so a cleared field stops being an outbreak."""
 
-HEALTH_DRAIN = 0.08
-"""Health an infested plant loses per second, per unit of pressure."""
+HEALTH_DRAIN = 0.5
+"""Health an infested plant loses in a day, per unit of pressure. A plant
+left at full pressure dies in about two nights -- long enough to answer,
+short enough that ignoring it costs the crop."""
 
-HEALTH_REGEN = 0.02
-"""Health a plant under `RECOVER_THRESHOLD` pressure regains per second."""
+HEALTH_REGEN = 0.2
+"""Health a plant under `RECOVER_THRESHOLD` pressure regains in a day."""
 
 VULNERABLE_STAGES = frozenset(
     {"growing", "mature", "harvestable", "overripe", "infested"}
@@ -96,10 +102,10 @@ class PestSystem:
         self._grid = grid
         self._weather = weather
 
-    def update(self, dt: float) -> None:
+    def update(self, days: float) -> None:
         """Move pressure around the plot, then apply it to the plants."""
-        self._update_pressure(dt)
-        self._update_plants(dt)
+        self._update_pressure(days)
+        self._update_plants(days)
 
     def _plant_at(self, cell: Cell) -> PlantComponent | None:
         entity_id = self._grid.plant_at.get(cell)
@@ -121,7 +127,7 @@ class PestSystem:
                 return True
         return False
 
-    def _update_pressure(self, dt: float) -> None:
+    def _update_pressure(self, days: float) -> None:
         deltas: dict[Cell, float] = {}
         spread_rate = SPREAD_RATE * (
             self._weather.pest_spread_multiplier if self._weather else 1.0
@@ -140,7 +146,7 @@ class PestSystem:
                 host = self._plant_at(cell)
                 if host is None or host.growth_stage not in VULNERABLE_STAGES:
                     decay += NO_HOST_DECAY
-                deltas[cell] = deltas.get(cell, 0.0) - decay * dt
+                deltas[cell] = deltas.get(cell, 0.0) - decay * days
 
                 if pressure < SPREAD_MIN_PRESSURE:
                     continue
@@ -154,7 +160,9 @@ class PestSystem:
                     rate = spread_rate
                     if source is not None and source.species_id == target.species_id:
                         rate *= MONOCULTURE_SPREAD
-                    deltas[neighbor] = deltas.get(neighbor, 0.0) + rate * pressure * dt
+                    deltas[neighbor] = (
+                        deltas.get(neighbor, 0.0) + rate * pressure * days
+                    )
 
         for cell, delta in deltas.items():
             soil = self._grid.soil_at(cell)
@@ -167,7 +175,7 @@ class PestSystem:
                 updated = 0.0
             soil.pest_pressure = updated
 
-    def _update_plants(self, dt: float) -> None:
+    def _update_plants(self, days: float) -> None:
         for cell in self._grid.plant_at:
             plant = self._plant_at(cell)
             if plant is None:
@@ -177,6 +185,6 @@ class PestSystem:
             if plant.growth_stage not in VULNERABLE_STAGES:
                 continue
             if pressure >= RECOVER_THRESHOLD:
-                plant.health = max(0.0, plant.health - HEALTH_DRAIN * pressure * dt)
+                plant.health = max(0.0, plant.health - HEALTH_DRAIN * pressure * days)
             else:
-                plant.health = min(1.0, plant.health + HEALTH_REGEN * dt)
+                plant.health = min(1.0, plant.health + HEALTH_REGEN * days)

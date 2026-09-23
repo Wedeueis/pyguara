@@ -32,8 +32,8 @@ class WeatherCondition:
             probability itself, just compared against the others' weights.
         growth_multiplier: Applied on top of everything else
             `PlantGrowthSystem` already multiplies in.
-        moisture_gain_per_second: What rain adds to every tilled cell,
-            read by `SoilSystem` alongside its own evaporation.
+        moisture_gain_per_day: What a day of rain adds to every tilled
+            cell, read by `SoilSystem` alongside its own evaporation.
         evaporation_multiplier: Applied to `SoilSystem.EVAPORATION_RATE` --
             wind dries the plot out faster.
         pest_spread_multiplier: Applied to `PestSystem.SPREAD_RATE`.
@@ -48,7 +48,7 @@ class WeatherCondition:
     color: Color
     weight: float = 1.0
     growth_multiplier: float = 1.0
-    moisture_gain_per_second: float = 0.0
+    moisture_gain_per_day: float = 0.0
     evaporation_multiplier: float = 1.0
     pest_spread_multiplier: float = 1.0
     cold_snap: bool = False
@@ -88,7 +88,7 @@ WEATHER_TABLE: dict[str, WeatherCondition] = {
         display_name="Rain",
         color=Water.C300,
         weight=20.0,
-        moisture_gain_per_second=0.02,
+        moisture_gain_per_day=0.3,
     ),
     "windy": WeatherCondition(
         condition_id="windy",
@@ -118,7 +118,7 @@ class WeatherState:
 
     condition_id: str = CALM_CONDITION_ID
     growth_multiplier: float = 1.0
-    moisture_gain_per_second: float = 0.0
+    moisture_gain_per_day: float = 0.0
     evaporation_multiplier: float = 1.0
     pest_spread_multiplier: float = 1.0
     cold_snap: bool = False

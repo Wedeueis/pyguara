@@ -35,7 +35,6 @@ from games.quintal_cerrado.persistence_schema import (
 )
 from games.quintal_cerrado.scenes import GardenScene, TitleScene
 from games.quintal_cerrado.scoring import compute_score
-from games.quintal_cerrado.systems.day_resolver import SUB_STEP
 from games.quintal_cerrado.turn import SESSION_DAYS, DayCycle
 from pyguara.ai.components import AIComponent
 from pyguara.common.types import Vector2
@@ -282,7 +281,9 @@ class TestRoundTrip:
         loaded.grid.water((1, 1))
         before = _plant(loaded, (1, 1)).growth_progress
 
-        _resolve(loaded, 0.5)
+        # A tenth of a day: enough to see progress move, not enough to
+        # cross the stage boundary, which would reset it to zero.
+        _resolve(loaded, 0.1)
 
         assert _plant(loaded, (1, 1)).growth_progress > before
 
@@ -873,7 +874,9 @@ class TestTheHud:
         structures.place_structure(
             scene.grid, scene.entity_manager, scene.economy, "drip_irrigation", (2, 0)
         )
-        _resolve(scene, SUB_STEP)
+        # Power is allocated by the machines' own night pass.
+        assert scene._resolver is not None
+        scene._resolver.automation.resolve_night()
         scene.update(1 / 60)
 
         assert scene._hud.resources.power == (1, 3)

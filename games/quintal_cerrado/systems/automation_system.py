@@ -42,22 +42,17 @@ from pyguara.common.grid import Cell
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 
-SOLAR_INTERVAL = 4.0
-"""Seconds between a panel's payouts."""
-
-SOLAR_YIELD = 6
-"""Sementes one panel pays per payout. Retuned for the turn-based build: a
-panel now earns roughly a cheap seed's worth a night, so the first rung of
-the automation tree pays for itself over a session rather than a minute."""
+SOLAR_YIELD = 8
+"""Sementes one panel pays a night. A panel (50) earns itself back in about
+six days of a twelve-day session, so the first rung of the tree is worth
+taking early and not worth taking late."""
 
 DRIP_TARGET = 0.65
 """The moisture drip irrigation holds a cell at (PRD: "above 60%")."""
 
-DRIP_RATE = 0.25
-"""Moisture a drip nozzle adds per second to a cell below the target."""
-
-DRONE_INTERVAL = 3.0
-"""Seconds between a drone's harvests."""
+DRONE_HARVESTS_PER_NIGHT = 2
+"""Plants one drone collects a night. Bounded so the drone is a pair of
+extra hands, not a replacement for tending the plot."""
 
 
 class AutomationSystem:
@@ -85,7 +80,7 @@ class AutomationSystem:
         self.power_used = 0
         self.power_capacity = 0
 
-    def update(self, dt: float) -> None:
+    def resolve_night(self) -> None:
         """Share out power, then run every structure for one tick."""
         structures = self._structures()
         self._allocate_power(structures)
@@ -101,11 +96,11 @@ class AutomationSystem:
             if not structure.powered:
                 continue
             if structure.kind == "solar_panel":
-                self._run_solar(cell, structure, dt)
+                self._run_solar(cell)
             elif structure.kind == "drip_irrigation":
-                self._run_drip(cell, dt)
+                self._run_drip(cell)
             elif structure.kind == "auto_harvester":
-                self._run_drone(cell, structure, dt)
+                self._run_drone(cell)
 
     def _structures(self) -> list[tuple[Cell, AutomationComponent]]:
         """Every placed structure, in placement order."""
@@ -129,31 +124,35 @@ class AutomationSystem:
             else:
                 structure.powered = False
 
-    def _run_solar(self, cell: Cell, structure: AutomationComponent, dt: float) -> None:
-        structure.timer += dt
-        if structure.timer < SOLAR_INTERVAL:
-            return
-        structure.timer -= SOLAR_INTERVAL
+    def _run_solar(self, cell: Cell) -> None:
+        """Pay one panel's night."""
         add_credits(self._economy, SOLAR_YIELD)
         self._dispatcher.dispatch(SolarIncomeEvent(cell=cell, amount=SOLAR_YIELD))
 
-    def _run_drip(self, cell: Cell, dt: float) -> None:
+    def _run_drip(self, cell: Cell) -> None:
+        """Bring every cell in range up to the target, overnight.
+
+        A night is long enough to fill a nozzle's range, so this is the
+        target itself rather than a rate: what the player feels is "the
+        drip cells were never dry in the morning".
+        """
         for target in area(self._grid, cell, STRUCTURE_TABLE["drip_irrigation"].radius):
             soil = self._grid.soil_at(target)
             if soil.moisture < DRIP_TARGET:
-                soil.moisture = min(DRIP_TARGET, soil.moisture + DRIP_RATE * dt)
+                soil.moisture = DRIP_TARGET
 
-    def _run_drone(self, cell: Cell, structure: AutomationComponent, dt: float) -> None:
-        structure.timer = max(0.0, structure.timer - dt)
-        if structure.timer > 0.0:
-            return
+    def _run_drone(self, cell: Cell) -> None:
+        """Collect up to `DRONE_HARVESTS_PER_NIGHT` ready plants in range."""
+        harvested = 0
         for target in area(self._grid, cell, STRUCTURE_TABLE["auto_harvester"].radius):
+            if harvested >= DRONE_HARVESTS_PER_NIGHT:
+                return
             result = harvest_cell(
                 self._grid, self._entity_manager, self._economy, target
             )
             if result is None:
                 continue
-            structure.timer = DRONE_INTERVAL
+            harvested += 1
             self._dispatcher.dispatch(
                 PlantHarvestedEvent(
                     cell=target,
@@ -162,4 +161,3 @@ class AutomationSystem:
                     kind=result.kind,
                 )
             )
-            return

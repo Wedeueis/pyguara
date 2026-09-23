@@ -2,7 +2,7 @@
 
 Reads `PlantComponent.growth_multiplier`, which `syntropic_system.py` must
 have already written this tick (see the priority constants in
-`scenes.py`), each species' `stage_seconds` from `species.py`, and the
+`scenes.py`), each species' `stage_days` from `species.py`, and the
 cell's own `SoilCell.moisture` -- growth stalls below
 `MOISTURE_GROWTH_THRESHOLD` rather than merely slowing, so watering is a
 real, revisit-worthy action and not flavour text on a number nothing
@@ -76,8 +76,14 @@ class PlantGrowthSystem:
         self._grid = grid
         self._weather = weather
 
-    def update(self, dt: float) -> None:
-        """Advance every planted entity's `growth_progress` by one tick."""
+    def update(self, days: float) -> None:
+        """Advance every planted entity's `growth_progress`.
+
+        Args:
+            days: Fraction of a day to advance by. The night resolver
+                (`systems/day_resolver.py`) splits a day into a few steps
+                so a plant cannot skip a stage boundary unseen.
+        """
         for cell, entity_id in self._grid.plant_at.items():
             entity = self._entity_manager.get_entity(entity_id)
             if entity is None or not entity.has_component(PlantComponent):
@@ -97,7 +103,7 @@ class PlantGrowthSystem:
             ):
                 continue
             species = SPECIES_TABLE.get(plant.species_id)
-            if species is None or species.stage_seconds <= 0:
+            if species is None or species.stage_days <= 0:
                 continue
             multiplier = plant.growth_multiplier
             if self._weather is not None:
@@ -106,4 +112,4 @@ class PlantGrowthSystem:
                 multiplier *= CHEMICAL_GROWTH_BOOST
             if soil.is_chemically_degraded:
                 multiplier *= DEGRADED_SOIL_GROWTH
-            plant.growth_progress += (dt / species.stage_seconds) * multiplier
+            plant.growth_progress += (days / species.stage_days) * multiplier

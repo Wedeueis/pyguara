@@ -14,13 +14,12 @@ from __future__ import annotations
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.weather import WeatherState
 
-EVAPORATION_RATE = 0.05
-"""Moisture a cell loses per simulated second at multiplier 1.0.
+EVAPORATION_RATE = 0.15
+"""Moisture a cell loses in a day at multiplier 1.0.
 
-Retuned for the turn-based build: a night is `day_resolver.DAY_SIM_SECONDS`
-of this, so a watering (`components.WATER_AMOUNT`, 0.4) carries a cell about
-two and a half days. At the old rate it lasted over a week, and watering
-stopped being a decision."""
+A watering (`components.WATER_AMOUNT`, 0.4) carries a cell about two and a
+half days, so tending is a real part of the loop rather than something done
+once. Wind (`weather.py`) multiplies it."""
 
 
 class SoilSystem:
@@ -41,15 +40,15 @@ class SoilSystem:
         self._grid = grid
         self._weather = weather
 
-    def update(self, dt: float) -> None:
+    def update(self, days: float) -> None:
         """Rain a tilled cell up, then evaporate every cell back down."""
-        rain = self._weather.moisture_gain_per_second if self._weather else 0.0
+        rain = self._weather.moisture_gain_per_day if self._weather else 0.0
         evaporation = EVAPORATION_RATE * (
             self._weather.evaporation_multiplier if self._weather else 1.0
         )
         for row in self._grid.soil:
             for soil in row:
                 if rain > 0.0 and soil.soil_type == "tilled_dirt":
-                    soil.moisture = min(1.0, soil.moisture + rain * dt)
+                    soil.moisture = min(1.0, soil.moisture + rain * days)
                 if soil.moisture > 0.0:
-                    soil.moisture = max(0.0, soil.moisture - evaporation * dt)
+                    soil.moisture = max(0.0, soil.moisture - evaporation * days)
