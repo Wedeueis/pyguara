@@ -342,13 +342,14 @@ class TitleScene(Scene):
         """Nothing animates yet."""
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
-        """Clear to the world backdrop; the menu is UI on top of it.
+        """Draw the backdrop; the menu is UI on top of it.
 
         The post-process pass that grades this is not run from here:
         `Application` executes every render-graph pass itself, after all
         scenes have drawn.
         """
         world_renderer.clear(art.WORLD_BACKDROP)
+        art.draw_backdrop(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
 
 
 class GardenScene(Scene):
@@ -493,6 +494,7 @@ class GardenScene(Scene):
             layout.GRID_ORIGIN, self.grid, self.entity_manager, self._audio
         )
         self._canvas.on_cell_clicked = self._on_cell_clicked
+        self._canvas.tool_allows = self._tool_allows
         ui_manager.add_element(self._canvas, UILayer.CONTENT)
 
     def _build_dock(self, ui_manager: UIManager) -> None:
@@ -531,6 +533,43 @@ class GardenScene(Scene):
         """Re-read every slot's badge and affordability from the economy."""
         for tool, slot in self._tool_buttons.items():
             slot.badge, slot.affordable = slot_status(tool, self.economy)
+
+    def _tool_allows(self, cell: Cell) -> bool:
+        """Whether the active tool would actually do something on `cell`.
+
+        What the cursor colours itself from. Every branch mirrors the
+        check the click itself makes -- `grid.till`/`water` on the soil,
+        `can_plant`, `can_build`, and `treatments`' own tilled/saturated
+        rules -- plus whether it can be paid for (`slot_status`), so the
+        ring cannot promise an action the click then refuses.
+
+        Args:
+            cell: The cell under the cursor.
+
+        Returns:
+            Whether a click there would land.
+        """
+        tool = self._active_tool
+        if not self.grid.in_bounds(cell):
+            return False
+        if not slot_status(tool, self.economy)[1]:
+            return False
+        soil = self.grid.soil_at(cell)
+        if tool == "till":
+            return soil.soil_type == "raw_dirt"
+        if tool == "water":
+            return soil.moisture < 1.0
+        if tool == "harvest":
+            return cell in self.grid.plant_at
+        if tool == "compost":
+            return soil.soil_type == "tilled_dirt" and soil.organic_matter < 1.0
+        if tool == "spray":
+            return True
+        if tool.startswith("plant_"):
+            return self.grid.can_plant(cell)
+        if tool.startswith("build_"):
+            return self.grid.can_build(cell)
+        return True
 
     def _tool_button_handler(self, tool: str) -> Callable[[object], None]:
         def _handler(_element: object) -> None:
@@ -937,5 +976,6 @@ class GardenScene(Scene):
         `garden_widget.py`'s module docstring for why.
         """
         world_renderer.clear(art.WORLD_BACKDROP)
+        art.draw_backdrop(world_renderer, WINDOW_WIDTH, WINDOW_HEIGHT)
         if self._canvas is not None:
             self._canvas.render_world(world_renderer)

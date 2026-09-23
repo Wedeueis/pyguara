@@ -272,6 +272,39 @@ class TestTheGardenScreen:
         current = game_container.get(SceneManager).current_scene
         assert isinstance(current, StoreOverlayScene)
 
+    def test_the_cursor_only_promises_what_the_click_will_do(
+        self, game_container: DIContainer
+    ) -> None:
+        """`_tool_allows` is what colours the cursor, so every branch has
+        to agree with the check the click itself makes."""
+        scene = self._entered_scene(game_container)
+        raw, tilled = (5, 5), (6, 6)
+        scene.grid.till(tilled)
+
+        scene._set_active_tool("till")
+        assert scene._tool_allows(raw)
+        assert not scene._tool_allows(tilled), "already worked"
+
+        scene._set_active_tool("plant_guandu")
+        assert scene._tool_allows(tilled)
+        assert not scene._tool_allows(raw), "nothing grows in raw dirt"
+
+        scene._set_active_tool("harvest")
+        assert not scene._tool_allows(tilled), "nothing planted there"
+
+        scene._set_active_tool("compost")
+        assert scene._tool_allows(tilled)
+        scene.economy.credits = 0
+        assert not scene._tool_allows(tilled), "cannot be paid for"
+
+    def test_the_cursor_is_blocked_off_the_plot(
+        self, game_container: DIContainer
+    ) -> None:
+        scene = self._entered_scene(game_container)
+
+        assert not scene._tool_allows((-1, 0))
+        assert not scene._tool_allows((99, 99))
+
     def test_planting_requires_tilled_unoccupied_ground(
         self, game_container: DIContainer
     ) -> None:

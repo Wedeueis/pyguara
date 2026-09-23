@@ -22,17 +22,30 @@ from __future__ import annotations
 
 import math
 
+from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.protocols import ShapeRenderer
+from pyguara.ui.design_system.skin import bevel_edges
 from pyguara.ui.design_system.tokens import Rock, Roxo, Sand, Verdant, Water, Wood
 
-WORLD_BACKDROP = Verdant.COLONIAL_700
+WORLD_BACKDROP = Wood.INK_900.lerp(Wood.C700, 0.45)
+"""Warm dark earth, not the cool green the plot used to sit on: the plot
+is soil, and a garden reads as warmer ground under a warm sky."""
+
+BACKDROP_FLECK = Wood.C700.lerp(Sand.C500, 0.25)
+BACKDROP_FLECK_COUNT = 150
+BACKDROP_SEED = 20260922
+"""Fixed, so the speckle is the same grain every run -- it is texture, not
+an event, and a backdrop that reshuffled each launch would be noise."""
 
 RAW_DIRT = Wood.C500
 TILLED_DIRT = Wood.C700
 PATH = Sand.C300
 WATER_PIPE = Water.C300
 GRID_LINE = Rock.C600
+GRID_LINE_MIX = 0.45
+"""How far a cell's own colour moves towards `GRID_LINE` for its border --
+the full-strength wire the plot used to wear cut it into 96 loud boxes."""
 
 _SOIL_COLORS: dict[str, Color] = {
     "raw_dirt": RAW_DIRT,
@@ -57,6 +70,27 @@ PRD's "soil turns dusty red"."""
 PEST = Roxo.C700
 PEST_TINT = Roxo.C500
 DYING_TINT = Color(112, 102, 92)
+
+
+def draw_backdrop(renderer: ShapeRenderer, width: int, height: int) -> None:
+    """Fill the screen with warm earth and a sparse, fixed speckle.
+
+    Plain flat colour left the plot floating on an empty field. The
+    speckle is drawn from a seeded stream so it is the same grain every
+    run, and stays behind everything: this is called before the plot.
+
+    Args:
+        renderer: The world renderer to draw through.
+        width: Screen width.
+        height: Screen height.
+    """
+    renderer.draw_rect(Rect(0, 0, width, height), WORLD_BACKDROP)
+    rng = RandomStream(BACKDROP_SEED)
+    for _ in range(BACKDROP_FLECK_COUNT):
+        x = rng.randint(0, width)
+        y = rng.randint(0, height)
+        size = rng.randint(1, 3)
+        renderer.draw_rect(Rect(x, y, size, size), BACKDROP_FLECK)
 
 
 def draw_soil_tile(
@@ -91,7 +125,20 @@ def draw_soil_tile(
         base = base.lerp(DEGRADED_TINT, DEGRADED_TINT_STRENGTH)
     color = base.lerp(MOISTURE_TINT, moisture * MOISTURE_TINT_STRENGTH)
     renderer.draw_rect(rect, color)
-    renderer.draw_rect(rect, GRID_LINE, width=1)
+
+    # Worked ground sits *into* the plot and raw ground stands proud of
+    # it, which is the whole visual difference a glance has to make. The
+    # bevel says it in light: lit edge on top for raised, on the bottom
+    # for sunken.
+    lit, shaded = bevel_edges(color, pressed=kind == "tilled_dirt")
+    for start, end, edge in (
+        ((rect.x, rect.y), (rect.right - 1, rect.y), lit),
+        ((rect.x, rect.y), (rect.x, rect.bottom - 1), lit),
+        ((rect.x, rect.bottom - 1), (rect.right - 1, rect.bottom - 1), shaded),
+        ((rect.right - 1, rect.y), (rect.right - 1, rect.bottom - 1), shaded),
+    ):
+        renderer.draw_line(Vector2(*start), Vector2(*end), edge)
+    renderer.draw_rect(rect, color.lerp(GRID_LINE, GRID_LINE_MIX), width=1)
 
 
 def draw_pest_marks(
