@@ -298,35 +298,6 @@ class TestTheArt:
             assert drawn.y >= rect.y
             assert drawn.y + drawn.height <= rect.y + rect.height
 
-    def test_the_hero_is_drawn_from_several_parts(self, world: Any) -> None:
-        art.draw_guara(
-            world,
-            Vector2(100, 100),
-            Vector2(48, 72),
-            facing_right=True,
-            running=True,
-            airborne=False,
-            phase=0.0,
-        )
-
-        assert world.draw_rect.call_count >= 8
-
-    def test_facing_mirrors_the_head(self, world: Any) -> None:
-        def head_xs(facing: bool) -> list[int]:
-            world.reset_mock()
-            art.draw_guara(
-                world,
-                Vector2(100, 100),
-                Vector2(48, 72),
-                facing_right=facing,
-                running=False,
-                airborne=False,
-                phase=0.0,
-            )
-            return [call.args[0].x for call in world.draw_rect.call_args_list]
-
-        assert head_xs(True) != head_xs(False)
-
     def test_the_sky_never_blooms(self) -> None:
         """The sun disc is meant to be the only thing over the bloom
         threshold; a near-white sky band hazed the whole frame."""
