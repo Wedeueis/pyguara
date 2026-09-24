@@ -40,8 +40,11 @@ class GLTextureLoader:
     def load_with_meta(self, path: str, meta: AssetMeta | None) -> Resource:
         """Load an image file and create a GPU texture.
 
-        The image is loaded via pygame, flipped vertically (OpenGL uses
-        bottom-left origin), converted to RGBA bytes, and uploaded to GPU.
+        The image is loaded via pygame, converted to RGBA bytes and
+        uploaded top-down -- **not** flipped. `ModernGLRenderer`'s sprite
+        quad pairs the screen's top edge with `v = 0` (see
+        `_create_quad_vbo`), so its first row of texel data is the top of
+        the sprite. A file loaded bottom-up draws upside down.
 
         Args:
             path: Full path to the image file.
@@ -66,11 +69,14 @@ class GLTextureLoader:
         width = surface.get_width()
         height = surface.get_height()
 
-        # Flip vertically for OpenGL (origin at bottom-left)
-        surface = pygame.transform.flip(surface, False, True)
-
-        # Get raw pixel data as bytes (RGBA format)
-        # pygame surfaces are in RGBA format when using convert_alpha()
+        # No vertical flip. This used to flip "for OpenGL (origin at
+        # bottom-left)", which is the right instinct for a quad whose UVs
+        # run bottom-up -- but `ModernGLRenderer`'s sprite quad does not:
+        # its top vertex carries `v = 0`, so the data it wants is the
+        # ordinary top-down order pygame already has. Every sprite loaded
+        # from a file drew upside down, which no demo had noticed because
+        # none of them loaded one -- the GL demos all generate their
+        # textures at runtime through `GLTextureFactory` instead.
         data = pygame.image.tobytes(surface, "RGBA", False)
 
         # Create the GPU texture
