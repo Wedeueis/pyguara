@@ -37,7 +37,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from games.quintal_cerrado import art
+from games.quintal_cerrado import art, nutrients
 from games.quintal_cerrado.components import AutomationComponent, PlantComponent
 from games.quintal_cerrado.garden_grid import (
     GRID_HEIGHT,
@@ -486,6 +486,7 @@ class GardenGridCanvas(Canvas):
                     kind,
                     moisture=soil.moisture,
                     degraded=soil.is_chemically_degraded,
+                    vitality=nutrients.vitality(soil),
                 )
                 if soil.pest_pressure > 0.05:
                     art.draw_pest_marks(

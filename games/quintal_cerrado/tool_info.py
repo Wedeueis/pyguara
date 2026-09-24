@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from games.quintal_cerrado.economy import COMPOST_COST, ORGANIC_PREMIUM, SPRAY_COST
-from games.quintal_cerrado.species import SPECIES_TABLE
+from games.quintal_cerrado.species import SPECIES_TABLE, Species
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
 from games.quintal_cerrado.turn import SESSION_DAYS, action_cost
 
@@ -151,15 +151,22 @@ def _describe_seed(tool: str) -> ToolInfo | None:
     lines = [
         f"{LAYER_NAMES.get(species.canopy_layer, '?')}. "
         f"About {nights:.0f} nights to a harvest.",
-        f"Sells for {species.base_price}, or "
-        f"{round(species.base_price * ORGANIC_PREMIUM)} if it was never sprayed.",
     ]
-    if species.canopy_layer == "understory":
-        lines.append("Grows 40% faster in the shade of a grown canopy tree.")
-    elif species.canopy_layer == "ground_cover":
-        lines.append("Grows 40% faster beside a plant of any other layer.")
+    # What it gives back comes before what it costs: it is the reason to
+    # plant this one *here*, next to that one, rather than anywhere.
+    gift = _gift(species)
+    if gift:
+        lines.append(gift)
     if species.repels_pests:
-        lines.append("A grown one suppresses pests on and around its cell.")
+        lines.append("A grown one suppresses pests around it.")
+    if species.canopy_layer == "understory":
+        lines.append("Grows 40% faster under a grown canopy tree.")
+    elif species.canopy_layer == "ground_cover":
+        lines.append("Grows 40% faster beside another layer.")
+    lines.append(
+        f"Sells for {species.base_price}, or "
+        f"{round(species.base_price * ORGANIC_PREMIUM)} unsprayed."
+    )
     return ToolInfo(
         name=species.display_name,
         icon_id=tool,
@@ -167,6 +174,21 @@ def _describe_seed(tool: str) -> ToolInfo | None:
         stamina=action_cost(tool),
         price=str(species.seed_cost),
     )
+
+
+def _gift(species: Species) -> str:
+    """What a grown plant of this species puts back into the soil.
+
+    The line that makes interplanting a decision rather than a layout: a
+    legume beside a heavy feeder is worth more than either alone.
+    """
+    if species.fixes_nitrogen:
+        return "Fixes nitrogen for its neighbours: they grow faster."
+    if species.lifts_potassium:
+        return "Deep roots lift potassium for everything around it."
+    if species.leaves_calcium:
+        return "Leaves calcium, which helps the ground resist pests."
+    return ""
 
 
 def _describe_structure(tool: str) -> ToolInfo | None:

@@ -673,11 +673,15 @@ class TestEconomy:
         _plant_at(scene, (2, 2), "baru", stage="harvestable")
         credits = scene.economy.credits
         plant = _plant_component(scene, (2, 2))
+        # Paid on the soil it grew in: phosphorus adds to the price
+        # (`nutrients.value_multiplier`), so the bare price is the floor.
+        expected = sale_value(plant, scene.grid.soil_at((2, 2)))
 
         scene._harvest((2, 2))
 
         assert sale_value(plant) == SPECIES_TABLE["baru"].base_price * 2
-        assert scene.economy.credits == credits + sale_value(plant)
+        assert expected >= sale_value(plant)
+        assert scene.economy.credits == credits + expected
         assert scene.economy.organic_sales == 1
         assert (2, 2) not in scene.grid.plant_at
 
@@ -686,11 +690,12 @@ class TestEconomy:
         _plant_component(scene, (2, 2)).is_chemical_boosted = True
         credits = scene.economy.credits
         plant = _plant_component(scene, (2, 2))
+        expected = sale_value(plant, scene.grid.soil_at((2, 2)))
 
         scene._harvest((2, 2))
 
         assert sale_value(plant) == SPECIES_TABLE["baru"].base_price // 2
-        assert scene.economy.credits == credits + sale_value(plant)
+        assert scene.economy.credits == credits + expected
         assert scene.economy.chemical_sales == 1
 
     def test_the_organic_premium_beats_the_chemical_shortcut(

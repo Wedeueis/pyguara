@@ -55,12 +55,20 @@ class Species:
             discount is applied. Meaningless for a weed, which pulling
             pays out in generic seed stock instead of Sementes (see
             `economy.harvest_cell`).
+        fixes_nitrogen: Whether this plant puts nitrogen back into its own
+            cell and its neighbours as it grows -- what makes a legume
+            worth interplanting rather than just growing on its own.
+        lifts_potassium: Whether its roots bring potassium up to the
+            surface, which is what a deep canopy tree does for everything
+            under it.
+        leaves_calcium: Whether a grown one leaves calcium in the soil.
+        appetite: How heavily it feeds on nitrogen and phosphorus while it
+            grows, relative to a ground-cover plant.
         repels_pests: Whether a grown plant of this species suppresses
             pest pressure on and around its own cell -- the PRD's "pest
             resistance via flora".
-        spread_chance: Chance, each time `systems/weed_spread_system.py`
-            checks (every `PROPAGATION_INTERVAL` seconds, not every tick),
-            that a mature-or-later plant of this species seeds a free
+        spread_chance: Chance, each night `systems/weed_spread_system.py`
+            rolls, that a mature-or-later plant of this species seeds a free
             neighbouring tilled cell with itself. Weeds are given a high
             one; real crops a very low one -- the same "economically
             valuable plants propagate rarely, weeds propagate fast" split
@@ -82,6 +90,10 @@ class Species:
     repels_pests: bool = False
     spread_chance: float = 0.0
     is_weed: bool = False
+    fixes_nitrogen: bool = False
+    lifts_potassium: bool = False
+    leaves_calcium: bool = False
+    appetite: float = 1.0
 
 
 SPECIES_TABLE: dict[str, Species] = {
@@ -94,6 +106,7 @@ SPECIES_TABLE: dict[str, Species] = {
         seed_cost=5,
         base_price=10,
         spread_chance=0.03,
+        fixes_nitrogen=True,
     ),
     "cagaita": Species(
         species_id="cagaita",
@@ -104,6 +117,7 @@ SPECIES_TABLE: dict[str, Species] = {
         seed_cost=10,
         base_price=20,
         spread_chance=0.02,
+        appetite=1.3,
     ),
     "baru": Species(
         species_id="baru",
@@ -114,6 +128,8 @@ SPECIES_TABLE: dict[str, Species] = {
         seed_cost=15,
         base_price=30,
         spread_chance=0.008,
+        lifts_potassium=True,
+        appetite=1.6,
     ),
     "pequi": Species(
         species_id="pequi",
@@ -125,6 +141,8 @@ SPECIES_TABLE: dict[str, Species] = {
         base_price=26,
         repels_pests=True,
         spread_chance=0.008,
+        leaves_calcium=True,
+        appetite=1.4,
     ),
     WEED_SPECIES_ID: Species(
         species_id=WEED_SPECIES_ID,

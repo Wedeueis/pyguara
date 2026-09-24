@@ -20,6 +20,7 @@ a stage transition is one frame behind the progress that triggered it. At
 
 from __future__ import annotations
 
+from games.quintal_cerrado import nutrients
 from games.quintal_cerrado.components import PlantComponent
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.species import SPECIES_TABLE
@@ -28,6 +29,10 @@ from pyguara.ecs.manager import EntityManager
 
 MOISTURE_GROWTH_THRESHOLD = 0.15
 """Below this, a plant's growth simply does not advance this tick."""
+
+COLD_SNAP_HARDINESS = 0.25
+"""How much `nutrients.hardiness` a cell needs to shrug off a cold snap
+without a canopy over it."""
 
 COLD_SNAP_SHADE_COVER = 0.2
 """`SoilCell.shade_level` a cell needs to count as "covered" during a
@@ -100,7 +105,11 @@ class PlantGrowthSystem:
                 self._weather is not None
                 and self._weather.cold_snap
                 and soil.shade_level < COLD_SNAP_SHADE_COVER
+                and nutrients.hardiness(soil) < COLD_SNAP_HARDINESS
             ):
+                # Cover or potassium: either answers a cold snap. A canopy
+                # overhead is the planned answer, well-fed ground the one
+                # the player gets for having looked after the soil.
                 continue
             species = SPECIES_TABLE.get(plant.species_id)
             if species is None or species.stage_days <= 0:
@@ -112,4 +121,5 @@ class PlantGrowthSystem:
                 multiplier *= CHEMICAL_GROWTH_BOOST
             if soil.is_chemically_degraded:
                 multiplier *= DEGRADED_SOIL_GROWTH
+            multiplier *= nutrients.growth_multiplier(soil)
             plant.growth_progress += (days / species.stage_days) * multiplier

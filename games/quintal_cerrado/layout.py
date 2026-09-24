@@ -43,7 +43,7 @@ WEATHER_CARD = Rect(
 )
 RESILIENCE_CARD = Rect(COLUMN_X, RIBBON_Y, COLUMN_WIDTH, RIBBON_HEIGHT)
 
-TOOL_CARD_HEIGHT = 108
+TOOL_CARD_HEIGHT = 100
 """The card under the inspector that explains the hovered tool or seed."""
 
 SLOT_SIZE = Vector2(64, 76)

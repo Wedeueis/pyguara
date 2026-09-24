@@ -115,6 +115,7 @@ from games.quintal_cerrado.store import StoreOverlayScene
 from games.quintal_cerrado.structures import STRUCTURE_TABLE, place_structure
 from games.quintal_cerrado.systems.automation_system import AutomationSystem
 from games.quintal_cerrado.systems.day_resolver import DayReport, DayResolver
+from games.quintal_cerrado.systems.nutrient_system import NutrientSystem
 from games.quintal_cerrado.systems.pest_system import PestSystem
 from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
@@ -501,6 +502,7 @@ class GardenScene(Scene):
             growth=PlantGrowthSystem(self.entity_manager, self.grid, self.weather),
             weeds=WeedSpreadSystem(self.entity_manager, self.grid, self._rng),
             weather=WeatherSystem(self.weather, self._rng),
+            nutrients=NutrientSystem(self.entity_manager, self.grid),
         )
 
     def _build_grid_widget(self, ui_manager: UIManager) -> None:

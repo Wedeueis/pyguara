@@ -48,8 +48,9 @@ from games.quintal_cerrado.turn import DayCycle
 from games.quintal_cerrado.weather import CALM_CONDITION_ID, WEATHER_TABLE
 from pyguara.ai.components import AIComponent
 from pyguara.ecs.manager import EntityManager
+from pyguara.persistence.migration import Migration
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SAVE_KEY = "garden_save"
 """Alphanumerics, `_` and `-` only: `FileStorageBackend` rejects any other key
 rather than mangling it."""
@@ -72,6 +73,39 @@ def _is_known_inventory_key(key: str) -> bool:
         return True
     prefix, _, species_id = key.partition(":")
     return prefix == "seed" and species_id in SPECIES_TABLE
+
+
+STARTING_NUTRIENT = 0.35
+"""What a v2 cell is assumed to have held. The same value a fresh
+`SoilCell` starts at, so a garden saved before nutrients existed comes
+back as ordinary untouched ground rather than barren or blessed."""
+
+
+def migrate_v2_to_v3(payload: dict[str, Any]) -> dict[str, Any]:
+    """Give a v2 save the three nutrient fields it never had.
+
+    v2 tracked nitrogen alone (and read it nowhere). v3 reads all four, so
+    every cell needs phosphorus, potassium and calcium -- defaulted to the
+    level fresh ground starts at, which is the only honest answer: the
+    save cannot say what it never recorded.
+
+    Args:
+        payload: A v2 payload, as `load_data` returned it.
+
+    Returns:
+        The same payload at v3. Mutated in place and returned, which is
+        the shape `MigrationManager` expects.
+    """
+    for record in payload.get("grid", []):
+        for nutrient in ("phosphorus", "potassium", "calcium"):
+            record.setdefault(nutrient, STARTING_NUTRIENT)
+    payload["version"] = 3
+    return payload
+
+
+MIGRATIONS = (Migration(2, 3, migrate_v2_to_v3),)
+"""Every migration this build knows, oldest first. `bootstrap.py` registers
+them on the `MigrationManager` the `PersistenceManager` loads through."""
 
 
 def to_save_payload(
@@ -109,6 +143,9 @@ def to_save_payload(
                     "soil_type": soil.soil_type,
                     "moisture": soil.moisture,
                     "nitrogen": soil.nitrogen,
+                    "phosphorus": soil.phosphorus,
+                    "potassium": soil.potassium,
+                    "calcium": soil.calcium,
                     "organic_matter": soil.organic_matter,
                     "shade_level": soil.shade_level,
                     "pest_pressure": soil.pest_pressure,
@@ -306,6 +343,9 @@ def _parse_cell(record: dict[str, Any]) -> dict[str, Any]:
         "soil_type": str(record["soil_type"]),
         "moisture": float(record["moisture"]),
         "nitrogen": float(record["nitrogen"]),
+        "phosphorus": float(record["phosphorus"]),
+        "potassium": float(record["potassium"]),
+        "calcium": float(record["calcium"]),
         "organic_matter": float(record["organic_matter"]),
         "shade_level": float(record["shade_level"]),
         "pest_pressure": float(record["pest_pressure"]),
@@ -385,6 +425,9 @@ def apply_save_payload(
         soil = grid.soil_at(cell)
         soil.moisture = record["moisture"]
         soil.nitrogen = record["nitrogen"]
+        soil.phosphorus = record["phosphorus"]
+        soil.potassium = record["potassium"]
+        soil.calcium = record["calcium"]
         soil.organic_matter = record["organic_matter"]
         soil.shade_level = record["shade_level"]
         soil.pest_pressure = record["pest_pressure"]

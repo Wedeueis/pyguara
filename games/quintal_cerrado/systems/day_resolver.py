@@ -5,7 +5,8 @@ changed under the cursor while the player was reading it. They are not
 registered with the `SystemManager` any more (`scenes.GardenScene` drops the
 engine's `AISystem` too); this resolver owns them and runs them once, in the
 same order their old priorities gave them: soil, automation, shade,
-syntropic, pest, growth, weeds -- then the weather turns for tomorrow.
+syntropic, pest, growth, nutrients, weeds -- then the weather turns for
+tomorrow.
 
 Every constant these systems own is now expressed **per day** -- a species
 grows in `stage_days`, soil loses `EVAPORATION_RATE` a day, a panel pays
@@ -40,6 +41,7 @@ from games.quintal_cerrado.events import (
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.systems.automation_system import AutomationSystem
+from games.quintal_cerrado.systems.nutrient_system import NutrientSystem
 from games.quintal_cerrado.systems.pest_system import PestSystem
 from games.quintal_cerrado.systems.plant_growth_system import PlantGrowthSystem
 from games.quintal_cerrado.systems.shade_system import ShadeSystem
@@ -129,6 +131,7 @@ class DayResolver:
         growth: PlantGrowthSystem,
         weeds: WeedSpreadSystem,
         weather: WeatherSystem,
+        nutrients: NutrientSystem,
     ) -> None:
         """Bind the resolver to the plot and the systems that change it.
 
@@ -146,6 +149,8 @@ class DayResolver:
             growth: Stage progress.
             weeds: Propagation.
             weather: Tomorrow's condition.
+            nutrients: What the plants took from the soil, and what the
+                grown ones put back.
         """
         self.entity_manager = entity_manager
         self.grid = grid
@@ -158,6 +163,7 @@ class DayResolver:
         self.growth = growth
         self.weeds = weeds
         self.weather = weather
+        self.nutrients = nutrients
 
         self._solar_income = 0
         self._drone_harvests = 0
@@ -197,6 +203,10 @@ class DayResolver:
             self.growth.update(SUB_STEP)
             self._drive_plants(SUB_STEP)
             self.entity_manager.flush_pending_removals()
+
+        # After growth: a plant feeds for the night it just grew through,
+        # and gives back only once that growth has made it mature.
+        self.nutrients.resolve_night()
 
         # After growth, so a plant that matured tonight can seed tonight.
         self.weeds.resolve_night()
