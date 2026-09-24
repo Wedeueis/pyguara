@@ -1,4 +1,4 @@
-"""The garden HUD: the ribbon's three cards, a toast, and the inspector.
+"""The garden HUD: the ribbon, the tool card, the toast and the inspector.
 
 `Hud` owns the top ribbon (`ribbon.py` -- resources, weather, resilience)
 and the message toast; `CellInspector` is the card under them in the right
@@ -23,12 +23,18 @@ from games.quintal_cerrado.components import (
     PlayerEconomy,
 )
 from games.quintal_cerrado.garden_grid import GardenGrid
-from games.quintal_cerrado.hud_widgets import MUTED_TEXT, TEXT_COLOR, CardPanel
+from games.quintal_cerrado.hud_widgets import (
+    MUTED_TEXT,
+    TEXT_COLOR,
+    CardPanel,
+    draw_badge,
+)
 from games.quintal_cerrado.icons import draw_icon
 from games.quintal_cerrado.ribbon import ResilienceCard, ResourceCard, WeatherCard
 from games.quintal_cerrado.scoring import Score
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
+from games.quintal_cerrado.tool_info import ToolInfo, describe
 from games.quintal_cerrado.turn import DayCycle
 from pyguara.common.grid import Cell
 from pyguara.common.types import Color, Rect, Vector2
@@ -67,12 +73,13 @@ _SOIL_NAMES = {
 class Hud:
     """Owns the ribbon's three cards and the message toast."""
 
-    def __init__(self, ui_manager: UIManager, toast_y: int) -> None:
-        """Build the ribbon and the toast.
+    def __init__(self, ui_manager: UIManager, column_top: int) -> None:
+        """Build the ribbon, the tool card and the toast.
 
         Args:
             ui_manager: The manager to add them to.
-            toast_y: Where the toast's top edge sits in the right column.
+            column_top: Where the right column continues below the cell
+                inspector -- the tool card goes here, the toast under it.
         """
         self.resources = ResourceCard()
         self.weather = WeatherCard()
@@ -80,6 +87,10 @@ class Hud:
         for card in (self.resources, self.weather, self.resilience):
             ui_manager.add_element(card, UILayer.HUD)
 
+        self.tools = ToolCard(column_top)
+        ui_manager.add_element(self.tools, UILayer.HUD)
+
+        toast_y = column_top + layout.TOOL_CARD_HEIGHT + layout.GAP
         self.message_label = Label("", Vector2(0, 0), font_size=13)
         self.toast = CardPanel(
             Vector2(layout.COLUMN_X, toast_y),
@@ -148,6 +159,15 @@ class Hud:
                 self.message_label.set_text("")
                 self.toast.visible = False
 
+    def show_tool(self, tool: str) -> None:
+        """Explain `tool` on the card under the inspector.
+
+        Args:
+            tool: The hovered tool id, or the active one when the cursor is
+                not over the dock.
+        """
+        self.tools.show(tool)
+
     def update_weather(self, condition_id: str, forecast: list[str], day: int) -> None:
         """Hand the weather card the sky and the calendar.
 
@@ -198,6 +218,117 @@ def pest_color(pressure: float) -> Color:
         if pressure >= floor:
             return color
     return PEST_CALM
+
+
+class ToolCard(CardPanel):
+    """What the hovered tool or seed is for.
+
+    The dock says what something costs; it cannot say what it does, and the
+    PRD's dilemma only works if the player knows what a spray trades away.
+    Falls back to the *active* tool when the cursor is not over the dock,
+    so the card is never blank and always describes what a click would do.
+
+    Attributes:
+        tool: The tool id currently explained.
+    """
+
+    LINE_HEIGHT = 15
+    BODY_SIZE = 11
+
+    def __init__(self, top: int) -> None:
+        """Build the card at the top of its slice of the right column.
+
+        Args:
+            top: The card's top edge, below the cell inspector.
+        """
+        super().__init__(
+            Vector2(layout.COLUMN_X, top),
+            Vector2(layout.COLUMN_WIDTH, layout.TOOL_CARD_HEIGHT),
+        )
+        self.tool = ""
+        self._info: ToolInfo | None = None
+
+    def show(self, tool: str) -> None:
+        """Point the card at `tool`.
+
+        Args:
+            tool: The tool id to explain.
+        """
+        if tool == self.tool:
+            return
+        self.tool = tool
+        self._info = describe(tool)
+
+    def render(self, renderer: UIRenderer) -> None:
+        """Draw the card: icon, name, the costs, then the wrapped body."""
+        super().render(renderer)
+        info = self._info
+        if info is None:
+            return
+        draw_icon(
+            renderer, info.icon_id, Rect(self.rect.x + 12, self.rect.y + 10, 22, 22)
+        )
+        renderer.draw_text(
+            info.name, Vector2(self.rect.x + 42, self.rect.y + 13), TEXT_COLOR, 14
+        )
+        self._draw_costs(renderer, info)
+
+        y = self.rect.y + 40
+        limit = self.rect.bottom - 6
+        for line in info.lines:
+            for part in _wrap(renderer, line, self.rect.width - 24, self.BODY_SIZE):
+                if y + self.LINE_HEIGHT > limit:
+                    return
+                renderer.draw_text(
+                    part, Vector2(self.rect.x + 12, y), MUTED_TEXT, self.BODY_SIZE
+                )
+                y += self.LINE_HEIGHT
+
+    def _draw_costs(self, renderer: UIRenderer, info: ToolInfo) -> None:
+        """Stamina and Sementes, right-aligned against the name."""
+        x = self.rect.right - 12
+        if info.price:
+            badge = draw_badge(renderer, info.price, Vector2(0, 0), icon_id="seed")
+            x -= badge.width
+            draw_badge(
+                renderer, info.price, Vector2(x, self.rect.y + 12), icon_id="seed"
+            )
+            x -= 6
+        if info.stamina:
+            text = f"{info.stamina}"
+            badge = draw_badge(renderer, text, Vector2(0, 0), icon_id="stamina")
+            draw_badge(
+                renderer,
+                text,
+                Vector2(x - badge.width, self.rect.y + 12),
+                icon_id="stamina",
+            )
+
+
+def _wrap(renderer: UIRenderer, text: str, width: int, size: int) -> list[str]:
+    """Break `text` into lines that fit `width`.
+
+    Args:
+        renderer: Measures the text.
+        text: One sentence.
+        width: Pixels available.
+        size: Font size.
+
+    Returns:
+        The lines, in order.
+    """
+    lines: list[str] = []
+    current = ""
+    for word in text.split():
+        candidate = f"{current} {word}".strip()
+        if current and renderer.get_text_size(candidate, size)[0] > width:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines
 
 
 class CellInspector:

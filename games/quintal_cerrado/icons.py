@@ -228,6 +228,16 @@ def _store(pen: _Pen) -> None:
     pen.line(0.1, 0.24, 0.9, 0.24, Wood.C700, 0.04)
 
 
+def _stamina(pen: _Pen) -> None:
+    """One point of a day's energy: the ribbon's pip, drawn round.
+
+    The same Sand as `ribbon.PIP_FULL`, so a cost on the tool card and the
+    pips it will spend read as the same currency.
+    """
+    pen.circle(0.5, 0.5, 0.3, Sand.C300)
+    pen.circle(0.42, 0.42, 0.1, Sand.C100)
+
+
 def _sleep(pen: _Pen) -> None:
     """Dormir: a bed under a crescent moon."""
     pen.box(0.08, 0.6, 0.84, 0.1, Wood.C500, radius=0.03)
@@ -452,6 +462,7 @@ ICONS: dict[str, Callable[[_Pen], None]] = {
     "store": _store,
     "menu": _menu,
     "sleep": _sleep,
+    "stamina": _stamina,
     "seed": _seed,
     "seed_pouch": _seed_pouch,
     "plant_guandu": _plant_guandu,

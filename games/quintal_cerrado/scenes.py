@@ -144,7 +144,7 @@ from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.manager import UIManager
-from pyguara.ui.types import TextAlign, UILayer
+from pyguara.ui.types import TextAlign, UIElementState, UILayer
 
 # Game systems must register at >=500 (pyguara/scene/base.py's
 # GAME_SYSTEM_PRIORITY_MIN) to stay clear of the engine's own reserved band
@@ -413,6 +413,9 @@ class GardenScene(Scene):
         self._hud: Hud | None = None
         self._inspector: CellInspector | None = None
         self._tool_buttons: dict[str, ToolSlot] = {}
+        self._dock_slots: dict[str, ToolSlot] = {}
+        """Every slot, the base ones included -- what the tool card reads to
+        find which one the cursor is over."""
         self._store_button: ToolSlot | None = None
         self._menu_button: ToolSlot | None = None
         self._sleep_button: ToolSlot | None = None
@@ -443,6 +446,7 @@ class GardenScene(Scene):
         self._hud = Hud(
             ui_manager, layout.GRID_RECT.y + CellInspector.HEIGHT + layout.GAP
         )
+        self._hud.show_tool(self._active_tool)
         self._create_entities()
         self._resolver = self._build_resolver()
         if self._load_requested:
@@ -518,6 +522,7 @@ class GardenScene(Scene):
         themselves (`slot_status`), next to the thing they buy.
         """
         dock = ToolDock(_dock_groups(), WINDOW_WIDTH)
+        self._dock_slots = dock.slots
         for tool, slot in dock.slots.items():
             if tool == SLEEP_SLOT:
                 slot.on_click = lambda _element: self.end_day()
@@ -542,6 +547,18 @@ class GardenScene(Scene):
             Vector2(layout.COLUMN_X, layout.GRID_RECT.y),
             layout.COLUMN_WIDTH,
         )
+
+    def _hovered_tool(self) -> str:
+        """The dock slot under the cursor, or the active tool.
+
+        Falling back to the active tool rather than blanking the card: what
+        a player wants when they are not pointing at the dock is a reminder
+        of what their next click will do.
+        """
+        for tool, slot in self._dock_slots.items():
+            if slot.state == UIElementState.HOVERED:
+                return tool
+        return self._active_tool
 
     def _refresh_tool_slots(self) -> None:
         """Re-read every slot's badge and affordability from the economy."""
@@ -1052,6 +1069,8 @@ class GardenScene(Scene):
                 self._score,
             )
         self._refresh_tool_slots()
+        if self._hud is not None:
+            self._hud.show_tool(self._hovered_tool())
         weather = self._resolver.weather if self._resolver is not None else None
         if self._hud is not None and weather is not None:
             self._hud.update_weather(

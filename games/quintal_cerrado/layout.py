@@ -5,7 +5,8 @@ dock cannot drift into each other one hard-coded offset at a time::
 
     RIBBON  [ resources ][ weather / day   ][ resilience        ]
     GRID    [ 12x8 plot, 576x384           ][ right column:     ]
-            [                              ][ inspector, toasts ]
+            [                              ][ inspector, tool,  ]
+            [                              ][ toast             ]
     DOCK    [ ESPÉCIES      ][ FERRAMENTAS    ][ BASE ]
 """
 
@@ -41,6 +42,9 @@ WEATHER_CARD = Rect(
     RIBBON_HEIGHT,
 )
 RESILIENCE_CARD = Rect(COLUMN_X, RIBBON_Y, COLUMN_WIDTH, RIBBON_HEIGHT)
+
+TOOL_CARD_HEIGHT = 108
+"""The card under the inspector that explains the hovered tool or seed."""
 
 SLOT_SIZE = Vector2(64, 76)
 SLOT_SPACING = 6
