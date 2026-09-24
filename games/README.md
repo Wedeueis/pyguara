@@ -131,17 +131,22 @@ These modules correspond to the "Tutorial Series Roadmap".
   answer it with slow, cheap, organic **compost** (keeps the 2.0x organic
   sale premium) or a fast, expensive chemical **spray** (clears it at
   once and grows the crop faster, but sells for 0.5x, degrades the soil
-  and marks every plant it reaches for good). An icon dock names every
-  tool, its price and its keyboard shortcut. A **store** (a scene pushed over the
+  and marks every plant it reaches for good). The game is **turn-based**: a day is the
+  turn, nothing in the simulation moves while you are in one, and
+  **stamina** (12 a day, spent per action) is what makes a day finite.
+  Sleeping resolves the night — growth, drying, pests, the machines, the
+  sky — and opens a **morning report** of what happened while you slept.
+  An icon dock names every tool, its price, its stamina cost and its
+  keyboard shortcut. A **store** (a scene pushed over the
   frozen garden) sells a four-step automation tech tree — solar panel →
   drip irrigation → soil sensor → harvester drone — each unlocked by
-  *placing* the one before it. The garden **saves and resumes** — every 60
-  seconds of play and whenever you leave it (which includes closing the
-  window) — through `pyguara.persistence`; the title offers Continue / New
-  Garden, Esc opens a pause menu, and a fifteen-minute session ends in an
-  **evaluation**: an Agroecological Score from soil health, biodiversity,
-  revenue and how much of it was sold organically. **Status: complete**
-  (all five phases of the PRD).
+  *placing* the one before it, and each doing its work overnight. The
+  garden **saves and resumes** — every night, and whenever you leave it
+  (which includes closing the window) — through `pyguara.persistence`; the
+  title offers Continue / New Garden, Esc opens a pause menu, and a
+  **twelve-day** session ends in an **evaluation**: an Agroecological Score
+  from soil health, biodiversity, revenue and how much of it was sold
+  organically. **Status: complete** (all five phases of the PRD).
 * **Key Concepts:** the first real adopter of `pyguara.tilemap`
   (`Tilemap`/`TileLayer`/`Tileset`, built procedurally rather than from a
   `.tmx` — the plot is simulation state, not level art);
@@ -163,12 +168,16 @@ These modules correspond to the "Tutorial Series Roadmap".
   demo (`persistence_schema.py`) — the serializer does not round-trip
   dataclasses, so the payload is hand-built plain data, and loading is
   *parse, then apply* so a corrupt or hand-edited save is refused without
-  ever half-loading the plot; a day/night clock and a hover cell inspector
-  built from stock `ProgressBar`s; the automation tree (`structures.py`,
+  ever half-loading the plot; a turn loop (`turn.py`,
+  `systems/day_resolver.py`) where the simulation runs only when the player
+  sleeps, in a few sub-steps so the non-linear pest maths and the plant
+  FSMs stay honest; a hover cell inspector built from stock
+  `ProgressBar`s; the automation tree (`structures.py`,
   `systems/automation_system.py`), where one solar panel powers three
-  devices handed out in placement order, drip irrigation holds the soil
-  above the moisture line, a sensor prints moisture/humus/pest bars on the
-  tiles it reaches, and a drone sells ready crops through the same
+  devices handed out in placement order, drip irrigation fills its cells overnight
+  so they are never dry in the morning, a sensor prints
+  moisture/humus/pest bars on the tiles it reaches, and a drone sells a
+  couple of ready crops a night through the same
   `economy.sell_harvest` the harvest tool uses; a small economy (`economy.py`, `treatments.py`) where
   seeds and treatments cost Sementes and a harvest pays them back; and a
   `juice.Motes`/`juice.FloatingLabels` pair (adapted from
