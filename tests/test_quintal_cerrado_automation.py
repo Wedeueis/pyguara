@@ -15,6 +15,7 @@ from games.quintal_cerrado.events import PlantHarvestedEvent, SolarIncomeEvent
 from games.quintal_cerrado.scenes import GardenScene
 from games.quintal_cerrado.store import StoreOverlayScene
 from games.quintal_cerrado.systems import automation_system as auto
+from games.quintal_cerrado.systems import weather_system
 from games.quintal_cerrado.systems.automation_system import (
     DRIP_TARGET,
     DRONE_HARVESTS_PER_NIGHT,
@@ -301,10 +302,17 @@ class TestDrip:
         assert scene.grid.soil_at((5, 5)).moisture == 0.0
 
     def test_drip_keeps_a_plant_growing_with_no_hand_watering(
-        self, scene: GardenScene
+        self, scene: GardenScene, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """The point of the second rung: a drip cell is never dry in the
-        morning, so it grows without the watering can."""
+        morning, so it grows without the watering can.
+
+        The sky is pinned calm: a cloudy or cold night grows less, and this
+        is about the nozzle, not the weather.
+        """
+        monkeypatch.setattr(weather_system, "roll_condition", lambda _rng: "calm")
+        assert scene._resolver is not None
+        scene._resolver.weather.restore("calm", ["calm", "calm"])
         _place(scene, "solar_panel", (0, 0))
         _place(scene, "drip_irrigation", (5, 5))
         scene.grid.till((5, 6))
@@ -313,14 +321,8 @@ class TestDrip:
 
         _nights(scene, 3)
 
-        # Which stage exactly depends on the nights' weather (a cloudy or
-        # cold night grows less); what this pins is that it kept growing
-        # with no watering can, which is the second rung's whole point.
         plant = scene.entity_manager.get_entity(scene.grid.plant_at[(5, 6)])
-        assert plant.get_component(PlantComponent).growth_stage in (
-            "mature",
-            "harvestable",
-        )
+        assert plant.get_component(PlantComponent).growth_stage == "harvestable"
         assert scene.grid.soil_at((5, 6)).moisture > 0.0
 
 

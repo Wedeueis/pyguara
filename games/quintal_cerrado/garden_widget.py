@@ -76,6 +76,8 @@ SFX_DENIED = f"{_ASSETS}/denied.wav"
 SFX_OUTBREAK_START = f"{_ASSETS}/outbreak_start.wav"
 SFX_OUTBREAK_RESOLVED = f"{_ASSETS}/outbreak_resolved.wav"
 SFX_SOLAR_INCOME = f"{_ASSETS}/solar_income.wav"
+SFX_SLEEP = f"{_ASSETS}/sleep.wav"
+SFX_MORNING = f"{_ASSETS}/morning.wav"
 
 TILL_DUST = Color(196, 158, 110)
 WATER_DROPLET = Color(120, 180, 200)
@@ -90,7 +92,13 @@ WARN_COLOR = Color(236, 120, 96)
 
 NIGHT_COLOR = (16, 26, 72)
 NIGHT_MAX_ALPHA = 110
-"""Alpha of the night wash at `clock.darkness() == 1.0`."""
+"""Alpha of the night wash at `darkness == 1.0`."""
+
+NIGHT_DARKNESS = 0.85
+"""How dark the plot goes while the player sleeps."""
+
+SUNRISE_SECONDS = 0.7
+"""How long the wash takes to lift once the morning report is dismissed."""
 
 ALERT_COLOR = (190, 50, 50)
 ALERT_MAX_ALPHA = 95

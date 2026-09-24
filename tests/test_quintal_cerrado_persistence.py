@@ -745,7 +745,9 @@ class TestTheOverlays:
 
         manager.current_scene._close()
         scene.end_day()
-        assert manager.current_scene is scene, "it is offered once, not nightly"
+        assert not isinstance(manager.current_scene, EvaluationScene), (
+            "it is offered once, not nightly"
+        )
 
     def test_a_session_loaded_past_its_last_day_is_not_evaluated_again(
         self, scene: GardenScene
