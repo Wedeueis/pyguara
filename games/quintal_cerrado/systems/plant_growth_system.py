@@ -1,7 +1,7 @@
 """Accumulates every planted entity's growth progress, every tick.
 
 Reads `PlantComponent.growth_multiplier`, which `syntropic_system.py` must
-have already written this tick (see the priority constants in
+have already written this step (see the order in
 `scenes.py`), each species' `stage_days` from `species.py`, and the
 cell's own `SoilCell.moisture` -- growth stalls below
 `MOISTURE_GROWTH_THRESHOLD` rather than merely slowing, so watering is a

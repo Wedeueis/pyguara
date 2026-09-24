@@ -11,13 +11,13 @@ small on purpose.
 so every keyboard shortcut is also discoverable) and a `GardenGridCanvas`
 that turns a grid click into the active tool's action. Where each region
 sits is `layout.py`'s.
-Eight simulation systems run every fixed tick -- `SoilSystem`,
-`AutomationSystem`, `ShadeSystem`, `SyntropicSystem`, `PestSystem`,
-`PlantGrowthSystem`, `WeedSpreadSystem`, `WeatherSystem`, in that priority
-order (see the `_*_PRIORITY` constants) -- registered on
-`self.system_manager`, which `SceneManager.fixed_update()` already calls
-automatically for every active scene alongside the engine's own
-`AISystem`.
+Nothing simulates between actions. The eight simulation systems --
+`SoilSystem`, `AutomationSystem`, `ShadeSystem`, `SyntropicSystem`,
+`PestSystem`, `PlantGrowthSystem`, `WeedSpreadSystem`, `WeatherSystem` --
+are owned by `systems/day_resolver.py` and run, in that order, only when
+the player sleeps (`end_day`). They are deliberately *not* registered on
+`self.system_manager`, and this scene drops the engine's own `AISystem`
+too, so neither the plant nor the garden FSM can advance on real seconds.
 
 Two entities besides the plants live in the scene's world: `player`,
 carrying `PlayerEconomy`, and `garden_conditions`, carrying
@@ -140,28 +140,6 @@ from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.manager import UIManager
 from pyguara.ui.types import TextAlign, UILayer
-
-# Game systems must register at >=500 (pyguara/scene/base.py's
-# GAME_SYSTEM_PRIORITY_MIN) to stay clear of the engine's own reserved band
-# (100-399, e.g. AISystem at 200). Ascending order = update order: soil
-# moisture before shade, before the companion bonus that reads shade,
-# before growth that reads both.
-_SOIL_PRIORITY = 500
-_AUTOMATION_PRIORITY = 505
-_SHADE_PRIORITY = 510
-_SYNTROPIC_PRIORITY = 520
-_PEST_PRIORITY = 525
-_GROWTH_PRIORITY = 530
-_WEED_SPREAD_PRIORITY = 535
-# WeatherSystem reads nothing and only ever writes WeatherState -- it runs
-# last, not first, despite SoilSystem/PestSystem/PlantGrowthSystem reading
-# that state: game systems cannot register below 500, where SoilSystem
-# already sits, so a condition change here is read by them one tick later
-# instead. See weather_system.py's own module docstring for why that lag
-# is the same one plant_growth_system.py already accepts for a stage
-# transition, and just as imperceptible at 60Hz.
-_WEATHER_PRIORITY = 536
-_AUTOSAVE_PRIORITY = 590
 
 SOIL_HEALTH_GRADE_STRENGTH = 0.3
 """How strongly `SoilHealthEffect` blends in once anything is tilled -- kept
