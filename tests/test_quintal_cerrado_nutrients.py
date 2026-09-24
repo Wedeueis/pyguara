@@ -56,20 +56,11 @@ class TestEachNutrientOwnsOneEffect:
         assert nutrients.hardiness(_rich(potassium=0.0)) == 0.0
         assert nutrients.hardiness(_rich(potassium=1.0)) > 0.0
 
-    def test_calcium_turns_pests_away(self) -> None:
-        bare = nutrients.pest_susceptibility(_rich())
-        guarded = nutrients.pest_susceptibility(_rich(calcium=1.0))
-
-        assert guarded < bare
-
-    def test_nitrogen_draws_the_pests_calcium_answers(self) -> None:
-        """The tension the whole system is built around."""
-        fed = nutrients.pest_susceptibility(_rich(nitrogen=1.0))
-        bare = nutrients.pest_susceptibility(_rich())
-        both = nutrients.pest_susceptibility(_rich(nitrogen=1.0, calcium=1.0))
-
-        assert fed > bare, "the obvious lever costs something"
-        assert both < fed, "and calcium is what pays it"
+    def test_calcium_is_a_share_the_stress_model_multiplies(self) -> None:
+        """Calcium's worth depends on the plant being able to use it --
+        `stress.pest_resistance`, not a flat shield here."""
+        assert nutrients.calcium_share(_rich(calcium=0.0)) == 0.0
+        assert nutrients.calcium_share(_rich(calcium=1.0)) == 1.0
 
     def test_nothing_else_changes_when_one_nutrient_moves(self) -> None:
         """Each lever moves its own effect and no other."""
