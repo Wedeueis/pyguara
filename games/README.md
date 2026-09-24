@@ -53,12 +53,20 @@ These modules correspond to the "Tutorial Series Roadmap".
   `LayoutConstraints` anchoring each HUD cluster to a corner; the focus ring
   and Enter/Space activation; `Slider`/`Checkbox` `on_change`; a scene-stack
   pause (`push_scene(..., pause_below=True)`) that leaves the frozen game
-  rendering behind a translucent scrim; and a live `set_theme()` swap between
-  Cerrado Dusk and Day that re-skins everything on screen.
-* **Art:** none. Every pixel of the world is a renderer primitive — see
-  [`art.py`](./guara_falcao/art.py). The demo ships no textures on purpose:
-  the subject is the UI, and an asset pipeline beside it would be the thing
-  everyone looked at instead.
+  rendering behind a translucent scrim; a live `set_theme()` swap between
+  Cerrado Dusk and Day that re-skins everything on screen; and the only
+  **sprite animation** in the demo set — the guará is an `Animator` under an
+  `AnimationStateMachine` with a clip per movement state, the falcão a plain
+  `Animator` with one looping clip and nothing to decide
+  ([`animation.py`](./guara_falcao/animation.py)).
+* **Art:** the two characters are sprites; the world is not. Sky, mounds,
+  trees, platforms and fruit are all renderer primitives — see
+  [`art.py`](./guara_falcao/art.py) — and their look comes from layering,
+  palette and light. The character frames are cut out of the project's
+  contact sheet once by
+  [`tools/slice_spritesheet.py`](../tools/slice_spritesheet.py), which keys
+  the backdrop to alpha and stands every frame on one shared canvas, and
+  checked in as PNGs; the demo loads files and knows nothing about sheets.
 * **Run:** `uv run python games/guara_falcao/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py guara_falcao --gl`
   (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all).

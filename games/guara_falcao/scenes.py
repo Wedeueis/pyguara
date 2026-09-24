@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 
-from games.guara_falcao import art
+from games.guara_falcao import animation, art
 from games.guara_falcao.bootstrap import (
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
@@ -37,6 +37,7 @@ from games.guara_falcao.events import (
     CheckpointReachedEvent,
     CollectiblePickedEvent,
     DebugCollidersToggled,
+    PlayerDamagedEvent,
     PlayerDeathEvent,
 )
 from games.guara_falcao.hud import Hud
@@ -57,7 +58,13 @@ from pyguara.common.components import Transform, render_position, teleport
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.manager import ConfigManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.graphics.animation_system import AnimationSystem
+from pyguara.graphics.components.animation import (
+    AnimationClip,
+    AnimationStateMachine,
+)
 from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.lighting.components import AmbientLight, LightSource
 from pyguara.graphics.lighting.light_system import LightingSystem
 from pyguara.graphics.protocols import IRenderer, UIRenderer
@@ -74,6 +81,7 @@ from pyguara.physics.platformer_system import PlatformerSystem
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.solid_mover import SolidMover
 from pyguara.physics.solid_system import SolidSystem
+from pyguara.resources.manager import ResourceManager
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
@@ -132,12 +140,20 @@ class TitleScene(Scene):
         self._lighting: LightingSystem | None = None
         self._elapsed = 0.0
         self._visible = True
+        self._walk: animation.Filmstrip | None = None
+        self._fly: animation.Filmstrip | None = None
 
     def on_enter(self) -> None:
-        """Build the backdrop's lights and the menu."""
+        """Build the backdrop's lights, the walker and the menu."""
         self._lighting = LightingSystem(self.entity_manager)
         _sun(self, WINDOW_WIDTH)
         attach_lighting(self.container, self._lighting)
+        # The same clips the game plays, so the title and the level look
+        # like one game. No entities here to hang components on, so these
+        # are plain `Animator`s advanced by hand.
+        clips = animation.load_clips(self.container.get(ResourceManager))
+        self._walk = animation.Filmstrip(clips[animation.RUN])
+        self._fly = animation.Filmstrip(clips[animation.FALCAO])
         self._build_menu()
 
     def on_resume(self) -> None:
@@ -255,10 +271,13 @@ class TitleScene(Scene):
         self._visible = False
 
     def update(self, dt: float) -> None:
-        """Drift the backdrop."""
+        """Drift the backdrop, and walk the guará across it."""
         self._elapsed += dt
         if self._lighting:
             self._lighting.update(dt)
+        for strip in (self._walk, self._fly):
+            if strip is not None:
+                strip.advance(dt)
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Draw the Cerrado behind the menu."""
@@ -281,21 +300,19 @@ class TitleScene(Scene):
         walker = Vector2(
             WINDOW_WIDTH * 0.2 + math.sin(self._elapsed * 0.4) * 60.0, ground - 46
         )
-        art.draw_guara(
-            world_renderer,
-            walker,
-            Vector2(64, 92),
-            facing_right=True,
-            running=True,
-            airborne=False,
-            phase=self._elapsed,
-        )
-        art.draw_falcao(
-            world_renderer,
-            Vector2(walker.x + 6, walker.y - 74),
-            self._elapsed,
-            facing_right=True,
-        )
+        if self._walk is not None and self._fly is not None:
+            scale = animation.DRAW_SCALE
+            world_renderer.draw_texture(
+                self._walk.sprite.texture,
+                walker,
+                scale=Vector2(scale, scale),
+            )
+            fly = animation.FALCAO_DRAW_SCALE
+            world_renderer.draw_texture(
+                self._fly.sprite.texture,
+                walker + animation.falcao_offset(True, self._elapsed),
+                scale=Vector2(fly, fly),
+            )
 
         world_renderer.end_frame()
         configure_pipeline(self.container, self._camera)
@@ -317,6 +334,10 @@ class GameScene(Scene):
         self._show_colliders = False
         self._player_control: PlayerControlSystem | None = None
         self._animation_fsm: AnimationFSMSystem | None = None
+        self._animation_system: AnimationSystem | None = None
+        self._player_animation: AnimationStateMachine | None = None
+        self._clips: dict[str, AnimationClip] = {}
+        self._falcao_id: str | None = None
         self._camera_follow: CameraFollowSystem | None = None
         self._collectible_system: CollectibleSystem | None = None
         self._checkpoint_system: CheckpointSystem | None = None
@@ -386,6 +407,12 @@ class GameScene(Scene):
             self.entity_manager, self.event_dispatcher
         )
         self._animation_fsm = AnimationFSMSystem(self.entity_manager)
+        # The engine's own, which advances `Animator`/`AnimationStateMachine`.
+        # It runs after `AnimationFSMSystem`, which is what decides the
+        # state it will play.
+        self._animation_system = AnimationSystem(
+            self.entity_manager, self.event_dispatcher
+        )
         self._camera_follow = CameraFollowSystem(self.entity_manager)
         self._collectible_system = CollectibleSystem(
             self.entity_manager, self.event_dispatcher
@@ -401,6 +428,11 @@ class GameScene(Scene):
         # Setup camera
         self._camera = Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
         self._camera_follow.set_camera(self._camera)
+
+        # Loaded before the first `_link_player`, which is what attaches
+        # them. `ResourceManager` caches, so a respawn or a second entry
+        # into the scene re-reads nothing.
+        self._clips = animation.load_clips(self.container.get(ResourceManager))
 
         # Build level
         self._level_builder = LevelBuilder()
@@ -420,6 +452,7 @@ class GameScene(Scene):
 
         # Register events
         self.event_dispatcher.subscribe(PlayerDeathEvent, self._on_player_death)
+        self.event_dispatcher.subscribe(PlayerDamagedEvent, self._on_player_damaged)
         self.event_dispatcher.subscribe(CheckpointReachedEvent, self._on_checkpoint)
         self.event_dispatcher.subscribe(CollectiblePickedEvent, self._on_collectible)
         self.event_dispatcher.subscribe(DebugCollidersToggled, self._on_collider_toggle)
@@ -444,6 +477,19 @@ class GameScene(Scene):
         self._collectible_system.set_player(player)  # type: ignore[union-attr]
         self._checkpoint_system.set_player(player)  # type: ignore[union-attr]
         self._hazard_system.set_player(player)  # type: ignore[union-attr]
+        # A respawned player is a new entity, so it needs its own
+        # animator -- the clips themselves are cached by the resource
+        # manager and shared.
+        self._player_animation = animation.attach(player, self._clips)
+
+        # The companion is an entity of its own with a plain `Animator`
+        # and no state machine -- one clip, nothing to decide. The
+        # engine's `AnimationSystem` drives both paths.
+        if self._falcao_id:
+            self.entity_manager.remove_entity(self._falcao_id)
+        falcao = self.entity_manager.create_entity("falcao")
+        animation.attach_falcao(falcao, self._clips)
+        self._falcao_id = falcao.id
 
     def _prepare_pickups(self) -> None:
         """Light every pickup, and remember the height it floats around.
@@ -685,8 +731,9 @@ class GameScene(Scene):
                 self._coroutine_manager.update(dt)
             return
 
+        self._advance_player_animation(dt)
+
         for system in (
-            self._animation_fsm,
             self._camera_follow,
             self._collectible_system,
             self._checkpoint_system,
@@ -704,6 +751,42 @@ class GameScene(Scene):
 
         if self._hud and self._player_id:
             self._hud.update(self.entity_manager.get_entity(self._player_id))
+
+    def _advance_player_animation(self, dt: float) -> None:
+        """Decide the player's clip, then advance it.
+
+        Three steps in a fixed order, which is why they are here rather
+        than in the systems tuple above: `AnimationFSMSystem` works out
+        what the player is doing, `animation.drive` picks the clip for
+        it, and the engine's `AnimationSystem` advances the frames. Any
+        other order draws the previous frame's pose.
+
+        Args:
+            dt: Seconds since the last frame.
+        """
+        if self._animation_fsm is not None:
+            self._animation_fsm.update(dt)
+
+        player = (
+            self.entity_manager.get_entity(self._player_id) if self._player_id else None
+        )
+        if player is not None and self._player_animation is not None:
+            state = player.get_component(PlayerState)
+            if state is not None:
+                animation.drive(self._player_animation, state.current_state)
+
+        if self._animation_system is not None:
+            self._animation_system.update(dt)
+
+    def _on_player_damaged(self, event: PlayerDamagedEvent) -> None:
+        """Play the recoil.
+
+        Driven by the event, not by `Health.invincible_time`: being hit
+        happens once and being invincible lasts seconds, so a
+        state-driven recoil would loop until it wore off.
+        """
+        if self._player_animation is not None:
+            animation.recoil(self._player_animation)
 
     def _animate_pickups(self) -> None:
         """Float the uncollected pickups, and put out the collected ones.
@@ -902,31 +985,59 @@ class GameScene(Scene):
         position = render_position(transform, self.render_alpha) - offset
 
         facing = state.facing_right if state else True
-        anim = state.current_state if state else PlayerAnimState.IDLE
-        flash = bool(
-            health
-            and health.invincible_time > 0
-            and int(health.invincible_time * 10) % 2 == 0
-        )
 
-        # Drawn half again as big as the collision box. A character that
-        # exactly fills its collider reads as a crate; the overhang is
-        # where the mane, the ears and the tail live.
-        art.draw_guara(
-            renderer,
-            Vector2(position.x, position.y),
-            Vector2(sprite.size.x * 1.5, sprite.size.y * 1.4),
-            facing_right=facing,
-            running=anim == PlayerAnimState.RUN,
-            airborne=anim in (PlayerAnimState.JUMP, PlayerAnimState.FALL),
-            phase=self._elapsed,
-            flash=flash,
+        # The invincibility blink. It used to be a white flash, which
+        # `draw_texture` cannot do -- it carries no tint -- so the sprite
+        # flickers instead, which is what the genre does anyway.
+        if health is not None and not animation.blink_visible(health.invincible_time):
+            return
+
+        frame = player.get_component(Sprite)
+        if frame is None or frame.texture is None:
+            return
+
+        anim = state.current_state if state else PlayerAnimState.IDLE
+
+        # Lifted so the guará stands on the platform rather than sinking
+        # into it: the slicer stands every frame on the bottom of its
+        # canvas, and `draw_texture` centres on what it is given.
+        feet = position.y + animation.draw_offset(sprite.size.y)
+
+        # One scale for every clip -- every frame shares a canvas, so a
+        # state change cannot resize the character. Mirrored by a negative
+        # x, which is `IRenderer.draw_texture`'s contract.
+        scale = animation.DRAW_SCALE
+        renderer.draw_texture(
+            frame.texture,
+            Vector2(position.x, feet),
+            scale=Vector2(scale if facing else -scale, scale),
         )
-        art.draw_falcao(
-            renderer,
-            Vector2(
-                position.x - (10 if facing else -10), position.y - sprite.size.y * 0.8
-            ),
-            self._elapsed,
-            facing_right=facing,
+        self._draw_falcao(renderer, Vector2(position.x, feet), facing, anim)
+
+    def _draw_falcao(
+        self,
+        renderer: IRenderer,
+        centre: Vector2,
+        facing_right: bool,
+        anim: PlayerAnimState,
+    ) -> None:
+        """Draw the companion, when it is flying rather than riding.
+
+        The guará's idle frames already have the falcão perched on its
+        back, so it only appears here once the guará moves.
+        """
+        if not animation.falcao_visible(anim) or not self._falcao_id:
+            return
+        falcao = self.entity_manager.get_entity(self._falcao_id)
+        if falcao is None:
+            return
+        frame = falcao.get_component(Sprite)
+        if frame is None or frame.texture is None:
+            return
+        offset = animation.falcao_offset(facing_right, self._elapsed)
+        scale = animation.FALCAO_DRAW_SCALE
+        renderer.draw_texture(
+            frame.texture,
+            centre + offset,
+            scale=Vector2(scale if facing_right else -scale, scale),
         )

@@ -211,8 +211,7 @@ def draw_plant(
         sway: A per-plant horizontal offset in pixels, so a full plot
             doesn't read as a field of static stickers.
         elapsed: Seconds since the scene entered, driving the harvestable
-            stage's pulsing ring -- the same role `phase` plays in
-            `guara_falcao.art.draw_guara`'s run cycle.
+            stage's pulsing ring.
     """
     scale = STAGE_SCALE.get(stage, 1.0) * pop_scale
     if stage == "infested":

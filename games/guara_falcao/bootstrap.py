@@ -36,6 +36,7 @@ from pyguara.graphics.backends.moderngl import (
     ModernGLRenderer,
     PygameGLWindow,
 )
+from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
 from pyguara.graphics.backends.pygame.clock import PygameClock
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.lighting.light_system import LightingSystem
@@ -236,7 +237,14 @@ def configure_game_container() -> DIContainer:
     container.register_instance(ComponentRegistry, get_component_registry())
     container.register_instance(PrefabCache, PrefabCache())
     container.register_singleton(SceneManager, SceneManager)
-    container.register_singleton(ResourceManager, ResourceManager)
+    # A resource manager with the backend's own texture loader. This demo
+    # builds its container by hand rather than through
+    # `pyguara.application.bootstrap`, so nothing had registered one --
+    # and until the guará became a sprite, nothing had asked it to load
+    # an image either.
+    resources = ResourceManager()
+    resources.register_loader(GLTextureLoader(ctx))
+    container.register_instance(ResourceManager, resources)
     container.register_singleton(UIManager, UIManager)
     _install_theme()
     container.register_singleton(SystemManager, SystemManager)
