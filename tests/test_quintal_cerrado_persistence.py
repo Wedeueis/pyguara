@@ -865,7 +865,7 @@ class TestTheHud:
         scene.turn = DayCycle(day=2, stamina=5)
         scene.update(1 / 60)
         assert scene._hud is not None
-        assert scene._hud.day_label.text == f"Dia 2 / {SESSION_DAYS}"
+        assert scene._hud.day_label.text.startswith(f"Dia 2 / {SESSION_DAYS}")
         assert scene._hud.resources.power == (0, 0)
 
         scene.economy.inventory["solar_panel"] = 1

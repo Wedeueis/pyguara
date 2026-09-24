@@ -45,7 +45,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from games.quintal_cerrado import art, layout, treatments
+from games.quintal_cerrado import art, layout, seasons, treatments
 from games.quintal_cerrado.bootstrap import (
     BASE_VIGNETTE_INTENSITY,
     COLD_SNAP_VIGNETTE_INTENSITY,
@@ -953,7 +953,8 @@ class GardenScene(Scene):
         plant is refused -- treating the pests first is the point of the
         outbreak -- and a plant still growing is left alone. What a
         collectable plant is worth (Sementes, or a seed) is entirely
-        `economy.harvest_cell`'s call; this only reports the result.
+        `economy.harvest_cell`'s call -- including the premium a crop
+        harvested in its own season fetches; this only reports the result.
         """
         entity_id = self.grid.plant_at.get(cell)
         if entity_id is None:
@@ -972,7 +973,13 @@ class GardenScene(Scene):
             if self._canvas is not None:
                 self._canvas.spawn_label(cell, "Cleared", Color(190, 180, 168))
             return True
-        result = harvest_cell(self.grid, self.entity_manager, self.economy, cell)
+        result = harvest_cell(
+            self.grid,
+            self.entity_manager,
+            self.economy,
+            cell,
+            seasons.season_for(self.turn.day),
+        )
         if result is None:
             return False
         if self._canvas is None:

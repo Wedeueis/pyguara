@@ -33,6 +33,7 @@ from games.quintal_cerrado.economy import (
 from games.quintal_cerrado.events import OutbreakResolvedEvent, OutbreakStartedEvent
 from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
 from games.quintal_cerrado.scenes import GardenScene
+from games.quintal_cerrado.seasons import season_for
 from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.systems import weed_spread_system as weed_module
@@ -673,9 +674,12 @@ class TestEconomy:
         _plant_at(scene, (2, 2), "baru", stage="harvestable")
         credits = scene.economy.credits
         plant = _plant_component(scene, (2, 2))
-        # Paid on the soil it grew in: phosphorus adds to the price
-        # (`nutrients.value_multiplier`), so the bare price is the floor.
-        expected = sale_value(plant, scene.grid.soil_at((2, 2)))
+        # Paid on the soil it grew in and the day it is sold on:
+        # phosphorus adds to the price (`nutrients.value_multiplier`) and
+        # so does baru's own season, so the bare price is the floor.
+        expected = sale_value(
+            plant, scene.grid.soil_at((2, 2)), season_for(scene.turn.day)
+        )
 
         scene._harvest((2, 2))
 
@@ -690,7 +694,9 @@ class TestEconomy:
         _plant_component(scene, (2, 2)).is_chemical_boosted = True
         credits = scene.economy.credits
         plant = _plant_component(scene, (2, 2))
-        expected = sale_value(plant, scene.grid.soil_at((2, 2)))
+        expected = sale_value(
+            plant, scene.grid.soil_at((2, 2)), season_for(scene.turn.day)
+        )
 
         scene._harvest((2, 2))
 

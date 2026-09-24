@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from games.quintal_cerrado.economy import COMPOST_COST, ORGANIC_PREMIUM, SPRAY_COST
+from games.quintal_cerrado.seasons import IN_SEASON_PREMIUM, SEASON_TABLE
 from games.quintal_cerrado.species import SPECIES_TABLE, Species
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
 from games.quintal_cerrado.turn import SESSION_DAYS, action_cost
@@ -167,6 +168,10 @@ def _describe_seed(tool: str) -> ToolInfo | None:
         f"Sells for {species.base_price}, or "
         f"{round(species.base_price * ORGANIC_PREMIUM)} unsprayed."
     )
+    season = SEASON_TABLE.get(species.season or "")
+    if season is not None:
+        premium = round((IN_SEASON_PREMIUM - 1.0) * 100)
+        lines.append(f"Worth {premium}% more harvested in the {season.display_name}.")
     return ToolInfo(
         name=species.display_name,
         icon_id=tool,

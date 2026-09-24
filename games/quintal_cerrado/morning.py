@@ -24,6 +24,7 @@ from games.quintal_cerrado.hud_widgets import (
 )
 from games.quintal_cerrado.icons import draw_icon
 from games.quintal_cerrado.overlay import OverlayScene, Scrim
+from games.quintal_cerrado.seasons import SEASON_TABLE
 from games.quintal_cerrado.systems.day_resolver import DayReport
 from games.quintal_cerrado.weather import WEATHER_TABLE
 from pyguara.common.types import Color, Rect, Vector2
@@ -47,6 +48,9 @@ ROW_ICON = 20
 GOOD = Verdant.SAGE_100
 BAD = Color(226, 110, 92)
 COIN = Sand.C300
+SEASON = Sand.C200
+"""The season line: news, not good news and not bad -- a dry season is
+welcome or ruinous depending entirely on what is in the ground."""
 
 
 @dataclass(frozen=True)
@@ -77,6 +81,14 @@ def report_lines(report: DayReport) -> list[_Line]:
         The lines, in the order the card shows them.
     """
     lines: list[_Line] = []
+    season = SEASON_TABLE.get(report.season_arrived)
+    if season is not None:
+        # First, and never counted as a quiet night: the season is the one
+        # thing in the report that changes what tomorrow is *for*. Its own
+        # blurb says what changes, because "Águas" alone does not.
+        lines.append(
+            _Line(season.icon_id, f"{season.display_name}. {season.blurb}", SEASON)
+        )
     if report.outbreak_started:
         lines.append(_Line("pests", "Pests broke out in the night", BAD))
     if report.outbreak_resolved:
