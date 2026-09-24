@@ -23,6 +23,7 @@ from games.protocolo_bandeira.events import (
     PlayerDamagedEvent,
     PlayerDeathEvent,
 )
+from games.protocolo_bandeira.navigation import ChaserNavigator
 from games.protocolo_bandeira.pooling import EnemyPool
 from pyguara.ai.behavior_tree import BehaviorTree
 from pyguara.common.components import Transform
@@ -131,13 +132,26 @@ class EnemyAISystem:
         enemy_pool: EnemyPool,
         projectile_system: ProjectileSystem,
         arena: Rect,
+        navigator: ChaserNavigator | None = None,
     ):
-        """Initialize the system."""
+        """Initialize the system.
+
+        Args:
+            entity_manager: Where the enemies live.
+            event_dispatcher: Where attacks are announced.
+            enemy_pool: The active enemies this walks each tick.
+            projectile_system: What a shooter fires through.
+            arena: The play area enemies are kept within reach of.
+            navigator: Routes a chaser around the termite mounds
+                (`navigation.py`). None keeps the straight-line chase the
+                game shipped with, which is what the unit tests build.
+        """
         self._em = entity_manager
         self._arena = arena
         self._dispatcher = event_dispatcher
         self._enemy_pool = enemy_pool
         self._projectile_system = projectile_system
+        self._navigator = navigator
 
         # Behavior trees per enemy type (cached)
         self._behavior_trees: dict[str, BehaviorTree] = {}
@@ -151,7 +165,12 @@ class EnemyAISystem:
 
     def update(self, dt: float) -> None:
         """Update all enemy AI."""
-        for entity in self._enemy_pool.get_active():
+        active = list(self._enemy_pool.get_active())
+        if self._navigator is not None:
+            # Before the walk, not after: a route dropped here belongs to
+            # an enemy that is already off the field.
+            self._navigator.retain({entity.id for entity in active})
+        for entity in active:
             ai = entity.get_component(EnemyAI)
             transform = entity.get_component(Transform)
             movement = entity.get_component(Movement)
@@ -175,6 +194,7 @@ class EnemyAISystem:
                 is_alerted=ai.is_alerted,
                 detection_range=ai.detection_range,
                 attack_range=ai.attack_range,
+                navigator=self._navigator,
             )
 
             # Initialize behavior tree for this enemy if needed
@@ -188,7 +208,7 @@ class EnemyAISystem:
             tree.tick(context)
 
             # Apply movement from context
-            if hasattr(context, "move_direction") and context.move_direction:
+            if context.move_direction:
                 if movement:
                     movement.velocity = context.move_direction * ai.move_speed
                     transform.position = transform.position + movement.velocity * dt
@@ -208,7 +228,7 @@ class EnemyAISystem:
 
             # Handle attack
             ai.current_cooldown = max(0, ai.current_cooldown - dt)
-            if hasattr(context, "should_attack") and context.should_attack:
+            if context.should_attack:
                 if ai.current_cooldown <= 0:
                     self._perform_attack(entity, ai, transform)
                     ai.current_cooldown = ai.attack_cooldown

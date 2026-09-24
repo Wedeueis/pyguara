@@ -1,6 +1,11 @@
 """Protocolo Bandeira - AI Behaviors.
 
 Behavior tree implementations for enemy AI.
+
+The tree decides *what* an enemy wants and writes it to `AIContext`;
+`systems.EnemyAISystem` is what moves anything. The one action that is
+not a straight line is `chase_player`, which routes around the termite
+mounds through `navigation.ChaserNavigator` when one is attached.
 """
 
 import math
@@ -39,9 +44,22 @@ def is_alerted(context: AIContext) -> bool:
 
 
 def chase_player(context: AIContext) -> NodeStatus:
-    """Move towards the player."""
+    """Move towards the player, around the mounds if they are in the way.
+
+    With a navigator attached the direction comes from `navigation.py`,
+    which steers straight at the player whenever it can see them and
+    falls back to an A* route when a termite mound is in between. Without
+    one -- a bare context, as every unit test builds -- it is the straight
+    line this behaviour has always been.
+    """
     if context.player_position is None:
         return NodeStatus.FAILURE
+
+    if context.navigator is not None:
+        context.move_direction = context.navigator.direction(
+            context.entity_id, context.position, context.player_position, context.dt
+        )
+        return NodeStatus.SUCCESS
 
     # Calculate direction to player
     direction = context.player_position - context.position

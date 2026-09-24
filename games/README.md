@@ -87,7 +87,10 @@ These modules correspond to the "Tutorial Series Roadmap".
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`), the
   engine's `HeatHazeEffect` shader for the afternoon shimmer and its dust, an
   HDR light map, `Sparks`/`Shaker`/`FloatingText`/`ScreenFlash` for the
-  feedback layer, hit-stop, behaviour-tree enemy AI, `kits/projectiles`,
+  feedback layer, hit-stop, behaviour-tree enemy AI, **single-agent A***
+  (`pyguara.ai.pathfinding`) routing a chaser around the termite mounds
+  when it cannot see the player — line-of-sight first, a cached path only
+  when something is in the way — `kits/projectiles`,
   `kits/action_combat`, `kits/spawn` and `ecs/pool` for the waves.
 * **Run:** `uv run python games/protocolo_bandeira/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py protocolo_bandeira --gl`
