@@ -134,12 +134,33 @@ shopping are free. Sleeping restores the pool, advances the day, resolves
 the night and opens a **morning report** of what happened while the player
 slept.
 
+The twelve days are also a **calendar**. The Cerrado has two seasons, not
+four, so a run is three four-day spells — **seca, águas, seca** — and the
+season is two levers and no more:
+
+- **the sky**: each season re-weights the same six weather conditions. It
+  does not rain in the *seca* at all, and the cold fronts (*friagem*)
+  belong to it alone; the *águas* rain three times as often and never
+  bring a front. Every forecast entry is rolled for the day it will land
+  on, so the two-day forecast shows the rains arriving before they do.
+- **the market**: a crop harvested in its own season sells 25% above the
+  market rate. Baru and Cagaita belong to the dry months, Pequi and
+  Guandu to the rains — roughly when each actually fruits — so what goes
+  in the ground is planned around what is coming, not around what is
+  cheapest today. It is a premium, not a lockout: an out-of-season crop
+  is still worth growing.
+
+Growth rates are untouched by the season: the weather already moves those,
+and a second multiplier saying the same thing would be one system too many.
+
 - **Days 1–2 (Onboarding):** A barren $12 \times 8$ dirt plot and a few
   legume seeds (_Guandu_). The player learns tilling, planting and
   watering, and finds that a day runs out.
 - **Days 2–4 (Stratification):** _Baru_ and _Cagaita_ unlock. Planting
   _Cagaita_ under the shade of _Baru_ with _Guandu_ at the base boosts
   growth speed by $40\%$ — which now reads as "a stage a night sooner".
+  These are the driest days of the run: nothing falls from the sky, and
+  the watering can is the whole answer.
 - **Day 3 onward (The Fork in the Road):** A pest infestation arrives once
   the plot has enough established plants. The player chooses:
     - _Option A:_ chemical spray (clears it at once and grows the crop
@@ -147,11 +168,19 @@ slept.
     - _Option B:_ plant _Pequi_ and add organic compost (slower recovery,
       keeps the 2.0x organic premium).
 
+- **Day 5 (The rains):** the *águas* arrive. The plot waters itself, the
+  cold fronts stop, and the pests like the wet as much as the plants do.
+  _Pequi_ and _Guandu_ are worth a quarter more while it lasts.
+
 - **Days 4–10 (Automation Expansion):** Revenue allows the Solar Panel and
   Drip Irrigation. Each night the panel pays, the drip keeps its cells off
   the dry line, and the drone collects a couple of ready plants — the
   garden does part of the work while the player sleeps, which is what buys
   back stamina for everything else.
+
+- **Day 9 (The dry harvest):** the *seca* returns for the last four days,
+  and with it the premium on _Baru_ and _Cagaita_ — the crops a player
+  who read the calendar on day 1 put in the ground to ripen now.
 
 - **Day 12 (Evaluation & Save Test):** Sleeping on the last day calculates
   the **Agroecological Score** (Soil Health + Biodiversity Index + Total

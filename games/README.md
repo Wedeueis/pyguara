@@ -136,6 +136,10 @@ These modules correspond to the "Tutorial Series Roadmap".
   **stamina** (12 a day, spent per action) is what makes a day finite.
   Sleeping resolves the night — growth, drying, pests, the machines, the
   sky — and opens a **morning report** of what happened while you slept.
+  A run also has a **calendar**: twelve days are three four-day spells of
+  the Cerrado's own two seasons — dry, wet, dry — and the season decides
+  what the sky can do (no rain at all in the *seca*, no cold front in the
+  *águas*) and which crops sell 25% above the market rate.
   An icon dock names every tool, its price, its stamina cost and its
   keyboard shortcut. A **store** (a scene pushed over the
   frozen garden) sells a four-step automation tech tree — solar panel →
@@ -171,7 +175,10 @@ These modules correspond to the "Tutorial Series Roadmap".
   ever half-loading the plot; a turn loop (`turn.py`,
   `systems/day_resolver.py`) where the simulation runs only when the player
   sleeps, in a few sub-steps so the non-linear pest maths and the plant
-  FSMs stay honest; a hover cell inspector built from stock
+  FSMs stay honest; a two-season calendar (`seasons.py`) that re-weights
+  the same six weather conditions and prices each crop's own harvest
+  window, rolled *per day ahead* so a forecast crossing a season boundary
+  shows the season it will land in; a hover cell inspector built from stock
   `ProgressBar`s; the automation tree (`structures.py`,
   `systems/automation_system.py`), where one solar panel powers three
   devices handed out in placement order, drip irrigation fills its cells overnight
