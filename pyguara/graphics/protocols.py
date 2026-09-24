@@ -235,7 +235,12 @@ class IRenderer(Protocol):
         scale: Vector2 = Vector2(1, 1),
     ) -> None:
         """
-        Draw a texture at the given Screen Coordinate.
+        Draw a texture **centred** on the given Screen Coordinate.
+
+        Centred, not top-left: a rotation is about the texture's own
+        middle, which is what a caller drawing a character or a spinning
+        pickup means. A caller that wants a top-left anchor shifts by
+        half the texture -- `draw_text` does exactly that.
 
         Note:
             This method receives coordinates that have *already* been transformed
@@ -244,9 +249,12 @@ class IRenderer(Protocol):
 
         Args:
             texture (Texture): The resource to draw.
-            destination (Vector2): The top-left or center position on screen.
-            rotation (float, optional): Rotation in degrees. Defaults to 0.0.
-            scale (Vector2, optional): Scale factor. Defaults to (1, 1).
+            destination (Vector2): The centre of the drawn texture.
+            rotation (float, optional): Rotation in degrees, counter-clockwise.
+                Defaults to 0.0.
+            scale (Vector2, optional): Scale factor, multiplied into the
+                texture's own size. A negative component flips that axis,
+                which is how a sprite is mirrored. Defaults to (1, 1).
         """
         ...
 
