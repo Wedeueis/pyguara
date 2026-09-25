@@ -22,8 +22,12 @@ from games.vinagre_matilha.components import (
     WebbedFeet,
 )
 from games.vinagre_matilha.events import GateOpenedEvent, JaguarCorneredEvent
-from games.vinagre_matilha.level_builder import CELL_SIZE
-from games.vinagre_matilha.pack_behaviors import PLATE_ASSIGNEES_KEY, PLATE_POSITION_KEY
+from games.vinagre_matilha.level_builder import CELL_SIZE, FLANKER_SPATIAL_MASK
+from games.vinagre_matilha.pack_behaviors import (
+    NEIGHBOR_COUNT_KEY,
+    PLATE_ASSIGNEES_KEY,
+    PLATE_POSITION_KEY,
+)
 from pyguara.ai.blackboard import Blackboard
 from pyguara.ai.flocking_system import FlockingAgent
 from pyguara.ai.pathfinding.flow_field_service import FlowFieldService
@@ -31,6 +35,7 @@ from pyguara.ai.pathfinding.grid import GridGraph
 from pyguara.ai.steering import SteeringBehavior
 from pyguara.common.components import Transform
 from pyguara.common.grid import Cell, world_to_cell
+from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
@@ -54,7 +59,6 @@ from pyguara.physics.trigger_volume import TriggerVolume
 _ENCIRCLE_RADIUS = 30.0
 _CAPTURE_RADIUS = 80.0
 _CORNERED_SUSTAIN_SECONDS = 1.0
-_NEIGHBOR_COUNT_KEY = "pack_neighbor_count"
 
 
 def _walkable(graph: GridGraph, cell: Cell) -> bool:
@@ -70,6 +74,12 @@ class FlankerAssignmentSystem:
     current angle around the jaguar so a dog isn't reshuffled to the
     opposite side every frame. Also owns recomputing the shared flow field
     toward the jaguar's current cell.
+
+    The neighbour counts come from the shared `SpatialHash`, the way
+    `kits/projectiles` and `kits/progression`'s magnet find their
+    candidates. Flankers are tracked in it the usual way
+    (`pyguara.spatial.SpatialTracked` + `SpatialIndexSystem`, registered by
+    `GameScene`); this system never inserts into it itself.
     """
 
     def __init__(
@@ -78,11 +88,13 @@ class FlankerAssignmentSystem:
         blackboard: Blackboard,
         flow_field: FlowFieldService,
         jaguar_id: str,
+        spatial_index: SpatialHash[str],
     ) -> None:
         self._em = entity_manager
         self._blackboard = blackboard
         self._flow_field = flow_field
         self._jaguar_id = jaguar_id
+        self._spatial_index = spatial_index
         blackboard.set("pack_flow_field", flow_field)
         blackboard.set("pack_cell_size", CELL_SIZE)
 
@@ -101,18 +113,23 @@ class FlankerAssignmentSystem:
             if entity.get_component(PackMember).role is PackRole.FLANKER
         ]
 
+        # Per dog, the cells its neighbour radius spans -- not every other
+        # dog. A pack is small enough that the old pairwise scan was never
+        # the bottleneck here, but this is a capstone demo, and the next
+        # person who needs neighbour counts is likely to start from it.
         counts: dict[str, int] = {}
         for dog in flankers:
             position = dog.get_component(Transform).position
             radius = dog.get_component(FlockingAgent).neighbor_radius
-            counts[dog.id] = sum(
-                1
-                for other in flankers
-                if other.id != dog.id
-                and (other.get_component(Transform).position - position).length
-                <= radius
+            nearby = self._spatial_index.query_radius(
+                position, radius, FLANKER_SPATIAL_MASK
             )
-        self._blackboard.set(_NEIGHBOR_COUNT_KEY, counts)
+            # The dog finds itself, at distance zero. Excluding it by id
+            # rather than subtracting one keeps the count right on a tick
+            # where `SpatialIndexSystem` has not run yet and the dog is not
+            # in the index at all.
+            counts[dog.id] = sum(1 for other_id in nearby if other_id != dog.id)
+        self._blackboard.set(NEIGHBOR_COUNT_KEY, counts)
 
         self._assign_plate_runners(flankers)
 

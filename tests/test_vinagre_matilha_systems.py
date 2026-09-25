@@ -17,7 +17,12 @@ from games.vinagre_matilha.components import (
     WebbedFeet,
 )
 from games.vinagre_matilha.events import GateOpenedEvent, JaguarCorneredEvent
-from games.vinagre_matilha.pack_behaviors import PLATE_ASSIGNEES_KEY, PLATE_POSITION_KEY
+from games.vinagre_matilha.level_builder import FLANKER_SPATIAL_MASK
+from games.vinagre_matilha.pack_behaviors import (
+    NEIGHBOR_COUNT_KEY,
+    PLATE_ASSIGNEES_KEY,
+    PLATE_POSITION_KEY,
+)
 from games.vinagre_matilha.systems import (
     CurrentZoneSystem,
     FlankerAssignmentSystem,
@@ -31,6 +36,7 @@ from pyguara.ai.flocking_system import FlockingAgent
 from pyguara.ai.pathfinding.flow_field_service import FlowFieldService
 from pyguara.ai.pathfinding.grid import GridGraph
 from pyguara.common.components import Transform
+from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Rect, Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
@@ -44,6 +50,7 @@ from pyguara.kits.pack import (
     threat_position,
 )
 from pyguara.physics.trigger_volume import TriggerVolume
+from pyguara.spatial import SpatialIndexSystem, SpatialTracked
 
 CELL_SIZE = 32.0
 
@@ -54,7 +61,40 @@ def _flanker(em: EntityManager, pos: Vector2, **agent_kwargs) -> Entity:
     entity.add_component(PackMember(role=PackRole.FLANKER, dog_id=entity.id))
     entity.add_component(DogState())
     entity.add_component(FlockingAgent(**agent_kwargs))
+    # As `level_builder._create_dog` does: the neighbour count comes from the
+    # shared SpatialHash, and an untracked dog is invisible to it.
+    entity.add_component(SpatialTracked(mask=FLANKER_SPATIAL_MASK))
     return entity
+
+
+class _PackTick:
+    """`FlankerAssignmentSystem` and the index it reads, in frame order.
+
+    `GameScene` registers `SpatialIndexSystem` just ahead of the assignment
+    system, because the assignment system queries the index rather than
+    scanning every dog. A test that built the assignment system alone would
+    see an empty index and report every dog as having no neighbours -- true
+    of the object under test, and false of the game.
+    """
+
+    def __init__(
+        self,
+        em: EntityManager,
+        blackboard: Blackboard,
+        flow_field: FlowFieldService,
+        jaguar_id: str,
+    ) -> None:
+        """Build both systems over a fresh index."""
+        self.index: SpatialHash[str] = SpatialHash()
+        self._index_system = SpatialIndexSystem(em, self.index, EventDispatcher())
+        self._system = FlankerAssignmentSystem(
+            em, blackboard, flow_field, jaguar_id, self.index
+        )
+
+    def update(self, dt: float) -> None:
+        """Tick the index, then the system that reads it."""
+        self._index_system.update(dt)
+        self._system.update(dt)
 
 
 def _vanguard(em: EntityManager, pos: Vector2) -> Entity:
@@ -81,9 +121,7 @@ class TestFlankerAssignmentSystem:
         jaguar = _jaguar(em, Vector2(200, 200))
         blackboard = Blackboard()
         graph = GridGraph(20, 20)
-        system = FlankerAssignmentSystem(
-            em, blackboard, FlowFieldService(graph), jaguar.id
-        )
+        system = _PackTick(em, blackboard, FlowFieldService(graph), jaguar.id)
 
         system.update(1 / 60)
 
@@ -94,7 +132,7 @@ class TestFlankerAssignmentSystem:
         jaguar = _jaguar(em, Vector2(200, 200))
         blackboard = Blackboard()
         flow_field = FlowFieldService(GridGraph(20, 20))
-        system = FlankerAssignmentSystem(em, blackboard, flow_field, jaguar.id)
+        system = _PackTick(em, blackboard, flow_field, jaguar.id)
 
         assert not flow_field.is_computed
         system.update(1 / 60)
@@ -105,7 +143,7 @@ class TestFlankerAssignmentSystem:
         jaguar = _jaguar(em, Vector2(300, 300))
         dogs = [_flanker(em, Vector2(100 + i * 20, 100)) for i in range(3)]
         blackboard = Blackboard()
-        system = FlankerAssignmentSystem(
+        system = _PackTick(
             em, blackboard, FlowFieldService(GridGraph(30, 30)), jaguar.id
         )
 
@@ -124,7 +162,7 @@ class TestFlankerAssignmentSystem:
             em, Vector2(100, 100), cohesion_weight=1.0, separation_weight=1.0
         )
         blackboard = Blackboard()
-        system = FlankerAssignmentSystem(
+        system = _PackTick(
             em, blackboard, FlowFieldService(GridGraph(30, 30)), jaguar.id
         )
 
@@ -151,7 +189,7 @@ class TestFlankerAssignmentSystem:
         plate.add_component(TriggerVolume())
         plate.add_component(PressurePlate(required_count=1, log_entity_id="log"))
         blackboard = Blackboard()
-        system = FlankerAssignmentSystem(
+        system = _PackTick(
             em, blackboard, FlowFieldService(GridGraph(50, 50)), jaguar.id
         )
 
@@ -173,13 +211,113 @@ class TestFlankerAssignmentSystem:
             PressurePlate(required_count=1, log_entity_id="log", opened=True)
         )
         blackboard = Blackboard()
-        system = FlankerAssignmentSystem(
+        system = _PackTick(
             em, blackboard, FlowFieldService(GridGraph(50, 50)), jaguar.id
         )
 
         system.update(1 / 60)
 
         assert blackboard.get(PLATE_ASSIGNEES_KEY) == frozenset()
+
+    def test_counts_only_the_flankers_inside_a_dog_s_neighbour_radius(self) -> None:
+        """The count `CallReinforcements` reads to decide a dog is isolated.
+
+        Nothing asserted this before, which is why the pairwise scan it used
+        to do could be replaced by a `SpatialHash` query with no test to
+        confirm the answers matched. Three dogs, deliberately asymmetric: a
+        close pair and one dog far enough out that the radius excludes it,
+        so a query that returned everything in the touched cells rather than
+        everything inside the radius would be caught here.
+        """
+        em = EntityManager()
+        jaguar = _jaguar(em, Vector2(900, 900))
+        radius = 110.0
+        near_a = _flanker(em, Vector2(0, 0), neighbor_radius=radius)
+        near_b = _flanker(em, Vector2(80, 0), neighbor_radius=radius)
+        loner = _flanker(em, Vector2(600, 0), neighbor_radius=radius)
+        blackboard = Blackboard()
+        system = _PackTick(
+            em, blackboard, FlowFieldService(GridGraph(40, 40)), jaguar.id
+        )
+
+        system.update(1 / 60)
+
+        counts = blackboard.get(NEIGHBOR_COUNT_KEY)
+        assert counts[near_a.id] == 1
+        assert counts[near_b.id] == 1
+        assert counts[loner.id] == 0, "the far dog has no neighbours in range"
+
+    def test_a_dog_does_not_count_itself(self) -> None:
+        """A lone dog reads zero, not one.
+
+        It sits in the index at distance zero from its own query, so the
+        radius test finds it. `CallReinforcements` checks for isolation, and
+        off-by-one here means no dog is ever isolated.
+        """
+        em = EntityManager()
+        jaguar = _jaguar(em, Vector2(900, 900))
+        alone = _flanker(em, Vector2(0, 0), neighbor_radius=110.0)
+        blackboard = Blackboard()
+        system = _PackTick(
+            em, blackboard, FlowFieldService(GridGraph(40, 40)), jaguar.id
+        )
+
+        system.update(1 / 60)
+
+        assert blackboard.get(NEIGHBOR_COUNT_KEY)[alone.id] == 0
+
+    def test_each_dog_s_own_radius_decides_its_count(self) -> None:
+        """`neighbor_radius` is per `FlockingAgent`, not one shared number.
+
+        Two dogs 150px apart, one with the reach to see the other and one
+        without -- so the counts have to disagree. A query that used any
+        single radius for the whole pack would make them agree.
+        """
+        em = EntityManager()
+        jaguar = _jaguar(em, Vector2(900, 900))
+        far_sighted = _flanker(em, Vector2(0, 0), neighbor_radius=200.0)
+        short_sighted = _flanker(em, Vector2(150, 0), neighbor_radius=100.0)
+        blackboard = Blackboard()
+        system = _PackTick(
+            em, blackboard, FlowFieldService(GridGraph(40, 40)), jaguar.id
+        )
+
+        system.update(1 / 60)
+
+        counts = blackboard.get(NEIGHBOR_COUNT_KEY)
+        assert counts[far_sighted.id] == 1
+        assert counts[short_sighted.id] == 0
+
+    def test_only_flankers_are_counted_even_when_something_else_is_indexed(
+        self,
+    ) -> None:
+        """What `FLANKER_SPATIAL_MASK` is for.
+
+        The old pairwise scan filtered by `PackRole` before comparing
+        positions; the mask replaces that filter. Today nothing else in this
+        demo is tracked, so dropping the mask would change no answer and no
+        test would notice -- which is exactly how a defensive filter rots.
+        So this puts a tracked non-flanker right beside the dog, under its
+        own bit, and asserts the count still ignores it.
+
+        The Vanguard stands there too, untracked, as `level_builder` leaves
+        it: it cannot be counted because it is not in the index at all.
+        """
+        em = EntityManager()
+        jaguar = _jaguar(em, Vector2(900, 900))
+        dog = _flanker(em, Vector2(0, 0), neighbor_radius=110.0)
+        _vanguard(em, Vector2(20, 0))
+        bystander = em.create_entity()
+        bystander.add_component(Transform(position=Vector2(30, 0)))
+        bystander.add_component(SpatialTracked(mask=FLANKER_SPATIAL_MASK << 1))
+        blackboard = Blackboard()
+        system = _PackTick(
+            em, blackboard, FlowFieldService(GridGraph(40, 40)), jaguar.id
+        )
+
+        system.update(1 / 60)
+
+        assert blackboard.get(NEIGHBOR_COUNT_KEY)[dog.id] == 0
 
 
 # ========== VanguardControlSystem ==========

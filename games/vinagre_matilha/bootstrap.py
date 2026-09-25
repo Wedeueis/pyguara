@@ -12,6 +12,7 @@ from pyguara.application.application import Application
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.common.spatial import SpatialHash
 from pyguara.config.manager import ConfigManager
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
@@ -75,6 +76,7 @@ def configure_game_container() -> DIContainer:
     container.register_singleton(InputManager, InputManager)
     container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]
     container.register_instance(ComponentRegistry, get_component_registry())
+    container.register_instance(SpatialHash, SpatialHash())
     container.register_instance(PrefabCache, PrefabCache())
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(ResourceManager, ResourceManager)

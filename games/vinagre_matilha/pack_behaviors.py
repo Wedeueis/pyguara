@@ -37,7 +37,13 @@ from pyguara.kits.pack import (
 _ISOLATION_THRESHOLD = 2
 _REINFORCE_THREAT_DISTANCE = 250.0
 
-_NEIGHBOR_COUNT_KEY = "pack_neighbor_count"
+NEIGHBOR_COUNT_KEY = "pack_neighbor_count"
+"""Blackboard key: each flanker's live neighbour count, by dog id.
+
+Written by `FlankerAssignmentSystem` every tick and read by
+`CallReinforcements` below. Shared from here rather than spelled out at both
+ends, the way the plate keys below already are -- the two copies of the
+literal were free to drift apart."""
 
 # Written each tick by FlankerAssignmentSystem when a stage has an unopened
 # PressurePlate: the world position to press it, and which dog ids are this
@@ -107,7 +113,7 @@ def check_and_call_reinforcements(context: AIContext) -> NodeStatus:
     if threat is None:
         return NodeStatus.FAILURE
 
-    neighbor_count = context.blackboard.get(_NEIGHBOR_COUNT_KEY, {}).get(
+    neighbor_count = context.blackboard.get(NEIGHBOR_COUNT_KEY, {}).get(
         context.entity.id, 0
     )
     distance = (_position(context) - threat).length
