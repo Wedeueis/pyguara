@@ -30,6 +30,7 @@ Registered between `SyntropicSystem` and `PlantGrowthSystem` (see
 
 from __future__ import annotations
 
+from games.quintal_cerrado import nutrients
 from games.quintal_cerrado.components import PlantComponent
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.plant_states import RECOVER_THRESHOLD
@@ -49,6 +50,13 @@ SPREAD_MIN_PRESSURE = 0.3
 
 MONOCULTURE_SPREAD = 1.5
 """Spread multiplier when source and target plants are the same species."""
+
+BIODIVERSITY_GUARD = 0.15
+"""How much each *additional* species growing around a cell takes out of
+the pressure reaching it."""
+
+MIN_BIODIVERSITY_GUARD = 0.5
+"""However mixed the neighbourhood, half the pressure still lands."""
 
 ORGANIC_DECAY = 0.5
 """Pressure lost in a day per unit of organic matter. Composted ground
@@ -160,6 +168,11 @@ class PestSystem:
                     rate = spread_rate
                     if source is not None and source.species_id == target.species_id:
                         rate *= MONOCULTURE_SPREAD
+                    # What the *receiving* cell does about it: rich
+                    # nitrogen invites pests in, calcium turns them away,
+                    # and a mixed neighbourhood resists them.
+                    rate *= nutrients.pest_susceptibility(self._grid.soil_at(neighbor))
+                    rate *= self._biodiversity_guard(neighbor)
                     deltas[neighbor] = (
                         deltas.get(neighbor, 0.0) + rate * pressure * days
                     )
@@ -174,6 +187,25 @@ class PestSystem:
             if delta < 0.0 and updated < _SNAP_TO_ZERO:
                 updated = 0.0
             soil.pest_pressure = updated
+
+    def _biodiversity_guard(self, cell: Cell) -> float:
+        """How much a mixed neighbourhood slows pests reaching `cell`.
+
+        The in-loop payoff for biodiversity, which until now only showed
+        up in the end-of-session score: every distinct species growing
+        around a cell takes a little more of the pressure out of what
+        arrives. A monoculture gets the opposite (`MONOCULTURE_SPREAD`),
+        so the two halves of the same idea now both pay.
+        """
+        species = {
+            plant.species_id
+            for neighbour in neighbors8(cell)
+            if self._grid.in_bounds(neighbour)
+            for plant in (self._plant_at(neighbour),)
+            if plant is not None
+        }
+        distinct = max(0, len(species) - 1)
+        return max(MIN_BIODIVERSITY_GUARD, 1.0 - BIODIVERSITY_GUARD * distinct)
 
     def _update_plants(self, days: float) -> None:
         for cell in self._grid.plant_at:

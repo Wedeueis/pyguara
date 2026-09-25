@@ -24,7 +24,10 @@ class SoilCell:
 
     soil_type: str = "raw_dirt"
     moisture: float = 0.3
-    nitrogen: float = 0.2
+    nitrogen: float = 0.35
+    phosphorus: float = 0.35
+    potassium: float = 0.35
+    calcium: float = 0.35
     organic_matter: float = 0.2
     shade_level: float = 0.0
     pest_pressure: float = 0.0
@@ -264,6 +267,11 @@ def water_cell(soil: SoilCell) -> bool:
     return True
 
 
+COMPOST_NUTRIENTS = 0.3
+"""Nitrogen and phosphorus one composting puts back. The player's way to
+feed the soil without waiting for a consortium to do it -- and the reason
+compost answers a worked-out bed as well as it answers an outbreak."""
+
 COMPOST_AMOUNT = 0.5
 """Organic matter a single compost application adds, capped at 1.0."""
 
@@ -277,7 +285,9 @@ SPRAY_ORGANIC_MATTER_LOSS = 0.15
 
 
 def compost_cell(soil: SoilCell) -> bool:
-    """Add organic matter to a cell, healing chemical damage once rich enough.
+    """Feed a cell: organic matter, nitrogen and phosphorus.
+
+    Healing chemical damage once rich enough.
 
     Args:
         soil: The cell to compost.
@@ -289,6 +299,8 @@ def compost_cell(soil: SoilCell) -> bool:
     if soil.organic_matter >= 1.0:
         return False
     soil.organic_matter = min(1.0, soil.organic_matter + COMPOST_AMOUNT)
+    soil.nitrogen = min(1.0, soil.nitrogen + COMPOST_NUTRIENTS)
+    soil.phosphorus = min(1.0, soil.phosphorus + COMPOST_NUTRIENTS)
     if (
         soil.is_chemically_degraded
         and soil.organic_matter >= COMPOST_HEALS_DEGRADATION_AT

@@ -24,10 +24,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from games.quintal_cerrado import nutrients
 from games.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
     PlantComponent,
     PlayerEconomy,
+    SoilCell,
     add_credits,
     grant_seed,
     specific_seed_key,
@@ -59,11 +61,14 @@ def sale_multiplier(plant: PlantComponent) -> float:
     return CHEMICAL_DISCOUNT if plant.is_chemical_boosted else ORGANIC_PREMIUM
 
 
-def sale_value(plant: PlantComponent) -> int:
+def sale_value(plant: PlantComponent, soil: SoilCell | None = None) -> int:
     """Whole Sementes `plant` sells for.
 
     Args:
         plant: The plant being sold.
+        soil: The cell it grew in, whose phosphorus adds to the price --
+            the one thing that nutrient governs. None ignores the soil,
+            which is what a caller with only a plant in hand wants.
 
     Returns:
         Its species' base price times `sale_multiplier`, rounded to a whole
@@ -72,7 +77,10 @@ def sale_value(plant: PlantComponent) -> int:
     species = SPECIES_TABLE.get(plant.species_id)
     if species is None:
         return 0
-    return max(1, round(species.base_price * sale_multiplier(plant)))
+    value = species.base_price * sale_multiplier(plant)
+    if soil is not None:
+        value *= nutrients.value_multiplier(soil)
+    return max(1, round(value))
 
 
 CREDITS = "credits"
@@ -147,7 +155,7 @@ def harvest_cell(
         grant_seed(economy, specific_seed_key(species_id), 1)
         result = HarvestResult(species_id, SPECIFIC_SEED, 1)
     else:
-        value = sale_value(plant)
+        value = sale_value(plant, grid.soil_at(cell))
         add_credits(economy, value)
         if plant.is_chemical_boosted:
             economy.chemical_sales += 1

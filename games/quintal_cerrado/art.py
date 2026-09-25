@@ -67,6 +67,12 @@ DEGRADED_TINT_STRENGTH = 0.4
 """How far chemically degraded soil shifts towards `DEGRADED_TINT` -- the
 PRD's "soil turns dusty red"."""
 
+TIRED_TINT = Color(150, 138, 124)
+TIRED_TINT_STRENGTH = 0.45
+"""How far fully worked-out ground washes towards grey. Enough to read as
+"this bed is spent" beside a fed one, not enough to be mistaken for the
+dusty red of chemical damage."""
+
 PEST = Roxo.C700
 PEST_TINT = Roxo.C500
 DYING_TINT = Color(112, 102, 92)
@@ -100,6 +106,7 @@ def draw_soil_tile(
     *,
     moisture: float = 0.0,
     degraded: bool = False,
+    vitality: float = 1.0,
 ) -> None:
     """Fill one cell with its soil kind's colour, plus a grid line.
 
@@ -119,10 +126,15 @@ def draw_soil_tile(
         degraded: `SoilCell.is_chemically_degraded`. Tints the tile dusty
             red, so the cost of a chemical spray stays visible in the
             ground long after the pests are gone.
+        vitality: `nutrients.vitality`, 0.0-1.0. Worked-out ground washes
+            out towards `TIRED_TINT`, so a bed that needs feeding can be
+            seen from across the plot rather than read a cell at a time.
     """
     base = _SOIL_COLORS.get(kind, RAW_DIRT)
     if degraded:
         base = base.lerp(DEGRADED_TINT, DEGRADED_TINT_STRENGTH)
+    if vitality < 1.0:
+        base = base.lerp(TIRED_TINT, (1.0 - vitality) * TIRED_TINT_STRENGTH)
     color = base.lerp(MOISTURE_TINT, moisture * MOISTURE_TINT_STRENGTH)
     renderer.draw_rect(rect, color)
 

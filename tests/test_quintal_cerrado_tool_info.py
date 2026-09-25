@@ -85,8 +85,8 @@ class TestWhatItSays:
         cagaita = " ".join(describe("plant_cagaita").lines)  # type: ignore[union-attr]
         baru = " ".join(describe("plant_baru").lines)  # type: ignore[union-attr]
 
-        assert "shade of a grown canopy" in cagaita
-        assert "shade of a grown canopy" not in baru
+        assert "under a grown canopy" in cagaita
+        assert "under a grown canopy" not in baru
 
     def test_only_pequi_claims_to_repel_pests(self) -> None:
         for species_id, species in SPECIES_TABLE.items():

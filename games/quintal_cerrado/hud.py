@@ -15,12 +15,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from games.quintal_cerrado import art, layout
+from games.quintal_cerrado import art, layout, nutrients
 from games.quintal_cerrado.components import (
     AutomationComponent,
     GardenConditions,
     PlantComponent,
     PlayerEconomy,
+    SoilCell,
 )
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.hud_widgets import (
@@ -58,9 +59,14 @@ PORTRAIT_FILL = Roxo.C900.lerp(Color(0, 0, 0), 0.25)
 PORTRAIT_EDGE = Sand.C500.lerp(Roxo.C900, 0.55)
 RUNG_OFF = Falcao.C400.lerp(Roxo.C900, 0.55)
 DEGRADED_TEXT = Color(206, 132, 96)
+SOIL_LOW = Sand.C500
+SOIL_RICH = Verdant.SAGE_100
 
 MESSAGE_SECONDS = 2.5
-TOAST_HEIGHT = 34
+TOAST_HEIGHT = 30
+"""The column is exactly tall enough for the inspector, the tool card and
+this, between the ribbon and the dock. Anything taller runs into the
+dock's BASE group."""
 
 _SOIL_NAMES = {
     "raw_dirt": "Raw dirt",
@@ -232,7 +238,7 @@ class ToolCard(CardPanel):
         tool: The tool id currently explained.
     """
 
-    LINE_HEIGHT = 15
+    LINE_HEIGHT = 14
     BODY_SIZE = 11
 
     def __init__(self, top: int) -> None:
@@ -273,8 +279,8 @@ class ToolCard(CardPanel):
         )
         self._draw_costs(renderer, info)
 
-        y = self.rect.y + 40
-        limit = self.rect.bottom - 6
+        y = self.rect.y + 36
+        limit = self.rect.bottom - 4
         for line in info.lines:
             for part in _wrap(renderer, line, self.rect.width - 24, self.BODY_SIZE):
                 if y + self.LINE_HEIGHT > limit:
@@ -399,6 +405,7 @@ class CellInspector:
             self.panel.show_plant(None, 0.0)
             self.panel.detail = ""
             self.panel.degraded = False
+            self.panel.soil = None
             for bar in self.bars.values():
                 bar.set_value(0.0)
             return
@@ -408,6 +415,7 @@ class CellInspector:
             f"({cell[0]},{cell[1]}) {_SOIL_NAMES.get(soil.soil_type, '?')}"
         )
         self.panel.degraded = soil.is_chemically_degraded
+        self.panel.soil = soil
         plant = self._plant_at(grid, entity_manager, cell)
         if plant is not None:
             species = SPECIES_TABLE.get(plant.species_id)
@@ -458,6 +466,7 @@ class _InspectorCard(CardPanel):
         detail: The line under the portrait -- a species and stage, or a
             structure's name.
         degraded: Whether to say the soil is chemically degraded.
+        soil: The hovered cell, for the soil chip. None hides it.
     """
 
     def __init__(self, position: Vector2, size: Vector2) -> None:
@@ -471,6 +480,7 @@ class _InspectorCard(CardPanel):
         self.plant: PlantComponent | None = None
         self.detail = ""
         self.degraded = False
+        self.soil: SoilCell | None = None
         self._elapsed = 0.0
 
     def show_plant(self, plant: PlantComponent | None, elapsed: float) -> None:
@@ -491,6 +501,7 @@ class _InspectorCard(CardPanel):
         renderer.draw_rect(box, PORTRAIT_EDGE, width=1, border_radius=6)
         self._draw_portrait(renderer, box)
         self._draw_ladder(renderer, box)
+        self._draw_soil(renderer)
         if self.detail:
             renderer.draw_text(
                 self.detail,
@@ -505,6 +516,27 @@ class _InspectorCard(CardPanel):
                 DEGRADED_TEXT,
                 11,
             )
+
+    def _draw_soil(self, renderer: UIRenderer) -> None:
+        """One chip for the ground's condition -- never four numbers.
+
+        What a player can act on is "this bed is short of nitrogen", not a
+        reading of each element. `nutrients.scarcest` picks the one worth
+        naming, and a well-fed cell says so in a word.
+        """
+        if self.soil is None:
+            return
+        short = nutrients.scarcest(self.soil)
+        text = f"low {short.short}" if short is not None else "soil in good heart"
+        color = SOIL_LOW if short is not None else SOIL_RICH
+        width, _ = renderer.get_text_size(text, 10)
+        draw_badge(
+            renderer,
+            text,
+            Vector2(self.rect.right - width - 30, self.rect.y + 8),
+            icon_id="humus",
+            color=color,
+        )
 
     def _draw_portrait(self, renderer: UIRenderer, box: Rect) -> None:
         if self.plant is None:

@@ -35,7 +35,8 @@ there never was one to begin with.
 own reference wiring does it -- a `FileStorageBackend` plus a
 `MigrationManager` at the schema's version -- and, unlike there, is actually
 used: `scenes.GardenScene` saves and loads through it (see
-`persistence_schema.py`). `FileStorageBackend.base_path` is CWD-relative, not an OS user-data
+`persistence_schema.py`), with `MIGRATIONS` registered so a garden saved
+by an older build is carried forward rather than refused. `FileStorageBackend.base_path` is CWD-relative, not an OS user-data
 directory (a known engine gap, tracked as issue #43) -- fine for a demo
 run from the repo root via `uv run python -m games.quintal_cerrado.main`,
 but not a real per-user save location.
@@ -43,7 +44,7 @@ but not a real per-user save location.
 
 from __future__ import annotations
 
-from games.quintal_cerrado.persistence_schema import SCHEMA_VERSION
+from games.quintal_cerrado.persistence_schema import MIGRATIONS, SCHEMA_VERSION
 from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock
@@ -179,6 +180,8 @@ def configure_game_container() -> DIContainer:
 
     storage = FileStorageBackend(base_path=SAVE_DIRECTORY)
     migration_manager = MigrationManager(current_version=SCHEMA_VERSION)
+    for migration in MIGRATIONS:
+        migration_manager.register(migration)
     persistence = PersistenceManager(storage, migration_manager)
     container.register_instance(PersistenceManager, persistence)
 
