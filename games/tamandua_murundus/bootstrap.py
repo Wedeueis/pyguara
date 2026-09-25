@@ -24,47 +24,19 @@ the vignette is a lens, not a light, and belongs over everything.
 
 from __future__ import annotations
 
-from pyguara.application.application import Application
-from pyguara.application.clock import Clock
-from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
-from pyguara.common.spatial import SpatialHash
+from pyguara.application.bootstrap import create_container
 from pyguara.common.types import Color
-from pyguara.config.manager import ConfigManager
+from pyguara.config.types import GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.backends.moderngl import (
-    GLTextureFactory,
-    GLUIRenderer,
-    ModernGLRenderer,
-    PygameGLWindow,
-)
-from pyguara.graphics.backends.pygame.clock import PygameClock
-from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.pipeline.passes import (
     CompositePass,
     FinalPass,
     PostProcessPass,
-    WorldPass,
 )
-from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 from pyguara.graphics.vfx.effects.vignette import VignetteEffect
 from pyguara.graphics.vfx.post_process import PostProcessStack
-from pyguara.graphics.window import Window, WindowConfig
-from pyguara.input.backends.pygame_backend import PygameInputBackend
-from pyguara.input.manager import InputManager
-from pyguara.input.protocols import IInputBackend
-from pyguara.log.manager import LogManager
-from pyguara.log.types import LogLevel
-from pyguara.prefabs.loader import PrefabCache
-from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
-from pyguara.resources.manager import ResourceManager
-from pyguara.scene.manager import SceneManager
-from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.systems.manager import SystemManager
-from pyguara.ui.manager import UIManager
 from pyguara.ui.theme import UITheme, set_theme
 from pyguara.ui.types import ColorScheme
 
@@ -100,56 +72,49 @@ def _install_theme() -> None:
     )
 
 
+def _configure(config: GameConfig) -> None:
+    """Select the ModernGL backend, and name the window.
+
+    Called before the window exists, which is the only point where
+    `backend` still decides which one gets built.
+
+    Args:
+        config: The loaded configuration, to adjust in place.
+    """
+    config.display.title = "Tamanduá: O Guardião dos Murundus"
+    config.display.screen_width = WINDOW_WIDTH
+    config.display.screen_height = WINDOW_HEIGHT
+    config.display.backend = RenderingBackend.MODERNGL
+
+
 def configure_game_container() -> DIContainer:
-    """Initialize and configure the DI container for Tamanduá."""
-    container = DIContainer()
-    container.register_instance(DIContainer, container)
+    """Build the engine container, then this demo's render chain.
 
-    event_dispatcher = EventDispatcher()
-    container.register_instance(EventDispatcher, event_dispatcher)
+    The light map is 16-bit float because `RenderGraph` declares the whole
+    chain that way (`pipeline/buffers.py`). An 8-bit map clamps at 1.0, so
+    no light could brighten anything past what was drawn, and a swarm that
+    never over-exposes never crosses the bloom threshold -- which is the
+    entire look of the second half of this run.
 
-    config_manager = ConfigManager(event_dispatcher)
-    config_manager.load()
-    container.register_instance(ConfigManager, config_manager)
+    Returns:
+        The configured container.
+    """
+    container = create_container(_configure)
+    _install_theme()
 
-    log_manager = LogManager(event_dispatcher)
-    log_manager.configure(level=LogLevel.INFO, console=True)
-    container.register_instance(LogManager, log_manager)
-
-    win_config = WindowConfig(
-        title="Tamanduá: O Guardião dos Murundus",
-        screen_width=WINDOW_WIDTH,
-        screen_height=WINDOW_HEIGHT,
-    )
-
-    gl_window = PygameGLWindow()
-    window = Window(win_config, gl_window)
-    window.create()
-    container.register_instance(Window, window)
-
-    ctx = gl_window.get_screen()
-
-    renderer = ModernGLRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-    container.register_instance(IRenderer, renderer)  # type: ignore[type-abstract]
-    container.register_instance(  # type: ignore[type-abstract]
-        UIRenderer, GLUIRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-    )
-    container.register_instance(TextureFactory, GLTextureFactory(ctx))  # type: ignore[type-abstract]
-
-    render_graph = RenderGraph(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
+    graph = container.get(RenderGraph)
+    ctx = graph.ctx
 
     # The graph owns the framebuffer manager and every pass resolves
     # through it; anything built here has to share it or it allocates a
     # second, parallel set of buffers the graph never looks at.
-    fbo_manager = render_graph.fbo_manager
-    container.register_instance(FramebufferManager, fbo_manager)
+    fbo_manager = graph.fbo_manager
 
-    # The light map is 16-bit float because `RenderGraph` declares the
-    # whole chain that way (`pipeline/buffers.py`) -- this bootstrap used to
-    # claim it by hand. An 8-bit map clamps at 1.0, so no light could
-    # brighten anything past what was drawn, and a swarm that never
-    # over-exposes never crosses the bloom threshold, which is the entire
-    # look of the second half of this run.
+    # The engine's default tail blits "world" straight to the screen. This
+    # demo composites and post-processes first, so its FinalPass reads a
+    # different buffer and replaces that one. WorldPass, identical to the
+    # one this demo would have built, stays.
+    graph.remove_pass("final")
 
     stack = PostProcessStack(ctx, fbo_manager)
     stack.add_effect(
@@ -163,30 +128,8 @@ def configure_game_container() -> DIContainer:
     )
     stack.add_effect(VignetteEffect(ctx, intensity=0.52, radius=0.85, softness=0.6))
 
-    render_graph.add_pass(WorldPass(renderer))
-    render_graph.add_pass(CompositePass(ctx))
-    render_graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
-    render_graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
-
-    container.register_instance(RenderGraph, render_graph)
-
-    container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
-    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
-    container.register_singleton(InputManager, InputManager)
-    container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]
-    container.register_instance(ComponentRegistry, get_component_registry())
-    container.register_instance(PrefabCache, PrefabCache())
-    container.register_singleton(SceneManager, SceneManager)
-    container.register_singleton(ResourceManager, ResourceManager)
-    container.register_singleton(UIManager, UIManager)
-    _install_theme()
-    container.register_singleton(SystemManager, SystemManager)
-    container.register_singleton(CoroutineManager, CoroutineManager)
-
-    # The tongue's target search and (from D4) the mote magnet both query
-    # this rather than scanning every insect.
-    container.register_instance(SpatialHash, SpatialHash())
-
-    container.register_singleton(Application, Application)
+    graph.add_pass(CompositePass(ctx))
+    graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
+    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
 
     return container
