@@ -37,7 +37,7 @@
 
 * **Implementation Steps:**
 1. **Define Components:** Create `Transform(Component)` and `Sprite(Component)`.
-2. **Create Systems:** Implement a `MovementSystem` that iterates over entities with `Transform`.
+2. **Create Systems:** Implement a `MovementSystem` that iterates over entities with `Transform`, and register it with the scene's `SystemManager` -- being ticked in priority order by the scene is what makes it a System rather than a class with an `update()` method.
 3. **Query Optimization:** Explain and implement `QueryCache` to avoid  lookup costs in Python.
 4. **Entity Creation:** Use `EntityManager.create_entity()` to spawn a test object.
 
@@ -77,12 +77,17 @@
 
 
 * **Implementation Steps:**
-1. **Binding:** Map hardware keys to abstract actions: `InputMap.bind("jump", Key.SPACE)`.
-2. **Dispatching:** Create a custom `JumpEvent`.
-3. **Listening:** Subscribe `PlayerSystem` to `JumpEvent`.
+1. **Binding:** Map hardware keys to abstract actions -- `HOLD` for the four directions, `PRESS` for the dash.
+2. **Dispatching:** Create a custom `DashEvent`. Note the split: a *held* direction becomes state on a component, a *pressed* dash becomes an event.
+3. **Listening:** Subscribe `PlayerSystem` to `DashEvent`.
 
 
-* **Outcome:** The player sprite jumps only when the spacebar is pressed, using decoupled events rather than direct polling in the update loop.
+* **Outcome:** The player sprite moves while a direction is held and hops on the spacebar, using decoupled events rather than direct polling in the update loop.
+
+> Deliberately **no physics**: the square moves because a key is held, with no
+> gravity, velocity integration or collision. Module 5 is the first place a
+> body moves under forces, and an ad-hoc version here would teach the wrong
+> answer one module early.
 
 ### Module 5: Physics Integration
 

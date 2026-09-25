@@ -215,79 +215,116 @@ class ECSScene(Scene):
 
 PyGuara decouples player input from the engine loop using semantic action bindings and a pub/sub event dispatcher.
 
-1. **InputManager**: Maps keyboard, mouse, or gamepad inputs (e.g. `SPACE`) to virtual actions (e.g. `"jump"`).
+1. **InputManager**: Maps keyboard, mouse, or gamepad inputs (e.g. `SPACE`) to virtual actions (e.g. `"dash"`).
 2. **EventDispatcher**: Broadcasts event payloads across systems. Systems can subscribe to actions without holding references to windows or input devices.
+
+There is no physics in this part. The square moves because you are holding a
+key, full stop — `Part 4` below is where a body first moves under forces, and
+doing a rough version of it here would only teach the wrong answer one section
+early.
 
 ### 1. Registering Action Bindings
 Inside your scene's `on_enter`:
 ```python
 from pyguara.input.manager import InputManager
 from pyguara.input.types import InputDevice, ActionType
-from pyguara.input.keys import SPACE
+from pyguara.input.keys import SPACE, A, D, S, W
 
 input_manager = self.container.get(InputManager)
-# Register a digital action "jump" that triggers on PRESS
-input_manager.register_action("jump", ActionType.PRESS)
-# Bind keyboard SPACE key to trigger "jump"
-input_manager.bind_input(InputDevice.KEYBOARD, SPACE, "jump")
+
+# HOLD for the directions: true for as long as the key is down.
+for action in ("move_up", "move_down", "move_left", "move_right"):
+    input_manager.register_action(action, ActionType.HOLD)
+# PRESS for the dash: it happens once, on the way down.
+input_manager.register_action("dash", ActionType.PRESS)
+
+input_manager.bind_input(InputDevice.KEYBOARD, W, "move_up")
+input_manager.bind_input(InputDevice.KEYBOARD, S, "move_down")
+input_manager.bind_input(InputDevice.KEYBOARD, A, "move_left")
+input_manager.bind_input(InputDevice.KEYBOARD, D, "move_right")
+input_manager.bind_input(InputDevice.KEYBOARD, SPACE, "dash")
 ```
 
 ### 2. Translating Inputs to Events (`systems.py`)
-We create an `InputBridgeSystem` that intercepts input mappings and dispatches game-specific actions (like a `JumpEvent`):
+We create an `InputBridgeSystem` that intercepts input mappings and turns them
+into game-specific results. Note that it does **two different things**, and the
+difference matters:
+
+* a *held* direction becomes **state** on a component — "am I still holding
+  left" is a question about now, not about a moment;
+* a *pressed* dash becomes an **event** — it happened once, and anything that
+  cares should hear about it once.
+
+Reaching for an event where state was wanted (or the reverse) is the commonest
+way this wiring goes wrong.
 
 ```python
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.input.events import OnActionEvent
-from games.input_events.events import JumpEvent
+from games.input_events.events import DashEvent
 
 class InputBridgeSystem:
-    def __init__(self, dispatcher: EventDispatcher, player_id: str):
+    def __init__(self, entity_manager, dispatcher: EventDispatcher, player_id: str):
+        self._em = entity_manager
         self._dispatcher = dispatcher
         self._player_id = player_id
+        self._held: set[str] = set()
         # Subscribe to standard engine action events
         self._dispatcher.subscribe(OnActionEvent, self.on_action)
 
     def on_action(self, event: OnActionEvent) -> None:
-        # Check if the "jump" key action has been triggered
-        if event.action_name == "jump" and event.value > 0.5:
-            # Broadcast our gameplay-specific event
-            self._dispatcher.dispatch(JumpEvent(self._player_id, force=400.0))
+        pressed = event.value > 0.5
+
+        if event.action_name in _DIRECTIONS:   # state
+            if pressed:
+                self._held.add(event.action_name)
+            else:
+                self._held.discard(event.action_name)
+            self._write_direction()
+            return
+
+        if event.action_name == "dash" and pressed:   # event
+            self._dispatcher.dispatch(DashEvent(self._player_id, distance=80.0))
 ```
 
 ### 3. Handling Gameplay Events in PlayerSystem
-The `PlayerSystem` listens for `JumpEvent` and applies gravity:
+`PlayerSystem` knows nothing about keys or actions — only about the `Movement`
+component and the gameplay event. That is what lets the same system be driven
+by a gamepad, a replay or an AI without a line changing here:
 
 ```python
 class PlayerSystem:
     def __init__(self, entity_manager: EntityManager, dispatcher: EventDispatcher):
         self._em = entity_manager
-        dispatcher.subscribe(JumpEvent, self.on_jump)
+        dispatcher.subscribe(DashEvent, self.on_dash)
 
-    def on_jump(self, event: JumpEvent) -> None:
+    def on_dash(self, event: DashEvent) -> None:
+        """One instant hop the way the player is facing."""
         entity = self._em.get_entity(event.entity_id)
-        if entity and entity.has_component(Velocity):
-            vel = entity.get_component(Velocity)
-            # Instantly apply upward force (negative Y is up in 2D coordinate system)
-            vel.value = Vector2(vel.value.x, -event.force)
+        if entity is None or not entity.has_component(Movement):
+            return
+        movement = entity.get_component(Movement)
+        direction = movement.direction
+        if direction.length == 0:
+            direction = Vector2(1, 0)   # standing still: dash right
+        transform = entity.get_component(Transform)
+        transform.position = transform.position + direction * event.distance
 
     def update(self, dt: float) -> None:
-        gravity = 800.0
-        floor_y = 500.0
-
-        for entity in self._em.get_entities_with(Transform, Velocity):
-            trans = entity.get_component(Transform)
-            vel = entity.get_component(Velocity)
-
-            # Apply gravity acceleration to velocity
-            vel.value = Vector2(vel.value.x, vel.value.y + gravity * dt)
-            # Update coordinate position
-            trans.position = trans.position + (vel.value * dt)
-
-            # Simple ground alignment check
-            if trans.position.y > floor_y:
-                trans.position = Vector2(trans.position.x, floor_y)
-                vel.value = Vector2(vel.value.x, 0)
+        for entity in self._em.get_entities_with(Transform, Movement):
+            transform = entity.get_component(Transform)
+            movement = entity.get_component(Movement)
+            # Position, straight from intent. Nothing is integrated here --
+            # `dt` is only what makes a held key cover the same distance per
+            # second on any machine.
+            transform.position = transform.position + movement.direction * (
+                movement.speed * dt
+            )
 ```
+
+`PlayerSystem` is registered with the scene's own `SystemManager`
+(`self.system_manager.register(...)`), so it is ticked for you every fixed
+step — the scene's `update()` has nothing to call by hand.
 
 ---
 
