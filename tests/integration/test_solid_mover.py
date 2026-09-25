@@ -280,3 +280,33 @@ class TestPushableCrate:
         character_right = character.get_component(Transform).position.x + 12.0
         crate_left = crate_x - 20.0
         assert character_right <= crate_left + 0.5
+
+    def test_a_head_bump_does_not_shove_a_crate_upward(self) -> None:
+        """Jumping into a crate's underside must leave the crate where it is.
+
+        `hit_y` fires on either a landing or a head-bump, and the leftover
+        motion handed to `_push_if_pushable` carries the sign of the move
+        that was blocked. So a character bonking its head under a crate
+        used to ask `SolidMover` to shove that crate *upward* -- off
+        whatever it was resting on -- by however much of the jump the
+        ceiling ate. Measured at 0.67px per bump, and it does not come
+        back down: a `MovingSolid` is KINEMATIC, so gravity never undoes it.
+        """
+        world, platformer, character = self._world()
+        # Directly over the character's head (`_world` stands it at x=350),
+        # bottom face at 410 -- 30px of clearance above the character's top
+        # at 440, so the jump is genuinely in flight when it connects.
+        crate = world.solid(Vector2(350, 390), [40.0, 40.0], pushable=True)
+        world.build()
+        crate_y = crate.get_component(Transform).position.y
+
+        controller = character.get_component(PlatformerController)
+        for frame in range(90):
+            controller.pending_input = PlatformerInput(jump=frame == 0)
+            world.physics.update(DT)
+            platformer.update(DT)
+
+        assert character.get_component(Transform).position.y == pytest.approx(
+            FLOOR_TOP - 20, abs=0.5
+        ), "the character should have bumped its head and fallen back to the floor"
+        assert crate.get_component(Transform).position.y == pytest.approx(crate_y)

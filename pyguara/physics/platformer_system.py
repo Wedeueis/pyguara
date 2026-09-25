@@ -493,10 +493,23 @@ class PlatformerSystem:
                 entity_id,
             ):
                 pushed = True
-            if result.hit_y and self._push_if_pushable(
-                result.blocking_y,
-                Vector2(0, delta.y - (result.position.y - origin.y)),
-                entity_id,
+            # Downward blocks only. `hit_y` fires on either a landing
+            # (`delta.y > 0`) or a head-bump (`delta.y < 0`), and the
+            # leftover motion below carries the sign of whichever it was --
+            # so a character bonking its head under a crate asked
+            # `SolidMover` to shove that crate *upward*, off whatever it was
+            # resting on, and a KINEMATIC solid has no gravity to undo it.
+            # Nothing about a head-bump makes a crate rise. The horizontal
+            # branch has no such ambiguity: a push there is always away
+            # from the character.
+            if (
+                result.hit_y
+                and delta.y > 0
+                and self._push_if_pushable(
+                    result.blocking_y,
+                    Vector2(0, delta.y - (result.position.y - origin.y)),
+                    entity_id,
+                )
             ):
                 pushed = True
             if pushed:
