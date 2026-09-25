@@ -58,11 +58,52 @@ class PygameBackend:
         rotation: float = 0.0,
         scale: Vector2 = Vector2(1, 1),
     ) -> None:
-        """Draw a single texture immediately (Unbatched)."""
+        """Draw a single texture immediately, centred on `position`.
+
+        Honours `rotation` and `scale`, and treats a negative scale on
+        either axis as a flip -- `IRenderer.draw_texture`'s contract, and
+        what the ModernGL backend has always done. This implementation
+        used to ignore both and blit top-left, so the same call put a
+        sprite in a different place at a different size depending on
+        which backend was running.
+
+        Scales and rotates the same way `render_batch` already does --
+        `pygame.transform.scale` and `.rotate`, which are
+        nearest-neighbour. The two paths are the same backend and must
+        not filter the same texture differently, and nearest is what
+        `loaders.py` tells the world pygame does ("pygame uses nearest by
+        default") when it drops a `TextureMeta.filter` on the floor.
+
+        Untransformed draws still take the plain blit: that is every
+        `draw_text` in the game, and transforming an unrotated, unscaled
+        surface is a copy for nothing.
+        """
         surf = texture.native_handle
-        # Note: If you need rotation/scale here, you'd use pygame.transform
-        # For raw speed, we assume pre-transformed or handle it elsewhere
-        self._screen.blit(surf, (position.x, position.y))
+        flip_x, flip_y = scale.x < 0, scale.y < 0
+        if flip_x or flip_y:
+            surf = pygame.transform.flip(surf, flip_x, flip_y)
+        factor_x, factor_y = abs(scale.x), abs(scale.y)
+
+        if factor_x != 1.0 or factor_y != 1.0:
+            surf = pygame.transform.scale(
+                surf,
+                (
+                    max(1, round(surf.get_width() * factor_x)),
+                    max(1, round(surf.get_height() * factor_y)),
+                ),
+            )
+        if rotation:
+            # Negated, as in `render_batch`: pygame turns counter-clockwise
+            # for a positive angle, and the GL backend's rotation matrix
+            # turns clockwise in the same y-down screen space.
+            surf = pygame.transform.rotate(surf, -rotation)
+
+        # Centred, not top-left. A rotation about a corner is almost never
+        # what a caller means, and the GL path already centres -- see its
+        # own `draw_text`, which shifts by half the glyph run to undo it.
+        self._screen.blit(
+            surf, surf.get_rect(center=(int(position.x), int(position.y)))
+        )
 
     def render_batch(self, batch: RenderBatch) -> None:
         """Optimized method to draw many instances of the same texture.

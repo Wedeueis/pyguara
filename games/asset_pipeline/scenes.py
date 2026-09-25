@@ -60,7 +60,9 @@ class AssetScene(Scene):
             transform = entity.get_component(Transform)
             sprite = entity.get_component(Sprite)
 
-            # Draw texture at position
+            # `draw_texture` centres on the position it is given, so
+            # the transform *is* the middle of the sprite -- not its
+            # top-left corner.
             world_renderer.draw_texture(
                 sprite.texture,
                 transform.position,
