@@ -1,69 +1,35 @@
 """Mourisco: Ressonância - Bootstrap.
 
-The only demo in this repo that runs on the **ModernGL** backend, because
-it is the only one whose whole premise is lighting: a pitch-black cave
-where an echolocation pulse is the light source.
+Render pipeline, in execution order:
 
-That also makes it the first place the engine's lighting pipeline is
-assembled end to end. `pyguara/application/bootstrap.py` only ever builds
-`WorldPass -> FinalPass`; `LightPass`, `CompositePass` and
-`PostProcessPass` existed and were unit-tested in isolation but nothing
-had ever strung them together, so this wiring is new:
-
-    WorldPass      -- draw the cave into the "world" FBO
-    LightPass      -- accumulate lights into "lightmap", over ambient
-    PulsePass      -- add the expanding wavefront rings on top of it
-    CompositePass  -- world * lightmap -> "composite"
+    WorldPass      -- the cave and its occupants
+    LightPass      -- inserted by `attach_lighting()` once a scene exists
+    PulsePass      -- the echolocation rings, added onto the light map
+    CompositePass  -- world x lightmap -> "composite"
     PostProcessPass-- bloom the bright rings -> "post_processed"
     FinalPass      -- blit to the screen
 
-Note the pulse rings are injected into the *lightmap*, before compositing,
-so they light the cave rather than merely drawing over it.
+`create_container()` wires everything else, and gives this demo a graph
+that already holds `WorldPass` and a `FinalPass` reading straight from
+"world". Only the tail is replaced: this chain ends somewhere else.
 """
 
 from __future__ import annotations
 
 from games.mourisco_ressonancia.pulse_pass import PulsePass
-from pyguara.application.application import Application
-from pyguara.application.clock import Clock
-from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
-from pyguara.config.manager import ConfigManager
+from pyguara.application.bootstrap import create_container
+from pyguara.config.types import GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.backends.moderngl import (
-    GLTextureFactory,
-    GLUIRenderer,
-    ModernGLRenderer,
-    PygameGLWindow,
-)
-from pyguara.graphics.backends.pygame.clock import PygameClock
 from pyguara.graphics.lighting.light_system import LightingSystem
-from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.pipeline.passes import (
     CompositePass,
     FinalPass,
     LightPass,
     PostProcessPass,
-    WorldPass,
 )
-from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 from pyguara.graphics.vfx.post_process import PostProcessStack
-from pyguara.graphics.window import Window, WindowConfig
-from pyguara.input.backends.pygame_backend import PygameInputBackend
-from pyguara.input.manager import InputManager
-from pyguara.input.protocols import IInputBackend
-from pyguara.log.manager import LogManager
-from pyguara.log.types import LogLevel
-from pyguara.prefabs.loader import PrefabCache
-from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
-from pyguara.resources.manager import ResourceManager
-from pyguara.scene.manager import SceneManager
-from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.systems.manager import SystemManager
-from pyguara.ui.manager import UIManager
 
 WINDOW_WIDTH = 960
 WINDOW_HEIGHT = 640
@@ -76,57 +42,50 @@ BLOOM_INTENSITY = 1.5
 BLOOM_BLUR_PASSES = 3
 
 
+def _configure(config: GameConfig) -> None:
+    """Select the ModernGL backend, and name the window.
+
+    Called before the window exists, which is the only point where
+    `backend` still decides which one gets built.
+
+    Args:
+        config: The loaded configuration, to adjust in place.
+    """
+    config.display.title = "Mourisco: Ressonância -- Master the Mix!"
+    config.display.screen_width = WINDOW_WIDTH
+    config.display.screen_height = WINDOW_HEIGHT
+    config.display.backend = RenderingBackend.MODERNGL
+
+
 def configure_game_container() -> DIContainer:
-    """Initialize and configure the DI container for Mourisco: Ressonância."""
-    container = DIContainer()
-    container.register_instance(DIContainer, container)
+    """Build the engine container, then this demo's render chain.
 
-    event_dispatcher = EventDispatcher()
-    container.register_instance(EventDispatcher, event_dispatcher)
+    Nothing here touches pymunk: movement is a hand-rolled AABB/grid
+    stepper against `CaveLayout` (see `systems.py`'s `PlayerController`)
+    for tight platformer feel, and no entity in this demo carries a
+    `RigidBody`. The engine registers an `IPhysicsEngine` regardless --
+    unused and never ticked, since no scene builds a `PhysicsSystem`.
 
-    config_manager = ConfigManager(event_dispatcher)
-    config_manager.load()
-    config_manager.config.physics.gravity_y = 1500.0
-    container.register_instance(ConfigManager, config_manager)
+    Returns:
+        The configured container.
+    """
+    container = create_container(_configure)
 
-    log_manager = LogManager(event_dispatcher)
-    log_manager.configure(level=LogLevel.INFO, console=True)
-    container.register_instance(LogManager, log_manager)
+    graph = container.get(RenderGraph)
+    ctx = graph.ctx
 
-    win_config = WindowConfig(
-        title="Mourisco: Ressonância -- Master the Mix!",
-        screen_width=WINDOW_WIDTH,
-        screen_height=WINDOW_HEIGHT,
-    )
-    gl_window = PygameGLWindow()
-    window = Window(win_config, gl_window)
-    window.create()
-    container.register_instance(Window, window)
+    # The graph's own manager. Anything that allocates buffers -- the bloom
+    # effect, the post-process stack -- has to share it, or it gets a
+    # parallel set the graph never looks at.
+    fbo_manager = graph.fbo_manager
 
-    ctx = gl_window.get_screen()
+    # The engine's default tail blits "world" straight to the screen. This
+    # demo has four passes to run first and ends on a different buffer, so
+    # its FinalPass replaces that one. WorldPass, which is identical to
+    # what this demo would have built, stays.
+    graph.remove_pass("final")
 
-    renderer = ModernGLRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-    container.register_instance(IRenderer, renderer)  # type: ignore[type-abstract]
-    container.register_instance(  # type: ignore[type-abstract]
-        UIRenderer, GLUIRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-    )
-    container.register_instance(TextureFactory, GLTextureFactory(ctx))  # type: ignore[type-abstract]
-
-    # The lighting system is scene-agnostic but needs an EntityManager,
-    # which is per-scene, so the scene builds its own and hands it to the
-    # passes registered here via `set_lighting_system`.
-    render_graph = RenderGraph(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-
-    # The graph builds its own framebuffer manager, and the passes resolve
-    # every buffer through that one. Anything else built here -- the bloom
-    # effect, the post-process stack -- has to share it, or it allocates a
-    # second, parallel set of buffers that the graph never looks at.
-    fbo_manager = render_graph.fbo_manager
-    container.register_instance(FramebufferManager, fbo_manager)
-
-    world_pass = WorldPass(renderer)
     pulse_pass = PulsePass(ctx)
-    composite_pass = CompositePass(ctx)
     bloom = BloomEffect(
         ctx,
         fbo_manager,
@@ -136,37 +95,14 @@ def configure_game_container() -> DIContainer:
     )
     stack = PostProcessStack(ctx, fbo_manager)
     stack.add_effect(bloom)
-    post_pass = PostProcessPass(stack, input_fbo_name="composite")
-    final_pass = FinalPass(ctx, input_fbo_name="post_processed")
 
-    render_graph.add_pass(world_pass)
-    render_graph.add_pass(pulse_pass)
-    render_graph.add_pass(composite_pass)
-    render_graph.add_pass(post_pass)
-    render_graph.add_pass(final_pass)
+    graph.add_pass(pulse_pass)
+    graph.add_pass(CompositePass(ctx))
+    graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
+    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
 
-    container.register_instance(RenderGraph, render_graph)
-    container.register_instance(WorldPass, world_pass)
     container.register_instance(PulsePass, pulse_pass)
     container.register_instance(BloomEffect, bloom)
-
-    container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
-    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
-    container.register_singleton(InputManager, InputManager)
-    container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]
-    container.register_instance(ComponentRegistry, get_component_registry())
-    container.register_instance(PrefabCache, PrefabCache())
-    container.register_singleton(SceneManager, SceneManager)
-    container.register_singleton(ResourceManager, ResourceManager)
-    container.register_singleton(UIManager, UIManager)
-    container.register_singleton(SystemManager, SystemManager)
-    container.register_singleton(CoroutineManager, CoroutineManager)
-
-    # No IPhysicsEngine/CollisionSystem here: movement is a hand-rolled
-    # AABB/grid stepper against CaveLayout (see systems.py's PlayerController)
-    # for tight platformer feel, and nothing else in this demo touches
-    # RigidBody/pymunk.
-    container.register_singleton(Application, Application)
 
     return container
 
