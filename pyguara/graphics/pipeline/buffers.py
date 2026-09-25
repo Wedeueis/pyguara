@@ -24,9 +24,12 @@ POST_PROCESSED_FBO_NAME = "post_processed"
 HDR_DTYPE = "f2"
 """16-bit float, so a value above 1.0 survives to be tonemapped.
 
-Nothing in the chain produces one yet except the light map -- re-enabling the
-Reinhard tonemap in `bloom_composite.frag`, and re-tuning the demos that were
-lit against a clamped pipeline, is deliberately a separate change.
+`bloom_composite.frag` is where it is tonemapped: a knee at 0.8, identity
+below and asymptotic to 1.0 above. That choice is what let the range be
+brought in without re-tuning the demos lit against the old clamped
+pipeline -- a plain Reinhard maps the whole scale, and would have pulled
+every mid-tone in `tamandua_murundus` and `mourisco_ressonancia` down with
+it. See `tests/integration/test_bloom_tonemap_pixels.py`.
 """
 
 STANDARD_CHAIN: tuple[str, ...] = (
