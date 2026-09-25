@@ -30,7 +30,7 @@ _SIZE = 64
 
 
 @pytest.fixture
-def bare_ctx() -> Iterator[Any]:
+def bare_ctx(isolated_gl_ctx: Any) -> Any:
     """A standalone GL context of this module's own, never the shared one.
 
     Function-scoped and untouched on purpose. These tests are *about* the
@@ -38,16 +38,13 @@ def bare_ctx() -> Iterator[Any]:
     session-scoped, so doing that there would leak into every other GL
     test. A fresh context per test is also the only way to observe what a
     renderer sets up on a context nothing has configured.
+
+    This used to create the context itself, which broke every GL module
+    that ran after this one: releasing a standalone context leaves no
+    context current at all, so the shared `gl_ctx` stopped working. See
+    `isolated_gl_ctx` in `tests/conftest.py`, which owns that hazard now.
     """
-    moderngl = pytest.importorskip("moderngl")
-    try:
-        ctx = moderngl.create_standalone_context()
-    except Exception as exc:  # pragma: no cover - depends on the machine
-        pytest.skip(f"no standalone GL context available: {exc}")
-    try:
-        yield ctx
-    finally:
-        ctx.release()
+    return isolated_gl_ctx
 
 
 class _HalfAlphaWhite:

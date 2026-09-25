@@ -59,6 +59,47 @@ def gl_ctx() -> Iterator[Any]:
         ctx.release()
 
 
+@pytest.fixture
+def isolated_gl_ctx(gl_ctx: Any) -> Iterator[Any]:
+    """A standalone GL context of one test's own, then the shared one back.
+
+    For a test that needs to change context-global state -- the blend mode,
+    say -- and so cannot use the session-scoped `gl_ctx` without leaking
+    into every later GL test.
+
+    **Do not create a standalone context by hand for this.** Creating one
+    makes it current, and releasing it leaves *no* context current, not the
+    one that was current before. The shared `gl_ctx` is then still a live
+    Python object whose every GL call fails: `cannot create renderbuffer`,
+    from a fixture that looks entirely unrelated. That is what this fixture
+    exists to prevent -- it re-asserts `gl_ctx` afterwards.
+
+    It went unnoticed because it depends on collection order. While the
+    only module with a private context happened to run *before* every other
+    GL module, `gl_ctx` did not exist yet when those contexts came and
+    went, so it was created afterwards and was current. Adding a GL test
+    file that sorts earlier in the directory was enough to break 28 tests
+    across seven modules that nothing had touched.
+
+    Yields:
+        A fresh standalone context, released when the test ends.
+    """
+    moderngl = pytest.importorskip("moderngl")
+    try:
+        ctx = moderngl.create_standalone_context()
+    except Exception as exc:  # pragma: no cover - depends on the machine
+        pytest.skip(f"no standalone GL context available: {exc}")
+    try:
+        yield ctx
+    finally:
+        ctx.release()
+        # moderngl offers no public "make current" other than the
+        # context-manager protocol, and nothing here wants to exit it: the
+        # shared context is session-scoped, and every later GL test expects
+        # to find it current.
+        gl_ctx.__enter__()
+
+
 # Define fake classes for Pygame types to satisfy dataclasses and inheritance
 class MockColor:
     """Mock for pygame.Color."""
