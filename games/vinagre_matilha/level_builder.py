@@ -34,8 +34,18 @@ from pyguara.kits.pack import PackMember, PackRole
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.trigger_volume import TriggerVolume
 from pyguara.physics.types import BodyType, ShapeType
+from pyguara.spatial import SpatialTracked
 
 CELL_SIZE = 32.0
+
+FLANKER_SPATIAL_MASK = 0x1
+"""Spatial-index bit the flankers are tracked under.
+
+`FlankerAssignmentSystem` counts each flanker's neighbours by querying the
+shared `SpatialHash`, and wants flankers back rather than everything nearby.
+A dedicated bit keeps that query exact even if something else in this demo
+is indexed later, without a per-candidate component lookup to filter it.
+"""
 _GOLDEN_ANGLE = 2.399963229728653  # radians; pi * (3 - sqrt(5))
 DOG_COLLIDER_RADIUS = 8.0
 VANGUARD_COLLIDER_RADIUS = 10.0
@@ -227,6 +237,7 @@ def _create_dog(
         entity.add_component(
             AIComponent(blackboard=blackboard, behavior_tree=build_pack_tree())
         )
+        entity.add_component(SpatialTracked(mask=FLANKER_SPATIAL_MASK))
 
     return entity.id
 

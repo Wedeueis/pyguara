@@ -40,6 +40,7 @@ from games.vinagre_matilha.systems import (
     VanguardControlSystem,
 )
 from pyguara.ai.flocking_system import FlockingSystem
+from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D
@@ -58,6 +59,7 @@ from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.trigger_system import TriggerSystem
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
+from pyguara.spatial import SpatialIndexSystem
 from pyguara.ui.components.button import Button
 from pyguara.ui.layout import BoxContainer
 from pyguara.ui.manager import UIManager
@@ -81,6 +83,11 @@ _UI_GOOD = Color(120, 196, 110)
 _PRIORITY_TRIGGER_SETUP = 90
 _PRIORITY_VANGUARD = 110
 _PRIORITY_JAGUAR_AI = 120
+# Before the assignment system, which queries the index it fills. Both
+# then see the same positions: motion runs later in the frame
+# (_PRIORITY_PHYSICS), so either way this is where the previous tick left
+# every dog.
+_PRIORITY_SPATIAL_INDEX = 170
 _PRIORITY_FLANKER_ASSIGNMENT = 175
 # [engine] AISystem = 200
 _PRIORITY_FLOCKING = 220
@@ -244,12 +251,20 @@ class GameScene(Scene):
             ),
             priority=_PRIORITY_JAGUAR_AI,
         )
+        spatial_index = self.container.get(SpatialHash)
+        register(
+            SpatialIndexSystem(
+                self.entity_manager, spatial_index, self.event_dispatcher
+            ),
+            priority=_PRIORITY_SPATIAL_INDEX,
+        )
         register(
             FlankerAssignmentSystem(
                 self.entity_manager,
                 self._level.blackboard,
                 self._level.flow_field,
                 self._level.jaguar_id,
+                spatial_index,
             ),
             priority=_PRIORITY_FLANKER_ASSIGNMENT,
         )
