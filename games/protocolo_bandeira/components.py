@@ -5,9 +5,13 @@ Pure data containers for the shooter game.
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from typing import TYPE_CHECKING
 
 from pyguara.common.types import Color, Vector2
 from pyguara.ecs.component import BaseComponent, pure_query
+
+if TYPE_CHECKING:  # pragma: no cover -- import cycle: navigation imports nothing here
+    from games.protocolo_bandeira.navigation import ChaserNavigator
 
 
 class EntityTeam(Enum):
@@ -107,7 +111,15 @@ class ShooterSprite(BaseComponent):
 
 @dataclass
 class AIContext:
-    """Context object passed to AI behavior trees."""
+    """Context object passed to AI behavior trees.
+
+    The behaviour tree's action nodes write their intent back here and
+    `systems.EnemyAISystem` reads it after the tick -- so the two output
+    fields below are declared rather than attached on the fly. They used
+    to be bare attribute assignments inside `ai_behaviors.chase_player`,
+    read back through `hasattr`, which meant a typo in either half was a
+    silently motionless enemy.
+    """
 
     entity_id: str
     position: Vector2
@@ -115,6 +127,16 @@ class AIContext:
     distance_to_player: float
     dt: float
     is_alerted: bool = False
+
+    # --- what the tree decided, read back by the AI system ---
+    move_direction: Vector2 | None = None
+    should_attack: bool = False
+
+    # Routes a chaser around the termite mounds when it cannot see the
+    # player (`navigation.py`). None -- which is what every test building
+    # a bare context gets -- falls back to the straight line this game
+    # shipped with.
+    navigator: "ChaserNavigator | None" = None
 
     # Copied off the enemy's own `EnemyAI` each tick. The condition nodes
     # used to hardcode 300/150 instead, which meant every per-type range

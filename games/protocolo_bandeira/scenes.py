@@ -40,6 +40,7 @@ from games.protocolo_bandeira.events import (
     WaveCompleteEvent,
     WaveStartEvent,
 )
+from games.protocolo_bandeira.navigation import ArenaNavGrid, ChaserNavigator
 from games.protocolo_bandeira.pooling import EnemyPool
 from games.protocolo_bandeira.systems import (
     CollisionSystem,
@@ -354,12 +355,23 @@ class ArenaScene(_ClearingScene):
 
         self._player_control = PlayerControlSystem(self.entity_manager, ARENA)
         self._health_system = HealthSystem(self.entity_manager)
+        # The mounds are cover, so a chaser has to go round them. Built
+        # from the clearing `build_fx()` just scattered, which is fixed
+        # for the life of the scene -- see `navigation.ArenaNavGrid`.
+        self._nav_grid = ArenaNavGrid(
+            ARENA,
+            [(mound.position, mound.radius) for mound in self.fx.backdrop.mounds]
+            if self.fx is not None
+            else [],
+        )
+        self._navigator = ChaserNavigator(self._nav_grid)
         self._enemy_ai = EnemyAISystem(
             self.entity_manager,
             self.event_dispatcher,
             self._enemy_pool,
             self._projectile_system,
             ARENA,
+            navigator=self._navigator,
         )
         self._collision_system = CollisionSystem(
             self.entity_manager,
