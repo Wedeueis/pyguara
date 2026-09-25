@@ -142,10 +142,10 @@ def test_texture_loader(mock_ctx: MagicMock) -> None:
         mock_surf.convert_alpha.return_value = mock_surf
         mock_load.return_value = mock_surf
 
-        with (
-            patch("pygame.transform.flip", return_value=mock_surf),
-            patch("pygame.image.tobytes", return_value=b"pixeldata"),
-        ):
+        # No `pygame.transform.flip` patch: the loader does not flip any
+        # more, and patching it away is what let the orientation bug sit
+        # here unnoticed. See `test_gl_texture_orientation.py`.
+        with patch("pygame.image.tobytes", return_value=b"pixeldata"):
             texture = loader.load("test.png")
 
         assert isinstance(texture, GLTexture)

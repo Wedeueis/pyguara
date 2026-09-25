@@ -1,11 +1,20 @@
 """The Cerrado, drawn from primitives.
 
-No textures, no sprite sheets, no asset pipeline: every pixel here is a
-rect, a circle or a line, and the look comes from layering, palette and
-light. That is deliberate -- this demo exists to show the UI and the design
-system, and an art pipeline beside them would be the thing everyone looked
-at instead. It is also how `tamandua_murundus` and `protocolo_bandeira` are
-drawn, so it is the house style rather than a shortcut taken here.
+The **world** here is rects, circles and lines -- sky, mounds, trees,
+platforms, fruit -- and its look comes from layering, palette and light
+rather than from art. That is how `tamandua_murundus` and
+`protocolo_bandeira` are drawn too, so it is the house style rather than
+a shortcut taken here.
+
+The **characters** are not. The guará and the falcão used to be drawn
+here as well, swinging their legs off a sine wave, and they are now
+sprites played by the engine's own `Animator` and
+`AnimationStateMachine` -- see `animation.py`, and
+`tools/slice_spritesheet.py` for where the frames come from. That is the
+whole point of the change: those two components had no reference usage
+anywhere in the repository, which is a poor advertisement for an engine
+that ships them. Nothing else moved: a demo that was primitives all the
+way down would still have had nothing to show for them.
 
 Two rules everything in this module obeys.
 
@@ -396,149 +405,3 @@ def draw_crate(renderer: IRenderer, rect: Rect) -> None:
 
 
 # ---- the characters -----------------------------------------------------
-
-
-def draw_guara(
-    renderer: IRenderer,
-    center: Vector2,
-    size: Vector2,
-    *,
-    facing_right: bool,
-    running: bool,
-    airborne: bool,
-    phase: float,
-    flash: bool = False,
-) -> None:
-    """Draw the maned wolf, built from a dozen shapes.
-
-    Long black legs, a red-orange coat, a dark mane over the shoulders and
-    a cream-tipped brush tail -- the four things that make a guará read as
-    a guará rather than a fox.
-
-    Args:
-        renderer: The world renderer.
-        center: Screen position of the body's centre.
-        size: The sprite's box, which the parts are laid out inside.
-        facing_right: Which way to mirror the head and tail.
-        running: Whether to swing the legs.
-        airborne: Whether to tuck them instead.
-        phase: Seconds, for the leg swing.
-        flash: Draw everything white -- the invincibility blink.
-    """
-    coat = Color.WHITE if flash else COAT
-    coat_dark = Color.WHITE if flash else COAT_DARK
-    mane = Color.WHITE if flash else MANE
-    cream = Color.WHITE if flash else CREAM
-
-    facing = 1 if facing_right else -1
-    half_w = size.x / 2
-    half_h = size.y / 2
-    left = center.x - half_w
-    top = center.y - half_h
-
-    # Legs. A running guará is mostly legs, so they get a third of the box.
-    swing = math.sin(phase * 12.0) * 6.0 if running else 0.0
-    leg_top = top + size.y * 0.55
-    leg_height = size.y * 0.45
-    for index, offset in enumerate((-half_w * 0.45, half_w * 0.15)):
-        lift = 0.0 if airborne else (swing if index == 0 else -swing)
-        renderer.draw_rect(
-            Rect(
-                int(center.x + offset * facing),
-                int(leg_top + (4 if airborne else 0)),
-                max(3, int(size.x * 0.18)),
-                int(leg_height - abs(lift) * 0.5),
-            ),
-            mane,
-        )
-
-    # Tail, behind the body, with its cream tip.
-    tail_x = center.x - facing * half_w * 1.05
-    renderer.draw_rect(
-        Rect(int(tail_x), int(top + size.y * 0.35), max(4, int(size.x * 0.38)), 9), coat
-    )
-    renderer.draw_rect(
-        Rect(
-            int(tail_x if facing > 0 else tail_x + size.x * 0.22),
-            int(top + size.y * 0.35),
-            max(3, int(size.x * 0.16)),
-            9,
-        ),
-        cream,
-    )
-
-    # Body, then the mane over its shoulders.
-    renderer.draw_rect(
-        Rect(
-            int(left + size.x * 0.1),
-            int(top + size.y * 0.3),
-            int(size.x * 0.8),
-            int(size.y * 0.32),
-        ),
-        coat,
-    )
-    renderer.draw_rect(
-        Rect(
-            int(left + size.x * (0.35 if facing > 0 else 0.1)),
-            int(top + size.y * 0.28),
-            int(size.x * 0.55),
-            int(size.y * 0.16),
-        ),
-        mane,
-    )
-
-    # Head, muzzle, ear, eye.
-    head_x = center.x + facing * size.x * 0.2
-    head_y = top + size.y * 0.08
-    renderer.draw_rect(
-        Rect(
-            int(head_x - size.x * 0.22),
-            int(head_y),
-            int(size.x * 0.44),
-            int(size.y * 0.26),
-        ),
-        coat,
-    )
-    renderer.draw_rect(
-        Rect(
-            int(head_x + facing * size.x * 0.16),
-            int(head_y + size.y * 0.12),
-            int(size.x * 0.2),
-            int(size.y * 0.1),
-        ),
-        coat_dark,
-    )
-    renderer.draw_rect(
-        Rect(int(head_x - facing * size.x * 0.12), int(head_y - size.y * 0.08), 5, 8),
-        mane,
-    )
-    if not flash:
-        renderer.draw_rect(
-            Rect(
-                int(head_x + facing * size.x * 0.04), int(head_y + size.y * 0.08), 3, 3
-            ),
-            EYE,
-        )
-
-
-def draw_falcao(
-    renderer: IRenderer, center: Vector2, phase: float, *, facing_right: bool
-) -> None:
-    """Draw the companion falcon, bobbing.
-
-    Args:
-        renderer: The world renderer.
-        center: Screen position.
-        phase: Seconds, for the bob and the wing beat.
-        facing_right: Which way it faces.
-    """
-    facing = 1 if facing_right else -1
-    bob = math.sin(phase * 3.4) * 3.0
-    at = Vector2(center.x, center.y + bob)
-
-    wing = math.sin(phase * 9.0) * 5.0
-    renderer.draw_rect(Rect(int(at.x - 12), int(at.y - 4 + wing), 12, 5), FALCAO_WING)
-    renderer.draw_rect(Rect(int(at.x - 6), int(at.y - 6), 13, 11), FALCAO_BODY)
-    renderer.draw_rect(Rect(int(at.x - 3), int(at.y - 1), 8, 6), FALCAO_CHEST)
-    renderer.draw_rect(Rect(int(at.x + facing * 6), int(at.y - 5), 5, 5), FALCAO_BODY)
-    renderer.draw_rect(Rect(int(at.x + facing * 10), int(at.y - 3), 3, 2), Sand.C300)
