@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from games.quintal_cerrado import art, layout, nutrients
+from games.quintal_cerrado import art, layout, nutrients, stress
 from games.quintal_cerrado.components import (
     AutomationComponent,
     GardenConditions,
@@ -37,6 +37,7 @@ from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.structures import STRUCTURE_TABLE
 from games.quintal_cerrado.tool_info import ToolInfo, describe
 from games.quintal_cerrado.turn import DayCycle
+from games.quintal_cerrado.weather import WeatherState
 from pyguara.common.grid import Cell
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
@@ -390,7 +391,11 @@ class CellInspector:
         ui_manager.add_element(self.panel, UILayer.HUD)
 
     def update(
-        self, grid: GardenGrid, entity_manager: EntityManager, cell: Cell | None
+        self,
+        grid: GardenGrid,
+        entity_manager: EntityManager,
+        cell: Cell | None,
+        weather: WeatherState | None = None,
     ) -> None:
         """Describe `cell`, or prompt for one.
 
@@ -399,6 +404,8 @@ class CellInspector:
             entity_manager: Where the plant and structure live.
             cell: The hovered cell, or None if the cursor has not been over
                 the plot yet.
+            weather: The sky, since a cold snap is one of the things that
+                can be wrong with the plant standing there.
         """
         if cell is None or not grid.in_bounds(cell):
             self.title.set_text("Hover a tile to inspect it")
@@ -416,6 +423,7 @@ class CellInspector:
         )
         self.panel.degraded = soil.is_chemically_degraded
         self.panel.soil = soil
+        self.panel.weather = weather
         plant = self._plant_at(grid, entity_manager, cell)
         if plant is not None:
             species = SPECIES_TABLE.get(plant.species_id)
@@ -467,6 +475,8 @@ class _InspectorCard(CardPanel):
             structure's name.
         degraded: Whether to say the soil is chemically degraded.
         soil: The hovered cell, for the soil chip. None hides it.
+        weather: The sky, since a cold snap is one of the things that can
+            be wrong with a plant.
     """
 
     def __init__(self, position: Vector2, size: Vector2) -> None:
@@ -481,6 +491,7 @@ class _InspectorCard(CardPanel):
         self.detail = ""
         self.degraded = False
         self.soil: SoilCell | None = None
+        self.weather: WeatherState | None = None
         self._elapsed = 0.0
 
     def show_plant(self, plant: PlantComponent | None, elapsed: float) -> None:
@@ -526,9 +537,17 @@ class _InspectorCard(CardPanel):
         """
         if self.soil is None:
             return
-        short = nutrients.scarcest(self.soil)
-        text = f"low {short.short}" if short is not None else "soil in good heart"
-        color = SOIL_LOW if short is not None else SOIL_RICH
+        if self.plant is not None:
+            # A planted cell reports the *plant*: what is wrong with its
+            # conditions is more use than what the dirt holds.
+            text = stress.describe(
+                self.soil, SPECIES_TABLE.get(self.plant.species_id), self.weather
+            )
+            color = SOIL_RICH if text == stress.THRIVING else SOIL_LOW
+        else:
+            short = nutrients.scarcest(self.soil)
+            text = f"low {short.short}" if short is not None else "soil in good heart"
+            color = SOIL_LOW if short is not None else SOIL_RICH
         width, _ = renderer.get_text_size(text, 10)
         draw_badge(
             renderer,

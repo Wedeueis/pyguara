@@ -30,7 +30,7 @@ Registered between `SyntropicSystem` and `PlantGrowthSystem` (see
 
 from __future__ import annotations
 
-from games.quintal_cerrado import nutrients
+from games.quintal_cerrado import stress
 from games.quintal_cerrado.components import PlantComponent
 from games.quintal_cerrado.garden_grid import GardenGrid
 from games.quintal_cerrado.plant_states import RECOVER_THRESHOLD
@@ -168,10 +168,15 @@ class PestSystem:
                     rate = spread_rate
                     if source is not None and source.species_id == target.species_id:
                         rate *= MONOCULTURE_SPREAD
-                    # What the *receiving* cell does about it: rich
-                    # nitrogen invites pests in, calcium turns them away,
-                    # and a mixed neighbourhood resists them.
-                    rate *= nutrients.pest_susceptibility(self._grid.soil_at(neighbor))
+                    # What the *receiving* plant does about it. A plant in
+                    # the conditions it wants is hard to take, a stressed
+                    # one is easy, and calcium is worth most to the former
+                    # (`stress.py`). A mixed neighbourhood helps too.
+                    rate *= stress.pest_susceptibility(
+                        self._grid.soil_at(neighbor),
+                        SPECIES_TABLE.get(target.species_id),
+                        self._weather,
+                    )
                     rate *= self._biodiversity_guard(neighbor)
                     deltas[neighbor] = (
                         deltas.get(neighbor, 0.0) + rate * pressure * days

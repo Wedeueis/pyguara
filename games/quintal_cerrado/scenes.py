@@ -1060,7 +1060,10 @@ class GardenScene(Scene):
             self._advance_sunrise(dt)
             if self._inspector is not None:
                 self._inspector.update(
-                    self.grid, self.entity_manager, self._canvas.hover_cell
+                    self.grid,
+                    self.entity_manager,
+                    self._canvas.hover_cell,
+                    self.weather,
                 )
         self._update_weather_effects(dt)
 

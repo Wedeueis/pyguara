@@ -6,16 +6,21 @@ player can move on purpose:
 
 | Nutrient | What it does | Where it comes from |
 |---|---|---|
-| **N** nitrogen | grows the crop faster -- *and draws pests to the cell* | legumes fix it; compost |
+| **N** nitrogen | grows the crop faster -- *forced past its band, growth goes soft and pests take hold* | legumes fix it; compost |
 | **P** phosphorus | the harvest is worth more | compost |
 | **K** potassium | shields growth from cold snaps and dry ground | a deep-rooted canopy tree lifts it |
-| **Ca** calcium | resists pests taking hold on the cell | a grown Pequi leaves it behind |
+| **Ca** calcium | multiplies how much a comfortable plant resists pests | a grown Pequi leaves it behind |
 
-The tension is deliberate: nitrogen is the obvious lever, and pulling it
-invites exactly the problem calcium answers. A plot that grows fast and
-stays healthy is one where the player put a legume next to a Pequi on
-purpose -- which is the syntropic consortium the PRD is about, arrived at
-through the soil rather than announced.
+The tension is deliberate: nitrogen is the obvious lever, and pushing it
+past what the plant wants is exactly what makes pests easy
+(`stress.NUTRITION`). A plot that grows fast and stays healthy is one
+where the player fed it to the top of the band and no further, and put a
+Pequi where its calcium would do the most good -- the syntropic
+consortium the PRD is about, arrived at through the soil rather than
+announced.
+
+What pests actually meet is in `stress.py`: this module owns the levels,
+that one owns what a plant makes of them.
 
 A fifth nutrient only earns a place if it owns an effect none of these
 four do. Tracking calcium *and* magnesium because real soil has both is
@@ -75,13 +80,6 @@ reads as hungry once it has actually been worked."""
 GROWTH_BONUS = 0.4
 """How much faster a crop grows on nitrogen-rich soil."""
 
-NITROGEN_PEST_DRAW = 0.5
-"""How much more pest pressure lands on a cell rich in nitrogen. The cost
-of the obvious lever, and the reason calcium is worth planting for."""
-
-CALCIUM_PEST_GUARD = 0.5
-"""How much pest pressure calcium-rich soil turns away."""
-
 VALUE_BONUS = 0.3
 """How much more a harvest fetches from phosphorus-rich soil."""
 
@@ -124,16 +122,14 @@ def hardiness(soil: SoilCell) -> float:
     return COLD_GUARD * _fraction(level(soil, POTASSIUM))
 
 
-def pest_susceptibility(soil: SoilCell) -> float:
-    """How readily pests take hold here, as a multiplier on what arrives.
+def calcium_share(soil: SoilCell) -> float:
+    """How far this cell's calcium has come, 0.0-1.0.
 
-    Nitrogen invites them and calcium turns them away -- the two levers
-    pull against each other on purpose, so a fast-growing plot is one the
-    player has to defend.
+    What `stress.pest_resistance` multiplies by a plant's comfort: calcium
+    is conditioning, not a shield, so what it is worth depends on the
+    plant being in a state to use it.
     """
-    drawn = 1.0 + NITROGEN_PEST_DRAW * _fraction(level(soil, NITROGEN))
-    guarded = 1.0 - CALCIUM_PEST_GUARD * _fraction(level(soil, CALCIUM))
-    return max(0.0, drawn * guarded)
+    return _fraction(level(soil, CALCIUM))
 
 
 def vitality(soil: SoilCell) -> float:
