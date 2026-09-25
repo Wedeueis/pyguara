@@ -133,3 +133,67 @@ def test_the_exception_sets_name_demos_that_exist() -> None:
     stale = (HAND_WIRED_ON_PURPOSE | NOT_YET_CONVERTED) - demos
 
     assert stale == set(), f"{stale} are named as exceptions but do not exist"
+
+
+# `RenderGraph` builds the one real manager every pass resolves through.
+# Anything else that constructs one produces a parallel set of buffers that
+# the graph never reads.
+PYGUARA_DIR = Path(__file__).resolve().parent.parent / "pyguara"
+MAY_BUILD_A_MANAGER = {PYGUARA_DIR / "graphics" / "pipeline" / "graph.py"}
+
+
+def _builds_a_framebuffer_manager(path: Path) -> bool:
+    """Whether `path` calls `FramebufferManager(...)`.
+
+    Args:
+        path: A module to parse.
+
+    Returns:
+        True if the constructor is called anywhere in it.
+    """
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Call):
+            func = node.func
+            name = (
+                func.id
+                if isinstance(func, ast.Name)
+                else func.attr
+                if isinstance(func, ast.Attribute)
+                else None
+            )
+            if name == "FramebufferManager":
+                return True
+    return False
+
+
+def test_only_the_render_graph_builds_a_framebuffer_manager() -> None:
+    """The engine must not hand games an orphaned manager either.
+
+    `_setup_container()` used to construct a `FramebufferManager`, register
+    *that* in the container, and then build a `RenderGraph` -- which makes
+    its own. So `container.get(FramebufferManager)` returned a manager no
+    pass ever read, and a game declaring an HDR buffer on it, the obvious
+    correct thing to do, was declaring it into nothing. Silently.
+
+    This is the same defect the demo check above has guarded against since
+    `mourisco_ressonancia` hit it; the guard simply never looked at the
+    engine, where it mattered more -- the orphan was the one registered in
+    DI, so a well-behaved game would find it in preference to any other.
+
+    Proven at runtime before it was fixed, with a real GL window under
+    SDL's offscreen driver: two distinct manager ids, and a buffer declared
+    on the registered one reading back as `None` on the graph's. That probe
+    cannot live in the suite, for the reason this module's docstring gives,
+    so the invariant is checked here instead.
+    """
+    offenders = sorted(
+        str(path.relative_to(PYGUARA_DIR))
+        for path in PYGUARA_DIR.rglob("*.py")
+        if path not in MAY_BUILD_A_MANAGER and _builds_a_framebuffer_manager(path)
+    )
+
+    assert offenders == [], (
+        f"{offenders} construct a FramebufferManager. Only RenderGraph may; "
+        "everything else uses `render_graph.fbo_manager`, or a second set of "
+        "buffers is allocated that no pass ever reads."
+    )
