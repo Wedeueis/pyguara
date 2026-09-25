@@ -18,12 +18,18 @@ everything else uses, singled out only by `is_weed` and a much higher
 `Species` rather than a special-cased second kind of thing means
 rendering, growth, pests and stratification all already know how to
 handle it for free.
+
+Each crop also names the season it belongs to (`seasons.py`), following
+roughly when it actually fruits in the Cerrado: baru and cagaita in the
+dry months, pequi and guandu with the rains. Harvesting in season pays
+more, which is what makes the calendar worth planting around.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from games.quintal_cerrado.seasons import DRY, WET
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color
 from pyguara.ui.design_system.tokens import Guara, Sand, Verdant
@@ -64,6 +70,11 @@ class Species:
         leaves_calcium: Whether a grown one leaves calcium in the soil.
         appetite: How heavily it feeds on nitrogen and phosphorus while it
             grows, relative to a ground-cover plant.
+        season: The `seasons.Season` key this crop belongs to, or None for
+            one that does not care. Harvesting it in its own season pays
+            `seasons.IN_SEASON_PREMIUM` -- the reason to plan what goes in
+            the ground around the calendar rather than around what is
+            cheapest today.
         repels_pests: Whether a grown plant of this species suppresses
             pest pressure on and around its own cell -- the PRD's "pest
             resistance via flora".
@@ -94,6 +105,7 @@ class Species:
     lifts_potassium: bool = False
     leaves_calcium: bool = False
     appetite: float = 1.0
+    season: str | None = None
 
 
 SPECIES_TABLE: dict[str, Species] = {
@@ -107,6 +119,7 @@ SPECIES_TABLE: dict[str, Species] = {
         base_price=10,
         spread_chance=0.03,
         fixes_nitrogen=True,
+        season=WET,
     ),
     "cagaita": Species(
         species_id="cagaita",
@@ -118,6 +131,7 @@ SPECIES_TABLE: dict[str, Species] = {
         base_price=20,
         spread_chance=0.02,
         appetite=1.3,
+        season=DRY,
     ),
     "baru": Species(
         species_id="baru",
@@ -130,6 +144,7 @@ SPECIES_TABLE: dict[str, Species] = {
         spread_chance=0.008,
         lifts_potassium=True,
         appetite=1.6,
+        season=DRY,
     ),
     "pequi": Species(
         species_id="pequi",
@@ -143,6 +158,7 @@ SPECIES_TABLE: dict[str, Species] = {
         spread_chance=0.008,
         leaves_calcium=True,
         appetite=1.4,
+        season=WET,
     ),
     WEED_SPECIES_ID: Species(
         species_id=WEED_SPECIES_ID,

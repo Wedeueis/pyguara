@@ -17,6 +17,10 @@ Three systems act **once** a night, because what they do is an event and
 not an accumulation: automation (solar pays, drip fills, the drone
 collects), weeds (one spread roll each), and the weather (tomorrow's sky).
 
+The day is also what says which season it is (`seasons.py`): it prices the
+drone's harvests and weights tomorrow's sky, and the report names the
+season only on the morning it turns.
+
 The rest are still stepped `SUB_STEPS` times across the night, for two
 reasons. `PestSystem` integrates a coupled non-linear system -- spread is
 proportional to current pressure, health drain is the product of two
@@ -39,6 +43,7 @@ from games.quintal_cerrado.events import (
     SolarIncomeEvent,
 )
 from games.quintal_cerrado.garden_grid import GardenGrid
+from games.quintal_cerrado.seasons import season_for, turns_on
 from games.quintal_cerrado.species import SPECIES_TABLE
 from games.quintal_cerrado.systems.automation_system import AutomationSystem
 from games.quintal_cerrado.systems.nutrient_system import NutrientSystem
@@ -84,11 +89,16 @@ class DayReport:
         outbreak_started: Whether pests broke out tonight.
         outbreak_resolved: `"organic"`, `"chemical"` or `""`.
         pest_peak: The worst pest pressure left on the plot.
+        season_arrived: The `seasons.SEASON_TABLE` key of the season
+            that begins tomorrow, or `""` on an ordinary morning. Only a
+            turn is reported: a line that says "still the dry season"
+            every morning is a line nobody reads.
     """
 
     day: int
     weather_id: str = ""
     next_weather_id: str = ""
+    season_arrived: str = ""
     stages_grown: list[str] = field(default_factory=list)
     ripened: list[str] = field(default_factory=list)
     lost: list[str] = field(default_factory=list)
@@ -111,6 +121,7 @@ class DayReport:
             or self.drone_harvests
             or self.outbreak_started
             or self.outbreak_resolved
+            or self.season_arrived
         )
 
 
@@ -193,7 +204,7 @@ class DayResolver:
         # The machines first: a panel pays, the drip fills its cells and the
         # drone collects, all before the night's own weather and growth run
         # against the soil they just changed.
-        self.automation.resolve_night()
+        self.automation.resolve_night(season_for(day))
 
         for _ in range(SUB_STEPS):
             self.soil.update(SUB_STEP)
@@ -215,7 +226,7 @@ class DayResolver:
         # What was overhead tonight is the sky the player saw forecast
         # yesterday; this rolls tomorrow's.
         self._drive_conditions(ONE_DAY)
-        self.weather.advance_day()
+        self.weather.advance_day(day + 1)
 
         return self._report(day, weather_id, before)
 
@@ -246,6 +257,7 @@ class DayResolver:
             outbreak_started=self._outbreak_started,
             outbreak_resolved=self._outbreak_resolved,
             pest_peak=max(soil.pest_pressure for row in self.grid.soil for soil in row),
+            season_arrived=season_for(day + 1).key if turns_on(day + 1) else "",
         )
         after = self._snapshot()
         for entity_id, (species_id, stage) in after.items():

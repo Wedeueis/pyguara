@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from games.quintal_cerrado.seasons import Season, condition_weight
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color
 from pyguara.ui.design_system.tokens import Guara, Sand, Verdant, Water
@@ -124,20 +125,37 @@ class WeatherState:
     cold_snap: bool = False
 
 
-def roll_condition(rng: RandomStream) -> str:
+def roll_condition(rng: RandomStream, season: Season | None = None) -> str:
     """Pick a condition, weighted by `WeatherCondition.weight`.
+
+    The season only re-weights the same six conditions -- it never adds
+    one or takes one away, so nothing downstream has to know seasons
+    exist. A weight it zeroes (rain in the dry season) simply never comes
+    up.
 
     Args:
         rng: The stream to roll on.
+        season: The season in force, or None for the plain weights.
 
     Returns:
         A `condition_id` from `WEATHER_TABLE`.
     """
     candidates = list(WEATHER_TABLE.values())
-    roll = rng.uniform(0.0, sum(c.weight for c in candidates))
+    weights = [
+        c.weight
+        if season is None
+        else condition_weight(season, c.condition_id, c.weight)
+        for c in candidates
+    ]
+    roll = rng.uniform(0.0, sum(weights))
     upto = 0.0
-    for condition in candidates:
-        upto += condition.weight
+    for condition, weight in zip(candidates, weights, strict=True):
+        if weight <= 0.0:
+            continue
+        upto += weight
         if roll <= upto:
             return condition.condition_id
-    return candidates[-1].condition_id  # pragma: no cover -- float-rounding fallback
+    # Float-rounding fallback. The last *possible* condition, not simply
+    # the last one: the season may have zeroed that one out.
+    possible = [c for c, w in zip(candidates, weights, strict=True) if w > 0.0]
+    return possible[-1].condition_id

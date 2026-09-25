@@ -37,6 +37,7 @@ from games.quintal_cerrado.components import (
 from games.quintal_cerrado.economy import harvest_cell
 from games.quintal_cerrado.events import PlantHarvestedEvent, SolarIncomeEvent
 from games.quintal_cerrado.garden_grid import GardenGrid
+from games.quintal_cerrado.seasons import Season
 from games.quintal_cerrado.structures import POWER_PER_PANEL, STRUCTURE_TABLE, area
 from pyguara.common.grid import Cell
 from pyguara.ecs.manager import EntityManager
@@ -80,8 +81,14 @@ class AutomationSystem:
         self.power_used = 0
         self.power_capacity = 0
 
-    def resolve_night(self) -> None:
-        """Share out power, then run every structure for one tick."""
+    def resolve_night(self, season: Season | None = None) -> None:
+        """Share out power, then run every structure for one tick.
+
+        Args:
+            season: The season the night falls in, passed through to the
+                drone's harvests so it is paid the same in-season premium
+                a hand harvest would be. None prices without the calendar.
+        """
         structures = self._structures()
         self._allocate_power(structures)
         self.power_capacity = POWER_PER_PANEL * sum(
@@ -100,7 +107,7 @@ class AutomationSystem:
             elif structure.kind == "drip_irrigation":
                 self._run_drip(cell)
             elif structure.kind == "auto_harvester":
-                self._run_drone(cell)
+                self._run_drone(cell, season)
 
     def _structures(self) -> list[tuple[Cell, AutomationComponent]]:
         """Every placed structure, in placement order."""
@@ -141,14 +148,14 @@ class AutomationSystem:
             if soil.moisture < DRIP_TARGET:
                 soil.moisture = DRIP_TARGET
 
-    def _run_drone(self, cell: Cell) -> None:
+    def _run_drone(self, cell: Cell, season: Season | None = None) -> None:
         """Collect up to `DRONE_HARVESTS_PER_NIGHT` ready plants in range."""
         harvested = 0
         for target in area(self._grid, cell, STRUCTURE_TABLE["auto_harvester"].radius):
             if harvested >= DRONE_HARVESTS_PER_NIGHT:
                 return
             result = harvest_cell(
-                self._grid, self._entity_manager, self._economy, target
+                self._grid, self._entity_manager, self._economy, target, season
             )
             if result is None:
                 continue

@@ -18,13 +18,17 @@ a crop collected at its peak still sells for Sementes; a weed, or a crop
 left to go `"overripe"`, pays out in seed stock instead (`components.py`'s
 `grant_seed`) -- generic for a weed, specific to its own species for an
 overripe crop.
+
+What a crop is worth is three multipliers over its base price, each owned
+elsewhere: the organic/chemical fork here, the soil's phosphorus in
+`nutrients.py`, and the calendar in `seasons.py`.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from games.quintal_cerrado import nutrients
+from games.quintal_cerrado import nutrients, seasons
 from games.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
     PlantComponent,
@@ -61,7 +65,11 @@ def sale_multiplier(plant: PlantComponent) -> float:
     return CHEMICAL_DISCOUNT if plant.is_chemical_boosted else ORGANIC_PREMIUM
 
 
-def sale_value(plant: PlantComponent, soil: SoilCell | None = None) -> int:
+def sale_value(
+    plant: PlantComponent,
+    soil: SoilCell | None = None,
+    season: seasons.Season | None = None,
+) -> int:
     """Whole Sementes `plant` sells for.
 
     Args:
@@ -69,6 +77,10 @@ def sale_value(plant: PlantComponent, soil: SoilCell | None = None) -> int:
         soil: The cell it grew in, whose phosphorus adds to the price --
             the one thing that nutrient governs. None ignores the soil,
             which is what a caller with only a plant in hand wants.
+        season: The season it is being sold in, which pays a premium for a
+            crop harvested in its own (`seasons.price_multiplier`). None
+            ignores the calendar, for a caller pricing a plant in the
+            abstract.
 
     Returns:
         Its species' base price times `sale_multiplier`, rounded to a whole
@@ -80,6 +92,8 @@ def sale_value(plant: PlantComponent, soil: SoilCell | None = None) -> int:
     value = species.base_price * sale_multiplier(plant)
     if soil is not None:
         value *= nutrients.value_multiplier(soil)
+    if season is not None:
+        value *= seasons.price_multiplier(season, species.season)
     return max(1, round(value))
 
 
@@ -116,6 +130,7 @@ def harvest_cell(
     entity_manager: EntityManager,
     economy: PlayerEconomy,
     cell: Cell,
+    season: seasons.Season | None = None,
 ) -> HarvestResult | None:
     """Collect whatever `cell` is ready to give up, freeing the (still
     tilled) cell either way.
@@ -129,6 +144,8 @@ def harvest_cell(
         entity_manager: Where the plant lives.
         economy: Who is paid, or whose seed stock grows.
         cell: The cell to harvest.
+        season: The season the harvest happens in, for the in-season
+            premium. None prices it without the calendar.
 
     Returns:
         The `HarvestResult`, or None -- nothing there, not ready yet, or
@@ -155,7 +172,7 @@ def harvest_cell(
         grant_seed(economy, specific_seed_key(species_id), 1)
         result = HarvestResult(species_id, SPECIFIC_SEED, 1)
     else:
-        value = sale_value(plant, grid.soil_at(cell))
+        value = sale_value(plant, grid.soil_at(cell), season)
         add_credits(economy, value)
         if plant.is_chemical_boosted:
             economy.chemical_sales += 1

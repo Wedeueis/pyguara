@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from games.quintal_cerrado import layout
+from games.quintal_cerrado import layout, seasons
 from games.quintal_cerrado.clock import format_day
 from games.quintal_cerrado.components import (
     GENERIC_SEED_KEY,
@@ -173,7 +173,9 @@ class WeatherCard(CardPanel):
 
     Attributes:
         now_label: The current condition's name.
-        day_label: `"Dia 3 / 12"`.
+        day_label: `"Dia 3 / 12 · Seca"` -- the calendar and the season on
+            one line, because the season is what the day *means*: which
+            crops sell high, and whether rain is on the table at all.
         condition_id: What the sky is doing today.
         forecast: The conditions of the next days, nearest first.
     """
@@ -204,7 +206,8 @@ class WeatherCard(CardPanel):
         self.condition_id = condition_id
         condition = WEATHER_TABLE.get(condition_id)
         self.now_label.set_text(condition.display_name if condition else "?")
-        self.day_label.set_text(format_day(day))
+        season = seasons.season_for(day)
+        self.day_label.set_text(f"{format_day(day)} · {season.display_name}")
         self.forecast = [c for c in forecast if c in WEATHER_TABLE][:FORECAST_LENGTH]
 
     def render(self, renderer: UIRenderer) -> None:

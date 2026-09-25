@@ -310,7 +310,9 @@ class TestDrip:
         The sky is pinned calm: a cloudy or cold night grows less, and this
         is about the nozzle, not the weather.
         """
-        monkeypatch.setattr(weather_system, "roll_condition", lambda _rng: "calm")
+        monkeypatch.setattr(
+            weather_system, "roll_condition", lambda _rng, _season=None: "calm"
+        )
         assert scene._resolver is not None
         scene._resolver.weather.restore("calm", ["calm", "calm"])
         _place(scene, "solar_panel", (0, 0))

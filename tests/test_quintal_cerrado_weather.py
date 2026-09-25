@@ -60,7 +60,7 @@ class TestWeatherSystem:
         system = WeatherSystem(rng=RandomStream(1))
         expected = system.forecast[0]
 
-        system.advance_day()
+        system.advance_day(2)
 
         assert system.state.condition_id == expected
         assert len(system.forecast) == FORECAST_LENGTH  # refilled, not shrunk

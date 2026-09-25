@@ -20,6 +20,7 @@ from games.quintal_cerrado.ribbon import (
     WeatherCard,
 )
 from games.quintal_cerrado.scoring import Score
+from games.quintal_cerrado.seasons import SEASON_LENGTH
 from games.quintal_cerrado.systems.weather_system import WeatherSystem
 from games.quintal_cerrado.turn import SESSION_DAYS
 from games.quintal_cerrado.weather import WEATHER_TABLE
@@ -87,12 +88,19 @@ class TestWeatherCard:
         assert card.now_label.text == WEATHER_TABLE["rainy"].display_name
         assert card.forecast == ["cold_snap", "clear"], "two days fit on the card"
 
-    def test_it_shows_the_day_out_of_the_session(self) -> None:
+    def test_it_shows_the_day_and_the_season(self) -> None:
         card = WeatherCard()
 
         card.refresh("calm", [], day=3)
 
-        assert card.day_label.text == f"Dia 3 / {SESSION_DAYS}"
+        assert card.day_label.text == f"Dia 3 / {SESSION_DAYS} · Seca"
+
+    def test_the_season_on_the_card_turns_with_the_calendar(self) -> None:
+        card = WeatherCard()
+
+        card.refresh("calm", [], day=SEASON_LENGTH + 1)
+
+        assert card.day_label.text.endswith("Águas")
 
     def test_an_unknown_condition_does_not_raise(self) -> None:
         card = WeatherCard()
@@ -122,7 +130,7 @@ class TestTheWeatherTurnsOncePerDay:
         system = WeatherSystem(rng=RandomStream(4))
         queued = system.forecast
 
-        system.advance_day()
+        system.advance_day(2)
 
         assert system.state.condition_id == queued[0]
         assert system.forecast[0] == queued[1]
