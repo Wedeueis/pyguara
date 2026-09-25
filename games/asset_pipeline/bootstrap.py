@@ -1,86 +1,44 @@
-"""Module 3: Asset Pipeline Bootstrap.
-
-Configures DI with Resource Manager and Loaders.
-"""
+"""Module 3: Asset Pipeline Bootstrap."""
 
 import os
 
-from pyguara.application.application import Application
-from pyguara.application.clock import Clock
-from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
-from pyguara.config.manager import ConfigManager
+from pyguara.application.bootstrap import create_container
+from pyguara.config.types import GameConfig
 from pyguara.di.container import DIContainer
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.backends.pygame.clock import PygameClock
-from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
-from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
-from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
-from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
-from pyguara.graphics.protocols import IRenderer, UIRenderer
-from pyguara.graphics.window import Window, WindowConfig
-from pyguara.input.backends.pygame_backend import PygameInputBackend
-from pyguara.input.manager import InputManager
-from pyguara.input.protocols import IInputBackend
-from pyguara.log.manager import LogManager
-from pyguara.log.types import LogLevel
-from pyguara.prefabs.loader import PrefabCache
-from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.manager import ResourceManager
-from pyguara.scene.manager import SceneManager
-from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.ui.manager import UIManager
+
+
+def _configure(config: GameConfig) -> None:
+    """Name and size the window this module opens.
+
+    Called before the window exists, so this is what it is built from.
+
+    Args:
+        config: The loaded configuration, to adjust in place.
+    """
+    config.display.title = "Module 3: Asset Pipeline"
+    config.display.screen_width = 800
+    config.display.screen_height = 600
 
 
 def configure_game_container() -> DIContainer:
-    """Initialize and configure the DI container."""
-    container = DIContainer()
-    container.register_instance(DIContainer, container)
+    """Build the engine container, then index this module's assets.
 
-    event_dispatcher = EventDispatcher()
-    container.register_instance(EventDispatcher, event_dispatcher)
+    `create_container()` already builds a `ResourceManager` with the image,
+    sound, JSON and prefab loaders registered -- which is the whole of what
+    the other modules need. This module's own topic is what comes next:
+    pointing that manager at a directory so `.meta` files are discovered.
 
-    config_manager = ConfigManager(event_dispatcher)
-    config_manager.load()
-    container.register_instance(ConfigManager, config_manager)
+    That split is the point. A game asks the engine for the wiring every
+    game needs, and writes only the part that is its own.
 
-    log_manager = LogManager(event_dispatcher)
-    log_manager.configure(level=LogLevel.INFO, console=True)
-    container.register_instance(LogManager, log_manager)
+    Returns:
+        The configured container.
+    """
+    container = create_container(_configure)
 
-    win_config = WindowConfig(
-        title="Module 3: Asset Pipeline", screen_width=800, screen_height=600
-    )
-    window_backend = PygameWindow()
-    window = Window(win_config, window_backend)
-    window.create()
-    container.register_instance(Window, window)
-
-    renderer = PygameBackend(window.native_handle)
-    container.register_instance(IRenderer, renderer)
-
-    ui_renderer = PygameUIRenderer(window.native_handle)
-    container.register_instance(UIRenderer, ui_renderer)
-
-    # Resource Manager Setup
-    res_manager = ResourceManager()
-    res_manager.register_loader(PygameImageLoader())
-
-    # Index the assets directory for this module
+    resources = container.get(ResourceManager)
     assets_path = os.path.join(os.path.dirname(__file__), "assets")
-    res_manager.index_directory(assets_path)
-
-    container.register_instance(ResourceManager, res_manager)
-
-    container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
-    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
-    container.register_singleton(InputManager, InputManager)
-    container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]
-    container.register_instance(ComponentRegistry, get_component_registry())
-    container.register_instance(PrefabCache, PrefabCache())
-    container.register_singleton(SceneManager, SceneManager)
-    container.register_singleton(UIManager, UIManager)
-    container.register_singleton(CoroutineManager, CoroutineManager)
-    container.register_singleton(Application, Application)
+    resources.index_directory(assets_path)
 
     return container
