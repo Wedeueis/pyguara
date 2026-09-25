@@ -58,7 +58,6 @@ NOT_YET_CONVERTED = {
     "quintal_cerrado",
     "tamandua_murundus",
     "true_coral",
-    "vinagre_matilha",
 }
 
 ENGINE_BOOTSTRAP_FACTORIES = frozenset(
