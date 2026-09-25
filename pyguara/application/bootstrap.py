@@ -284,12 +284,17 @@ def _setup_container(
         # Render Pipeline (FBO management and render graph)
         from pyguara.graphics.pipeline.passes import FinalPass, WorldPass
 
-        fbo_manager = FramebufferManager(
-            ctx, disp_cfg.screen_width, disp_cfg.screen_height
-        )
-        container.register_instance(FramebufferManager, fbo_manager)
-
         render_graph = RenderGraph(ctx, disp_cfg.screen_width, disp_cfg.screen_height)
+
+        # The graph's own manager, not a second one. `RenderGraph` builds a
+        # `FramebufferManager` internally and every pass resolves its buffers
+        # through that one, so registering a separately-constructed manager
+        # hands games an orphan: a buffer declared on it is invisible to the
+        # graph, silently. This is the same defect
+        # `tests/test_demo_bootstrap_conventions.py` has guarded the demos
+        # against since `mourisco_ressonancia` hit it -- the guard just never
+        # looked at the engine.
+        container.register_instance(FramebufferManager, render_graph.fbo_manager)
 
         # Setup default render passes
         world_pass = WorldPass(gl_renderer)
