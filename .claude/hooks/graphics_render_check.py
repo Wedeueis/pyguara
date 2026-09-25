@@ -68,7 +68,7 @@ def main() -> int:
 
     try:
         result = subprocess.run(
-            ["uv", "run", "python", str(tool), DEMO, "--frames", str(FRAMES)],
+            ["uv", "run", "python", str(tool), DEMO, "--gl", "--frames", str(FRAMES)],
             cwd=repo,
             capture_output=True,
             text=True,
@@ -88,7 +88,7 @@ def main() -> int:
     warning = (
         f"Render check failed after editing {shown}\n\n"
         f"{(result.stdout + result.stderr).strip()}\n\n"
-        f"Reproduce: uv run python tools/agent_view.py {DEMO} --frames {FRAMES}"
+        f"Reproduce: uv run python tools/agent_view.py {DEMO} --gl --frames {FRAMES}"
     )
     json.dump(
         {
