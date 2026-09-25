@@ -31,7 +31,6 @@ from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.systems.manager import SystemManager
 from pyguara.ui.manager import UIManager
 
 
@@ -77,7 +76,6 @@ def configure_game_container() -> DIContainer:
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(ResourceManager, ResourceManager)
     container.register_singleton(UIManager, UIManager)
-    container.register_singleton(SystemManager, SystemManager)
     container.register_singleton(CoroutineManager, CoroutineManager)
 
     # --- Physics Setup ---

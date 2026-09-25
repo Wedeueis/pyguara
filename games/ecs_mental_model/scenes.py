@@ -10,20 +10,29 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.scene.base import Scene
 
+# SystemManager runs lower numbers first. The engine registers its own four
+# systems in the 100-399 band (see Scene.resolve_dependencies), so game
+# systems go after them unless they have a reason not to.
+_PRIORITY_MOVEMENT = 400
+
 
 class ECSScene(Scene):
     """Demonstrates Entity creation and System execution."""
 
     def __init__(self, event_dispatcher: EventDispatcher):
         super().__init__("ECSScene", event_dispatcher)
-        self.movement_system = None  # Will be initialized in on_enter
 
     def on_enter(self) -> None:
         print("ECSScene entered! Creating entities...")
 
-        # 1. Initialize Systems
-        # Pass the EntityManager (which belongs to the Scene) to the System
-        self.movement_system = MovementSystem(self.entity_manager)
+        # 1. Register Systems
+        # Every Scene owns a SystemManager. Registering here rather than
+        # calling update() by hand is what "System" means in this engine:
+        # SceneManager ticks the whole set every fixed step, in priority
+        # order, and cleans them up when the scene exits.
+        self.system_manager.register(
+            MovementSystem(self.entity_manager), priority=_PRIORITY_MOVEMENT
+        )
 
         # 2. Create Entities
         # We spawn a "Hero" square
@@ -37,16 +46,21 @@ class ECSScene(Scene):
         pass
 
     def update(self, dt: float) -> None:
-        # Run our logic systems
-        if self.movement_system:
-            self.movement_system.update(dt)
+        # Nothing here on purpose. MovementSystem is registered with
+        # self.system_manager, so it is already being ticked -- this is the
+        # difference between "a class with an update() method" and a System.
+        pass
 
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         # Clear screen
         world_renderer.clear(Color(30, 30, 30))
 
-        # Simple Rendering Logic (usually this goes in a RenderSystem)
-        # Iterate over all entities that have visuals
+        # Drawn by hand, with renderer primitives, because this module has
+        # no textures: `Sprite` here is a colour and a size we defined
+        # ourselves, to show that a Component is just data. The engine's
+        # RenderSystem draws `Renderable`s, and a Renderable needs a
+        # Texture -- which is module 3's subject. From module 3 on, Scene's
+        # own render() does this for you and nothing overrides it.
         for entity in self.entity_manager.get_entities_with(Transform, Sprite):
             transform = entity.get_component(Transform)
             sprite = entity.get_component(Sprite)
