@@ -77,21 +77,24 @@ def test_a_hand_rolled_private_context_is_what_the_fixture_prevents(
     happen not to interfere -- and the regression would come back the next
     time a GL test file was added with an early-sorting name.
 
-    If this ever fails it is worth reading rather than deleting: it means a
-    driver or a moderngl release stopped dropping currency on release, and
-    the fixture could be simplified.
+    Whether releasing a context drops currency is the driver's business,
+    not ours, so this skips rather than fails where it does not happen.
+    A skip here is worth reading: on that platform the fixture's teardown
+    is guarding nothing and could be simplified.
     """
-    moderngl = pytest.importorskip("moderngl")
     assert _can_allocate(gl_ctx), "precondition: the shared context works"
 
-    private = moderngl.create_standalone_context()
+    # Through the shared helper, not `moderngl.create_standalone_context()`
+    # -- the bare call picks GLX and dies on a headless runner.
+    private = conftest.create_standalone_context()
     private.release()
 
     broken = not _can_allocate(gl_ctx)
     gl_ctx.__enter__()  # put it back before anything else runs
+    assert _can_allocate(gl_ctx), "re-entering the shared context has to be the cure"
 
-    assert broken, (
-        "releasing a standalone context no longer drops currency on this "
-        "platform -- isolated_gl_ctx's teardown may no longer be needed"
-    )
-    assert _can_allocate(gl_ctx), "and re-entering it has to be the cure"
+    if not broken:  # pragma: no cover - depends on the driver
+        pytest.skip(
+            "releasing a standalone context does not drop currency on this "
+            "platform, so isolated_gl_ctx's teardown is a no-op here"
+        )
