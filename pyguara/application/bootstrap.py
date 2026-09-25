@@ -1,5 +1,7 @@
 """Application setup and dependency wiring."""
 
+from collections.abc import Callable
+
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock, FixedClock
 from pyguara.audio.audio_system import IAudioSystem
@@ -7,7 +9,7 @@ from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.manager import AudioManager
 from pyguara.config.manager import ConfigManager
-from pyguara.config.types import RenderingBackend
+from pyguara.config.types import GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
@@ -38,8 +40,46 @@ from pyguara.ui.manager import UIManager
 
 from .sandbox import SandboxApplication
 
+Configure = Callable[[GameConfig], None]
+"""A hook to adjust configuration before anything is built from it.
 
-def create_application() -> Application:
+Called once, after `ConfigManager.load()` and **before** the window, the
+renderer or the physics engine exist -- which is the only point where
+changing `display.backend` or `display.screen_width` still decides
+anything. A game uses it to name its window and pick its backend without
+reimplementing the wiring that follows:
+
+```python
+def _configure(config: GameConfig) -> None:
+    config.display.title = "My Game"
+    config.display.backend = RenderingBackend.MODERNGL
+```
+"""
+
+
+def create_container(configure: Configure | None = None) -> DIContainer:
+    """Build the fully-wired engine container.
+
+    The same container `create_application()` runs on, handed over before
+    an `Application` is built from it -- for a game that needs to register
+    its own services, or add passes to the `RenderGraph`, between the
+    engine's wiring and the first frame.
+
+    `Application` is registered as a singleton rather than constructed
+    here, so `container.get(Application)` builds it on first use: after
+    whatever the caller adds, not before.
+
+    Args:
+        configure: Optional hook to adjust configuration before the window
+            and backends are built from it. See `Configure`.
+
+    Returns:
+        The configured container.
+    """
+    return _setup_container(configure=configure)
+
+
+def create_application(configure: Configure | None = None) -> Application:
     """
     Construct and configure the Application instance.
 
@@ -50,20 +90,29 @@ def create_application() -> Application:
     4. Initializes the Window based on config.
     5., 6., 7. ... Registers all core subsystems (Input, Physics, UI, Resources).
 
+    Args:
+        configure: Optional hook to adjust configuration before the window
+            and backends are built from it. See `Configure`.
+
     Returns:
         A fully configured Application ready to run.
     """
-    container = _setup_container()
-    return Application(container)
+    return create_container(configure).get(Application)
 
 
-def create_sandbox_application() -> SandboxApplication:
+def create_sandbox_application(
+    configure: Configure | None = None,
+) -> SandboxApplication:
     """
     Construct and configure the SandboxApplication instance.
 
     Includes developer tools.
+
+    Args:
+        configure: Optional hook to adjust configuration before the window
+            and backends are built from it. See `Configure`.
     """
-    container = _setup_container()
+    container = _setup_container(configure=configure)
     return SandboxApplication(container)
 
 
@@ -93,7 +142,9 @@ def create_headless_sandbox_application() -> SandboxApplication:
     return SandboxApplication(container)
 
 
-def _setup_container(headless: bool = False) -> DIContainer:
+def _setup_container(
+    headless: bool = False, configure: Configure | None = None
+) -> DIContainer:
     """Configure common dependencies internally.
 
     Args:
@@ -101,6 +152,8 @@ def _setup_container(headless: bool = False) -> DIContainer:
             window/renderer/UI-renderer/texture-factory quartet instead of
             whatever `config.display.backend` says, regardless of its value.
             See `create_headless_application()`.
+        configure: Optional hook to adjust configuration after it loads and
+            before anything is built from it. See `Configure`.
     """
     # 1. Event System (Core)
     event_dispatcher = EventDispatcher()
@@ -108,6 +161,11 @@ def _setup_container(headless: bool = False) -> DIContainer:
     # 2. Configuration System
     config_manager = ConfigManager(event_dispatcher=event_dispatcher)
     config_manager.load()  # Loads from disk or defaults
+
+    # Before the window, the renderer or the physics engine exist -- the
+    # only point at which changing `display.backend` still decides anything.
+    if configure is not None:
+        configure(config_manager.config)
 
     # 3. Logging System
     debug_cfg = config_manager.config.debug
@@ -125,6 +183,11 @@ def _setup_container(headless: bool = False) -> DIContainer:
 
     # Initialize the container to register the core services
     container = DIContainer()
+
+    # The container resolves itself, which is what lets `Application` be
+    # auto-wired below: its only argument without a default is the
+    # container it runs on.
+    container.register_instance(DIContainer, container)
 
     container.register_instance(EventDispatcher, event_dispatcher)
     container.register_instance(ConfigManager, config_manager)
@@ -354,6 +417,13 @@ def _setup_container(headless: bool = False) -> DIContainer:
 
     # Register prefab loader with resource manager
     res_manager.register_loader(PrefabLoader())
+
+    # 9. The Application itself, as a singleton rather than an instance, so
+    # it is built on the first `container.get(Application)` -- after
+    # whatever a game registered on top of this, not before. Its constructor
+    # resolves Window, SceneManager and friends eagerly, so building it too
+    # early would freeze a half-configured world.
+    container.register_singleton(Application, Application)
 
     logger.info("Engine bootstrap complete. Handing over to Application.")
 
