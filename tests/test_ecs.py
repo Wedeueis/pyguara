@@ -666,14 +666,50 @@ def test_entity_destroyed_event_dispatches_through_a_real_dispatcher() -> None:
 # -- QueryCache (wayfinder ticket 26) --
 
 
-def test_query_cache_values_are_frozensets() -> None:
+def test_a_cached_query_hands_back_an_immutable_view() -> None:
+    """Through the public getter, not `_cache`.
+
+    This used to reach into `_query_cache._cache` and assert the stored
+    value was a `frozenset`. That pinned an implementation detail rather
+    than a promise: the cache is a mutable set internally now, so the
+    entity ids can be added in O(1) instead of copying the whole set on
+    every spawn, and the old assertion failed while nothing a caller can
+    observe had changed.
+    """
     manager = EntityManager()
     manager.register_cached_query(Position)
     entity = manager.create_entity()
     entity.add_component(Position())
 
-    cache = manager._query_cache._cache[frozenset({Position})]
-    assert isinstance(cache, frozenset)
+    cached = manager._query_cache.get_cached(Position)
+
+    assert isinstance(cached, frozenset)
+    assert cached == {entity.id}
+
+
+def test_iterating_a_cached_query_survives_spawning_into_it() -> None:
+    """The reason the view is immutable at all.
+
+    A system iterating a cached query while spawning entities that match
+    it -- a splitter enemy dividing, a projectile seeding more projectiles
+    -- would hit "set changed size during iteration" if it were handed the
+    live set. Copying on every *read* would avoid that too, and move the
+    cost onto the hot path instead; the snapshot is dropped on the next
+    change, so it is paid once per change rather than once per read.
+    """
+    manager = EntityManager()
+    manager.register_cached_query(Position)
+    for _ in range(3):
+        manager.create_entity().add_component(Position())
+
+    seen = 0
+    for _ in manager.get_entities_with_cached(Position):
+        seen += 1
+        if seen == 1:
+            manager.create_entity().add_component(Position())
+
+    assert seen == 3, "the iteration saw the world it started with"
+    assert len(list(manager.get_entities_with_cached(Position))) == 4
 
 
 def test_query_cache_distinguishes_registered_empty_from_unregistered() -> None:
@@ -1138,3 +1174,121 @@ def test_clear_on_an_empty_world_is_a_noop() -> None:
     manager = EntityManager()
     manager.clear()
     assert list(manager.get_all_entities()) == []
+
+
+class TestBulkCreation:
+    """`create_entities(n)`: a wave of entities in one call."""
+
+    def test_it_creates_and_registers_them_all(self) -> None:
+        manager = EntityManager()
+
+        entities = manager.create_entities(5)
+
+        assert len(entities) == 5
+        assert len(list(manager.get_all_entities())) == 5
+        for entity in entities:
+            assert manager.get_entity(entity.id) is entity
+
+    def test_the_entities_are_live_not_deferred(self) -> None:
+        """No half-registered state to flush.
+
+        A caller attaching components immediately -- which is the entire
+        point of spawning a wave -- must find the index already listening,
+        or those components land in nothing.
+        """
+        manager = EntityManager()
+        manager.register_cached_query(Position)
+
+        for entity in manager.create_entities(3):
+            entity.add_component(Position())
+
+        assert len(list(manager.get_entities_with(Position))) == 3
+        assert len(list(manager.get_entities_with_cached(Position))) == 3
+
+    def test_each_gets_its_own_id(self) -> None:
+        manager = EntityManager()
+
+        ids = {entity.id for entity in manager.create_entities(50)}
+
+        assert len(ids) == 50
+
+    def test_zero_is_allowed_and_empty(self) -> None:
+        """Spawn counts come from data -- a wave table, a difficulty curve
+        -- so zero is a normal value, not a caller error.
+        """
+        manager = EntityManager()
+
+        assert manager.create_entities(0) == []
+
+    def test_a_negative_count_raises(self) -> None:
+        manager = EntityManager()
+
+        with pytest.raises(ValueError, match="negative"):
+            manager.create_entities(-1)
+
+
+class TestQueryCacheSnapshots:
+    """The copy-on-write behaviour that took the quadratic out of spawning.
+
+    Timing assertions would be flaky, so these pin the mechanism instead:
+    a read between two changes must reuse its snapshot, and any change must
+    drop it. Get either wrong and the cost returns -- rebuilding per change
+    (the original bug) or per read (the obvious fix that moves the cost to
+    the hot path).
+    """
+
+    def test_repeated_reads_reuse_one_snapshot(self) -> None:
+        manager = EntityManager()
+        manager.register_cached_query(Position)
+        manager.create_entity().add_component(Position())
+
+        first = manager._query_cache.get_cached(Position)
+        second = manager._query_cache.get_cached(Position)
+
+        assert first is second, "a read rebuilt the snapshot with nothing changed"
+
+    def test_adding_a_component_drops_the_snapshot(self) -> None:
+        manager = EntityManager()
+        manager.register_cached_query(Position)
+        manager.create_entity().add_component(Position())
+        before = manager._query_cache.get_cached(Position)
+
+        manager.create_entity().add_component(Position())
+        after = manager._query_cache.get_cached(Position)
+
+        assert after is not before
+        assert len(after) == 2
+
+    def test_removing_a_component_drops_the_snapshot(self) -> None:
+        manager = EntityManager()
+        manager.register_cached_query(Position)
+        entity = manager.create_entity()
+        entity.add_component(Position())
+        before = manager._query_cache.get_cached(Position)
+
+        entity.remove_component(Position)
+        after = manager._query_cache.get_cached(Position)
+
+        assert after is not before
+        assert after == frozenset()
+
+    def test_a_removal_that_changes_nothing_keeps_the_snapshot(self) -> None:
+        """Dropping the snapshot on a no-op would rebuild it once per
+        removed component of every entity the query does not hold -- which
+        `flush_pending_removals` does in bulk at every frame boundary.
+        """
+        manager = EntityManager()
+        manager.register_cached_query(Position)
+        manager.create_entity().add_component(Position())
+        before = manager._query_cache.get_cached(Position)
+
+        other = manager.create_entity()
+        other.add_component(Position())
+        other.remove_component(Position)
+        manager._query_cache.get_cached(Position)
+        stable = manager._query_cache.get_cached(Position)
+
+        manager._query_cache.on_component_removed("never-was-here", Position)
+
+        assert manager._query_cache.get_cached(Position) is stable
+        assert before is not stable  # sanity: the earlier add did drop it

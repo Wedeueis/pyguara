@@ -50,7 +50,19 @@ class QueryCache:
             manager: The entity manager whose queries are cached.
         """
         self._manager = manager
-        self._cache: dict[_QueryKey, frozenset[str]] = {}
+        # Mutable and authoritative: a component change edits this in place,
+        # which is O(1). Rebuilding a frozenset per change made a spawn wave
+        # quadratic -- 4000 entities cost 40ms with no cached query and
+        # 214ms with one, because every add copied the whole set.
+        self._cache: dict[_QueryKey, set[str]] = {}
+        # Immutable views, built on demand and dropped on the next change.
+        # Callers iterate these across a frame while systems add and remove
+        # components, so handing out the live set would raise "set changed
+        # size during iteration"; copying on every *read* would only move
+        # the same cost to the hot path. A query read repeatedly between
+        # changes -- the normal case -- pays for one copy, not one per read
+        # and not one per change.
+        self._snapshots: dict[_QueryKey, frozenset[str]] = {}
         self._registered_queries: set[_QueryKey] = set()
         # ComponentType -> the registered queries mentioning it, so a component
         # change only visits the queries it can actually affect.
@@ -89,7 +101,12 @@ class QueryCache:
         query_key: _QueryKey = frozenset(component_types)
         if query_key not in self._registered_queries:
             return None
-        return self._cache.get(query_key, frozenset())
+
+        snapshot = self._snapshots.get(query_key)
+        if snapshot is None:
+            snapshot = frozenset(self._cache.get(query_key, ()))
+            self._snapshots[query_key] = snapshot
+        return snapshot
 
     def on_component_added(
         self, entity_id: str, component_type: type[Component]
@@ -106,9 +123,8 @@ class QueryCache:
 
         for query_key in self._queries_by_type.get(component_type, ()):
             if all(entity.has_component(ct) for ct in query_key):
-                self._cache[query_key] = self._cache.get(query_key, frozenset()) | {
-                    entity_id
-                }
+                self._cache.setdefault(query_key, set()).add(entity_id)
+                self._snapshots.pop(query_key, None)
 
     def on_component_removed(
         self, entity_id: str, component_type: type[Component]
@@ -126,8 +142,9 @@ class QueryCache:
         """
         for query_key in self._queries_by_type.get(component_type, ()):
             current = self._cache.get(query_key)
-            if current is not None:
-                self._cache[query_key] = current - {entity_id}
+            if current is not None and entity_id in current:
+                current.discard(entity_id)
+                self._snapshots.pop(query_key, None)
 
     def rebuild_all(self) -> None:
         """Recompute every registered query from the current world state.
@@ -149,7 +166,7 @@ class QueryCache:
         queries: list[dict[str, Any]] = [
             {
                 "component_types": sorted(ct.__name__ for ct in query_key),
-                "cached_entities": len(self._cache.get(query_key, frozenset())),
+                "cached_entities": len(self._cache.get(query_key, ())),
             }
             for query_key in self._registered_queries
         ]
@@ -171,6 +188,5 @@ class QueryCache:
         # dormancy in here would strand every parked entity -- the cache is
         # maintained by component add/remove, and parking an entity is
         # neither.
-        self._cache[query_key] = frozenset(
-            self._manager.entity_ids_with(tuple(query_key))
-        )
+        self._cache[query_key] = set(self._manager.entity_ids_with(tuple(query_key)))
+        self._snapshots.pop(query_key, None)

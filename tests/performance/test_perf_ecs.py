@@ -82,6 +82,57 @@ def test_pool_churn_is_linear() -> None:
     )
 
 
+def _spawn_with_cached_query(count: int) -> None:
+    """Spawn `count` two-component entities into a world with a cached query.
+
+    The shape a bullet wave or a procgen room dump has: many entities
+    created in a burst, each gaining components that a registered query
+    matches.
+
+    Args:
+        count: How many entities to spawn.
+    """
+    manager = EntityManager()
+    manager.register_cached_query(Transform, Poolable)
+    for _ in range(count):
+        entity = manager.create_entity()
+        entity.add_component(Transform(position=Vector2.zero()))
+        entity.add_component(Poolable())
+
+
+@pytest.mark.performance
+def test_spawning_into_a_cached_query_is_linear() -> None:
+    """Spawning 4x the entities should cost about 4x, not 16x.
+
+    The second quadratic this module has caught, and the same shape as the
+    pool one above: `QueryCache.on_component_added` rebuilt the whole
+    result frozenset for every component added, so each new entity copied
+    a set that every previous entity had grown.
+
+    Measured before the fix, spawning with one cached query registered
+    against spawning with none:
+
+        500 -> 1.6x, 1000 -> 2.4x, 2000 -> 4.0x, 4000 -> 5.4x
+
+    -- the cached column quadrupling as N doubled (17.5ms, 56.3ms,
+    214.2ms). After: 34.6ms at 4000, and the ratio flat at ~1.0-1.3x.
+
+    The cache now holds a mutable set and hands out an immutable snapshot
+    that it drops on the next change, so a change is O(1) and a read
+    between changes is free.
+    """
+    small = measure(lambda: _spawn_with_cached_query(500))
+    large = measure(lambda: _spawn_with_cached_query(2000))
+
+    assert_scales_no_worse_than(
+        small=small,
+        large=large,
+        factor=4,
+        limit=8.0,
+        what="spawning entities into a registered cached query",
+    )
+
+
 @pytest.mark.performance
 def test_cached_queries_are_no_slower_than_uncached() -> None:
     """`get_entities_with_cached` should never lose to the uncached form.
