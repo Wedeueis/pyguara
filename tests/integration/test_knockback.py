@@ -18,12 +18,15 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.kits.platformer_movement.controller import (
+    PlatformerController,
+    PlatformerInput,
+)
+from pyguara.kits.platformer_movement.system import PlatformerSystem, apply_knockback
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import CharacterBody, Collider
 from pyguara.physics.physics_system import PhysicsSystem
-from pyguara.physics.platformer_controller import PlatformerController, PlatformerInput
-from pyguara.physics.platformer_system import PlatformerSystem, apply_knockback
 
 pytestmark = pytest.mark.integration
 

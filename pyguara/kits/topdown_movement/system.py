@@ -16,10 +16,10 @@ from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
+from pyguara.kits.topdown_movement.body import TopDownBody
 from pyguara.physics.character_mover import CharacterMover
 from pyguara.physics.components import Collider
 from pyguara.physics.protocols import IPhysicsEngine
-from pyguara.physics.topdown_controller import TopDownBody
 from pyguara.spatial.components import SpatialTracked
 
 # Default half-extents for a character with no Collider -- matches the

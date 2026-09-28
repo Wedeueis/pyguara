@@ -25,6 +25,7 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.kits.effects import EffectContainer
 from pyguara.kits.loot import LootEntry, LootTable, roll_loot
+from pyguara.kits.platformer_movement.controller import PlatformerController
 from pyguara.kits.stats import StatBlock
 from pyguara.physics.components import (
     CharacterBody,
@@ -33,7 +34,6 @@ from pyguara.physics.components import (
     Pushable,
     RigidBody,
 )
-from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.physics.tilemap import merge_tile_rects
 from pyguara.physics.types import BodyType
 

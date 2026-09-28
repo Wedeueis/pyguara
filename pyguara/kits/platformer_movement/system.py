@@ -15,13 +15,13 @@ from __future__ import annotations
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.character_mover import CharacterMover
-from pyguara.physics.components import CharacterBody, Collider, Pushable
-from pyguara.physics.platformer_controller import (
+from pyguara.kits.platformer_movement.controller import (
     PlatformerController,
     PlatformerInput,
     PlatformerState,
 )
+from pyguara.physics.character_mover import CharacterMover
+from pyguara.physics.components import CharacterBody, Collider, Pushable
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.solid_mover import SolidMover
 

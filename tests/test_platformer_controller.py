@@ -3,14 +3,14 @@
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.backends.pymunk_impl import PymunkEngine
-from pyguara.physics.components import CharacterBody, Collider
-from pyguara.physics.platformer_controller import (
+from pyguara.kits.platformer_movement.controller import (
     PlatformerController,
     PlatformerInput,
     PlatformerState,
 )
-from pyguara.physics.platformer_system import PlatformerSystem
+from pyguara.kits.platformer_movement.system import PlatformerSystem
+from pyguara.physics.backends.pymunk_impl import PymunkEngine
+from pyguara.physics.components import CharacterBody, Collider
 from pyguara.physics.types import ShapeType
 
 

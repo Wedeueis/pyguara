@@ -38,8 +38,34 @@ def test_component_registry_is_registered_once_with_core_components():
 
     registry = container.get(ComponentRegistry)
 
-    assert len(registry.list_components()) == 18
+    assert len(registry.list_components()) == 17
     assert registry.get("Transform") is not None
+
+
+@pytest.mark.integration
+def test_the_core_registry_holds_no_kit_components():
+    """Core registers core components, and only those.
+
+    `PlatformerController` was registered here until it moved to
+    `kits/platformer_movement` (#132). Registering a kit's component from
+    core is the same layering break as importing one: it hands every game
+    a genre's vocabulary whether or not it asked, and makes the kit look
+    optional while the engine depends on it.
+
+    Named rather than counted, because the count above cannot tell which
+    component appeared -- and a kit component creeping back in is exactly
+    what it would fail to describe.
+    """
+    container = _setup_container()
+    registry = container.get(ComponentRegistry)
+
+    registered = set(registry.list_components())
+
+    assert "PlatformerController" not in registered
+    assert "TopDownBody" not in registered
+    # The core physics components it should still carry, so this cannot
+    # pass by the registry being empty.
+    assert {"RigidBody", "Collider", "TriggerVolume"} <= registered
 
 
 @pytest.mark.integration

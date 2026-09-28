@@ -22,7 +22,7 @@ from pyguara.config.manager import ConfigManager
 from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.input import keys
-from pyguara.physics.platformer_controller import PlatformerController
+from pyguara.kits.platformer_movement.controller import PlatformerController
 from pyguara.scene.base import Scene
 from pyguara.tools.config_inspector import ConfigInspector
 from pyguara.tools.inspector import EntityInspector
