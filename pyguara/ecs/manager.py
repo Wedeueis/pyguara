@@ -10,6 +10,7 @@ from typing import TypeVar, overload
 from pyguara.ecs.component import Component
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.query_cache import QueryCache
+from pyguara.ecs.relations import ChildOf
 
 C1 = TypeVar("C1", bound=Component)
 C2 = TypeVar("C2", bound=Component)
@@ -64,6 +65,14 @@ class EntityManager:
         # a single slot would let whichever registered last silently displace
         # the others.
         self._entity_removed_callbacks: list[EntityRemovedCallback] = []
+
+        # The `ChildOf` relation, both ways. `_parent_of` is the authority
+        # -- it is what lets the component-removed hook know which parent
+        # to detach from, since the component is already gone by then --
+        # and `_children` is the reverse index that makes a cascade O(its
+        # own subtree) rather than a scan of the world.
+        self._parent_of: dict[str, str] = {}
+        self._children: dict[str, set[str]] = defaultdict(set)
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -126,6 +135,12 @@ class EntityManager:
         synchronously here, after soft-death but before the deferred cleanup,
         so they can still read the entity's components.
 
+        **Destruction cascades.** Every entity owning a `ChildOf` pointing
+        at this one is removed too, depth first, and so are theirs. That is
+        what stops a despawned enemy leaking the health bar, weapon and
+        aura its prefab attached: nothing else in the engine knows those
+        entities were only ever meaningful as part of it.
+
         Removing an unknown id is a no-op.
 
         Args:
@@ -136,11 +151,20 @@ class EntityManager:
             return
 
         # Soft-dead first, before the hook below can run any user code, so no
-        # reentrant mutation can resurrect this id.
+        # reentrant mutation can resurrect this id -- and before the cascade,
+        # so that a removal subscriber cannot `set_parent()` something onto
+        # this entity while it is being torn down. By now it is gone from
+        # `_entities`, so that call raises instead of attaching a child to a
+        # corpse that will never cascade again.
         entity._on_component_added = None
         entity._on_component_removed = None
         entity._is_removed = True
         del self._entities[entity_id]
+
+        # Detach from this entity's own parent. `_unlink` would otherwise
+        # run from the component-removed hook, which a soft-dead entity
+        # never fires.
+        self._unlink(entity_id)
         # A destroyed entity is not a parked one. Leaving its id behind
         # would disable whatever reused that id later, and `create_entity`
         # takes an explicit id.
@@ -153,6 +177,12 @@ class EntityManager:
 
         for component_type in entity._components:
             self._pending_index_cleanup.append((component_type, entity_id))
+
+        # Then the subtree, read as a snapshot: each child's own removal
+        # detaches it from this set. Depth first, so a grandchild is gone
+        # before the child that owned it is reported.
+        for child_id in self.children_of(entity_id):
+            self.remove_entity(child_id)
 
     def flush_pending_removals(self) -> None:
         """Clean up index entries for entities soft-removed since the last flush.
@@ -262,6 +292,117 @@ class EntityManager:
         would be the more surprising answer.
         """
         return entity_id in self._entities and entity_id not in self._disabled
+
+    # -------------------------------------------------------------------------
+    # Relations
+    # -------------------------------------------------------------------------
+
+    def set_parent(self, child_id: str, parent_id: str | None) -> None:
+        """Make one entity own another, or detach it.
+
+        Ownership means destruction cascades: removing the parent removes
+        the child. It says nothing about position -- a child that should
+        also *move* with its parent sets its `Transform` parent too. See
+        `ecs.relations` for why those are separate.
+
+        Args:
+            child_id: The entity to be owned.
+            parent_id: The owning entity, or None to detach and leave the
+                child standing on its own.
+
+        Raises:
+            KeyError: If either entity is unknown. Silently doing nothing
+                would leave a caller believing a cascade is wired up when
+                it is not, and the symptom would be a leak much later.
+            ValueError: If the link would make an entity its own ancestor.
+                A cycle makes the cascade unbounded, and the natural
+                mistake -- re-parenting a node under its own descendant --
+                is easy to make and invisible until something is destroyed.
+        """
+        child = self._entities.get(child_id)
+        if child is None:
+            raise KeyError(f"Unknown child entity '{child_id}'")
+
+        if parent_id is None:
+            if child.has_component(ChildOf):
+                child.remove_component(ChildOf)
+            return
+
+        if parent_id not in self._entities:
+            raise KeyError(f"Unknown parent entity '{parent_id}'")
+        if parent_id == child_id:
+            raise ValueError(f"Entity '{child_id}' cannot be its own parent")
+
+        ancestor: str | None = parent_id
+        while ancestor is not None:
+            if ancestor == child_id:
+                raise ValueError(
+                    f"Parenting '{child_id}' to '{parent_id}' would make it its "
+                    "own ancestor; the destroy cascade would not terminate."
+                )
+            ancestor = self._parent_of.get(ancestor)
+
+        # Replace rather than mutate: the component add/remove hooks are
+        # what keep the reverse index true, and assigning `parent_id` in
+        # place runs neither.
+        if child.has_component(ChildOf):
+            child.remove_component(ChildOf)
+        child.add_component(ChildOf(parent_id=parent_id))
+
+    def parent_of(self, child_id: str) -> str | None:
+        """Return the id of the entity owning `child_id`, if any.
+
+        Args:
+            child_id: The entity to look up.
+
+        Returns:
+            The parent's id, or None if the entity has no parent or does
+            not exist.
+        """
+        return self._parent_of.get(child_id)
+
+    def children_of(self, parent_id: str) -> list[str]:
+        """Return the ids of the entities `parent_id` owns, directly.
+
+        Direct children only -- walk it yourself for a whole subtree.
+
+        Args:
+            parent_id: The owning entity.
+
+        Returns:
+            A snapshot list, safe to iterate while destroying what is in
+            it. The live set is mutated by every detach.
+        """
+        return list(self._children.get(parent_id, ()))
+
+    def _link(self, child_id: str, parent_id: str) -> None:
+        """Record a parent-child relation in both directions.
+
+        Called from the component-added hook, which fires only once the
+        relation is attached -- and `set_parent()` detaches any previous
+        one first, so there is never a stale link to clear here.
+
+        Args:
+            child_id: The owned entity.
+            parent_id: The owning entity.
+        """
+        self._parent_of[child_id] = parent_id
+        self._children[parent_id].add(child_id)
+
+    def _unlink(self, child_id: str) -> None:
+        """Drop whatever relation `child_id` had, if any.
+
+        Args:
+            child_id: The formerly owned entity.
+        """
+        previous = self._parent_of.pop(child_id, None)
+        if previous is None:
+            return
+        siblings = self._children.get(previous)
+        if siblings is not None:
+            siblings.discard(child_id)
+            if not siblings:
+                del self._children[previous]
 
     def get_entity(self, entity_id: str) -> Entity | None:
         """Retrieve a live entity by id.
@@ -514,6 +655,11 @@ class EntityManager:
         self._component_index[component_type].add(entity_id)
         self._query_cache.on_component_added(entity_id, component_type)
 
+        if component_type is ChildOf:
+            entity = self._entities.get(entity_id)
+            if entity is not None:
+                self._link(entity_id, entity.get_component(ChildOf).parent_id)
+
     def _on_entity_component_removed(
         self, entity_id: str, component_type: type[Component]
     ) -> None:
@@ -527,3 +673,6 @@ class EntityManager:
         if index is not None:
             index.discard(entity_id)
         self._query_cache.on_component_removed(entity_id, component_type)
+
+        if component_type is ChildOf:
+            self._unlink(entity_id)
