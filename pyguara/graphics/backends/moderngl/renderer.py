@@ -47,7 +47,7 @@ class ModernGLRenderer:
     # = 11 floats = 44 bytes. The layout itself, and the packing of it,
     # live in `instancing.py`.
     INSTANCE_FLOATS = instancing.INSTANCE_FLOATS
-    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 44 bytes
+    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 60 bytes
 
     # Initial instance buffer capacity (grows as needed)
     INITIAL_CAPACITY = 1024
@@ -217,7 +217,8 @@ class ModernGLRenderer:
         raise ValueError(
             f"A material's vertex shader must consume {', '.join(missing)}: "
             "the renderer packs one fixed instance layout (in_vert, in_uv "
-            "per-vertex; in_pos, in_rot, in_scale, in_size, in_color "
+            "per-vertex; in_pos, in_rot, in_scale, in_size, in_color, "
+            "in_uv_offset, in_uv_scale "
             "per-instance), and a shader that ignores it draws every sprite "
             "in the same place rather than failing. Reuse "
             "`materials.defaults.DEFAULT_SPRITE_VERTEX` unless you mean to "
@@ -263,12 +264,14 @@ class ModernGLRenderer:
                 # Instance data (per-instance, hence /i)
                 (
                     self._instance_vbo,
-                    "2f 1f 2f 2f 4f/i",
+                    "2f 1f 2f 2f 4f 2f 2f/i",
                     "in_pos",
                     "in_rot",
                     "in_scale",
                     "in_size",
                     "in_color",
+                    "in_uv_offset",
+                    "in_uv_scale",
                 ),
             ],
             skip_errors=True,
@@ -466,34 +469,32 @@ class ModernGLRenderer:
         use render_batch() instead.
         """
         self._flush_shapes()
-        # Convert rotation from degrees to radians
-        rot_rad = math.radians(rotation)
 
-        # Pack instance data for a single sprite. This shares the batch
-        # path's VBO and VAO, so it must carry the full instance layout --
-        # a short row would leave the next attributes reading whatever the
-        # previous frame left at that stride. Untinted: `IRenderer` has no
-        # per-call colour on this method, and `draw_text()` routes through
-        # here with its colour already baked into the glyph texture.
-        instance_data = np.array(
-            [
-                position.x,  # pos x
-                position.y,  # pos y
-                rot_rad,  # rotation
-                scale.x,  # scale x
-                scale.y,  # scale y
-                float(texture.width),  # size x
-                float(texture.height),  # size y
-                1.0,  # tint r
-                1.0,  # tint g
-                1.0,  # tint b
-                1.0,  # tint a
-            ],
-            dtype="f4",
+        # Packed by the batch path's own packer, through a one-sprite
+        # batch. This shares the batch path's VBO and VAO, so it must carry
+        # the full instance layout -- a short row leaves the following
+        # attributes reading whatever the previous frame left at that
+        # stride, which is a blank glyph rather than an error. Writing the
+        # row out by hand here is what made that a live bug the day the
+        # layout grew its UV columns; there is now one packer and one
+        # layout.
+        #
+        # Untinted: `IRenderer` has no per-call colour on this method, and
+        # `draw_text()` routes through here with its colour already baked
+        # into the glyph texture.
+        packed = instancing.pack_sprite_instances(
+            RenderBatch(
+                texture=texture,
+                destinations=[(position.x, position.y)],
+                rotations=[rotation],
+                scales=[(scale.x, scale.y)],
+                transforms_enabled=True,
+            ),
+            self._instance_scratch,
         )
 
         # Upload to instance buffer
-        self._instance_vbo.write(instance_data.tobytes())
+        self._instance_vbo.write(self._instance_scratch[:packed].tobytes())
 
         # Bind texture
         gl_texture = texture.native_handle

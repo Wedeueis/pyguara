@@ -11,6 +11,26 @@ from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 
 
+def _to_area(region: Rect | None, whole: pygame.Rect) -> pygame.Rect:
+    """Convert a batch's source rect to the `area` pygame blitting wants.
+
+    Args:
+        region: The sub-rectangle of the texture, or None for all of it.
+        whole: The rect covering the entire surface, used for None. Passed
+            in rather than derived here so a batch computes it once instead
+            of once per sprite.
+
+    Returns:
+        A pygame rect. One tuple shape reaches `blits()` either way, which
+        is what keeps a mixed batch on the fast path.
+    """
+    if region is None:
+        return whole
+    return pygame.Rect(
+        int(region.x), int(region.y), int(region.width), int(region.height)
+    )
+
+
 class PygameBackend:
     """Renderer backend that uses the Pygame library."""
 
@@ -115,15 +135,37 @@ class PygameBackend:
           sprite is transformed/tinted individually
         """
         texture = batch.texture.native_handle
+        regions = batch.source_rects if batch.source_rects_enabled else ()
 
         if not batch.transforms_enabled and not batch.colors_enabled:
-            # FAST PATH: Simple blits without transforms or tint
-            blit_sequence = ((texture, dest) for dest in batch.destinations)
-            self._screen.blits(blit_sequence, doreturn=0)
+            # FAST PATH: Simple blits without transforms or tint.
+            # `blits` takes an optional area rect per entry, so an atlas
+            # stays on this path instead of falling back to per-sprite
+            # work -- which is the whole reason for packing one.
+            if regions:
+                whole = texture.get_rect()
+                self._screen.blits(
+                    (
+                        (texture, dest, _to_area(regions[i], whole))
+                        for i, dest in enumerate(batch.destinations)
+                    ),
+                    doreturn=0,
+                )
+            else:
+                self._screen.blits(
+                    ((texture, dest) for dest in batch.destinations), doreturn=0
+                )
             return
 
         for i, dest in enumerate(batch.destinations):
             surf = texture
+            region = regions[i] if regions else None
+            if region is not None:
+                # Rotation, scaling and tinting all operate on a whole
+                # surface, so the region has to become one before any of
+                # them run. Only on this path: the fast path above blits
+                # the area straight out of the sheet.
+                surf = surf.subsurface(_to_area(region, surf.get_rect()))
 
             if batch.transforms_enabled:
                 # Apply rotation if needed
@@ -153,7 +195,8 @@ class PygameBackend:
                     tinted.fill(rgba, special_flags=pygame.BLEND_RGBA_MULT)
                     surf = tinted
 
-            # Draw the transformed/tinted sprite
+            # Draw the transformed/tinted sprite. `area` is already
+            # resolved into `surf` above, so this is a plain blit.
             self._screen.blit(surf, dest)
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:

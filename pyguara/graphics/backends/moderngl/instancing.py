@@ -16,16 +16,20 @@ import numpy as np
 from pyguara.graphics.types import RenderBatch
 
 # Per-instance layout: pos(2) + rot(1) + scale(2) + size(2) + color(4)
-# = 11 floats. The colour columns are always present, never gated by a
-# uniform or a second shader program: broadcasting a constant white into
-# four columns is free once the pack is vectorised, and
-# `docs/guides/performance.md` measures 7 floats against 11 at 20,000
-# sprites as a difference below the noise floor. A uniform would instead
-# force a per-batch state change to buy nothing.
-INSTANCE_FLOATS = 11
+# + uv_offset(2) + uv_scale(2) = 15 floats. Neither the colour nor the UV
+# columns are gated by a uniform or a second shader program: broadcasting
+# a constant (white, or the whole texture) is free once the pack is
+# vectorised, and `docs/guides/performance.md` measures 7 floats against
+# 11 at 20,000 sprites as a difference below the noise floor -- the same
+# reasoning carries the four UV columns. A uniform would instead force a
+# per-batch state change to buy nothing, which is the whole problem an
+# atlas exists to avoid.
+INSTANCE_FLOATS = 15
 
-# Column span for the tint, so a layout change has one place to happen.
+# Column spans, so a layout change has one place to happen.
 _COLOR_COLUMNS = slice(7, 11)
+_UV_OFFSET_COLUMNS = slice(11, 13)
+_UV_SCALE_COLUMNS = slice(13, 15)
 
 
 def pack_sprite_instances(batch: RenderBatch, out: np.ndarray) -> int:
@@ -82,8 +86,32 @@ def pack_sprite_instances(batch: RenderBatch, out: np.ndarray) -> int:
         rows[:, 2] = 0.0
         rows[:, 3:5] = 1.0
 
-    rows[:, 5] = float(batch.texture.width)
-    rows[:, 6] = float(batch.texture.height)
+    texture_width = float(batch.texture.width)
+    texture_height = float(batch.texture.height)
+
+    if batch.source_rects_enabled and len(batch.source_rects) == count:
+        # One (x, y, w, h) block, so the four columns come from a single
+        # conversion rather than four list comprehensions.
+        rects = np.asarray(
+            [
+                (r.x, r.y, r.width, r.height)
+                if r is not None
+                else (0.0, 0.0, texture_width, texture_height)
+                for r in batch.source_rects
+            ],
+            dtype="f4",
+        )
+        # A region is drawn at the region's size, not the sheet's. This is
+        # the half that a UV rect alone would miss: get it wrong and every
+        # atlas sprite draws at the full atlas's dimensions.
+        rows[:, 5:7] = rects[:, 2:4]
+        rows[:, _UV_OFFSET_COLUMNS] = rects[:, 0:2] / (texture_width, texture_height)
+        rows[:, _UV_SCALE_COLUMNS] = rects[:, 2:4] / (texture_width, texture_height)
+    else:
+        rows[:, 5] = texture_width
+        rows[:, 6] = texture_height
+        rows[:, _UV_OFFSET_COLUMNS] = 0.0
+        rows[:, _UV_SCALE_COLUMNS] = 1.0
 
     if batch.colors_enabled and len(batch.colors) == count:
         # 0-255 on the batch, 0-1 in the shader, where the tint multiplies
