@@ -23,49 +23,22 @@ is a lens, not a light.
 
 from __future__ import annotations
 
-from pyguara.application.application import Application
-from pyguara.application.clock import Clock
-from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.application.bootstrap import create_container
 from pyguara.common.types import Color
-from pyguara.config.manager import ConfigManager
+from pyguara.config.types import GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
-from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.backends.moderngl import (
-    GLTextureFactory,
-    GLUIRenderer,
-    ModernGLRenderer,
-    PygameGLWindow,
-)
-from pyguara.graphics.backends.pygame.clock import PygameClock
 from pyguara.graphics.lighting.light_system import LightingSystem
-from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.pipeline.passes import (
     CompositePass,
     FinalPass,
     LightPass,
     PostProcessPass,
-    WorldPass,
 )
-from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 from pyguara.graphics.vfx.effects.storm import StormEffect
 from pyguara.graphics.vfx.effects.vignette import VignetteEffect
 from pyguara.graphics.vfx.post_process import PostProcessStack
-from pyguara.graphics.window import Window, WindowConfig
-from pyguara.input.backends.pygame_backend import PygameInputBackend
-from pyguara.input.manager import InputManager
-from pyguara.input.protocols import IInputBackend
-from pyguara.log.manager import LogManager
-from pyguara.log.types import LogLevel
-from pyguara.prefabs.loader import PrefabCache
-from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
-from pyguara.resources.manager import ResourceManager
-from pyguara.scene.manager import SceneManager
-from pyguara.scripting.coroutines import CoroutineManager
-from pyguara.systems.manager import SystemManager
-from pyguara.ui.manager import UIManager
 from pyguara.ui.theme import UITheme, set_theme
 from pyguara.ui.types import ColorScheme
 
@@ -101,67 +74,52 @@ def _install_theme() -> None:
     )
 
 
+def _configure(config: GameConfig) -> None:
+    """Select the ModernGL backend, and name the window.
+
+    Called before the window exists, which is the only point where
+    `backend` still decides which one gets built.
+
+    Args:
+        config: The loaded configuration, to adjust in place.
+    """
+    config.display.title = "True Coral"
+    config.display.screen_width = WINDOW_WIDTH
+    config.display.screen_height = WINDOW_HEIGHT
+    config.display.backend = RenderingBackend.MODERNGL
+
+
 def configure_game_container() -> DIContainer:
-    """Initialize and configure the DI container for True Coral."""
-    container = DIContainer()
-    container.register_instance(DIContainer, container)
+    """Build the engine container, then this demo's render chain.
 
-    # Event System
-    event_dispatcher = EventDispatcher()
-    container.register_instance(EventDispatcher, event_dispatcher)
+    The light map is 16-bit float because `RenderGraph` declares the whole
+    chain that way (`pipeline/buffers.py`). It is the difference between the
+    lighting working and not: lights blend additively into it and the
+    composite multiplies the world by it, so an 8-bit map -- clamped at 1.0
+    -- could only ever restore a colour to what was drawn. A glowing mushroom
+    could not push its surroundings past the bloom threshold, and a lightning
+    strike could not reveal the floor, because the ambient term it lifts was
+    already saturated.
 
-    # Configuration & Logging
-    config_manager = ConfigManager(event_dispatcher)
-    config_manager.load()
-    container.register_instance(ConfigManager, config_manager)
+    Returns:
+        The configured container.
+    """
+    container = create_container(_configure)
+    _install_theme()
 
-    log_manager = LogManager(event_dispatcher)
-    log_manager.configure(level=LogLevel.INFO, console=True)
-    container.register_instance(LogManager, log_manager)
+    graph = container.get(RenderGraph)
+    ctx = graph.ctx
 
-    # Window & Graphics
-    win_config = WindowConfig(
-        title="True Coral - cocar the coral snake",
-        screen_width=WINDOW_WIDTH,
-        screen_height=WINDOW_HEIGHT,
-    )
+    # The graph owns the framebuffer manager and every pass resolves
+    # through it; anything built here has to share it or it allocates a
+    # second, parallel set of buffers the graph never looks at.
+    fbo_manager = graph.fbo_manager
 
-    gl_window = PygameGLWindow()
-    window = Window(win_config, gl_window)
-    window.create()
-    container.register_instance(Window, window)
-
-    ctx = gl_window.get_screen()
-
-    renderer = ModernGLRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-    container.register_instance(IRenderer, renderer)  # type: ignore[type-abstract]
-    container.register_instance(  # type: ignore[type-abstract]
-        UIRenderer, GLUIRenderer(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-    )
-    container.register_instance(TextureFactory, GLTextureFactory(ctx))  # type: ignore[type-abstract]
-
-    render_graph = RenderGraph(ctx, WINDOW_WIDTH, WINDOW_HEIGHT)
-
-    # The graph builds its own framebuffer manager, and the passes resolve
-    # every buffer through that one. Anything else built here -- the bloom
-    # effect, the post-process stack -- has to share it, or it allocates a
-    # second, parallel set of buffers that the graph never looks at.
-    fbo_manager = render_graph.fbo_manager
-    container.register_instance(FramebufferManager, fbo_manager)
-
-    # The light map is 16-bit float because `RenderGraph` declares the
-    # whole chain that way (`pipeline/buffers.py`) -- this bootstrap used to
-    # claim it by hand.
-    #
-    # It is the difference between the lighting working and not. Lights
-    # blend additively into this buffer and the composite multiplies the
-    # world by it, so an 8-bit map -- clamped at 1.0 -- could only ever
-    # restore a colour to what was drawn. No light brightened anything, a
-    # glowing mushroom could not push its surroundings past the bloom
-    # threshold, and a lightning strike could not reveal the floor, because
-    # the ambient term it lifts was already saturated. With a float map the
-    # same lights over-expose what they fall on, which is what bloom is
-    # looking for.
+    # The engine's default tail blits "world" straight to the screen. This
+    # demo composites and post-processes first, so its FinalPass reads a
+    # different buffer and replaces that one. WorldPass, identical to the
+    # one this demo would have built, stays.
+    graph.remove_pass("final")
 
     storm = StormEffect(ctx)
     stack = PostProcessStack(ctx, fbo_manager)
@@ -177,30 +135,11 @@ def configure_game_container() -> DIContainer:
     stack.add_effect(storm)
     stack.add_effect(VignetteEffect(ctx, intensity=0.42, radius=0.86, softness=0.55))
 
-    render_graph.add_pass(WorldPass(renderer))
-    render_graph.add_pass(CompositePass(ctx))
-    render_graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
-    render_graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
+    graph.add_pass(CompositePass(ctx))
+    graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
+    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
 
-    container.register_instance(RenderGraph, render_graph)
     container.register_instance(StormEffect, storm)
-
-    # Core Systems
-    container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
-    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
-    container.register_singleton(InputManager, InputManager)
-    container.register_instance(IAudioSystem, PygameAudioSystem())  # type: ignore[type-abstract]
-    container.register_instance(ComponentRegistry, get_component_registry())
-    container.register_instance(PrefabCache, PrefabCache())
-    container.register_singleton(SceneManager, SceneManager)
-    container.register_singleton(ResourceManager, ResourceManager)
-    container.register_singleton(UIManager, UIManager)
-    _install_theme()
-    container.register_singleton(SystemManager, SystemManager)
-    container.register_singleton(CoroutineManager, CoroutineManager)
-
-    # Application
-    container.register_singleton(Application, Application)
 
     return container
 

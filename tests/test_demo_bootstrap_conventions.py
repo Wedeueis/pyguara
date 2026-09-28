@@ -48,17 +48,6 @@ def test_the_glob_found_the_demos() -> None:
 # lesson -- it is the one demo that should not call the engine's bootstrap.
 HAND_WIRED_ON_PURPOSE = {"boot_process"}
 
-# Not yet converted (#196). This set only ever shrinks: a demo removed from
-# it can never drift back, because the test below then holds it to the
-# convention. Delete the set, and this comment, when it empties.
-NOT_YET_CONVERTED = {
-    "guara_falcao",
-    "mourisco_ressonancia",
-    "protocolo_bandeira",
-    "quintal_cerrado",
-    "tamandua_murundus",
-    "true_coral",
-}
 
 ENGINE_BOOTSTRAP_FACTORIES = frozenset(
     {"create_container", "create_application", "create_sandbox_application"}
@@ -108,12 +97,12 @@ def test_a_demo_builds_its_container_through_the_engine(bootstrap: Path) -> None
     registered `SpatialHash`. Neither could have happened to a demo that
     started from `create_container()`.
 
-    This is the guard that keeps the list of hand-wired demos shrinking
-    rather than growing.
+    Every demo but `boot_process` now goes through the engine, so this
+    holds the line rather than chasing a backlog.
     """
     demo = bootstrap.parent.name
-    if demo in HAND_WIRED_ON_PURPOSE or demo in NOT_YET_CONVERTED:
-        pytest.skip(f"{demo} is a known exception; see the sets above")
+    if demo in HAND_WIRED_ON_PURPOSE:
+        pytest.skip(f"{demo} is hand-wired on purpose; see the set above")
 
     assert _calls_engine_bootstrap(bootstrap.read_text()), (
         f"{demo}/bootstrap.py wires its own container. Call "
@@ -125,11 +114,11 @@ def test_a_demo_builds_its_container_through_the_engine(bootstrap: Path) -> None
 def test_the_exception_sets_name_demos_that_exist() -> None:
     """A renamed or deleted demo must not leave a waiver behind.
 
-    A stale name in `NOT_YET_CONVERTED` is a waiver for nothing, and would
-    quietly stop the set from ever emptying.
+    A stale name is a waiver for nothing, and the next demo to take that
+    name would inherit it silently.
     """
     demos = {path.parent.name for path in BOOTSTRAPS}
-    stale = (HAND_WIRED_ON_PURPOSE | NOT_YET_CONVERTED) - demos
+    stale = HAND_WIRED_ON_PURPOSE - demos
 
     assert stale == set(), f"{stale} are named as exceptions but do not exist"
 
