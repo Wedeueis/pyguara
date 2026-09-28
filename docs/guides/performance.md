@@ -189,19 +189,28 @@ remaining cost is dominated by turning Python lists of tuples into arrays.
 
 ### Instance layout width
 
-Packing and uploading 20000 instances, 7 floats each versus 11:
+Packing and uploading 20000 instances, at each width the layout has had:
 
 | Floats per instance | Time |
 | ---: | ---: |
-| 7 (position and transform only) | 9.02 ms |
-| 11 (with a per-instance tint) | 9.53 ms |
+| 7 (position and transform only) | 9.29 ms |
+| 11 (with a per-instance tint) | 9.72 ms |
+| 15 (with an atlas UV rect) | 9.85 ms |
 
-**Within a few percent, and across runs the two swap places.** Widening the
-sprite instance layout to carry a per-instance tint therefore costs effectively
-nothing, which is why the GL sprite path carries it unconditionally rather than
-keeping a second shader program for untinted batches — an untinted batch simply
-broadcasts white into the four colour columns, which is free once the pack is
-vectorised. The bytes uploaded are 320 KB per frame at 20,000 sprites.
+**A few percent per widening, and the steps are small enough that the 11→15 one
+lands inside run-to-run noise about as often as not** — measured across repeats
+it ranged from 0.07 ms to 0.44 ms, against a standard deviation of roughly
+0.15–0.39 ms. The ordering is consistent; the size of each gap is not.
+
+That is why the GL sprite path carries both the tint and the UV rect
+unconditionally, rather than keeping extra shader programs for batches that
+want neither — a plain sprite broadcasts white into the four colour columns
+and `(0,0)`/`(1,1)` into the four UV columns, which is free once the pack is
+vectorised. A uniform would instead force a per-batch state change, which for
+the UV rect would defeat the entire purpose: an atlas exists so that sprites
+with *different* regions share one draw call.
+
+The bytes uploaded are 1.2 MB per frame at 20,000 sprites.
 
 ---
 

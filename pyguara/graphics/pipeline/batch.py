@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pyguara.common.types import Color
+from pyguara.common.types import Color, Rect
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.types import RenderBatch, RenderCommand
@@ -57,8 +57,10 @@ class Batcher:
         current_rotations: list[float] = []
         current_scales: list[tuple[float, float]] = []
         current_colors: list[tuple[int, int, int, int]] = []
+        current_source_rects: list[Rect | None] = []
         has_transforms = False
         has_colors = False
+        has_source_rects = False
 
         # Optimization: Pre-calculate viewport offset once for the frame.
         # screen_pos = (world * zoom) + offset
@@ -79,6 +81,8 @@ class Batcher:
                         transforms_enabled=has_transforms,
                         colors=current_colors if has_colors else [],
                         colors_enabled=has_colors,
+                        source_rects=(current_source_rects if has_source_rects else []),
+                        source_rects_enabled=has_source_rects,
                         material=current_material,
                     )
                     batches.append(batch)
@@ -91,8 +95,10 @@ class Batcher:
                 current_rotations = []
                 current_scales = []
                 current_colors = []
+                current_source_rects = []
                 has_transforms = False
                 has_colors = False
+                has_source_rects = False
 
             # Transform to Screen Space HERE (CPU) so the Backend just draws
             screen_pos = (cmd.world_position * zoom) + offset
@@ -102,6 +108,21 @@ class Batcher:
             current_rotations.append(cmd.rotation)
             current_scales.append((cmd.scale.x, cmd.scale.y))
             current_colors.append((cmd.color.r, cmd.color.g, cmd.color.b, cmd.color.a))
+
+            # Appended even when None, like the rotations and colours
+            # above, so the list stays parallel to `destinations` and a
+            # batch mixing atlas entries with plain sprites needs no
+            # backfill. None means "the whole texture", resolved by the
+            # backend, which is holding the dimensions anyway -- filling a
+            # Rect here would allocate one per sprite per frame in the
+            # batcher's hot loop to say nothing.
+            #
+            # Note this does *not* break the batch: two regions of one
+            # atlas belong in the same draw call, which is the entire point
+            # of having an atlas.
+            current_source_rects.append(cmd.source_rect)
+            if cmd.source_rect is not None:
+                has_source_rects = True
 
             # Check if this command has non-default transforms/tint.
             # Compared componentwise rather than against a `Vector2(1, 1)`:
@@ -123,6 +144,8 @@ class Batcher:
                 transforms_enabled=has_transforms,
                 colors=current_colors if has_colors else [],
                 colors_enabled=has_colors,
+                source_rects=current_source_rects if has_source_rects else [],
+                source_rects_enabled=has_source_rects,
                 material=current_material,
             )
             batches.append(batch)

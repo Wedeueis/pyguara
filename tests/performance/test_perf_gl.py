@@ -39,6 +39,7 @@ pytestmark = [pytest.mark.performance, pytest.mark.slow]
 # of that layout decision on record rather than on trust.
 FLOATS_UNTINTED = 7
 FLOATS_WITH_TINT = 11
+FLOATS_WITH_TINT_AND_UV = 15
 
 
 class _GLTexture:
@@ -100,6 +101,8 @@ def _pack_rows(batch: RenderBatch, floats: int) -> np.ndarray:
         row = [x, y, rotation, scale_x, scale_y, width, height]
         if floats > FLOATS_UNTINTED:
             row += [1.0, 1.0, 1.0, 1.0]
+        if floats > FLOATS_WITH_TINT:
+            row += [0.0, 0.0, 1.0, 1.0]
         data[i] = row
     return data
 
@@ -126,6 +129,11 @@ def _pack_vectorised(batch: RenderBatch, floats: int) -> np.ndarray:
     data[:, 6] = float(batch.texture.height)
     if floats > FLOATS_UNTINTED:
         data[:, 7:11] = 1.0
+    if floats > FLOATS_WITH_TINT:
+        # uv_offset then uv_scale: the whole texture, which is what a
+        # non-atlas sprite packs.
+        data[:, 11:13] = 0.0
+        data[:, 13:15] = 1.0
     return data
 
 
@@ -183,7 +191,9 @@ def test_sweep_instance_pack_vectorised(benchmark, gl_ctx, count: int) -> None:
     )
 
 
-@pytest.mark.parametrize("floats", [FLOATS_UNTINTED, FLOATS_WITH_TINT])
+@pytest.mark.parametrize(
+    "floats", [FLOATS_UNTINTED, FLOATS_WITH_TINT, FLOATS_WITH_TINT_AND_UV]
+)
 def test_sweep_instance_stride_cost(benchmark, gl_ctx, floats: int) -> None:
     """Report what widening the instance layout for the tint cost.
 

@@ -10,6 +10,8 @@ layout(location = 3) in float in_rot;   // Rotation (radians)
 layout(location = 4) in vec2 in_scale;  // Scale factor
 layout(location = 5) in vec2 in_size;   // Texture dimensions (pixels)
 layout(location = 6) in vec4 in_color;  // Per-instance tint (0.0 to 1.0)
+layout(location = 7) in vec2 in_uv_offset;  // Atlas region origin (0..1)
+layout(location = 8) in vec2 in_uv_scale;   // Atlas region size (0..1)
 
 // Uniforms
 uniform mat4 u_projection;
@@ -30,7 +32,10 @@ void main() {
     // Translate to screen position and project
     gl_Position = u_projection * vec4(rotated + in_pos, 0.0, 1.0);
 
-    // Pass UV coordinates and tint to fragment shader
-    v_uv = in_uv;
+    // Pass UV coordinates and tint to fragment shader.
+    // in_uv spans the quad 0..1; the offset/scale pair narrows it to one
+    // region of the texture. A whole-texture sprite packs (0,0) and (1,1),
+    // so this is the identity for everything that is not an atlas entry.
+    v_uv = in_uv * in_uv_scale + in_uv_offset;
     v_color = in_color;
 }

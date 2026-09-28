@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import TYPE_CHECKING
 
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.resources.types import Texture
 
 if TYPE_CHECKING:
@@ -51,6 +51,12 @@ class RenderCommand:
     material: Material | None = None
     color: Color = field(default_factory=lambda: Color(255, 255, 255, 255))
 
+    # The sub-rectangle of `texture` to draw, in pixels, or None for all of
+    # it. This is what lets an atlas be an atlas: two commands naming
+    # different regions of one texture still batch together, where slicing
+    # the sheet into separate textures forces a batch break per region.
+    source_rect: Rect | None = None
+
     @property
     def material_id(self) -> int:
         """Get the material ID for sorting (0 if no material)."""
@@ -83,6 +89,18 @@ class RenderBatch:
     # dataclass overhead -- same reasoning as `destinations` staying tuples.
     colors: list[tuple[int, int, int, int]] = field(default_factory=list)
     colors_enabled: bool = False
+
+    # Optional per-instance sub-rectangle of `texture`, in pixels. Rects
+    # rather than normalised UVs, because that is what `AtlasRegion.rect`
+    # and a sprite sheet's grid already speak; the backend divides by the
+    # texture's dimensions, which it is holding anyway.
+    #
+    # A region also sets the sprite's drawn size: an atlas entry is the
+    # size of its rect, not of the sheet it sits in. `None` in the list
+    # means "all of the texture", so one batch can mix atlas entries with
+    # ordinary sprites.
+    source_rects: list[Rect | None] = field(default_factory=list)
+    source_rects_enabled: bool = False
 
     # Optional material for custom shaders/uniforms
     material: Material | None = None
