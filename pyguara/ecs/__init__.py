@@ -7,6 +7,8 @@ Public surface:
 - `BaseComponent`: reference implementation; warns on logic methods.
 - `StrictComponent`: rejects logic methods at class-definition time.
 - `EntityManager`: registration, lifecycle and querying for one world.
+- `ChildOf`: entity ownership, so destruction cascades to what an
+  entity owns. Distinct from `Transform` parenting, which is spatial.
 - `EntityPool`/`Poolable`: acquire/release pooling for entities that spawn
   and despawn at high frequency, without per-spawn allocation or GC churn.
 """
@@ -20,12 +22,14 @@ from pyguara.ecs.component import (
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.ecs.pool import EntityPool, Poolable
+from pyguara.ecs.relations import ChildOf
 
 __all__ = [
     "ALLOWED_METHODS",
     "BaseComponent",
     "Component",
     "Entity",
+    "ChildOf",
     "EntityManager",
     "EntityPool",
     "Poolable",
