@@ -340,6 +340,10 @@ class SceneManager:
         # Update all active scenes (in order, bottom to top)
         scenes_to_update = self._get_active_scenes()
         for scene in reversed(scenes_to_update):
+            # Systems first, then the scene, mirroring fixed_update() -- a
+            # scene's own update() should see whatever its systems just
+            # did, not the previous frame's.
+            scene.system_manager.variable_update(dt)
             scene.update(dt)
 
     def _get_active_scenes(self) -> list[Scene]:
