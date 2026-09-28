@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any, TypeVar
 
 from pyguara.log import get_logger
-from pyguara.systems.protocols import CleanupSystem, InitializableSystem, System
+from pyguara.systems.protocols import (
+    CleanupSystem,
+    InitializableSystem,
+    System,
+    VariableStepSystem,
+)
 
 logger = get_logger(__name__)
 
@@ -44,6 +49,10 @@ class SystemManager:
         self._systems_by_type: dict[type[Any], Any] = {}
         self._initialized = False
         self._enabled = True
+        # Systems explicitly switched off, by identity. Absent means on, so
+        # registering does not have to touch this and a system that is
+        # unregistered and re-registered comes back enabled.
+        self._disabled: set[int] = set()
 
     def register(
         self,
@@ -105,6 +114,7 @@ class SystemManager:
             return None
 
         self._systems = [(p, s) for p, s in self._systems if s is not system]
+        self._disabled.discard(id(system))
         if isinstance(system, CleanupSystem):
             system.cleanup()
         return system
@@ -147,18 +157,48 @@ class SystemManager:
         self._initialized = True
 
     def update(self, dt: float) -> None:
-        """Update every system in ascending priority order.
+        """Advance every enabled system one **fixed** step, in priority order.
 
-        Does nothing while disabled.
+        `SceneManager` calls this from its own `fixed_update()`, so this is
+        the deterministic channel: a constant rate regardless of framerate.
+        A system that also wants per-frame work implements
+        `VariableStepSystem` and gets `variable_update()` as well.
+
+        Does nothing while the whole manager is disabled, and skips any
+        system switched off with `set_system_enabled()`.
 
         Args:
-            dt: Delta time in seconds.
+            dt: The fixed step, in seconds.
         """
         if not self._enabled:
             return
 
         for _, system in self._systems:
-            system.update(dt)
+            if id(system) not in self._disabled:
+                system.update(dt)
+
+    def variable_update(self, dt: float) -> None:
+        """Advance every enabled `VariableStepSystem` one rendered frame.
+
+        The other half of `update()`, for work whose job is to look smooth
+        rather than to be deterministic -- camera easing, tweens, particle
+        drift. `SceneManager` calls this from its own `update()`.
+
+        Systems that do not implement `VariableStepSystem` are skipped
+        entirely, so the common case costs one `isinstance` per system per
+        frame and nothing else.
+
+        Args:
+            dt: Seconds since the last rendered frame; varies with framerate.
+        """
+        if not self._enabled:
+            return
+
+        for _, system in self._systems:
+            if id(system) in self._disabled:
+                continue
+            if isinstance(system, VariableStepSystem):
+                system.variable_update(dt)
 
     def cleanup(self) -> None:
         """Clean up and drop every system, leaving the manager empty.
@@ -173,6 +213,7 @@ class SystemManager:
 
         self._systems.clear()
         self._systems_by_type.clear()
+        self._disabled.clear()
         self._initialized = False
 
     def set_enabled(self, enabled: bool) -> None:
@@ -189,6 +230,53 @@ class SystemManager:
     def enabled(self) -> bool:
         """Whether `update()` currently does anything."""
         return self._enabled
+
+    def set_system_enabled(self, system_type: type[Any], enabled: bool) -> bool:
+        """Turn one system's ticks on or off without unregistering it.
+
+        For the cases where `set_enabled()` is too blunt: silencing AI while
+        a menu is open, dropping a render system in a headless balance sim,
+        letting a debug overlay toggle a subsystem to see what it was
+        contributing. A disabled system keeps its registration, its state
+        and its place in the order -- it simply does not tick, on either
+        channel.
+
+        `cleanup()` is *not* called: this is a pause, not a removal. Use
+        `unregister()` to take a system out for good.
+
+        Args:
+            system_type: The key the system was registered under.
+            enabled: False to skip it during `update()` and
+                `variable_update()`.
+
+        Returns:
+            True if a system was found under that key, False if nothing was
+            registered -- so a caller toggling an optional system can tell
+            "switched off" from "never there", which a silent no-op cannot.
+        """
+        system = self._systems_by_type.get(system_type)
+        if system is None:
+            return False
+
+        if enabled:
+            self._disabled.discard(id(system))
+        else:
+            self._disabled.add(id(system))
+        return True
+
+    def is_system_enabled(self, system_type: type[Any]) -> bool:
+        """Report whether a registered system currently ticks.
+
+        Args:
+            system_type: The key the system was registered under.
+
+        Returns:
+            True if the system is registered and not switched off. An
+            unregistered key reads False: nothing under it is ticking,
+            which is the question this answers.
+        """
+        system = self._systems_by_type.get(system_type)
+        return system is not None and id(system) not in self._disabled
 
     @property
     def system_count(self) -> int:

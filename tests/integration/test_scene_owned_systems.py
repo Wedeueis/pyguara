@@ -25,9 +25,11 @@ from pyguara.application.bootstrap import (
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
+from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.protocols import TextureFactory
 from pyguara.scene.base import Scene
+from pyguara.scene.manager import SceneManager
 
 
 class _TestScene(Scene):
@@ -392,3 +394,83 @@ def test_fixed_update_does_not_snapshot_non_interpolated_transforms() -> None:
     assert transform.previous_position == Vector2(-1, -1)
 
     app.shutdown()
+
+
+class _DualChannelSystem:
+    """Records each channel separately, to tell them apart by cadence."""
+
+    def __init__(self) -> None:
+        """Start with both tallies empty."""
+        self.fixed_dts: list[float] = []
+        self.variable_dts: list[float] = []
+
+    def update(self, dt: float) -> None:
+        """The fixed step."""
+        self.fixed_dts.append(dt)
+
+    def variable_update(self, dt: float) -> None:
+        """The rendered frame."""
+        self.variable_dts.append(dt)
+
+
+class TestSystemUpdateChannels:
+    """Which `SceneManager` call drives which system channel.
+
+    Unit tests can show `SystemManager` routes the two apart; only this can
+    show the scene layer calls both, at the rates they are named for. That
+    gap is exactly where the missing channel hid: `SystemManager.update()`
+    worked perfectly, and `SceneManager.update()` simply never reached
+    systems at all, so every registered system ticked on the fixed step and
+    nothing ticked per frame.
+    """
+
+    def _scene_with(self, system: object) -> tuple[SceneManager, Scene]:
+        """A registered, current scene holding `system`."""
+        scene = _TestScene("channels", EventDispatcher())
+        scene.system_manager.register(system)
+        manager = SceneManager()
+        manager.register(scene)
+        manager.switch_to("channels")
+        manager.update(0.0)  # settle the pending switch
+        return manager, scene
+
+    def test_each_channel_runs_at_its_own_rate(self) -> None:
+        """Different call counts, deliberately, so neither can stand in for
+        the other: three frames against one fixed step.
+        """
+        system = _DualChannelSystem()
+        manager, _ = self._scene_with(system)
+        before = len(system.variable_dts)
+
+        for _ in range(3):
+            manager.update(0.016)
+        manager.fixed_update(1 / 60)
+
+        assert len(system.variable_dts) - before == 3
+        assert system.fixed_dts == [1 / 60]
+
+    def test_a_plain_system_is_untouched_by_the_frame_channel(self) -> None:
+        """The regression guard for every system that exists today.
+
+        None of them define `variable_update`. If the frame channel reached
+        them anyway they would tick twice per fixed step and once per
+        frame besides -- non-deterministic, and roughly double the work.
+        """
+
+        class _PlainSystem:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def update(self, dt: float) -> None:
+                self.calls += 1
+
+        system = _PlainSystem()
+        manager, _ = self._scene_with(system)
+
+        for _ in range(5):
+            manager.update(0.016)
+
+        assert system.calls == 0
+
+        manager.fixed_update(1 / 60)
+        assert system.calls == 1
