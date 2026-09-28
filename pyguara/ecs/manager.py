@@ -463,20 +463,48 @@ class EntityManager:
         """
         return iter(self._entities.values())
 
-    def get_entities_with(self, *component_types: type[Component]) -> Iterator[Entity]:
-        """Iterate entities carrying all of the given component types.
+    def get_entities_with(
+        self,
+        *component_types: type[Component],
+        without: tuple[type[Component], ...] = (),
+        any_of: tuple[type[Component], ...] = (),
+    ) -> Iterator[Entity]:
+        """Iterate entities matching a component query.
+
+        The positional types are an **all-of**: an entity must carry every
+        one. `without` and `any_of` narrow that further, and each is
+        resolved through the same inverted index rather than by filtering
+        the results, so "every enemy that is not stunned" costs one set
+        difference instead of a `has_component` call per enemy per frame.
+
+        ```python
+        for enemy in manager.get_entities_with(Enemy, without=(Stunned,)):
+            ...
+        for burning in manager.get_entities_with(any_of=(OnFire, Scalded)):
+            ...
+        ```
 
         Args:
-            *component_types: Component classes the entity must all carry.
+            *component_types: Classes the entity must all carry.
+            without: Classes the entity must carry none of.
+            any_of: Classes the entity must carry at least one of. Given
+                alongside positional types it narrows them; given alone it
+                is the whole query.
 
         Yields:
-            Each matching entity. Yields nothing if no types are given.
+            Each matching entity. Yields nothing when no term is given at
+            all.
+
+        Note:
+            `without` on its own -- "everything that is not X" -- has no
+            positive term to start from, so it scans every entity. Every
+            other shape starts from an index set.
         """
-        if not component_types:
+        if not component_types and not without and not any_of:
             return
 
         disabled = self._disabled
-        for entity_id in self._matching_entity_ids(component_types):
+        for entity_id in self._matching_entity_ids(component_types, without, any_of):
             if entity_id in disabled:
                 continue
             entity = self._entities.get(entity_id)
@@ -626,7 +654,10 @@ class EntityManager:
     # -------------------------------------------------------------------------
 
     def entity_ids_with(
-        self, component_types: tuple[type[Component], ...]
+        self,
+        component_types: tuple[type[Component], ...],
+        without: tuple[type[Component], ...] = (),
+        any_of: tuple[type[Component], ...] = (),
     ) -> Iterator[str]:
         """Iterate live entity ids carrying every given component type.
 
@@ -639,49 +670,96 @@ class EntityManager:
         parked.
 
         Args:
-            component_types: One or more component classes.
+            component_types: Classes an entity must all carry.
+            without: Classes an entity must carry none of.
+            any_of: Classes an entity must carry at least one of.
 
         Yields:
             Matching entity ids, excluding entities already removed.
         """
-        if not component_types:
+        if not component_types and not without and not any_of:
             return
         entities = self._entities
-        for entity_id in self._matching_entity_ids(component_types):
+        for entity_id in self._matching_entity_ids(component_types, without, any_of):
             if entity_id in entities:
                 yield entity_id
 
     def _matching_entity_ids(
-        self, component_types: tuple[type[Component], ...]
+        self,
+        component_types: tuple[type[Component], ...],
+        without: tuple[type[Component], ...] = (),
+        any_of: tuple[type[Component], ...] = (),
     ) -> AbstractSet[str]:
-        """Intersect the inverted index for a non-empty set of component types.
+        """Resolve a query against the inverted index.
 
         Smallest index set first, so each intersection step scans as few ids as
         possible.
 
-        For a single component type the result is the live index set itself,
-        not a copy. That is safe only because index cleanup is deferred to
-        `flush_pending_removals()`, so the set cannot change mid-frame; callers
-        must still skip ids whose entity is already soft-removed.
+        For a single component type and no other terms the result is the live
+        index set itself, not a copy. That is safe only because index cleanup
+        is deferred to `flush_pending_removals()`, so the set cannot change
+        mid-frame; callers must still skip ids whose entity is already
+        soft-removed. Any additional term produces a new set, so the aliasing
+        never escapes into a result the caller could be surprised by.
 
         Args:
-            component_types: One or more component classes. Must not be empty.
+            component_types: Classes an entity must all carry. May be empty
+                if `any_of` or `without` is given.
+            without: Classes an entity must carry none of.
+            any_of: Classes an entity must carry at least one of.
 
         Returns:
-            The ids of entities carrying every given type, possibly empty.
+            The ids of entities satisfying every term, possibly empty.
         """
-        sets = []
+        result: AbstractSet[str]
+
+        if component_types:
+            sets = []
+            for component_type in component_types:
+                index = self._component_index.get(component_type)
+                if not index:
+                    return _EMPTY_IDS
+                sets.append(index)
+
+            sets.sort(key=len)
+            result = sets[0]
+            for other in sets[1:]:
+                result = result & other
+        elif any_of:
+            result = self._union_of(any_of)
+        elif without:
+            # No positive term at all: the candidate set is the whole world,
+            # which is the only honest answer to "everything that is not X".
+            # It costs a full scan, unlike every other shape here.
+            result = self._entities.keys()
+        else:
+            return _EMPTY_IDS
+
+        if component_types and any_of:
+            result = result & self._union_of(any_of)
+
+        if without:
+            excluded = self._union_of(without)
+            if excluded:
+                result = result - excluded
+
+        return result
+
+    def _union_of(self, component_types: tuple[type[Component], ...]) -> set[str]:
+        """Union the index sets for several component types.
+
+        Args:
+            component_types: The classes whose indexes to combine.
+
+        Returns:
+            A new set of every id carrying at least one of them.
+        """
+        union: set[str] = set()
         for component_type in component_types:
             index = self._component_index.get(component_type)
-            if not index:
-                return _EMPTY_IDS
-            sets.append(index)
-
-        sets.sort(key=len)
-        result: AbstractSet[str] = sets[0]
-        for other in sets[1:]:
-            result = result & other
-        return result
+            if index:
+                union |= index
+        return union
 
     def _on_entity_component_added(
         self, entity_id: str, component_type: type[Component]

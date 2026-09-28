@@ -1,6 +1,7 @@
 import copy
 import pickle
 import warnings
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 
 import pytest
@@ -1292,3 +1293,136 @@ class TestQueryCacheSnapshots:
 
         assert manager._query_cache.get_cached(Position) is stable
         assert before is not stable  # sanity: the earlier add did drop it
+
+
+class TestQueryOperators:
+    """`without` and `any_of`, resolved through the index.
+
+    The point is not expressiveness alone -- a caller can always filter the
+    results -- but that "every enemy that is **not** stunned" becomes one
+    set difference instead of a `has_component` call per enemy per frame,
+    at every call site that wanted it.
+    """
+
+    def _world(self) -> tuple[EntityManager, dict[str, Entity]]:
+        """Three entities spanning every combination the tests need."""
+        manager = EntityManager()
+        plain = manager.create_entity("plain")
+        plain.add_component(Position())
+
+        stunned = manager.create_entity("stunned")
+        stunned.add_component(Position())
+        stunned.add_component(Health())
+
+        other = manager.create_entity("other")
+        other.add_component(Velocity())
+
+        return manager, {"plain": plain, "stunned": stunned, "other": other}
+
+    def _ids(self, entities: Iterator[Entity]) -> list[str]:
+        return sorted(entity.id for entity in entities)
+
+    def test_without_excludes_entities_carrying_the_type(self) -> None:
+        manager, _ = self._world()
+
+        found = manager.get_entities_with(Position, without=(Health,))
+
+        assert self._ids(found) == ["plain"]
+
+    def test_without_is_a_no_op_when_nothing_carries_the_type(self) -> None:
+        """An unused exclusion must not empty the result.
+
+        The excluded type is one **no entity in the world has**, so its
+        index is missing entirely -- not merely absent from the matches.
+        That is the case where subtracting a missing index is easy to get
+        backwards, and the symptom -- a query silently returning nothing --
+        reads as an empty world rather than a query bug.
+
+        An earlier version of this used `Velocity`, which one entity here
+        does carry, so it never exercised the empty-index path at all and
+        passed against an implementation that wiped the result.
+        """
+
+        @dataclass
+        class Unused(BaseComponent):
+            pass
+
+        manager, _ = self._world()
+
+        found = manager.get_entities_with(Position, without=(Unused,))
+
+        assert self._ids(found) == ["plain", "stunned"]
+
+    def test_any_of_matches_either(self) -> None:
+        manager, _ = self._world()
+
+        found = manager.get_entities_with(any_of=(Health, Velocity))
+
+        assert self._ids(found) == ["other", "stunned"]
+
+    def test_any_of_narrows_the_positional_types(self) -> None:
+        """Given alongside an all-of, it is an extra constraint, not a union
+        with it. `other` has Velocity but not Position, so it is out.
+        """
+        manager, _ = self._world()
+
+        found = manager.get_entities_with(Position, any_of=(Health, Velocity))
+
+        assert self._ids(found) == ["stunned"]
+
+    def test_the_terms_combine(self) -> None:
+        manager, entities = self._world()
+        entities["plain"].add_component(Velocity())
+
+        found = manager.get_entities_with(
+            Position, any_of=(Health, Velocity), without=(Health,)
+        )
+
+        assert self._ids(found) == ["plain"]
+
+    def test_without_alone_is_the_complement(self) -> None:
+        manager, _ = self._world()
+
+        found = manager.get_entities_with(without=(Position,))
+
+        assert self._ids(found) == ["other"]
+
+    def test_no_terms_at_all_yields_nothing(self) -> None:
+        """Unchanged. A query with nothing in it is a caller mistake, and
+        returning the whole world would be a surprising way to say so.
+        """
+        manager, _ = self._world()
+
+        assert list(manager.get_entities_with()) == []
+
+    def test_a_disabled_entity_is_still_excluded(self) -> None:
+        """The operators narrow the query; they do not reopen dormancy."""
+        manager, _ = self._world()
+        manager.set_entity_enabled("plain", False)
+
+        found = manager.get_entities_with(Position, without=(Health,))
+
+        assert self._ids(found) == []
+
+    def test_a_removed_entity_is_not_yielded_before_the_flush(self) -> None:
+        """Index cleanup is deferred to the frame boundary, so the id is
+        still in the index here -- and every query shape has to skip it.
+        """
+        manager, _ = self._world()
+        manager.remove_entity("plain")
+
+        assert self._ids(manager.get_entities_with(Position, without=(Health,))) == []
+        assert "plain" not in self._ids(manager.get_entities_with(any_of=(Position,)))
+
+    def test_a_narrowed_query_does_not_alias_the_live_index(self) -> None:
+        """A single-type query returns the live index set by design, which
+        is safe only because index cleanup is deferred. Any extra term
+        builds a new set, and this is the test that says the aliasing never
+        escapes into one a caller could mutate into the index.
+        """
+        manager, _ = self._world()
+
+        narrowed = manager._matching_entity_ids((Position,), without=(Health,))
+
+        assert narrowed is not manager._component_index[Position]
+        assert narrowed == {"plain"}
