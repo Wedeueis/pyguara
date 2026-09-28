@@ -36,11 +36,18 @@ class HandlerRecord:
         callback: Receives the event. Returning False stops propagation.
         priority: Higher runs first.
         filter_func: Optional predicate; the callback runs only if it passes.
+        owner: Whatever registered this, for bulk teardown. Held as an id
+            rather than a reference so a subscription never keeps its owner
+            alive -- a scene that leaks its handlers should not also leak
+            itself.
+        once: True if the subscription removes itself after one delivery.
     """
 
     callback: Callable[[Any], bool | None]
     priority: int
     filter_func: Callable[[Any], bool] | None
+    owner: int | None = None
+    once: bool = False
 
 
 class EventDispatcher:
@@ -94,6 +101,10 @@ class EventDispatcher:
         self._resolved: dict[type[Event], list[HandlerRecord]] = {}
 
         self._event_queue: queue.Queue[Event] = queue.Queue()
+        # (remaining seconds, event) for `dispatch_after`. A countdown
+        # rather than a deadline, so the caller's clock decides what a
+        # second is -- see `advance()`.
+        self._delayed: list[tuple[float, Event]] = []
 
         self._enable_history = enable_history
         self._max_history_size = max_history_size
@@ -112,6 +123,8 @@ class EventDispatcher:
         handler: EventHandler[E],
         priority: int = 0,
         filter_func: Callable[[E], bool] | None = None,
+        owner: object | None = None,
+        once: bool = False,
     ) -> None:
         """Register a handler for an event type and its subclasses.
 
@@ -125,12 +138,57 @@ class EventDispatcher:
             priority: Higher runs first. Ties keep subscription order.
             filter_func: Optional predicate; the handler runs only if it
                 returns True.
+            owner: Anything at all -- a scene, a system -- that
+                `clear_subscribers(owner=...)` can later drop in one call.
+                The dispatcher keeps only its `id()`, never a reference, so
+                subscribing cannot keep the owner alive.
+            once: Remove the subscription after its first delivery. The
+                handler still runs; it simply does not run again.
         """
         record = HandlerRecord(
-            callback=handler, priority=priority, filter_func=filter_func
+            callback=handler,
+            priority=priority,
+            filter_func=filter_func,
+            owner=None if owner is None else id(owner),
+            once=once,
         )
         self._listeners[event_type].append(record)
         self._resolved.clear()
+
+    def subscribe_once(
+        self,
+        event_type: type[E],
+        handler: EventHandler[E],
+        priority: int = 0,
+        filter_func: Callable[[E], bool] | None = None,
+        owner: object | None = None,
+    ) -> None:
+        """Register a handler that fires at most once.
+
+        For the "when the door first opens" shape, which otherwise becomes a
+        handler whose whole body is a `self._already_fired` guard.
+
+        A filtered one-shot survives until the filter actually passes: the
+        subscription is spent by *delivery*, not by the event merely being
+        dispatched. Waiting for `OnDamage` from one specific entity would be
+        useless otherwise.
+
+        Args:
+            event_type: The class to listen for. Subclasses match too.
+            handler: Receives the event, once.
+            priority: Higher runs first. Ties keep subscription order.
+            filter_func: Optional predicate; the handler runs, and the
+                subscription is spent, only when it returns True.
+            owner: For bulk teardown; see `subscribe()`.
+        """
+        self.subscribe(
+            event_type,
+            handler,
+            priority=priority,
+            filter_func=filter_func,
+            owner=owner,
+            once=True,
+        )
 
     def unsubscribe(self, event_type: type[E], handler: EventHandler[E]) -> None:
         """Remove every subscription of a handler for an event type.
@@ -149,13 +207,34 @@ class EventDispatcher:
         self._listeners[event_type] = [r for r in records if r.callback != handler]
         self._resolved.clear()
 
-    def clear_subscribers(self, event_type: type[Event] | None = None) -> None:
-        """Remove subscribers for one event type, or all of them.
+    def clear_subscribers(
+        self, event_type: type[Event] | None = None, owner: object | None = None
+    ) -> None:
+        """Remove subscribers, by event type, by owner, or all of them.
+
+        `owner` is the teardown half of `subscribe(owner=...)`: a scene
+        drops every handler it registered in one call, without tracking
+        them or knowing what they were. The alternative -- remembering each
+        `(event_type, handler)` pair to unsubscribe in `on_exit` -- is what
+        leaks a handler the moment anyone forgets one, and a leaked handler
+        does not merely linger: it double-fires after a scene reload.
+
+        Given both, only subscriptions matching *both* are removed.
 
         Args:
-            event_type: The class to clear. If None, clears everything.
+            event_type: The class to clear. None means any.
+            owner: The owner to clear. None means any, **not** "the
+                unowned ones" -- pass the owner to be selective.
         """
-        if event_type is not None:
+        if owner is not None:
+            owner_id = id(owner)
+            types = [event_type] if event_type is not None else list(self._listeners)
+            for cls in types:
+                records = self._listeners.get(cls)
+                if records is None:
+                    continue
+                self._listeners[cls] = [r for r in records if r.owner != owner_id]
+        elif event_type is not None:
             self._listeners.pop(event_type, None)
         else:
             self._listeners.clear()
@@ -189,6 +268,57 @@ class EventDispatcher:
             event: The event to queue.
         """
         self._event_queue.put(event)
+
+    def dispatch_after(self, delay: float, event: Event) -> None:
+        """Dispatch `event` once `delay` seconds of game time have passed.
+
+        For "spawn the reward half a second after the boss dies", which
+        otherwise becomes a hand-rolled timer on some system that had no
+        other reason to exist.
+
+        The delay is measured in whatever time `advance()` is fed, which
+        `Application` scales by `time_scale` and zeroes while paused. A
+        pending event therefore waits out a pause and runs at half speed in
+        slow motion, rather than firing into a frozen world.
+
+        A delay of zero or less dispatches on the next `advance()`, not
+        immediately -- use `dispatch()` to deliver now.
+
+        Args:
+            delay: Seconds of game time to wait.
+            event: The event to dispatch when the delay elapses.
+        """
+        self._delayed.append((delay, event))
+
+    def advance(self, dt: float) -> None:
+        """Advance pending `dispatch_after` timers and fire what is due.
+
+        Called once per frame by `Application`, with the same scaled delta
+        the physics accumulator gets.
+
+        An event whose handler schedules another delayed event does not
+        also fire this call: the new one is appended to the list being
+        rebuilt, so it starts its own delay from the next `advance()`. That
+        is what stops a zero-delay chain from spinning inside one frame.
+
+        Args:
+            dt: Seconds of game time elapsed since the last call.
+        """
+        if not self._delayed:
+            return
+
+        pending = self._delayed
+        self._delayed = []
+        due: list[Event] = []
+        for remaining, event in pending:
+            remaining -= dt
+            if remaining <= 0.0:
+                due.append(event)
+            else:
+                self._delayed.append((remaining, event))
+
+        for event in due:
+            self.dispatch(event)
 
     def process_queue(
         self, max_time_ms: float | None = None, max_events: int | None = None
@@ -289,6 +419,11 @@ class EventDispatcher:
             try:
                 if record.filter_func is not None and not record.filter_func(event):
                     continue
+                if record.once:
+                    # Retired *before* the callback runs, so a handler that
+                    # dispatches the same event type again -- or raises --
+                    # cannot re-enter this subscription.
+                    self._retire(record)
                 if record.callback(event) is False:
                     return False
             except Exception as error:
@@ -297,6 +432,24 @@ class EventDispatcher:
                 if not self._handle_error(record, event, error):
                     raise
         return True
+
+    def _retire(self, record: HandlerRecord) -> None:
+        """Drop a spent one-shot subscription.
+
+        Searched by identity across the listener lists, because the record
+        reached `_process_handlers` through the resolved cache and no
+        longer knows which event type it was registered against -- a
+        subclass dispatch pulls in handlers registered on every base.
+
+        Args:
+            record: The subscription to remove.
+        """
+        for records in self._listeners.values():
+            for i, existing in enumerate(records):
+                if existing is record:
+                    del records[i]
+                    self._resolved.clear()
+                    return
 
     def _handle_error(
         self, record: HandlerRecord, event: Event, error: Exception

@@ -8,6 +8,7 @@ exercises the actual composition root.
 """
 
 import os
+from dataclasses import dataclass
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -26,6 +27,7 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.protocols import Event
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.protocols import TextureFactory
 from pyguara.scene.base import Scene
@@ -474,3 +476,108 @@ class TestSystemUpdateChannels:
 
         manager.fixed_update(1 / 60)
         assert system.calls == 1
+
+
+@dataclass
+class _TeardownPing(Event):
+    """A trivial event for the teardown tests to fire."""
+
+    timestamp: float = 0.0
+    source: object = None
+
+
+class TestSceneTeardown:
+    """`Scene.on_teardown()`, and the subscriptions a scene owns.
+
+    Both are about the same failure: something scene-lived outliving its
+    scene. A leaked handler is the nastiest of them, because it does not
+    merely linger -- it fires again for the next scene, and twice after a
+    reload, which reads as a gameplay bug rather than a lifecycle one.
+    """
+
+    def _managed(self) -> tuple[SceneManager, Scene]:
+        """A registered, current scene."""
+        scene = _TestScene("teardown", EventDispatcher())
+        manager = SceneManager()
+        manager.register(scene)
+        manager.switch_to("teardown")
+        manager.update(0.0)
+        return manager, scene
+
+    def _leave(self, manager: SceneManager, scene: Scene) -> None:
+        """Switch away, so `_exit_scene()` runs for `scene`."""
+        manager.register(_TestScene("next", scene.event_dispatcher))
+        manager.switch_to("next")
+        manager.update(0.0)
+
+    def test_teardown_callbacks_run_when_the_scene_exits(self) -> None:
+        manager, scene = self._managed()
+        ran: list[str] = []
+        scene.on_teardown(lambda: ran.append("closed"))
+
+        self._leave(manager, scene)
+
+        assert ran == ["closed"]
+
+    def test_they_run_in_reverse_registration_order(self) -> None:
+        """Like nested context managers: a later callback can rely on what
+        an earlier one set up, so it has to be undone first.
+        """
+        manager, scene = self._managed()
+        ran: list[str] = []
+        scene.on_teardown(lambda: ran.append("outer"))
+        scene.on_teardown(lambda: ran.append("inner"))
+
+        self._leave(manager, scene)
+
+        assert ran == ["inner", "outer"]
+
+    def test_one_raising_callback_does_not_strand_the_others(self) -> None:
+        """Teardown that gives up halfway leaks exactly what it exists to
+        release, so a failure is logged and the rest still run.
+        """
+        manager, scene = self._managed()
+        ran: list[str] = []
+
+        def explode() -> None:
+            raise RuntimeError("cleanup went wrong")
+
+        scene.on_teardown(lambda: ran.append("first"))
+        scene.on_teardown(explode)
+        scene.on_teardown(lambda: ran.append("third"))
+
+        self._leave(manager, scene)
+
+        assert ran == ["third", "first"]
+
+    def test_a_scene_s_owned_subscriptions_are_dropped_on_exit(self) -> None:
+        """The leak, end to end: subscribe with `owner=self`, exit, and the
+        handler is gone without the scene having tracked it.
+        """
+        manager, scene = self._managed()
+        dispatcher = scene.event_dispatcher
+        received: list[int] = []
+        dispatcher.subscribe(_TeardownPing, lambda e: received.append(1), owner=scene)
+
+        dispatcher.dispatch(_TeardownPing())
+        assert received == [1], "precondition: the handler is live while the scene is"
+
+        self._leave(manager, scene)
+        dispatcher.dispatch(_TeardownPing())
+
+        assert received == [1], "the handler outlived its scene"
+
+    def test_an_unowned_subscription_survives(self) -> None:
+        """Exiting a scene must not clear handlers it never claimed --
+        the engine's own, another scene's, or anything registered before
+        this API existed.
+        """
+        manager, scene = self._managed()
+        dispatcher = scene.event_dispatcher
+        received: list[int] = []
+        dispatcher.subscribe(_TeardownPing, lambda e: received.append(1))
+
+        self._leave(manager, scene)
+        dispatcher.dispatch(_TeardownPing())
+
+        assert received == [1]

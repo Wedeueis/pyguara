@@ -253,6 +253,11 @@ class Application:
                     if is_replay_driven
                     else frame_time * self._effective_time_scale()
                 )
+                # Delayed events run on the same scaled clock as physics,
+                # so a pending `dispatch_after` waits out a pause instead of
+                # firing into a frozen world.
+                self._event_dispatcher.advance(simulated_time)
+
                 self._accumulator += simulated_time
 
                 while self._accumulator >= fixed_dt:
