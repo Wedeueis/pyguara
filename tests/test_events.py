@@ -887,3 +887,243 @@ def test_get_history_returns_a_snapshot_not_the_live_deque() -> None:
     dispatcher.get_history().clear()
 
     assert len(dispatcher.get_history()) == 1
+
+
+class TestOwnerKeyedSubscriptions:
+    """`subscribe(owner=...)` and `clear_subscribers(owner=...)`.
+
+    The leak this closes is not a slow one. A handler that outlives its
+    scene fires again for the next scene, and twice after a reload -- so
+    the symptom is doubled damage or a duplicated spawn, which reads as a
+    gameplay bug rather than a lifecycle one.
+    """
+
+    def test_clearing_an_owner_drops_only_its_handlers(self) -> None:
+        dispatcher = EventDispatcher()
+        scene, other = object(), object()
+        received: list[str] = []
+
+        dispatcher.subscribe(
+            CustomEvent, lambda e: received.append("scene"), owner=scene
+        )
+        dispatcher.subscribe(
+            CustomEvent, lambda e: received.append("other"), owner=other
+        )
+        dispatcher.subscribe(CustomEvent, lambda e: received.append("unowned"))
+
+        dispatcher.clear_subscribers(owner=scene)
+        dispatcher.dispatch(CustomEvent(data="x"))
+
+        assert sorted(received) == ["other", "unowned"]
+
+    def test_one_owner_can_hold_several_subscriptions(self) -> None:
+        """The whole point: teardown without tracking what was registered."""
+        dispatcher = EventDispatcher()
+        owner = object()
+        received: list[str] = []
+
+        for name in ("a", "b", "c"):
+            dispatcher.subscribe(
+                CustomEvent, lambda e, n=name: received.append(n), owner=owner
+            )
+
+        dispatcher.clear_subscribers(owner=owner)
+        dispatcher.dispatch(CustomEvent(data="x"))
+
+        assert received == []
+
+    def test_clearing_by_owner_and_type_together_is_an_intersection(self) -> None:
+        """Both given means both must match, not either."""
+
+        @dataclass
+        class OtherEvent(Event):
+            timestamp: float = 0.0
+            source: object = None
+
+        dispatcher = EventDispatcher()
+        owner = object()
+        received: list[str] = []
+
+        dispatcher.subscribe(
+            CustomEvent, lambda e: received.append("custom"), owner=owner
+        )
+        dispatcher.subscribe(
+            OtherEvent, lambda e: received.append("other"), owner=owner
+        )
+
+        dispatcher.clear_subscribers(CustomEvent, owner=owner)
+        dispatcher.dispatch(CustomEvent(data="x"))
+        dispatcher.dispatch(OtherEvent())
+
+        assert received == ["other"], "only the CustomEvent subscription should go"
+
+    def test_the_dispatcher_does_not_keep_its_owner_alive(self) -> None:
+        """Owners are held by id, never by reference.
+
+        A scene that forgets to tear down its handlers already leaks those
+        handlers; it must not also be unable to be garbage collected
+        because the dispatcher is holding it.
+        """
+        import gc
+        import weakref
+
+        class Owner:
+            pass
+
+        dispatcher = EventDispatcher()
+        owner = Owner()
+        ref = weakref.ref(owner)
+        dispatcher.subscribe(CustomEvent, lambda e: None, owner=owner)
+
+        del owner
+        gc.collect()
+
+        assert ref() is None, "the dispatcher is holding a reference to its owner"
+
+
+class TestSubscribeOnce:
+    """One-shot subscriptions."""
+
+    def test_it_fires_exactly_once(self) -> None:
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+        dispatcher.subscribe_once(CustomEvent, lambda e: received.append(e.data))
+
+        dispatcher.dispatch(CustomEvent(data="first"))
+        dispatcher.dispatch(CustomEvent(data="second"))
+
+        assert received == ["first"]
+
+    def test_a_filtered_one_shot_waits_for_a_match(self) -> None:
+        """Spent by *delivery*, not by the event being dispatched at all.
+
+        Otherwise "the next time *this* entity takes damage" is spent by
+        the first damage event from anyone, which is useless.
+        """
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+        dispatcher.subscribe_once(
+            CustomEvent,
+            lambda e: received.append(e.data),
+            filter_func=lambda e: e.data == "wanted",
+        )
+
+        dispatcher.dispatch(CustomEvent(data="ignored"))
+        dispatcher.dispatch(CustomEvent(data="wanted"))
+        dispatcher.dispatch(CustomEvent(data="wanted"))
+
+        assert received == ["wanted"]
+
+    def test_a_one_shot_that_redispatches_does_not_re_enter(self) -> None:
+        """The subscription is retired before its callback runs.
+
+        A handler that dispatches the same event type -- a death event
+        that triggers another death, say -- would otherwise recurse
+        through its own still-live subscription.
+        """
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+
+        def handler(event: CustomEvent) -> None:
+            received.append(event.data)
+            if event.data == "first":
+                dispatcher.dispatch(CustomEvent(data="second"))
+
+        dispatcher.subscribe_once(CustomEvent, handler)
+        dispatcher.dispatch(CustomEvent(data="first"))
+
+        assert received == ["first"]
+
+    def test_a_one_shot_leaves_ordinary_subscriptions_alone(self) -> None:
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+        dispatcher.subscribe_once(CustomEvent, lambda e: received.append("once"))
+        dispatcher.subscribe(CustomEvent, lambda e: received.append("always"))
+
+        dispatcher.dispatch(CustomEvent(data="a"))
+        dispatcher.dispatch(CustomEvent(data="b"))
+
+        assert received == ["once", "always", "always"]
+
+
+class TestDispatchAfter:
+    """Delayed dispatch, on the caller's clock."""
+
+    def test_it_waits_for_the_delay(self) -> None:
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+        dispatcher.subscribe(CustomEvent, lambda e: received.append(e.data))
+
+        dispatcher.dispatch_after(0.5, CustomEvent(data="reward"))
+        dispatcher.advance(0.2)
+        assert received == []
+
+        dispatcher.advance(0.2)
+        assert received == []
+
+        dispatcher.advance(0.2)
+        assert received == ["reward"]
+
+    def test_it_fires_only_once(self) -> None:
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+        dispatcher.subscribe(CustomEvent, lambda e: received.append(e.data))
+
+        dispatcher.dispatch_after(0.1, CustomEvent(data="x"))
+        dispatcher.advance(1.0)
+        dispatcher.advance(1.0)
+
+        assert received == ["x"]
+
+    def test_a_zero_advance_never_fires_anything(self) -> None:
+        """What a paused game does: `Application` scales dt to zero.
+
+        A pending reward must wait out the pause rather than fire into a
+        frozen world.
+        """
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+        dispatcher.subscribe(CustomEvent, lambda e: received.append(e.data))
+
+        dispatcher.dispatch_after(0.1, CustomEvent(data="x"))
+        for _ in range(100):
+            dispatcher.advance(0.0)
+
+        assert received == []
+
+    def test_a_handler_scheduling_another_delay_does_not_spin(self) -> None:
+        """A zero-delay chain advances one link per `advance()`, not forever.
+
+        Without that, a handler that reschedules itself at zero delay hangs
+        the frame it was dispatched in.
+        """
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+
+        def handler(event: CustomEvent) -> None:
+            received.append(event.data)
+            if len(received) < 3:
+                dispatcher.dispatch_after(0.0, CustomEvent(data="again"))
+
+        dispatcher.subscribe(CustomEvent, handler)
+        dispatcher.dispatch_after(0.0, CustomEvent(data="start"))
+
+        dispatcher.advance(0.016)
+        assert received == ["start"], "the chain ran ahead within one advance()"
+
+        dispatcher.advance(0.016)
+        dispatcher.advance(0.016)
+        assert received == ["start", "again", "again"]
+
+    def test_several_delays_fire_in_the_order_they_come_due(self) -> None:
+        dispatcher = EventDispatcher()
+        received: list[str] = []
+        dispatcher.subscribe(CustomEvent, lambda e: received.append(e.data))
+
+        dispatcher.dispatch_after(0.3, CustomEvent(data="late"))
+        dispatcher.dispatch_after(0.1, CustomEvent(data="early"))
+
+        dispatcher.advance(0.15)
+        dispatcher.advance(0.2)
+
+        assert received == ["early", "late"]

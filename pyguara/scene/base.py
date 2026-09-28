@@ -1,6 +1,7 @@
 """Base scene abstraction."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 
 from pyguara.ai.ai_system import AISystem
 from pyguara.ai.steering_system import SteeringSystem
@@ -17,6 +18,7 @@ from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.render_system import RenderSystem
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.log import get_logger
 from pyguara.prefabs.factory import PrefabFactory
 from pyguara.prefabs.loader import PrefabCache
 from pyguara.prefabs.registry import ComponentRegistry
@@ -29,6 +31,9 @@ from pyguara.systems.manager import SystemManager
 ENGINE_SYSTEM_PRIORITY_MIN = 100
 ENGINE_SYSTEM_PRIORITY_MAX = 399
 GAME_SYSTEM_PRIORITY_MIN = 500
+
+
+logger = get_logger(__name__)
 
 
 class Scene(ABC):
@@ -71,6 +76,10 @@ class Scene(ABC):
         # render() runs each frame. 1.0 = fully at the current fixed step --
         # a sane default before the first real render() call.
         self.render_alpha: float = 1.0
+
+        # Callbacks registered through `on_teardown()`, run by
+        # `SceneManager._exit_scene()`.
+        self._teardown_callbacks: list[Callable[[], None]] = []
 
     def resolve_dependencies(self, container: DIContainer) -> None:
         """
@@ -124,6 +133,51 @@ class Scene(ABC):
             container.get(ComponentRegistry),
             prefab_resolver=container.get(PrefabCache).load,
         )
+
+    def on_teardown(self, callback: Callable[[], None]) -> None:
+        """Register a callback to run when this scene exits.
+
+        The symmetric half of `resolve_dependencies()`. Everything that
+        builds something scene-lived -- a coroutine, a spawned entity, an
+        audio channel, a subscription on a dispatcher the scene does not
+        own -- otherwise re-invents "remember what I made, undo it in
+        `on_exit`", and each re-invention is a place to forget one.
+
+        Run by `SceneManager._exit_scene()`, not by `on_exit()`: scenes
+        override `on_exit()` without calling `super()`, so a callback
+        registered here would otherwise fire only for the well-behaved
+        ones. They run in reverse registration order, like nested
+        context managers, so a later callback can still rely on what an
+        earlier one set up.
+
+        A callback that raises is logged and the rest still run: teardown
+        that gives up halfway is how a scene leaks the very things this
+        exists to release.
+
+        Args:
+            callback: Takes nothing, returns nothing. Called exactly once.
+        """
+        self._teardown_callbacks.append(callback)
+
+    def run_teardown(self) -> None:
+        """Run and drop every `on_teardown()` callback.
+
+        Called by `SceneManager._exit_scene()`. Idempotent: the list is
+        cleared first, so a scene re-entered after exiting starts empty
+        rather than running the previous visit's callbacks again.
+        """
+        callbacks = self._teardown_callbacks
+        self._teardown_callbacks = []
+
+        for callback in reversed(callbacks):
+            try:
+                callback()
+            except Exception as error:
+                logger.exception(
+                    error,
+                    f"A teardown callback for scene '{self.name}' raised; "
+                    "the remaining callbacks still run.",
+                )
 
     def _dispatch_entity_destroyed(self, entity: Entity) -> None:
         """Republish a soft-removed entity as an `EntityDestroyed` event.

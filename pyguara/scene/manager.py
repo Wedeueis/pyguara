@@ -483,14 +483,20 @@ class SceneManager:
     def _exit_scene(self, scene: Scene) -> None:
         """Run a scene's exit hook and guarantee its resources are torn down.
 
-        Calls `scene.system_manager.cleanup()` and disposes `scene.scope`
-        directly rather than relying on `scene.on_exit()` to do it: existing
-        scenes already override `on_exit()` without calling `super()`, so a
-        base-class default there wouldn't reliably fire. `scope.dispose()`
-        runs last, after `on_exit()`, so scoped services are still resolvable
-        during a scene's own exit-time cleanup.
+        Calls `scene.run_teardown()`, `scene.system_manager.cleanup()` and
+        disposes `scene.scope` directly rather than relying on
+        `scene.on_exit()` to do it: existing scenes already override
+        `on_exit()` without calling `super()`, so a base-class default there
+        wouldn't reliably fire. `scope.dispose()` runs last, after
+        `on_exit()`, so scoped services are still resolvable during a
+        scene's own exit-time cleanup.
         """
         scene.on_exit()
+        scene.run_teardown()
+        # Every subscription the scene registered with `owner=scene`, in one
+        # call. A handler that outlives its scene does not merely linger: it
+        # fires again for the next one, and twice after a reload.
+        scene.event_dispatcher.clear_subscribers(owner=scene)
         scene.system_manager.cleanup()
         if scene.scope is not None:
             scene.scope.dispose()
