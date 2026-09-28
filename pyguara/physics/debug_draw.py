@@ -17,7 +17,6 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.protocols import IRenderer
 from pyguara.physics.components import Collider, RigidBody
-from pyguara.physics.platformer_controller import PlatformerController
 from pyguara.physics.types import BodyType, ShapeType
 
 STATIC = Color(80, 220, 120)
@@ -30,7 +29,15 @@ AIRBORNE = Color(255, 110, 110)
 
 
 class ColliderDebugRenderer:
-    """Draws collider outlines, and the rays the platformer casts.
+    """Draws collider outlines for every entity that has one.
+
+    Genre-agnostic, and deliberately so: this used to also draw a
+    platformer's ground and wall probes, which meant core importing
+    `PlatformerController`. That component now lives in
+    `kits.platformer_movement`, and core never imports a kit (see
+    `pyguara.kits`). The probe drawing moved with it, to
+    `PlatformerProbeDebugRenderer` -- compose the two when debugging a
+    platformer.
 
     Attributes:
         entity_manager: Source of entities to draw.
@@ -45,7 +52,7 @@ class ColliderDebugRenderer:
         self._entity_manager = entity_manager
 
     def render(self, renderer: IRenderer, camera_offset: Vector2 | None = None) -> None:
-        """Draw every collider, and each platformer's ground and wall rays.
+        """Draw an outline for every collider.
 
         Args:
             renderer: Target renderer; only primitive draws are used.
@@ -77,44 +84,6 @@ class ColliderDebugRenderer:
                     colour,
                     width=1,
                 )
-
-        for entity in self._entity_manager.get_entities_with(
-            Transform, Collider, PlatformerController
-        ):
-            self._draw_probe_rays(renderer, entity, offset)
-
-    def _draw_probe_rays(
-        self, renderer: IRenderer, entity: object, offset: Vector2
-    ) -> None:
-        """Draw the wall probes, and a marker at the ground probe's pixel.
-
-        Ground detection is a one-pixel overlap test now (Celeste's model),
-        not a variable-length ray, so there is no length to draw -- the
-        marker sits exactly on the pixel `CharacterMover.probe()` checks.
-        Colour is where a grounding bug shows itself: green while the
-        character floats reads as a false positive just as clearly as a
-        ray drawn too long used to.
-        """
-        transform = entity.get_component(Transform)  # type: ignore[attr-defined]
-        collider = entity.get_component(Collider)  # type: ignore[attr-defined]
-        controller = entity.get_component(PlatformerController)  # type: ignore[attr-defined]
-
-        half_height = collider.dimensions[1] / 2
-        half_width = collider.dimensions[0] / 2
-        position = transform.position - offset
-
-        colour = GROUNDED if controller.is_grounded else AIRBORNE
-        foot = position + Vector2(0, half_height)
-        renderer.draw_line(foot + Vector2(-4, 1), foot + Vector2(4, 1), colour, width=2)
-
-        for direction in (-1.0, 1.0):
-            side_start = position + Vector2(direction * (half_width + 2), -10)
-            renderer.draw_line(
-                side_start,
-                side_start + Vector2(direction * controller.wall_check_distance, 0),
-                KINEMATIC,
-                width=1,
-            )
 
     @staticmethod
     def _colour(entity: object, collider: Collider) -> Color:

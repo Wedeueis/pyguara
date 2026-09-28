@@ -73,11 +73,12 @@ from pyguara.input.keys import ESCAPE, F1, LEFT, RIGHT, SPACE, UP, R
 from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.kits.effects import EffectSystem
+from pyguara.kits.platformer_movement import PlatformerProbeDebugRenderer
+from pyguara.kits.platformer_movement.controller import PlatformerController
+from pyguara.kits.platformer_movement.system import PlatformerSystem
 from pyguara.physics.components import CharacterBody
 from pyguara.physics.debug_draw import ColliderDebugRenderer
 from pyguara.physics.physics_system import PhysicsSystem
-from pyguara.physics.platformer_controller import PlatformerController
-from pyguara.physics.platformer_system import PlatformerSystem
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.solid_mover import SolidMover
 from pyguara.physics.solid_system import SolidSystem
@@ -330,7 +331,11 @@ class GameScene(Scene):
         self._platformer_system: PlatformerSystem | None = None
         self._solid_system: SolidSystem | None = None
         self._patrol_system: PatrolSystem | None = None
+        # Two drawers, because the probe rays belong to the platformer
+        # kit and collider outlines belong to core -- core does not
+        # import a kit to draw one (#132).
         self._collider_debug: ColliderDebugRenderer | None = None
+        self._probe_debug: PlatformerProbeDebugRenderer | None = None
         self._show_colliders = False
         self._player_control: PlayerControlSystem | None = None
         self._animation_fsm: AnimationFSMSystem | None = None
@@ -878,7 +883,10 @@ class GameScene(Scene):
         if self._show_colliders:
             if self._collider_debug is None:
                 self._collider_debug = ColliderDebugRenderer(self.entity_manager)
+                self._probe_debug = PlatformerProbeDebugRenderer(self.entity_manager)
             self._collider_debug.render(world_renderer, camera_offset)
+            if self._probe_debug is not None:
+                self._probe_debug.render(world_renderer, camera_offset)
 
         # Shapes are batched and flushed here; anything drawn after this
         # lands on top of them. The HUD is widgets on the UI layer, which

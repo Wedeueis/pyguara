@@ -448,10 +448,14 @@ def _register_core_components(registry: ComponentRegistry) -> None:
     registry.register(Transform)
     registry.register(ResourceLink)
 
-    # Physics components
+    # Physics components. No `PlatformerController` here: it moved to
+    # `kits/platformer_movement`, and core neither imports a kit nor
+    # registers one's components (see `pyguara.kits`). A game that wants it
+    # in prefabs registers it itself:
+    #
+    #     container.get(ComponentRegistry).register(PlatformerController)
     from pyguara.physics.components import Collider, RigidBody
     from pyguara.physics.joints import Joint
-    from pyguara.physics.platformer_controller import PlatformerController
     from pyguara.physics.trigger_volume import EntityTags, TriggerVolume
 
     registry.register(RigidBody)
@@ -459,7 +463,6 @@ def _register_core_components(registry: ComponentRegistry) -> None:
     registry.register(Joint)
     registry.register(TriggerVolume)
     registry.register(EntityTags)
-    registry.register(PlatformerController)
 
     # AI components
     from pyguara.ai.components import AIComponent, Navigator, SteeringAgent

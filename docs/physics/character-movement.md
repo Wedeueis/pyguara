@@ -90,7 +90,7 @@ pass that follows — without that, a pushed crate immediately shoves back at
 whoever just pushed it, which is exactly the shape a first version of the
 test for this caught.
 
-**Knockback** is `apply_knockback()` (`pyguara/physics/platformer_system.py`):
+**Knockback** is `apply_knockback()` (`pyguara/kits/platformer_movement/system.py`):
 consumed as velocity, not an impulse. It overrides `CharacterBody.velocity`
 directly and suppresses input control for a short window, during which the
 velocity decays back toward zero and gravity keeps acting underneath it —
@@ -117,18 +117,46 @@ Two details worth keeping in mind, both handled:
   bisection settling near the answer any more, so there's no reason to
   tolerate one.
 
+## Where these live
+
+`CharacterMover` is **core**: axis-separated sweep-and-resolve, no gravity
+assumption, no genre vocabulary. Every genre with character-based movement
+needs it, and #99 proved the point — it needed zero changes to serve
+8-directional top-down motion.
+
+`PlatformerController`/`PlatformerSystem` and `TopDownBody`/`TopDownSystem`
+are **kits** (`pyguara/kits/platformer_movement`,
+`pyguara/kits/topdown_movement`). Coyote time and wall-jumping answer a
+platformer's questions; actor-vs-actor separation answers a top-down
+game's. Neither belongs to the other, and core belongs to both.
+
+Import them from the kit, and register the component yourself if you want
+it in prefabs — core does not register a kit's components:
+
+```python
+from pyguara.kits.platformer_movement import PlatformerController, PlatformerSystem
+
+container.get(ComponentRegistry).register(PlatformerController)
+```
+
 ## Related
 
 - `pyguara/physics/character_mover.py` — the character's own movement
 - `pyguara/physics/solid_mover.py`, `solid_system.py` — how the world moves a
   character
 - `pyguara/physics/components.py` — `CharacterBody`, `MovingSolid`, `Pushable`
-- `pyguara/physics/platformer_system.py` — wiring, gravity integration,
-  `apply_knockback()`
+- `pyguara/kits/platformer_movement/` — the platformer policy over that
+  mover: `controller.py` (coyote time, jump buffer, wall state),
+  `system.py` (wiring, gravity integration, `apply_knockback()`),
+  `debug_draw.py` (the probe overlay). A kit, not core — the genre
+  vocabulary lives here, the mover it drives does not (#132)
+- `pyguara/kits/topdown_movement/` — the other policy over the same mover:
+  8-directional motion and actor-vs-actor soft separation
 - `pyguara/physics/tilemap.py` — collider merging, and why interior faces
   mattered even before the mover
-- `pyguara/physics/debug_draw.py` — collider and probe overlay (F1 in
-  `guara_falcao`)
+- `pyguara/physics/debug_draw.py` — collider outlines (F1 in
+  `guara_falcao`); the platformer's probe overlay is
+  `kits/platformer_movement/debug_draw.py`, composed alongside it
 - `tests/integration/test_character_mover.py` — the no-penetration property,
   exact-pixel resting positions
 - `tests/integration/test_solid_mover.py` — riding, pushing, squish,

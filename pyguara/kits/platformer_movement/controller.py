@@ -10,7 +10,7 @@ data plus a small set of side-effect-free query predicates
 (`can_jump()`/`can_wall_jump()`/`is_wall_sliding()`).
 
 Usage:
-    from pyguara.physics.platformer_controller import PlatformerController, PlatformerInput
+    from pyguara.kits.platformer_movement.controller import PlatformerController, PlatformerInput
 
     # Add controller to player entity
     player.add_component(PlatformerController(

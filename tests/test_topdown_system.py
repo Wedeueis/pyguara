@@ -8,8 +8,8 @@ from pyguara.common.components import Transform
 from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.physics.topdown_controller import TopDownBody
-from pyguara.physics.topdown_system import TopDownSystem
+from pyguara.kits.topdown_movement.body import TopDownBody
+from pyguara.kits.topdown_movement.system import TopDownSystem
 from pyguara.spatial.components import SpatialTracked
 
 

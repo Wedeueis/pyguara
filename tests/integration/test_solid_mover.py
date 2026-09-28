@@ -17,6 +17,11 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.kits.platformer_movement.controller import (
+    PlatformerController,
+    PlatformerInput,
+)
+from pyguara.kits.platformer_movement.system import PlatformerSystem
 from pyguara.physics.backends.pymunk_impl import PymunkEngine
 from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.components import (
@@ -28,8 +33,6 @@ from pyguara.physics.components import (
 )
 from pyguara.physics.events import OnActorSquished
 from pyguara.physics.physics_system import PhysicsSystem
-from pyguara.physics.platformer_controller import PlatformerController, PlatformerInput
-from pyguara.physics.platformer_system import PlatformerSystem
 from pyguara.physics.solid_mover import SolidMover
 from pyguara.physics.solid_system import SolidSystem
 from pyguara.physics.types import BodyType, ShapeType

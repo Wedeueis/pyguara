@@ -34,14 +34,14 @@ from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.camera import Camera2D, CameraFollowConstraints
 from pyguara.kits.effects import Effect, EffectContainer, StackingRule, add_effect
-from pyguara.kits.stats import StatBlock, get_stat
-from pyguara.physics.components import CharacterBody
-from pyguara.physics.platformer_controller import (
+from pyguara.kits.platformer_movement.controller import (
     PlatformerController,
     PlatformerInput,
     PlatformerState,
 )
-from pyguara.physics.platformer_system import apply_knockback
+from pyguara.kits.platformer_movement.system import apply_knockback
+from pyguara.kits.stats import StatBlock, get_stat
+from pyguara.physics.components import CharacterBody
 
 MOVE_SPEED_STAT = "move_speed"
 
