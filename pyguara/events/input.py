@@ -95,3 +95,45 @@ class MouseMotionEvent:
     def pos(self) -> tuple[int, int]:
         """The cursor position as an ``(x, y)`` tuple."""
         return (self.x, self.y)
+
+
+@dataclass
+class MouseWheelEvent:
+    """Fired when the mouse wheel or a trackpad scroll gesture moves.
+
+    Separate from `MouseButtonEvent`'s legacy 4/5 wheel indices: SDL
+    reports real scroll deltas (and horizontal scroll, and sub-step
+    trackpad precision) that a button press cannot carry.
+
+    Attributes:
+        x: Horizontal scroll, positive to the right.
+        y: Vertical scroll, positive away from the user.
+        timestamp: Unix time the event was created.
+        source: Whatever raised the event, if it identified itself.
+    """
+
+    x: float
+    y: float
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None
+
+
+@dataclass
+class TextInputEvent:
+    """Fired when the platform produces text, already composed.
+
+    Distinct from `KeyDownEvent` on purpose: a key code is a *physical*
+    key, while this is the character the OS decided that keypress means
+    after layout, modifiers and IME composition. Deriving text from key
+    codes gets non-US layouts and accented input wrong, so a text field
+    should read this and leave `KeyDownEvent` for navigation and shortcuts.
+
+    Attributes:
+        text: The composed text, usually one character but not guaranteed.
+        timestamp: Unix time the event was created.
+        source: Whatever raised the event, if it identified itself.
+    """
+
+    text: str
+    timestamp: float = field(default_factory=time.time)
+    source: Any = None

@@ -2,9 +2,10 @@
 
 The pygame and ModernGL window backends both pump SDL via `pygame.event.get()`
 and call this to hand the rest of the engine `QuitEvent` / `KeyDownEvent` /
-`KeyUpEvent` / `MouseButtonEvent` / `MouseMotionEvent` / `WindowResizeEvent`
-instead of raw SDL structs -- so `application.py`, `InputManager`,
-`pyguara/tools/*` and `sandbox.py` stop importing pygame (issue #9).
+`KeyUpEvent` / `MouseButtonEvent` / `MouseMotionEvent` / `MouseWheelEvent` /
+`TextInputEvent` / `WindowResizeEvent` instead of raw SDL structs -- so
+`application.py`, `InputManager`, `pyguara/tools/*`, `pyguara/editor/*` and
+`sandbox.py` stop importing pygame (issue #9).
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from pyguara.events.input import (
     KeyUpEvent,
     MouseButtonEvent,
     MouseMotionEvent,
+    MouseWheelEvent,
+    TextInputEvent,
 )
 from pyguara.events.lifecycle import QuitEvent
 from pyguara.events.window import WindowResizeEvent
@@ -62,6 +65,17 @@ def translate_event(raw: Any) -> object | None:
             rel_x=raw.rel[0],
             rel_y=raw.rel[1],
         )
+
+    if etype == pygame.MOUSEWHEEL:
+        # SDL's own scroll deltas, not the legacy button 4/5 encoding:
+        # horizontal scroll and sub-step trackpad precision have nowhere
+        # to go in a button index.
+        return MouseWheelEvent(x=float(raw.x), y=float(raw.y))
+
+    if etype == pygame.TEXTINPUT:
+        # The composed character, after layout/modifiers/IME -- which is
+        # what a text field needs, and what a key code cannot give it.
+        return TextInputEvent(text=raw.text)
 
     if etype == pygame.VIDEORESIZE:
         return WindowResizeEvent(width=raw.w, height=raw.h)
