@@ -156,22 +156,23 @@ class SandboxApplication(Application):
         if self._tool_manager:
             self._tool_manager.update(dt)
 
-    def _render(self) -> None:
-        """Render the game scene followed by tool overlays."""
-        # 1. Clear Screen
-        self._window.clear()
+    def _render_overlays(self) -> None:
+        """Draw the developer tool overlay above the game and its UI.
 
-        # 2. Render Game Scene
-        alpha = self._accumulator / self._fixed_dt if self._fixed_dt > 0 else 0.0
-        if self._scene_manager:
-            self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
+        This used to be a wholesale override of `_render()`, which restated
+        the frame loop and in doing so dropped two things from every sandbox
+        frame:
 
-        # 3. Render Tools (On top of everything)
+        - **The render graph.** It never executed a single pass, so on the
+          ModernGL backend the sandbox skipped lighting, compositing,
+          post-processing and the `final` blit -- `Application` and
+          `SandboxApplication` disagreed about how a GL frame is drawn.
+        - **The game's own UI.** It called `ToolManager.render()` but never
+          `UIManager.render()`, so no game UI widget drew under the sandbox
+          app at all.
+
+        Overriding the overlay hook instead inherits whichever path the
+        backend provides and adds only what the sandbox is actually for.
+        """
         if self._tool_manager:
             self._tool_manager.render(self._ui_renderer)
-
-        # 4. Finalize UI (composites for GL backends)
-        self._ui_renderer.present()
-
-        # 5. Swap Buffers
-        self._window.present()
