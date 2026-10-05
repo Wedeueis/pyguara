@@ -195,6 +195,11 @@ ignore = [
     "B027",
     # PEP 695 `def f[T]()` syntax; deferred as a separate, deliberate migration.
     "UP047",
+    # The class-level half of the same PEP 695 migration
+    # (`class C[T]` over `Generic[T]`). Deferred with UP047 rather than
+    # separately: mypy is configured for python_version 3.10 here, so the
+    # syntax UP046 asks for does not type-check at all until that moves.
+    "UP046",
 ]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
