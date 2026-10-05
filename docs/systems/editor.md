@@ -9,6 +9,12 @@ editor, animation editor, agentic authoring harness) is tracked separately as
 > An earlier Dear ImGui editor (`pyguara/editor`) was removed: its pygame
 > integration hard-imports `OpenGL.GL`, PyOpenGL was never a dependency, so it
 > had never executed. Its useful parts were rebuilt as the tools below.
+>
+> A **second**, working ImGui layer now exists beside them --
+> [the ImGui editor layer](#the-imgui-editor-layer) -- drawing through the
+> engine's own `moderngl` context instead of PyOpenGL. The two are
+> independent: attaching the editor changes nothing about the overlay, and
+> the overlay remains the only dev surface on the Pygame backend.
 
 ## Enabling the overlay
 
@@ -138,3 +144,96 @@ access. **Before the first scene switch there is no world**, so it returns a
 single throwaway empty manager -- fine to read, but a tool that *mutates* the
 world in that window is writing into an orphan no scene will ever see. Return
 `True` from `process_event` to stop an event reaching the game.
+
+
+## The ImGui editor layer
+
+A second dev surface, `pyguara.editor`: Dear ImGui panels drawn as a render
+pass over the finished frame. It is **ModernGL-only** and **opt-in**.
+
+```python
+from pyguara.application.bootstrap import create_application
+from pyguara.editor import attach_editor
+
+app = create_application()
+attach_editor(app.container)
+app.run(MyScene("game", app._event_dispatcher))
+```
+
+`attach_editor` returns the `EditorLayer`, and registers it in the container
+so game code can reach it. It returns `None` -- logging why -- when the
+editor cannot run: ImGui is not installed, or the backend has no GL render
+graph. It does not half-install.
+
+### Why ModernGL-only
+
+The editor rasterises ImGui's draw data through the `moderngl.Context` the
+`RenderGraph` owns. The Pygame backend has none: its `PygameRenderGraph` is a
+stub whose `ctx` is `None`, and the window it opens is a software surface
+(`pygame_window.py` actively strips `pygame.OPENGL` to keep it one). On that
+backend `attach_editor` declines and the `pyguara.tools` overlay above stays
+the dev surface.
+
+### Why not `imgui_bundle.python_backends`
+
+Those backends import `OpenGL.GL`. An undeclared PyOpenGL dependency is
+exactly what made the *first* editor dead code, so the renderer here
+(`pyguara.editor.renderer.ModernGLImGuiRenderer`) is written against
+`moderngl` -- already a hard dependency of the engine -- and shares the
+context the renderer is already using rather than standing up a second GL
+stack. `pyguara.editor.availability.IMGUI_AVAILABLE` records whether ImGui
+imported, and a test asserts it is `True`, so the editor cannot quietly
+switch itself off again.
+
+### Panels
+
+| Panel | Shows |
+| --- | --- |
+| `HierarchyPanel` | The entity tree, over the ECS parent/child relation; click to select |
+| `InspectorPanel` | The selected entity's components, with editable fields |
+
+Both read `PanelContext`, which carries the active scene's `EntityManager`
+(or `None` when no scene is active yet) and the shared `Selection`. The
+inspector edits `bool`, `int`, `float`, `str`, `Vector2` and `Color` fields
+and draws anything else read-only. A `frozen=True` component is drawn
+read-only rather than assigned to, and every accepted edit ends with
+`EntityManager.notify_component_changed()` so anything mirroring the
+component -- physics bodies, render batches, the spatial index -- is told.
+
+### Custom panels
+
+```python
+from pyguara.editor import EditorPanel, PanelContext
+
+
+class EntityCount(EditorPanel):
+    def __init__(self) -> None:
+        super().__init__("Entity Count")
+
+    def draw(self, context: PanelContext) -> None:
+        from imgui_bundle import imgui
+
+        imgui.begin(self.title)
+        if context.entity_manager is None:
+            imgui.text_disabled("No active scene.")
+        else:
+            total = sum(1 for _ in context.entity_manager.get_all_entities())
+            imgui.text(f"Entities: {total}")
+        imgui.end()
+```
+
+```python
+layer = attach_editor(app.container, panels=[EntityCount()])
+```
+
+`draw()` runs between `new_frame()` and `render()`, and only while the panel
+is visible. Pair every `begin()` with an `end()` unconditionally -- Dear
+ImGui owes an `End` even for a collapsed window.
+
+### Input
+
+`EditorLayer.process_event()` takes the engine's own events -- the editor
+never imports pygame -- and returns `True` when ImGui is using that kind of
+input, so the caller can stop the event reaching the game. Scroll and typing
+arrive as `MouseWheelEvent` and `TextInputEvent`, which the window backends
+translate from SDL alongside the existing key and mouse events.
