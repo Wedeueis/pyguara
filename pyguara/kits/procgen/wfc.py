@@ -12,11 +12,14 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from pyguara.common.grid import Cell, neighbors4
 from pyguara.common.random import RandomStream, weighted_choice
 
+# Shared by `generate_wfc()` and `_attempt()`. `AdjacencyRule[S]`
+# declares its own `S`: PEP 695 type parameters are scoped per class or
+# function, so one used from several scopes stays a TypeVar.
 S = TypeVar("S")
 
 
@@ -25,7 +28,7 @@ class WfcContradictionError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class AdjacencyRule(Generic[S]):  # noqa: UP046 -- mypy is pinned to python_version = "3.10" (pyproject.toml)
+class AdjacencyRule[S]:
     """One allowed neighbor pairing.
 
     Attributes:

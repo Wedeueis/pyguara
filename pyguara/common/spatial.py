@@ -21,7 +21,6 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from collections.abc import Iterator
-from typing import Generic, TypeVar
 
 from pyguara.common.types import Rect, Vector2
 
@@ -29,11 +28,9 @@ DEFAULT_CELL_SIZE = 64.0
 _FULL_MASK = 0xFFFFFFFF
 
 Cell = tuple[int, int]
-K = TypeVar("K")
 
 
-class SpatialHash(Generic[K]):  # noqa: UP046 -- mypy is pinned to python_version
-    # 3.10 (pyproject.toml), which rejects PEP 695 `class SpatialHash[K]` syntax.
+class SpatialHash[K]:
     """Buckets keys by position into fixed-size cells for range queries."""
 
     __slots__ = ("_cell_size", "_cells", "_positions", "_masks")
