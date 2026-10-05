@@ -54,6 +54,13 @@ tickets inherit rather than revisit them):
 
 <!-- one line per resolved ticket: gist + link. Nothing resolved yet. -->
 
+- [Prototype the declarative UI builder API](issues/49-prototype-ui-builder.md) —
+  built for production instead of prototyped, per the dev's call: `UIBuilder` in
+  `pyguara/ui/builder.py`, the sketched context-manager syntax unchanged. Custom
+  widgets (`add()`/`nest()`, type-preserving) are the design centre, since no demo
+  screen uses stock components; plus root layers, mount-on-clean-exit, and
+  `UIBuilderError` for misuse. Verified by comparing trees built both ways, not by
+  eye. **This was the last open ticket on this map.**
 - [Fix the EngineLogger kwargs collision](issues/01-engine-logger-kwargs-collision.md) —
   `_log` pulls `exc_info`/`stack_info`/`stacklevel` into real logging args and renames any
   remaining kwarg that collides with a `LogRecord` attribute instead of raising; `shutdown()`
