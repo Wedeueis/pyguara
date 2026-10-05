@@ -189,17 +189,17 @@ ignore = [
     "SIM102",
     # A ternary is not automatically clearer than an if/else block.
     "SIM108",
+    # PEP 695 `def f[T]()` syntax. Adopted for classes (UP046) but not
+    # functions: the pydocstyle 6.3.0 pre-commit hook cannot parse a
+    # function's type-parameter list and reports D103 "missing docstring"
+    # for a docstring that is plainly there -- six of them. pydocstyle is
+    # unmaintained; ruff's own D rules parse it correctly, but swapping the
+    # two surfaces 190 findings and is a decision of its own.
+    "UP047",
     # An empty method on a non-ABC base is how optional lifecycle hooks are
     # declared here (Scene.on_exit, RenderPass hooks); they are deliberately
     # overridable no-ops, not forgotten abstract methods.
     "B027",
-    # PEP 695 `def f[T]()` syntax; deferred as a separate, deliberate migration.
-    "UP047",
-    # The class-level half of the same PEP 695 migration
-    # (`class C[T]` over `Generic[T]`), deferred with UP047 so the two move
-    # together. No longer blocked -- mypy now matches requires-python, so
-    # the syntax type-checks -- just not yet done.
-    "UP046",
 ]
 
 # Allow fix for all enabled rules (when `--fix`) is provided.

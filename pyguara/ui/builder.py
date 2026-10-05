@@ -38,7 +38,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from types import TracebackType
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from pyguara.common.types import Color, Vector2
 from pyguara.ui.base import UIElement
@@ -61,6 +61,11 @@ from pyguara.ui.types import (
     UILayer,
 )
 
+# Shared by `UIBuilder.add()` and `nest()`, which are methods on a
+# non-generic class, so this stays a module-level TypeVar. `_Nested[E]`
+# declares its own `E` -- a PEP 695 type parameter is scoped to the class
+# or function that declares it, and cannot be shared between several, so
+# a TypeVar used from more than one scope is still the right spelling.
 E = TypeVar("E", bound=UIElement)
 
 # Children of a container are positioned by its layout pass, so a nested
@@ -73,7 +78,7 @@ class UIBuilderError(RuntimeError):
     """Raised when a builder is used in a way that cannot be meant."""
 
 
-class _Nested(Generic[E]):
+class _Nested[E: UIElement]:
     """Makes an already-attached element the parent for a `with` block.
 
     Deliberately a class rather than a `@contextmanager` generator. The
