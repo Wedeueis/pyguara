@@ -108,6 +108,11 @@ class EditorLayer:
         )
 
     @property
+    def is_released(self) -> bool:
+        """Whether `release()` has run and this layer is spent."""
+        return self._context is None
+
+    @property
     def panels(self) -> list[EditorPanel]:
         """The panels this layer draws, in draw order."""
         return list(self._panels)

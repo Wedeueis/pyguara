@@ -38,6 +38,11 @@ def attach_editor(
             backend.
         panels: Panels for the layer. Defaults to Hierarchy and Inspector.
 
+    The returned layer's teardown is owned by the pass that is installed
+    into the graph, so `RenderGraph.release()` -- which
+    `Application.shutdown()` calls -- releases the editor too. Releasing it
+    by hand as well is harmless.
+
     Returns:
         The `EditorLayer`, registered in the container so game code can
         reach it, or `None` when the editor cannot run here -- ImGui

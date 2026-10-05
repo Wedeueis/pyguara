@@ -301,6 +301,31 @@ class TestAttachEditor:
             layer.release()
             graph.release()
 
+    def test_releasing_the_graph_releases_the_editor(
+        self, isolated_gl_ctx: Any, container: DIContainer
+    ) -> None:
+        """The layer owns an ImGui context and GL resources built on this
+        graph's context. `Application.shutdown()` releases the graph, so
+        that has to reach the editor or they outlive the context."""
+        graph = RenderGraph(isolated_gl_ctx, *_SIZE)
+        container.register_instance(RenderGraph, graph)
+        layer = attach_editor(container)
+        assert layer is not None
+        assert layer.is_released is False
+
+        graph.release()
+        assert layer.is_released is True
+
+    def test_releasing_both_the_graph_and_the_layer_is_safe(
+        self, isolated_gl_ctx: Any, container: DIContainer
+    ) -> None:
+        graph = RenderGraph(isolated_gl_ctx, *_SIZE)
+        container.register_instance(RenderGraph, graph)
+        layer = attach_editor(container)
+        assert layer is not None
+        layer.release()
+        graph.release()  # must not raise
+
     def test_a_resize_reaches_the_pass(
         self, isolated_gl_ctx: Any, container: DIContainer
     ) -> None:

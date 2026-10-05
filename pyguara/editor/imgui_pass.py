@@ -41,9 +41,8 @@ class ImGuiPass(BaseRenderPass):
         """Initialize the pass.
 
         Args:
-            layer: The editor layer to draw. Not owned: releasing the layer
-                is `attach_editor`'s caller's job, since the layer outlives
-                any single graph.
+            layer: The editor layer to draw, whose teardown this pass owns
+                -- see `release()`.
             width: Initial target width in pixels.
             height: Initial target height in pixels.
             enabled: Whether the pass draws.
@@ -91,3 +90,17 @@ class ImGuiPass(BaseRenderPass):
         """
         self._width = width
         self._height = height
+
+    def release(self) -> None:
+        """Release the editor layer with the graph that drives it.
+
+        The layer owns an ImGui context and, through its renderer, GL
+        programs, buffers and textures built on this graph's context. The
+        graph releases every pass it holds (`Application.shutdown()` calls
+        `RenderGraph.release()`), so routing the layer's teardown through
+        here is what keeps those from outliving the context they came from.
+
+        `EditorLayer.release()` is idempotent, so a caller that also
+        releases the layer itself is fine.
+        """
+        self._layer.release()
