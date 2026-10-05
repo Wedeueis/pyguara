@@ -1,5 +1,6 @@
 """Standard UI Components and Theming."""
 
+from pyguara.ui.builder import UIBuilder, UIBuilderError
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.canvas import Canvas
 from pyguara.ui.components.checkbox import Checkbox
@@ -19,6 +20,7 @@ from pyguara.ui.constraints import (
     create_centered_constraints,
     create_fill_constraints,
 )
+from pyguara.ui.layout import BoxContainer
 from pyguara.ui.theme import ThemeValidationError, UITheme, get_theme, set_theme
 from pyguara.ui.theme_presets import Themes
 from pyguara.ui.types import (
@@ -43,6 +45,11 @@ __all__ = [
     "TextInput",
     "Canvas",
     "NavBar",
+    # Layout
+    "BoxContainer",
+    # Declarative construction (opt-in sugar over add_child())
+    "UIBuilder",
+    "UIBuilderError",
     # Theme
     "UITheme",
     "get_theme",
