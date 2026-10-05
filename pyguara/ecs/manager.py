@@ -22,6 +22,14 @@ _EMPTY_IDS: frozenset[str] = frozenset()
 EntityRemovedCallback = Callable[[Entity], None]
 """Called synchronously with an entity at the moment it is soft-removed."""
 
+ComponentCallback = Callable[[Entity, Component], None]
+"""Called synchronously with the entity and the component involved.
+
+Both are passed because neither is reliably reachable from the other at
+the moment it fires: on removal the component is already detached, so
+`entity.get_component(...)` would return nothing.
+"""
+
 
 class EntityManager:
     """Central database for the entities in one world.
@@ -65,6 +73,21 @@ class EntityManager:
         # a single slot would let whichever registered last silently displace
         # the others.
         self._entity_removed_callbacks: list[EntityRemovedCallback] = []
+
+        # Per-component-type observers. Keyed by the exact type subscribed
+        # to, not by subclass: a HUD watching `Health` wants `Health`, and
+        # resolving an MRO on every component change would put a loop in
+        # the hottest path in the engine to serve a case nothing has asked
+        # for yet.
+        self._component_added_callbacks: dict[
+            type[Component], list[ComponentCallback]
+        ] = defaultdict(list)
+        self._component_removed_callbacks: dict[
+            type[Component], list[ComponentCallback]
+        ] = defaultdict(list)
+        self._component_changed_callbacks: dict[
+            type[Component], list[ComponentCallback]
+        ] = defaultdict(list)
 
         # The `ChildOf` relation, both ways. `_parent_of` is the authority
         # -- it is what lets the component-removed hook know which parent
@@ -283,6 +306,171 @@ class EntityManager:
         """
         if callback in self._entity_removed_callbacks:
             self._entity_removed_callbacks.remove(callback)
+
+    def subscribe_component_added(
+        self, component_type: type[Component], callback: ComponentCallback
+    ) -> None:
+        """Register a callback for when a component type is attached.
+
+        Fires synchronously from `Entity.add_component()`, after the
+        indexes are updated, so a callback can already query for what it
+        was just told about.
+
+        Matched on the exact type, not on subclasses. Subscribing the same
+        callback twice is a no-op, matching
+        `subscribe_entity_removed()`.
+
+        Args:
+            component_type: The class to watch.
+            callback: Receives the entity and the component.
+        """
+        callbacks = self._component_added_callbacks[component_type]
+        if callback not in callbacks:
+            callbacks.append(callback)
+
+    def subscribe_component_removed(
+        self, component_type: type[Component], callback: ComponentCallback
+    ) -> None:
+        """Register a callback for when a component type is detached.
+
+        Fires synchronously from `Entity.remove_component()`, with the
+        component that was removed -- which is why the callback is handed
+        both: by then the entity no longer carries it.
+
+        **Not fired when the whole entity is removed.** That is
+        `subscribe_entity_removed()`, which hands over an entity with its
+        components still intact; raising a removal per component as well
+        would make every despawn N notifications where one carries strictly
+        more information.
+
+        Args:
+            component_type: The class to watch.
+            callback: Receives the entity and the detached component.
+        """
+        callbacks = self._component_removed_callbacks[component_type]
+        if callback not in callbacks:
+            callbacks.append(callback)
+
+    def subscribe_component_changed(
+        self, component_type: type[Component], callback: ComponentCallback
+    ) -> None:
+        """Register a callback for when a component's data is changed.
+
+        Unlike added and removed, this one **cannot be detected**. A
+        component is a plain dataclass and `health.current -= 10` is an
+        ordinary attribute write; catching it would mean a descriptor or a
+        proxy on every field of every component, which is a real cost on
+        the hot path to serve the few types anything observes.
+
+        So the writer says so, through `notify_component_changed()`. That
+        is honest about what it is -- a convention, not a guarantee -- and
+        it is also what makes it useful: a system mutating twenty fields
+        reports once, when the change is complete, rather than twenty times
+        through inconsistent intermediate states.
+
+        Args:
+            component_type: The class to watch.
+            callback: Receives the entity and the changed component.
+        """
+        callbacks = self._component_changed_callbacks[component_type]
+        if callback not in callbacks:
+            callbacks.append(callback)
+
+    def unsubscribe_component_added(
+        self, component_type: type[Component], callback: ComponentCallback
+    ) -> None:
+        """Stop notifying a callback registered for component attachment.
+
+        Args:
+            component_type: The class it was registered against.
+            callback: The callback to remove. Not being subscribed is a
+                no-op.
+        """
+        self._drop(self._component_added_callbacks, component_type, callback)
+
+    def unsubscribe_component_removed(
+        self, component_type: type[Component], callback: ComponentCallback
+    ) -> None:
+        """Stop notifying a callback registered for component detachment.
+
+        Args:
+            component_type: The class it was registered against.
+            callback: The callback to remove. Not being subscribed is a
+                no-op.
+        """
+        self._drop(self._component_removed_callbacks, component_type, callback)
+
+    def unsubscribe_component_changed(
+        self, component_type: type[Component], callback: ComponentCallback
+    ) -> None:
+        """Stop notifying a callback registered for component changes.
+
+        Args:
+            component_type: The class it was registered against.
+            callback: The callback to remove. Not being subscribed is a
+                no-op.
+        """
+        self._drop(self._component_changed_callbacks, component_type, callback)
+
+    def notify_component_changed(
+        self, entity_id: str, component_type: type[Component]
+    ) -> None:
+        """Report that a component's data has changed.
+
+        The other half of `subscribe_component_changed()`: call it after
+        mutating a component that something may be mirroring, once the
+        change is complete.
+
+        Does nothing for an unknown entity, or one that does not carry the
+        type -- a caller reporting a change to something it just removed
+        should not have to guard the call.
+
+        Args:
+            entity_id: The entity whose component changed.
+            component_type: The class that changed.
+        """
+        callbacks = self._component_changed_callbacks.get(component_type)
+        if not callbacks:
+            return
+        entity = self._entities.get(entity_id)
+        if entity is None or not entity.has_component(component_type):
+            return
+        self._notify(callbacks, entity, entity.get_component(component_type))
+
+    @staticmethod
+    def _drop(
+        registry: dict[type[Component], list[ComponentCallback]],
+        component_type: type[Component],
+        callback: ComponentCallback,
+    ) -> None:
+        """Remove one callback from one of the component registries.
+
+        Args:
+            registry: The registry to edit.
+            component_type: The class it was registered against.
+            callback: The callback to remove.
+        """
+        callbacks = registry.get(component_type)
+        if callbacks is not None and callback in callbacks:
+            callbacks.remove(callback)
+
+    @staticmethod
+    def _notify(
+        callbacks: list[ComponentCallback], entity: Entity, component: Component
+    ) -> None:
+        """Run every callback, over a copy of the list.
+
+        A subscriber may unsubscribe itself, or tear down a subsystem that
+        unsubscribes, while it is being notified -- the same reason
+        `remove_entity()` iterates a copy of its own subscribers.
+
+        Args:
+            callbacks: The callbacks to run.
+            entity: The entity involved.
+            component: The component involved.
+        """
+        for callback in list(callbacks):
+            callback(entity, component)
 
     # -------------------------------------------------------------------------
     # Lookup
@@ -695,19 +883,29 @@ class EntityManager:
         self._component_index[component_type].add(entity_id)
         self._query_cache.on_component_added(entity_id, component_type)
 
+        entity = self._entities.get(entity_id)
+        if entity is None:
+            return
+
         if component_type is ChildOf:
-            entity = self._entities.get(entity_id)
-            if entity is not None:
-                self._link(entity_id, entity.get_component(ChildOf).parent_id)
+            self._link(entity_id, entity.get_component(ChildOf).parent_id)
+
+        # After the indexes, so a subscriber can already query for what it
+        # was just told about.
+        callbacks = self._component_added_callbacks.get(component_type)
+        if callbacks:
+            self._notify(callbacks, entity, entity.get_component(component_type))
 
     def _on_entity_component_removed(
-        self, entity_id: str, component_type: type[Component]
+        self, entity_id: str, component_type: type[Component], component: Component
     ) -> None:
         """Drop an entity from the index for a component type it just lost.
 
         Args:
             entity_id: The id of the entity that lost the component.
             component_type: The component class that was detached.
+            component: The detached instance, which the entity no longer
+                holds and an observer therefore cannot fetch back.
         """
         index = self._component_index.get(component_type)
         if index is not None:
@@ -716,3 +914,9 @@ class EntityManager:
 
         if component_type is ChildOf:
             self._unlink(entity_id)
+
+        callbacks = self._component_removed_callbacks.get(component_type)
+        if callbacks:
+            entity = self._entities.get(entity_id)
+            if entity is not None:
+                self._notify(callbacks, entity, component)
