@@ -45,7 +45,12 @@ class Entity:
         # Set by EntityManager.add_entity() so component changes can keep the
         # manager's inverted index in sync without the entity knowing the manager.
         self._on_component_added: Callable[[str, type[Component]], None] | None = None
-        self._on_component_removed: Callable[[str, type[Component]], None] | None = None
+        # Carries the detached component as well as its type, unlike the
+        # added hook: by the time this fires the entity no longer holds
+        # it, so an observer could not fetch it back.
+        self._on_component_removed: (
+            Callable[[str, type[Component], Component], None] | None
+        ) = None
 
         # Set by EntityManager.remove_entity() at the moment of soft-death.
         # Removal is terminal, not reusable: further mutation raises rather
@@ -162,7 +167,7 @@ class Entity:
         self._property_cache.pop(self._get_snake_name(component_type), None)
 
         if self._on_component_removed:
-            self._on_component_removed(self.id, component_type)
+            self._on_component_removed(self.id, component_type, component)
 
     def clone(self, new_id: str | None = None) -> Entity:
         """Create a detached, unregistered copy of this entity's data.
