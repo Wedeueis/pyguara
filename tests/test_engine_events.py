@@ -21,6 +21,8 @@ from pyguara.events.input import (
     KeyUpEvent,
     MouseButtonEvent,
     MouseMotionEvent,
+    MouseWheelEvent,
+    TextInputEvent,
 )
 from pyguara.events.lifecycle import QuitEvent
 from pyguara.events.window import WindowResizeEvent
@@ -67,6 +69,36 @@ class TestTranslateEvent:
         out = translate_event(raw)
         assert isinstance(out, MouseMotionEvent)
         assert (out.pos, out.rel_x, out.rel_y) == ((10, 20), 3, -4)
+
+    def test_mousewheel_carries_both_axes(self) -> None:
+        raw = pygame.event.Event(pygame.MOUSEWHEEL, x=-1, y=3, flipped=False)
+        out = translate_event(raw)
+        assert isinstance(out, MouseWheelEvent)
+        assert (out.x, out.y) == (-1.0, 3.0)
+
+    def test_mousewheel_is_not_a_mouse_button(self) -> None:
+        """The legacy 4/5 button encoding cannot carry horizontal scroll or
+        trackpad sub-steps, which is why this is its own event."""
+        out = translate_event(
+            pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=1, flipped=False)
+        )
+        assert not isinstance(out, MouseButtonEvent)
+
+    def test_textinput_carries_the_composed_text(self) -> None:
+        raw = pygame.event.Event(pygame.TEXTINPUT, text="\u00e9")
+        out = translate_event(raw)
+        assert isinstance(out, TextInputEvent)
+        assert out.text == "\u00e9"
+
+    def test_textinput_is_separate_from_the_keypress(self) -> None:
+        """A key code is a physical key; the character is what the layout,
+        modifiers and IME made of it. A text field needs the latter."""
+        key = translate_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_a))
+        text = translate_event(pygame.event.Event(pygame.TEXTINPUT, text="A"))
+        assert isinstance(key, KeyDownEvent)
+        assert isinstance(text, TextInputEvent)
+        assert key.key_code == keys.A
+        assert text.text == "A"
 
     def test_videoresize_becomes_window_resize_event(self) -> None:
         raw = pygame.event.Event(pygame.VIDEORESIZE, w=800, h=600, size=(800, 600))

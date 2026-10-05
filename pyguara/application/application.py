@@ -133,6 +133,20 @@ class Application:
 
         self.logger.info("Application instance created.")
 
+    @property
+    def container(self) -> DIContainer:
+        """The service container this application was built on.
+
+        `create_application()` builds the container itself, so without a
+        public accessor anything that needs to resolve or register a
+        service afterwards -- `pyguara.editor.attach_editor()`, a game's
+        own systems -- has to reach for `app._container`.
+
+        Returns:
+            The DI container.
+        """
+        return self._container
+
     def enable_asset_hot_reload(self, poll_interval: float = 0.5) -> None:
         """Watch every loaded asset's file and re-import it on change.
 

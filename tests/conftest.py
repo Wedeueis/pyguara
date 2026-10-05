@@ -120,6 +120,40 @@ def isolated_gl_ctx(gl_ctx: Any) -> Iterator[Any]:
         gl_ctx.__enter__()
 
 
+@pytest.fixture
+def imgui_ctx() -> Iterator[Any]:
+    """A Dear ImGui context with no GL behind it, for the editor panels.
+
+    ImGui's C++ core needs no OpenGL to create a context or build a frame
+    -- only to *rasterise* the draw data it produces. That is what makes
+    the editor's panels testable at all, and it is the seam the previous
+    `pyguara/editor` lacked: every one of its panel methods early-returned
+    behind a dead GL import, so 705 lines of it were never executed by a
+    test or by a game.
+
+    `renderer_has_textures` is declared because ImGui 1.92 asserts in
+    `new_frame()` otherwise -- it expects a legacy backend to have uploaded
+    the font atlas itself, and this fixture has no backend at all.
+
+    Yields:
+        The ImGui IO for the fresh context, already sized.
+    """
+    imgui = pytest.importorskip("imgui_bundle").imgui
+
+    ctx = imgui.create_context()
+    imgui.set_current_context(ctx)
+    io = imgui.get_io()
+    io.display_size = imgui.ImVec2(1280.0, 720.0)
+    io.delta_time = 1.0 / 60.0
+    io.backend_flags |= imgui.BackendFlags_.renderer_has_textures.value
+    # Keeps the suite from writing an imgui.ini into the repository root.
+    io.set_ini_filename("")
+    try:
+        yield io
+    finally:
+        imgui.destroy_context(ctx)
+
+
 # Define fake classes for Pygame types to satisfy dataclasses and inheritance
 class MockColor:
     """Mock for pygame.Color."""

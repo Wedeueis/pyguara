@@ -53,6 +53,12 @@ dev = [
     "tox>=4.0.0",
     "build>=0.10.0",
     "twine>=4.0.0",
+
+    # Editor (pyguara/editor): Dear ImGui panels over the ModernGL context.
+    # A dev extra, not a runtime dependency -- a shipped game never attaches
+    # the editor. `tests/test_editor_availability.py` asserts it imports, so
+    # it cannot silently go missing the way the old editor's PyOpenGL did.
+    "imgui-bundle>=1.92.0",
 ]
 
 docs = [
