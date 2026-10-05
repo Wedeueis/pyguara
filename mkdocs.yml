@@ -47,6 +47,8 @@ nav:
       - Replay: systems/replay.md
       - Resources: systems/resources.md
       - Scripting: systems/scripting.md
+      - UI Builder: systems/ui-builder.md
+      - UI Design System: systems/ui-design-system.md
   - Kits:
       - Overview: kits/index.md
       - Progression: kits/progression.md

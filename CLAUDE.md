@@ -343,8 +343,9 @@ An earlier effort, tracked via the `/wayfinder` skill:
 - Map: `.scratch/engine-remediation/map.md`
 - Tickets: `.scratch/engine-remediation/issues/`
 
-48 of its 49 tickets are resolved. Do not start here unless a task explicitly
-refers to it; the subsystem audit above is where active work happens.
+**All 49 tickets are resolved** -- the last, 49 (declarative UI builder), closed
+2026-10-05. Do not start here; the subsystem audit above is where active work
+happens, and the capability work that remains lives in GitHub issues.
 
 ## Agent skills
 
