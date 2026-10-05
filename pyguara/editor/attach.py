@@ -43,15 +43,11 @@ def attach_editor(
     `Application.shutdown()` calls -- releases the editor too. Releasing it
     by hand as well is harmless.
 
-    **Attach to `create_application()`, not `create_sandbox_application()`.**
-    The editor draws as a render-graph pass, and `SandboxApplication._render`
-    does not execute graph passes -- it draws straight to the window -- so
-    under the sandbox app this succeeds and the editor is then never drawn.
-    That bypass is not the editor's to fix (it also skips lighting,
-    compositing and post-processing on the ModernGL backend), and nothing
-    here can detect it: resolving `Application` from the container
-    constructs a *second* application rather than returning the running
-    one.
+    Works under `create_application()` and `create_sandbox_application()`
+    alike: both draw through `Application`'s frame loop, which executes
+    every registered pass. (`SandboxApplication` briefly did not -- it
+    overrode `_render()` and ran no passes at all, so the editor attached
+    and was never drawn. It overrides `_render_overlays()` now.)
 
     Returns:
         The `EditorLayer`, registered in the container so game code can

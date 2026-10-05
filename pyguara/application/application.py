@@ -501,6 +501,20 @@ class Application:
         else:
             self._render_direct(alpha)
 
+    def _render_overlays(self) -> None:
+        """Draw anything layered above the game's own UI.
+
+        Nothing by default. The extension point exists so a subclass can add
+        a layer *without* restating the frame loop: `SandboxApplication` used
+        to override `_render()` wholesale to draw its tool overlay, and in
+        doing so quietly dropped the render graph and the game's `UIManager`
+        from every sandbox frame.
+
+        Called after `UIManager.render()` and before `UIRenderer.present()`,
+        on both the direct and the render-graph path, so an overlay sits on
+        top of the game's UI and is still composited by the backend.
+        """
+
     def _render_direct(self, alpha: float) -> None:
         """Draw straight to the window, for backends with no render graph.
 
@@ -510,6 +524,7 @@ class Application:
         self._window.clear()
         self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
         self._ui_manager.render(self._ui_renderer)
+        self._render_overlays()
         self._ui_renderer.present()
         self._window.present()
 
@@ -565,6 +580,7 @@ class Application:
 
         # Render UI on top (directly to screen)
         self._ui_manager.render(self._ui_renderer)
+        self._render_overlays()
         self._ui_renderer.present()
 
         # Present to display

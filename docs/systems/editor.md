@@ -165,20 +165,14 @@ so game code can reach it. It returns `None` -- logging why -- when the
 editor cannot run: ImGui is not installed, or the backend has no GL render
 graph. It does not half-install.
 
-!!! warning "Use `create_application()`, not `create_sandbox_application()`"
-
-    The editor draws as a render-graph pass, and
-    `SandboxApplication._render` does not execute graph passes -- it draws
-    the scene and the `pyguara.tools` overlay straight to the window. So
-    under the sandbox app `attach_editor()` succeeds, installs its pass,
-    and the editor is then **never drawn**. (The same bypass means the
-    sandbox skips every other pass too -- lighting, compositing,
-    post-processing -- on the ModernGL backend; that divergence predates
-    the editor.)
-
-    Attach the editor to a plain `create_application()`, which renders
-    through the graph. The `pyguara.tools` overlay is the dev surface for
-    the sandbox app.
+It works on both `create_application()` and `create_sandbox_application()`,
+which draw a frame the same way. That was briefly not true:
+`SandboxApplication` used to override `_render()` wholesale and never
+executed a single render-graph pass, so the editor attached and was then
+never drawn -- and the sandbox also skipped lighting, compositing and
+post-processing on the ModernGL backend. It now overrides the
+`_render_overlays()` hook instead and inherits the frame loop, so an
+overlay adds itself without restating how a frame is drawn.
 
 ### Why ModernGL-only
 
