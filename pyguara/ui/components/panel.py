@@ -25,9 +25,15 @@ class Panel(Widget):
         # A panel is a card sitting on the canvas, not the canvas itself --
         # `surface_card` is what separates it from the background behind it.
         bg_color = self._color or self.theme.colors.surface_card
-        renderer.draw_rect(self.rect, bg_color, width=0)
+        radius = self.theme.borders.radius
+        renderer.draw_rect(self.rect, bg_color, width=0, border_radius=radius)
 
-        renderer.draw_rect(self.rect, self.theme.colors.edge, width=self.border_width)
+        renderer.draw_rect(
+            self.rect,
+            self.theme.colors.edge,
+            width=self.border_width,
+            border_radius=radius,
+        )
 
         # Children, which a panel used to lay out and then never draw --
         # so a panel with contents rendered as an empty box unless the

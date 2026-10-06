@@ -67,9 +67,13 @@ class Button(Widget):
 
     def render(self, renderer: UIRenderer) -> None:
         """Render the button in its current state."""
-        renderer.draw_rect(self.rect, self.fill_color(), width=0)
+        radius = self.theme.borders.radius
+        renderer.draw_rect(self.rect, self.fill_color(), width=0, border_radius=radius)
         renderer.draw_rect(
-            self.rect, self.border_color(), width=self.theme.borders.width
+            self.rect,
+            self.border_color(),
+            width=self.theme.borders.width,
+            border_radius=radius,
         )
         self.render_label(renderer)
 
