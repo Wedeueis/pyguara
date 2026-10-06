@@ -19,6 +19,7 @@ from pyguara.di.container import DIContainer
 from pyguara.di.exceptions import ServiceNotFoundException
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.lifecycle import ApplicationStartEvent, QuitEvent
+from pyguara.events.resources import ResourceReloaded
 from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.window import Window
@@ -476,7 +477,12 @@ class Application:
         """
         # Apply any pending asset hot-reloads (dev only; no-op when disabled).
         if self._asset_reload_watcher is not None:
-            self._asset_reload_watcher.drain()
+            for key in self._asset_reload_watcher.drain():
+                # `reload()` swaps the cache entry and leaves every holder of
+                # the previous instance stale, so the swap has to be announced
+                # or a hot-reloaded sprite changes nothing on screen.
+                # `drain()` always returned these keys; nothing used them.
+                self._event_dispatcher.dispatch(ResourceReloaded(key, source=self))
 
         # Update UI at display framerate for smooth interactions
         self._ui_manager.update(dt)
