@@ -131,9 +131,13 @@ def test_theme_swap_reskins_existing_element() -> None:
         r = MagicMock(spec=UIRenderer)
         r.get_text_size.return_value = (10, 10)
         btn.render(r)
-        # First draw_rect is the background, in the new theme's primary.
-        first_fill = r.draw_rect.call_args_list[0]
-        assert first_fill.args[1] == Color(255, 0, 255)
+        # The background is drawn in the new theme's primary. Located by
+        # colour rather than by position: CYBERPUNK enables `shadows`, and
+        # a widget's shadow is drawn *before* its face, so the background
+        # is no longer the first `draw_rect`.
+        fills = [c.args[1] for c in r.draw_rect.call_args_list]
+        assert Color(255, 0, 255) in fills
+        assert fills.index(Color(255, 0, 255)) == fills.index(btn.fill_color())
     finally:
         set_theme(original)
 

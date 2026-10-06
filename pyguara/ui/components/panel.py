@@ -25,6 +25,10 @@ class Panel(Widget):
         # A panel is a card sitting on the canvas, not the canvas itself --
         # `surface_card` is what separates it from the background behind it.
         bg_color = self._color or self.theme.colors.surface_card
+        # A card lifts off the canvas, so it is one of the two stock
+        # widgets that casts a shadow; the inset ones (text field, progress
+        # track, checkbox box) are recessed and must not.
+        self.draw_shadow(renderer)
         radius = self.theme.borders.radius
         renderer.draw_rect(self.rect, bg_color, width=0, border_radius=radius)
 

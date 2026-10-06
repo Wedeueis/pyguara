@@ -137,3 +137,105 @@ class TestBorderWidthStillApplies:
 
         widths = [c.kwargs.get("width") for c in renderer.draw_rect.call_args_list]
         assert rounded_theme.borders.width in widths
+
+
+@pytest.fixture
+def shadow_theme():
+    """The active theme with shadows on, then put back."""
+    previous = get_theme()
+    theme = copy.deepcopy(previous)
+    theme.shadows.enabled = True
+    theme.shadows.offset_x = 3
+    theme.shadows.offset_y = 4
+    set_theme(theme)
+    yield theme
+    set_theme(previous)
+
+
+@pytest.mark.unit
+class TestShadowSchemeReachesWidgets:
+    def test_shadows_are_off_by_default(self):
+        """Every preset leaves them off, so a widget costs nothing until a
+        theme opts in -- and default rendering is unchanged."""
+        previous = get_theme()
+        try:
+            theme = copy.deepcopy(previous)
+            theme.shadows.enabled = False
+            set_theme(theme)
+
+            renderer = _renderer()
+            Button("ok", Vector2(10, 10)).render(renderer)
+
+            # Face + border only; no third rect underneath them.
+            assert len(renderer.draw_rect.call_args_list) == 2
+        finally:
+            set_theme(previous)
+
+    def test_a_raised_widget_casts_a_shadow_when_enabled(self, shadow_theme):
+        renderer = _renderer()
+        Button("ok", Vector2(10, 20)).render(renderer)
+
+        first = renderer.draw_rect.call_args_list[0]
+        rect, color = first.args[0], first.args[1]
+        assert (rect.x, rect.y) == (13, 24)  # offset by (3, 4)
+        assert color == shadow_theme.shadows.color
+
+    def test_the_shadow_is_drawn_under_the_face(self, shadow_theme):
+        """Drawn first, so the widget's own face covers the overlap."""
+        renderer = _renderer()
+        panel = Panel(Vector2(0, 0), Vector2(60, 30))
+        panel.render(renderer)
+
+        shadow, face = renderer.draw_rect.call_args_list[:2]
+        assert shadow.args[1] == shadow_theme.shadows.color
+        assert face.args[0].x == 0  # the face itself, un-offset
+
+    def test_recessed_widgets_do_not_cast_shadows(self, shadow_theme):
+        """A text field, a progress track and a checkbox box are inset into
+        the surface; a shadow would claim a depth they do not have."""
+        for widget in (
+            TextInput(Vector2(0, 0)),
+            ProgressBar(Vector2(0, 0)),
+            Checkbox("on", Vector2(0, 0)),
+        ):
+            renderer = _renderer()
+            widget.render(renderer)
+            colors = [c.args[1] for c in renderer.draw_rect.call_args_list]
+            assert shadow_theme.shadows.color not in colors, type(widget).__name__
+
+    def test_the_shadow_follows_the_corner_radius(self, shadow_theme):
+        """A square shadow under a rounded face would show at the corners."""
+        rounded = copy.deepcopy(shadow_theme)
+        rounded.borders.radius = 6
+        set_theme(rounded)
+
+        renderer = _renderer()
+        Button("ok", Vector2(0, 0)).render(renderer)
+
+        assert renderer.draw_rect.call_args_list[0].kwargs["border_radius"] == 6
+
+    def test_blur_is_declared_but_consumed_nowhere(self):
+        """Pinned deliberately, not aspirationally. A soft shadow is not
+        reachable through the renderer's rectangle primitives, so `blur`
+        stays documented-as-unconsumed rather than silently ignored. If a
+        layered approximation ever lands, this test should fail and be
+        rewritten -- that is the point of it."""
+        previous = get_theme()
+        try:
+            theme = copy.deepcopy(previous)
+            theme.shadows.enabled = True
+            theme.shadows.blur = 12
+            set_theme(theme)
+
+            renderer = _renderer()
+            Button("ok", Vector2(0, 0)).render(renderer)
+
+            # One shadow rect, regardless of blur: no layered falloff.
+            shadow_calls = [
+                c
+                for c in renderer.draw_rect.call_args_list
+                if c.args[1] == theme.shadows.color
+            ]
+            assert len(shadow_calls) == 1
+        finally:
+            set_theme(previous)
