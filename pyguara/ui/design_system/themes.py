@@ -28,7 +28,7 @@ FONT_FAMILY = "Arial"
 
 
 def _cerrado_fonts() -> FontScheme:
-    """The type scale both themes share."""
+    """Build the type scale both themes share."""
     return FontScheme(
         family=FONT_FAMILY,
         size_small=12,
@@ -39,7 +39,7 @@ def _cerrado_fonts() -> FontScheme:
 
 
 def cerrado_dusk() -> UITheme:
-    """The dark theme: violet ground, Guará action, sand focus ring.
+    """Build the dark theme: violet ground, Guará action, sand focus ring.
 
     Returns:
         A fresh theme instance -- mutate it freely.
@@ -97,7 +97,7 @@ def cerrado_dusk() -> UITheme:
 
 
 def cerrado_day() -> UITheme:
-    """The light theme: sand ground, deepened Guará, wood secondary.
+    """Build the light theme: sand ground, deepened Guará, wood secondary.
 
     Returns:
         A fresh theme instance -- mutate it freely.

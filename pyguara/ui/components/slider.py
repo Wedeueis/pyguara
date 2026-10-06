@@ -105,7 +105,7 @@ class Slider(Widget):
             )
 
     def _value_text(self) -> str:
-        """The value as the options screens print it."""
+        """Return the value as the options screens print it."""
         return f"{self.value:.2f}"
 
     def _value_width(self, renderer: UIRenderer) -> int:

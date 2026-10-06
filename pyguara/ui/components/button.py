@@ -19,7 +19,7 @@ class Button(Widget):
         self.text_padding = 5
 
     def fill_color(self) -> Color:
-        """The background for the current state.
+        """Return the background for the current state.
 
         Reads the action roles rather than `primary`/`secondary`, so hover
         and press are colours a theme chose for exactly those states
@@ -38,7 +38,7 @@ class Button(Widget):
         return colors.action_primary
 
     def text_color(self) -> Color:
-        """The label colour for the current state.
+        """Return the label colour for the current state.
 
         Returns:
             The text colour that stays legible on `fill_color()`.
@@ -49,7 +49,7 @@ class Button(Widget):
         return colors.text_on_primary
 
     def border_color(self) -> Color:
-        """The edge colour, which doubles as the focus indicator.
+        """Return the edge colour, which doubles as the focus indicator.
 
         The ring only paints when `focus_visible` is set -- keyboard
         traversal turns it on, a mouse click or a screen pre-focusing its

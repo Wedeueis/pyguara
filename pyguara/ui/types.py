@@ -204,7 +204,7 @@ OVERLAY_ALPHA = 240
 
 
 def _scrim_from(background: Color) -> Color:
-    """The translucent ink a modal is laid over.
+    """Return the translucent ink a modal is laid over.
 
     Args:
         background: The theme's canvas colour.

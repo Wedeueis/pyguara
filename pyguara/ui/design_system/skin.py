@@ -32,7 +32,7 @@ of the same magnitude."""
 
 
 def bevel_edges(base: Color, *, pressed: bool = False) -> tuple[Color, Color]:
-    """The top and bottom edge colours for a bevel over `base`.
+    """Return the top and bottom edge colours for a bevel over `base`.
 
     Args:
         base: The element's fill colour, which the edges are mixed from.

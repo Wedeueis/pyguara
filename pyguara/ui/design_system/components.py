@@ -124,7 +124,7 @@ class BevelButton(Button):
         self.press_offset = press_offset
 
     def fill_color(self) -> Color:
-        """The background for the current state, honouring `skin`.
+        """Return the background for the current state, honouring `skin`.
 
         Returns:
             The fill colour.
@@ -138,7 +138,7 @@ class BevelButton(Button):
         return self.skin.fill
 
     def text_color(self) -> Color:
-        """The label colour, honouring `skin`.
+        """Return the label colour, honouring `skin`.
 
         Returns:
             The text colour.
@@ -148,7 +148,7 @@ class BevelButton(Button):
         return self.skin.text
 
     def border_color(self) -> Color:
-        """The edge colour, honouring `skin` unless focused.
+        """Return the edge colour, honouring `skin` unless focused.
 
         Returns:
             The focus ring when focused and visible, otherwise the skin's
