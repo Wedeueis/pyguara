@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, Any
 
 from pyguara.log import get_logger
 from pyguara.persistence.serializer import Serializer
-from pyguara.persistence.types import SaveMetadata, SerializationFormat, StorageBackend
+from pyguara.persistence.types import (
+    BackupCapableStorage,
+    SaveMetadata,
+    SerializationFormat,
+    StorageBackend,
+)
 
 if TYPE_CHECKING:
     from pyguara.persistence.migration import MigrationManager
@@ -125,43 +130,106 @@ class PersistenceManager:
             The deserialized object, or None if the key is absent, the blob
             is corrupt, or a migration failed.
         """
-        try:
-            blob = self.storage.load(key)
-            if blob is None:
-                logger.warning(f"No data found for key '{key}'")
-                return None
-
-            meta_dict, payload = self._unframe(blob)
-
-            if verify_integrity:
-                stored = meta_dict.get("checksum")
-                calculated = hashlib.md5(payload).hexdigest()  # noqa: S324
-                if stored != calculated:
-                    logger.error(
-                        f"Integrity check failed for '{key}'. File may be corrupted."
-                    )
-                    return None
-
-            if meta_dict.get("compressed"):
-                payload = gzip.decompress(payload)
-
-            fmt = SerializationFormat(meta_dict.get("format", "json"))
-            data = self.serializer.deserialize(payload, format_type=fmt)
-
-            if self.migration_manager and isinstance(data, dict):
-                save_version = meta_dict.get("save_version", 1)
-                if self.migration_manager.needs_migration(save_version):
-                    logger.info(
-                        f"Migrating save data '{key}' from v{save_version} "
-                        f"to v{self.migration_manager.current_version}"
-                    )
-                    data = self.migration_manager.migrate(data, save_version)
-
-            return data
-
-        except Exception as e:
-            logger.error(f"Failed to load data '{key}': {e}", exc_info=True)
+        blob = self.storage.load(key)
+        if blob is None:
+            logger.warning(f"No data found for key '{key}'")
             return None
+
+        try:
+            return self._decode(key, blob, verify_integrity)
+        except Exception as primary_error:
+            logger.error(f"Failed to load data '{key}': {primary_error}")
+            return self._recover_from_backup(key, verify_integrity)
+
+    def _recover_from_backup(self, key: str, verify_integrity: bool) -> Any | None:
+        """Try the previous value of `key` after the primary failed to decode.
+
+        The atomic write already rules out a torn file, so a primary that
+        will not decode means something worse: bit-rot, a half-finished
+        migration, a disk that lied. For a permadeath roguelike that is the
+        difference between a lost run and a recovered one.
+
+        On success the corrupt primary is quarantined and the backup is
+        promoted in its place, so the *next* load does not have to repeat
+        this -- a read that silently left the broken file in place would
+        fail again every time.
+
+        Args:
+            key: Unique identifier for the data.
+            verify_integrity: Passed through to the decode.
+
+        Returns:
+            The recovered object, or None if there is no usable backup.
+        """
+        if not isinstance(self.storage, BackupCapableStorage):
+            return None
+
+        backup = self.storage.load_backup(key)
+        if backup is None:
+            logger.error(f"No backup available for '{key}'; data is unrecoverable")
+            return None
+
+        try:
+            data = self._decode(key, backup, verify_integrity)
+        except Exception as backup_error:
+            logger.error(f"Backup for '{key}' is also unusable: {backup_error}")
+            return None
+
+        logger.warning(
+            f"Recovered '{key}' from its backup; the primary save was unreadable"
+        )
+        self.storage.quarantine(key)
+        if not self.storage.save(key, backup):
+            # The caller still gets its data; only the self-heal failed.
+            logger.error(f"Could not promote the backup of '{key}' to primary")
+        return data
+
+    def _decode(self, key: str, blob: bytes, verify_integrity: bool) -> Any:
+        """Turn one blob back into the object it was framed from.
+
+        Raises rather than returning None so the caller can tell "this blob
+        is bad" from "this blob held None", which is what makes falling
+        back to a backup possible at all.
+
+        Args:
+            key: Unique identifier, for log messages.
+            blob: The framed bytes.
+            verify_integrity: Validate the payload checksum.
+
+        Returns:
+            The deserialized object, migrated if a migration applies.
+
+        Raises:
+            ValueError: If the header is missing or the checksum disagrees.
+            Exception: Whatever decompression or deserialization raises.
+        """
+        meta_dict, payload = self._unframe(blob)
+
+        if verify_integrity:
+            stored = meta_dict.get("checksum")
+            calculated = hashlib.md5(payload).hexdigest()  # noqa: S324
+            if stored != calculated:
+                raise ValueError(
+                    f"Integrity check failed for '{key}': checksum {calculated} "
+                    f"does not match the recorded {stored}"
+                )
+
+        if meta_dict.get("compressed"):
+            payload = gzip.decompress(payload)
+
+        fmt = SerializationFormat(meta_dict.get("format", "json"))
+        data = self.serializer.deserialize(payload, format_type=fmt)
+
+        if self.migration_manager and isinstance(data, dict):
+            save_version = meta_dict.get("save_version", 1)
+            if self.migration_manager.needs_migration(save_version):
+                logger.info(
+                    f"Migrating save data '{key}' from v{save_version} "
+                    f"to v{self.migration_manager.current_version}"
+                )
+                data = self.migration_manager.migrate(data, save_version)
+
+        return data
 
     @staticmethod
     def _frame(metadata: SaveMetadata, payload: bytes) -> bytes:
