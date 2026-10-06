@@ -193,9 +193,6 @@ ignore = [
     "SIM102",
     # A ternary is not automatically clearer than an if/else block.
     "SIM108",
-    # PEP 695 `def f[T]()`. Unblocked by this change but adopted in its own
-    # commit, so this one is purely the tooling swap.
-    "UP047",
     # An empty method on a non-ABC base is how optional lifecycle hooks are
     # declared here (Scene.on_exit, RenderPass hooks); they are deliberately
     # overridable no-ops, not forgotten abstract methods.

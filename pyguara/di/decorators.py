@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol, TypeVar, cast
+from typing import Any, Protocol, cast
 
 from pyguara.di.container import DIContainer
 from pyguara.di.types import ServiceLifetime
-
-T = TypeVar("T")
 
 _INTERFACE_ATTR = "_di_interface"
 _LIFETIME_ATTR = "_di_lifetime"
@@ -21,7 +19,7 @@ class _DIMarked(Protocol):
     _di_lifetime: ServiceLifetime
 
 
-def _mark(
+def _mark[T](
     interface: type[T], lifetime: ServiceLifetime
 ) -> Callable[[type[T]], type[T]]:
     """Build a decorator that stamps registration metadata onto a class.
@@ -43,7 +41,7 @@ def _mark(
     return decorator
 
 
-def singleton(interface: type[T]) -> Callable[[type[T]], type[T]]:
+def singleton[T](interface: type[T]) -> Callable[[type[T]], type[T]]:
     """Mark a class for singleton registration.
 
     Args:
@@ -55,7 +53,7 @@ def singleton(interface: type[T]) -> Callable[[type[T]], type[T]]:
     return _mark(interface, ServiceLifetime.SINGLETON)
 
 
-def transient(interface: type[T]) -> Callable[[type[T]], type[T]]:
+def transient[T](interface: type[T]) -> Callable[[type[T]], type[T]]:
     """Mark a class for transient registration.
 
     Args:
@@ -67,7 +65,7 @@ def transient(interface: type[T]) -> Callable[[type[T]], type[T]]:
     return _mark(interface, ServiceLifetime.TRANSIENT)
 
 
-def scoped(interface: type[T]) -> Callable[[type[T]], type[T]]:
+def scoped[T](interface: type[T]) -> Callable[[type[T]], type[T]]:
     """Mark a class for scoped registration.
 
     Args:

@@ -18,6 +18,9 @@ import random
 from collections.abc import MutableSequence, Sequence
 from typing import Any, TypeVar
 
+# Used by `RandomStream.choice()`, a method on a non-generic class, so it
+# stays a TypeVar. `weighted_choice[T]` declares its own: a PEP 695
+# parameter is scoped to the one function or class that declares it.
 T = TypeVar("T")
 
 
@@ -70,7 +73,7 @@ class RandomStream:
         self._rng.setstate(_retuple(state))
 
 
-def weighted_choice(rng: RandomStream, choices: Sequence[tuple[T, float]]) -> T:
+def weighted_choice[T](rng: RandomStream, choices: Sequence[tuple[T, float]]) -> T:
     """Pick one item from `choices`, weighted by each entry's own weight.
 
     Originated in `kits/loot` (drop tables); moved here once `kits/procgen`
