@@ -27,6 +27,28 @@ logger = get_logger(__name__)
 
 _HEADER_SEP = b"\n"
 
+
+class UnsupportedSaveFormatError(Exception):
+    """A save's container format is newer than this build understands.
+
+    Kept distinct from the corruption path on purpose. A save like this is
+    not damaged -- it is valid and was written by a later build, which is
+    what a player sees after downgrading. Treating it as corrupt would
+    quarantine a perfectly good save and promote an older backup over it,
+    so recovery is deliberately *not* attempted for this one.
+    """
+
+
+CONTAINER_FORMAT_VERSION = 1
+"""Version of the blob framing: one JSON header line, newline, payload.
+
+Distinct from a save's `save_version` (the game's schema) and from
+`version` (the engine build). The framing changed once already with no
+field to detect it by, which is the hole this closes while it is still v1 --
+a reader that cannot recognise the container must refuse it rather than
+misread the payload inside.
+"""
+
 try:
     _ENGINE_VERSION = version("pyguara")
 except PackageNotFoundError:  # pragma: no cover - only when run uninstalled
@@ -106,6 +128,7 @@ class PersistenceManager:
                 save_version=save_version,
                 format=fmt.value,
                 compressed=compress,
+                format_version=CONTAINER_FORMAT_VERSION,
             )
             blob = self._frame(metadata, payload)
         except Exception as e:
@@ -138,6 +161,11 @@ class PersistenceManager:
 
         try:
             return self._decode(key, blob, verify_integrity)
+        except UnsupportedSaveFormatError as e:
+            # Not damaged, just newer. Recovering would quarantine a good
+            # save and promote an older backup over it.
+            logger.error(f"Refusing to load '{key}': {e}")
+            return None
         except Exception as primary_error:
             logger.error(f"Failed to load data '{key}': {primary_error}")
             return self._recover_from_backup(key, verify_integrity)
@@ -205,6 +233,17 @@ class PersistenceManager:
             Exception: Whatever decompression or deserialization raises.
         """
         meta_dict, payload = self._unframe(blob)
+
+        # Checked before anything is decoded: a container this build does
+        # not understand cannot be read safely, and guessing would mean
+        # handing back a half-understood object. Saves predating the field
+        # read as 1.
+        container = int(meta_dict.get("format_version", 1))
+        if container > CONTAINER_FORMAT_VERSION:
+            raise UnsupportedSaveFormatError(
+                f"Save '{key}' uses container format v{container}, but this "
+                f"build understands up to v{CONTAINER_FORMAT_VERSION}"
+            )
 
         if verify_integrity:
             stored = meta_dict.get("checksum")
@@ -330,6 +369,7 @@ class PersistenceManager:
                 save_version=int(raw.get("save_version", 1)),
                 format=str(raw.get("format", "json")),
                 compressed=bool(raw.get("compressed", False)),
+                format_version=int(raw.get("format_version", 1)),
             )
         except (KeyError, TypeError, ValueError) as e:
             logger.error(f"Malformed metadata header for '{key}': {e}")

@@ -32,6 +32,12 @@ class SaveMetadata:
         save_version: Integer schema version, for migration tracking.
         format: The ``SerializationFormat`` value the payload is encoded in.
         compressed: Whether the payload bytes are gzip-compressed.
+        format_version: Version of the *container* -- the header/payload
+            framing itself, as opposed to ``save_version`` (the game's
+            schema) or ``version`` (the engine build). A reader that does
+            not recognise it cannot safely guess at the payload, so it
+            refuses instead. Absent in saves written before the field
+            existed, which are read as 1.
     """
 
     version: str
@@ -41,6 +47,7 @@ class SaveMetadata:
     save_version: int = 1
     format: str = "json"
     compressed: bool = False
+    format_version: int = 1
 
 
 @runtime_checkable

@@ -10,9 +10,9 @@ import pathlib
 
 import pytest
 
-from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.manager import CONTAINER_FORMAT_VERSION, PersistenceManager
 from pyguara.persistence.migration import Migration, MigrationManager
-from pyguara.persistence.storage import FileStorageBackend
+from pyguara.persistence.storage import FileStorageBackend, user_data_path
 from pyguara.persistence.types import SerializationFormat
 
 
@@ -472,3 +472,109 @@ class TestSaveMenuAPI:
         meta = manager.read_metadata("slot")
         assert meta is not None
         assert meta.save_version == 2
+
+
+# --------------------------------------------------------------------------- #
+# User data directory                                                          #
+# --------------------------------------------------------------------------- #
+class TestUserDataDirectory:
+    def test_it_resolves_under_the_platform_data_dir(self, tmp_path, monkeypatch):
+        """The whole point: not relative to the working directory, which is
+        wrong for anything installed."""
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        path = user_data_path("MyGame", subdir="saves")
+
+        assert pathlib.Path(path).is_dir()
+        assert str(tmp_path) in path
+        assert "MyGame" in path
+
+    def test_the_subdir_is_optional(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        assert not user_data_path("MyGame").endswith("saves")
+
+    def test_an_empty_app_name_is_rejected(self):
+        """There is no sensible default -- the engine cannot invent the name
+        of the game it is running, which is why this is opt-in."""
+        with pytest.raises(ValueError, match="non-empty"):
+            user_data_path("")
+
+    def test_the_backend_roundtrips_there_and_not_in_the_cwd(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.chdir(tmp_path / "..")
+
+        manager = PersistenceManager(FileStorageBackend.in_user_data_dir("MyGame"))
+        manager.save_data("slot", {"run": 3})
+
+        assert manager.load_data("slot") == {"run": 3}
+        assert list(tmp_path.glob("MyGame/saves/slot.save"))
+
+
+# --------------------------------------------------------------------------- #
+# Envelope format version                                                      #
+# --------------------------------------------------------------------------- #
+class TestFormatVersion:
+    def test_the_header_records_the_container_format(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        header = json.loads((tmp_path / "slot.save").read_bytes().split(b"\n")[0])
+        assert header["format_version"] == CONTAINER_FORMAT_VERSION
+
+    def test_read_metadata_exposes_it(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        meta = manager.read_metadata("slot")
+        assert meta is not None
+        assert meta.format_version == CONTAINER_FORMAT_VERSION
+
+    def test_a_header_without_one_is_treated_as_v1(self, tmp_path):
+        """Saves written before the field existed must keep loading."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        del raw["format_version"]
+        path.write_bytes(json.dumps(raw).encode("utf-8") + b"\n" + payload)
+
+        assert manager.load_data("slot") == {"a": 1}
+        meta = manager.read_metadata("slot")
+        assert meta is not None and meta.format_version == 1
+
+    def test_a_future_container_format_is_refused(self, tmp_path):
+        """The reason the field exists: a build that does not understand the
+        container must say so rather than misread the payload."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        raw["format_version"] = CONTAINER_FORMAT_VERSION + 1
+        path.write_bytes(json.dumps(raw).encode("utf-8") + b"\n" + payload)
+
+        assert manager.load_data("slot") is None
+
+    def test_a_future_format_is_not_treated_as_corruption(self, tmp_path):
+        """A newer save is valid, not damaged -- what a player sees after
+        downgrading. Falling back would quarantine their good save and
+        promote an older backup over it."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        manager.save_data("slot", {"run": 2})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        raw["format_version"] = CONTAINER_FORMAT_VERSION + 1
+        newer = json.dumps(raw).encode("utf-8") + b"\n" + payload
+        path.write_bytes(newer)
+
+        assert manager.load_data("slot") is None
+        # The newer save is still there, untouched.
+        assert path.read_bytes() == newer
+        assert list(tmp_path.glob("slot.save.corrupt.*")) == []
