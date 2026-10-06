@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from pyguara.resources.data import DataResource
+from pyguara.resources.exceptions import ResourceLoadError
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.meta import AssetMeta, TextureMeta
@@ -424,3 +425,96 @@ def test_iter_cached_snapshot_survives_unload_during_iteration() -> None:
 
     assert sorted(seen) == ["a.mock", "b.mock"]
     assert list(manager.iter_cached()) == []
+
+
+# --------------------------------------------------------------------------
+# Error context on a failed load
+# --------------------------------------------------------------------------
+class FailingLoader(MockLoader):
+    """A loader that raises the way a real one does: no asset context."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self._error = error
+
+    def load(self, path: str) -> MockRes:
+        self.load_calls += 1
+        raise self._error
+
+
+class TestLoadErrorContext:
+    def test_a_loader_failure_names_the_asset_and_the_resolved_path(
+        self, tmp_path: Path
+    ) -> None:
+        """The debugging difficulty this closes: a game asks for
+        `"hero.mock"`, the index resolves it somewhere under `assets/`, and
+        the loader's bare `FileNotFoundError` named neither clearly."""
+        (tmp_path / "hero.mock").write_text("x")
+        manager = _mgr(FailingLoader(FileNotFoundError("no such file")))
+        manager.index_directory(str(tmp_path))
+
+        with pytest.raises(ResourceLoadError) as excinfo:
+            manager.load("hero.mock", MockRes)
+
+        error = excinfo.value
+        assert error.name == "hero.mock"
+        assert error.path == str(tmp_path / "hero.mock")
+        assert "hero.mock" in str(error)
+        assert "resolved to" in str(error)
+
+    def test_the_original_exception_is_chained(self, tmp_path: Path) -> None:
+        """Wrapping must not hide what actually went wrong."""
+        (tmp_path / "hero.mock").write_text("x")
+        original = FileNotFoundError("no such file")
+        manager = _mgr(FailingLoader(original))
+        manager.index_directory(str(tmp_path))
+
+        with pytest.raises(ResourceLoadError) as excinfo:
+            manager.load("hero.mock", MockRes)
+
+        assert excinfo.value.__cause__ is original
+        assert "FileNotFoundError" in str(excinfo.value)
+
+    def test_a_direct_path_does_not_repeat_itself(self, tmp_path: Path) -> None:
+        """Nothing was resolved, so the message should not claim it was."""
+        path = tmp_path / "hero.mock"
+        path.write_text("x")
+        manager = _mgr(FailingLoader(OSError("broken")))
+
+        with pytest.raises(ResourceLoadError) as excinfo:
+            manager.load(str(path), MockRes)
+
+        assert excinfo.value.name is None
+        assert "resolved to" not in str(excinfo.value)
+
+    def test_a_resource_error_is_not_re_wrapped(self, tmp_path: Path) -> None:
+        """A loader that already reports context keeps it, rather than being
+        buried under a second layer."""
+        (tmp_path / "hero.mock").write_text("x")
+        inner = ResourceLoadError("some/other/path", "already explained")
+        manager = _mgr(FailingLoader(inner))
+        manager.index_directory(str(tmp_path))
+
+        with pytest.raises(ResourceLoadError) as excinfo:
+            manager.load("hero.mock", MockRes)
+
+        assert excinfo.value is inner
+
+    def test_an_unknown_extension_still_raises_value_error(self) -> None:
+        """Not a loader failure -- there is no loader to fail. Unchanged."""
+        manager = _mgr()
+        with pytest.raises(ValueError, match="No loader registered"):
+            manager.load("thing.unknown", MockRes)
+
+    def test_a_json_loader_failure_is_wrapped_too(self, tmp_path: Path) -> None:
+        """Against a real loader, not just the test double."""
+        (tmp_path / "level.json").write_text("{not valid json")
+        manager = ResourceManager()
+        manager.register_loader(JsonLoader())
+        manager.index_directory(str(tmp_path))
+
+        with pytest.raises(ResourceLoadError) as excinfo:
+            manager.load("level.json", DataResource)
+
+        assert excinfo.value.name == "level.json"
+        assert "JSONDecodeError" in str(excinfo.value)
