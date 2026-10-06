@@ -1,9 +1,13 @@
 """Concrete storage backend implementations."""
 
+from __future__ import annotations
+
 import contextlib
 import os
 import tempfile
 from datetime import UTC, datetime
+
+import platformdirs
 
 from pyguara.log import get_logger
 
@@ -70,6 +74,52 @@ def _atomic_write_bytes(path: str, data: bytes) -> None:
         pass
 
 
+def user_data_path(
+    app_name: str,
+    app_author: str | None = None,
+    *,
+    subdir: str | None = None,
+) -> str:
+    """Return the per-user data directory a shipped game should write to.
+
+    `~/.local/share/<app>` on Linux, under `%LOCALAPPDATA%` on Windows,
+    `~/Library/Application Support/<app>` on macOS. The directory is
+    created if absent.
+
+    A default of `"saves"` relative to the working directory -- which is
+    what the engine wires up unless told otherwise -- is wrong for anything
+    installed: the install directory is often read-only, the working
+    directory depends on how the game was launched, and saves belong to the
+    user rather than to the copy of the program.
+
+    There is no sensible default for `app_name`, which is why this is
+    opt-in rather than the engine's default: the engine cannot invent the
+    name of the game it is running.
+
+    Args:
+        app_name: The game's name, used as the directory name.
+        app_author: Vendor name, used only on Windows, where the
+            convention nests under it. Defaults to `app_name`.
+        subdir: Optional directory beneath the app directory, e.g.
+            `"saves"`, to keep saves apart from logs or caches.
+
+    Returns:
+        The absolute path, which exists by the time this returns.
+
+    Raises:
+        ValueError: If `app_name` is empty.
+        OSError: If the directory cannot be created.
+    """
+    if not app_name:
+        raise ValueError("app_name must be a non-empty string")
+
+    path = platformdirs.user_data_dir(app_name, app_author, roaming=False)
+    if subdir:
+        path = os.path.join(path, subdir)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 class FileStorageBackend:
     """Storage backend that saves each key as one file on the local disk.
 
@@ -100,6 +150,39 @@ class FileStorageBackend:
         self.base_path = base_path
         os.makedirs(self.base_path, exist_ok=True)
         self._sweep_temp_files()
+
+    @classmethod
+    def in_user_data_dir(
+        cls,
+        app_name: str,
+        app_author: str | None = None,
+        *,
+        subdir: str = "saves",
+    ) -> FileStorageBackend:
+        """Build a backend rooted in the per-user data directory.
+
+        What a shipped game wants instead of the default `"saves"`, which
+        is relative to the working directory. See `user_data_path()` for
+        why that default is wrong once a game is installed.
+
+        ```python
+        storage = FileStorageBackend.in_user_data_dir("Guara & Falcao")
+        persistence = PersistenceManager(storage)
+        ```
+
+        Args:
+            app_name: The game's name, used as the directory name.
+            app_author: Vendor name, used only on Windows.
+            subdir: Directory beneath the app directory to store saves in.
+
+        Returns:
+            A backend rooted at the resolved path.
+
+        Raises:
+            ValueError: If `app_name` is empty.
+            OSError: If the directory cannot be created.
+        """
+        return cls(base_path=user_data_path(app_name, app_author, subdir=subdir))
 
     def _sweep_temp_files(self) -> None:
         """Remove orphaned temp files left by a crashed write."""

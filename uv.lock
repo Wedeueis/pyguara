@@ -1342,6 +1342,7 @@ dependencies = [
     { name = "msgpack" },
     { name = "numpy" },
     { name = "pillow" },
+    { name = "platformdirs" },
     { name = "pygame-ce" },
     { name = "pymunk" },
 ]
@@ -1391,6 +1392,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pillow", specifier = ">=12.1.0" },
+    { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "py-spy", marker = "extra == 'benchmark'", specifier = ">=0.3.0" },
     { name = "pygame-ce", specifier = ">=2.5.6" },
