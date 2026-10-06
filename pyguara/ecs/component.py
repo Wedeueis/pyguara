@@ -21,9 +21,7 @@ side-effect-free reads of the component's own fields.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
-
-_F = TypeVar("_F", bound=Callable[..., Any])
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from pyguara.ecs.entity import Entity
@@ -76,7 +74,7 @@ ALLOWED_METHODS: frozenset[str] = frozenset(
 _PURE_QUERY_FLAG = "__pyguara_pure_query__"
 
 
-def pure_query(method: _F) -> _F:
+def pure_query[F: Callable[..., Any]](method: F) -> F:
     """Mark a component method as a side-effect-free read of its own fields.
 
     The data-only rule exists so behaviour cannot hide inside components,

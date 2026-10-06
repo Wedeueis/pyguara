@@ -179,23 +179,20 @@ target-version = "py312"
 #        raise-without-from, unused loop variables).
 # I    - isort: one canonical import order, so import blocks stop churning.
 # SIM  - flake8-simplify.
-# Docstring style is enforced by the separate pydocstyle pre-commit hook, which
-# is scoped to pyguara/ only; ruff's D rules are deliberately not enabled here
-# to avoid two tools disagreeing about the same thing.
-select = ["E4", "E7", "E9", "F", "UP", "B", "I", "SIM"]
+# D    - pydocstyle, under the same `pep257` convention the standalone
+#        pydocstyle hook ran with, so this is the same standard enforced by
+#        one tool instead of two. It replaced that hook because pydocstyle
+#        6.3.0 is unmaintained and cannot parse PEP 695 type parameters --
+#        it reported D103 "missing docstring" against docstrings that were
+#        plainly present -- and because pre-commit only fed it *changed*
+#        files, so 12 D401 violations sat in the tree unreported.
+select = ["E4", "E7", "E9", "F", "UP", "B", "I", "SIM", "D"]
 ignore = [
     # Nesting often reads better than an `and` chain when the outer condition
     # is a guard and the inner one is the real test; leaving this to judgement.
     "SIM102",
     # A ternary is not automatically clearer than an if/else block.
     "SIM108",
-    # PEP 695 `def f[T]()` syntax. Adopted for classes (UP046) but not
-    # functions: the pydocstyle 6.3.0 pre-commit hook cannot parse a
-    # function's type-parameter list and reports D103 "missing docstring"
-    # for a docstring that is plainly there -- six of them. pydocstyle is
-    # unmaintained; ruff's own D rules parse it correctly, but swapping the
-    # two surfaces 190 findings and is a decision of its own.
-    "UP047",
     # An empty method on a non-ABC base is how optional lifecycle hooks are
     # declared here (Scene.on_exit, RenderPass hooks); they are deliberately
     # overridable no-ops, not forgotten abstract methods.
@@ -208,6 +205,33 @@ unfixable = []
 
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.pydocstyle]
+# The convention the standalone pydocstyle hook enforced (its default), so
+# swapping tools kept the standard identical rather than quietly raising it.
+# `google` would have been a different, stricter standard -- 190 findings
+# against this tree rather than 14.
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+# Docstring rules cover the engine package only, which is exactly the scope
+# the standalone pydocstyle hook had (`files: ^pyguara/.*\.py$`). Selecting
+# `D` globally would newly fail 3,429 findings across tests/, games/ and
+# tools/ -- widening the standard, which is a separate decision from
+# swapping which tool enforces it.
+"tests/**" = ["D"]
+"games/**" = ["D"]
+"tools/**" = ["D"]
+"main.py" = ["D"]
+
+# D301 wants `r"""` wherever a docstring contains a backslash. These two
+# Click commands must NOT be raw strings: `\b` has to reach Click as a
+# backspace, which is its "do not rewrap this paragraph" marker in `--help`.
+# Making them raw would send a literal backslash-b and print it. The audit
+# changed `r"""` -> `"""` here on purpose, so the rule is wrong for these
+# two files specifically rather than for the project.
+"pyguara/cli/atlas_generator.py" = ["D301"]
+"pyguara/cli/build.py" = ["D301"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Vector2 subclasses pymunk.Vec2d, which is a NamedTuple: instances are
