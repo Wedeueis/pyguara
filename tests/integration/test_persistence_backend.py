@@ -374,3 +374,101 @@ class TestHeaderRead:
         backend = FileStorageBackend(base_path=str(tmp_path))
         backend.save("s", b"x" * 10_000)
         assert backend.load_header("s", max_bytes=128) is None
+
+
+# --------------------------------------------------------------------------- #
+# Save-menu API                                                                #
+# --------------------------------------------------------------------------- #
+class TestSaveMenuAPI:
+    def test_list_saves_reports_written_keys(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot_a", {"a": 1})
+        manager.save_data("slot_b", {"b": 2})
+        assert sorted(manager.list_saves()) == ["slot_a", "slot_b"]
+
+    def test_exists_and_delete_without_reaching_into_storage(self, tmp_path):
+        """Callers used to go through `.storage` for these, which tied game
+        code to the backend's interface."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        assert manager.exists("slot") is True
+        assert manager.delete("slot") is True
+        assert manager.exists("slot") is False
+        assert manager.delete("slot") is False
+
+    def test_read_metadata_returns_the_header(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"hp": 3}, save_version=4)
+
+        meta = manager.read_metadata("slot")
+
+        assert meta is not None
+        assert meta.data_type == "dict"
+        assert meta.save_version == 4
+        assert meta.timestamp.tzinfo is not None
+
+    def test_read_metadata_of_a_missing_key_is_none(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        assert manager.read_metadata("absent") is None
+
+    def test_read_metadata_survives_a_corrupt_payload(self, tmp_path):
+        """The point of reading only the header: a slot whose *data* is
+        broken still shows its timestamp in a load menu."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"hp": 3})
+        _corrupt_payload(tmp_path / "slot.save")
+
+        meta = manager.read_metadata("slot")
+
+        assert meta is not None
+        assert meta.data_type == "dict"
+
+    def test_read_metadata_of_a_broken_header_is_none(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        (tmp_path / "slot.save").write_bytes(b"{not json at all}\npayload")
+        assert manager.read_metadata("slot") is None
+
+    def test_read_metadata_tolerates_unknown_future_fields(self, tmp_path):
+        """A header written by a newer build must still load, not raise
+        `TypeError` on an unexpected keyword."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"hp": 3})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        raw["something_from_the_future"] = 99
+        path.write_bytes(json.dumps(raw).encode("utf-8") + b"\n" + payload)
+
+        meta = manager.read_metadata("slot")
+        assert meta is not None
+        assert meta.data_type == "dict"
+
+    def test_read_metadata_works_without_a_header_capable_backend(self, tmp_path):
+        """`HeaderReadableStorage` is optional; the manager falls back to
+        reading the whole blob."""
+
+        class Minimal:
+            def __init__(self):
+                self.blobs = {}
+
+            def save(self, key, blob):
+                self.blobs[key] = blob
+                return True
+
+            def load(self, key):
+                return self.blobs.get(key)
+
+            def delete(self, key):
+                return self.blobs.pop(key, None) is not None
+
+            def list_keys(self):
+                return list(self.blobs)
+
+        manager = PersistenceManager(Minimal())
+        manager.save_data("slot", {"hp": 3}, save_version=2)
+
+        meta = manager.read_metadata("slot")
+        assert meta is not None
+        assert meta.save_version == 2

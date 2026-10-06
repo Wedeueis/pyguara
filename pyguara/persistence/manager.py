@@ -14,6 +14,7 @@ from pyguara.log import get_logger
 from pyguara.persistence.serializer import Serializer
 from pyguara.persistence.types import (
     BackupCapableStorage,
+    HeaderReadableStorage,
     SaveMetadata,
     SerializationFormat,
     StorageBackend,
@@ -230,6 +231,109 @@ class PersistenceManager:
                 data = self.migration_manager.migrate(data, save_version)
 
         return data
+
+    def list_saves(self) -> list[str]:
+        """Return every key currently in storage.
+
+        Args:
+            None.
+
+        Returns:
+            The keys, in whatever order the backend reports them.
+        """
+        return self.storage.list_keys()
+
+    def exists(self, key: str) -> bool:
+        """Whether a save exists under `key`.
+
+        Args:
+            key: Unique identifier for the save data.
+
+        Returns:
+            True if the backend holds a value for it.
+        """
+        return key in self.storage.list_keys()
+
+    def delete(self, key: str) -> bool:
+        """Delete the save stored under `key`.
+
+        Here so callers stop reaching through `.storage` for it, which left
+        the manager's facade half-complete and tied game code to the
+        backend's own interface.
+
+        Args:
+            key: Unique identifier for the save data.
+
+        Returns:
+            True if something was removed, False if it was already absent.
+        """
+        return self.storage.delete(key)
+
+    def read_metadata(self, key: str) -> SaveMetadata | None:
+        """Return a save's metadata without deserializing its payload.
+
+        What a load-game screen needs: slot timestamps and schema versions
+        for a list of saves, at the cost of one short read each rather than
+        a full decode each. Uses the backend's `load_header()` when it has
+        one and falls back to reading the whole blob when it does not.
+
+        The payload is never touched, so this answers for a save whose
+        *data* is corrupt as long as the header survived.
+
+        Args:
+            key: Unique identifier for the save data.
+
+        Returns:
+            The metadata, or None if the key is absent or its header is
+            unreadable.
+        """
+        header: bytes | None
+        if isinstance(self.storage, HeaderReadableStorage):
+            header = self.storage.load_header(key)
+        else:
+            blob = self.storage.load(key)
+            header = None if blob is None else blob.partition(_HEADER_SEP)[0]
+
+        if not header:
+            return None
+
+        try:
+            raw = json.loads(header.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            logger.error(f"Unreadable metadata header for '{key}': {e}")
+            return None
+
+        return self._metadata_from(key, raw)
+
+    @staticmethod
+    def _metadata_from(key: str, raw: dict[str, Any]) -> SaveMetadata | None:
+        """Rebuild `SaveMetadata` from a decoded header.
+
+        Only known fields are read, so a header written by a newer build
+        with extra fields still loads instead of raising `TypeError` on an
+        unexpected keyword.
+
+        Args:
+            key: Unique identifier, for log messages.
+            raw: The decoded header mapping.
+
+        Returns:
+            The metadata, or None if a required field is missing or the
+            timestamp will not parse.
+        """
+        try:
+            return SaveMetadata(
+                version=str(raw["version"]),
+                timestamp=datetime.fromisoformat(raw["timestamp"]),
+                data_type=str(raw["data_type"]),
+                checksum=raw.get("checksum"),
+                save_version=int(raw.get("save_version", 1)),
+                format=str(raw.get("format", "json")),
+                compressed=bool(raw.get("compressed", False)),
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error(f"Malformed metadata header for '{key}': {e}")
+            return None
 
     @staticmethod
     def _frame(metadata: SaveMetadata, payload: bytes) -> bytes:
