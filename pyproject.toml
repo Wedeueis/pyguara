@@ -33,6 +33,10 @@ dependencies = [
     "msgpack>=1.1.2",
     "moderngl>=5.8.0",
     "numpy>=1.26.0",
+    # Resolves the per-user data directory a shipped game must save into
+    # (~/.local/share, %APPDATA%, ~/Library/Application Support). Small,
+    # dependency-free, and already in this tree transitively.
+    "platformdirs>=4.0.0",
 ]
 
 [project.optional-dependencies]

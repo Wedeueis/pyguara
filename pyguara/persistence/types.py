@@ -32,6 +32,12 @@ class SaveMetadata:
         save_version: Integer schema version, for migration tracking.
         format: The ``SerializationFormat`` value the payload is encoded in.
         compressed: Whether the payload bytes are gzip-compressed.
+        format_version: Version of the *container* -- the header/payload
+            framing itself, as opposed to ``save_version`` (the game's
+            schema) or ``version`` (the engine build). A reader that does
+            not recognise it cannot safely guess at the payload, so it
+            refuses instead. Absent in saves written before the field
+            existed, which are read as 1.
     """
 
     version: str
@@ -41,6 +47,7 @@ class SaveMetadata:
     save_version: int = 1
     format: str = "json"
     compressed: bool = False
+    format_version: int = 1
 
 
 @runtime_checkable
@@ -88,4 +95,59 @@ class StorageBackend(Protocol):
 
     def list_keys(self) -> list[str]:
         """List all keys currently present in storage."""
+        ...
+
+
+@runtime_checkable
+class BackupCapableStorage(Protocol):
+    """A storage backend that keeps the previous value of each key.
+
+    Kept separate from `StorageBackend` on purpose. That protocol is the
+    contract every backend must meet -- a plain key -> blob store -- and
+    widening it would break any backend written against it. This is an
+    *optional* capability the manager tests for with `isinstance`, so a
+    minimal backend stays valid and simply gets no recovery.
+    """
+
+    def load_backup(self, key: str) -> bytes | None:
+        """Return the value this key held before the most recent write.
+
+        Args:
+            key: Unique identifier for the data.
+
+        Returns:
+            The backed-up bytes, or None if there is no backup.
+        """
+        ...
+
+    def quarantine(self, key: str) -> str | None:
+        """Move an unreadable value aside, keeping it for inspection.
+
+        Args:
+            key: Unique identifier for the data.
+
+        Returns:
+            Where it was moved, or None if there was nothing to move.
+        """
+        ...
+
+
+@runtime_checkable
+class HeaderReadableStorage(Protocol):
+    """A backend that can return a blob's first line on its own.
+
+    Lets a save menu read twenty slots' metadata without loading twenty
+    payloads. Optional, for the same reason as `BackupCapableStorage`.
+    """
+
+    def load_header(self, key: str, max_bytes: int = ...) -> bytes | None:
+        """Return the bytes before the blob's first newline.
+
+        Args:
+            key: Unique identifier for the data.
+            max_bytes: Give up after this many bytes without a newline.
+
+        Returns:
+            The header bytes, or None if unavailable.
+        """
         ...

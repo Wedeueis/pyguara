@@ -1,14 +1,29 @@
 """Concrete storage backend implementations."""
 
+from __future__ import annotations
+
 import contextlib
 import os
 import tempfile
+from datetime import UTC, datetime
+
+import platformdirs
 
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
 _TEMP_PREFIX = ".tmp_"
+
+# `{key}.save.bak` holds the value this key had before the most recent
+# write, so a save that is valid-but-unreadable (bit-rot, a bad migration,
+# an interrupted disk) is not the end of the run. Deliberately *not* ending
+# in `.save`, so `list_keys()` cannot report a backup as a save of its own.
+_BACKUP_SUFFIX = ".bak"
+
+# A primary that failed to decode is moved aside under this suffix rather
+# than deleted, so it can still be inspected after the fact.
+_CORRUPT_SUFFIX = ".corrupt"
 
 
 def _atomic_write_bytes(path: str, data: bytes) -> None:
@@ -59,12 +74,63 @@ def _atomic_write_bytes(path: str, data: bytes) -> None:
         pass
 
 
+def user_data_path(
+    app_name: str,
+    app_author: str | None = None,
+    *,
+    subdir: str | None = None,
+) -> str:
+    """Return the per-user data directory a shipped game should write to.
+
+    `~/.local/share/<app>` on Linux, under `%LOCALAPPDATA%` on Windows,
+    `~/Library/Application Support/<app>` on macOS. The directory is
+    created if absent.
+
+    A default of `"saves"` relative to the working directory -- which is
+    what the engine wires up unless told otherwise -- is wrong for anything
+    installed: the install directory is often read-only, the working
+    directory depends on how the game was launched, and saves belong to the
+    user rather than to the copy of the program.
+
+    There is no sensible default for `app_name`, which is why this is
+    opt-in rather than the engine's default: the engine cannot invent the
+    name of the game it is running.
+
+    Args:
+        app_name: The game's name, used as the directory name.
+        app_author: Vendor name, used only on Windows, where the
+            convention nests under it. Defaults to `app_name`.
+        subdir: Optional directory beneath the app directory, e.g.
+            `"saves"`, to keep saves apart from logs or caches.
+
+    Returns:
+        The absolute path, which exists by the time this returns.
+
+    Raises:
+        ValueError: If `app_name` is empty.
+        OSError: If the directory cannot be created.
+    """
+    if not app_name:
+        raise ValueError("app_name must be a non-empty string")
+
+    path = platformdirs.user_data_dir(app_name, app_author, roaming=False)
+    if subdir:
+        path = os.path.join(path, subdir)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 class FileStorageBackend:
     """Storage backend that saves each key as one file on the local disk.
 
     Each key maps to a single ``{key}.save`` file under ``base_path``,
     written with an atomic temp-file-then-rename so a crash mid-write never
     corrupts the previous value.
+
+    Each write also keeps the previous value as ``{key}.save.bak``, which
+    `PersistenceManager` falls back to when the primary will not decode.
+    The atomic rename already prevents a *torn* write; a backup is what
+    covers a write that completed and is still unusable.
 
     Keys must be filesystem-safe as given: alphanumerics, ``_`` and ``-``.
     A key that would need rewriting to be safe is rejected with
@@ -84,6 +150,39 @@ class FileStorageBackend:
         self.base_path = base_path
         os.makedirs(self.base_path, exist_ok=True)
         self._sweep_temp_files()
+
+    @classmethod
+    def in_user_data_dir(
+        cls,
+        app_name: str,
+        app_author: str | None = None,
+        *,
+        subdir: str = "saves",
+    ) -> FileStorageBackend:
+        """Build a backend rooted in the per-user data directory.
+
+        What a shipped game wants instead of the default `"saves"`, which
+        is relative to the working directory. See `user_data_path()` for
+        why that default is wrong once a game is installed.
+
+        ```python
+        storage = FileStorageBackend.in_user_data_dir("Guara & Falcao")
+        persistence = PersistenceManager(storage)
+        ```
+
+        Args:
+            app_name: The game's name, used as the directory name.
+            app_author: Vendor name, used only on Windows.
+            subdir: Directory beneath the app directory to store saves in.
+
+        Returns:
+            A backend rooted at the resolved path.
+
+        Raises:
+            ValueError: If `app_name` is empty.
+            OSError: If the directory cannot be created.
+        """
+        return cls(base_path=user_data_path(app_name, app_author, subdir=subdir))
 
     def _sweep_temp_files(self) -> None:
         """Remove orphaned temp files left by a crashed write."""
@@ -132,6 +231,7 @@ class FileStorageBackend:
             ValueError: If the key is not filesystem-safe.
         """
         path = self._path_for(key)
+        self._rotate_backup(path, key)
         try:
             _atomic_write_bytes(path, blob)
             logger.debug("Saved '%s' (%d bytes)", key, len(blob))
@@ -139,6 +239,30 @@ class FileStorageBackend:
         except OSError as e:
             logger.error("Save failed for '%s': %s", key, e, exc_info=True)
             return False
+
+    def _rotate_backup(self, path: str, key: str) -> None:
+        """Copy the current value of `key` to its backup slot.
+
+        Copied rather than renamed: a rename would leave no primary at all
+        if the write that follows then failed, turning a failed save into a
+        missing one. A copy means the worst case is a backup identical to
+        the primary.
+
+        A failure here is logged and ignored -- losing the backup is worth
+        strictly less than refusing the save.
+
+        Args:
+            path: The primary file's path.
+            key: The storage key, for logging.
+        """
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, "rb") as f:
+                previous = f.read()
+            _atomic_write_bytes(path + _BACKUP_SUFFIX, previous)
+        except OSError as e:
+            logger.warning("Could not back up '%s' before overwriting: %s", key, e)
 
     def load(self, key: str) -> bytes | None:
         """Read the blob stored under a key.
@@ -177,6 +301,10 @@ class FileStorageBackend:
             ValueError: If the key is not filesystem-safe.
         """
         path = self._path_for(key)
+        # The backup goes with it. Leaving it behind would let a later
+        # `load` recover data the caller asked to be gone.
+        with contextlib.suppress(OSError):
+            os.remove(path + _BACKUP_SUFFIX)
         try:
             os.remove(path)
         except FileNotFoundError:
@@ -186,6 +314,91 @@ class FileStorageBackend:
             return False
         logger.debug("Deleted '%s'", key)
         return True
+
+    def load_backup(self, key: str) -> bytes | None:
+        """Return the value this key held before the most recent write.
+
+        Args:
+            key: Unique identifier for the data.
+
+        Returns:
+            The backed-up bytes, or None if there is no backup.
+
+        Raises:
+            ValueError: If the key is not filesystem-safe.
+        """
+        path = self._path_for(key) + _BACKUP_SUFFIX
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except OSError as e:
+            logger.error("Backup read failed for '%s': %s", key, e)
+            return None
+
+    def quarantine(self, key: str) -> str | None:
+        """Move an unreadable primary aside, keeping it for inspection.
+
+        Named with a timestamp so repeated failures do not overwrite each
+        other, and with a suffix that `list_keys()` ignores.
+
+        Args:
+            key: Unique identifier for the data.
+
+        Returns:
+            The path the file was moved to, or None if there was nothing to
+            move or the move failed.
+
+        Raises:
+            ValueError: If the key is not filesystem-safe.
+        """
+        path = self._path_for(key)
+        if not os.path.exists(path):
+            return None
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
+        target = f"{path}{_CORRUPT_SUFFIX}.{stamp}"
+        try:
+            os.replace(path, target)
+        except OSError as e:
+            logger.error("Could not quarantine '%s': %s", key, e)
+            return None
+        logger.warning("Quarantined unreadable save '%s' to %s", key, target)
+        return target
+
+    def load_header(self, key: str, max_bytes: int = 64 * 1024) -> bytes | None:
+        """Return the blob's first line without reading the whole file.
+
+        What a save menu needs: the metadata header is the first line of
+        every blob, so listing twenty slots should not mean deserialising
+        twenty payloads.
+
+        Args:
+            key: Unique identifier for the data.
+            max_bytes: Give up after this many bytes without finding a
+                newline, rather than reading a whole corrupt file into
+                memory looking for one.
+
+        Returns:
+            The bytes before the first newline, or None if the key is
+            absent, unreadable, or has no newline within `max_bytes`.
+
+        Raises:
+            ValueError: If the key is not filesystem-safe.
+        """
+        path = self._path_for(key)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "rb") as f:
+                chunk = f.read(max_bytes)
+        except OSError as e:
+            logger.error("Header read failed for '%s': %s", key, e)
+            return None
+        header, sep, _rest = chunk.partition(b"\n")
+        if not sep:
+            return None
+        return header
 
     def list_keys(self) -> list[str]:
         """List all keys currently present in storage.

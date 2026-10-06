@@ -6,12 +6,13 @@ end to end against real files under ``tmp_path``.
 
 import gzip
 import json
+import pathlib
 
 import pytest
 
-from pyguara.persistence.manager import PersistenceManager
+from pyguara.persistence.manager import CONTAINER_FORMAT_VERSION, PersistenceManager
 from pyguara.persistence.migration import Migration, MigrationManager
-from pyguara.persistence.storage import FileStorageBackend
+from pyguara.persistence.storage import FileStorageBackend, user_data_path
 from pyguara.persistence.types import SerializationFormat
 
 
@@ -185,3 +186,395 @@ class TestPersistenceManager:
         manager.save_data("temp", {"x": 1})
         assert manager.storage.delete("temp") is True
         assert manager.load_data("temp") is None
+
+
+# --------------------------------------------------------------------------- #
+# Backup, recovery and quarantine                                              #
+# --------------------------------------------------------------------------- #
+def _corrupt_payload(path) -> None:
+    """Damage a save's payload while leaving the header intact.
+
+    This is the failure a backup exists for. The atomic write already rules
+    out a *torn* file, so the interesting case is a blob that is structurally
+    fine and still will not decode -- bit-rot, a bad migration, a lying
+    disk. Truncating the file would only prove the easy case.
+    """
+    blob = path.read_bytes()
+    header, _sep, payload = blob.partition(b"\n")
+    path.write_bytes(header + b"\n" + payload[:-3] + b"XXX")
+
+
+class TestBackupRetention:
+    def test_the_first_save_has_no_backup(self, tmp_path):
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"one")
+        assert backend.load_backup("s") is None
+
+    def test_a_second_save_backs_up_the_first(self, tmp_path):
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"one")
+        backend.save("s", b"two")
+        assert backend.load("s") == b"two"
+        assert backend.load_backup("s") == b"one"
+
+    def test_the_backup_is_not_reported_as_a_save(self, tmp_path):
+        """`list_keys()` matches `.save`, and a backup ends `.save.bak` --
+        otherwise a save menu would show every slot twice."""
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"one")
+        backend.save("s", b"two")
+        assert backend.list_keys() == ["s"]
+
+    def test_delete_takes_the_backup_with_it(self, tmp_path):
+        """Leaving it behind would let a later load recover data the caller
+        asked to be gone."""
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"one")
+        backend.save("s", b"two")
+        backend.delete("s")
+        assert backend.load_backup("s") is None
+        assert list(tmp_path.glob("s.save*")) == []
+
+    def test_quarantine_moves_the_primary_aside(self, tmp_path):
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"one")
+        target = backend.quarantine("s")
+        assert target is not None
+        assert backend.load("s") is None
+        assert pathlib.Path(target).read_bytes() == b"one"
+
+    def test_quarantine_of_a_missing_key_is_not_an_error(self, tmp_path):
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        assert backend.quarantine("absent") is None
+
+    def test_quarantined_files_are_not_reported_as_saves(self, tmp_path):
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"one")
+        backend.quarantine("s")
+        assert backend.list_keys() == []
+
+
+class TestRecoveryFromBackup:
+    def test_a_corrupt_primary_falls_back_to_the_previous_save(self, tmp_path):
+        """The headline behaviour: for a permadeath roguelike this is the
+        difference between a lost run and a recovered one."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        manager.save_data("slot", {"run": 2})
+
+        _corrupt_payload(tmp_path / "slot.save")
+
+        assert manager.load_data("slot") == {"run": 1}
+
+    def test_recovery_quarantines_the_corrupt_primary(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        manager.save_data("slot", {"run": 2})
+        _corrupt_payload(tmp_path / "slot.save")
+
+        manager.load_data("slot")
+
+        assert list(tmp_path.glob("slot.save.corrupt.*"))
+
+    def test_recovery_self_heals_so_the_next_load_is_clean(self, tmp_path):
+        """A read that left the broken file in place would fail again every
+        time, so the backup is promoted to primary on the way out."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        manager.save_data("slot", {"run": 2})
+        _corrupt_payload(tmp_path / "slot.save")
+
+        first = manager.load_data("slot")
+        second = manager.load_data("slot")
+
+        assert first == second == {"run": 1}
+        # The second load found a healthy primary, not another corrupt one.
+        assert len(list(tmp_path.glob("slot.save.corrupt.*"))) == 1
+
+    def test_no_backup_means_no_recovery(self, tmp_path):
+        """One save, then corruption: there is nothing to fall back to, and
+        the old behaviour -- None -- is preserved."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        _corrupt_payload(tmp_path / "slot.save")
+
+        assert manager.load_data("slot") is None
+
+    def test_a_corrupt_backup_is_not_trusted_either(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        manager.save_data("slot", {"run": 2})
+        _corrupt_payload(tmp_path / "slot.save")
+        _corrupt_payload(tmp_path / "slot.save.bak")
+
+        assert manager.load_data("slot") is None
+
+    def test_a_missing_header_also_triggers_recovery(self, tmp_path):
+        """Integrity failure is not the only way a blob goes bad."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        manager.save_data("slot", {"run": 2})
+        (tmp_path / "slot.save").write_bytes(b"no header separator here")
+
+        assert manager.load_data("slot") == {"run": 1}
+
+    def test_a_backend_without_backups_still_works(self, tmp_path):
+        """`BackupCapableStorage` is an optional capability, so a minimal
+        backend stays valid and simply gets no recovery."""
+
+        class Minimal:
+            def __init__(self):
+                self.blobs = {}
+
+            def save(self, key, blob):
+                self.blobs[key] = blob
+                return True
+
+            def load(self, key):
+                return self.blobs.get(key)
+
+            def delete(self, key):
+                return self.blobs.pop(key, None) is not None
+
+            def list_keys(self):
+                return list(self.blobs)
+
+        manager = PersistenceManager(Minimal())
+        assert manager.save_data("slot", {"run": 1}) is True
+        assert manager.load_data("slot") == {"run": 1}
+
+        manager.storage.blobs["slot"] = b"garbage"
+        assert manager.load_data("slot") is None
+
+
+class TestHeaderRead:
+    def test_the_header_is_readable_without_the_payload(self, tmp_path):
+        """What a save menu needs: twenty slots' metadata without
+        deserialising twenty payloads."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 7})
+
+        header = manager.storage.load_header("slot")
+
+        assert header is not None
+        assert json.loads(header)["data_type"] == "dict"
+
+    def test_a_missing_key_has_no_header(self, tmp_path):
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        assert backend.load_header("absent") is None
+
+    def test_a_blob_with_no_newline_has_no_header(self, tmp_path):
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"no newline anywhere")
+        assert backend.load_header("s") is None
+
+    def test_the_scan_is_bounded(self, tmp_path):
+        """A corrupt file must not be read into memory in full just to look
+        for a newline that is not there."""
+        backend = FileStorageBackend(base_path=str(tmp_path))
+        backend.save("s", b"x" * 10_000)
+        assert backend.load_header("s", max_bytes=128) is None
+
+
+# --------------------------------------------------------------------------- #
+# Save-menu API                                                                #
+# --------------------------------------------------------------------------- #
+class TestSaveMenuAPI:
+    def test_list_saves_reports_written_keys(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot_a", {"a": 1})
+        manager.save_data("slot_b", {"b": 2})
+        assert sorted(manager.list_saves()) == ["slot_a", "slot_b"]
+
+    def test_exists_and_delete_without_reaching_into_storage(self, tmp_path):
+        """Callers used to go through `.storage` for these, which tied game
+        code to the backend's interface."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        assert manager.exists("slot") is True
+        assert manager.delete("slot") is True
+        assert manager.exists("slot") is False
+        assert manager.delete("slot") is False
+
+    def test_read_metadata_returns_the_header(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"hp": 3}, save_version=4)
+
+        meta = manager.read_metadata("slot")
+
+        assert meta is not None
+        assert meta.data_type == "dict"
+        assert meta.save_version == 4
+        assert meta.timestamp.tzinfo is not None
+
+    def test_read_metadata_of_a_missing_key_is_none(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        assert manager.read_metadata("absent") is None
+
+    def test_read_metadata_survives_a_corrupt_payload(self, tmp_path):
+        """The point of reading only the header: a slot whose *data* is
+        broken still shows its timestamp in a load menu."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"hp": 3})
+        _corrupt_payload(tmp_path / "slot.save")
+
+        meta = manager.read_metadata("slot")
+
+        assert meta is not None
+        assert meta.data_type == "dict"
+
+    def test_read_metadata_of_a_broken_header_is_none(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        (tmp_path / "slot.save").write_bytes(b"{not json at all}\npayload")
+        assert manager.read_metadata("slot") is None
+
+    def test_read_metadata_tolerates_unknown_future_fields(self, tmp_path):
+        """A header written by a newer build must still load, not raise
+        `TypeError` on an unexpected keyword."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"hp": 3})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        raw["something_from_the_future"] = 99
+        path.write_bytes(json.dumps(raw).encode("utf-8") + b"\n" + payload)
+
+        meta = manager.read_metadata("slot")
+        assert meta is not None
+        assert meta.data_type == "dict"
+
+    def test_read_metadata_works_without_a_header_capable_backend(self, tmp_path):
+        """`HeaderReadableStorage` is optional; the manager falls back to
+        reading the whole blob."""
+
+        class Minimal:
+            def __init__(self):
+                self.blobs = {}
+
+            def save(self, key, blob):
+                self.blobs[key] = blob
+                return True
+
+            def load(self, key):
+                return self.blobs.get(key)
+
+            def delete(self, key):
+                return self.blobs.pop(key, None) is not None
+
+            def list_keys(self):
+                return list(self.blobs)
+
+        manager = PersistenceManager(Minimal())
+        manager.save_data("slot", {"hp": 3}, save_version=2)
+
+        meta = manager.read_metadata("slot")
+        assert meta is not None
+        assert meta.save_version == 2
+
+
+# --------------------------------------------------------------------------- #
+# User data directory                                                          #
+# --------------------------------------------------------------------------- #
+class TestUserDataDirectory:
+    def test_it_resolves_under_the_platform_data_dir(self, tmp_path, monkeypatch):
+        """The whole point: not relative to the working directory, which is
+        wrong for anything installed."""
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        path = user_data_path("MyGame", subdir="saves")
+
+        assert pathlib.Path(path).is_dir()
+        assert str(tmp_path) in path
+        assert "MyGame" in path
+
+    def test_the_subdir_is_optional(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        assert not user_data_path("MyGame").endswith("saves")
+
+    def test_an_empty_app_name_is_rejected(self):
+        """There is no sensible default -- the engine cannot invent the name
+        of the game it is running, which is why this is opt-in."""
+        with pytest.raises(ValueError, match="non-empty"):
+            user_data_path("")
+
+    def test_the_backend_roundtrips_there_and_not_in_the_cwd(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.chdir(tmp_path / "..")
+
+        manager = PersistenceManager(FileStorageBackend.in_user_data_dir("MyGame"))
+        manager.save_data("slot", {"run": 3})
+
+        assert manager.load_data("slot") == {"run": 3}
+        assert list(tmp_path.glob("MyGame/saves/slot.save"))
+
+
+# --------------------------------------------------------------------------- #
+# Envelope format version                                                      #
+# --------------------------------------------------------------------------- #
+class TestFormatVersion:
+    def test_the_header_records_the_container_format(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        header = json.loads((tmp_path / "slot.save").read_bytes().split(b"\n")[0])
+        assert header["format_version"] == CONTAINER_FORMAT_VERSION
+
+    def test_read_metadata_exposes_it(self, tmp_path):
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        meta = manager.read_metadata("slot")
+        assert meta is not None
+        assert meta.format_version == CONTAINER_FORMAT_VERSION
+
+    def test_a_header_without_one_is_treated_as_v1(self, tmp_path):
+        """Saves written before the field existed must keep loading."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        del raw["format_version"]
+        path.write_bytes(json.dumps(raw).encode("utf-8") + b"\n" + payload)
+
+        assert manager.load_data("slot") == {"a": 1}
+        meta = manager.read_metadata("slot")
+        assert meta is not None and meta.format_version == 1
+
+    def test_a_future_container_format_is_refused(self, tmp_path):
+        """The reason the field exists: a build that does not understand the
+        container must say so rather than misread the payload."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"a": 1})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        raw["format_version"] = CONTAINER_FORMAT_VERSION + 1
+        path.write_bytes(json.dumps(raw).encode("utf-8") + b"\n" + payload)
+
+        assert manager.load_data("slot") is None
+
+    def test_a_future_format_is_not_treated_as_corruption(self, tmp_path):
+        """A newer save is valid, not damaged -- what a player sees after
+        downgrading. Falling back would quarantine their good save and
+        promote an older backup over it."""
+        manager = PersistenceManager(FileStorageBackend(base_path=str(tmp_path)))
+        manager.save_data("slot", {"run": 1})
+        manager.save_data("slot", {"run": 2})
+
+        path = tmp_path / "slot.save"
+        header, _sep, payload = path.read_bytes().partition(b"\n")
+        raw = json.loads(header)
+        raw["format_version"] = CONTAINER_FORMAT_VERSION + 1
+        newer = json.dumps(raw).encode("utf-8") + b"\n" + payload
+        path.write_bytes(newer)
+
+        assert manager.load_data("slot") is None
+        # The newer save is still there, untouched.
+        assert path.read_bytes() == newer
+        assert list(tmp_path.glob("slot.save.corrupt.*")) == []
