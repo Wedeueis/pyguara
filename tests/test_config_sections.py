@@ -448,3 +448,32 @@ def test_from_dict_still_works_without_a_registry():
 
     assert config.display.fps_target == 30
     assert config.custom == {}
+
+
+# -- The bootstrap hook --
+
+
+def test_the_bootstrap_hook_runs_early_enough_for_file_values_to_survive(
+    tmp_path, monkeypatch
+):
+    """`configure` runs *after* the load, so it is the wrong hook: by then
+    the file's `balance` block is already discarded."""
+    from pyguara.application.bootstrap import create_headless_application
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config").mkdir()
+    _write(
+        tmp_path / "config" / "game_config.json",
+        balance={"boss_waves": 12},
+    )
+
+    app = create_headless_application(
+        register_sections=lambda manager: manager.register_section(
+            "balance", BalanceConfig
+        )
+    )
+    try:
+        manager = app._container.get(ConfigManager)
+        assert manager.section(BalanceConfig).boss_waves == 12
+    finally:
+        app.shutdown()

@@ -145,8 +145,8 @@ class ConfigManager:
             raise RuntimeError(
                 f"Config section {name!r} was registered after load(); the "
                 f"file's values for it have already been discarded. Register "
-                f"every section before loading -- see "
-                f"pyguara.application.bootstrap's `configure` hook."
+                f"every section before loading -- under bootstrap, through "
+                f"create_application(register_sections=...)."
             )
         self._registry.register(name, section_type)
         self._config.custom.setdefault(name, section_type())

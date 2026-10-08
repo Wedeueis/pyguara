@@ -56,8 +56,32 @@ def _configure(config: GameConfig) -> None:
 ```
 """
 
+RegisterSections = Callable[[ConfigManager], None]
+"""A hook to register game-defined config sections, before anything loads.
 
-def create_container(configure: Configure | None = None) -> DIContainer:
+Called once **before** `ConfigManager.load()`, which is the only point at
+which `register_section()` can still do anything: `from_dict()` builds only
+the sections the registry knows about, so a registration after the load has
+already discarded whatever the file said about them.
+
+`Configure` is the hook *after* the load, for adjusting values. This one is
+for declaring what values there are.
+
+```python
+def _sections(config_manager: ConfigManager) -> None:
+    config_manager.register_section("balance", BalanceConfig)
+
+
+app = create_application(configure=_configure, register_sections=_sections)
+app.run(MyScene("game", app.container.get(EventDispatcher)))
+```
+"""
+
+
+def create_container(
+    configure: Configure | None = None,
+    register_sections: RegisterSections | None = None,
+) -> DIContainer:
     """Build the fully-wired engine container.
 
     The same container `create_application()` runs on, handed over before
@@ -72,14 +96,20 @@ def create_container(configure: Configure | None = None) -> DIContainer:
     Args:
         configure: Optional hook to adjust configuration before the window
             and backends are built from it. See `Configure`.
+        register_sections: Optional hook to register game-defined config
+            sections before the configuration loads. See
+            `RegisterSections`.
 
     Returns:
         The configured container.
     """
-    return _setup_container(configure=configure)
+    return _setup_container(configure=configure, register_sections=register_sections)
 
 
-def create_application(configure: Configure | None = None) -> Application:
+def create_application(
+    configure: Configure | None = None,
+    register_sections: RegisterSections | None = None,
+) -> Application:
     """
     Construct and configure the Application instance.
 
@@ -93,15 +123,19 @@ def create_application(configure: Configure | None = None) -> Application:
     Args:
         configure: Optional hook to adjust configuration before the window
             and backends are built from it. See `Configure`.
+        register_sections: Optional hook to register game-defined config
+            sections before the configuration loads. See
+            `RegisterSections`.
 
     Returns:
         A fully configured Application ready to run.
     """
-    return create_container(configure).get(Application)
+    return create_container(configure, register_sections).get(Application)
 
 
 def create_sandbox_application(
     configure: Configure | None = None,
+    register_sections: RegisterSections | None = None,
 ) -> SandboxApplication:
     """
     Construct and configure the SandboxApplication instance.
@@ -111,12 +145,19 @@ def create_sandbox_application(
     Args:
         configure: Optional hook to adjust configuration before the window
             and backends are built from it. See `Configure`.
+        register_sections: Optional hook to register game-defined config
+            sections before the configuration loads. See
+            `RegisterSections`.
     """
-    container = _setup_container(configure=configure)
+    container = _setup_container(
+        configure=configure, register_sections=register_sections
+    )
     return SandboxApplication(container)
 
 
-def create_headless_application() -> Application:
+def create_headless_application(
+    register_sections: RegisterSections | None = None,
+) -> Application:
     """Construct an Application wired onto the headless graphics backend.
 
     Test-only entry point: swaps the window/renderer/UI-renderer/texture-
@@ -128,22 +169,35 @@ def create_headless_application() -> Application:
     Not a third shipped rendering backend (the engine still ships pygame and
     ModernGL only) -- this exists so the integration suite can boot a real
     `Application` without an SDL video driver, dummy or otherwise.
+
+    Args:
+        register_sections: Optional hook to register game-defined config
+            sections before the configuration loads, for a test that needs
+            one. See `RegisterSections`.
     """
-    container = _setup_container(headless=True)
+    container = _setup_container(headless=True, register_sections=register_sections)
     return Application(container)
 
 
-def create_headless_sandbox_application() -> SandboxApplication:
+def create_headless_sandbox_application(
+    register_sections: RegisterSections | None = None,
+) -> SandboxApplication:
     """Construct a SandboxApplication wired onto the headless graphics backend.
 
     Test-only entry point; see `create_headless_application()`.
+
+    Args:
+        register_sections: Optional hook to register game-defined config
+            sections before the configuration loads. See `RegisterSections`.
     """
-    container = _setup_container(headless=True)
+    container = _setup_container(headless=True, register_sections=register_sections)
     return SandboxApplication(container)
 
 
 def _setup_container(
-    headless: bool = False, configure: Configure | None = None
+    headless: bool = False,
+    configure: Configure | None = None,
+    register_sections: RegisterSections | None = None,
 ) -> DIContainer:
     """Configure common dependencies internally.
 
@@ -154,12 +208,22 @@ def _setup_container(
             See `create_headless_application()`.
         configure: Optional hook to adjust configuration after it loads and
             before anything is built from it. See `Configure`.
+        register_sections: Optional hook to register game-defined config
+            sections, called before the configuration loads. See
+            `RegisterSections`.
     """
     # 1. Event System (Core)
     event_dispatcher = EventDispatcher()
 
     # 2. Configuration System
     config_manager = ConfigManager(event_dispatcher=event_dispatcher)
+
+    # Before the load, not after: `from_dict()` builds only the sections the
+    # registry knows about, so a registration afterwards has already lost
+    # whatever the file said about them.
+    if register_sections is not None:
+        register_sections(config_manager)
+
     config_manager.load()  # Loads from disk or defaults
 
     # Before the window, the renderer or the physics engine exist -- the

@@ -73,6 +73,19 @@ from the file.
 The dataclass must be constructible with no arguments — those values are what a
 missing file falls back to.
 
+Under bootstrap, the place for that is the `register_sections` hook, which runs
+before the load — unlike `configure`, which runs after it and is for adjusting
+values rather than declaring them:
+
+```python
+app = create_application(
+    configure=lambda config: setattr(config.display, "title", "My Game"),
+    register_sections=lambda manager: manager.register_section(
+        "balance", BalanceConfig
+    ),
+)
+```
+
 `section()` is keyed by type rather than name because that is what game code
 actually holds, and it stays type-checked where `config.custom["balance"]`
 would be `Any`. It finds engine sections too
