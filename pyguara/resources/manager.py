@@ -11,7 +11,9 @@ of truth for all game assets. It handles:
 
 import json
 import os
-from collections.abc import Iterator
+import time
+from collections.abc import Iterator, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -19,9 +21,17 @@ from pyguara.common.types import Rect
 from pyguara.graphics.atlas import Atlas, AtlasRegion
 from pyguara.log import get_logger
 
+from .async_load import (
+    DEFAULT_PUMP_BUDGET_MS,
+    Budget,
+    DecodePool,
+    LoadBatch,
+    LoadRequest,
+    LoadState,
+)
 from .exceptions import InvalidMetadataError, ResourceError, ResourceLoadError
-from .loader import IMetaAwareLoader, IResourceLoader
-from .meta import MetaLoader, get_meta_loader
+from .loader import IMetaAwareLoader, IResourceLoader, ITwoPhaseLoader
+from .meta import AssetMeta, MetaLoader, get_meta_loader
 from .types import Resource, Texture
 
 logger = get_logger(__name__)
@@ -73,6 +83,11 @@ class ResourceManager:
         self._path_index: dict[str, str] = {}
         self._reference_counts: dict[str, int] = {}
         self._meta_loader = meta_loader or get_meta_loader()
+
+        # Asynchronous loading. The pool is lazy: a game that never calls
+        # load_async() starts no threads.
+        self._decode_pool = DecodePool()
+        self._queue: list[LoadRequest] = []
 
     def register_loader(self, loader: IResourceLoader) -> None:
         """
@@ -192,6 +207,278 @@ class ResourceManager:
         self._reference_counts[actual_path] = 0
 
         return resource
+
+    # ------------------------------------------------------------------
+    # Asynchronous loading
+    #
+    # See `async_load.py` for why this is a thread pool plus a budgeted
+    # main-thread pump rather than asyncio, and why threading is opt-in per
+    # loader. The short version: image decode releases the GIL and scales
+    # ~3x, JSON parsing holds it and runs 0.71x threaded.
+    # ------------------------------------------------------------------
+
+    def load_async(
+        self, path_or_name: str, resource_type: type[Resource]
+    ) -> LoadRequest:
+        """Queue a load and return immediately.
+
+        Nothing is read here. The caller drives progress with `pump()`,
+        normally once per frame, and watches the returned request's `state`.
+
+        A resource already in the cache yields a request that is already
+        `READY`, so a caller need not special-case the hit.
+
+        Args:
+            path_or_name: The full path or the indexed filename.
+            resource_type: The expected class.
+
+        Returns:
+            A `LoadRequest` to watch. Also tracked internally until it
+            finishes, so dropping the reference does not cancel the load.
+
+        Raises:
+            ValueError: If no loader is registered for the extension. Raised
+                here rather than deferred, since it is a programming error
+                and not a runtime failure.
+        """
+        actual_path = self._path_index.get(path_or_name, path_or_name)
+        request = LoadRequest(
+            key=actual_path,
+            requested_as=path_or_name,
+            resource_type=resource_type,
+        )
+
+        cached = self._cache.get(actual_path)
+        if cached is not None:
+            if isinstance(cached, resource_type):
+                request.resource = cached
+                request.state = LoadState.READY
+            else:
+                request.error = TypeError(
+                    f"Resource '{path_or_name}' is cached as "
+                    f"{type(cached).__name__}, but {resource_type.__name__} "
+                    f"was requested."
+                )
+                request.state = LoadState.FAILED
+            return request
+
+        loader = self._loader_for(actual_path)
+        request._meta = self._meta_for(actual_path, loader)
+        self._schedule_decode(request, loader)
+        self._queue.append(request)
+        return request
+
+    def preload(self, items: Sequence[tuple[str, type[Resource]]]) -> LoadBatch:
+        """Queue several loads and return a progress handle.
+
+        What a loading screen wants: queue the scene's assets, then pump and
+        read `batch.progress` until `batch.done`.
+
+        Args:
+            items: `(path_or_name, resource_type)` pairs.
+
+        Returns:
+            A `LoadBatch` over the queued requests.
+        """
+        return LoadBatch([self.load_async(name, rtype) for name, rtype in items])
+
+    def pump(self, budget_ms: float = DEFAULT_PUMP_BUDGET_MS) -> int:
+        """Advance queued loads, spending at most `budget_ms`.
+
+        Call once per frame on the thread that owns the device context --
+        uploads happen here. Work is started only while the budget holds,
+        but a single item is never interrupted part-way, so one slow upload
+        can overrun it; see `Budget`.
+
+        Requests whose decode is still running on a worker are skipped
+        without consuming budget, so a pump never blocks on a thread.
+
+        Args:
+            budget_ms: Milliseconds this call may spend. Non-positive means
+                unlimited, which is what a loading screen between frames
+                wants.
+
+        Returns:
+            How many requests reached a terminal state this call.
+        """
+        if not self._queue:
+            return 0
+
+        budget = Budget(budget_ms)
+        finished = 0
+        still_pending: list[LoadRequest] = []
+
+        for request in self._queue:
+            if request.done:
+                continue
+            if budget.spent:
+                still_pending.append(request)
+                continue
+            if not self._advance(request):
+                # Decode still in flight; costs no budget to skip.
+                still_pending.append(request)
+                continue
+            finished += 1
+
+        self._queue = still_pending
+        return finished
+
+    @property
+    def pending_loads(self) -> int:
+        """How many queued loads have not finished."""
+        return sum(1 for request in self._queue if not request.done)
+
+    def wait_for(self, batch: LoadBatch, budget_ms: float = 0.0) -> None:
+        """Pump until `batch` is finished.
+
+        For a loading screen that is not trying to keep a frame budget, and
+        for tests. Blocks, so it is the one place an unlimited budget is the
+        right default.
+
+        Args:
+            batch: The batch to finish.
+            budget_ms: Per-pump budget; 0 (the default) means unlimited.
+        """
+        while not batch.done:
+            if self.pump(budget_ms) == 0 and self.pending_loads:
+                # Every remaining request is mid-decode on a worker. Yield
+                # rather than spin: the GIL is better spent on the decode.
+                time.sleep(0.001)
+
+    def shutdown_decode_pool(self, wait: bool = True) -> None:
+        """Stop the decode pool, if one was started.
+
+        Args:
+            wait: Let in-flight decodes finish. A decode holds no device
+                state, so this is cheap.
+        """
+        self._decode_pool.shutdown(wait=wait)
+
+    def _schedule_decode(self, request: LoadRequest, loader: IResourceLoader) -> None:
+        """Put a request's decode on a worker, or defer it to the pump.
+
+        Args:
+            request: The request to schedule.
+            loader: Its loader.
+        """
+        if isinstance(loader, ITwoPhaseLoader):
+            decode = partial(loader.decode, request.key, request._meta)
+            if loader.threaded_decode:
+                request._future = self._decode_pool.submit(decode)
+            else:
+                # Two-phase but GIL-bound: still worth splitting, because
+                # the pump can then do the decode and the upload in
+                # different frames rather than both in one.
+                request._inline_decode = decode
+            return
+
+        # A single-phase loader cannot be split, so the whole thing runs on
+        # the main thread during a pump. The gain is the spread across
+        # frames, not parallelism -- which for a GIL-holding loader is the
+        # only gain available anyway.
+        request._inline_decode = partial(
+            self._load_from_disk,
+            request.key,
+            request.resource_type,
+            request.requested_as,
+        )
+
+    def _advance(self, request: LoadRequest) -> bool:
+        """Move one request forward as far as it can go now.
+
+        Args:
+            request: The request to advance.
+
+        Returns:
+            True if it reached a terminal state, False if it is waiting on
+            a worker.
+        """
+        try:
+            if request._future is not None:
+                if not request._future.done():
+                    return False
+                request._decoded = request._future.result()
+                request._future = None
+                request.state = LoadState.DECODED
+            elif request._inline_decode is not None:
+                request._decoded = request._inline_decode()
+                request._inline_decode = None
+                request.state = LoadState.DECODED
+
+            self._finish(request)
+        except Exception as e:
+            request.error = e
+            request.state = LoadState.FAILED
+            logger.error("Async load failed for '%s': %s", request.requested_as, e)
+        return True
+
+    def _finish(self, request: LoadRequest) -> None:
+        """Upload a decoded payload, type-check it, and cache it.
+
+        Runs on the pumping thread, which is the one that owns the device
+        context.
+
+        Args:
+            request: A request whose decode has completed.
+
+        Raises:
+            TypeError: If the result is not the requested type.
+        """
+        decoded = request._decoded
+        loader = self._loader_for(request.key)
+
+        if isinstance(loader, ITwoPhaseLoader):
+            resource = loader.upload(request.key, decoded, request._meta)
+            resource.import_meta = request._meta
+        else:
+            # A single-phase loader's "decode" already produced the
+            # finished, type-checked resource.
+            resource = decoded  # type: ignore[assignment]
+
+        if not isinstance(resource, request.resource_type):
+            raise TypeError(
+                f"Loader for '{request.requested_as}' returned "
+                f"{type(resource).__name__}, expected "
+                f"{request.resource_type.__name__}."
+            )
+
+        self._cache[request.key] = resource
+        # Same lifecycle as load(): enters unpinned, as a cache-get.
+        self._reference_counts.setdefault(request.key, 0)
+        request.resource = resource
+        request.state = LoadState.READY
+
+    def _loader_for(self, actual_path: str) -> IResourceLoader:
+        """Return the loader registered for a path's extension.
+
+        Args:
+            actual_path: The resolved filesystem path.
+
+        Returns:
+            The loader.
+
+        Raises:
+            ValueError: If no loader handles the extension.
+        """
+        extension = os.path.splitext(actual_path)[1].lower()
+        loader = self._extension_map.get(extension)
+        if not loader:
+            raise ValueError(f"No loader registered for extension: {extension}")
+        return loader
+
+    def _meta_for(self, actual_path: str, loader: IResourceLoader) -> AssetMeta | None:
+        """Load a path's sidecar metadata, if its loader uses metadata.
+
+        Args:
+            actual_path: The resolved filesystem path.
+            loader: The loader for it.
+
+        Returns:
+            The metadata, or None.
+        """
+        if isinstance(loader, IMetaAwareLoader | ITwoPhaseLoader):
+            return self._meta_loader.load_meta(actual_path)
+        return None
 
     def _load_from_disk(
         self,
