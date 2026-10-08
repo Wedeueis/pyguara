@@ -1,17 +1,25 @@
 """Tests for behavior tree system."""
 
+from typing import Any
+
+import pytest
+
 from pyguara.ai.behavior_tree import (
     ActionNode,
     BehaviorTree,
+    BlackboardCondition,
     ConditionNode,
+    CooldownNode,
     InverterNode,
     NodeStatus,
     ParallelNode,
+    RandomSelector,
     ReactiveSelectorNode,
     ReactiveSequenceNode,
     RepeaterNode,
     SelectorNode,
     SequenceNode,
+    SetBlackboard,
     SucceederNode,
     UntilFailNode,
     WaitNode,
@@ -1017,3 +1025,274 @@ class TestPreemptedChildIsAborted:
 
         assert node._running_child is None
         assert wait._elapsed == 0.0
+
+
+class TestParallelLatching:
+    """A finished child must not be re-ticked (#46, P1).
+
+    `ParallelNode` re-ran every child each tick, including ones that had
+    already returned SUCCESS, so `ParallelNode([fire_weapon_once, wait_5s])`
+    fired the weapon on every tick of the wait. Reproduced at 60/60 before
+    the fix.
+    """
+
+    @staticmethod
+    def _one_shot_and_wait(latch: bool):
+        fired: list[int] = []
+        node = ParallelNode(
+            [
+                ActionNode(lambda _ctx: (fired.append(1), NodeStatus.SUCCESS)[1]),
+                WaitNode(5.0),
+            ],
+            success_threshold=2,
+            failure_threshold=1,
+            latch=latch,
+        )
+        return node, fired
+
+    def test_a_finished_child_runs_once(self) -> None:
+        node, fired = self._one_shot_and_wait(latch=True)
+        context = MockContext()
+
+        for _ in range(60):
+            node.tick(context)
+
+        assert len(fired) == 1
+
+    def test_opting_out_restores_the_old_behaviour(self) -> None:
+        """Kept as an escape hatch for a node whose children are all
+        idempotent polls."""
+        node, fired = self._one_shot_and_wait(latch=False)
+        context = MockContext()
+
+        for _ in range(60):
+            node.tick(context)
+
+        assert len(fired) == 60
+
+    def test_latched_results_still_count_towards_the_threshold(self) -> None:
+        """Latching must not lose the result it remembered, or a parallel
+        could never reach its success threshold."""
+        node = ParallelNode(
+            [
+                ActionNode(lambda _ctx: NodeStatus.SUCCESS),
+                WaitNode(0.05),
+            ],
+            success_threshold=2,
+            failure_threshold=1,
+        )
+        context = MockContext()
+
+        statuses = [node.tick(context) for _ in range(10)]
+
+        assert NodeStatus.SUCCESS in statuses
+
+    def test_resolving_clears_the_latch(self) -> None:
+        """Otherwise the node would resolve immediately on its next use."""
+        calls: list[int] = []
+        node = ParallelNode(
+            [ActionNode(lambda _ctx: (calls.append(1), NodeStatus.SUCCESS)[1])],
+            success_threshold=1,
+        )
+        context = MockContext()
+
+        node.tick(context)
+        node.tick(context)
+
+        assert len(calls) == 2
+
+    def test_reset_clears_the_latch(self) -> None:
+        node = ParallelNode(
+            [ActionNode(lambda _ctx: NodeStatus.SUCCESS)], success_threshold=2
+        )
+        node.tick(MockContext())
+        node.reset()
+        assert node._finished == {}
+
+
+class TestBlackboardNodes:
+    """Stock nodes, so a tree can be data rather than closures (#46).
+
+    Every leaf used to be a hand-written lambda, which cannot be serialised
+    -- so an editor-authored or data-driven tree was impossible.
+    """
+
+    @staticmethod
+    def _context() -> Any:
+        from dataclasses import dataclass
+
+        from pyguara.ai.blackboard import Blackboard
+
+        @dataclass
+        class Ctx:
+            blackboard: Blackboard
+            dt: float = 0.016
+
+        return Ctx(Blackboard())
+
+    def test_a_comparison_succeeds_and_fails(self) -> None:
+        context = self._context()
+        context.blackboard.set("health", 15)
+
+        assert BlackboardCondition("health", "<", 20).tick(context) is (
+            NodeStatus.SUCCESS
+        )
+        assert BlackboardCondition("health", ">", 20).tick(context) is (
+            NodeStatus.FAILURE
+        )
+
+    def test_an_absent_key_fails_rather_than_raising(self) -> None:
+        """A tree asking "is the player visible" before anything set that
+        key should take the else-branch, not crash the frame."""
+        assert BlackboardCondition("nope", "==", 1).tick(self._context()) is (
+            NodeStatus.FAILURE
+        )
+
+    def test_incomparable_types_fail_rather_than_raising(self) -> None:
+        """One mistyped blackboard value should not take the frame down."""
+        context = self._context()
+        context.blackboard.set("name", "boss")
+
+        assert BlackboardCondition("name", "<", 5).tick(context) is (NodeStatus.FAILURE)
+
+    def test_an_unknown_operator_is_rejected_at_construction(self) -> None:
+        """Where the mistake was made, not mid-frame three states later."""
+        with pytest.raises(ValueError, match="Unsupported operator"):
+            BlackboardCondition("k", "~=", 1)
+
+    def test_every_operator_works(self) -> None:
+        context = self._context()
+        context.blackboard.set("n", 5)
+        expected = {
+            "==": True,
+            "!=": False,
+            "<": False,
+            "<=": True,
+            ">": False,
+            ">=": True,
+        }
+        for op, want in expected.items():
+            status = BlackboardCondition("n", op, 5).tick(context)
+            assert (status is NodeStatus.SUCCESS) is want, op
+
+    def test_set_blackboard_writes_and_succeeds(self) -> None:
+        context = self._context()
+
+        assert SetBlackboard("alerted", True).tick(context) is NodeStatus.SUCCESS
+        assert context.blackboard.get("alerted") is True
+
+    def test_nodes_fail_without_a_blackboard(self) -> None:
+        """A tree ticked with a bare entity rather than an `AIContext`."""
+        assert BlackboardCondition("k", "==", 1).tick(object()) is NodeStatus.FAILURE
+        assert SetBlackboard("k", 1).tick(object()) is NodeStatus.FAILURE
+
+
+class TestCooldownNode:
+    def test_it_rate_limits_its_child(self) -> None:
+        """Without this a dash or special attack fires as fast as the frame
+        rate allows."""
+        casts: list[int] = []
+        node = CooldownNode(
+            0.5, ActionNode(lambda _ctx: (casts.append(1), NodeStatus.SUCCESS)[1])
+        )
+        context = MockContext()
+        context.dt = 1 / 60
+
+        for _ in range(40):
+            node.tick(context)
+
+        assert len(casts) == 2  # once, then again after 30 ticks
+
+    def test_a_cooling_child_reports_failure(self) -> None:
+        """FAILURE, not RUNNING: a cooling-down ability is a branch that
+        cannot be taken, so a selector should move on. RUNNING would block
+        the branch for the whole cooldown."""
+        node = CooldownNode(1.0, ActionNode(lambda _ctx: NodeStatus.SUCCESS))
+        context = MockContext()
+
+        node.tick(context)
+
+        assert node.tick(context) is NodeStatus.FAILURE
+
+    def test_the_cooldown_starts_when_the_child_finishes(self) -> None:
+        """Not when it starts -- a long action is not cut short, and the gap
+        is measured from the end of the last use."""
+        node = CooldownNode(1.0, WaitNode(0.05))
+        context = MockContext()
+
+        assert node.tick(context) is NodeStatus.RUNNING
+        assert node._remaining == 0.0  # still running, not yet cooling
+
+    def test_reset_clears_a_pending_cooldown(self) -> None:
+        node = CooldownNode(5.0, ActionNode(lambda _ctx: NodeStatus.SUCCESS))
+        node.tick(MockContext())
+
+        node.reset()
+
+        assert node._remaining == 0.0
+
+
+class TestRandomSelector:
+    def test_it_tries_every_child_before_failing(self) -> None:
+        import random
+
+        log: list[int] = []
+        node = RandomSelector(
+            [
+                ActionNode(lambda _ctx, i=i: (log.append(i), NodeStatus.FAILURE)[1])
+                for i in range(3)
+            ],
+            rng=random.Random(42),
+        )
+
+        assert node.tick(MockContext()) is NodeStatus.FAILURE
+        assert sorted(log) == [0, 1, 2]
+
+    def test_it_succeeds_on_the_first_success(self) -> None:
+        import random
+
+        log: list[int] = []
+
+        def child(index: int, status: NodeStatus):
+            return ActionNode(lambda _ctx: (log.append(index), status)[1])
+
+        node = RandomSelector(
+            [child(0, NodeStatus.SUCCESS), child(1, NodeStatus.SUCCESS)],
+            rng=random.Random(1),
+        )
+
+        assert node.tick(MockContext()) is NodeStatus.SUCCESS
+        assert len(log) == 1
+
+    def test_the_order_is_reproducible_for_a_seeded_rng(self) -> None:
+        """Injectable randomness, so a test -- or a replay -- is
+        deterministic."""
+        import random
+
+        def run(seed: int) -> list[int]:
+            log: list[int] = []
+            node = RandomSelector(
+                [
+                    ActionNode(lambda _ctx, i=i: (log.append(i), NodeStatus.FAILURE)[1])
+                    for i in range(4)
+                ],
+                rng=random.Random(seed),
+            )
+            node.tick(MockContext())
+            return log
+
+        assert run(7) == run(7)
+
+    def test_a_running_child_keeps_its_turn(self) -> None:
+        """The order is shuffled when the node starts, not every tick, so a
+        child mid-action is not abandoned."""
+        import random
+
+        node = RandomSelector([WaitNode(1.0)], rng=random.Random(3))
+        context = MockContext()
+
+        assert node.tick(context) is NodeStatus.RUNNING
+        assert node.tick(context) is NodeStatus.RUNNING
+
+    def test_an_empty_selector_fails(self) -> None:
+        assert RandomSelector([]).tick(MockContext()) is NodeStatus.FAILURE
