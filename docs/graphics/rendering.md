@@ -268,6 +268,57 @@ built on it and take an optional `viewport` (defaulting to the camera's
 constructed size). Camera rotation is not supported — the render path does not
 rotate.
 
+`position` is where the camera is; `view_position` is where it *looks* this
+frame, which is `position` plus the current shake. Every transform is expressed
+against `view_position`, so a shake moves the picture without moving the
+camera.
+
+#### Framing
+
+```python
+camera.set_bounds(Rect(0, 0, level_w, level_h))   # never show past the wall
+```
+
+Clamped against `position`, every `update()`. A room **smaller** than the view
+centres on the room rather than picking an edge, which is the only choice that
+does not show more wall on one side than the other. The clamp is sized from the
+camera's fallback viewport, so a split-screen camera must declare its real size
+with `set_viewport_size()`.
+
+A shake at the wall still reads as a shake: suppressing it would turn an
+explosion next to one into a stutter, which is more visually wrong than a few
+pixels of overscan.
+
+```python
+camera.frame_targets([p1.position, p2.position], padding=120.0,
+                     min_zoom=0.5, max_zoom=2.0, smooth_time=0.15)
+```
+
+The co-op camera. Call it each frame; it centres the targets' bounding box and
+picks the zoom that fits, between `min_zoom` and `max_zoom`. `min_zoom` is how
+far out the camera is willing to go before it lets someone off screen;
+`max_zoom` stops a single target (a zero-size box) zooming to infinity.
+`adjust_zoom=False` centres without touching zoom.
+
+Framing and `follow()` are **mutually exclusive** — both decide `position`, so
+starting one cancels the other. `stop_framing()` ends framing in place.
+
+#### Lookahead
+
+```python
+camera.follow(player.position, CameraFollowConstraints(
+    deadzone=Rect(-50, -50, 100, 100), smooth_time=0.15, lookahead=0.3,
+))
+```
+
+Leads the target by `lookahead` seconds of its own velocity, so the view shows
+more of what the player is about to hit than of what they have already passed.
+The camera **measures that velocity itself**, from how far the followed point
+moved since the last frame, so a caller already passing
+`player.transform.position` every frame passes nothing more. It is smoothed
+with the follow's own `smooth_time`, because a raw per-frame delta is noisy
+enough to visibly jitter the view.
+
 ### Viewport
 Defines the drawable region on the screen. Used for:
 - Split-screen multiplayer.
