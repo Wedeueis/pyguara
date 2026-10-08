@@ -1,4 +1,4 @@
-"""#28's procgen kit: BSP, Wave Function Collapse, graph, and Poisson-disc generation.
+"""#28's procgen kit: BSP, WFC, graph, Delaunay, Poisson-disc and placement.
 
 `bsp.py` is genre-agnostic (plain `Rect` regions, no "room"/"dungeon"
 vocabulary); `dungeon.py`'s room-carving and critical-path corridor
@@ -17,10 +17,11 @@ join two points that are not neighbours. Same signature, same guarantee
 that every point is reachable; pick by whether long edges crossing open
 space are acceptable.
 
-`poisson.py` is the "constraint-placement" family scoped to its
-well-defined piece, minimum-spacing sampling; a generic
-frequency/dependency/exclusion rule-checking engine is a separate,
-heavier concern, deliberately deferred rather than built here.
+The "constraint-placement" family comes in two halves. `poisson.py` is
+the spacing one -- minimum-distance sampling, deciding *where* the
+candidate spots are. `placement.py` is the other: given candidate slots,
+deciding *what* goes in each under frequency, spacing, dependency and
+exclusion rules written by the caller over its own kinds and tags.
 """
 
 from pyguara.kits.procgen.bsp import BspNode, split_bsp
@@ -32,14 +33,43 @@ from pyguara.kits.procgen.delaunay import (
 )
 from pyguara.kits.procgen.dungeon import DungeonLayout, carve_room, generate_dungeon
 from pyguara.kits.procgen.graph import Edge, build_graph, scatter_points
+from pyguara.kits.procgen.placement import (
+    DependencyCycleError,
+    Excludes,
+    ForbidsTag,
+    MaxCount,
+    MaxPerGroup,
+    MinSpacing,
+    PlacementRequest,
+    PlacementResult,
+    PlacementRule,
+    PlacementState,
+    Requires,
+    RequiresTag,
+    Slot,
+    place_items,
+)
 from pyguara.kits.procgen.poisson import poisson_disc_sample
 from pyguara.kits.procgen.wfc import AdjacencyRule, WfcContradictionError, generate_wfc
 
 __all__ = [
     "AdjacencyRule",
     "BspNode",
+    "DependencyCycleError",
     "DungeonLayout",
     "Edge",
+    "Excludes",
+    "ForbidsTag",
+    "MaxCount",
+    "MaxPerGroup",
+    "MinSpacing",
+    "PlacementRequest",
+    "PlacementResult",
+    "PlacementRule",
+    "PlacementState",
+    "Requires",
+    "RequiresTag",
+    "Slot",
     "Triangle",
     "WfcContradictionError",
     "build_graph",
@@ -49,6 +79,7 @@ __all__ = [
     "delaunay_triangles",
     "generate_dungeon",
     "generate_wfc",
+    "place_items",
     "poisson_disc_sample",
     "scatter_points",
     "split_bsp",
