@@ -2,12 +2,13 @@
 
 from pyguara.common.types import Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.input import TextInputEvent
 from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.input import keys
 from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.log import get_logger
-from pyguara.ui.base import UIElement
+from pyguara.ui.base import TextInsertable, UIElement
 from pyguara.ui.types import UIEventType, UILayer
 
 logger = get_logger(__name__)
@@ -36,6 +37,7 @@ class UIManager:
         # Subscribe to Engine Input Events
         self._dispatcher.subscribe(OnMouseEvent, self._on_mouse_event)
         self._dispatcher.subscribe(OnRawKeyEvent, self._on_key_event)
+        self._dispatcher.subscribe(TextInputEvent, self._on_text_input)
         self._dispatcher.subscribe(WindowResizeEvent, self._on_resize_event)
 
     def add_element(self, element: UIElement, layer: int = UILayer.CONTENT) -> None:
@@ -366,6 +368,26 @@ class UIManager:
         target = ring[index % len(ring)]
         self.set_focus(target, visible=True)
         return target
+
+    def _on_text_input(self, event: TextInputEvent) -> None:
+        """Route composed text to the focused widget, if it takes any.
+
+        Separate from `_on_key_event` because the two carry different
+        things: a key code is a *physical* key, while this is the character
+        the platform decided that keypress means after layout, modifiers
+        and IME composition. A text field needs the latter -- deriving it
+        from key codes made capital letters impossible, since SDL reports
+        `SDLK_a` whether or not shift is held.
+
+        Args:
+            event: The composed-text event.
+        """
+        # Widened to `object` first: narrowing `UIElement` through a
+        # Protocol leaves mypy with an empty intersection, so it calls the
+        # body unreachable. The same dodge as `editor/attach.py`.
+        focused: object = self._focused_element
+        if isinstance(focused, TextInsertable):
+            focused.insert_text(event.text)
 
     def _on_key_event(self, event: OnRawKeyEvent) -> None:
         """Handle keyboard events and route to focused element.

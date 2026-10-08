@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from pyguara.common.types import Vector2
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.input import keys
 from pyguara.ui.components.widget import Widget
 from pyguara.ui.types import UIEventType
 
@@ -25,6 +26,28 @@ class TextInput(Widget):
         # Fired on every accepted edit, so a field can drive something live
         # rather than being read once on submit.
         self.on_change: Callable[[str], None] | None = None
+
+    def insert_text(self, text: str) -> bool:
+        """Append composed text, respecting `max_length`.
+
+        This is the path real typing takes. It receives the characters the
+        platform produced -- after layout, modifiers and IME composition --
+        rather than a key code this widget has to guess a character from.
+
+        Args:
+            text: The composed text, usually one character.
+
+        Returns:
+            True if anything was inserted, so a caller can tell whether the
+            event was consumed.
+        """
+        if not self.active or not text:
+            return False
+        room = self.max_length - len(self.text)
+        if room <= 0:
+            return False
+        self.set_text(self.text + text[:room])
+        return True
 
     def set_text(self, text: str) -> None:
         """Replace the contents, firing `on_change` if they differ.
@@ -94,16 +117,20 @@ class TextInput(Widget):
             self.active = False
             return True
 
-        # Keyboard input handling
+        # Editing keys only. Characters arrive through `insert_text()`,
+        # driven by `TextInputEvent`.
+        #
+        # This used to synthesise characters here with `chr(key_code)`,
+        # which cannot work: a key code is a *physical* key, so SDL reports
+        # `SDLK_a` whether or not shift is held. Typing a capital letter was
+        # impossible -- shift-A produced "a" -- and every non-US layout
+        # produced the wrong letter, with accented and IME input out of
+        # reach entirely.
         if self.active and event_type == UIEventType.KEY_DOWN:
-            if key_code in (8, 127):  # Backspace, Delete
-                # Delete behaves same as backspace for simple single-cursor input
+            if key_code in (keys.BACKSPACE, keys.DELETE):
+                # Delete behaves as backspace for a single-cursor field.
                 if self.text:
                     self.set_text(self.text[:-1])
-                return True
-            elif 32 <= key_code <= 126:  # Printable ASCII range
-                if len(self.text) < self.max_length:
-                    self.set_text(self.text + chr(key_code))
                 return True
 
         return False

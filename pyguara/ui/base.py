@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pyguara.common.types import Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
@@ -12,6 +12,33 @@ from pyguara.ui.types import UIElementState, UIEventType
 if TYPE_CHECKING:
     from pyguara.ui.constraints import LayoutConstraints, Padding
     from pyguara.ui.theme import UITheme
+
+
+@runtime_checkable
+class TextInsertable(Protocol):
+    """A widget that accepts composed text.
+
+    An optional capability, tested with `isinstance`, rather than a `text`
+    parameter added to `UIElement.handle_event()`. Widening that signature
+    would break every widget -- in this engine and in any game -- that
+    already implements the three-argument form, and only text fields have
+    any use for it.
+
+    Same shape as the storage capabilities in `pyguara/persistence`: the
+    base contract stays minimal and a widget opts in.
+    """
+
+    def insert_text(self, text: str) -> bool:
+        """Insert composed text.
+
+        Args:
+            text: The text the platform produced, after layout, modifiers
+                and IME composition.
+
+        Returns:
+            True if anything was inserted.
+        """
+        ...
 
 
 class UIElement(ABC):
