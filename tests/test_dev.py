@@ -9,6 +9,8 @@ import pytest
 
 from pyguara.dev.asset_reload import AssetReloadWatcher
 from pyguara.dev.file_watcher import PollingFileWatcher, WatchedFile
+from pyguara.events.dispatcher import EventDispatcher
+from pyguara.events.resources import ResourceReloaded
 from pyguara.resources.data import DataResource
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
@@ -288,3 +290,59 @@ def test_removed_code_reload_symbols_are_gone(name: str) -> None:
     assert not hasattr(dev, name)
     with pytest.raises(ModuleNotFoundError):
         __import__("pyguara.dev.hot_reload")
+
+
+class TestResourceReloadedEvent:
+    """`reload()` swaps the cache entry and leaves every holder of the
+    previous instance stale -- `AssetReloadWatcher`'s own docstring says so,
+    and told callers to re-`load()` without giving them any way to know
+    when. `Application` now announces each applied reload.
+    """
+
+    def test_the_event_carries_the_reloaded_key(self) -> None:
+        event = ResourceReloaded("assets/hero.png")
+        assert event.key == "assets/hero.png"
+        assert event.timestamp > 0
+
+    def test_a_subscriber_can_re_fetch_the_new_instance(self, tmp_path: Path) -> None:
+        """The whole point: a handler woken by the event sees the *new*
+        resource, not the one it was holding."""
+        asset = tmp_path / "data.json"
+        rm, key = _manager_with_json(asset, {"hp": 10})
+        dispatcher = EventDispatcher()
+
+        held = rm.load(key, DataResource)
+        refetched: list[object] = []
+        dispatcher.subscribe(
+            ResourceReloaded,
+            lambda e: refetched.append(rm.load(e.key, DataResource).native_handle),
+        )
+
+        watcher = AssetReloadWatcher(rm)
+        watcher.refresh()
+        asset.write_text(json.dumps({"hp": 99}))
+        watcher._watcher.check_now()
+
+        # Exactly what Application._update does with drain()'s return.
+        for reloaded_key in watcher.drain():
+            dispatcher.dispatch(ResourceReloaded(reloaded_key))
+
+        assert refetched == [{"hp": 99}]
+        # The instance the caller was holding is still the old one, which is
+        # precisely why the event has to exist.
+        assert held.native_handle == {"hp": 10}
+
+    def test_nothing_is_dispatched_when_nothing_changed(self, tmp_path: Path) -> None:
+        asset = tmp_path / "data.json"
+        rm, _key = _manager_with_json(asset, {"hp": 10})
+        dispatcher = EventDispatcher()
+        seen: list[object] = []
+        dispatcher.subscribe(ResourceReloaded, seen.append)
+
+        watcher = AssetReloadWatcher(rm)
+        watcher.refresh()
+
+        for reloaded_key in watcher.drain():
+            dispatcher.dispatch(ResourceReloaded(reloaded_key))
+
+        assert seen == []

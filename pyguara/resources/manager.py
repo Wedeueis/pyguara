@@ -19,7 +19,7 @@ from pyguara.common.types import Rect
 from pyguara.graphics.atlas import Atlas, AtlasRegion
 from pyguara.log import get_logger
 
-from .exceptions import InvalidMetadataError, ResourceLoadError
+from .exceptions import InvalidMetadataError, ResourceError, ResourceLoadError
 from .loader import IMetaAwareLoader, IResourceLoader
 from .meta import MetaLoader, get_meta_loader
 from .types import Resource, Texture
@@ -180,7 +180,9 @@ class ResourceManager:
             return res
 
         # 3. Load from disk
-        resource = self._load_from_disk(actual_path, resource_type)
+        resource = self._load_from_disk(
+            actual_path, resource_type, requested_as=path_or_name
+        )
 
         self._cache[actual_path] = resource
 
@@ -191,7 +193,12 @@ class ResourceManager:
 
         return resource
 
-    def _load_from_disk(self, actual_path: str, resource_type: type[T]) -> T:
+    def _load_from_disk(
+        self,
+        actual_path: str,
+        resource_type: type[T],
+        requested_as: str | None = None,
+    ) -> T:
         """Run the registered loader for a path and type-check the result.
 
         Shared by load() (cache miss) and reload(). Does not touch the cache
@@ -200,6 +207,7 @@ class ResourceManager:
         Args:
             actual_path: The resolved filesystem path.
             resource_type: The expected class.
+            requested_as: The name the caller asked for, for error context.
 
         Returns:
             The freshly loaded resource.
@@ -207,6 +215,8 @@ class ResourceManager:
         Raises:
             ValueError: If no loader is registered for the file extension.
             TypeError: If the loader returns the wrong type.
+            ResourceLoadError: If the loader itself fails. The original
+                exception is chained, so nothing is hidden.
         """
         extension = os.path.splitext(actual_path)[1].lower()
         loader = self._extension_map.get(extension)
@@ -218,13 +228,25 @@ class ResourceManager:
 
         # Check for meta-aware loader and load metadata
         meta = None
-        if isinstance(loader, IMetaAwareLoader):
-            meta = self._meta_loader.load_meta(actual_path)
-            if meta:
-                logger.debug("Applying meta settings for '%s'", actual_path)
-            resource = loader.load_with_meta(actual_path, meta)
-        else:
-            resource = loader.load(actual_path)
+        try:
+            if isinstance(loader, IMetaAwareLoader):
+                meta = self._meta_loader.load_meta(actual_path)
+                if meta:
+                    logger.debug("Applying meta settings for '%s'", actual_path)
+                resource = loader.load_with_meta(actual_path, meta)
+            else:
+                resource = loader.load(actual_path)
+        except ResourceError:
+            # Already carries its own context -- re-wrapping would bury it.
+            raise
+        except Exception as e:
+            # A loader's own `FileNotFoundError` or `pygame.error` names
+            # neither the asset the caller asked for nor, clearly, the path
+            # the index resolved it to. `load_atlas()` already wrapped its
+            # failures this way; this is the same for every other loader.
+            raise ResourceLoadError(
+                actual_path, f"{type(e).__name__}: {e}", name=requested_as
+            ) from e
 
         if not isinstance(resource, resource_type):
             raise TypeError(
