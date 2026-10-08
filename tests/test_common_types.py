@@ -274,3 +274,195 @@ class TestVector2Directions:
     def test_zero_and_one(self) -> None:
         assert Vector2.zero() == Vector2(0, 0)
         assert Vector2.one() == Vector2(1, 1)
+
+
+class TestRectMove:
+    def test_move_offsets_and_keeps_size(self) -> None:
+        assert Rect(1, 2, 10, 20).move(3, -4) == Rect(4, -2, 10, 20)
+
+    def test_move_does_not_mutate(self) -> None:
+        r = Rect(1, 2, 10, 20)
+        r.move(5, 5)
+        assert r == Rect(1, 2, 10, 20)
+
+
+class TestRectClip:
+    def test_clip_returns_the_overlap(self) -> None:
+        assert Rect(0, 0, 10, 10).clip(Rect(5, 5, 10, 10)) == Rect(5, 5, 5, 5)
+
+    def test_clip_of_a_contained_rect_is_that_rect(self) -> None:
+        inner = Rect(2, 2, 3, 3)
+        assert Rect(0, 0, 10, 10).clip(inner) == inner
+
+    def test_no_overlap_is_zero_sized_at_self_position(self) -> None:
+        """Not at the origin -- `pygame.Rect.clip` puts it at the clipped
+        rectangle's own position. The first implementation returned
+        `Rect(0, 0, 0, 0)`, which agrees with pygame only for a rectangle
+        that happens to sit at the origin, and the probe that "confirmed"
+        it used exactly such a rectangle. A differential test caught it."""
+        result = Rect(19, -2, 8, 1).clip(Rect(-25, 28, 38, 3))
+        assert result == Rect(19, -2, 0, 0)
+
+    def test_an_edge_touch_is_not_an_overlap(self) -> None:
+        """Rect bounds are half-open, as `contains_point` already is."""
+        assert Rect(0, 0, 5, 5).clip(Rect(5, 0, 5, 5)).size == (0, 0)
+
+    def test_intersection_is_an_alias(self) -> None:
+        a, b = Rect(0, 0, 10, 10), Rect(5, 5, 10, 10)
+        assert a.intersection(b) == a.clip(b)
+
+
+class TestRectUnion:
+    def test_union_covers_both(self) -> None:
+        assert Rect(0, 0, 10, 10).union(Rect(5, 5, 10, 10)) == Rect(0, 0, 15, 15)
+
+    def test_union_with_a_contained_rect_is_unchanged(self) -> None:
+        outer = Rect(0, 0, 10, 10)
+        assert outer.union(Rect(2, 2, 3, 3)) == outer
+
+    def test_union_is_symmetric(self) -> None:
+        a, b = Rect(-5, 3, 4, 4), Rect(10, -2, 6, 9)
+        assert a.union(b) == b.union(a)
+
+
+class TestRectClamp:
+    def test_clamp_moves_a_smaller_rect_inside(self) -> None:
+        assert Rect(0, 0, 4, 4).clamp(Rect(10, 10, 20, 20)) == Rect(10, 10, 4, 4)
+
+    def test_clamp_leaves_an_already_inside_rect_alone(self) -> None:
+        inside = Rect(12, 12, 4, 4)
+        assert inside.clamp(Rect(10, 10, 20, 20)) == inside
+
+    def test_clamp_pushes_back_from_the_far_edge(self) -> None:
+        assert Rect(100, 12, 4, 4).clamp(Rect(10, 10, 20, 20)) == Rect(26, 12, 4, 4)
+
+    def test_a_rect_too_large_is_centred_on_the_target(self) -> None:
+        """What a camera clamped to a level smaller than its viewport wants,
+        and the case that pinned down the rule: pygame centres as
+        `other.centerx - self.width // 2`, *not* by halving the leftover.
+        Two earlier attempts each matched about three quarters of random
+        inputs and disagreed with each other on the rest, because neither
+        was the rule."""
+        assert Rect(0, -10, 26, 3).clamp(Rect(-13, 5, 1, 28)) == Rect(-26, 5, 26, 3)
+
+
+class TestRectFit:
+    def test_fit_preserves_aspect_and_centres(self) -> None:
+        assert Rect(0, 0, 20, 10).fit(Rect(0, 0, 100, 100)) == Rect(0, 25, 100, 50)
+
+    def test_fit_lands_exactly_on_the_constraining_axis(self) -> None:
+        """Where this deliberately beats `pygame.Rect.fit`: pygame divides
+        by a float ratio, so `36 / (36 / 35)` is `34.999...` and truncates
+        to 34 -- a unit short of the height it just asked for. Integer
+        arithmetic on the dominant axis lands on it exactly."""
+        assert Rect(0, 0, 13, 36).fit(Rect(0, 0, 23, 35)).height == 35
+
+    def test_fit_never_overflows_the_target(self) -> None:
+        for size in ((13, 36), (36, 13), (7, 7), (40, 1), (1, 40)):
+            result = Rect(0, 0, *size).fit(Rect(0, 0, 23, 35))
+            assert result.width <= 23 and result.height <= 35, size
+
+
+class TestRectScaleBy:
+    def test_scale_by_grows_about_the_centre(self) -> None:
+        r = Rect(0, 0, 10, 10)
+        assert r.scale_by(1.5) == Rect(-2, -2, 15, 15)
+
+    def test_scale_by_shrinks(self) -> None:
+        assert Rect(0, 0, 10, 10).scale_by(0.5) == Rect(2, 2, 5, 5)
+
+    def test_scale_by_takes_separate_axes(self) -> None:
+        assert Rect(0, 0, 10, 10).scale_by(2, 1) == Rect(-5, 0, 20, 10)
+
+    def test_scale_by_keeps_the_centre_within_a_pixel(self) -> None:
+        """The documented property, since this is the one helper that does
+        not bit-match pygame -- pygame-ce's rounding is not reproducible
+        from any single rule."""
+        r = Rect(3, 5, 7, 9)
+        scaled = r.scale_by(1.5)
+        assert abs(scaled.centerx - r.centerx) <= 1
+        assert abs(scaled.centery - r.centery) <= 1
+
+
+class TestRectCollideList:
+    def test_collidelist_returns_the_first_index(self) -> None:
+        a = Rect(0, 0, 10, 10)
+        assert a.collidelist([Rect(100, 100, 5, 5), Rect(5, 5, 10, 10)]) == 1
+
+    def test_collidelist_returns_minus_one_for_no_hit(self) -> None:
+        """The pygame convention, kept so `if (hit := ...) >= 0` works."""
+        assert Rect(0, 0, 10, 10).collidelist([Rect(100, 100, 5, 5)]) == -1
+
+    def test_collidelist_of_nothing_is_minus_one(self) -> None:
+        assert Rect(0, 0, 10, 10).collidelist([]) == -1
+
+    def test_collidelistall_returns_every_index(self) -> None:
+        a = Rect(0, 0, 10, 10)
+        hits = a.collidelistall(
+            [Rect(1, 1, 2, 2), Rect(100, 100, 5, 5), Rect(5, 5, 10, 10)]
+        )
+        assert hits == [0, 2]
+
+    def test_collidelistall_of_no_hits_is_empty(self) -> None:
+        assert Rect(0, 0, 10, 10).collidelistall([Rect(50, 50, 1, 1)]) == []
+
+
+class TestRectPygameParity:
+    """Differential parity against `pygame.Rect`, which is what these
+    helpers exist to stand in for.
+
+    Randomised and seeded rather than hand-picked: every single-case probe
+    I wrote by hand agreed with pygame while the implementation was wrong,
+    because the cases I chose were too tidy -- a rectangle at the origin
+    hides `clip`'s position behaviour entirely. Three real bugs came out of
+    running this over a few thousand inputs.
+
+    `fit` and `scale_by` are excluded deliberately and tested above on their
+    own terms; both divergences are documented on the methods.
+    """
+
+    @staticmethod
+    def _cases(count: int = 400):
+        import random
+
+        random.seed(20261008)
+        for _ in range(count):
+            yield (
+                (
+                    random.randint(-30, 30),
+                    random.randint(-30, 30),
+                    random.randint(1, 40),
+                    random.randint(1, 40),
+                ),
+                (
+                    random.randint(-30, 30),
+                    random.randint(-30, 30),
+                    random.randint(1, 40),
+                    random.randint(1, 40),
+                ),
+            )
+
+    def test_move_clip_union_clamp_match_pygame(self) -> None:
+        import pygame
+
+        for a, b in self._cases():
+            mine, theirs = Rect(*a), pygame.Rect(*a)
+            other, their_other = Rect(*b), pygame.Rect(*b)
+
+            for name in ("move", "clip", "union", "clamp"):
+                if name == "move":
+                    got, want = mine.move(3, -4), theirs.move(3, -4)
+                else:
+                    got = getattr(mine, name)(other)
+                    want = getattr(theirs, name)(their_other)
+                assert (got.x, got.y, got.width, got.height) == tuple(want), (
+                    f"{name}: self={a} other={b}"
+                )
+
+    def test_collidelist_matches_pygame(self) -> None:
+        import pygame
+
+        for a, b in self._cases(200):
+            assert Rect(*a).collidelist([Rect(*b)]) == pygame.Rect(*a).collidelist(
+                [pygame.Rect(*b)]
+            )
