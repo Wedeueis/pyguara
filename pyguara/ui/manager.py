@@ -2,13 +2,13 @@
 
 from pyguara.common.types import Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.events.input import TextInputEvent
+from pyguara.events.input import MouseWheelEvent, TextInputEvent
 from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.input import keys
 from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.log import get_logger
-from pyguara.ui.base import TextInsertable, UIElement
+from pyguara.ui.base import Scrollable, TextInsertable, UIElement
 from pyguara.ui.types import UIEventType, UILayer
 
 logger = get_logger(__name__)
@@ -34,10 +34,17 @@ class UIManager:
         self._layout_dirty = True
         self._warned_no_screen = False
 
+        # Where the cursor last was. `MouseWheelEvent` carries a delta and
+        # no position -- SDL does not put one on a wheel event -- so the
+        # only way to know which viewport the wheel belongs to is to
+        # remember where the mouse is.
+        self._cursor = Vector2.zero()
+
         # Subscribe to Engine Input Events
         self._dispatcher.subscribe(OnMouseEvent, self._on_mouse_event)
         self._dispatcher.subscribe(OnRawKeyEvent, self._on_key_event)
         self._dispatcher.subscribe(TextInputEvent, self._on_text_input)
+        self._dispatcher.subscribe(MouseWheelEvent, self._on_wheel_event)
         self._dispatcher.subscribe(WindowResizeEvent, self._on_resize_event)
 
     def add_element(self, element: UIElement, layer: int = UILayer.CONTENT) -> None:
@@ -243,6 +250,7 @@ class UIManager:
 
         # Convert tuple pos to Vector2
         pos = Vector2(event.position[0], event.position[1])
+        self._cursor = pos
 
         # On click, track focus changes
         clicked_element: UIElement | None = None
@@ -272,6 +280,54 @@ class UIManager:
         # keyboard asking to see where focus is.
         if event_type == UIEventType.MOUSE_DOWN:
             self.set_focus(clicked_element)
+
+    def _on_wheel_event(self, event: MouseWheelEvent) -> None:
+        """Route a wheel delta to the nearest scrollable under the cursor.
+
+        Hit-test, then walk *up*: the wheel over a button inside a list
+        scrolls the list, which is what every UI toolkit does and what a
+        player expects. A `Scrollable` that returns False -- already at its
+        end -- does not stop the walk, so the page behind a list that
+        cannot scroll still does.
+
+        Routed by cursor position rather than by focus. A wheel follows the
+        pointer, and a focused text field across the screen is not what the
+        player is pointing at.
+        """
+        if event.x == 0 and event.y == 0:
+            return
+
+        for _, root in reversed(self._ordered_roots()):
+            if not self._root_contains(root, self._cursor):
+                continue
+            element: UIElement | None = root.hit_test(self._cursor)
+            while element is not None:
+                if isinstance(element, Scrollable) and element.scroll_by(
+                    event.x, event.y
+                ):
+                    return
+                element = element.parent
+            # The top-most root under the cursor had nothing scrollable;
+            # a root further down is behind it, not under the pointer in
+            # any sense the player would recognise.
+            return
+
+    @staticmethod
+    def _root_contains(root: UIElement, position: Vector2) -> bool:
+        """Report whether a point is inside a root's own rect.
+
+        Args:
+            root: The root element.
+            position: Screen position.
+
+        Returns:
+            True if the point is inside.
+        """
+        return (
+            root.visible
+            and root.rect.x <= position.x <= root.rect.x + root.rect.width
+            and root.rect.y <= position.y <= root.rect.y + root.rect.height
+        )
 
     @staticmethod
     def _nearest_focusable(element: UIElement) -> UIElement | None:
