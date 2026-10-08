@@ -4,11 +4,17 @@ Behavior trees provide a modular, reusable way to structure AI logic.
 Nodes return SUCCESS, FAILURE, or RUNNING status.
 """
 
+import operator
+import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any
+from typing import Any, ClassVar
+
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class NodeStatus(Enum):
@@ -432,6 +438,17 @@ class ParallelNode(CompositeNode):
     Returns FAILURE if failure_threshold children fail.
     Returns RUNNING otherwise.
 
+    A child that has finished is **latched**: its result is remembered and
+    it is not ticked again until this node itself resolves. Without that,
+    every tick re-ran children that had already succeeded --
+    `ParallelNode([fire_weapon_once, wait_5s])` fired the weapon on all
+    ~300 ticks of the wait rather than once (#46, reproduced at 60/60
+    before this change).
+
+    Latching is the conventional parallel semantic and is on by default;
+    `latch=False` restores the historical re-tick-everything behaviour for
+    a node whose children are all idempotent polls.
+
     Example:
         >>> parallel = ParallelNode(
         ...     children=[move_to_target, scan_for_enemies, play_animation],
@@ -446,6 +463,8 @@ class ParallelNode(CompositeNode):
         success_threshold: int = 1,
         failure_threshold: int = 1,
         name: str = "Parallel",
+        *,
+        latch: bool = True,
     ):
         """Initialize parallel node.
 
@@ -454,18 +473,38 @@ class ParallelNode(CompositeNode):
             success_threshold: Number of successes needed to succeed
             failure_threshold: Number of failures needed to fail
             name: Optional name for debugging
+            latch: Stop ticking a child once it has finished, remembering
+                its result until this node resolves. True is both the
+                conventional semantic and the fix for re-firing one-shot
+                actions; False re-ticks everything every tick.
         """
         super().__init__(children, name)
         self.success_threshold = success_threshold
         self.failure_threshold = failure_threshold
+        self.latch = latch
+        # Latched results by child index, cleared when this node resolves.
+        self._finished: dict[int, NodeStatus] = {}
+
+    def reset(self) -> None:
+        """Reset this node, its children, and any latched results."""
+        super().reset()
+        self._finished.clear()
 
     def tick(self, context: Any) -> NodeStatus:
         """Execute all children in parallel."""
         success_count = 0
         failure_count = 0
 
-        for child in self.children:
-            status = child.tick(context)
+        for index, child in enumerate(self.children):
+            if self.latch and index in self._finished:
+                status = self._finished[index]
+            else:
+                status = child.tick(context)
+                if self.latch and status in (
+                    NodeStatus.SUCCESS,
+                    NodeStatus.FAILURE,
+                ):
+                    self._finished[index] = status
 
             if status == NodeStatus.SUCCESS:
                 success_count += 1
@@ -475,12 +514,14 @@ class ParallelNode(CompositeNode):
         # Check thresholds
         if success_count >= self.success_threshold:
             self._status = NodeStatus.SUCCESS
+            self._finished.clear()
             for child in self.children:
                 child.reset()
             return self._status
 
         if failure_count >= self.failure_threshold:
             self._status = NodeStatus.FAILURE
+            self._finished.clear()
             for child in self.children:
                 child.reset()
             return self._status
@@ -491,6 +532,197 @@ class ParallelNode(CompositeNode):
 
 
 # Decorator Nodes
+
+
+class BlackboardCondition(BehaviorNode):
+    """Compare a blackboard value without writing a closure.
+
+    Every behaviour-tree leaf used to be a hand-written lambda, which makes
+    a data-driven or editor-authored tree impossible -- you cannot
+    serialise a closure (#46). These stock nodes are the authoring
+    vocabulary: a tree built from them is describable as data.
+
+    The operator set is deliberately small and total: equality and ordering
+    cover the conditions a game actually asks about, and anything stranger
+    is still a `ConditionNode` away.
+
+    Example:
+        >>> BlackboardCondition("health", "<", 20)
+    """
+
+    OPERATORS: ClassVar[dict[str, Callable[[Any, Any], bool]]] = {
+        "==": operator.eq,
+        "!=": operator.ne,
+        "<": operator.lt,
+        "<=": operator.le,
+        ">": operator.gt,
+        ">=": operator.ge,
+    }
+
+    def __init__(
+        self,
+        key: str,
+        op: str,
+        value: Any,
+        name: str = "BlackboardCondition",
+    ):
+        """Initialize the condition.
+
+        Args:
+            key: The blackboard key to read.
+            op: One of `==`, `!=`, `<`, `<=`, `>`, `>=`.
+            value: The value to compare against.
+            name: Optional name for debugging.
+
+        Raises:
+            ValueError: If `op` is not a supported operator. Raised at
+                construction rather than on the first tick, so a misspelt
+                tree fails where it was built instead of mid-frame.
+        """
+        super().__init__(name)
+        if op not in self.OPERATORS:
+            raise ValueError(
+                f"Unsupported operator {op!r}. Expected one of "
+                f"{sorted(self.OPERATORS)}."
+            )
+        self.key = key
+        self.op = op
+        self.value = value
+
+    def tick(self, context: Any) -> NodeStatus:
+        """Compare the blackboard value, failing if the key is absent."""
+        blackboard = getattr(context, "blackboard", None)
+        if blackboard is None or not blackboard.has(self.key):
+            # An absent key is a failed condition, not an error: a tree
+            # that asks "is the player visible" before anything has set
+            # that key should take the else-branch, not crash.
+            self._status = NodeStatus.FAILURE
+            return self._status
+
+        try:
+            result = self.OPERATORS[self.op](blackboard.get(self.key), self.value)
+        except TypeError:
+            # Comparing incomparable types -- a string against an int, say.
+            # Failing beats propagating: one mistyped blackboard value
+            # should not take the whole frame down.
+            logger.warning(
+                "BlackboardCondition(%r %s %r): incomparable types, failing",
+                self.key,
+                self.op,
+                self.value,
+            )
+            self._status = NodeStatus.FAILURE
+            return self._status
+
+        self._status = NodeStatus.SUCCESS if result else NodeStatus.FAILURE
+        return self._status
+
+
+class SetBlackboard(BehaviorNode):
+    """Write a blackboard value and succeed.
+
+    The write half of the authoring vocabulary -- enough to latch a flag,
+    remember a target, or count something without a closure.
+
+    Example:
+        >>> SetBlackboard("alerted", True)
+    """
+
+    def __init__(self, key: str, value: Any, name: str = "SetBlackboard"):
+        """Initialize the write.
+
+        Args:
+            key: The blackboard key to set.
+            value: The value to store.
+            name: Optional name for debugging.
+        """
+        super().__init__(name)
+        self.key = key
+        self.value = value
+
+    def tick(self, context: Any) -> NodeStatus:
+        """Set the value, failing only if there is no blackboard to set on."""
+        blackboard = getattr(context, "blackboard", None)
+        if blackboard is None:
+            self._status = NodeStatus.FAILURE
+            return self._status
+        blackboard.set(self.key, self.value)
+        self._status = NodeStatus.SUCCESS
+        return self._status
+
+
+class RandomSelector(CompositeNode):
+    """Try children in a shuffled order until one succeeds.
+
+    A selector picks by priority, which makes a guard dog predictable. This
+    picks by chance, which is what idle variation, attack choice and barks
+    want.
+
+    The order is reshuffled when the node starts, not on every tick, so a
+    child that returns RUNNING keeps its turn rather than being abandoned
+    mid-action.
+
+    Example:
+        >>> RandomSelector([bark, sniff, scratch])
+    """
+
+    def __init__(
+        self,
+        children: list[BehaviorNode],
+        name: str = "RandomSelector",
+        *,
+        rng: random.Random | None = None,
+    ):
+        """Initialize the selector.
+
+        Args:
+            children: Children to try in random order.
+            name: Optional name for debugging.
+            rng: Source of randomness. Injectable so a test -- or a replay
+                -- is reproducible; `pyguara.common.random.RandomStream`
+                wraps the engine's seeded stream for the same reason.
+        """
+        super().__init__(children, name)
+        self._rng = rng or random.Random()
+        self._order: list[int] = []
+
+    def reset(self) -> None:
+        """Reset this node, its children, and the shuffled order."""
+        super().reset()
+        self._order = []
+
+    def tick(self, context: Any) -> NodeStatus:
+        """Try children in a shuffled order until one succeeds."""
+        if not self.children:
+            self._status = NodeStatus.FAILURE
+            return self._status
+
+        if not self._order:
+            self._order = list(range(len(self.children)))
+            self._rng.shuffle(self._order)
+
+        while self._current_child < len(self._order):
+            child = self.children[self._order[self._current_child]]
+            status = child.tick(context)
+
+            if status == NodeStatus.SUCCESS:
+                # Cleared *before* recording the result: `reset()` sets
+                # `_status` to FAILURE, so assigning first and resetting
+                # second returned FAILURE from a successful tick. Caught by
+                # a test that expected SUCCESS from two succeeding children.
+                self.reset()
+                self._status = NodeStatus.SUCCESS
+                return self._status
+
+            if status == NodeStatus.RUNNING:
+                self._status = NodeStatus.RUNNING
+                return self._status
+
+            self._current_child += 1
+
+        self.reset()
+        self._status = NodeStatus.FAILURE
+        return self._status
 
 
 class DecoratorNode(BehaviorNode):
@@ -510,6 +742,66 @@ class DecoratorNode(BehaviorNode):
         """Reset this node and child."""
         super().reset()
         self.child.reset()
+
+
+class CooldownNode(DecoratorNode):
+    """Refuse to run a child again until a delay has elapsed.
+
+    The rate limit every ability needs. Without it a tree re-attempts its
+    child on every tick, so a dash, a shout or a special attack fires as
+    fast as the frame rate allows.
+
+    The cooldown starts when the child **finishes**, not when it starts, so
+    a long-running action is not cut short and the gap is measured from the
+    end of the last use. A child that returns RUNNING is left alone.
+
+    Reads `context.dt`, as `WaitNode` does: wall-clock time would make the
+    cooldown depend on how long the game spent paused.
+
+    Example:
+        >>> CooldownNode(5.0, ActionNode(cast_fireball))
+    """
+
+    def __init__(
+        self,
+        seconds: float,
+        child: BehaviorNode,
+        name: str = "Cooldown",
+    ):
+        """Initialize the cooldown.
+
+        Args:
+            seconds: How long to refuse after the child finishes.
+            child: The node to rate-limit.
+            name: Optional name for debugging.
+        """
+        super().__init__(child, name)
+        self.seconds = seconds
+        self._remaining = 0.0
+
+    def reset(self) -> None:
+        """Reset this node and its child, clearing any pending cooldown."""
+        super().reset()
+        self._remaining = 0.0
+
+    def tick(self, context: Any) -> NodeStatus:
+        """Tick the child unless the cooldown is still running."""
+        dt = getattr(context, "dt", 1.0 / 60.0)
+
+        if self._remaining > 0.0:
+            self._remaining = max(0.0, self._remaining - dt)
+            # FAILURE rather than RUNNING: a cooling-down ability is a
+            # branch that cannot be taken, so a selector should move on to
+            # the next option. RUNNING would block the whole branch for the
+            # length of the cooldown.
+            self._status = NodeStatus.FAILURE
+            return self._status
+
+        status = self.child.tick(context)
+        if status != NodeStatus.RUNNING:
+            self._remaining = self.seconds
+        self._status = status
+        return self._status
 
 
 class InverterNode(DecoratorNode):
