@@ -186,6 +186,125 @@ class Vector2(pymunk.Vec2d):
             self.y + (target.y - self.y) * t,
         )
 
+    def clamp_magnitude(self, max_length: float) -> Vector2:
+        """Return this vector shortened to at most `max_length`.
+
+        Distinct from pymunk's inherited `scale_to_length()`, which scales
+        in *both* directions and would lengthen a short vector. A speed cap
+        wants only the shortening half.
+
+        Args:
+            max_length: The longest the result may be. Non-positive gives
+                the zero vector.
+
+        Returns:
+            This vector if already short enough, otherwise one of
+            `max_length` pointing the same way.
+        """
+        if max_length <= 0:
+            return Vector2.zero()
+        length = self.length
+        if length <= max_length or length == 0:
+            return Vector2(self.x, self.y)
+        scale = max_length / length
+        return Vector2(self.x * scale, self.y * scale)
+
+    def move_towards(self, target: Vector2, max_distance: float) -> Vector2:
+        """Return a point stepped towards `target`, never overshooting.
+
+        What frame-rate-independent chasing wants, as opposed to `lerp()`,
+        which eases in and never quite arrives.
+
+        Args:
+            target: Where to move towards.
+            max_distance: The furthest to travel this step. Non-positive
+                leaves the point where it is.
+
+        Returns:
+            `target` if it is within reach, otherwise a point
+            `max_distance` along the way.
+        """
+        if max_distance <= 0:
+            return Vector2(self.x, self.y)
+        delta = Vector2(target.x - self.x, target.y - self.y)
+        distance = delta.length
+        if distance <= max_distance or distance == 0:
+            return Vector2(target.x, target.y)
+        scale = max_distance / distance
+        return Vector2(self.x + delta.x * scale, self.y + delta.y * scale)
+
+    def reflect(self, normal: Vector2) -> Vector2:
+        """Return this vector mirrored about a surface `normal`.
+
+        The normal is normalised internally, so a caller passing a surface
+        direction of any length gets the right answer rather than a
+        silently scaled one. A zero-length normal has no plane to mirror
+        about, so the vector comes back unchanged.
+
+        Args:
+            normal: The surface normal; any non-zero length.
+
+        Returns:
+            The reflected vector.
+        """
+        length = normal.length
+        if length == 0:
+            return Vector2(self.x, self.y)
+        nx, ny = normal.x / length, normal.y / length
+        dot = self.x * nx + self.y * ny
+        return Vector2(self.x - 2.0 * dot * nx, self.y - 2.0 * dot * ny)
+
+    def reject(self, other: Vector2) -> Vector2:
+        """Return the component of this vector perpendicular to `other`.
+
+        The complement of pymunk's inherited `projection()`: together they
+        split a vector into "along" and "across" a direction, which is how
+        a slide-along-a-wall response is built.
+
+        Args:
+            other: The direction to reject from.
+
+        Returns:
+            This vector minus its projection onto `other`.
+        """
+        projected = self.projection(other)
+        return Vector2(self.x - projected.x, self.y - projected.y)
+
+    def snapped(self, grid: float | Vector2) -> Vector2:
+        """Return this point rounded to the nearest multiple of `grid`.
+
+        Args:
+            grid: Cell size, uniform as a float or per-axis as a vector. A
+                zero component leaves that axis alone rather than dividing
+                by zero.
+
+        Returns:
+            The snapped point.
+        """
+        step_x, step_y = (grid.x, grid.y) if isinstance(grid, Vector2) else (grid, grid)
+        return Vector2(
+            self.x if step_x == 0 else round(self.x / step_x) * step_x,
+            self.y if step_y == 0 else round(self.y / step_y) * step_y,
+        )
+
+    @staticmethod
+    def from_angle_degrees(degrees: float, length: float = 1.0) -> Vector2:
+        """Return a vector at `degrees`, measured anticlockwise from +X.
+
+        pymunk's inherited `from_polar()` takes **radians**, which is the
+        easy mistake to make -- `from_polar(1, 90)` is 90 *radians*, not a
+        quarter turn.
+
+        Args:
+            degrees: The angle in degrees.
+            length: The resulting magnitude.
+
+        Returns:
+            The vector.
+        """
+        radians = math.radians(degrees)
+        return Vector2(math.cos(radians) * length, math.sin(radians) * length)
+
     def to_tuple(self) -> tuple[float, float]:
         """Return the components as a plain float tuple."""
         return (self.x, self.y)
@@ -261,6 +380,12 @@ class Color:
     CYAN: ClassVar[Color]
     MAGENTA: ClassVar[Color]
     TRANSPARENT: ClassVar[Color]
+    # Neutral greys, the ones UI chrome and debug overlays reach for. Named
+    # rather than spelled `Color(128, 128, 128)` at each call site, which is
+    # how three slightly different "greys" end up in one screen.
+    GREY: ClassVar[Color]
+    LIGHT_GREY: ClassVar[Color]
+    DARK_GREY: ClassVar[Color]
 
     def __post_init__(self) -> None:
         """Coerce every channel to an int within 0-255."""
@@ -316,6 +441,117 @@ class Color:
     def normalized(self) -> tuple[float, float, float, float]:
         """The channels as floats in 0.0-1.0, for shaders and GL backends."""
         return (self.r / 255.0, self.g / 255.0, self.b / 255.0, self.a / 255.0)
+
+    def with_alpha(self, alpha: int) -> Color:
+        """Return this colour at a different opacity.
+
+        The commonest edit by far -- a scrim, a fade, a ghosted preview --
+        and it should not require restating three channels.
+
+        Args:
+            alpha: The new alpha, clamped to 0..255 by `Color`.
+
+        Returns:
+            The same hue at the new opacity.
+        """
+        return Color(self.r, self.g, self.b, alpha)
+
+    def darken(self, amount: float) -> Color:
+        """Return this colour mixed towards black.
+
+        Args:
+            amount: How far to go, 0.0 unchanged to 1.0 black. Values
+                outside that range are clamped, so a caller cannot
+                accidentally brighten with a negative.
+
+        Returns:
+            The darkened colour, alpha untouched -- darkening is not
+            fading, and conflating them is how a shadow ends up
+            see-through.
+        """
+        factor = 1.0 - min(max(amount, 0.0), 1.0)
+        return Color(
+            int(self.r * factor), int(self.g * factor), int(self.b * factor), self.a
+        )
+
+    def lighten(self, amount: float) -> Color:
+        """Return this colour mixed towards white.
+
+        Args:
+            amount: How far to go, 0.0 unchanged to 1.0 white. Clamped.
+
+        Returns:
+            The lightened colour, alpha untouched.
+        """
+        t = min(max(amount, 0.0), 1.0)
+        return Color(
+            int(self.r + (255 - self.r) * t),
+            int(self.g + (255 - self.g) * t),
+            int(self.b + (255 - self.b) * t),
+            self.a,
+        )
+
+    def multiply(self, other: Color) -> Color:
+        """Return this colour modulated by another, per channel.
+
+        The tint operation: multiplying by a colour scales each channel
+        rather than mixing towards it, so white leaves the result alone and
+        a red tint keeps only the red. Both backends' sprite tinting does
+        this, and a damage flash or a rarity tint is the same arithmetic.
+
+        Args:
+            other: The modulating colour.
+
+        Returns:
+            The product, including alpha.
+        """
+        return Color(
+            self.r * other.r // 255,
+            self.g * other.g // 255,
+            self.b * other.b // 255,
+            self.a * other.a // 255,
+        )
+
+    @staticmethod
+    def grey(level: int, alpha: int = 255) -> Color:
+        """Return a neutral grey.
+
+        Args:
+            level: The value for all three channels, 0 black to 255 white.
+            alpha: Opacity.
+
+        Returns:
+            The grey.
+        """
+        return Color(level, level, level, alpha)
+
+    @staticmethod
+    def ramp(stops: Sequence[Color], t: float) -> Color:
+        """Sample a gradient of evenly spaced colour stops.
+
+        What a lighting ramp, a health bar that shifts green to red, or a
+        heat overlay needs. Stops are evenly spaced; weighted stops would
+        need a different signature and have no caller yet.
+
+        Args:
+            stops: Two or more colours, in order.
+            t: Position along the ramp, clamped to 0.0..1.0.
+
+        Returns:
+            The sampled colour.
+
+        Raises:
+            ValueError: If `stops` is empty.
+        """
+        if not stops:
+            raise ValueError("A colour ramp needs at least one stop")
+        if len(stops) == 1:
+            return stops[0]
+
+        clamped = min(max(t, 0.0), 1.0)
+        scaled = clamped * (len(stops) - 1)
+        index = min(int(scaled), len(stops) - 2)
+        return stops[index].lerp(stops[index + 1], scaled - index)
 
     def lerp(self, target: Color, t: float) -> Color:
         """Linearly interpolate towards another colour.
@@ -390,6 +626,9 @@ Color.YELLOW = Color(255, 255, 0)
 Color.CYAN = Color(0, 255, 255)
 Color.MAGENTA = Color(255, 0, 255)
 Color.TRANSPARENT = Color(0, 0, 0, 0)
+Color.GREY = Color(128, 128, 128)
+Color.LIGHT_GREY = Color(192, 192, 192)
+Color.DARK_GREY = Color(64, 64, 64)
 
 
 @dataclass(slots=True)
