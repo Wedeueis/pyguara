@@ -214,6 +214,50 @@ The bytes uploaded are 1.2 MB per frame at 20,000 sprites.
 
 ---
 
+## Resource loading, and the GIL
+
+What decides the shape of asynchronous loading here. `pygame-ce` decodes
+images in SDL with the GIL **released**; `json` parses with it **held**. So
+"load assets on a worker thread" is right for one and a pessimisation for
+the other, and the difference is measured rather than assumed.
+
+Per item, 24 items, 4 worker threads, CPython 3.12.10 (a standard GIL
+build -- `Py_GIL_DISABLED` is unset), 12 logical CPUs:
+
+| Operation | Sequential | 4 threads | Speed-up | GIL |
+| --- | ---: | ---: | ---: | --- |
+| `pygame.image.load`, 2356×1824 jpg | 30.87 ms | 10.58 ms | **2.92×** | released |
+| `pygame.image.load`, 1024×1024 png | 6.91 ms | 2.05 ms | **3.37×** | released |
+| …plus `convert_alpha` + `tobytes` | 15.12 ms | 7.93 ms | 1.91× | mostly released |
+| `json.loads`, ~4k entries | 4.64 ms | 6.51 ms | **0.71×** | held |
+| `open().read()`, 2.5 MB, page-cached | 0.17 ms | 0.84 ms | 0.20× | n/a |
+
+Three things follow.
+
+**One image decode can cost more than a frame.** 30.87 ms for a 2356×1824
+jpg is nearly two 60 Hz frames, so a scene that loads a dozen textures on
+entry stalls for a third of a second. This is the cost asynchronous loading
+exists to move.
+
+**Threading pays for image decode and costs for JSON.** 2.9–3.4× against
+0.71×: offloading a GIL-holding parse adds contention and returns nothing,
+so it finishes *slower* than doing it inline. A loader therefore opts in to
+threaded decode rather than getting it by default.
+
+**`asyncio` is the wrong tool for this problem.** It overlaps I/O *waits*,
+and there is no wait here worth overlapping -- reading 2.5 MB costs 0.17 ms
+while decoding it costs 30.87 ms. The expense is CPU, which an event loop
+cannot parallelise on a GIL build; it would also mean running an event loop
+inside a synchronous frame loop. A thread pool for the phases that release
+the GIL, plus a time-budgeted main-thread pump for everything else, is what
+the measurements support.
+
+The last row measures thread-pool overhead, not disk: 2.5 MB out of the
+page cache costs 0.17 ms, less than the ~0.7 ms it takes to hand the work
+to a pool. Quoted so nobody reads it as "file I/O does not parallelise".
+
+---
+
 ## What the test suite guarantees
 
 `tests/performance/` runs in two tiers, and they exist for different reasons.
