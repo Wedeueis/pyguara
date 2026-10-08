@@ -74,13 +74,58 @@ class Renderable(Protocol):
     @property
     def z_index(self) -> float:
         """
-        The Y-Sort key for depth sorting within the same layer.
+        Manual depth key within the layer, used when `y_sort` is False.
 
-        Usually corresponds to the `y` position of the entity's feet.
-        Objects lower on the screen (higher Y) cover objects higher up.
+        Set it by hand to decide what covers what among things that do not
+        move -- a floor decal under a wall shadow. Anything that *does*
+        move wants `y_sort` instead, since a hand-maintained z_index cannot
+        track a character walking past a tree.
 
         Returns:
             float: The sorting key.
+        """
+        ...
+
+    @property
+    def y_sort(self) -> bool:
+        """
+        Whether world Y decides this object's depth instead of `z_index`.
+
+        The 2.5D rule: objects lower on the screen (higher Y) cover objects
+        higher up, so a character walking down past a tree ends up in front
+        of it with nobody maintaining a number.
+
+        Returns:
+            bool: True to sort by Y.
+        """
+        ...
+
+    @property
+    def sort_offset(self) -> float:
+        """
+        Added to world Y before comparing, when `y_sort` is True.
+
+        An object's depth is its contact point with the ground, not its
+        centre: without this a tall tree whose centre sits above a short
+        character's centre draws behind the character even while the
+        character stands in front of its trunk. Usually half the height.
+
+        Returns:
+            float: The offset in world units.
+        """
+        ...
+
+    @property
+    def sort_group(self) -> int:
+        """
+        Coarse ordering within the layer, compared before depth.
+
+        What a "sorting group" is for: a character and the sword they are
+        holding must stay together relative to the scenery however their
+        own depths compare, so both carry the group and sort as one unit.
+
+        Returns:
+            int: The group index; 0 for the default group.
         """
         ...
 

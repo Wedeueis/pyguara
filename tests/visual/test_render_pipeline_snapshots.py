@@ -71,6 +71,9 @@ class Sprite:
         rotation: float = 0.0,
         scale: Vector2 | None = None,
         color: Color | None = None,
+        y_sort: bool = False,
+        sort_offset: float = 0.0,
+        sort_group: int = 0,
     ) -> None:
         """Create a renderable at a world position on a layer."""
         self.texture = texture
@@ -81,6 +84,9 @@ class Sprite:
         self.scale = scale if scale is not None else Vector2(1, 1)
         self.material = None
         self.color = color if color is not None else Color(255, 255, 255, 255)
+        self.y_sort = y_sort
+        self.sort_offset = sort_offset
+        self.sort_group = sort_group
 
 
 def _f(value: float) -> str:

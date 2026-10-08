@@ -33,9 +33,63 @@ The rendering process within each pass follows these stages:
 
 1.  **Submission**: Entities submit `Renderable` items to the `RenderSystem`.
 2.  **Queueing**: Items are stored in a `RenderQueue`.
-3.  **Sorting**: The queue is sorted by Layer, Material, and Z-Index.
+3.  **Sorting**: The queue is sorted by **layer, sort group, depth, material**
+    — in that order. See [Depth ordering](#depth-ordering).
 4.  **Batching**: The `Batcher` groups compatible draw calls (same material) into `RenderBatch` objects.
 5.  **Execution**: The backend (e.g., `ModernGLRenderer`) executes the batches.
+
+## Depth ordering
+
+Four keys, most significant first:
+
+| Key | What it is for |
+| --- | --- |
+| `layer` | The coarse band: background, world, entities, effects, UI, debug |
+| `sort_group` | A cluster that must sort as one unit within its layer |
+| depth | `z_index`, or world Y when `y_sort` is on |
+| material | Groups by shader **among things already at equal depth** |
+
+### Y-sort
+
+```python
+sprite.y_sort = True
+sprite.sort_offset = 16.0      # half the sprite's height
+```
+
+The 2.5D rule: objects lower on the screen cover objects higher up, so a
+character walking down past a tree ends up in front of it with nobody
+maintaining a number. Anything that moves wants this; a hand-set `z_index`
+cannot track it.
+
+`sort_offset` exists because an object's depth is its **contact point with the
+ground**, not its centre. Without it a tall tree whose centre sits above a
+short character's centre draws behind the character even while the character
+stands in front of its trunk.
+
+Depth comes from the position the sprite is **submitted at** — for an entity
+that is its `Transform` plus the sprite's own offset — not from
+`sprite.position` alone.
+
+### Sorting groups
+
+```python
+hero_sprite.sort_group = 1
+sword_sprite.sort_group = 1
+```
+
+A character and the sword they are holding must stay together relative to the
+scenery however their own depths compare. Both carry the group and sort as one
+unit; within the group they still sort by depth against each other.
+
+### Why material sorts last
+
+Material used to be compared *before* depth, so two overlapping sprites with
+different materials drew in material order rather than depth order — y-sorting
+could not have worked at all in a scene with more than one material.
+
+Depth is a correctness constraint and batching is an optimisation, so depth
+wins. Material still breaks ties at equal depth, which is where the batching
+actually comes from: a tilemap row, a crowd of identical particles.
 
 ## Material System
 

@@ -43,17 +43,29 @@ class RenderSystem:
                 to `item.position` when omitted.
         """
         # Direct access - protocol guarantees these attributes exist
-        cmd = RenderCommand(
-            texture=item.texture,
-            world_position=position if position is not None else item.position,
-            layer=item.layer,
-            z_index=item.z_index,
-            rotation=item.rotation,
-            scale=item.scale,
-            material=item.material,
-            color=item.color,
+        world_position = position if position is not None else item.position
+
+        # Resolved here, not in the queue's sort key: a y-sorted command
+        # carries its world Y in `z_index` so the comparison stays one
+        # tuple of numbers rather than a branch per command per frame.
+        # The *submitted* position is what counts -- for an entity sprite
+        # that is the Transform plus the sprite's own offset, and depth has
+        # to come from where the sprite is actually drawn.
+        depth = world_position.y + item.sort_offset if item.y_sort else item.z_index
+
+        self._queue.push(
+            RenderCommand(
+                texture=item.texture,
+                world_position=world_position,
+                layer=item.layer,
+                z_index=depth,
+                sort_group=item.sort_group,
+                rotation=item.rotation,
+                scale=item.scale,
+                material=item.material,
+                color=item.color,
+            )
         )
-        self._queue.push(cmd)
 
     def flush(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
         """

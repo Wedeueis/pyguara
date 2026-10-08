@@ -37,6 +37,9 @@ class Geometry:
         texture_factory: TextureFactory,
         layer: int = Layer.WORLD,
         z_index: float = 0.0,
+        y_sort: bool = False,
+        sort_offset: float = 0.0,
+        sort_group: int = 0,
     ) -> None:
         """Initialise the shared shape state.
 
@@ -45,11 +48,20 @@ class Geometry:
                 Resolve it from the DI container -- in a scene,
                 `self.container.get(TextureFactory)`.
             layer: Sorting layer.
-            z_index: Depth key within the layer.
+            z_index: Manual depth key within the layer, used when `y_sort`
+                is False.
+            y_sort: Sort by world Y instead of `z_index`. A procedural shape
+                standing in a 2.5D scene -- a bush, a crate -- needs this
+                as much as a sprite does.
+            sort_offset: Added to world Y before comparing, when `y_sort`.
+            sort_group: Coarse ordering within the layer, before depth.
         """
         self._texture_factory = texture_factory
         self._layer = layer
         self._z_index = z_index
+        self.y_sort = y_sort
+        self.sort_offset = sort_offset
+        self.sort_group = sort_group
         self._position = Vector2.zero()
         self._texture: Texture | None = None
         self.rotation: float = 0.0
