@@ -14,6 +14,24 @@ Per `pyguara.kits`' layering rule, nothing here registers itself.
 """
 
 from pyguara.kits.topdown_movement.body import TopDownBody
+from pyguara.kits.topdown_movement.directional_system import (
+    DirectionalAnimationSystem,
+)
+from pyguara.kits.topdown_movement.facing import (
+    DirectionalAnimator,
+    DirectionalClipSet,
+    Facing,
+    facing_from_vector,
+)
 from pyguara.kits.topdown_movement.system import TopDownSystem
 
-__all__ = ["TopDownBody", "TopDownSystem"]
+__all__ = [
+    "TopDownBody",
+    "TopDownSystem",
+    # Directional animation: N actions x 4 or 8 facings
+    "Facing",
+    "DirectionalClipSet",
+    "DirectionalAnimator",
+    "DirectionalAnimationSystem",
+    "facing_from_vector",
+]
