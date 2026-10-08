@@ -31,6 +31,79 @@ container, so any service can take a `ConfigManager` in its constructor.
 manager.config.physics.fixed_dt   # 1 / fixed_timestep_hz, in seconds
 ```
 
+### Game-defined sections
+
+`GameConfig` is closed — those five, full stop. A game registers its own
+section instead of growing a second JSON loader beside the engine's:
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class BalanceConfig:
+    enemy_hp_scale: float = 1.0
+    drop_rate: float = 0.25
+    boss_waves: int = 3
+
+manager.register_section("balance", BalanceConfig)
+manager.load()
+
+manager.section(BalanceConfig).drop_rate        # typed
+manager.update_setting("balance", "drop_rate", 0.4)
+```
+
+It then gets everything an engine section gets: the same file (at the top
+level, beside `display` — nothing is nested under a `custom` key), the same
+type coercion on load, the same `PYGUARA_BALANCE_DROP_RATE` override, the same
+`update_setting()` checks, the same profile layering, and validation if it asks
+for it.
+
+**Register before `load()`.** `from_dict()` can only build a section the
+registry knows about, so a late registration would discard whatever the file
+said and hand back defaults instead. Registering afterwards raises rather than
+doing that quietly, and a section in the file that nothing registered is logged
+by name:
+
+```
+Unknown config section 'balance' ignored. Register it with
+ConfigManager.register_section('balance', ...) before load(), or remove it
+from the file.
+```
+
+The dataclass must be constructible with no arguments — those values are what a
+missing file falls back to.
+
+`section()` is keyed by type rather than name because that is what game code
+actually holds, and it stays type-checked where `config.custom["balance"]`
+would be `Any`. It finds engine sections too
+(`manager.section(PhysicsConfig)`).
+
+#### Validating a game's own values
+
+The engine cannot know what `drop_rate` means, so a section carries its own
+rules by growing a `validate()` method (the `ValidatableSection` protocol —
+opt-in; a section without one is simply unchecked):
+
+```python
+@dataclass
+class BalanceConfig:
+    drop_rate: float = 0.25
+
+    def validate(self) -> list[ValidationIssue]:
+        if 0.0 <= self.drop_rate <= 1.0:
+            return []
+        return [ValidationIssue(
+            ValidationSeverity.ERROR, "balance", "drop_rate",
+            f"drop_rate must be within 0..1, got {self.drop_rate}.",
+        )]
+```
+
+`ValidationIssue.section` is overwritten with the registered name, so you
+cannot get it wrong. An `ERROR` or `CRITICAL` from here blocks
+`update_setting()` and `push_profile()` exactly as an engine rule does. A
+`validate()` that raises becomes one `ERROR` naming the section rather than
+taking down startup.
+
 `fixed_dt` raises `ValueError` rather than `ZeroDivisionError` if
 `fixed_timestep_hz` is not positive — `Application.run()` reads it on every
 startup, so the message names the setting.
@@ -122,7 +195,19 @@ advice, not a veto.
 
 ## Environment overrides
 
-Applied after the file is read, so they win:
+Applied after the file is read, so they win.
+
+Any setting in any section — including a game's own — is reachable as
+`PYGUARA_<SECTION>_<FIELD>`:
+
+```bash
+PYGUARA_DISPLAY_FPS_TARGET=144
+PYGUARA_AUDIO_MUTED=true
+PYGUARA_BALANCE_DROP_RATE=0.75
+```
+
+Four short aliases predate that rule and do not follow it. They stay because
+launch scripts and CI jobs set them:
 
 | Variable | Overrides |
 | --- | --- |
@@ -131,12 +216,33 @@ Applied after the file is read, so they win:
 | `PYGUARA_WINDOW_WIDTH` | `display.screen_width` |
 | `PYGUARA_WINDOW_HEIGHT` | `display.screen_height` |
 
+The explicit form wins where both name the same field — it says which field it
+means, so it is the more deliberate of the two.
+
+Booleans accept `1/true/yes/on` and `0/false/no/off`. Enums accept a member
+name or a value. A `Color` or a nested dataclass is **refused** rather than
+parsed from an invented syntax — the file is the place for those.
+
 An unparseable value is reported and skipped:
 
 ```
 Ignoring PYGUARA_BACKEND='vulkan': not a valid RenderingBackend.
 Expected one of PYGAME, MODERNGL.
 ```
+
+A variable whose section matches but whose field does not is reported too — a
+mistyped field under a real section is a typo, not someone else's variable:
+
+```
+Ignoring PYGUARA_DISPLAY_FPS_TARGEET: 'display' has no setting 'fps_targeet'.
+```
+
+One naming no section at all is left alone; it belongs to something else.
+
+A **missing** config file is written with the engine's defaults *before*
+overrides are applied: the file is the game's to edit, while an override
+belongs to one launch. (It also means the first launch now applies them at all,
+which it previously skipped.)
 
 ## Events
 
@@ -165,3 +271,5 @@ whole config.
    `validate()` if you care.
 4. Adding a field to a config dataclass is enough; loading, saving and
    coercion are driven by the declared types.
+5. A game's own tunables belong in a registered section, not a second JSON
+   file. Register them before `load()`.

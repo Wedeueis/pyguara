@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
 from pyguara.config.types import (
@@ -12,6 +12,9 @@ from pyguara.config.types import (
     PhysicsConfig,
     WindowConfig,
 )
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 MIN_SCREEN_WIDTH = 640
 MIN_SCREEN_HEIGHT = 480
@@ -71,7 +74,59 @@ class ConfigValidator:
             *self._validate_audio(config.audio),
             *self._validate_input(config.input),
             *self._validate_physics(config.physics),
+            *self._validate_custom(config),
         ]
+
+    def _validate_custom(self, config: GameConfig) -> list[ValidationIssue]:
+        """Ask each game-defined section to check itself.
+
+        The engine cannot know what a game's values mean, so a registered
+        section carries its own rules by implementing
+        `sections.ValidatableSection`. One without a `validate()` method is
+        simply unchecked -- the protocol is opt-in.
+
+        `section` is overwritten with the registered name on every issue
+        returned: the name is the registry's to know, not the section's, and
+        a mismatch would quietly route the issue past
+        `validate_section()` and past `update_setting()`'s blocking check.
+
+        A section whose `validate()` raises becomes one ERROR naming it,
+        rather than taking down the startup path that called it -- a buggy
+        rule in a game's own config should not stop the engine from
+        reporting everything else.
+
+        Args:
+            config: The configuration whose custom sections to check.
+
+        Returns:
+            Issues found, in registration order.
+        """
+        issues: list[ValidationIssue] = []
+        for name, section in config.custom.items():
+            check = getattr(section, "validate", None)
+            if not callable(check):
+                continue
+            try:
+                reported = list(check())
+            except Exception as error:  # noqa: BLE001 - a game's rule, not ours
+                logger.exception(
+                    error,
+                    f"Config section '{name}' raised from validate(); treating "
+                    f"it as one unusable section.",
+                )
+                issues.append(
+                    ValidationIssue(
+                        ValidationSeverity.ERROR,
+                        name,
+                        "validate",
+                        f"{type(section).__name__}.validate() raised "
+                        f"{type(error).__name__}: {error}",
+                        "Fix the rule; the section's values were not checked.",
+                    )
+                )
+                continue
+            issues.extend(replace(issue, section=name) for issue in reported)
+        return issues
 
     def validate_section(
         self, config: GameConfig, section: str
