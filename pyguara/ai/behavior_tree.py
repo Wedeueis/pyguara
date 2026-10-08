@@ -156,23 +156,78 @@ class WaitNode(BehaviorNode):
 class CompositeNode(BehaviorNode):
     """Base class for nodes with multiple children."""
 
-    def __init__(self, children: list[BehaviorNode], name: str = ""):
+    def __init__(
+        self,
+        children: list[BehaviorNode],
+        name: str = "",
+        *,
+        memory: bool = True,
+    ):
         """Initialize composite node.
 
         Args:
             children: List of child nodes
             name: Optional name for debugging
+            memory: Whether to resume at the child that was RUNNING instead
+                of re-ticking from the first one. True keeps the historical
+                behaviour; see the subclasses for why False is usually what
+                an author meant.
         """
         super().__init__(name)
         self.children = children
+        self.memory = memory
         self._current_child = 0
+        # Which child was RUNNING on the previous tick, so a reactive
+        # composite can abort it when a different branch takes over.
+        self._running_child: int | None = None
 
     def reset(self) -> None:
         """Reset this node and all children."""
         super().reset()
         self._current_child = 0
+        self._running_child = None
         for child in self.children:
             child.reset()
+
+    def _start_index(self) -> int:
+        """Return the child index this tick should begin at.
+
+        Returns:
+            The remembered child with memory, or 0 without it -- which is
+            what makes a guard at the front of the list keep being checked.
+        """
+        return self._current_child if self.memory else 0
+
+    def _abort_running(self) -> None:
+        """Reset a child left mid-flight because this composite finished.
+
+        A composite that returns SUCCESS or FAILURE while one of its
+        children was RUNNING has pre-empted that child, exactly as a
+        higher-priority branch does. Clearing the bookkeeping without
+        resetting the child would leave it holding a part-elapsed
+        `WaitNode` or a half-finished action, which then resumes from the
+        middle the next time the branch is reached.
+        """
+        if self._running_child is not None:
+            self.children[self._running_child].reset()
+            self._running_child = None
+
+    def _note_running(self, index: int) -> None:
+        """Record which child is RUNNING, aborting a pre-empted one.
+
+        A child that was RUNNING and is no longer the one being ticked has
+        been pre-empted by a higher-priority branch. Resetting it is what
+        "abort" means for a behaviour tree: without it the child keeps its
+        internal state -- a half-elapsed `WaitNode`, a part-finished action
+        -- and resumes mid-way if it is reached again later.
+
+        Args:
+            index: The child that returned RUNNING this tick.
+        """
+        if self._running_child is not None and self._running_child != index:
+            self.children[self._running_child].reset()
+        self._running_child = index
+        self._current_child = index
 
 
 class SequenceNode(CompositeNode):
@@ -190,35 +245,50 @@ class SequenceNode(CompositeNode):
         ... ])
     """
 
-    def __init__(self, children: list[BehaviorNode], name: str = "Sequence"):
+    def __init__(
+        self,
+        children: list[BehaviorNode],
+        name: str = "Sequence",
+        *,
+        memory: bool = True,
+    ):
         """Initialize sequence node.
 
         Args:
             children: List of child nodes to execute in order
             name: Optional name for debugging
+            memory: Resume at the RUNNING child (True, the historical
+                behaviour) or re-tick from the first child every tick
+                (False). See `ReactiveSequenceNode` for why False is
+                usually what a guarded sequence meant.
         """
-        super().__init__(children, name)
+        super().__init__(children, name, memory=memory)
 
     def tick(self, context: Any) -> NodeStatus:
         """Execute children sequentially."""
-        while self._current_child < len(self.children):
-            status = self.children[self._current_child].tick(context)
+        index = self._start_index()
+        while index < len(self.children):
+            status = self.children[index].tick(context)
 
             if status == NodeStatus.FAILURE:
                 self._status = NodeStatus.FAILURE
                 self._current_child = 0
+                self._abort_running()
                 return self._status
 
             if status == NodeStatus.RUNNING:
                 self._status = NodeStatus.RUNNING
+                self._note_running(index)
                 return self._status
 
             # Success - move to next child
-            self._current_child += 1
+            index += 1
+            self._current_child = index
 
         # All children succeeded
         self._status = NodeStatus.SUCCESS
         self._current_child = 0
+        self._abort_running()
         return self._status
 
 
@@ -237,36 +307,122 @@ class SelectorNode(CompositeNode):
         ... ])
     """
 
-    def __init__(self, children: list[BehaviorNode], name: str = "Selector"):
+    def __init__(
+        self,
+        children: list[BehaviorNode],
+        name: str = "Selector",
+        *,
+        memory: bool = True,
+    ):
         """Initialize selector node.
 
         Args:
             children: List of child nodes to try in order
             name: Optional name for debugging
+            memory: Resume at the RUNNING child (True, the historical
+                behaviour) or re-tick from the first child every tick
+                (False). See `ReactiveSelectorNode`.
         """
-        super().__init__(children, name)
+        super().__init__(children, name, memory=memory)
 
     def tick(self, context: Any) -> NodeStatus:
         """Try children until one succeeds."""
-        while self._current_child < len(self.children):
-            status = self.children[self._current_child].tick(context)
+        index = self._start_index()
+        while index < len(self.children):
+            status = self.children[index].tick(context)
 
             if status == NodeStatus.SUCCESS:
                 self._status = NodeStatus.SUCCESS
                 self._current_child = 0
+                self._abort_running()
                 return self._status
 
             if status == NodeStatus.RUNNING:
                 self._status = NodeStatus.RUNNING
+                self._note_running(index)
                 return self._status
 
             # Failure - move to next child
-            self._current_child += 1
+            index += 1
+            self._current_child = index
 
         # All children failed
         self._status = NodeStatus.FAILURE
         self._current_child = 0
+        self._abort_running()
         return self._status
+
+
+class ReactiveSequenceNode(SequenceNode):
+    """A sequence that re-checks its guards every tick.
+
+    The ordinary `SequenceNode` has *memory*: once it advances past a child
+    it resumes at the one that was RUNNING and never re-ticks the earlier
+    ones. That quietly breaks the most common way a behaviour tree is
+    written:
+
+        >>> SequenceNode([
+        ...     ConditionNode(is_player_visible),
+        ...     ActionNode(chase),
+        ...     ActionNode(attack),
+        ... ])
+
+    The condition is checked once. The moment the sequence moves on to
+    `chase`, `is_player_visible` stops being evaluated -- so the enemy keeps
+    chasing and attacking after the player breaks line of sight, and
+    nothing anywhere reports a problem. The tree reads correctly; it just
+    does not do what it says.
+
+    A reactive sequence starts from the first child on every tick, so a
+    guard at the front is a guard for as long as the branch runs. When a
+    failing guard pre-empts a child that was RUNNING, that child is
+    `reset()` -- the abort -- so it does not resume half-finished later.
+
+    This is what most authors mean by a sequence; the memory variant is the
+    specialised one. The default is unchanged only because changing it would
+    silently alter every tree already written against it.
+    """
+
+    def __init__(self, children: list[BehaviorNode], name: str = "ReactiveSequence"):
+        """Initialize a memoryless sequence.
+
+        Args:
+            children: List of child nodes to execute in order
+            name: Optional name for debugging
+        """
+        super().__init__(children, name, memory=False)
+
+
+class ReactiveSelectorNode(SelectorNode):
+    """A selector that re-checks higher-priority branches every tick.
+
+    The ordinary `SelectorNode` resumes at the child that was RUNNING, so a
+    higher-priority branch that becomes viable mid-action never gets a
+    chance to take over:
+
+        >>> SelectorNode([
+        ...     SequenceNode([is_health_low, flee]),
+        ...     SequenceNode([is_enemy_close, attack]),
+        ...     ActionNode(patrol),
+        ... ])
+
+    Once `patrol` is RUNNING, dropping to low health does not interrupt it.
+    A reactive selector re-ticks from the top, so the first viable branch
+    wins on every tick -- which is the entire point of ordering a selector
+    by priority.
+
+    The pre-empted child is `reset()` when a higher branch takes over, so
+    `patrol` does not resume mid-stride once the danger passes.
+    """
+
+    def __init__(self, children: list[BehaviorNode], name: str = "ReactiveSelector"):
+        """Initialize a memoryless selector.
+
+        Args:
+            children: List of child nodes to try in priority order
+            name: Optional name for debugging
+        """
+        super().__init__(children, name, memory=False)
 
 
 class ParallelNode(CompositeNode):
