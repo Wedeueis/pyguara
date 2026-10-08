@@ -24,6 +24,26 @@ class StackEntry:
     pause_below: bool
 
 
+@dataclass
+class LayerEntry:
+    """A persistent layer: a scene held outside the stack.
+
+    Attributes:
+        scene: The layer's scene.
+        order: Render order among layers; lower draws first. Every layer
+            draws above the whole scene stack.
+        sequence: Insertion counter, breaking ties between equal orders so
+            the order two layers were added in is the order they draw in.
+        paused: Whether the game has paused this layer's updates. A paused
+            layer still renders.
+    """
+
+    scene: Scene
+    order: int
+    sequence: int
+    paused: bool = False
+
+
 class SceneManager:
     """Coordinator for scene transitions and lifecycle."""
 
@@ -41,6 +61,12 @@ class SceneManager:
         # pause_below that applied when that scene was itself current.
         self._stack: list[StackEntry] = []
         self._current_pause_below: bool = False
+
+        # Persistent layers, in render order. Deliberately *not* part of
+        # `_stack`: `switch_to()` unwinds the stack, which is exactly what a
+        # run-wide HUD must survive.
+        self._layers: list[LayerEntry] = []
+        self._layer_sequence = 0
 
     def set_container(self, container: DIContainer) -> None:
         """Receive the DI container and wire every scene with it.
@@ -114,6 +140,8 @@ class SceneManager:
         if scene_name not in self._scenes:
             raise ValueError(f"Scene '{scene_name}' not registered.")
 
+        self._assert_not_a_layer(scene_name, f"switch to '{scene_name}'")
+
         if self._reject_during_transition(f"switch to '{scene_name}'"):
             return
 
@@ -177,6 +205,8 @@ class SceneManager:
         """
         if scene_name not in self._scenes:
             raise ValueError(f"Scene '{scene_name}' not registered.")
+
+        self._assert_not_a_layer(scene_name, f"push '{scene_name}'")
 
         if self._reject_during_transition(f"push '{scene_name}'"):
             return
@@ -280,6 +310,169 @@ class SceneManager:
 
         return popped_scene
 
+    # -- Persistent layers --
+
+    @property
+    def layers(self) -> tuple[str, ...]:
+        """Names of the active persistent layers, in render order."""
+        return tuple(entry.scene.name for entry in self._layers)
+
+    def has_layer(self, scene_name: str) -> bool:
+        """Report whether a scene is currently an active layer.
+
+        Args:
+            scene_name: Name of the scene to look for.
+
+        Returns:
+            True if that scene is an active layer.
+        """
+        return self._layer_entry(scene_name) is not None
+
+    def add_layer(self, scene_name: str, order: int = 0) -> None:
+        """Activate a scene as a persistent layer above the scene stack.
+
+        A layer lives *outside* the stack, so `switch_to()` -- which unwinds
+        the stack entirely -- leaves it alone. That is the whole point: a
+        roguelike floor transition is "swap the world scene, keep the HUD",
+        and without this the HUD had to be torn down and re-pushed on every
+        transition, losing its state each time.
+
+        Layers draw above every scene in the stack, in `order` then
+        insertion order, and **above an in-flight transition** too: a
+        persistent HUD that blinks out during every floor change defeats the
+        point of persisting it. A game that wants one covered by the fade
+        can remove it for the duration.
+
+        They also keep updating during a transition, when the stack does
+        not, so a layer's own animations do not freeze mid-fade.
+
+        `pause_below` does not apply to layers in either direction: a layer
+        neither pauses the stack nor is paused by it. Use `pause_layer()`
+        when a pause menu should freeze the HUD -- explicit, because a HUD
+        that keeps animating while paused is just as often what a game
+        wants.
+
+        Args:
+            scene_name: Name of the registered scene to activate.
+            order: Render order among layers; lower draws first. A modal
+                that must cover the HUD is a layer with a higher order.
+
+        Raises:
+            ValueError: If the scene is not registered, or is already in use
+                as the current scene or on the stack -- one scene cannot be
+                both, since each would enter and exit it independently.
+        """
+        if scene_name not in self._scenes:
+            raise ValueError(f"Scene '{scene_name}' not registered.")
+
+        if self.has_layer(scene_name):
+            logger.warning(
+                f"Scene '{scene_name}' is already an active layer; nothing was changed."
+            )
+            return
+
+        scene = self._scenes[scene_name]
+        if scene is self._current_scene or any(
+            entry.scene is scene for entry in self._stack
+        ):
+            raise ValueError(
+                f"Scene '{scene_name}' is already live in the scene stack and "
+                f"cannot also be a layer: the stack and the layer list would "
+                f"each enter and exit it independently."
+            )
+
+        self._layer_sequence += 1
+        self._layers.append(LayerEntry(scene, order, self._layer_sequence))
+        self._layers.sort(key=lambda entry: (entry.order, entry.sequence))
+        scene.on_enter()
+
+    def remove_layer(self, scene_name: str) -> Scene | None:
+        """Deactivate a persistent layer, exiting its scene.
+
+        Args:
+            scene_name: Name of the layer to remove.
+
+        Returns:
+            The scene that was removed, or None if it was not an active
+            layer.
+        """
+        entry = self._layer_entry(scene_name)
+        if entry is None:
+            return None
+
+        self._layers.remove(entry)
+        self._exit_scene(entry.scene)
+        return entry.scene
+
+    def pause_layer(self, scene_name: str) -> bool:
+        """Stop updating a layer, while it keeps rendering.
+
+        What a pause menu calls when the HUD underneath it should freeze.
+
+        Args:
+            scene_name: Name of the layer to pause.
+
+        Returns:
+            True if a live, unpaused layer was paused.
+        """
+        entry = self._layer_entry(scene_name)
+        if entry is None or entry.paused:
+            return False
+        entry.paused = True
+        self._pause_scene(entry.scene)
+        return True
+
+    def resume_layer(self, scene_name: str) -> bool:
+        """Resume updating a paused layer.
+
+        Args:
+            scene_name: Name of the layer to resume.
+
+        Returns:
+            True if a paused layer was resumed.
+        """
+        entry = self._layer_entry(scene_name)
+        if entry is None or not entry.paused:
+            return False
+        entry.paused = False
+        self._resume_scene(entry.scene)
+        return True
+
+    def _layer_entry(self, scene_name: str) -> LayerEntry | None:
+        """Find an active layer by scene name.
+
+        Args:
+            scene_name: Name to look for.
+
+        Returns:
+            The entry, or None.
+        """
+        return next(
+            (entry for entry in self._layers if entry.scene.name == scene_name), None
+        )
+
+    def _active_layer_scenes(self) -> list[Scene]:
+        """Return the layer scenes that should receive updates, in order."""
+        return [entry.scene for entry in self._layers if not entry.paused]
+
+    def _assert_not_a_layer(self, scene_name: str, action: str) -> None:
+        """Refuse to put an active layer into the scene stack as well.
+
+        Args:
+            scene_name: The scene being pushed or switched to.
+            action: Human-readable description, for the message.
+
+        Raises:
+            ValueError: If that scene is an active layer.
+        """
+        if self.has_layer(scene_name):
+            raise ValueError(
+                f"Cannot {action}: scene '{scene_name}' is an active "
+                f"persistent layer. Remove the layer first, or use a "
+                f"different scene -- one scene cannot be in the stack and a "
+                f"layer at once."
+            )
+
     def is_transitioning(self) -> bool:
         """Check if a scene transition is in progress.
 
@@ -308,6 +501,16 @@ class SceneManager:
         Args:
             fixed_dt: Fixed delta time in seconds.
         """
+        # Layers tick first and keep ticking during a transition: they sit
+        # outside the stack, so the stack's pause and transition gates are
+        # not theirs, and a persistent HUD freezing mid-fade is the thing
+        # layers exist to avoid.
+        for scene in self._active_layer_scenes():
+            self._snapshot_interpolated(scene)
+            scene.system_manager.update(fixed_dt)
+            scene.fixed_update(fixed_dt)
+            scene.entity_manager.flush_pending_removals()
+
         if self.is_transitioning():
             return
 
@@ -315,16 +518,24 @@ class SceneManager:
         scenes_to_update = self._get_active_scenes()
 
         for scene in scenes_to_update:
-            for entity in scene.entity_manager.get_entities_with(Transform):
-                transform = entity.get_component(Transform)
-                if transform.interpolate:
-                    transform.previous_position = transform.position
+            self._snapshot_interpolated(scene)
 
         # Fixed update all active scenes (in order, bottom to top)
         for scene in reversed(scenes_to_update):
             scene.system_manager.update(fixed_dt)
             scene.fixed_update(fixed_dt)
             scene.entity_manager.flush_pending_removals()
+
+    def _snapshot_interpolated(self, scene: Scene) -> None:
+        """Record this tick's starting position for every interpolated entity.
+
+        Args:
+            scene: The scene whose entities to snapshot.
+        """
+        for entity in scene.entity_manager.get_entities_with(Transform):
+            transform = entity.get_component(Transform)
+            if transform.interpolate:
+                transform.previous_position = transform.position
 
     def update(self, dt: float) -> None:
         """Variable-rate update for UI and smooth animations.
@@ -336,6 +547,10 @@ class SceneManager:
         """
         # Update transition
         self._transition_manager.update(dt)
+
+        for scene in self._active_layer_scenes():
+            scene.system_manager.variable_update(dt)
+            scene.update(dt)
 
         if self.is_transitioning():
             return
@@ -423,15 +638,31 @@ class SceneManager:
                 self._current_scene.render_alpha = alpha
                 self._current_scene.render(world_renderer, ui_renderer)
 
+        # Layers last, above the stack *and* above a transition. A paused
+        # layer still renders -- pausing stops its updates, not its pixels.
+        for layer in self._layers:
+            if before_each is not None:
+                before_each()
+            layer.scene.render_alpha = alpha
+            layer.scene.render(world_renderer, ui_renderer)
+
     def cleanup(self) -> None:
         """Tear down every live scene, LIFO, exiting each exactly once.
 
-        The current scene goes first (entered last), then the stack top-down.
+        Persistent layers go first (they draw on top), then the current
+        scene (entered last), then the stack top-down.
         A scene that a transition has started entering but not yet made
         current is included too, so an application shutting down mid-fade does
         not leave it holding its world.
         """
         exited: set[int] = set()
+
+        # Layers first: they draw above the stack, and LIFO teardown means
+        # the topmost thing goes first.
+        for layer in reversed(self._layers):
+            exited.add(id(layer.scene))
+            self._exit_scene(layer.scene)
+        self._layers.clear()
 
         for scene in (self._current_scene, self._transition_target()):
             if scene is not None and id(scene) not in exited:

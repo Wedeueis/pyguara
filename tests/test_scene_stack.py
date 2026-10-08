@@ -811,3 +811,250 @@ class TestRegistration:
             manager.register(scene)
 
         assert caplog.text == ""
+
+
+class TestPersistentLayers:
+    """A scene held outside the stack, surviving `switch_to` (#69)."""
+
+    def _manager(self, *names: str) -> SceneManager:
+        manager = SceneManager()
+        for name in names:
+            manager.register(MockScene(name))
+        return manager
+
+    def test_a_layer_survives_a_switch_that_unwinds_the_stack(self):
+        """The whole point: a roguelike floor change is "swap the world
+        scene, keep the HUD". Before this the HUD had to be torn down and
+        re-pushed every transition, losing its state each time."""
+        manager = self._manager("floor1", "floor2", "hud")
+        manager.switch_to("floor1")
+        manager.add_layer("hud")
+        hud = manager._scenes["hud"]
+
+        manager.switch_to("floor2")
+
+        assert manager.layers == ("hud",)
+        assert not hud.exited
+        assert manager._scenes["floor1"].exited
+
+    def test_a_layer_survives_a_push_and_pop_too(self):
+        manager = self._manager("world", "pause", "hud")
+        manager.switch_to("world")
+        manager.add_layer("hud")
+
+        manager.push_scene("pause")
+        manager.pop_scene()
+
+        assert manager.layers == ("hud",)
+        assert not manager._scenes["hud"].exited
+
+    def test_adding_a_layer_enters_its_scene(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+
+        assert manager._scenes["hud"].entered
+        assert manager.has_layer("hud")
+
+    def test_removing_a_layer_exits_its_scene(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+
+        removed = manager.remove_layer("hud")
+
+        assert removed is manager._scenes["hud"]
+        assert removed.exited
+        assert manager.layers == ()
+
+    def test_removing_a_layer_that_is_not_active_is_not_an_error(self):
+        assert self._manager("hud").remove_layer("hud") is None
+
+    def test_adding_an_unregistered_scene_raises(self):
+        with pytest.raises(ValueError, match="not registered"):
+            SceneManager().add_layer("hud")
+
+    def test_adding_the_same_layer_twice_changes_nothing(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+        manager.add_layer("hud")
+
+        assert manager.layers == ("hud",)
+
+    def test_a_layer_cannot_also_be_live_in_the_stack(self):
+        """Each would enter and exit it independently."""
+        manager = self._manager("world")
+        manager.switch_to("world")
+
+        with pytest.raises(ValueError, match="cannot also be a layer"):
+            manager.add_layer("world")
+
+    def test_a_scene_in_the_stack_cannot_also_be_a_layer(self):
+        manager = self._manager("world", "hud")
+        manager.add_layer("hud")
+
+        with pytest.raises(ValueError, match="active persistent layer"):
+            manager.switch_to("hud")
+        with pytest.raises(ValueError, match="active persistent layer"):
+            manager.push_scene("hud")
+
+    # -- Order --
+
+    def test_layers_render_above_the_whole_stack(self):
+        manager = self._manager("world", "pause", "hud")
+        manager.switch_to("world")
+        manager.push_scene("pause")
+        manager.add_layer("hud")
+
+        drawn: list[str] = []
+        for scene in ("world", "pause", "hud"):
+            target = manager._scenes[scene]
+            target.render = (  # type: ignore[method-assign]
+                lambda _w, _u, name=scene: drawn.append(name)
+            )
+
+        manager.render(Mock(spec=IRenderer), Mock(spec=UIRenderer))
+
+        assert drawn == ["world", "pause", "hud"]
+
+    def test_order_then_insertion_decides_which_layer_draws_first(self):
+        manager = self._manager("hud", "minimap", "modal")
+        manager.add_layer("minimap", order=0)
+        manager.add_layer("hud", order=0)
+        manager.add_layer("modal", order=-5)
+
+        assert manager.layers == ("modal", "minimap", "hud")
+
+    def test_a_layer_renders_above_an_in_flight_transition(self):
+        """A persistent HUD that blinks out during every floor change
+        defeats the point of persisting it."""
+        manager = self._manager("floor1", "floor2", "hud")
+        manager.switch_to("floor1")
+        manager.add_layer("hud")
+        hud = manager._scenes["hud"]
+
+        manager.switch_to("floor2", FadeTransition(TransitionConfig(duration=1.0)))
+        manager.update(0.1)
+        hud.reset_flags()
+        manager.render(Mock(spec=IRenderer), Mock(spec=UIRenderer))
+
+        assert manager.is_transitioning()
+        assert hud.rendered
+
+    # -- Updates --
+
+    def test_a_layer_updates_alongside_the_current_scene(self):
+        manager = self._manager("world", "hud")
+        manager.switch_to("world")
+        manager.add_layer("hud")
+
+        manager.update(0.016)
+
+        assert manager._scenes["hud"].updated
+        assert manager._scenes["world"].updated
+
+    def test_a_layer_keeps_updating_during_a_transition(self):
+        """Its own animations should not freeze mid-fade."""
+        manager = self._manager("floor1", "floor2", "hud")
+        manager.switch_to("floor1")
+        manager.add_layer("hud")
+        hud = manager._scenes["hud"]
+
+        manager.switch_to("floor2", FadeTransition(TransitionConfig(duration=1.0)))
+        hud.reset_flags()
+        manager.update(0.1)
+
+        assert manager.is_transitioning()
+        assert hud.updated
+
+    def test_pause_below_does_not_reach_a_layer(self):
+        """A layer sits outside the stack, so the stack's pause gate is not
+        its gate. `pause_layer()` is the explicit way."""
+        manager = self._manager("world", "pause", "hud")
+        manager.switch_to("world")
+        manager.add_layer("hud")
+        manager.push_scene("pause", pause_below=True)
+
+        manager._scenes["hud"].reset_flags()
+        manager._scenes["world"].reset_flags()
+        manager.update(0.016)
+
+        assert manager._scenes["hud"].updated
+        assert not manager._scenes["world"].updated
+
+    def test_pausing_a_layer_stops_its_updates_but_not_its_pixels(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+        hud = manager._scenes["hud"]
+
+        assert manager.pause_layer("hud")
+        hud.reset_flags()
+        manager.update(0.016)
+        manager.render(Mock(spec=IRenderer), Mock(spec=UIRenderer))
+
+        assert hud.paused
+        assert not hud.updated
+        assert hud.rendered
+
+    def test_resuming_a_paused_layer_restores_its_updates(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+        manager.pause_layer("hud")
+
+        assert manager.resume_layer("hud")
+        manager._scenes["hud"].reset_flags()
+        manager.update(0.016)
+
+        assert manager._scenes["hud"].resumed
+        assert manager._scenes["hud"].updated
+
+    def test_pausing_and_resuming_report_whether_anything_changed(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+
+        assert not manager.resume_layer("hud")  # not paused
+        assert manager.pause_layer("hud")
+        assert not manager.pause_layer("hud")  # already paused
+        assert not manager.pause_layer("absent")
+
+    def test_a_layer_gets_fixed_updates_and_flushes_its_entities(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+        hud = manager._scenes["hud"]
+        ticks: list[float] = []
+        hud.fixed_update = ticks.append  # type: ignore[method-assign]
+
+        manager.fixed_update(1 / 60)
+
+        assert ticks == [1 / 60]
+
+    # -- Teardown --
+
+    def test_cleanup_exits_layers_as_well(self):
+        manager = self._manager("world", "hud")
+        manager.switch_to("world")
+        manager.add_layer("hud")
+
+        manager.cleanup()
+
+        assert manager._scenes["hud"].exited
+        assert manager.layers == ()
+
+    def test_a_layer_is_exited_exactly_once_by_cleanup(self):
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+        exits: list[int] = []
+        manager._scenes["hud"].on_exit = lambda: exits.append(1)  # type: ignore[method-assign]
+
+        manager.cleanup()
+
+        assert exits == [1]
+
+    def test_a_layers_subscriptions_are_cleared_when_it_is_removed(self):
+        """`_exit_scene` is the one teardown path, so a layer gets the same
+        treatment a stacked scene does."""
+        manager = self._manager("hud")
+        manager.add_layer("hud")
+        hud = manager._scenes["hud"]
+
+        manager.remove_layer("hud")
+
+        hud.event_dispatcher.clear_subscribers.assert_called_once_with(owner=hud)
