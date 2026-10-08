@@ -5,6 +5,8 @@ tests cover the surface the decision (ticket 05) called for, since no
 dedicated test file existed for `common/types.py` before this ticket.
 """
 
+import pytest
+
 from pyguara.common.types import Color, Rect, Vector2
 
 
@@ -466,3 +468,152 @@ class TestRectPygameParity:
             assert Rect(*a).collidelist([Rect(*b)]) == pygame.Rect(*a).collidelist(
                 [pygame.Rect(*b)]
             )
+
+
+class TestVector2GameMath:
+    """The helpers `steering.py`, `CharacterMover` and camera-follow each
+    reimplemented subsets of (#64).
+
+    Several of the ones that issue listed as missing were **already there**
+    under pymunk names -- `project` is `projection()`, `angle_to` is
+    `get_angle_between()`, and `angle`/`perpendicular` are inherited. Only
+    the genuinely absent ones are added, so there is one spelling of each
+    rather than two.
+    """
+
+    def test_clamp_magnitude_shortens_a_long_vector(self) -> None:
+        clamped = Vector2(3, 4).clamp_magnitude(1)
+        assert round(clamped.length, 6) == 1.0
+
+    def test_clamp_magnitude_leaves_a_short_vector_alone(self) -> None:
+        """The difference from pymunk's inherited `scale_to_length()`, which
+        scales both ways and would *lengthen* this one. A speed cap wants
+        only the shortening half."""
+        assert Vector2(3, 4).clamp_magnitude(10) == Vector2(3, 4)
+
+    def test_clamp_magnitude_of_zero_length_is_safe(self) -> None:
+        assert Vector2(0, 0).clamp_magnitude(5) == Vector2(0, 0)
+
+    def test_a_non_positive_clamp_gives_the_zero_vector(self) -> None:
+        assert Vector2(3, 4).clamp_magnitude(0) == Vector2(0, 0)
+
+    def test_move_towards_steps_without_overshooting(self) -> None:
+        assert Vector2(0, 0).move_towards(Vector2(10, 0), 3) == Vector2(3, 0)
+
+    def test_move_towards_lands_exactly_on_a_near_target(self) -> None:
+        """Overshooting is the bug this exists to avoid -- a chaser that
+        jitters around its target forever."""
+        assert Vector2(0, 0).move_towards(Vector2(2, 0), 99) == Vector2(2, 0)
+
+    def test_move_towards_zero_distance_does_not_move(self) -> None:
+        assert Vector2(1, 1).move_towards(Vector2(9, 9), 0) == Vector2(1, 1)
+
+    def test_reflect_mirrors_about_a_normal(self) -> None:
+        assert Vector2(1, -1).reflect(Vector2(0, 1)) == Vector2(1, 1)
+
+    def test_reflect_normalises_the_normal_itself(self) -> None:
+        """A caller passing a surface direction of any length gets the right
+        answer rather than a silently scaled one."""
+        assert Vector2(1, -1).reflect(Vector2(0, 5)) == Vector2(1, 1)
+
+    def test_reflect_off_a_zero_normal_is_unchanged(self) -> None:
+        """No plane to mirror about. Returning the vector beats dividing by
+        zero or inventing a direction."""
+        assert Vector2(1, -1).reflect(Vector2(0, 0)) == Vector2(1, -1)
+
+    def test_projection_and_reject_decompose_the_vector(self) -> None:
+        """The property that makes `reject` worth having: together with
+        pymunk's inherited `projection()` it splits a vector into "along"
+        and "across" a direction, which is how sliding along a wall works."""
+        v, axis = Vector2(3, 4), Vector2(1, 0)
+        along, across = v.projection(axis), v.reject(axis)
+        assert Vector2(along.x + across.x, along.y + across.y) == v
+
+    def test_reject_of_a_parallel_vector_is_zero(self) -> None:
+        assert Vector2(5, 0).reject(Vector2(1, 0)) == Vector2(0, 0)
+
+    def test_snapped_rounds_to_the_grid(self) -> None:
+        assert Vector2(13, 27).snapped(10) == Vector2(10, 30)
+
+    def test_snapped_accepts_a_per_axis_grid(self) -> None:
+        assert Vector2(13, 27).snapped(Vector2(10, 5)) == Vector2(10, 25)
+
+    def test_a_zero_grid_leaves_that_axis_alone(self) -> None:
+        """Rather than dividing by zero."""
+        assert Vector2(13, 27).snapped(0) == Vector2(13, 27)
+
+    def test_from_angle_degrees_takes_degrees(self) -> None:
+        """pymunk's inherited `from_polar()` takes **radians**, which is the
+        easy mistake: `from_polar(1, 90)` is 90 radians, not a quarter
+        turn."""
+        quarter = Vector2.from_angle_degrees(90)
+        assert round(quarter.x, 6) == 0.0
+        assert round(quarter.y, 6) == 1.0
+
+    def test_from_angle_degrees_honours_length(self) -> None:
+        assert round(Vector2.from_angle_degrees(0, 5).x, 6) == 5.0
+
+    def test_from_angle_degrees_differs_from_from_polar(self) -> None:
+        assert Vector2.from_angle_degrees(90) != Vector2.from_polar(1, 90)
+
+
+class TestColorHelpers:
+    def test_with_alpha_keeps_the_hue(self) -> None:
+        assert Color(100, 150, 200).with_alpha(128) == Color(100, 150, 200, 128)
+
+    def test_darken_mixes_towards_black(self) -> None:
+        assert Color(100, 150, 200).darken(0.5) == Color(50, 75, 100)
+
+    def test_darken_keeps_alpha(self) -> None:
+        """Darkening is not fading. Conflating them is how a shadow ends up
+        see-through."""
+        assert Color(100, 150, 200, 128).darken(0.5).a == 128
+
+    def test_lighten_mixes_towards_white(self) -> None:
+        assert Color(0, 0, 0).lighten(1.0) == Color(255, 255, 255)
+
+    def test_darken_and_lighten_clamp_their_amount(self) -> None:
+        """So a negative cannot accidentally brighten."""
+        base = Color(100, 150, 200)
+        assert base.darken(-5) == base
+        assert base.darken(99) == Color(0, 0, 0)
+        assert base.lighten(-5) == base
+
+    def test_multiply_by_white_is_identity(self) -> None:
+        """What makes it a *tint*: multiplying scales each channel rather
+        than mixing towards the other colour, so white changes nothing."""
+        base = Color(100, 150, 200)
+        assert base.multiply(Color.WHITE) == base
+
+    def test_multiply_by_red_keeps_only_red(self) -> None:
+        assert Color(100, 150, 200).multiply(Color.RED) == Color(100, 0, 0)
+
+    def test_grey_builds_a_neutral(self) -> None:
+        assert Color.grey(200) == Color(200, 200, 200)
+
+    def test_the_grey_constants_are_neutral(self) -> None:
+        for grey in (Color.GREY, Color.LIGHT_GREY, Color.DARK_GREY):
+            assert grey.r == grey.g == grey.b
+
+    def test_ramp_lands_on_an_interior_stop(self) -> None:
+        stops = [Color.GREEN, Color.YELLOW, Color.RED]
+        assert Color.ramp(stops, 0.5) == Color.YELLOW
+
+    def test_ramp_hits_both_ends(self) -> None:
+        stops = [Color.GREEN, Color.RED]
+        assert Color.ramp(stops, 0.0) == Color.GREEN
+        assert Color.ramp(stops, 1.0) == Color.RED
+
+    def test_ramp_clamps_outside_the_range(self) -> None:
+        stops = [Color.GREEN, Color.RED]
+        assert Color.ramp(stops, 9.0) == Color.RED
+        assert Color.ramp(stops, -9.0) == Color.GREEN
+
+    def test_a_single_stop_ramp_is_that_colour(self) -> None:
+        assert Color.ramp([Color.RED], 0.7) == Color.RED
+
+    def test_an_empty_ramp_is_an_error(self) -> None:
+        """Nothing sensible to return, and a silent black would look like a
+        working gradient."""
+        with pytest.raises(ValueError, match="at least one stop"):
+            Color.ramp([], 0.5)
