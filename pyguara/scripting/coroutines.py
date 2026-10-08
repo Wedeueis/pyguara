@@ -17,6 +17,8 @@ Example:
     >>> manager.update(dt)
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable, Generator
 from typing import Any
 
@@ -39,6 +41,108 @@ class WaitInstruction:
             True if waiting is done
         """
         return True
+
+
+class FixedStepTicker:
+    """A count of fixed-timestep steps, so a sequence can wait on one.
+
+    The coroutine manager is ticked from the variable-rate update, so a
+    sequence has no inherent notion of the fixed step. This is the shared
+    counter that bridges them: the engine advances it from
+    `Application._fixed_update`, and `WaitForFixedUpdate` watches it.
+
+    A counter rather than a flag, so two instructions created in the same
+    frame both see the next step rather than racing to consume one signal.
+    """
+
+    __slots__ = ("count",)
+
+    def __init__(self) -> None:
+        """Start at zero."""
+        self.count = 0
+
+    def advance(self) -> None:
+        """Record one fixed step."""
+        self.count += 1
+
+
+_DEFAULT_FIXED_TICKER = FixedStepTicker()
+"""The ticker used unless one is injected.
+
+Module-level because the fixed step is a genuinely global property of the
+frame loop, in the same spirit as `get_theme()` -- and injectable at both
+ends so a test does not have to reach for it.
+"""
+
+
+class WaitForFrames(WaitInstruction):
+    """Wait a fixed number of update ticks.
+
+    The frame-count primitive that was missing: only time and predicate
+    waits existed, so "skip a frame so the thing I just spawned has been
+    laid out" had to be spelled as a `WaitForSeconds` guess.
+
+    Counts the ticks on which the instruction is *examined*, so
+    `WaitForFrames(1)` resumes on the next update rather than the current
+    one.
+    """
+
+    def __init__(self, frames: int) -> None:
+        """Initialize the wait.
+
+        Args:
+            frames: How many updates to wait. Zero or negative completes on
+                the first check, which is what "wait no frames" should mean
+                rather than an error.
+        """
+        self.frames = frames
+        self._remaining = frames
+
+    def is_complete(self, dt: float) -> bool:
+        """Count down one update.
+
+        Args:
+            dt: Unused; this instruction is frame-counted, not timed.
+
+        Returns:
+            True once the requested number of updates has passed.
+        """
+        self._remaining -= 1
+        return self._remaining <= 0
+
+
+class WaitForFixedUpdate(WaitInstruction):
+    """Wait until the next fixed-timestep step.
+
+    What a sequence needs to line up with physics: the coroutine manager
+    runs on the variable-rate update, so before this there was no way to
+    synchronise a scripted sequence with the fixed step at all.
+
+    Requires the engine to be advancing the ticker --
+    `Application._fixed_update` does. In a bare harness that never calls
+    `CoroutineManager.notify_fixed_update()`, this never completes, which
+    is the honest behaviour: the step it waits for is not happening.
+    """
+
+    def __init__(self, ticker: FixedStepTicker | None = None) -> None:
+        """Initialize the wait.
+
+        Args:
+            ticker: The counter to watch. Defaults to the engine-wide one.
+        """
+        self._ticker = ticker or _DEFAULT_FIXED_TICKER
+        self._start = self._ticker.count
+
+    def is_complete(self, dt: float) -> bool:
+        """Whether a fixed step has elapsed since this instruction began.
+
+        Args:
+            dt: Unused; this instruction is step-counted, not timed.
+
+        Returns:
+            True once the ticker has advanced.
+        """
+        return self._ticker.count > self._start
 
 
 class WaitForSeconds(WaitInstruction):
@@ -109,16 +213,75 @@ class Coroutine:
     Manages the execution state of a generator-based coroutine.
     """
 
-    def __init__(self, generator: Generator[Any, None, None]):
+    def __init__(
+        self,
+        generator: Generator[Any, None, None],
+        owner: Any = None,
+    ):
         """Initialize coroutine.
 
         Args:
             generator: Generator function to execute
+            owner: Arbitrary tag identifying what this sequence belongs to
+                -- an entity id, a scene, a system. `CoroutineManager.stop_by`
+                takes the same value. Compared by equality, so anything
+                hashable or comparable works.
         """
         self._generator = generator
         self._current_instruction: WaitInstruction | None = None
         self._is_complete = False
         self._nested_coroutine: Coroutine | None = None
+        self.owner = owner
+        self._result: Any = None
+        self._on_complete: list[Callable[[Coroutine], None]] = []
+
+    @property
+    def done(self) -> bool:
+        """Whether this sequence has finished, by completion or by `stop()`."""
+        return self._is_complete
+
+    @property
+    def result(self) -> Any:
+        """What the generator returned, once it has finished.
+
+        A generator's `return value` reaches its caller as
+        `StopIteration.value`, which this used to catch and discard -- so a
+        fire-and-forget sequence had no way to report anything back. None
+        until `done`, and None for a sequence that was stopped rather than
+        allowed to finish.
+        """
+        return self._result
+
+    def on_complete(self, callback: Callable[[Coroutine], None]) -> None:
+        """Register a callback for when this sequence finishes.
+
+        Called once, with this coroutine, whether it ran to completion or
+        was stopped -- a caller waiting on a sequence needs to hear about
+        either. Read `result` to tell them apart.
+
+        Args:
+            callback: Called with this coroutine when it finishes.
+        """
+        if self._is_complete:
+            # Already finished; a late subscriber still gets told rather
+            # than waiting for an event that cannot come.
+            callback(self)
+            return
+        self._on_complete.append(callback)
+
+    def _finish(self, result: Any = None) -> None:
+        """Mark finished and notify subscribers exactly once.
+
+        Args:
+            result: The generator's return value, if it returned one.
+        """
+        if self._is_complete:
+            return
+        self._is_complete = True
+        self._result = result
+        callbacks, self._on_complete = self._on_complete, []
+        for callback in callbacks:
+            callback(self)
 
     def update(self, dt: float) -> bool:
         """Update the coroutine.
@@ -179,8 +342,11 @@ class Coroutine:
                     # None or other values: pause until next frame
                     return True
 
-            except StopIteration:
-                self._is_complete = True
+            except StopIteration as stop:
+                # `.value` is the generator's `return`, which this used to
+                # throw away -- the reason a sequence could not report a
+                # result (#55).
+                self._finish(stop.value)
                 return False
 
     def stop(self) -> None:
@@ -193,7 +359,11 @@ class Coroutine:
         the injected ``GeneratorExit`` (by yielding again) is reported and
         left for the garbage collector.
         """
-        self._is_complete = True
+        # Marked finished first, so `done` is true for any `on_complete`
+        # subscriber this notifies and a stopped sequence cannot be
+        # mistaken for a running one mid-teardown. `result` stays None,
+        # which is how a caller tells "stopped" from "returned".
+        self._finish(None)
         if self._nested_coroutine:
             self._nested_coroutine.stop()
             self._nested_coroutine = None
@@ -249,19 +419,76 @@ class CoroutineManager:
         """
         self._coroutines: list[Coroutine] = []
         self._error_strategy = error_strategy
+        self._fixed_ticker = _DEFAULT_FIXED_TICKER
 
-    def start_coroutine(self, generator: Generator[Any, None, None]) -> Coroutine:
+    def start_coroutine(
+        self,
+        generator: Generator[Any, None, None],
+        owner: Any = None,
+    ) -> Coroutine:
         """Start a new coroutine.
 
         Args:
             generator: Generator function to run as coroutine
+            owner: Tag identifying what this sequence belongs to -- an
+                entity id, a scene, a system. `stop_by(owner)` then stops
+                the whole group, which is what a despawning enemy or an
+                exiting scene needs. Untagged coroutines are never caught
+                by `stop_by`.
 
         Returns:
             Coroutine object that can be used to stop it
         """
-        coroutine = Coroutine(generator)
+        coroutine = Coroutine(generator, owner=owner)
         self._coroutines.append(coroutine)
         return coroutine
+
+    def stop_by(self, owner: Any) -> int:
+        """Stop every coroutine tagged with `owner`.
+
+        The answer to both of #55's P1 rows with one mechanism. A killed
+        enemy's scripted attack pattern used to keep running against a
+        despawned entity, and a sequence started in one scene kept ticking
+        in the next -- because nothing could name a group to tear down.
+
+        `owner=None` stops nothing, deliberately: that is the untagged
+        default, and treating it as "stop everything anonymous" would make
+        a missing argument quietly destructive. Use `stop_all()` to mean
+        all.
+
+        Args:
+            owner: The tag to match, by equality.
+
+        Returns:
+            How many coroutines were stopped.
+        """
+        if owner is None:
+            return 0
+
+        matched = [c for c in self._coroutines if c.owner == owner]
+        for coroutine in matched:
+            coroutine.stop()
+        # Rebuilt rather than removed in a loop, so this is safe to call
+        # from inside a coroutine body during `update()` -- the same reason
+        # `update()` iterates a snapshot.
+        self._coroutines = [c for c in self._coroutines if c.owner != owner]
+        return len(matched)
+
+    def notify_fixed_update(self) -> None:
+        """Record that a fixed-timestep step has elapsed.
+
+        Called from the engine's fixed update. The coroutine manager is
+        ticked from the *variable*-rate update, so without this there is no
+        way for a sequence to sync to the fixed step at all -- which is
+        what `WaitForFixedUpdate` needs, and why physics-adjacent scripting
+        had no primitive to wait on.
+        """
+        self._fixed_ticker.advance()
+
+    @property
+    def fixed_ticker(self) -> FixedStepTicker:
+        """The ticker `WaitForFixedUpdate` instructions should watch."""
+        return self._fixed_ticker
 
     def stop_coroutine(self, coroutine: Coroutine) -> bool:
         """Stop a specific coroutine.
@@ -373,6 +600,32 @@ def wait_for_seconds(duration: float) -> WaitForSeconds:
         >>> yield wait_for_seconds(2.0)
     """
     return WaitForSeconds(duration)
+
+
+def wait_for_frames(frames: int) -> WaitForFrames:
+    """Wait a number of update ticks.
+
+    Args:
+        frames: How many updates to wait.
+
+    Returns:
+        The instruction to yield.
+    """
+    return WaitForFrames(frames)
+
+
+def wait_for_fixed_update(
+    ticker: FixedStepTicker | None = None,
+) -> WaitForFixedUpdate:
+    """Wait until the next fixed-timestep step.
+
+    Args:
+        ticker: The counter to watch; defaults to the engine-wide one.
+
+    Returns:
+        The instruction to yield.
+    """
+    return WaitForFixedUpdate(ticker)
 
 
 def wait_until(condition: Callable[[], bool]) -> WaitUntil:

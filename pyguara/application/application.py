@@ -474,6 +474,12 @@ class Application:
         # AudioSource, Animation); there is no global one.
         self._scene_manager.fixed_update(fixed_dt)
 
+        # Lets a scripted sequence wait on the fixed step. The coroutine
+        # manager itself is ticked from the variable-rate `_update`, so
+        # without this signal `WaitForFixedUpdate` has nothing to watch and
+        # a sequence cannot be synchronised with physics at all.
+        self._coroutine_manager.notify_fixed_update()
+
     def _update(self, dt: float) -> None:
         """Advance everything that should track display framerate, once a frame.
 
