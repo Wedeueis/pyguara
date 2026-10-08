@@ -69,3 +69,64 @@ class IMetaAwareLoader(IResourceLoader, Protocol):
             Resource: The loaded resource with meta settings applied.
         """
         ...
+
+
+@runtime_checkable
+class ITwoPhaseLoader(IResourceLoader, Protocol):
+    """A loader that separates file decode from device upload.
+
+    The split exists because the two halves have different constraints.
+    Decoding a file is CPU work on bytes; creating a GPU texture touches a
+    GL context that belongs to the main thread. `ResourceManager` can
+    therefore run `decode()` on a worker and must run `upload()` on the
+    thread that owns the context.
+
+    **`threaded_decode` is a claim about the GIL, and it is measured, not
+    guessed.** A worker thread only helps if `decode()` spends its time in
+    code that releases the GIL. `pygame-ce` decodes images in SDL with it
+    released and scales ~3x on four threads; `json` parses with it held and
+    runs *0.71x* threaded -- slower than inline, because the contention is
+    real and the parallelism is not. See "Resource loading, and the GIL" in
+    `docs/guides/performance.md`.
+
+    So the flag defaults to `False`: a loader that has not been measured is
+    run on the main thread, where it is merely slow rather than slow *and*
+    fighting the frame for the GIL.
+    """
+
+    threaded_decode: bool
+    """True only if `decode()` releases the GIL for most of its work."""
+
+    def decode(self, path: str, meta: AssetMeta | None) -> object:
+        """Read and decode the file, touching no device state.
+
+        Must be safe to call off the main thread when `threaded_decode` is
+        True. Anything that needs a GL context, a display surface, or any
+        other main-thread-only resource belongs in `upload()`.
+
+        Args:
+            path: The full path to the file.
+            meta: Optional metadata with import settings.
+
+        Returns:
+            Whatever `upload()` needs -- this loader's own intermediate
+            form, opaque to the manager.
+
+        Raises:
+            FileNotFoundError: If the path does not exist.
+            OSError: If the file is unreadable.
+        """
+        ...
+
+    def upload(self, path: str, decoded: object, meta: AssetMeta | None) -> Resource:
+        """Turn a decoded payload into a Resource, on the main thread.
+
+        Args:
+            path: The full path to the file, for error messages.
+            decoded: Exactly what this loader's `decode()` returned.
+            meta: Optional metadata with import settings.
+
+        Returns:
+            The finished resource.
+        """
+        ...

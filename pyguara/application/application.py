@@ -29,6 +29,7 @@ from pyguara.replay.player import ReplayPlayer
 from pyguara.replay.recorder import ReplayRecorder
 from pyguara.replay.serializer import ReplaySerializer
 from pyguara.replay.types import ReplayData
+from pyguara.resources.async_load import DEFAULT_PUMP_BUDGET_MS
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
@@ -109,6 +110,13 @@ class Application:
         self._scene_manager.set_container(container)
 
         self._clock: Clock = container.get(Clock)  # type: ignore[type-abstract]
+
+        # Pumped each frame so queued asset loads finish a slice at a time
+        # instead of stalling the frame they were requested on. Free when
+        # nothing is queued -- `pump()` returns immediately on an empty
+        # queue.
+        self._resource_manager: ResourceManager = container.get(ResourceManager)
+        self._resource_pump_budget_ms = DEFAULT_PUMP_BUDGET_MS
 
         # Fixed timestep accumulator
         self._accumulator = 0.0
@@ -484,6 +492,12 @@ class Application:
                 # `drain()` always returned these keys; nothing used them.
                 self._event_dispatcher.dispatch(ResourceReloaded(key, source=self))
 
+        # Finish a slice of any queued asynchronous loads. Device uploads
+        # happen here because this is the thread that owns the context; the
+        # decode half already ran on a worker for loaders that opted in.
+        # See `pyguara/resources/async_load.py` for why it is split that way.
+        self._resource_manager.pump(self._resource_pump_budget_ms)
+
         # Update UI at display framerate for smooth interactions
         self._ui_manager.update(dt)
 
@@ -616,6 +630,12 @@ class Application:
         ]
         if self._asset_reload_watcher is not None:
             steps.insert(0, ("asset hot-reload stop", self._asset_reload_watcher.stop))
+
+        # Worker threads outlive the loop otherwise. Idempotent, and a no-op
+        # when nothing ever loaded asynchronously.
+        steps.insert(
+            0, ("decode pool stop", self._resource_manager.shutdown_decode_pool)
+        )
         if self._render_graph is not None:
             steps.insert(1, ("render graph release", self._render_graph.release))
 
