@@ -16,6 +16,10 @@ class OnConfigurationChanged(Event):
         setting: Field name within that section.
         old_value: Value before the change.
         new_value: Value after the change.
+        profile: The profile responsible, when the change came from
+            `push_profile()` or `pop_profile()` rather than a direct
+            `update_setting()`. Lets a settings screen tell a run modifier
+            from something the player typed.
         timestamp: Unix time the event was created.
         source: Whatever raised the event, if it identified itself.
     """
@@ -24,6 +28,7 @@ class OnConfigurationChanged(Event):
     setting: str
     old_value: Any
     new_value: Any
+    profile: str | None = None
     timestamp: float = field(default_factory=time.time)
     source: Any = None
 

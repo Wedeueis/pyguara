@@ -172,6 +172,91 @@ Direct assignment (`manager.config.audio.master_volume = 99.0`) bypasses all of
 this. It is legal, and occasionally what you want during bootstrap, but nothing
 will check it.
 
+## Profiles
+
+A profile is a **named layer of overrides** applied over the configuration and
+peeled back off again. A difficulty preset, an accessibility profile and a
+roguelike's run modifiers are all the same shape: values that hold for a while
+and then stop.
+
+```python
+manager.push_profile("hard", {
+    "balance": {"enemy_hp_scale": 2.5, "permadeath": True},
+    "audio":   {"music_volume": 0.3},
+})
+
+manager.active_profiles          # ("hard",)
+manager.pop_profile()            # back to exactly what was underneath
+```
+
+Think of a push as a batch of `update_setting()` calls applied **atomically and
+reversibly**: the same type checks, the same validator veto, and a pop restores
+what was there — which plain assignment cannot, because the previous value is
+gone the moment it is overwritten.
+
+Authored in the config file, a profile needs no code at all:
+
+```json
+{
+  "profiles": {
+    "hard":   {"balance": {"enemy_hp_scale": 2.5}},
+    "quiet":  {"audio": {"master_volume": 0.2}}
+  }
+}
+```
+
+```python
+manager.available_profiles       # ("hard", "quiet")
+manager.push_profile("hard")     # resolved by name
+```
+
+`define_profile(name, overrides)` adds one from code — for a layer the game
+computes rather than authors, such as a daily modifier set. It is saved with
+the rest of the config. Defining applies nothing; only a push does.
+
+### Stacking
+
+Layers stack in push order and the later one wins where two set the same
+setting. `pop_profile(name)` can remove one from the **middle** of the stack:
+run modifiers are independent, so dropping one must not require dropping
+everything pushed after it. `clear_profiles()` drops them all.
+
+Internally a pop re-applies the base and then each surviving layer, rather than
+trying to undo what the removed one did — with two layers touching one setting,
+undoing is ambiguous. The `GameConfig` and its sections are mutated **in
+place**, so everything holding `manager.config` sees the result.
+
+### Rejection is all-or-nothing
+
+A push that names an unknown section or setting, carries a wrong-typed value,
+or introduces an `ERROR`/`CRITICAL` issue applies **nothing** and returns
+`False`:
+
+```python
+manager.push_profile("typo", {"audio": {"mastre_volume": 0.3}})   # False
+```
+
+Half a difficulty preset is worse than none of it, and a typo that silently
+skips one line costs someone an afternoon. A problem the configuration *already*
+had does not block a push — that would be a cascade with no way out.
+
+### What a profile owns
+
+While a profile is active, `update_setting()` **refuses** the settings that
+profile declares, naming it:
+
+```
+Rejected 'balance.permadeath': the active profile 'hard' sets it.
+```
+
+A run modifier the options menu can switch off is not a modifier. Every other
+setting stays writable, and such a write goes into the base layer, so a later
+push and pop does not revert the player's own choice.
+
+A `load()` drops every active profile: it re-establishes the base, and a stack
+whose values referred to the previous one would re-apply them over unrelated
+settings.
+
 ## Validation
 
 ```python
@@ -260,7 +345,9 @@ dispatcher.subscribe(OnConfigurationChanged, settings_menu.refresh)
 
 `OnConfigurationChanged` carries `section`, `setting`, `old_value` and
 `new_value` — enough for a settings screen to react without re-reading the
-whole config.
+whole config. A push or pop publishes **one event per setting that actually
+moved**, each carrying `profile`, so a listener can tell a run modifier from
+something the player typed.
 
 ## Rules of thumb
 
@@ -273,3 +360,5 @@ whole config.
    coercion are driven by the declared types.
 5. A game's own tunables belong in a registered section, not a second JSON
    file. Register them before `load()`.
+6. Anything temporary — a difficulty preset, a run modifier, an accessibility
+   profile — is a profile, not a set of assignments you plan to undo by hand.
