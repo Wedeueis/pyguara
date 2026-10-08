@@ -7,6 +7,8 @@ from pyguara.ai.behavior_tree import (
     InverterNode,
     NodeStatus,
     ParallelNode,
+    ReactiveSelectorNode,
+    ReactiveSequenceNode,
     RepeaterNode,
     SelectorNode,
     SequenceNode,
@@ -818,3 +820,200 @@ class TestBehaviorTreeIntegration:
         # Wait completes, action2 executes
         assert status == NodeStatus.SUCCESS
         assert "action2" in context.values
+
+
+class TestReactiveComposites:
+    """Guards that keep being checked, and children that get aborted.
+
+    `SequenceNode`/`SelectorNode` have *memory*: once a composite advances
+    past a child it resumes at the one that was RUNNING and never re-ticks
+    the earlier ones. That silently breaks the commonest way a behaviour
+    tree is written -- a guard at the front of a sequence stops being
+    evaluated the moment the sequence moves on, so the enemy keeps
+    attacking after the player breaks line of sight, and nothing reports a
+    problem (#46).
+
+    These tests pin the bug as well as the fix: the memory variants must
+    keep behaving exactly as before, because changing their default would
+    silently alter every tree already written against them.
+    """
+
+    @staticmethod
+    def _guarded_sequence(cls, visible: dict, attacks: list):
+        """`[is_player_visible, attack]`, the pattern from the issue."""
+        return cls(
+            [
+                ConditionNode(lambda _ctx: visible["v"]),
+                ActionNode(lambda _ctx: (attacks.append(1), NodeStatus.RUNNING)[1]),
+            ]
+        )
+
+    def test_a_memory_sequence_keeps_running_after_its_guard_fails(self):
+        """The bug, pinned deliberately. Not aspirational -- this is current
+        documented behaviour, and `ReactiveSequenceNode` exists because of
+        it. If this ever starts failing, the default changed and every
+        existing tree changed with it."""
+        visible = {"v": True}
+        attacks: list[int] = []
+        node = self._guarded_sequence(SequenceNode, visible, attacks)
+        context = MockContext()
+
+        node.tick(context)
+        visible["v"] = False
+        node.tick(context)
+        node.tick(context)
+
+        assert len(attacks) == 3  # kept attacking, unseen player
+
+    def test_a_reactive_sequence_stops_when_its_guard_fails(self):
+        visible = {"v": True}
+        attacks: list[int] = []
+        node = self._guarded_sequence(ReactiveSequenceNode, visible, attacks)
+        context = MockContext()
+
+        node.tick(context)
+        visible["v"] = False
+        status = node.tick(context)
+
+        assert status == NodeStatus.FAILURE
+        assert len(attacks) == 1  # only the tick where it could see
+
+    def test_the_memory_flag_is_the_same_thing_by_another_name(self):
+        visible = {"v": True}
+        attacks: list[int] = []
+        node = self._guarded_sequence(SequenceNode, visible, attacks)
+        node.memory = False
+        context = MockContext()
+
+        node.tick(context)
+        visible["v"] = False
+        node.tick(context)
+
+        assert len(attacks) == 1
+
+    def test_a_reactive_selector_lets_a_higher_branch_take_over(self):
+        """The whole point of ordering a selector by priority: with memory,
+        dropping to low health never interrupts an already-running patrol."""
+        danger = {"on": False}
+        log: list[str] = []
+
+        def branch(name: str, gate):
+            return SequenceNode(
+                [
+                    ConditionNode(lambda _ctx: gate()),
+                    ActionNode(lambda _ctx: (log.append(name), NodeStatus.RUNNING)[1]),
+                ]
+            )
+
+        node = ReactiveSelectorNode(
+            [
+                branch("flee", lambda: danger["on"]),
+                branch("patrol", lambda: True),
+            ]
+        )
+        context = MockContext()
+
+        node.tick(context)
+        assert log == ["patrol"]
+
+        danger["on"] = True
+        node.tick(context)
+        assert log == ["patrol", "flee"]  # pre-empted, as priority implies
+
+    def test_a_memory_selector_does_not_let_it_take_over(self):
+        """The counterpart, so the difference is pinned from both sides."""
+        danger = {"on": False}
+        log: list[str] = []
+
+        def branch(name: str, gate):
+            return SequenceNode(
+                [
+                    ConditionNode(lambda _ctx: gate()),
+                    ActionNode(lambda _ctx: (log.append(name), NodeStatus.RUNNING)[1]),
+                ]
+            )
+
+        node = SelectorNode(
+            [
+                branch("flee", lambda: danger["on"]),
+                branch("patrol", lambda: True),
+            ]
+        )
+        context = MockContext()
+
+        node.tick(context)
+        danger["on"] = True
+        node.tick(context)
+
+        assert log == ["patrol", "patrol"]  # flee never gets a look in
+
+
+class TestPreemptedChildIsAborted:
+    """A pre-empted RUNNING child must be reset, not merely forgotten.
+
+    Otherwise it keeps its internal state -- a part-elapsed `WaitNode`, a
+    half-finished action -- and resumes from the middle the next time the
+    branch is reached. That is what "abort" means in a behaviour tree, and
+    it is the half of reactive composites that is easy to miss: the first
+    implementation of this change cleared the bookkeeping without resetting
+    the child, and a test like this is what caught it.
+    """
+
+    def test_a_failing_guard_resets_the_running_child(self):
+        gate = {"ok": True}
+        wait = WaitNode(5.0)
+        node = ReactiveSequenceNode([ConditionNode(lambda _ctx: gate["ok"]), wait])
+        context = MockContext()
+
+        node.tick(context)
+        assert wait._elapsed > 0
+
+        gate["ok"] = False
+        node.tick(context)
+
+        assert wait._elapsed == 0.0
+
+    def test_a_higher_priority_branch_resets_the_lower_one(self):
+        danger = {"on": False}
+        patrol_wait = WaitNode(5.0)
+        node = ReactiveSelectorNode(
+            [
+                SequenceNode([ConditionNode(lambda _ctx: danger["on"])]),
+                patrol_wait,
+            ]
+        )
+        context = MockContext()
+
+        node.tick(context)
+        assert patrol_wait._elapsed > 0
+
+        danger["on"] = True
+        node.tick(context)
+
+        assert patrol_wait._elapsed == 0.0
+
+    def test_success_also_aborts_a_running_child(self):
+        """A composite finishing has pre-empted whatever was mid-flight,
+        exactly as a higher branch does."""
+        wait = WaitNode(5.0)
+        node = ReactiveSelectorNode([wait, ActionNode(lambda _ctx: NodeStatus.SUCCESS)])
+        context = MockContext()
+
+        node.tick(context)  # wait RUNNING
+        assert wait._elapsed > 0
+
+        # Make the wait fail so the selector moves on and succeeds.
+        wait.duration = -1.0
+        node.tick(context)
+
+        assert wait._elapsed == 0.0
+
+    def test_reset_clears_the_running_bookkeeping(self):
+        wait = WaitNode(5.0)
+        node = ReactiveSequenceNode([wait])
+        node.tick(MockContext())
+
+        node.reset()
+
+        assert node._running_child is None
+        assert wait._elapsed == 0.0
