@@ -457,6 +457,42 @@ class UIRenderer(Protocol):
         """Calculate dimensions of text."""
         ...
 
+    def push_clip(self, rect: Rect) -> None:
+        """Restrict subsequent drawing to `rect`, in screen coordinates.
+
+        **Nesting intersects.** A push inside an active clip narrows to the
+        overlap of the two rather than replacing it, which is the only
+        behaviour that lets a scroll container live inside another one -- an
+        inventory inside a scrolling sidebar must not draw outside the
+        sidebar just because its own viewport is larger. An empty
+        intersection clips everything away, and that is correct: nothing of
+        the inner element is on screen.
+
+        Every push must be matched by a `pop_clip()`. A widget that draws
+        between the two should do it in a `try`/`finally`, or a raised
+        exception leaves the clip set and silently truncates the rest of
+        the frame.
+
+        This is the UI counterpart of `IRenderer.set_viewport`, and
+        deliberately not the same call: the viewport is one absolute region
+        the render pipeline owns, while a UI clip is a stack many widgets
+        push onto during one pass.
+
+        Args:
+            rect: The region to clip to, in screen pixels.
+        """
+        ...
+
+    def pop_clip(self) -> None:
+        """Undo the most recent `push_clip()`.
+
+        Restores the clip to whatever was in force before that push, which
+        may be another clip or none at all. A pop with nothing pushed is a
+        no-op rather than an error: a widget that pops in a `finally` should
+        not turn one bug into two.
+        """
+        ...
+
     def present(self) -> None:
         """Finalize and present UI rendering.
 

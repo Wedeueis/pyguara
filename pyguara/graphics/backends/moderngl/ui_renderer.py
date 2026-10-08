@@ -13,12 +13,14 @@ import pygame
 
 import moderngl
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.graphics.backends.clipping import ClipStack
 from pyguara.graphics.backends.surface_blending import (
     blit_blended_circle,
     blit_blended_line,
     blit_blended_polygon,
     blit_blended_rect,
 )
+from pyguara.log import get_logger
 
 # Shader source for UI overlay
 _UI_VERT_SHADER = """
@@ -45,6 +47,9 @@ void main() {
 """
 
 
+logger = get_logger(__name__)
+
+
 class GLUIRenderer:
     """OpenGL-compatible UI renderer using pygame for text/primitives.
 
@@ -64,6 +69,8 @@ class GLUIRenderer:
         self._ctx = ctx
         self._width = width
         self._height = height
+        self._clips = ClipStack()
+        self._warned_about_clips = False
 
         # Initialize pygame font module if needed
         if not pygame.font.get_init():
@@ -242,6 +249,56 @@ class GLUIRenderer:
         txt_size = font.size(text)
         return (txt_size[0], txt_size[1])
 
+    def push_clip(self, rect: Rect) -> None:
+        """Restrict drawing to `rect`, intersected with any active clip.
+
+        Set on the offscreen pygame surface, not as a GL scissor: this
+        backend draws the whole UI into that surface and uploads it once in
+        `present()`, so the clip has to apply where the pixels are actually
+        produced. A scissor would clip the single fullscreen quad that
+        composites the finished surface, which is far too late.
+
+        Args:
+            rect: The region to clip to, in screen pixels.
+        """
+        self._apply_clip(self._clips.push(rect))
+
+    def pop_clip(self) -> None:
+        """Undo the most recent `push_clip()`."""
+        self._apply_clip(self._clips.pop())
+
+    def _apply_clip(self, rect: Rect | None) -> None:
+        """Set or clear the UI surface's clip rectangle.
+
+        Args:
+            rect: The region, or None to clip nothing.
+        """
+        if rect is None:
+            self._surface.set_clip(None)
+        else:
+            self._surface.set_clip(pygame.Rect(rect.x, rect.y, rect.width, rect.height))
+
+    def _reset_clips(self) -> None:
+        """Drop any clip a widget pushed and never popped.
+
+        Called from `present()`, before the upload: a leaked clip would
+        otherwise persist across frames and truncate every later one, and
+        on this backend it would also mean the uploaded surface keeps
+        whatever was last drawn in the clipped-away region.
+        """
+        if not self._clips.depth:
+            return
+        if not self._warned_about_clips:
+            self._warned_about_clips = True
+            logger.warning(
+                f"{self._clips.depth} UI clip region(s) were pushed and never "
+                f"popped. The clip is reset at the end of each frame, so the "
+                f"frame was truncated rather than every frame after it -- but "
+                f"pair every push_clip() with a pop_clip(), in a finally if "
+                f"the widget can raise. Reported once per renderer."
+            )
+        self._apply_clip(self._clips.clear())
+
     def present(self) -> None:
         """Upload UI surface to GPU and render as overlay.
 
@@ -249,6 +306,10 @@ class GLUIRenderer:
         the window's buffer swap. Clears the UI surface after compositing
         to prepare for the next frame.
         """
+        # Before the dirty check: a leaked clip on a frame that drew nothing
+        # would otherwise survive into the next one.
+        self._reset_clips()
+
         if not self._dirty:
             return
 

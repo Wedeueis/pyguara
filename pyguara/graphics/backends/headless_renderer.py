@@ -16,6 +16,7 @@ from typing import Any
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.types import WindowConfig
+from pyguara.graphics.backends.clipping import ClipStack
 from pyguara.graphics.types import RenderBatch
 from pyguara.log import get_logger
 from pyguara.resources.types import Texture
@@ -209,7 +210,34 @@ class HeadlessBackend:
 
 
 class HeadlessUIRenderer:
-    """A UI renderer that discards all draw calls."""
+    """A UI renderer that discards all draw calls.
+
+    Clips are the exception: the stack is kept, because a test asserting
+    that a scroll container narrows its children's clip region has nothing
+    else to look at, and the arithmetic is the shared `ClipStack`'s rather
+    than a second implementation that could disagree with the real ones.
+    """
+
+    def __init__(self) -> None:
+        """Start with nothing clipped."""
+        self._clips = ClipStack()
+
+    @property
+    def clip_stack(self) -> ClipStack:
+        """The live clip stack, for tests to inspect."""
+        return self._clips
+
+    def push_clip(self, rect: Rect) -> None:
+        """Record a clip region, intersected with any active one.
+
+        Args:
+            rect: The region, in screen pixels.
+        """
+        self._clips.push(rect)
+
+    def pop_clip(self) -> None:
+        """Undo the most recent `push_clip()`."""
+        self._clips.pop()
 
     def draw_rect(
         self, rect: Rect, color: Color, width: int = 0, border_radius: int = 0
@@ -252,8 +280,8 @@ class HeadlessUIRenderer:
         return (0, 0)
 
     def present(self) -> None:
-        """No-op: nothing to present."""
-        ...
+        """Drop any clip a widget pushed and never popped."""
+        self._clips.clear()
 
 
 class HeadlessTexture(Texture):
