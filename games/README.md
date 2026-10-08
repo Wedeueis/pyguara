@@ -36,7 +36,25 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Status:** ✅ Implemented
 * **Run:** `uv run python games/physics_integration/main.py`
 
-### [ui_scene_graph](./ui_scene_graph) - Module 6: UI & Scene Graph
+### [tilemap_authoring](./tilemap_authoring) - Module 6: Tilemap Authoring
+* **Goal:** Load a level authored in Tiled, and build the world from it.
+* **Key Concepts:** `load_tmx`, `Tilemap`, `TileLayer`, custom tile
+  properties, `Tilemap.collision_rects()`.
+* **Why it exists:** every other module builds its world in code. That is fine
+  for a tutorial and wrong for a game — a level is content, and content wants
+  an editor. [`assets/cerrado_cave.tmx`](./tilemap_authoring/assets/cerrado_cave.tmx)
+  can be opened in Tiled, edited and saved, and `scenes.py` does not change:
+  the whole interface between the map and the game is three custom properties
+  the map author sets (`solid`, `spawn`, `damage`).
+* **Worth seeing:** `collision_rects()` merges runs of solid tiles into the
+  fewest rectangles that cover them, so the 450-tile map becomes **9** static
+  bodies rather than 139 — a per-tile collider is the obvious first
+  implementation and how a tile-based game ends up with a physics step it
+  cannot afford.
+* **Status:** ✅ Implemented
+* **Run:** `uv run python games/tilemap_authoring/main.py`
+
+### [ui_scene_graph](./ui_scene_graph) - Module 7: UI & Scene Graph
 * **Goal:** Create a main menu with buttons and scene transitions.
 * **Key Concepts:** `UIManager`, `BoxContainer`, `SceneManager`.
 * **Status:** ✅ Implemented

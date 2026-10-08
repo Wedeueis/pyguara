@@ -1,4 +1,4 @@
-"""Module 6: UI Scenes.
+"""Module 7: UI Scenes.
 
 Menu and Gameplay scenes demonstrating the UI Scene Graph.
 """

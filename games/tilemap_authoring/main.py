@@ -1,4 +1,4 @@
-"""Module 7: UI & Scene Graph - Entry Point."""
+"""Module 6: Tilemap Authoring - Entry Point."""
 
 import logging
 import os
@@ -7,30 +7,30 @@ import sys
 # Ensure we can import pyguara from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
-from games.ui_scene_graph.bootstrap import configure_game_container
-from games.ui_scene_graph.scenes import MenuScene
+from games.tilemap_authoring.bootstrap import configure_game_container
+from games.tilemap_authoring.scenes import TilemapScene
 from pyguara.application.application import Application
 from pyguara.events.dispatcher import EventDispatcher
 
 
 def main():
-    """Run the UI & Scene Graph tutorial."""
+    """Run the Tilemap Authoring tutorial."""
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("Game")
-    logger.info("Starting Module 7: UI & Scene Graph")
+    logger.info("Starting Module 6: Tilemap Authoring")
 
     container = configure_game_container()
     app = container.get(Application)
 
     event_dispatcher = container.get(EventDispatcher)
-    start_scene = MenuScene(event_dispatcher)
+    start_scene = TilemapScene(event_dispatcher)
 
     try:
         app.run(starting_scene=start_scene)
     except KeyboardInterrupt:
         pass
-    except Exception as e:
-        logger.critical(f"Game crashed: {e}")
+    except Exception as error:
+        logger.critical(f"Game crashed: {error}")
         sys.exit(1)
 
 

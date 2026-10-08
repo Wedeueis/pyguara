@@ -100,6 +100,11 @@ DEMOS: dict[str, tuple[str, str, str]] = {
         "games.quintal_cerrado.scenes",
         "TitleScene",
     ),
+    "tilemap_authoring": (
+        "games.tilemap_authoring.bootstrap",
+        "games.tilemap_authoring.scenes",
+        "TilemapScene",
+    ),
     "tamandua_murundus": (
         "games.tamandua_murundus.bootstrap",
         "games.tamandua_murundus.scenes",
