@@ -1,7 +1,10 @@
 """Base scene abstraction."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from typing import TYPE_CHECKING, Any
 
 from pyguara.ai.ai_system import AISystem
 from pyguara.ai.steering_system import SteeringSystem
@@ -9,6 +12,9 @@ from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.common.components import Transform
 from pyguara.di.container import DIContainer, DIScope  # Import Container
+
+if TYPE_CHECKING:
+    from pyguara.scripting.coroutines import Coroutine
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
@@ -38,6 +44,7 @@ logger = get_logger(__name__)
 
 class Scene(ABC):
     """
+
     Abstract base class for all game scenes.
 
     Manages the lifecycle of a specific game state (Menu, Gameplay, etc).
@@ -195,6 +202,39 @@ class Scene(ABC):
     def on_enter(self) -> None:
         """Lifecycle hook: Called when scene becomes active."""
         ...
+
+    def start_coroutine(self, generator: Generator[Any, None, None]) -> Coroutine:
+        """Start a scripted sequence owned by this scene.
+
+        Tagged with the scene, so `SceneManager` stops it on exit. That
+        matters because `CoroutineManager` is an app-global singleton:
+        a sequence started through it directly keeps ticking after the scene
+        is gone, against entities that no longer exist (#55).
+
+        Prefer this over reaching for `CoroutineManager` from the container
+        -- an untagged coroutine is never caught by the scene teardown, and
+        the failure is invisible until something touches a dead entity.
+
+        Args:
+            generator: The generator to run.
+
+        Returns:
+            The `Coroutine`, for `stop()` or `on_complete()`.
+
+        Raises:
+            RuntimeError: If called before `resolve_dependencies()`, since
+                there is no container to find the manager in.
+        """
+        if self.container is None:
+            raise RuntimeError(
+                f"Scene {self.name!r} cannot start a coroutine before "
+                "resolve_dependencies() has run -- there is no container yet. "
+                "Start sequences in on_enter() or later."
+            )
+        from pyguara.scripting.coroutines import CoroutineManager
+
+        manager = self.container.get(CoroutineManager)
+        return manager.start_coroutine(generator, owner=self)
 
     @abstractmethod
     def on_exit(self) -> None:

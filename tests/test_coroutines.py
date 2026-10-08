@@ -6,9 +6,14 @@ from pyguara.errors import ErrorHandlingStrategy
 from pyguara.scripting.coroutines import (
     Coroutine,
     CoroutineManager,
+    FixedStepTicker,
+    WaitForFixedUpdate,
+    WaitForFrames,
     WaitForSeconds,
     WaitUntil,
     WaitWhile,
+    wait_for_fixed_update,
+    wait_for_frames,
     wait_for_seconds,
     wait_until,
     wait_while,
@@ -863,3 +868,239 @@ class TestReentrantMutation:
         manager.update(0.016)
 
         assert manager.active_count == 0
+
+
+class TestOwnerTagging:
+    """Stopping a group of sequences by tag (#55, both P1 rows).
+
+    `CoroutineManager` is an app-global DI singleton, so nothing stopped a
+    sequence when the thing it belonged to went away: a killed enemy's
+    scripted attack pattern kept running against a despawned entity, and a
+    sequence started in one scene kept ticking in the next. One owner tag
+    answers both.
+    """
+
+    @staticmethod
+    def _forever():
+        while True:
+            yield wait_for_seconds(0.01)
+
+    def test_stop_by_stops_only_that_owner(self) -> None:
+        manager = CoroutineManager()
+        manager.start_coroutine(self._forever(), owner="enemy_1")
+        manager.start_coroutine(self._forever(), owner="enemy_1")
+        manager.start_coroutine(self._forever(), owner="enemy_2")
+
+        assert manager.stop_by("enemy_1") == 2
+        assert manager.active_count == 1
+
+    def test_stop_by_marks_them_done(self) -> None:
+        manager = CoroutineManager()
+        coroutine = manager.start_coroutine(self._forever(), owner="e")
+
+        manager.stop_by("e")
+
+        assert coroutine.done is True
+
+    def test_an_untagged_coroutine_is_never_caught(self) -> None:
+        manager = CoroutineManager()
+        manager.start_coroutine(self._forever())
+
+        assert manager.stop_by(None) == 0
+        assert manager.active_count == 1
+
+    def test_stop_by_none_is_not_stop_all(self) -> None:
+        """None is the untagged default, so treating it as a group would make
+        a forgotten argument quietly destructive. `stop_all()` means all."""
+        manager = CoroutineManager()
+        manager.start_coroutine(self._forever(), owner="a")
+        manager.start_coroutine(self._forever())
+
+        assert manager.stop_by(None) == 0
+        assert manager.active_count == 2
+
+    def test_stop_by_an_unknown_owner_is_harmless(self) -> None:
+        manager = CoroutineManager()
+        manager.start_coroutine(self._forever(), owner="a")
+
+        assert manager.stop_by("nobody") == 0
+        assert manager.active_count == 1
+
+    def test_owner_defaults_to_none(self) -> None:
+        manager = CoroutineManager()
+        assert manager.start_coroutine(self._forever()).owner is None
+
+
+class TestCompletionAndResult:
+    """What a sequence returns, and telling a caller it finished (#55 P2).
+
+    `StopIteration.value` -- a generator's `return` -- used to be caught and
+    discarded, so a fire-and-forget sequence had no way to report anything
+    back, and there was no completion signal at all.
+    """
+
+    def test_a_returned_value_is_captured(self) -> None:
+        def returns_value():
+            yield wait_for_seconds(0.0)
+            return 42
+
+        manager = CoroutineManager()
+        coroutine = manager.start_coroutine(returns_value())
+        for _ in range(4):
+            manager.update(0.05)
+
+        assert coroutine.done is True
+        assert coroutine.result == 42
+
+    def test_on_complete_fires_once_with_the_result(self) -> None:
+        def returns_value():
+            yield wait_for_seconds(0.0)
+            return "done"
+
+        seen: list[object] = []
+        manager = CoroutineManager()
+        coroutine = manager.start_coroutine(returns_value())
+        coroutine.on_complete(lambda c: seen.append(c.result))
+
+        for _ in range(6):
+            manager.update(0.05)
+
+        assert seen == ["done"]
+
+    def test_a_stopped_coroutine_reports_no_result(self) -> None:
+        """How a caller tells "stopped" from "returned": both finish, only
+        one has a result."""
+
+        def forever():
+            while True:
+                yield wait_for_seconds(0.01)
+
+        manager = CoroutineManager()
+        coroutine = manager.start_coroutine(forever(), owner="x")
+        seen: list[object] = []
+        coroutine.on_complete(lambda c: seen.append(c.result))
+
+        manager.stop_by("x")
+
+        assert coroutine.done is True
+        assert coroutine.result is None
+        assert seen == [None]
+
+    def test_a_late_subscriber_is_still_told(self) -> None:
+        """Registering after the fact must not wait for an event that can no
+        longer come."""
+
+        def immediate():
+            return
+            yield  # pragma: no cover - makes this a generator
+
+        manager = CoroutineManager()
+        coroutine = manager.start_coroutine(immediate())
+        manager.update(0.016)
+
+        seen: list[object] = []
+        coroutine.on_complete(lambda c: seen.append(c.done))
+
+        assert seen == [True]
+
+    def test_completion_notifies_only_once(self) -> None:
+        def immediate():
+            return
+            yield  # pragma: no cover
+
+        manager = CoroutineManager()
+        coroutine = manager.start_coroutine(immediate())
+        calls: list[int] = []
+        coroutine.on_complete(lambda _c: calls.append(1))
+
+        manager.update(0.016)
+        manager.update(0.016)
+        coroutine.stop()
+
+        assert calls == [1]
+
+
+class TestFrameAndFixedWaits:
+    """Frame-count and fixed-step waits (#55 P2).
+
+    Only time and predicate waits existed, so "skip a frame" had to be
+    spelled as a `WaitForSeconds` guess -- and because the manager is ticked
+    from the variable-rate update, there was no way to sync to the fixed step
+    at all.
+    """
+
+    def test_wait_for_frames_resumes_after_that_many_updates(self) -> None:
+        log: list[str] = []
+
+        def counts():
+            log.append("a")
+            yield WaitForFrames(3)
+            log.append("b")
+
+        manager = CoroutineManager()
+        manager.start_coroutine(counts())
+
+        for _ in range(3):
+            manager.update(0.016)
+        assert log == ["a"]
+
+        manager.update(0.016)
+        assert log == ["a", "b"]
+
+    def test_wait_for_frames_ignores_dt(self) -> None:
+        """Frame-counted, not timed: a long frame must not skip ahead."""
+        instruction = WaitForFrames(2)
+        assert instruction.is_complete(99.0) is False
+        assert instruction.is_complete(99.0) is True
+
+    def test_zero_frames_completes_immediately(self) -> None:
+        assert WaitForFrames(0).is_complete(0.016) is True
+
+    def test_negative_frames_completes_immediately(self) -> None:
+        """Rather than waiting forever, which is what a countdown from a
+        negative would do."""
+        assert WaitForFrames(-5).is_complete(0.016) is True
+
+    def test_wait_for_fixed_update_waits_for_a_fixed_step(self) -> None:
+        ticker = FixedStepTicker()
+        log: list[str] = []
+
+        def sync():
+            log.append("start")
+            yield WaitForFixedUpdate(ticker)
+            log.append("after")
+
+        manager = CoroutineManager()
+        manager._fixed_ticker = ticker
+        manager.start_coroutine(sync())
+
+        manager.update(0.016)
+        manager.update(0.016)
+        assert log == ["start"]  # variable updates alone do not satisfy it
+
+        ticker.advance()
+        manager.update(0.016)
+        assert log == ["start", "after"]
+
+    def test_the_manager_advances_the_ticker(self) -> None:
+        manager = CoroutineManager()
+        before = manager.fixed_ticker.count
+
+        manager.notify_fixed_update()
+
+        assert manager.fixed_ticker.count == before + 1
+
+    def test_two_waits_in_one_frame_both_see_the_next_step(self) -> None:
+        """A counter rather than a flag, so they do not race to consume one
+        signal."""
+        ticker = FixedStepTicker()
+        first, second = WaitForFixedUpdate(ticker), WaitForFixedUpdate(ticker)
+
+        ticker.advance()
+
+        assert first.is_complete(0.016) is True
+        assert second.is_complete(0.016) is True
+
+    def test_the_convenience_functions_build_the_instructions(self) -> None:
+        assert isinstance(wait_for_frames(2), WaitForFrames)
+        assert isinstance(wait_for_fixed_update(), WaitForFixedUpdate)
