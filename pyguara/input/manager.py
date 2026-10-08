@@ -8,6 +8,7 @@ from pyguara.events.input import (
     KeyUpEvent,
     MouseButtonEvent,
     MouseMotionEvent,
+    TextInputEvent,
 )
 from pyguara.input.binding import KeyBindingManager
 from pyguara.input.coop import PlayerRouter
@@ -300,6 +301,13 @@ class InputManager:
         so this method -- and everything downstream -- is pygame-free.
         """
         # --- Keyboard ---
+        if isinstance(event, TextInputEvent):
+            # Forwarded as-is rather than translated: there is no action
+            # mapping to apply to a character, and a text field wants the
+            # text the platform composed, not a key it has to guess from.
+            self._dispatcher.dispatch(event)
+            return
+
         if isinstance(event, (KeyDownEvent, KeyUpEvent)):
             is_down = isinstance(event, KeyDownEvent)
             modifiers = set(event.modifiers)
