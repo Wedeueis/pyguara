@@ -67,6 +67,52 @@ So the pattern for an asset a scene must hold for its whole life is
 `load()` then `acquire()` in `on_enter()`, and `release()` (or a blanket
 `unload_unused()`) in `on_exit()`.
 
+## Cache budget
+
+`unload_unused()` is all-or-nothing and manual, so a long run that visits
+many floors accumulates every texture it ever touched until something thinks
+to call it. A budget makes the ceiling a property of the manager instead of a
+thing every scene must remember:
+
+```python
+manager.set_cache_budget(256 * 1024 * 1024)   # None is unbounded (the default)
+```
+
+Enforced after every load, least-recently-used first. A cache **hit** counts
+as use, so a texture you keep drawing stays.
+
+Three rules decide what gets evicted:
+
+- **A pinned resource is never evicted**, whatever the budget says.
+  `acquire()` means "I am using this"; a cache that evicted it anyway would
+  hand the next `load()` a second instance while the first is still being
+  drawn. A budget smaller than what is pinned is therefore exceeded, and said
+  so in the log once rather than every frame.
+- **The resource just loaded is never evicted** to make room for itself.
+- **A resource of unknown size is left alone.** Evicting it frees an unknown
+  amount, which is not a step towards a target.
+
+### `size_bytes`, and what "unknown" means
+
+The budget counts `Resource.size_bytes`, an **estimate**: the real figure
+lives in a backend's allocator and often on the GPU, where Python cannot see
+it.
+
+| Resource | Estimate |
+| --- | --- |
+| `Texture` | `width × height × 4` — every backend here uploads RGBA |
+| `BlobResource` | exactly `len(data)` |
+| `TextResource` | the *encoded* length, not `len(text)` |
+| anything else | `0`, meaning **unknown** |
+
+Zero means unknown, not free. A resource that cannot estimate is neither
+counted towards the budget nor evicted to satisfy it, so the figure
+undercounts rather than guessing. In practice it is a texture budget, which is
+where the memory is. Override `size_bytes` on a resource that can do better.
+
+`set_cache_budget(0)` keeps nothing unpinned — a real thing to want between
+levels.
+
 ## Hot reload: `reload`
 
 `reload(name)` re-runs the loader for a cached resource, re-reading its
@@ -109,8 +155,42 @@ texture so `unload_unused()` will not pull it out from under the atlas; drop
 it with `unload(texture_path, force=True)`. A malformed region map raises
 `InvalidMetadataError` with line/column info.
 
+## Files the engine does not interpret
+
+Not every asset is a texture, a sound or a parsed document. A shader is a
+string; a font file or a packed table is a pile of bytes. A game that wanted
+one used to go around `ResourceManager` entirely, losing the index, the cache,
+the reference counting and the hot reload with it.
+
+```python
+shader = manager.load("sprite.vert", TextResource).text
+font_bytes = manager.load("inter.ttf", BlobResource).data
+```
+
+Both are registered by bootstrap. `TextLoader` claims the shader stages
+(`.vert`, `.frag`, `.geom`, `.comp`, `.glsl`); `BlobLoader` claims `.bin`,
+`.dat`, `.ttf` and `.otf`. Neither claims `.txt` or `.md` — a game's prose is
+content a game loads on purpose, and claiming those engine-wide would make the
+choice for it:
+
+```python
+manager.register_loader(TextLoader(extensions=(".txt", ".md")))
+```
+
+Neither claims an extension a real loader owns, either: a blob loader claiming
+`.png` would quietly win the registration race and hand a texture request a
+pile of bytes.
+
+!!! note "No font *resource* yet"
+    `BlobResource` gets a `.ttf` into the cache; it does not give you
+    something you can draw with. A usable font is a backend object (pygame's
+    `Font`, or a GL glyph atlas) and so needs a factory protocol the way a
+    texture does — and both UI renderers currently own private font caches
+    that would have to be unified first. That is a design, not a loader, and
+    it is still open on #272.
+
 ## Introspection
 
 `get_cache_stats()` returns `{"resource_count", "total_references",
-"resources": {path: {"type", "ref_count"}}}` — useful for a debug overlay or
-a leak check between scenes.
+"total_bytes", "budget_bytes", "resources": {path: {"type", "ref_count",
+"size_bytes"}}}` — useful for a debug overlay or a leak check between scenes.

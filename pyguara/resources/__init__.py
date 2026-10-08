@@ -4,6 +4,7 @@ Handles loading, caching, and lifecycle of game resources including
 textures, audio clips, atlases, and other assets.
 """
 
+from pyguara.resources.blob import BlobResource, TextResource
 from pyguara.resources.data import DataResource
 from pyguara.resources.exceptions import (
     InvalidMetadataError,
@@ -11,6 +12,7 @@ from pyguara.resources.exceptions import (
     ResourceLoadError,
 )
 from pyguara.resources.loader import IMetaAwareLoader, IResourceLoader
+from pyguara.resources.loaders.blob_loader import BlobLoader, TextLoader
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.meta import (
@@ -27,6 +29,8 @@ __all__ = [
     "AssetMeta",
     "AudioClip",
     "AudioMeta",
+    "BlobLoader",
+    "BlobResource",
     "DataResource",
     "IMetaAwareLoader",
     "IResourceLoader",
@@ -38,6 +42,8 @@ __all__ = [
     "ResourceLoadError",
     "ResourceManager",
     "SpritesheetMeta",
+    "TextLoader",
+    "TextResource",
     "Texture",
     "TextureMeta",
     "get_meta_loader",

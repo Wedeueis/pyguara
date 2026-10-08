@@ -379,8 +379,14 @@ def test_cache_stats_shape() -> None:
 
     assert stats["resource_count"] == 2
     assert stats["total_references"] == 1
-    assert stats["resources"]["a.mock"] == {"type": "MockRes", "ref_count": 1}
+    assert stats["resources"]["a.mock"] == {
+        "type": "MockRes",
+        "ref_count": 1,
+        "size_bytes": 0,
+    }
     assert stats["resources"]["b.mock"]["ref_count"] == 0
+    assert stats["total_bytes"] == 0
+    assert stats["budget_bytes"] is None
 
 
 # --------------------------------------------------------------------------
