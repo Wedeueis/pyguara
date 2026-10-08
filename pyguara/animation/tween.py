@@ -1,11 +1,12 @@
 """Tween system for animating values over time."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, TypeGuard
+from typing import Any
 
 from pyguara.animation.easing import EasingType, ease
+from pyguara.animation.interpolation import decompose, interpolate, is_scalar
 
 
 class TweenState(Enum):
@@ -17,27 +18,19 @@ class TweenState(Enum):
     COMPLETE = auto()
 
 
-def _is_scalar(value: object) -> TypeGuard[float]:
-    """Return True for a plain number (int/float, but not bool)."""
-    return isinstance(value, int | float) and not isinstance(value, bool)
-
-
-def _is_sequence(value: object) -> TypeGuard[Sequence[float]]:
-    """Return True for a tuple/list of values (Vector2 is a tuple subclass)."""
-    return isinstance(value, tuple | list)
-
-
 @dataclass(eq=False)
 class Tween:
     """Animates a value from start to end over a duration.
 
     Supports different easing functions, delays, loops, and callbacks.
 
-    The endpoints must be either two numbers (``int``/``float``) or two
-    equal-length sequences of numbers (``tuple``/``list``). ``Vector2`` works
-    because it is a ``tuple`` subclass, but ``current_value`` is then a plain
-    ``tuple`` -- wrap it if you need the original type back. ``Color`` and
-    other non-sequence objects are not supported; tween their components.
+    The endpoints may be two numbers, two ``Vector2``, two ``Color``, or two
+    equal-length tuples/lists of numbers. **``current_value`` comes back as
+    the type that went in**: a ``Vector2`` endpoint yields a ``Vector2``, a
+    ``Color`` endpoint a ``Color`` with its channels rounded and clamped.
+    That matters because the usual destination is an attribute -- writing a
+    plain tuple to ``transform.position`` is a bug that surfaces as an
+    ``AttributeError`` several frames later, nowhere near the tween.
 
     Two ``Tween`` instances are equal only if they are the *same* object, so a
     ``TweenManager`` can hold many identically configured tweens without them
@@ -57,8 +50,8 @@ class Tween:
         >>> position = tween.current_value
     """
 
-    start_value: float | tuple[float, ...]
-    end_value: float | tuple[float, ...]
+    start_value: Any
+    end_value: Any
     duration: float
     easing: EasingType = EasingType.LINEAR
     delay: float = 0.0
@@ -78,30 +71,20 @@ class Tween:
         if self.duration <= 0:
             raise ValueError("Duration must be positive")
 
-        # Reject types that are neither a number nor a sequence (e.g. Color).
-        for label, value in (
-            ("start_value", self.start_value),
-            ("end_value", self.end_value),
-        ):
-            if not _is_sequence(value) and not _is_scalar(value):
-                raise TypeError(
-                    f"{label} must be a number or a sequence of numbers, "
-                    f"got {type(value).__name__}"
-                )
+        # Validated here rather than on the first `update()`: a tween is
+        # usually built a long way from where it is ticked, and a shape
+        # error reported at tick time names a frame, not a call site.
+        raw_start = decompose(self.start_value)
+        raw_end = decompose(self.end_value)
 
-        start_seq = _is_sequence(self.start_value)
-        end_seq = _is_sequence(self.end_value)
-
-        # Ensure start and end have the same shape.
-        if start_seq != end_seq:
+        if is_scalar(raw_start) != is_scalar(raw_end):
             raise ValueError(
                 "start_value and end_value must both be numbers or both be sequences"
             )
-
         if (
-            _is_sequence(self.start_value)
-            and _is_sequence(self.end_value)
-            and len(self.start_value) != len(self.end_value)
+            isinstance(raw_start, tuple)
+            and isinstance(raw_end, tuple)
+            and len(raw_start) != len(raw_end)
         ):
             raise ValueError(
                 "start_value and end_value sequences must have the same length"
@@ -177,16 +160,15 @@ class Tween:
     def _interpolate(self, t: float) -> None:
         """Interpolate between start and end values.
 
-        Sequence endpoints always yield a plain ``tuple``; scalar endpoints
-        always yield a ``float`` (``__post_init__`` guarantees the shapes match).
+        The result carries `start_value`'s type: see
+        `pyguara.animation.interpolation`. `__post_init__` has already
+        guaranteed the two shapes match.
+
+        Args:
+            t: Eased progress, which an elastic or back easing may push
+                outside 0..1 on purpose.
         """
-        start, end = self.start_value, self.end_value
-        if _is_sequence(start) and _is_sequence(end):
-            self.current_value = tuple(
-                s + (e - s) * t for s, e in zip(start, end, strict=True)
-            )
-        elif _is_scalar(start) and _is_scalar(end):
-            self.current_value = start + (end - start) * t
+        self.current_value = interpolate(self.start_value, self.end_value, t)
 
     def _handle_completion(self) -> None:
         """Handle tween completion and looping."""
@@ -212,15 +194,19 @@ class Tween:
                 self.on_complete()
 
     @property
-    def current_value(self) -> float | tuple[float, ...]:
-        """Get the current interpolated value."""
+    def current_value(self) -> Any:
+        """The current interpolated value, typed like `start_value`."""
         if not hasattr(self, "_current_value"):
             self._current_value = self.start_value
         return self._current_value
 
     @current_value.setter
-    def current_value(self, value: float | tuple[float, ...]) -> None:
-        """Set the current interpolated value."""
+    def current_value(self, value: Any) -> None:
+        """Set the current interpolated value.
+
+        Args:
+            value: The new value.
+        """
         self._current_value = value
 
     @property
