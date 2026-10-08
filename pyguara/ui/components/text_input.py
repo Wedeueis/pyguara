@@ -47,8 +47,9 @@ class TextInput(Widget):
         colors = self.theme.colors
         border_color = colors.focus_ring if self.active else colors.edge_strong
 
-        renderer.draw_rect(self.rect, colors.surface_inset)
-        renderer.draw_rect(self.rect, border_color, width=1)
+        radius = self.theme.borders.radius
+        renderer.draw_rect(self.rect, colors.surface_inset, border_radius=radius)
+        renderer.draw_rect(self.rect, border_color, width=1, border_radius=radius)
 
         # Text. A placeholder is faint text, not a border colour that
         # happened to be dim enough.

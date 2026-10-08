@@ -429,7 +429,27 @@ class BorderScheme:
 
 @dataclass
 class ShadowScheme:
-    """Shadow effect configuration."""
+    """Shadow effect configuration.
+
+    `enabled`, `offset_x`, `offset_y` and `color` are consumed by
+    `Widget.draw_shadow()` (and so by `Button` and `Panel`) and by the
+    design system's `BevelButton`.
+
+    `blur` is **not** honoured by anything, and cannot be: a soft shadow is
+    not reachable through the UI renderer's rectangle primitives, which is
+    why the shadows that exist are hard-edged. It is left declared rather
+    than removed because themes serialize it, so dropping it would
+    invalidate saved theme JSON -- but nothing reads it. Implementing a
+    layered approximation, or retiring the field, is an open decision
+    (see #49).
+
+    Attributes:
+        enabled: Whether widgets draw a shadow at all. Off in every preset.
+        offset_x: Shadow offset to the right, in pixels.
+        offset_y: Shadow offset downwards, in pixels.
+        blur: Declared but unconsumed; see above.
+        color: The shadow colour, usually translucent black.
+    """
 
     enabled: bool = False
     offset_x: int = 2

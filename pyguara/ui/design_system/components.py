@@ -222,6 +222,10 @@ class BevelPanel(Panel):
             shadow under every one of them reads as noise.
     """
 
+    # Draws its own stamp shadow below, gated on `self.shadow`, then
+    # calls `Panel.render()`. Without this it would render two.
+    casts_shadow = False
+
     def __init__(
         self,
         position: Vector2,
