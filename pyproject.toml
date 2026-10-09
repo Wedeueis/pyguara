@@ -167,6 +167,12 @@ markers = [
 # Without this, the generator falls back to `[project] description` and then
 # to a generic "a game built on the PyGuara engine", which is wrong here:
 # this repository is the engine.
+# No content inventory here. This repository is the engine, not a game: it
+# has no scenes or prefabs to list, and the asset counts would change with
+# every image added anywhere in `games/` or `docs/`, churning AGENTS.md for
+# no gain. A game project leaves this on.
+inventory = false
+
 summary = """\
 PyGuara is a code-first 2D game engine for Python 3.12+: an \
 Entity-Component-System core with inverted-index queries, a \

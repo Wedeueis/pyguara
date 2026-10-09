@@ -546,3 +546,59 @@ class TestThisRepositoryIsInSync:
             assert len(content) < 4000, (
                 f"{name} looks like a copy of AGENTS.md rather than an import"
             )
+
+
+class TestInventoryOptOut:
+    """A library or the engine itself has no content to inventory.
+
+    Left on, the asset counts change whenever any image anywhere in the
+    tree does -- so the generated file churns, and a strict `--check` in
+    CI fails for a reason nobody caused. Found by verifying this branch in
+    a clean worktree, where an untracked image made the committed
+    `AGENTS.md` disagree with a freshly generated one.
+    """
+
+    def test_the_inventory_is_included_by_default(self, project: Path) -> None:
+        body = build_instructions(project).files[0].content
+        assert "## Project contents" in body
+
+    def test_it_can_be_turned_off(self, project: Path) -> None:
+        (project / "pyproject.toml").write_text(
+            "[tool.pyguara.agents]\ninventory = false\n", encoding="utf-8"
+        )
+        body = build_instructions(project).files[0].content
+
+        assert "## Project contents" not in body
+        # Everything that does not depend on the file tree is still there.
+        assert "## Engine conventions" in body
+        assert "pyguara studio ops" in body
+
+    def test_turning_it_off_silences_the_empty_content_warning(
+        self, tmp_path: Path
+    ) -> None:
+        """The warning is about a project with no scenes; a project that
+        opted out is not telling us anything by having none."""
+        (tmp_path / "pyproject.toml").write_text(
+            "[tool.pyguara.agents]\ninventory = false\n", encoding="utf-8"
+        )
+        instructions = build_instructions(tmp_path)
+        assert not any("No scenes or prefabs" in w for w in instructions.warnings)
+
+    def test_the_result_is_stable_when_assets_change(self, project: Path) -> None:
+        """The property the opt-out exists for."""
+        (project / "pyproject.toml").write_text(
+            "[tool.pyguara.agents]\ninventory = false\n", encoding="utf-8"
+        )
+        before = build_instructions(project).files[0].generated
+
+        (project / "assets" / "late.png").write_bytes(b"")
+        (project / "scenes" / "level_9.scene").write_text("{}", encoding="utf-8")
+
+        assert build_instructions(project).files[0].generated == before
+
+    def test_with_the_inventory_on_it_is_not_stable(self, project: Path) -> None:
+        """Which is correct for a game project -- the inventory should
+        reflect reality -- and is why the opt-out is opt-*out*."""
+        before = build_instructions(project).files[0].generated
+        (project / "scenes" / "level_9.scene").write_text("{}", encoding="utf-8")
+        assert build_instructions(project).files[0].generated != before

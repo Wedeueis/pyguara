@@ -37,6 +37,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from pyguara.log import get_logger
 from pyguara.prefabs.registry import ComponentRegistry
@@ -252,10 +253,21 @@ def discover_facts(
         -- `uv run pytest` where there is a `uv.lock`, plain `pytest`
         otherwise. A command a project cannot run is worse than none: an
         agent will try it, and spend a turn finding out.
+
+        The content inventory is included unless the project turns it off
+        with `[tool.pyguara.agents] inventory = false`, which a library or
+        the engine itself wants: it has no scenes to inventory, and the
+        asset counts change whenever any image does, so the generated file
+        would churn for no gain.
     """
-    project_map = build_project_map(project_root, registry=registry)
+    settings = _declared_settings(project_root)
+    project_map = (
+        build_project_map(project_root, registry=registry)
+        if settings.get("inventory", True)
+        else None
+    )
     uses_uv = (project_root / "uv.lock").exists()
-    summary = _declared_summary(project_root)
+    summary = _summary_from(settings)
     runner = "uv run " if uses_uv else ""
 
     commands: list[tuple[str, str]] = []
@@ -282,26 +294,23 @@ def discover_facts(
     )
 
 
-def _declared_summary(project_root: Path) -> str:
-    """Return the summary the project declares, or "" for the default.
+def _declared_settings(project_root: Path) -> dict[str, Any]:
+    """Return the project's `[tool.pyguara.agents]` table.
 
-    Read from `pyproject.toml` rather than taken as a flag, so that
-    `--check` agrees with the write without the flag being repeated. A
-    summary passed only on the command line made CI report drift against
-    a file generated with it -- which is the whole point of `--check`
+    Read from `pyproject.toml` rather than taken as flags, so that
+    `--check` agrees with the write without every flag being repeated. A
+    summary that lived only on the command line made CI report drift
+    against the very file it had generated -- the point of `--check`
     defeated by the first project that used one.
-
-    Two sources, most specific first:
-
-    1. `[tool.pyguara.agents] summary` -- written for agents.
-    2. `[project] description` -- the package blurb, which is usually
-       close enough and is already maintained.
 
     Args:
         project_root: The project directory.
 
     Returns:
-        The summary, or "" when the project declares none.
+        The table, plus `description` from `[project]` under the key
+        `_package_description`. Empty when there is no readable
+        `pyproject.toml` -- a project with a broken one still gets
+        instructions.
     """
     import tomllib
 
@@ -310,14 +319,35 @@ def _declared_summary(project_root: Path) -> str:
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         logger.debug(f"Could not read {pyproject}: {exc}")
-        return ""
+        return {}
 
-    agents = data.get("tool", {}).get("pyguara", {}).get("agents", {})
-    declared = agents.get("summary")
+    settings = dict(data.get("tool", {}).get("pyguara", {}).get("agents", {}))
+    description = data.get("project", {}).get("description")
+    if isinstance(description, str):
+        settings["_package_description"] = description
+    return settings
+
+
+def _summary_from(settings: dict[str, Any]) -> str:
+    """Return the summary a project declares, or "" for the default.
+
+    Two sources, most specific first:
+
+    1. `[tool.pyguara.agents] summary` -- written for agents.
+    2. `[project] description` -- the package blurb, which is usually
+       close enough and is already maintained.
+
+    Args:
+        settings: The table `_declared_settings` returned.
+
+    Returns:
+        The summary, or "" when the project declares none.
+    """
+    declared = settings.get("summary")
     if isinstance(declared, str) and declared.strip():
         return declared.strip()
 
-    description = data.get("project", {}).get("description")
+    description = settings.get("_package_description")
     if isinstance(description, str) and description.strip():
         return description.strip()
     return ""

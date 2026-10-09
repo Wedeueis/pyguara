@@ -446,27 +446,6 @@ PyGuara is a code-first 2D game engine for Python 3.12+: an Entity-Component-Sys
   `fixed_update` at a constant rate; rendering and animation run
   in `update` at the display rate.
 
-## Project contents
-
-- Scenes: 0
-- Prefabs: 0
-- Registered components: 19
-- Asset files: 61
-- Asset directories: assets/textures, docs/design_system/assets, docs/design_system/assets/art, docs/design_system/assets/sprites, games/asset_pipeline/assets, games/guara_falcao/assets/textures, games/quintal_cerrado/assets/audio, games/tilemap_authoring/assets
-
-## Registered components
-
-Attachable by name through the component registry.
-
-`AIComponent`, `AnimationStateMachine`, `Animator`, `AudioEmitter`, `AudioListener`, `AudioSource`, `ChildOf`, `Collider`, `EntityTags`, `Joint`, `Navigator`, `PrefabInstance`, `ResourceLink`, `RigidBody`, `Sprite`, `SteeringAgent`, `Tag`, `Transform`, `TriggerVolume`
-
-## Assets
-
-- `.png`: 39
-- `.wav`: 17
-- `.jpg`: 4
-- `.tmx`: 1
-
 ## Authoring through PyGuara Studio
 
 Studio exposes the scene as a set of operations, so a scene can
