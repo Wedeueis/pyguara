@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from imgui_bundle import imgui
 
@@ -38,6 +39,34 @@ _DOCKSPACE_ID = 1
 Any non-zero constant works; ImGui only needs it stable across frames so a
 dock layout persists.
 """
+
+
+@dataclass(frozen=True)
+class DockLayout:
+    """Where each panel opens, by window title.
+
+    Titles rather than panel objects, because that is what ImGui's dock
+    builder keys on -- and it means a layout can name a panel that has
+    not been added yet, which is how a caller can describe an arrangement
+    once instead of rebuilding it as panels arrive.
+
+    Attributes:
+        left: Titles docked to the left edge.
+        right: Titles docked to the right edge.
+        bottom: Titles docked along the bottom.
+        centre: Titles filling what is left, which is the largest region.
+        left_ratio: How much of the width the left edge takes.
+        right_ratio: How much of the remaining width the right edge takes.
+        bottom_ratio: How much of the remaining height the bottom takes.
+    """
+
+    left: tuple[str, ...] = ()
+    right: tuple[str, ...] = ()
+    bottom: tuple[str, ...] = ()
+    centre: tuple[str, ...] = ()
+    left_ratio: float = 0.20
+    right_ratio: float = 0.25
+    bottom_ratio: float = 0.28
 
 
 def default_panels() -> list[EditorPanel]:
@@ -86,6 +115,9 @@ class EditorLayer:
         self._selection = Selection()
         self._visible = True
         self._last_frame_time: float | None = None
+
+        self._layout: DockLayout | None = None
+        self._layout_applied = False
 
         self._context = imgui.create_context()
         # A fresh context starts as the current one, but not necessarily the
@@ -151,6 +183,31 @@ class EditorLayer:
             panel: The panel to add.
         """
         self._panels.append(panel)
+
+    def register_texture(self, texture: object) -> int | None:
+        """Make a texture drawable by a panel, returning its ImGui id.
+
+        Forwarded to the renderer, which owns the id space. A Studio
+        viewport calls this with the render graph's framebuffer texture so
+        it can show the rendered frame as an image.
+
+        Returns None when this layer has no renderer, which is how the
+        headless tests run -- a panel then has no texture to show and must
+        say so rather than draw an image with a meaningless id.
+
+        Args:
+            texture: A `moderngl.Texture` on the renderer's context.
+
+        Returns:
+            The id to hand `imgui.image()`, or None.
+        """
+        if self._renderer is None:
+            return None
+        from typing import cast
+
+        import moderngl
+
+        return self._renderer.register_texture(cast(moderngl.Texture, texture))
 
     def process_event(self, event: object) -> bool:
         """Feed one engine event to ImGui and report whether it took it.
@@ -244,6 +301,72 @@ class EditorLayer:
             dockspace_id=_DOCKSPACE_ID,
             flags=imgui.DockNodeFlags_.passthru_central_node.value,
         )
+        if self._layout is not None and not self._layout_applied:
+            # After the dockspace exists -- the builder docks into it --
+            # and before any panel's `begin`, which would otherwise take
+            # its position for the frame and only snap into place on the
+            # next one.
+            self._layout_applied = True
+            self._apply_layout(self._layout)
+
+    def set_default_layout(self, layout: DockLayout | None) -> None:
+        """Arrange the panels the next time a frame is built.
+
+        Applied once rather than every frame, so a developer who drags a
+        panel somewhere else keeps it there. Without a layout every window
+        opens at the same default position, stacked on top of each other,
+        which is what an editor with docking enabled and no arrangement
+        looks like.
+
+        Args:
+            layout: Where each panel goes, or None to leave ImGui's
+                defaults alone.
+        """
+        self._layout = layout
+        self._layout_applied = False
+
+    def _apply_layout(self, layout: DockLayout) -> None:
+        """Build the dock tree and assign panels to its regions.
+
+        Args:
+            layout: Which panel titles belong in which region.
+        """
+        internal = imgui.internal
+        root = _DOCKSPACE_ID
+
+        internal.dock_builder_remove_node(root)
+        internal.dock_builder_add_node(
+            root, imgui.internal.DockNodeFlagsPrivate_.dock_space.value
+        )
+        internal.dock_builder_set_node_size(root, imgui.get_io().display_size)
+
+        # Split off each side in turn. Every split returns the new node and
+        # what is left of the one it came from, and the remainder becomes
+        # the thing to split next -- so the centre shrinks as sides are
+        # taken, and ends up as the viewport's home.
+        centre = root
+        regions: dict[str, int] = {}
+        for name, direction, ratio in (
+            ("left", imgui.Dir.left, layout.left_ratio),
+            ("right", imgui.Dir.right, layout.right_ratio),
+            ("bottom", imgui.Dir.down, layout.bottom_ratio),
+        ):
+            split = internal.dock_builder_split_node(centre, direction, ratio)
+            regions[name] = split.id_at_dir
+            centre = split.id_at_opposite_dir
+        regions["centre"] = centre
+
+        for region, titles in (
+            ("left", layout.left),
+            ("right", layout.right),
+            ("bottom", layout.bottom),
+            ("centre", layout.centre),
+        ):
+            for title in titles:
+                internal.dock_builder_dock_window(title, regions[region])
+
+        internal.dock_builder_finish(root)
+        logger.debug("Applied the default dock layout.")
 
     def _draw_menu_bar(self) -> None:
         """Draw the panel-visibility menu across the top of the window."""

@@ -28,6 +28,7 @@ audit journal, diffable agent edits and a deterministic edit-run-check
 loop the same mechanism rather than four parallel ones.
 """
 
+from pyguara.studio.attach import StudioAttachment, attach_studio
 from pyguara.studio.commands import CommandStack, EditCommand, EditError
 from pyguara.studio.session import ApprovalMode, EditOutcome, StudioSession
 
@@ -37,5 +38,7 @@ __all__ = [
     "EditCommand",
     "EditError",
     "EditOutcome",
+    "StudioAttachment",
     "StudioSession",
+    "attach_studio",
 ]
