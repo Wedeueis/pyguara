@@ -12,6 +12,7 @@ of truth for all game assets. It handles:
 import json
 import os
 import time
+from collections import OrderedDict
 from collections.abc import Iterator, Sequence
 from functools import partial
 from pathlib import Path
@@ -78,11 +79,20 @@ class ResourceManager:
         Args:
             meta_loader: Optional custom meta loader. If None, uses the global instance.
         """
-        self._cache: dict[str, Resource] = {}
+        # An ordered dict, least-recently-used first. Insertion order is
+        # already use order for a cache nothing has touched twice; `load()`
+        # moves a hit to the end, which is what makes the budget's eviction
+        # order mean anything.
+        self._cache: OrderedDict[str, Resource] = OrderedDict()
         self._extension_map: dict[str, IResourceLoader] = {}
         self._path_index: dict[str, str] = {}
         self._reference_counts: dict[str, int] = {}
         self._meta_loader = meta_loader or get_meta_loader()
+
+        # None means unbounded, which is the behaviour every existing
+        # caller already has. A budget is opted into.
+        self._cache_budget_bytes: int | None = None
+        self._warned_over_budget = False
 
         # Asynchronous loading. The pool is lazy: a game that never calls
         # load_async() starts no threads.
@@ -192,6 +202,7 @@ class ResourceManager:
                     f"Resource '{path_or_name}' is cached as {type(res).__name__}, "
                     f"but {resource_type.__name__} was requested."
                 )
+            self._cache.move_to_end(actual_path)
             return res
 
         # 3. Load from disk
@@ -205,6 +216,11 @@ class ResourceManager:
         # unpinned (ref count 0). Callers that need it to survive
         # unload_unused() must acquire() it explicitly.
         self._reference_counts[actual_path] = 0
+
+        # After inserting, and protecting what was just inserted: the thing
+        # the caller asked for should never be the thing evicted to make
+        # room for itself, however small the budget.
+        self.evict_to_budget(protect=actual_path)
 
         return resource
 
@@ -721,13 +737,127 @@ class ResourceManager:
 
         return len(to_unload)
 
+    # ------------------------------------------------------------------
+    # Cache budget
+    # ------------------------------------------------------------------
+
+    @property
+    def cache_budget_bytes(self) -> int | None:
+        """The cache's size ceiling, or None for unbounded."""
+        return self._cache_budget_bytes
+
+    def set_cache_budget(self, budget_bytes: int | None) -> int:
+        """Cap the cache's estimated size, evicting least-recently-used first.
+
+        `unload_unused()` is all-or-nothing and manual, so a long run that
+        visits many floors accumulates every texture it ever touched until
+        something thinks to call it. A budget makes the ceiling a property
+        of the manager instead of a thing every scene must remember.
+
+        Enforced after each load and whenever this is set, so a game sets
+        it once at startup and never calls it again.
+
+        **A pinned resource is never evicted**, whatever the budget says.
+        `acquire()` means "I am using this"; a cache that evicted it anyway
+        would hand the next `load()` a second instance while the first is
+        still being drawn. A budget smaller than what is pinned is
+        therefore exceeded, and said so once rather than every frame.
+
+        Args:
+            budget_bytes: The ceiling in bytes, or None for unbounded.
+                Compared against `Resource.size_bytes`, which is an
+                estimate -- see that property.
+
+        Returns:
+            How many resources this call evicted.
+
+        Raises:
+            ValueError: If the budget is negative. Zero is legal and means
+                "keep nothing unpinned", which is a real thing to want
+                between levels.
+        """
+        if budget_bytes is not None and budget_bytes < 0:
+            raise ValueError(
+                f"Cache budget must not be negative, got {budget_bytes}. Pass "
+                f"None for unbounded."
+            )
+        self._cache_budget_bytes = budget_bytes
+        return self.evict_to_budget()
+
+    def cache_size_bytes(self) -> int:
+        """Estimated total size of everything currently cached.
+
+        Resources reporting 0 from `size_bytes` -- the ones that cannot
+        estimate -- contribute nothing, so this undercounts rather than
+        guessing. In practice it is a texture figure, which is where the
+        memory is.
+
+        Returns:
+            Bytes.
+        """
+        return sum(resource.size_bytes for resource in self._cache.values())
+
+    def evict_to_budget(self, protect: str | None = None) -> int:
+        """Evict unpinned resources, oldest first, until under budget.
+
+        Args:
+            protect: A resolved path to leave alone whatever the budget
+                says. `load()` passes the resource it has just produced:
+                returning it and evicting it in the same call would hand
+                the caller an object the cache no longer has, and the next
+                `load()` of the same path a *second* instance of it.
+
+        Returns:
+            How many resources were evicted. Zero when no budget is set.
+        """
+        if self._cache_budget_bytes is None:
+            return 0
+
+        total = self.cache_size_bytes()
+        if total <= self._cache_budget_bytes:
+            return 0
+
+        evicted = 0
+        for path in list(self._cache):
+            if total <= self._cache_budget_bytes:
+                break
+            if path == protect:
+                continue
+            if self._reference_counts.get(path, 0) > 0:
+                continue
+            size = self._cache[path].size_bytes
+            if size <= 0:
+                # Evicting something of unknown size frees an unknown
+                # amount, which is not a step towards a target. Left alone
+                # rather than thrown away for no measurable gain.
+                continue
+            del self._cache[path]
+            self._reference_counts.pop(path, None)
+            total -= size
+            evicted += 1
+            logger.debug("Evicted to stay under cache budget: %s", path)
+
+        if total > self._cache_budget_bytes and not self._warned_over_budget:
+            self._warned_over_budget = True
+            logger.warning(
+                "Resource cache is %d bytes against a %d byte budget and "
+                "cannot shrink further: everything over it is either pinned "
+                "by acquire() or of unknown size. Reported once.",
+                total,
+                self._cache_budget_bytes,
+            )
+
+        return evicted
+
     def get_cache_stats(self) -> dict[str, Any]:
         """
         Get statistics about the current resource cache state.
 
         Returns:
-            A dict with ``resource_count`` (int), ``total_references`` (int)
-            and ``resources`` (a ``{path: {"type": str, "ref_count": int}}``
+            A dict with ``resource_count`` (int), ``total_references`` (int),
+            ``total_bytes`` (int, the estimate the budget counts),
+            ``budget_bytes`` (int or None) and ``resources`` (a
+            ``{path: {"type": str, "ref_count": int, "size_bytes": int}}``
             mapping).
         """
         total_refs = sum(self._reference_counts.values())
@@ -735,6 +865,7 @@ class ResourceManager:
             path: {
                 "type": type(res).__name__,
                 "ref_count": self._reference_counts.get(path, 0),
+                "size_bytes": res.size_bytes,
             }
             for path, res in self._cache.items()
         }
@@ -742,6 +873,8 @@ class ResourceManager:
         return {
             "resource_count": len(self._cache),
             "total_references": total_refs,
+            "total_bytes": self.cache_size_bytes(),
+            "budget_bytes": self._cache_budget_bytes,
             "resources": resources_info,
         }
 

@@ -31,6 +31,7 @@ from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.prefabs.loader import PrefabCache, PrefabLoader
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
+from pyguara.resources.loaders.blob_loader import BlobLoader, TextLoader
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.manager import SceneManager
@@ -440,6 +441,10 @@ def _setup_container(
     # 7. Resources & Physics
     res_manager = ResourceManager()
     res_manager.register_loader(JsonLoader())
+    # Shader stages as text, font and binary files as bytes. Neither needs
+    # a backend, which is why they can be registered for every one.
+    res_manager.register_loader(TextLoader())
+    res_manager.register_loader(BlobLoader())
     res_manager.register_loader(PygameSoundLoader())  # Register audio loader
 
     # Register appropriate texture loader based on backend. Headless registers

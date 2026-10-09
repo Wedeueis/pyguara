@@ -59,6 +59,26 @@ class Resource(ABC):
         """
         ...
 
+    @property
+    def size_bytes(self) -> int:
+        """Roughly how much memory this resource occupies.
+
+        What `ResourceManager`'s cache budget counts. An estimate, not a
+        measurement: the real figure lives in a backend's allocator and
+        often on the GPU, where Python cannot see it at all.
+
+        **Zero means "unknown", not "free".** The base class returns zero
+        rather than guessing, and a resource the budget cannot measure is
+        neither counted towards it nor evicted to satisfy it -- evicting
+        something of unknown size frees an unknown amount, which is not a
+        step towards a target. Subclasses that can estimate should, and
+        `Texture` does, which is where the memory actually is.
+
+        Returns:
+            Bytes, or 0 when unknown.
+        """
+        return 0
+
 
 class Texture(Resource):
     """Abstract contract for a 2D image or texture."""
@@ -79,6 +99,22 @@ class Texture(Resource):
     def size(self) -> tuple[int, int]:
         """Get a tuple containing (width, height)."""
         return (self.width, self.height)
+
+    @property
+    def size_bytes(self) -> int:
+        """Estimated memory, as four bytes of RGBA per pixel.
+
+        Four bytes because every backend here uploads RGBA: the pygame
+        surfaces are converted with alpha and the GL textures are four
+        components. A compressed or paletted format would use less, and
+        mipmaps more; neither is in the engine, and a figure that is right
+        for what the engine does beats a configurable one that is right
+        for nothing.
+
+        Returns:
+            Bytes.
+        """
+        return self.width * self.height * 4
 
 
 class AudioClip(Resource):
