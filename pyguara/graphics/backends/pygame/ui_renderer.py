@@ -5,12 +5,16 @@ from typing import Any
 import pygame
 
 from pyguara.common.types import Color, Rect, Vector2
+from pyguara.graphics.backends.clipping import ClipStack
 from pyguara.graphics.backends.surface_blending import (
     blit_blended_circle,
     blit_blended_line,
     blit_blended_polygon,
     blit_blended_rect,
 )
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 
 class PygameUIRenderer:
@@ -23,6 +27,8 @@ class PygameUIRenderer:
         """Initialize the renderer."""
         self._surface = target_surface
         self._font_cache: dict[int, pygame.font.Font] = {}
+        self._clips = ClipStack()
+        self._warned_about_clips = False
 
         if not pygame.font.get_init():
             pygame.font.init()
@@ -140,13 +146,63 @@ class PygameUIRenderer:
         txt_size = font.size(text)
         return (txt_size[0], txt_size[1])
 
+    def push_clip(self, rect: Rect) -> None:
+        """Restrict drawing to `rect`, intersected with any active clip.
+
+        Args:
+            rect: The region to clip to, in screen pixels.
+        """
+        self._apply_clip(self._clips.push(rect))
+
+    def pop_clip(self) -> None:
+        """Undo the most recent `push_clip()`."""
+        self._apply_clip(self._clips.pop())
+
+    def _apply_clip(self, rect: Rect | None) -> None:
+        """Set or clear the surface's clip rectangle.
+
+        Args:
+            rect: The region, or None to clip nothing.
+        """
+        if rect is None:
+            self._surface.set_clip(None)
+        else:
+            self._surface.set_clip(pygame.Rect(rect.x, rect.y, rect.width, rect.height))
+
     def set_target(self, surface: pygame.Surface) -> None:
-        """Switch render targets."""
+        """Switch render targets.
+
+        The clip follows: it belongs to the UI pass, not to the surface, and
+        a target swap in the middle of one would otherwise draw the rest of
+        a clipped widget unclipped.
+        """
         self._surface = surface
+        self._apply_clip(self._clips.current)
 
     def present(self) -> None:
         """Finalize UI rendering.
 
-        No-op for pygame since it draws directly to the surface.
+        Nothing is composited -- pygame draws straight to the surface -- but
+        any clip a widget pushed and failed to pop is dropped here, so an
+        unbalanced push truncates one frame instead of every frame after it.
         """
-        pass
+        if self._clips.depth:
+            self._warn_unbalanced_clips(self._clips.depth)
+            self._apply_clip(self._clips.clear())
+
+    def _warn_unbalanced_clips(self, depth: int) -> None:
+        """Report leaked clips once, not sixty times a second.
+
+        Args:
+            depth: How many pushes were outstanding.
+        """
+        if self._warned_about_clips:
+            return
+        self._warned_about_clips = True
+        logger.warning(
+            f"{depth} UI clip region(s) were pushed and never popped. The "
+            f"clip is reset at the end of each frame, so the frame was "
+            f"truncated rather than every frame after it -- but pair every "
+            f"push_clip() with a pop_clip(), in a finally if the widget can "
+            f"raise. This is reported once per renderer."
+        )

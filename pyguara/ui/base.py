@@ -41,6 +41,37 @@ class TextInsertable(Protocol):
         ...
 
 
+@runtime_checkable
+class Scrollable(Protocol):
+    """A widget that can scroll its own contents.
+
+    An optional capability tested with `isinstance`, not a `delta`
+    parameter added to `UIElement.handle_event()`. Widening that signature
+    would break every widget -- in this engine and in any game -- that
+    already implements the three-argument form, and only a viewport has any
+    use for a scroll delta. Same shape as `TextInsertable` beside it, and
+    as the storage capabilities in `pyguara/persistence`.
+
+    `UIManager` routes a wheel event by hit-testing the cursor and walking
+    *up* from whatever is under it to the nearest `Scrollable`, which is
+    how a wheel over a button inside a list still scrolls the list.
+    """
+
+    def scroll_by(self, dx: float, dy: float) -> bool:
+        """Scroll by a delta, in wheel notches.
+
+        Args:
+            dx: Horizontal notches, positive to the right.
+            dy: Vertical notches, positive away from the user.
+
+        Returns:
+            True if anything actually moved. False lets the manager keep
+            walking up -- a list already at its end should not swallow the
+            wheel from the page it sits on.
+        """
+        ...
+
+
 class UIElement(ABC):
     """Base class for all UI components."""
 
@@ -53,7 +84,7 @@ class UIElement(ABC):
         """Initialize the UI element."""
         # Use Engine Types, not Pygame Types
         self.rect = Rect(int(position.x), int(position.y), int(size.x), int(size.y))
-        self.visible = visible
+        self._visible = visible
         self.enabled = True
 
         self.state = UIElementState.NORMAL
@@ -94,6 +125,31 @@ class UIElement(ABC):
         # the manager its layout is stale -- a label whose text changed is
         # a different width, and nothing else can see that.
         self._manager: Any | None = None
+
+    @property
+    def visible(self) -> bool:
+        """Whether this element and its subtree are drawn and hit-tested."""
+        return self._visible
+
+    @visible.setter
+    def visible(self, value: bool) -> None:
+        """Show or hide this element, invalidating the layout if it changed.
+
+        A property rather than a plain attribute because hiding an element
+        changes where every one of its siblings sits: a container skips
+        invisible children when it stacks, so the ones after it move up.
+        Leaving that to the game meant `element.visible = False` silently
+        left a gap until something else happened to invalidate -- the
+        footgun #49's P3 row named, and the same one `Label.set_text()`
+        already closed for text.
+
+        Args:
+            value: True to show.
+        """
+        if value == self._visible:
+            return
+        self._visible = value
+        self.invalidate_layout()
 
     @property
     def theme(self) -> "UITheme":

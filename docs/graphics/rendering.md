@@ -417,7 +417,9 @@ The UI system (`pyguara.ui`) is immediate-mode friendly but retains state via an
 - **UIElement**: Base class for all widgets (`Button`, `Panel`, `Label`).
 - **Layouts**: `LayoutConstraints` position/size an element against its parent
   (anchor, margin, percentage); `BoxContainer` stacks children
-  vertically/horizontally with alignment.
+  vertically/horizontally with alignment, `GridContainer` wraps them into N
+  columns, and `ScrollContainer` clips and scrolls contents larger than their
+  window.
 - **Theme**: a global `UITheme` (`get_theme()`/`set_theme()`) controls colors
   and spacing; elements read it live, so a swap re-skins existing widgets.
 
@@ -450,6 +452,95 @@ traverse a row of buttons.
 `focusable` is off by default: a container, a label or a decorative panel is
 not a stop on the ring, and opting in is a smaller thing to get right than
 opting every layout box out.
+
+## Grids
+
+```python
+grid = GridContainer(Vector2(20, 20), Vector2(300, 300), columns=5,
+                     spacing=4, row_height=48)
+```
+
+Children flow left to right and wrap, so adding one never means rewriting the
+layout. Column width is uniform — the content width split `columns` ways minus
+spacing — because that is what a slot grid means. Row height is the tallest
+child in that row, or `row_height` for square cells regardless of content.
+
+`STRETCH` (the default) fills each cell, which is what an inventory or an
+ability bar wants; any other alignment keeps each child's measured size and
+centres it in its cell. A container placed in a cell lays out against that
+cell.
+
+## Scrolling and clipping
+
+```python
+log = ScrollContainer(Vector2(20, 20), Vector2(300, 200), scroll_speed=30.0)
+log.add_child(message_list)
+log.scroll_to_end()
+```
+
+`UIRenderer` grew a clip stack for this:
+
+```python
+renderer.push_clip(rect)    # intersects with any active clip
+renderer.pop_clip()
+```
+
+**Nesting intersects rather than replaces.** That is the only behaviour that
+lets a scroll container live inside another one — an inventory inside a
+scrolling sidebar must not draw outside the sidebar just because its own
+viewport is larger. An empty intersection clips everything away, which is
+correct: none of the inner element is on screen.
+
+Pair every push with a pop, in a `finally` if the widget can raise. A leaked
+clip is dropped at `present()` with a one-time warning, so one unbalanced push
+truncates a single frame rather than every frame after it.
+
+### What the viewport does
+
+- **It places its own children**, like `BoxContainer` does, stacking them along
+  the scroll axis and stretching them across it. That is what makes the layout
+  idempotent: an element without constraints keeps its own `rect`, so a
+  viewport that merely translated what it found would translate it *again* next
+  frame and walk the contents off screen. Put a `BoxContainer` or
+  `GridContainer` inside for spacing or columns.
+- **It shifts children during layout, not during render.** Translating at draw
+  time leaves every `rect` unscrolled, so a click lands on whatever used to be
+  under the cursor — the fifth inventory slot selecting the second. Moving the
+  rects means the click, the hover and the pixels all agree.
+- **The offset re-clamps every layout.** A filtered inventory or a cleared log
+  leaves the offset past an end that no longer exists, and a blank viewport the
+  player cannot scroll back from.
+
+### Wheel routing
+
+`ScrollContainer` implements the `Scrollable` capability protocol, tested with
+`isinstance` — the same shape as `TextInsertable`, and for the same reason:
+only a viewport has any use for a scroll delta, and widening
+`handle_event()` would break every widget that implements the three-argument
+form.
+
+`UIManager` hit-tests the cursor and walks **up** from whatever is under it to
+the nearest `Scrollable`, so the wheel over a button inside a list still
+scrolls the list. A `Scrollable` already at its end returns `False` and the
+walk continues, so the page behind a list that cannot scroll still does.
+Routing follows the pointer, not focus: a focused text field across the screen
+is not what the player is pointing at.
+
+## Layout invalidation
+
+The manager re-runs layout when it is dirty. Three things mark it dirty on
+their own:
+
+```python
+label.set_text("10")        # a label sizes itself from its content
+element.visible = False     # siblings after it move up
+container.add_child(widget)
+```
+
+`visible` is a property for exactly that reason. A plain attribute meant
+`element.visible = False` silently left a gap until something else happened to
+invalidate. `UIManager.invalidate_layout()` remains for anything the manager
+cannot see.
 
 ## Integration
 The UI is rendered via the `UIRenderer` protocol, allowing it to sit on top of the main game render pass.
