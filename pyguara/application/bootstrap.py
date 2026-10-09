@@ -34,6 +34,7 @@ from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
 from pyguara.resources.loaders.blob_loader import BlobLoader, TextLoader
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
+from pyguara.resources.types import Texture
 from pyguara.scene.manager import SceneManager
 from pyguara.scene.serializer import SceneSerializer
 from pyguara.scripting.coroutines import CoroutineManager
@@ -487,7 +488,43 @@ def _setup_container(
 
     persistence = PersistenceManager(storage, migration_manager)
     container.register_instance(PersistenceManager, persistence)
-    container.register_singleton(SceneSerializer, SceneSerializer)
+
+    # Built here rather than auto-wired, because the texture resolver is a
+    # closure the container cannot reflect over. A scene stores a texture as
+    # its path (`SceneSerializer.RESOURCE_KEY`); without this hook every
+    # component holding one would be skipped on load, and a reloaded scene
+    # would be sprite-less -- which, since the default `Scene.render()` draws
+    # only sprites, means it would render nothing.
+    def _resolve_texture(path: str) -> Texture | None:
+        """Load a texture by the path a scene file recorded.
+
+        Args:
+            path: The stored resource path.
+
+        Returns:
+            The texture, or None when it cannot be loaded -- a missing
+            file, no loader for the extension, or a path that names
+            something that is not an image. The serializer warns and skips
+            the component; raising here would take the whole scene down
+            over one stale reference.
+        """
+        try:
+            # Abstract by design: the concrete texture class is the
+            # backend's, and the resolver is handed the protocol. Same
+            # ignore `ResourceManager.load_atlas` carries for the same call.
+            return res_manager.load(path, Texture)  # type: ignore[type-abstract]
+        except (ValueError, TypeError, FileNotFoundError) as exc:
+            logger.warning(f"Scene references texture '{path}', which failed: {exc}")
+            return None
+
+    container.register_instance(
+        SceneSerializer,
+        SceneSerializer(
+            persistence,
+            component_registry=component_registry,
+            texture_resolver=_resolve_texture,
+        ),
+    )
 
     # Register prefab loader with resource manager
     res_manager.register_loader(PrefabLoader())
@@ -516,6 +553,23 @@ def _register_core_components(registry: ComponentRegistry) -> None:
     registry.register(Tag)
     registry.register(Transform)
     registry.register(ResourceLink)
+
+    # Ownership. Registered so `SceneSerializer` can restore parent/child
+    # links -- without it a saved hierarchy reloaded flat, and the cascade
+    # destroy that rides on `ChildOf` went with it. Attach it through
+    # `EntityManager.set_parent()`, never `add_component()`: the manager's
+    # parent -> children index is maintained there.
+    from pyguara.ecs.relations import ChildOf
+
+    registry.register(ChildOf)
+
+    # Sprites. A `Sprite` holds a live `Texture`, which is why this was
+    # absent for so long -- and why the serializer encodes a resource as its
+    # path and resolves it on load. Registering it without that encoding
+    # would have made every save fail on a non-JSON-serializable texture.
+    from pyguara.graphics.components.sprite import Sprite
+
+    registry.register(Sprite)
 
     # Physics components. No `PlatformerController` here: it moved to
     # `kits/platformer_movement`, and core neither imports a kit nor

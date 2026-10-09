@@ -17,6 +17,7 @@ nav:
       - Architecture & Style: guides/Archictecture & Style Guide.md
       - Project Structure: guides/PROJECT_STRUCTURE.md
       - Visual Inspection (agents): guides/agent-visual-inspection.md
+      - Agent Integration: guides/agent-integration.md
       - Measured Limits: guides/performance.md
   - Core:
       - Architecture: core/architecture.md
@@ -47,8 +48,12 @@ nav:
       - Replay: systems/replay.md
       - Resources: systems/resources.md
       - Scripting: systems/scripting.md
+      - Studio: systems/studio.md
       - UI Builder: systems/ui-builder.md
       - UI Design System: systems/ui-design-system.md
+  - Decisions:
+      - One mutation seam for Studio: adr/0001-one-mutation-seam-for-studio.md
+      - Two transports for Studio's agent surface: adr/0002-studio-agent-transports.md
   - Kits:
       - Overview: kits/index.md
       - Progression: kits/progression.md

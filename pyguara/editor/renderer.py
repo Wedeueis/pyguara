@@ -76,11 +76,82 @@ class ModernGLImGuiRenderer:
         self._textures: dict[int, moderngl.Texture] = {}
         self._next_texture_id = 1
 
+        # Ids registered by `register_texture()` rather than minted for
+        # ImGui's own atlas. Tracked apart because the two have different
+        # owners: `release()` frees everything in `_textures`, and a
+        # framebuffer's colour attachment belongs to the `FramebufferManager`
+        # that allocated it. Releasing it here too is a double free, and the
+        # second one lands on whatever moderngl reused the name for.
+        self._foreign_texture_ids: set[int] = set()
+        # Reverse lookup, so registering the same texture twice returns the
+        # same id. A viewport panel registers its framebuffer every frame;
+        # minting a fresh id each time would grow this dict without bound.
+        self._foreign_ids_by_texture: dict[int, int] = {}
+
         io = imgui.get_io()
         # Without this ImGui asserts in `new_frame()` ("font atlas is not
         # built") because it expects a legacy backend to have uploaded the
         # atlas itself.
         io.backend_flags |= imgui.BackendFlags_.renderer_has_textures.value
+
+    def register_texture(self, texture: moderngl.Texture) -> int:
+        """Make an existing texture drawable by ImGui, and return its id.
+
+        What `imgui.image()` needs: a texture id this renderer will resolve
+        in its draw loop. Without this, the only textures ImGui could draw
+        were the ones it asked for itself -- its font atlas -- because
+        `_textures` was populated solely from `_service_texture_requests`,
+        and a draw command carrying any other id hit the `continue` in
+        `render()` and vanished. That is what blocked the standard "scene
+        rendered into an FBO, shown inside an editor panel" arrangement.
+
+        Ownership stays with the caller: the texture is **not** released by
+        `release()`. Pass a framebuffer's `texture` freely -- its
+        `FramebufferManager` remains responsible for it.
+
+        Idempotent. The same texture always maps to the same id, so this is
+        safe to call once per frame.
+
+        Args:
+            texture: A live texture on this renderer's context.
+
+        Returns:
+            The id to hand `imgui.image()`.
+        """
+        key = id(texture)
+        existing = self._foreign_ids_by_texture.get(key)
+        if existing is not None:
+            # Re-point in case the caller resized the framebuffer, which
+            # replaces the texture object behind the same id.
+            self._textures[existing] = texture
+            return existing
+
+        texture_id = self._next_texture_id
+        self._next_texture_id += 1
+        self._textures[texture_id] = texture
+        self._foreign_texture_ids.add(texture_id)
+        self._foreign_ids_by_texture[key] = texture_id
+        return texture_id
+
+    def unregister_texture(self, texture_id: int) -> None:
+        """Stop resolving `texture_id`, without releasing the texture.
+
+        Call this when the underlying texture is about to be released by
+        whoever owns it; a draw command naming a dead texture would
+        otherwise reach moderngl.
+
+        Unknown ids are ignored, and an id ImGui minted is left alone --
+        those belong to the atlas and ImGui decides when they die.
+
+        Args:
+            texture_id: An id previously returned by `register_texture`.
+        """
+        if texture_id not in self._foreign_texture_ids:
+            return
+        texture = self._textures.pop(texture_id, None)
+        self._foreign_texture_ids.discard(texture_id)
+        if texture is not None:
+            self._foreign_ids_by_texture.pop(id(texture), None)
 
     def render(self, draw_data: imgui.ImDrawData) -> None:
         """Draw one frame's ImGui output to the currently bound framebuffer.
@@ -336,7 +407,13 @@ class ModernGLImGuiRenderer:
         self._vbo_capacity = 0
         self._ibo_capacity = 0
 
-        for texture in self._textures.values():
-            texture.release()
+        # Foreign textures are skipped: they were handed over by
+        # `register_texture()` and are owned elsewhere -- a framebuffer's
+        # colour attachment belongs to its `FramebufferManager`.
+        for texture_id, texture in self._textures.items():
+            if texture_id not in self._foreign_texture_ids:
+                texture.release()
         self._textures.clear()
+        self._foreign_texture_ids.clear()
+        self._foreign_ids_by_texture.clear()
         self._program.release()

@@ -315,7 +315,14 @@ class ComponentRegistry:
         if "scale" in data:
             scale = self._convert_vector2(data["scale"])
 
-        return Transform(position=position, rotation=rotation, scale=scale)
+        transform = Transform(position=position, rotation=rotation, scale=scale)
+        # Not a constructor argument, so it has to be assigned after. Omitting
+        # it meant a saved physics entity reloaded un-interpolated and
+        # visibly juddered at any frame rate above the fixed tick --
+        # `PhysicsSystem` sets this on every body it creates.
+        if "interpolate" in data:
+            transform.interpolate = bool(data["interpolate"])
+        return transform
 
     def list_components(self) -> list[str]:
         """Get list of all registered component names.
