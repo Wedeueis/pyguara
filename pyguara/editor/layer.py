@@ -54,19 +54,25 @@ class DockLayout:
         left: Titles docked to the left edge.
         right: Titles docked to the right edge.
         bottom: Titles docked along the bottom.
+        top: Titles docked along the top, above everything else -- where
+            a transport bar belongs.
         centre: Titles filling what is left, which is the largest region.
         left_ratio: How much of the width the left edge takes.
         right_ratio: How much of the remaining width the right edge takes.
         bottom_ratio: How much of the remaining height the bottom takes.
+        top_ratio: How much of the remaining height the top takes. Small
+            by default: a transport bar is one row of buttons.
     """
 
     left: tuple[str, ...] = ()
     right: tuple[str, ...] = ()
     bottom: tuple[str, ...] = ()
+    top: tuple[str, ...] = ()
     centre: tuple[str, ...] = ()
     left_ratio: float = 0.20
     right_ratio: float = 0.25
     bottom_ratio: float = 0.28
+    top_ratio: float = 0.10
 
 
 def default_panels() -> list[EditorPanel]:
@@ -350,6 +356,7 @@ class EditorLayer:
             ("left", imgui.Dir.left, layout.left_ratio),
             ("right", imgui.Dir.right, layout.right_ratio),
             ("bottom", imgui.Dir.down, layout.bottom_ratio),
+            ("top", imgui.Dir.up, layout.top_ratio),
         ):
             split = internal.dock_builder_split_node(centre, direction, ratio)
             regions[name] = split.id_at_dir
@@ -360,6 +367,7 @@ class EditorLayer:
             ("left", layout.left),
             ("right", layout.right),
             ("bottom", layout.bottom),
+            ("top", layout.top),
             ("centre", layout.centre),
         ):
             for title in titles:

@@ -44,6 +44,7 @@ DEFAULT_LAYOUT_REGIONS: dict[str, tuple[str, ...]] = {
     "left": ("Hierarchy",),
     "right": ("Inspector", "Components"),
     "bottom": ("History", "Journal", "Commands"),
+    "top": ("Play",),
     "centre": ("Viewport",),
 }
 """Where Studio's panels open, by window title.
@@ -81,6 +82,7 @@ def default_layout() -> Any:
         left=DEFAULT_LAYOUT_REGIONS["left"],
         right=DEFAULT_LAYOUT_REGIONS["right"],
         bottom=DEFAULT_LAYOUT_REGIONS["bottom"],
+        top=DEFAULT_LAYOUT_REGIONS["top"],
         centre=DEFAULT_LAYOUT_REGIONS["centre"],
     )
 
@@ -207,6 +209,7 @@ class StudioAttachment:
         from pyguara.studio.panels.history import HistoryPanel
         from pyguara.studio.panels.journal import JournalPanel
         from pyguara.studio.panels.palette import CommandPalette
+        from pyguara.studio.panels.play import PlayControlsPanel
         from pyguara.studio.panels.schema import SchemaPanel
         from pyguara.studio.viewport.gizmo import TransformGizmo
         from pyguara.studio.viewport.panel import ViewportPanel
@@ -223,13 +226,17 @@ class StudioAttachment:
             overlays=[gizmo],
         )
 
-        for panel in (
+        panels: list[Any] = [
             viewport,
             HistoryPanel(session),
             JournalPanel(session),
             SchemaPanel(self._resolve_registry()),
             CommandPalette(session, self._operations),
-        ):
+        ]
+        application = self._application()
+        if application is not None:
+            panels.insert(1, PlayControlsPanel(application))
+        for panel in panels:
             self._layer.add_panel(panel)
 
         self._layer.set_default_layout(default_layout())
@@ -272,6 +279,21 @@ class StudioAttachment:
         except Exception:  # pragma: no cover - a container with no manager
             return None
         return None if scene is None else scene.camera
+
+    def _application(self) -> Any:
+        """Return the running application, or None.
+
+        Returns:
+            The application, or None when the container has none -- which
+            is the case in a hand-built container, where the play
+            controls simply are not offered.
+        """
+        try:
+            from pyguara.application.application import Application
+
+            return self._container.get(Application)
+        except Exception:
+            return None
 
     def _physics_engine(self) -> Any:
         """Return the physics engine, or None.
