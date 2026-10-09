@@ -166,6 +166,8 @@ async def serve_stdio(
     *,
     registry: OperationRegistry | None = None,
     actor: Actor = Actor.AGENT,
+    stdin: Any = None,
+    stdout: Any = None,
 ) -> None:
     """Run the MCP server over stdin and stdout until the client leaves.
 
@@ -175,6 +177,13 @@ async def serve_stdio(
         session: The session every tool call acts on.
         registry: The operations to expose.
         actor: Who tool calls are attributed to.
+        stdin: An `anyio` async file to read from, or None for the
+            process's own stdin.
+        stdout: An `anyio` async file to write to, or None for the
+            process's own stdout. The CLI passes the *real* stdout here
+            after pointing `sys.stdout` at stderr, because pygame's import
+            banner and the engine's console logger would otherwise write
+            prose into the protocol stream.
 
     Raises:
         RuntimeError: If the MCP SDK is not installed.
@@ -184,7 +193,7 @@ async def serve_stdio(
     from mcp.server.stdio import stdio_server
 
     server = build_server(session, registry=registry, actor=actor)
-    async with stdio_server() as (read_stream, write_stream):
+    async with stdio_server(stdin, stdout) as (read_stream, write_stream):
         await server.run(
             read_stream,
             write_stream,

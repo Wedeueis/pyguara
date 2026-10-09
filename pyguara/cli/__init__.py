@@ -17,6 +17,7 @@ import click
 # module. Keep the submodules reachable by dotted path.
 from pyguara.cli.atlas_generator import atlas as atlas_command
 from pyguara.cli.build import build as build_command
+from pyguara.cli.studio import studio as studio_command
 
 __all__ = ["main"]
 
@@ -30,7 +31,8 @@ def main() -> None:
 
 main.add_command(build_command)
 main.add_command(atlas_command)
+main.add_command(studio_command)
 
-
-if __name__ == "__main__":
-    main()
+# No `if __name__ == "__main__"` here: inside a package's `__init__`,
+# `__name__` is `pyguara.cli` and the block could never run. `__main__.py`
+# beside this file is what makes `python -m pyguara.cli` work.
