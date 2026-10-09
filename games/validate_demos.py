@@ -24,6 +24,10 @@ import pygame
 
 from games.asset_pipeline.bootstrap import configure_game_container as ap_bootstrap
 from games.asset_pipeline.scenes import AssetScene as APAssetScene
+from games.tilemap_authoring.bootstrap import (
+    configure_game_container as tm_bootstrap,
+)
+from games.tilemap_authoring.scenes import TilemapScene
 
 # Import bootstrap configurations
 from games.vinagre_matilha.bootstrap import configure_game_container as vm_bootstrap
@@ -105,6 +109,13 @@ def main() -> None:
         name="Asset Pipeline",
         configure_container_fn=ap_bootstrap,
         scene_class=APAssetScene,
+    )
+
+    # 6. Tilemap Authoring Module (.tmx load -> colliders)
+    results["Tilemap Authoring (Module 6)"] = validate_game(
+        name="Tilemap Authoring",
+        configure_container_fn=tm_bootstrap,
+        scene_class=TilemapScene,
     )
 
     # 5. Squad Tactics (Vinagre: Matilha)
