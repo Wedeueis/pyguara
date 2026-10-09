@@ -63,6 +63,28 @@ dev = [
     # the editor. `tests/test_editor_availability.py` asserts it imports, so
     # it cannot silently go missing the way the old editor's PyOpenGL did.
     "imgui-bundle>=1.92.0",
+
+    # Studio's MCP front end. Here as well as in the `studio` extra so the
+    # availability test can assert it imports: a flag nothing asserts on is
+    # exactly how the first editor's missing PyOpenGL went unnoticed
+    # through an entire subsystem's life.
+    "mcp>=2.3.0",
+]
+
+# PyGuara Studio's agent integration over the Model Context Protocol.
+# Separate from `dev` so a developer can wire Studio into a coding agent
+# without installing the whole test and lint toolchain.
+#
+# NOT a runtime dependency, and not load-bearing for the feature: the
+# operation surface runs over `pyguara studio ops`, which is JSON lines on
+# stdio and needs only the standard library. This extra adds a second
+# transport for clients that speak MCP.
+#
+# Pinned to 2.x deliberately. `mcp` 2.0 renamed FastMCP to MCPServer and
+# moved the low-level handlers from decorators to constructor callbacks, so
+# a 1.x install cannot run `pyguara/studio/mcp/server.py`.
+studio = [
+    "mcp>=2.3.0,<3",
 ]
 
 docs = [
