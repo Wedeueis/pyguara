@@ -38,7 +38,21 @@ from pyguara.animation.easing import (
     ease_out_sine,
     linear,
 )
+from pyguara.animation.interpolation import decompose, interpolate, recompose
+from pyguara.animation.timeline import Animatable, Timeline
 from pyguara.animation.tween import Tween, TweenManager, TweenState
+from pyguara.animation.tweener import (
+    Binding,
+    PropertyPathError,
+    Tweener,
+    TweenSystem,
+    TweenTarget,
+    bind_tween,
+    resolve_property,
+    stop_property,
+    stop_tweens,
+    tween_property,
+)
 
 __all__ = [
     # Easing types and functions
@@ -89,4 +103,22 @@ __all__ = [
     "Tween",
     "TweenState",
     "TweenManager",
+    # Composition
+    "Animatable",
+    "Timeline",
+    # ECS integration
+    "Tweener",
+    "TweenSystem",
+    "TweenTarget",
+    "Binding",
+    "PropertyPathError",
+    "tween_property",
+    "bind_tween",
+    "stop_property",
+    "stop_tweens",
+    "resolve_property",
+    # Value decomposition
+    "decompose",
+    "recompose",
+    "interpolate",
 ]

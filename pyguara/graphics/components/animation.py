@@ -12,6 +12,29 @@ from pyguara.resources.types import Texture
 logger = get_logger(__name__)
 
 
+class PlaybackMode(Enum):
+    """How a clip behaves when it reaches its last frame.
+
+    A single `loop` bool could only say "start over" or "stop", which
+    leaves out the two things an idle animation and a one-shot both want:
+    breathing back down rather than snapping to frame 0, and finishing
+    N times rather than once or forever.
+
+    Attributes:
+        ONCE: Stop on the last frame.
+        LOOP: Jump back to frame 0 and keep going.
+        PING_PONG: Play forwards, then backwards, then forwards -- an idle
+            bob or a breathing loop, where a hard cut back to frame 0 is
+            visible as a hitch.
+        LOOP_TIMES: Loop `loop_count` times, then stop on the last frame.
+    """
+
+    ONCE = auto()
+    LOOP = auto()
+    PING_PONG = auto()
+    LOOP_TIMES = auto()
+
+
 @dataclass
 class AnimationClip:
     """Data for a single animation state (e.g., 'walk_down').
@@ -25,6 +48,10 @@ class AnimationClip:
             Hitbox's active frames without its own timer. Not fired for
             frame 0 by `play_clip()`'s initial-frame application; only by
             `advance_animator()`-driven frame transitions.
+        mode: What happens at the last frame. Defaults to None, which
+            means "whatever `loop` says" -- `loop` predates this and
+            plenty of clips (and every prefab file) still set it.
+        loop_count: How many loops `LOOP_TIMES` runs. Ignored otherwise.
     """
 
     name: str
@@ -32,9 +59,24 @@ class AnimationClip:
     frame_rate: float = 10.0  # Frames per second
     loop: bool = True
     frame_events: dict[int, tuple[str, ...]] = field(default_factory=dict)
+    mode: PlaybackMode | None = None
+    loop_count: int = 1
 
     def __post_init__(self) -> None:
-        """Reject clips that cannot be played (empty, or non-positive rate)."""
+        """Reject clips that cannot be played, and settle the mode.
+
+        `loop` is kept as the serialized form and `mode` derived from it
+        when nothing set one, so an existing clip or prefab keeps working
+        and a clip that sets `mode` gets the richer behaviour. Setting
+        both inconsistently resolves in `mode`'s favour, since it is the
+        more specific statement.
+
+        Raises:
+            ValueError: If there are no frames, the frame rate is not
+                positive, or `LOOP_TIMES` was asked for without a positive
+                count -- which would stop on the first frame and look like
+                a missing animation.
+        """
         if not self.frames:
             raise ValueError(f"AnimationClip '{self.name}' has no frames")
         if self.frame_rate <= 0:
@@ -42,6 +84,27 @@ class AnimationClip:
                 f"AnimationClip '{self.name}' frame_rate must be positive, "
                 f"got {self.frame_rate}"
             )
+
+        if self.mode is None:
+            self.mode = PlaybackMode.LOOP if self.loop else PlaybackMode.ONCE
+        else:
+            self.loop = self.mode in (
+                PlaybackMode.LOOP,
+                PlaybackMode.PING_PONG,
+                PlaybackMode.LOOP_TIMES,
+            )
+
+        if self.mode is PlaybackMode.LOOP_TIMES and self.loop_count < 1:
+            raise ValueError(
+                f"AnimationClip '{self.name}' uses LOOP_TIMES with "
+                f"loop_count={self.loop_count}; it must be at least 1."
+            )
+
+    @property
+    def playback_mode(self) -> PlaybackMode:
+        """The settled playback mode. Never None after `__post_init__`."""
+        assert self.mode is not None
+        return self.mode
 
 
 class Animator(StrictComponent):
@@ -69,6 +132,16 @@ class Animator(StrictComponent):
         self._current_time: float = 0.0
         self._current_frame_index: int = 0
         self._playing: bool = False
+
+        # Multiplier over the clip's own `frame_rate`. A haste or slow buff
+        # should not need every clip swapped for a faster copy. 0 freezes
+        # the cursor without clearing `is_playing`, which is what a
+        # hitstop wants -- the animation resumes rather than restarting.
+        self.playback_speed: float = 1.0
+
+        # PING_PONG direction, and completed-loop count for LOOP_TIMES.
+        self._reverse: bool = False
+        self._loops_done: int = 0
 
     def _apply_frame(self) -> None:
         """Update the visual Sprite component with the current texture."""
@@ -228,6 +301,8 @@ def play_clip(animator: Animator, name: str, force_reset: bool = False) -> None:
     animator._current_clip = animator._clips[name]
     animator._current_time = 0.0
     animator._current_frame_index = 0
+    animator._reverse = False
+    animator._loops_done = 0
     animator._playing = True
 
     # Apply the first frame immediately, so the sprite does not show the
@@ -241,6 +316,11 @@ def advance_animator(animator: Animator, dt: float) -> list[str]:
     Catches up every whole frame owed for `dt` in one call, so a lag spike
     or a host running slower than the clip's `frame_rate` does not
     silently drop frames or fall permanently behind.
+
+    `dt` is scaled by `animator.playback_speed` first, so a haste buff is
+    one field rather than a second copy of every clip. A speed of 0 holds
+    the cursor without clearing `is_playing`, which is what a hitstop
+    wants: the animation resumes where it was instead of restarting.
 
     Args:
         animator: The animator to advance.
@@ -256,7 +336,11 @@ def advance_animator(animator: Animator, dt: float) -> list[str]:
     if not animator._playing or not clip:
         return []
 
-    animator._current_time += dt
+    scaled = dt * animator.playback_speed
+    if scaled <= 0:
+        return []
+
+    animator._current_time += scaled
 
     # frame_rate is > 0; `AnimationClip` validates it.
     seconds_per_frame = 1.0 / clip.frame_rate
@@ -266,22 +350,9 @@ def advance_animator(animator: Animator, dt: float) -> list[str]:
     frames_advanced = int(animator._current_time / seconds_per_frame)
     animator._current_time -= frames_advanced * seconds_per_frame
 
+    crossed = _step_cursor(animator, clip, frames_advanced)
+
     total_frames = len(clip.frames)
-    previous_index = animator._current_frame_index
-    raw_index = previous_index + frames_advanced
-
-    if raw_index < total_frames:
-        animator._current_frame_index = raw_index
-        crossed = range(previous_index + 1, raw_index + 1)
-    elif clip.loop:
-        animator._current_frame_index = raw_index % total_frames
-        crossed = range(previous_index + 1, raw_index + 1)
-    else:
-        animator._current_frame_index = total_frames - 1
-        animator._current_time = 0.0
-        animator._playing = False  # Stop at end
-        crossed = range(previous_index + 1, total_frames)
-
     frame_events = clip.frame_events
     fired = [
         name for index in crossed for name in frame_events.get(index % total_frames, ())
@@ -289,6 +360,90 @@ def advance_animator(animator: Animator, dt: float) -> list[str]:
 
     animator._apply_frame()
     return fired
+
+
+def _step_cursor(
+    animator: Animator, clip: AnimationClip, frames_advanced: int
+) -> list[int]:
+    """Move the frame cursor by whole frames, per the clip's playback mode.
+
+    Returns the indices crossed rather than only the one landed on, so a
+    frame event in a hit window cannot be skipped by a lag spike -- which
+    is why PING_PONG walks frame by frame instead of computing the final
+    index with modular arithmetic. The walk is bounded by
+    `frames_advanced`, which a long frame makes large but never unbounded.
+
+    Args:
+        animator: The animator whose cursor to move.
+        clip: Its current clip.
+        frames_advanced: How many whole frames are owed.
+
+    Returns:
+        The frame indices crossed, oldest first.
+    """
+    total_frames = len(clip.frames)
+    mode = clip.playback_mode
+
+    if total_frames == 1:
+        # Nothing to advance through; a one-frame ONCE clip still has to
+        # stop, or `is_finished` never becomes true.
+        if mode is PlaybackMode.ONCE:
+            animator._playing = False
+            animator._current_time = 0.0
+        return []
+
+    previous_index = animator._current_frame_index
+
+    if mode is PlaybackMode.LOOP:
+        raw = previous_index + frames_advanced
+        animator._current_frame_index = raw % total_frames
+        return list(range(previous_index + 1, raw + 1))
+
+    if mode is PlaybackMode.ONCE:
+        raw = previous_index + frames_advanced
+        if raw < total_frames:
+            animator._current_frame_index = raw
+            return list(range(previous_index + 1, raw + 1))
+        animator._current_frame_index = total_frames - 1
+        animator._current_time = 0.0
+        animator._playing = False
+        return list(range(previous_index + 1, total_frames))
+
+    if mode is PlaybackMode.LOOP_TIMES:
+        raw = previous_index + frames_advanced
+        crossed = list(range(previous_index + 1, raw + 1))
+        animator._loops_done += raw // total_frames
+        if animator._loops_done >= clip.loop_count:
+            animator._current_frame_index = total_frames - 1
+            animator._current_time = 0.0
+            animator._playing = False
+            # Trim what never played: the clip stopped at the end of its
+            # last loop, so anything past that was not crossed.
+            allowed = clip.loop_count * total_frames - 1
+            return [index for index in crossed if index <= allowed]
+        animator._current_frame_index = raw % total_frames
+        return crossed
+
+    # PING_PONG: walk, because the direction flips mid-run and no closed
+    # form gives the crossed indices as well as the destination.
+    crossed = []
+    index = previous_index
+    for _ in range(frames_advanced):
+        if animator._reverse:
+            if index == 0:
+                animator._reverse = False
+                index = 1
+            else:
+                index -= 1
+        else:
+            if index == total_frames - 1:
+                animator._reverse = True
+                index = total_frames - 2
+            else:
+                index += 1
+        crossed.append(index)
+    animator._current_frame_index = index
+    return crossed
 
 
 def add_state(machine: AnimationStateMachine, state: AnimationState) -> None:

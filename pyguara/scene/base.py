@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from pyguara.ai.ai_system import AISystem
 from pyguara.ai.steering_system import SteeringSystem
+from pyguara.animation.tweener import TweenSystem
 from pyguara.audio.audio_source_system import AudioSourceSystem
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.common.components import Transform
@@ -32,8 +33,9 @@ from pyguara.resources.manager import ResourceManager
 from pyguara.systems.manager import SystemManager
 
 # Priority band reserved for engine-registered systems on a scene's
-# SystemManager (SteeringSystem=150, AISystem=200, AudioSourceSystem=250,
-# AnimationSystem=300). Game/scene systems should register at >=500.
+# SystemManager (TweenSystem=120, SteeringSystem=150, AISystem=200,
+# AudioSourceSystem=250, AnimationSystem=300). Game/scene systems should
+# register at >=500.
 ENGINE_SYSTEM_PRIORITY_MIN = 100
 ENGINE_SYSTEM_PRIORITY_MAX = 399
 GAME_SYSTEM_PRIORITY_MIN = 500
@@ -52,8 +54,8 @@ class Scene(ABC):
     Owns its own world: `entity_manager` and `system_manager` are private to
     this scene, so a scene pushed over another (e.g. a pause menu) never sees
     or affects the entities/systems underneath it. `resolve_dependencies()`
-    populates `system_manager` with the four engine systems (Steering, AI,
-    AudioSource, Animation -- priority band 100-399) plus `camera` and
+    populates `system_manager` with the five engine systems (Tween, Steering,
+    AI, AudioSource, Animation -- priority band 100-399) plus `camera` and
     `render_system`, all live before `on_enter()` ever runs.
     """
 
@@ -107,6 +109,15 @@ class Scene(ABC):
         # subscribes to its removals and republishes them as EntityDestroyed.
         self.entity_manager.subscribe_entity_removed(self._dispatch_entity_destroyed)
 
+        # First in the band: a tween driving `transform.position` must be
+        # applied before steering, AI or the scene's own update reads a
+        # position this tick, or every reader is one frame behind the
+        # animation they can see on screen.
+        self.system_manager.register(
+            TweenSystem(self.entity_manager),
+            priority=120,
+            system_type=TweenSystem,
+        )
         self.system_manager.register(
             SteeringSystem(self.entity_manager),
             priority=150,

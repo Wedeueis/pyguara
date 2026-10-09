@@ -10,6 +10,7 @@ and a TextureFactory protocol for creating backend-specific textures.
 
 from PIL import Image
 
+from pyguara.graphics.components.animation import AnimationClip, PlaybackMode
 from pyguara.graphics.protocols import TextureFactory
 from pyguara.resources.meta import SpritesheetMeta
 from pyguara.resources.types import Texture
@@ -198,6 +199,104 @@ class SpriteSheet:
             textures.append(texture)
 
         return textures
+
+    def clip(
+        self,
+        name: str,
+        frame_width: int,
+        frame_height: int,
+        row: int = 0,
+        count: int = 0,
+        fps: float = 10.0,
+        *,
+        loop: bool = True,
+        mode: PlaybackMode | None = None,
+        loop_count: int = 1,
+        frame_events: dict[int, tuple[str, ...]] | None = None,
+        margin: int = 0,
+        spacing: int = 0,
+    ) -> AnimationClip:
+        """Build an `AnimationClip` from one row of the grid.
+
+        `slice_grid()` returns a flat row-major list, so building a clip
+        meant slicing `frames[8:16]` by hand and getting the arithmetic
+        right every time -- friction rather than architecture, and the one
+        place a sprite sheet's layout leaks into game code.
+
+        A row, not an arbitrary span, because that is how sprite sheets are
+        actually laid out: one action per row. Use `slice_grid()` plus a
+        slice for anything stranger.
+
+        Args:
+            name: The clip's name, e.g. `"walk_down"`.
+            frame_width: Width of a single frame in pixels.
+            frame_height: Height of a single frame in pixels.
+            row: 0-based row index.
+            count: How many frames to take from that row. 0 takes the
+                whole row.
+            fps: The clip's frame rate.
+            loop: Whether the clip loops. Ignored if `mode` is given.
+            mode: Explicit `PlaybackMode`, for ping-pong or play-N-times.
+            loop_count: How many loops `LOOP_TIMES` runs.
+            frame_events: Frame index to event names, as `AnimationClip`
+                takes them. Indices are relative to this clip, not to the
+                sheet -- frame 0 is the first frame of the row.
+            margin: Blank border between the sheet edge and the grid.
+            spacing: Blank gutter between adjacent frames.
+
+        Returns:
+            The clip, with its frames already sliced.
+
+        Raises:
+            ValueError: If the row is out of range, or the requested count
+                exceeds what the row holds. Both mean the caller's idea of
+                the sheet disagrees with the sheet, and a clip quietly
+                short of frames animates wrongly rather than visibly
+                failing.
+        """
+        if frame_width <= 0 or frame_height <= 0:
+            raise ValueError("frame_width and frame_height must be positive")
+        if row < 0:
+            raise ValueError(f"row must not be negative, got {row}")
+
+        stride_x = frame_width + spacing
+        stride_y = frame_height + spacing
+        columns = max(0, (self._image.width - 2 * margin + spacing) // stride_x)
+        rows = max(0, (self._image.height - 2 * margin + spacing) // stride_y)
+
+        if row >= rows:
+            raise ValueError(
+                f"Row {row} is outside the sheet: a {frame_width}x"
+                f"{frame_height} grid of {self._path} has {rows} row(s)."
+            )
+
+        wanted = columns if count <= 0 else count
+        if wanted > columns:
+            raise ValueError(
+                f"Asked for {count} frames from row {row}, but a "
+                f"{frame_width}x{frame_height} grid of {self._path} has "
+                f"{columns} column(s)."
+            )
+
+        regions = [
+            (
+                margin + column * stride_x,
+                margin + row * stride_y,
+                frame_width,
+                frame_height,
+            )
+            for column in range(wanted)
+        ]
+
+        return AnimationClip(
+            name=name,
+            frames=self.slice_regions(regions),
+            frame_rate=fps,
+            loop=loop,
+            mode=mode,
+            loop_count=loop_count,
+            frame_events=frame_events or {},
+        )
 
     @property
     def frames(self) -> list[Texture]:

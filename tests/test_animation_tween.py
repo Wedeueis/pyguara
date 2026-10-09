@@ -65,36 +65,64 @@ class TestTweenValueTypes:
         tween.update(0.25)
         assert tween.current_value == pytest.approx(25.0)
 
-    def test_list_endpoints_behave_like_tuple(self):
-        """A list of numbers is accepted; the result is a plain tuple."""
+    def test_a_list_endpoint_comes_back_a_list(self):
+        """The result carries the endpoint's own type (#37)."""
         tween = Tween(start_value=[0.0, 10.0], end_value=[100.0, 20.0], duration=1.0)
         tween.start()
         tween.update(0.5)
-        assert tween.current_value == pytest.approx((50.0, 15.0))
-        assert isinstance(tween.current_value, tuple)
+        assert tween.current_value == pytest.approx([50.0, 15.0])
+        assert isinstance(tween.current_value, list)
 
-    def test_vector2_endpoints_work_as_tuple(self):
-        """Vector2 is a tuple subclass, so it tweens (yielding a bare tuple)."""
+    def test_a_vector2_endpoint_comes_back_a_vector2(self):
+        """Not a bare tuple, which is what it used to be: the usual
+        destination is `transform.position`, and writing a tuple there is an
+        AttributeError several frames later, nowhere near the tween."""
         tween = Tween(
             start_value=Vector2(0, 0), end_value=Vector2(100, 50), duration=1.0
         )
         tween.start()
         tween.update(0.5)
-        x, y = tween.current_value
-        assert (x, y) == pytest.approx((50.0, 25.0))
 
-    def test_color_endpoints_rejected(self):
-        """Color is neither number nor sequence -- reject it at construction."""
-        with pytest.raises(TypeError, match="number or a sequence of numbers"):
-            Tween(
-                start_value=Color(0, 0, 0),
-                end_value=Color(255, 255, 255),
-                duration=1.0,
-            )
+        assert isinstance(tween.current_value, Vector2)
+        assert (tween.current_value.x, tween.current_value.y) == pytest.approx(
+            (50.0, 25.0)
+        )
+
+    def test_a_color_endpoint_tweens_channelwise(self):
+        """Hit-flash white, poison tint, corpse fade -- #37's P2 row. Used to
+        be rejected outright."""
+        tween = Tween(
+            start_value=Color(0, 0, 0, 255),
+            end_value=Color(255, 100, 50, 0),
+            duration=1.0,
+        )
+        tween.start()
+        tween.update(0.5)
+
+        assert tween.current_value == Color(128, 50, 25, 128)
+
+    def test_a_colours_channels_stay_bytes_even_when_the_easing_overshoots(self):
+        """`Color`'s own constructor rounds and clamps, which is what a fade
+        pushed past 255 by an elastic easing needs."""
+        from pyguara.animation.easing import EasingType
+
+        tween = Tween(
+            start_value=Color(250, 250, 250),
+            end_value=Color(255, 255, 255),
+            duration=1.0,
+            easing=EasingType.EASE_OUT_ELASTIC,
+        )
+        tween.start()
+        tween.update(0.3)
+
+        value = tween.current_value
+        assert isinstance(value, Color)
+        assert 0 <= value.r <= 255
 
     def test_string_endpoint_rejected(self):
-        """Any non-number, non-sequence value is rejected with a clear error."""
-        with pytest.raises(TypeError, match="start_value must be a number"):
+        """Anything that cannot be taken apart into numbers is rejected at
+        construction, naming the type the caller passed."""
+        with pytest.raises(TypeError, match="Cannot interpolate a str"):
             Tween(start_value="nope", end_value="also nope", duration=1.0)
 
 
