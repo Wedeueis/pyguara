@@ -157,6 +157,24 @@ markers = [
     "cli: CLI system tests (command line interface)"
 ]
 
+[tool.pyguara.agents]
+# What `pyguara studio instructions` writes at the top of AGENTS.md.
+#
+# Declared here rather than passed as a flag so that `--check` agrees with
+# the write without the flag being repeated -- a summary that lived only on
+# the command line made CI report drift against the very file it generated.
+#
+# Without this, the generator falls back to `[project] description` and then
+# to a generic "a game built on the PyGuara engine", which is wrong here:
+# this repository is the engine.
+summary = """\
+PyGuara is a code-first 2D game engine for Python 3.12+: an \
+Entity-Component-System core with inverted-index queries, a \
+reflection-based dependency-injection container, an event bus, and \
+backend-agnostic rendering over pygame-ce and ModernGL. This repository is \
+the engine itself, not a game built on it -- `games/` holds the demos and \
+tutorials."""
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [

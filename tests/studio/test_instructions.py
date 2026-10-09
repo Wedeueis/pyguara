@@ -443,3 +443,106 @@ class TestDriftCheck:
         drifts = check_instructions(project, build_instructions(project))
         reason = next(drift.reason for drift in drifts if drift.path == AGENTS_FILE)
         assert "run the generator" in reason
+
+
+class TestDeclaredSummary:
+    """A project saying what it is, in a place `--check` can also see.
+
+    A summary that lived only on the command line made CI report drift
+    against the very file it had generated -- the whole point of `--check`
+    defeated by the first project that used one.
+    """
+
+    def test_the_tool_section_wins(self, project: Path) -> None:
+        (project / "pyproject.toml").write_text(
+            '[project]\ndescription = "the package blurb"\n'
+            '[tool.pyguara.agents]\nsummary = "written for agents"\n',
+            encoding="utf-8",
+        )
+        assert discover_facts(project).summary == "written for agents"
+
+    def test_the_package_description_is_the_fallback(self, project: Path) -> None:
+        """Usually close enough, and already maintained."""
+        (project / "pyproject.toml").write_text(
+            '[project]\ndescription = "the package blurb"\n', encoding="utf-8"
+        )
+        assert discover_facts(project).summary == "the package blurb"
+
+    def test_no_declaration_means_the_generic_default(self, project: Path) -> None:
+        (project / "pyproject.toml").write_text("[tool.ruff]\n", encoding="utf-8")
+        facts = discover_facts(project)
+        assert facts.summary == ""
+
+        body = build_instructions(project, facts=facts).files[0].content
+        assert "built on the PyGuara engine" in body
+
+    def test_a_declared_summary_reaches_the_file(self, project: Path) -> None:
+        (project / "pyproject.toml").write_text(
+            '[tool.pyguara.agents]\nsummary = "A tower defence."\n',
+            encoding="utf-8",
+        )
+        body = build_instructions(project).files[0].content
+        assert "A tower defence." in body
+        assert "built on the PyGuara engine" not in body
+
+    def test_check_agrees_with_the_write(self, project: Path) -> None:
+        """The property the declaration exists for."""
+        (project / "pyproject.toml").write_text(
+            '[tool.pyguara.agents]\nsummary = "A tower defence."\n',
+            encoding="utf-8",
+        )
+        write_instructions(project, build_instructions(project))
+        assert check_instructions(project, build_instructions(project)) == ()
+
+    def test_an_empty_summary_falls_through(self, project: Path) -> None:
+        (project / "pyproject.toml").write_text(
+            '[project]\ndescription = "the blurb"\n'
+            '[tool.pyguara.agents]\nsummary = "   "\n',
+            encoding="utf-8",
+        )
+        assert discover_facts(project).summary == "the blurb"
+
+    def test_malformed_toml_does_not_break_generation(self, project: Path) -> None:
+        """A project with a broken pyproject still gets instructions."""
+        (project / "pyproject.toml").write_text("[not toml", encoding="utf-8")
+        assert discover_facts(project).summary == ""
+
+    def test_a_missing_pyproject_does_not_break_generation(
+        self, tmp_path: Path
+    ) -> None:
+        assert discover_facts(tmp_path).summary == ""
+
+
+class TestThisRepositoryIsInSync:
+    """The generator is run on this repository, so it must stay current.
+
+    Guards the dogfooding: if someone edits the generated block of
+    `AGENTS.md` by hand, or adds a component, this says so rather than
+    letting the engine's own instructions drift -- which is exactly what
+    `GEMINI.md` had done, advertising three `make` targets that do not
+    exist.
+    """
+
+    def test_the_instruction_files_are_up_to_date(self) -> None:
+        from pyguara.application.bootstrap import _register_core_components
+        from pyguara.prefabs.registry import get_component_registry
+
+        root = Path(__file__).resolve().parents[2]
+        registry = get_component_registry()
+        _register_core_components(registry)
+
+        drifts = check_instructions(root, build_instructions(root, registry=registry))
+        assert not drifts, (
+            "the repository's own instruction files are stale: "
+            + ", ".join(f"{d.path} ({d.reason})" for d in drifts)
+            + ". Run `pyguara studio instructions`."
+        )
+
+    def test_the_shims_import_rather_than_copy(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        for name in ("CLAUDE.md", "GEMINI.md"):
+            content = (root / name).read_text(encoding="utf-8")
+            assert "@AGENTS.md" in content, f"{name} does not import AGENTS.md"
+            assert len(content) < 4000, (
+                f"{name} looks like a copy of AGENTS.md rather than an import"
+            )

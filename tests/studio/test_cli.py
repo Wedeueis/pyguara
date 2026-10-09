@@ -248,3 +248,61 @@ class TestModuleInvocation:
         )
         assert completed.returncode == 0
         assert "instructions" in completed.stdout
+
+
+class TestInstructionsPathHandling:
+    """A relative project path is the most ordinary invocation there is."""
+
+    def test_a_relative_project_path_works(
+        self, project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`write_instructions` builds its paths from the project root, so
+        a relative `.` produced relative paths that `relative_to` on the
+        resolved root then refused -- a crash in the success path, after
+        the files had already been written."""
+        monkeypatch.chdir(project)
+        result = CliRunner().invoke(studio, ["instructions", "."])
+
+        assert result.exit_code == 0, result.output
+        assert "wrote AGENTS.md" in result.output
+
+    def test_the_default_project_is_the_working_directory(
+        self, project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.chdir(project)
+        result = CliRunner().invoke(studio, ["instructions"])
+
+        assert result.exit_code == 0, result.output
+        assert (project / "AGENTS.md").exists()
+
+
+class TestSummaryOption:
+    """A project saying what it is."""
+
+    def test_the_summary_replaces_the_default(self, project: Path) -> None:
+        """The default describes a game built on the engine, which is
+        wrong for the engine's own repository and for a library."""
+        CliRunner().invoke(
+            studio,
+            ["instructions", str(project), "--summary", "A tower defence."],
+        )
+
+        content = (project / "AGENTS.md").read_text(encoding="utf-8")
+        assert "A tower defence." in content
+        assert "is a game built on the PyGuara engine" not in content
+
+    def test_the_rest_is_still_discovered(self, project: Path) -> None:
+        """Only the prose is replaced; commands and inventory are not."""
+        CliRunner().invoke(
+            studio,
+            ["instructions", str(project), "--summary", "A tower defence."],
+        )
+
+        content = (project / "AGENTS.md").read_text(encoding="utf-8")
+        assert "scenes/level_1.scene" in content
+        assert "ruff check" in content
+
+    def test_without_it_the_default_is_used(self, project: Path) -> None:
+        CliRunner().invoke(studio, ["instructions", str(project)])
+        content = (project / "AGENTS.md").read_text(encoding="utf-8")
+        assert "built on the PyGuara engine" in content

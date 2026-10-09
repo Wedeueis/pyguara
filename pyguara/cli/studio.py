@@ -28,6 +28,7 @@ import os
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import IO
 
@@ -96,8 +97,21 @@ def studio() -> None:
     is_flag=True,
     help="Write only AGENTS.md, no CLAUDE.md / GEMINI.md / Cursor rule.",
 )
+@click.option(
+    "--summary",
+    default=None,
+    help=(
+        "One or two sentences saying what this project is. The default "
+        "describes a game built on the engine, which is wrong for the "
+        "engine's own repository and for a library."
+    ),
+)
 def instructions_command(
-    project: Path, check: bool, dry_run: bool, no_shims: bool
+    project: Path,
+    check: bool,
+    dry_run: bool,
+    no_shims: bool,
+    summary: str | None,
 ) -> None:
     """Generate the instruction files coding agents read.
 
@@ -110,6 +124,7 @@ def instructions_command(
         check: Report drift and exit 1 rather than writing.
         dry_run: Print the intended contents without writing.
         no_shims: Skip the per-tool shim files.
+        summary: What this project is, replacing the generic description.
 
     Raises:
         SystemExit: With status 1 when `--check` finds drift.
@@ -125,15 +140,27 @@ def instructions_command(
         write_instructions,
     )
 
+    # Resolved up front: the paths `write_instructions` returns are built
+    # from this, so a relative `.` produced relative paths that
+    # `relative_to(project.resolve())` then refused -- a crash in the
+    # success path, reached by the most ordinary invocation there is.
+    project = project.resolve()
+
     registry = get_component_registry()
     _register_core_components(registry)
 
-    from pyguara.studio.agent.instructions import ShimKind
+    from pyguara.studio.agent.instructions import ShimKind, discover_facts
 
     shims: tuple[ShimKind, ...] = (
         () if no_shims else (ShimKind.CLAUDE, ShimKind.GEMINI, ShimKind.CURSOR)
     )
-    built = build_instructions(project, registry=registry, shims=shims)
+
+    facts = None
+    if summary:
+        # Everything else is still discovered; only the prose is replaced.
+        facts = replace(discover_facts(project, registry=registry), summary=summary)
+
+    built = build_instructions(project, registry=registry, shims=shims, facts=facts)
 
     for warning in built.warnings:
         click.echo(click.style(f"warning: {warning}", fg="yellow"), err=True)
@@ -159,7 +186,7 @@ def instructions_command(
         click.echo("Already up to date.")
         return
     for path in written:
-        click.echo(f"wrote {path.relative_to(project.resolve())}")
+        click.echo(f"wrote {path.relative_to(project)}")
 
 
 def _open_session(

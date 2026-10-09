@@ -255,6 +255,7 @@ def discover_facts(
     """
     project_map = build_project_map(project_root, registry=registry)
     uses_uv = (project_root / "uv.lock").exists()
+    summary = _declared_summary(project_root)
     runner = "uv run " if uses_uv else ""
 
     commands: list[tuple[str, str]] = []
@@ -275,9 +276,51 @@ def discover_facts(
 
     return ProjectFacts(
         name=project_root.name,
+        summary=summary,
         project_map=project_map,
         commands=tuple(commands),
     )
+
+
+def _declared_summary(project_root: Path) -> str:
+    """Return the summary the project declares, or "" for the default.
+
+    Read from `pyproject.toml` rather than taken as a flag, so that
+    `--check` agrees with the write without the flag being repeated. A
+    summary passed only on the command line made CI report drift against
+    a file generated with it -- which is the whole point of `--check`
+    defeated by the first project that used one.
+
+    Two sources, most specific first:
+
+    1. `[tool.pyguara.agents] summary` -- written for agents.
+    2. `[project] description` -- the package blurb, which is usually
+       close enough and is already maintained.
+
+    Args:
+        project_root: The project directory.
+
+    Returns:
+        The summary, or "" when the project declares none.
+    """
+    import tomllib
+
+    pyproject = project_root / "pyproject.toml"
+    try:
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        logger.debug(f"Could not read {pyproject}: {exc}")
+        return ""
+
+    agents = data.get("tool", {}).get("pyguara", {}).get("agents", {})
+    declared = agents.get("summary")
+    if isinstance(declared, str) and declared.strip():
+        return declared.strip()
+
+    description = data.get("project", {}).get("description")
+    if isinstance(description, str) and description.strip():
+        return description.strip()
+    return ""
 
 
 def merge_generated(existing: str | None, generated: str, *, header: str = "") -> str:
