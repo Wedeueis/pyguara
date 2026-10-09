@@ -60,3 +60,32 @@ def populated(world: EntityManager) -> EntityManager:
 def stack(populated: EntityManager) -> CommandStack:
     """A command stack over the populated world."""
     return CommandStack(populated)
+
+
+@pytest.fixture
+def core_registry():
+    """A component registry wired as `create_application()` wires it."""
+    from pyguara.application.bootstrap import _register_core_components
+    from pyguara.prefabs.registry import ComponentRegistry
+
+    registry = ComponentRegistry()
+    _register_core_components(registry)
+    return registry
+
+
+@pytest.fixture
+def session(populated: EntityManager, core_registry):
+    """A Studio session over the populated world, applying edits at once."""
+    from pyguara.studio.session import StudioSession
+
+    return StudioSession(
+        populated, scene_name="test_scene", component_registry=core_registry
+    )
+
+
+@pytest.fixture
+def ops():
+    """A fresh operation registry, isolated from the process-wide one."""
+    from pyguara.studio.ops.builtin import build_registry
+
+    return build_registry()

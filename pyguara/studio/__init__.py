@@ -29,5 +29,13 @@ loop the same mechanism rather than four parallel ones.
 """
 
 from pyguara.studio.commands import CommandStack, EditCommand, EditError
+from pyguara.studio.session import ApprovalMode, EditOutcome, StudioSession
 
-__all__ = ["CommandStack", "EditCommand", "EditError"]
+__all__ = [
+    "ApprovalMode",
+    "CommandStack",
+    "EditCommand",
+    "EditError",
+    "EditOutcome",
+    "StudioSession",
+]
