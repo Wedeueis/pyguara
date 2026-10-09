@@ -45,7 +45,18 @@ class RenderCommand:
     texture: Texture
     world_position: Vector2
     layer: int
+
+    # The depth key *within* `layer` and `sort_group`. For an ordinary
+    # sprite this is its own `z_index`; for a y-sorted one `RenderSystem`
+    # puts the submitted world Y here, so the queue has one number to
+    # compare either way rather than a branch per command inside the sort.
     z_index: float
+
+    # Coarse ordering within the layer, compared before `z_index`. Lets a
+    # cluster of sprites sort as one unit against the scenery -- see
+    # `Sprite.sort_group`.
+    sort_group: int = 0
+
     rotation: float = 0.0
     scale: Vector2 = field(default_factory=lambda: Vector2(1, 1))
     material: Material | None = None

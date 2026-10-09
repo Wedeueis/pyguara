@@ -26,8 +26,27 @@ class Sprite(BaseComponent):
 
     texture: Texture
     layer: int = 0  # 0=Background, 10=Main, 100=UI
-    z_index: int = 0  # For sorting within the same layer (Y-Sort)
+    z_index: int = 0  # Manual depth within the layer; ignored when y_sort
     visible: bool = True
+
+    # 2.5D depth. With `y_sort`, the submitted *world* Y decides depth
+    # within the layer instead of `z_index`, so a character walking down
+    # past a tree ends up in front of it without anyone maintaining a
+    # z_index by hand -- which is the only workable answer once things move.
+    y_sort: bool = False
+
+    # Added to that world Y before comparing. The depth of a sprite is its
+    # contact point with the ground, not its centre: without this a tall
+    # tree whose centre sits above a short character's centre draws behind
+    # the character even while the character stands in front of its trunk.
+    # Usually half the sprite's height.
+    sort_offset: float = 0.0
+
+    # Coarse override, compared before depth within the layer. What a
+    # "sorting group" is for: a player and the sword they are holding must
+    # stay together relative to the scenery however their own Y values
+    # compare, so both carry the group and sort as one unit.
+    sort_group: int = 0
     flip_x: bool = False
     flip_y: bool = False
 
