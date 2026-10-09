@@ -73,6 +73,71 @@ stops at the first `pause_below=True` it meets, so an inventory over a
 non-pausing dialog over a level updates all three, while one pausing layer
 freezes everything below it.
 
+## Persistent layers
+
+A third lifetime, for the thing neither of the above covers: a scene that
+outlives a `switch_to()` of the world beneath it.
+
+```python
+manager.add_layer("hud")             # enters it, and keeps it
+manager.switch_to("floor2")          # the stack unwinds; the HUD does not
+manager.remove_layer("hud")          # exits it
+```
+
+A roguelike floor change is "swap the world scene, keep the HUD". Without this
+a run-wide HUD, minimap or status overlay had to be torn down and re-pushed on
+every transition, losing its state each time.
+
+A layer lives **outside** the stack, which is why `switch_to()` — which unwinds
+the stack entirely — leaves it alone.
+
+| | Lifetime |
+| --- | --- |
+| `switch_to()` | replaces the stack; nothing in it survives |
+| `push_scene()` | keeps what is beneath alive, paused |
+| `add_layer()` | survives both, until `remove_layer()` or `cleanup()` |
+
+### Render order
+
+Layers draw **above the whole stack**, in `order` then insertion order:
+
+```python
+manager.add_layer("hud", order=0)
+manager.add_layer("modal", order=10)    # covers the HUD
+manager.layers                          # ("hud", "modal") — render order
+```
+
+They also draw above an **in-flight transition**. A persistent HUD that blinks
+out during every floor change defeats the point of persisting it; a game that
+wants one covered by the fade can remove it for the duration.
+
+### Updates
+
+A layer updates every frame, including **during a transition**, when the stack
+does not — its own animations should not freeze mid-fade.
+
+`pause_below` does not reach a layer in either direction: a layer neither
+pauses the stack nor is paused by it. Freezing the HUD behind a pause menu is
+explicit, because a HUD that keeps animating while paused is just as often what
+a game wants:
+
+```python
+manager.pause_layer("hud")      # stops updates; it still renders
+manager.resume_layer("hud")
+```
+
+A paused layer still draws. Pausing stops its updates, not its pixels.
+
+### What a layer may not be
+
+One scene cannot be in the stack *and* be a layer — each would enter and exit
+it independently — so `add_layer()`, `switch_to()` and `push_scene()` all raise
+rather than allowing it.
+
+Removal goes through the same teardown as any other scene exit: `on_exit()`,
+`on_teardown()` callbacks, owner-scoped subscriptions, coroutines, systems and
+the DI scope.
+
 ## Transitions
 
 ```python
@@ -96,7 +161,8 @@ hidden, and the incoming one enters when it becomes visible.
     changes from a transition's completion.
 
 While a transition runs, `update()` and `fixed_update()` are skipped entirely —
-the world is frozen for its duration.
+the world is frozen for its duration. Persistent layers are the exception;
+see above.
 
 ## The frame
 
@@ -165,18 +231,21 @@ implementing `cleanup()` gets it called exactly once.
 
 ## Shutdown
 
-`cleanup()` exits every live scene exactly once, LIFO — including a scene a
-transition has started entering but not yet made current, so an application
-shutting down mid-fade does not leave one holding its world.
+`cleanup()` exits every live scene exactly once, LIFO — persistent layers
+first (they draw on top), then the current scene, then the stack top-down —
+including a scene a transition has started entering but not yet made current,
+so an application shutting down mid-fade does not leave one holding its world.
 
 `Application.shutdown()` calls it for you.
 
 ## Rules of thumb
 
 1. `push_scene()` when you intend to come back; `switch_to()` when you do not.
-2. Nothing survives `switch_to()` — do not stash state on a scene object
-   across one.
+2. Nothing in the *stack* survives `switch_to()` — do not stash state on a
+   stacked scene across one. What must survive is a persistent layer.
 3. Check `is_transitioning()` before changing the stack.
 4. Deterministic work in `fixed_update()`, visual work in `update()`.
 5. Override `on_pause`/`on_resume` for music and timers; the system manager is
    already gated for you.
+6. A run-wide HUD, minimap or status overlay is a layer, not something to
+   re-push after every switch.
