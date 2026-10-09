@@ -413,15 +413,19 @@ def attach_studio(
     )
     container.register_instance(StudioAttachment, attachment)
 
-    # Resolved once now so the panels install as soon as a scene exists.
-    # Harmless when none does yet: `session` returns None and the next
-    # access tries again. Assigned rather than discarded so it does not
-    # read as a statement with no effect -- it has one, in the property.
-    if attachment.session is None:
-        logger.debug(
-            "No scene is active yet, so Studio's panels install on the "
-            "first frame after one is."
-        )
+    # Resolved every frame, which is what actually installs the panels.
+    #
+    # The session is per-scene and built lazily, and `attach_studio` runs
+    # *before* `app.run()`, so at this point there is no world and no
+    # session. Without something asking again each frame, nothing ever
+    # does: under `app.run()` -- the only way a game actually starts --
+    # Studio attached, logged that it had, and drew the base editor's two
+    # panels for ever. Resolving it here once was not enough, and every
+    # test missed it by reaching for `attachment.session` by hand.
+    # Through the attachment, whose `layer` is typed loosely:
+    # `attach_editor` is declared to return `object | None`, since the
+    # Pygame backend's stub is registered under the same key.
+    attachment.layer.add_frame_hook(lambda: attachment.session)
 
     logger.info("Studio attached.")
     return attachment

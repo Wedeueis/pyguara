@@ -15,6 +15,20 @@ attach_studio(app.container)
 app.run(MyScene("game", dispatcher))
 ```
 
+## Trying it
+
+Six demos already use the ModernGL backend, and `tools/studio_demo.py`
+opens any of them with Studio attached:
+
+```bash
+uv run python tools/studio_demo.py                       # guara_falcao
+uv run python tools/studio_demo.py tamandua_murundus
+uv run python tools/studio_demo.py guara_falcao --mode ask
+```
+
+`main.py` and the remaining demos run on the Pygame backend, where Studio
+declines rather than half-installing.
+
 `attach_studio` builds on `attach_editor`, so it is ModernGL-only for the
 same reason: it draws through the GL context the render graph owns, and
 the Pygame backend's window is a software surface with none. On that

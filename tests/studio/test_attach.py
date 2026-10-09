@@ -97,7 +97,12 @@ class TestAttachToARealApplication:
 
     @pytest.mark.parametrize(
         "scenario",
-        ["attaches", "session_follows_the_scene", "frames_and_operations"],
+        [
+            "attaches",
+            "session_follows_the_scene",
+            "frames_and_operations",
+            "panels_install_under_the_real_loop",
+        ],
     )
     def test_scenario(self, scenario: str) -> None:
         pytest.importorskip("imgui_bundle")

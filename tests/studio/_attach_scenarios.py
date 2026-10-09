@@ -158,10 +158,51 @@ def frames_and_operations() -> None:
         app.shutdown()
 
 
+def panels_install_under_the_real_loop() -> None:
+    """The panels appear without anyone asking for the session.
+
+    The bug this exists for: every other scenario, and every test,
+    reached for `attachment.session` by hand -- which is what installs
+    the panels. Under `app.run()`, the only way a game actually starts,
+    nothing does, so Studio attached, logged that it had, and drew the
+    base editor's two panels for ever.
+
+    This scenario therefore touches `.session` nowhere.
+    """
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=Path.cwd())
+        assert attachment is not None
+        app.begin(_scene(app))
+
+        # Exactly what `app.run()` does, and nothing else.
+        for _ in range(10):
+            app.step()
+
+        titles = [panel.title for panel in attachment.layer.panels]
+        for expected in (
+            "Viewport",
+            "Play",
+            "History",
+            "Journal",
+            "Components",
+            "Commands",
+        ):
+            assert expected in titles, (
+                f"{expected} was never installed. Studio's panels install "
+                f"when its session first resolves, and nothing resolves it "
+                f"under the real frame loop unless a frame hook does. "
+                f"Installed: {titles}"
+            )
+    finally:
+        app.shutdown()
+
+
 SCENARIOS = {
     "attaches": attaches,
     "session_follows_the_scene": session_follows_the_scene,
     "frames_and_operations": frames_and_operations,
+    "panels_install_under_the_real_loop": (panels_install_under_the_real_loop),
 }
 
 
