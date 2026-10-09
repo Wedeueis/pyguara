@@ -205,3 +205,67 @@ class TestConfigInspectorEditing:
         assert reloaded.config.audio.master_volume == original + 1.0
 
         app.shutdown()
+
+    def test_bookkeeping_fields_are_not_shown_as_settings(self) -> None:
+        """`GameConfig.custom` and `.profiles` are dicts, which the leaf
+        collector can only render as one read-only row of raw JSON."""
+        app = create_headless_application()
+        inspector = ConfigInspector(app._container)
+        renderer = MagicMock(spec=UIRenderer)
+        renderer.get_text_size.return_value = (50, 16)
+
+        inspector.render(renderer)
+
+        labels = [leaf.label for _, leaf in inspector._tweakable_rows]
+        assert "custom" not in labels
+        assert "profiles" not in labels
+        assert "version" not in labels
+        assert "display.fps_target" in labels
+
+        app.shutdown()
+
+    def test_a_game_defined_section_is_editable(self) -> None:
+        from dataclasses import dataclass
+
+        @dataclass
+        class BalanceConfig:
+            drop_rate: float = 0.25
+
+        app = create_headless_application(
+            register_sections=lambda manager: manager.register_section(
+                "balance", BalanceConfig
+            )
+        )
+        config_manager = app._container.get(ConfigManager)
+
+        inspector = ConfigInspector(app._container)
+        renderer = MagicMock(spec=UIRenderer)
+        renderer.get_text_size.return_value = (50, 16)
+        inspector.render(renderer)
+
+        rect, leaf = next(
+            (r, leaf)
+            for r, leaf in inspector._tweakable_rows
+            if leaf.label == "balance.drop_rate"
+        )
+        _click_at(inspector, rect.x + rect.width - 5, rect.y + 5)
+
+        assert config_manager.section(BalanceConfig).drop_rate == 1.25
+
+        app.shutdown()
+
+    def test_an_active_profile_is_named_in_the_panel(self) -> None:
+        """Otherwise a value a layer set reads as if someone chose it."""
+        app = create_headless_application()
+        config_manager = app._container.get(ConfigManager)
+        config_manager.push_profile("hard", {"audio": {"master_volume": 0.1}})
+
+        inspector = ConfigInspector(app._container)
+        renderer = MagicMock(spec=UIRenderer)
+        renderer.get_text_size.return_value = (50, 16)
+        inspector.render(renderer)
+
+        drawn = [call.args[0] for call in renderer.draw_text.call_args_list]
+        assert any("profiles: hard" in text for text in drawn)
+
+        app.shutdown()

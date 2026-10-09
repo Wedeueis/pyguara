@@ -75,7 +75,20 @@ class ConfigInspector(Tool):
         )
         y += 30
 
-        leaves = collect_tweakable_leaves(self._config_manager.config)
+        # Without this, a value a profile set reads as if someone chose it,
+        # and editing it looks like it worked right up until the next
+        # push or pop re-applies the layer over the edit.
+        active = self._config_manager.active_profiles
+        if active:
+            renderer.draw_text(
+                f"profiles: {', '.join(active)}",
+                Vector2(x, y),
+                Color(220, 190, 120),
+                14,
+            )
+            y += 20
+
+        leaves = self._collect_leaves()
         rows = render_tweakable_leaves(
             renderer,
             leaves,
@@ -91,6 +104,25 @@ class ConfigInspector(Tool):
         if self._saved_flash_timer > 0:
             footer_y = self._panel_rect.y + self._panel_rect.height - 30
             renderer.draw_text("Saved.", Vector2(x, footer_y), Color(120, 220, 120), 14)
+
+    def _collect_leaves(self) -> list[TweakableLeaf]:
+        """Walk each config section, engine-defined and game-defined alike.
+
+        Section by section rather than walking `GameConfig` whole, which
+        would also walk `custom` and `profiles` -- bookkeeping, not
+        settings, and a dict the leaf collector can only show as one
+        read-only row of raw JSON. Going through `sections()` skips them by
+        construction and picks up a game's registered sections for free,
+        with the same dotted labels as before.
+
+        Returns:
+            Every editable leaf, in section order.
+        """
+        return [
+            leaf
+            for name, section in self._config_manager.config.sections()
+            for leaf in collect_tweakable_leaves(section, prefix=f"{name}.")
+        ]
 
     def process_event(self, event: Any) -> bool:
         """Handle clicks on editable field rows and the Save shortcut.

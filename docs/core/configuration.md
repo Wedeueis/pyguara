@@ -31,6 +31,92 @@ container, so any service can take a `ConfigManager` in its constructor.
 manager.config.physics.fixed_dt   # 1 / fixed_timestep_hz, in seconds
 ```
 
+### Game-defined sections
+
+`GameConfig` is closed — those five, full stop. A game registers its own
+section instead of growing a second JSON loader beside the engine's:
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class BalanceConfig:
+    enemy_hp_scale: float = 1.0
+    drop_rate: float = 0.25
+    boss_waves: int = 3
+
+manager.register_section("balance", BalanceConfig)
+manager.load()
+
+manager.section(BalanceConfig).drop_rate        # typed
+manager.update_setting("balance", "drop_rate", 0.4)
+```
+
+It then gets everything an engine section gets: the same file (at the top
+level, beside `display` — nothing is nested under a `custom` key), the same
+type coercion on load, the same `PYGUARA_BALANCE_DROP_RATE` override, the same
+`update_setting()` checks, the same profile layering, and validation if it asks
+for it.
+
+**Register before `load()`.** `from_dict()` can only build a section the
+registry knows about, so a late registration would discard whatever the file
+said and hand back defaults instead. Registering afterwards raises rather than
+doing that quietly, and a section in the file that nothing registered is logged
+by name:
+
+```
+Unknown config section 'balance' ignored. Register it with
+ConfigManager.register_section('balance', ...) before load(), or remove it
+from the file.
+```
+
+The dataclass must be constructible with no arguments — those values are what a
+missing file falls back to.
+
+Under bootstrap, the place for that is the `register_sections` hook, which runs
+before the load — unlike `configure`, which runs after it and is for adjusting
+values rather than declaring them:
+
+```python
+app = create_application(
+    configure=lambda config: setattr(config.display, "title", "My Game"),
+    register_sections=lambda manager: manager.register_section(
+        "balance", BalanceConfig
+    ),
+)
+```
+
+`section()` is keyed by type rather than name because that is what game code
+actually holds, and it stays type-checked where `config.custom["balance"]`
+would be `Any`. It finds engine sections too
+(`manager.section(PhysicsConfig)`).
+
+#### Validating a game's own values
+
+The engine cannot know what `drop_rate` means, so a section carries its own
+rules by growing a `validate()` method (the `ValidatableSection` protocol —
+opt-in; a section without one is simply unchecked):
+
+```python
+@dataclass
+class BalanceConfig:
+    drop_rate: float = 0.25
+
+    def validate(self) -> list[ValidationIssue]:
+        if 0.0 <= self.drop_rate <= 1.0:
+            return []
+        return [ValidationIssue(
+            ValidationSeverity.ERROR, "balance", "drop_rate",
+            f"drop_rate must be within 0..1, got {self.drop_rate}.",
+        )]
+```
+
+`ValidationIssue.section` is overwritten with the registered name, so you
+cannot get it wrong. An `ERROR` or `CRITICAL` from here blocks
+`update_setting()` and `push_profile()` exactly as an engine rule does. A
+`validate()` that raises becomes one `ERROR` naming the section rather than
+taking down startup.
+
 `fixed_dt` raises `ValueError` rather than `ZeroDivisionError` if
 `fixed_timestep_hz` is not positive — `Application.run()` reads it on every
 startup, so the message names the setting.
@@ -99,6 +185,91 @@ Direct assignment (`manager.config.audio.master_volume = 99.0`) bypasses all of
 this. It is legal, and occasionally what you want during bootstrap, but nothing
 will check it.
 
+## Profiles
+
+A profile is a **named layer of overrides** applied over the configuration and
+peeled back off again. A difficulty preset, an accessibility profile and a
+roguelike's run modifiers are all the same shape: values that hold for a while
+and then stop.
+
+```python
+manager.push_profile("hard", {
+    "balance": {"enemy_hp_scale": 2.5, "permadeath": True},
+    "audio":   {"music_volume": 0.3},
+})
+
+manager.active_profiles          # ("hard",)
+manager.pop_profile()            # back to exactly what was underneath
+```
+
+Think of a push as a batch of `update_setting()` calls applied **atomically and
+reversibly**: the same type checks, the same validator veto, and a pop restores
+what was there — which plain assignment cannot, because the previous value is
+gone the moment it is overwritten.
+
+Authored in the config file, a profile needs no code at all:
+
+```json
+{
+  "profiles": {
+    "hard":   {"balance": {"enemy_hp_scale": 2.5}},
+    "quiet":  {"audio": {"master_volume": 0.2}}
+  }
+}
+```
+
+```python
+manager.available_profiles       # ("hard", "quiet")
+manager.push_profile("hard")     # resolved by name
+```
+
+`define_profile(name, overrides)` adds one from code — for a layer the game
+computes rather than authors, such as a daily modifier set. It is saved with
+the rest of the config. Defining applies nothing; only a push does.
+
+### Stacking
+
+Layers stack in push order and the later one wins where two set the same
+setting. `pop_profile(name)` can remove one from the **middle** of the stack:
+run modifiers are independent, so dropping one must not require dropping
+everything pushed after it. `clear_profiles()` drops them all.
+
+Internally a pop re-applies the base and then each surviving layer, rather than
+trying to undo what the removed one did — with two layers touching one setting,
+undoing is ambiguous. The `GameConfig` and its sections are mutated **in
+place**, so everything holding `manager.config` sees the result.
+
+### Rejection is all-or-nothing
+
+A push that names an unknown section or setting, carries a wrong-typed value,
+or introduces an `ERROR`/`CRITICAL` issue applies **nothing** and returns
+`False`:
+
+```python
+manager.push_profile("typo", {"audio": {"mastre_volume": 0.3}})   # False
+```
+
+Half a difficulty preset is worse than none of it, and a typo that silently
+skips one line costs someone an afternoon. A problem the configuration *already*
+had does not block a push — that would be a cascade with no way out.
+
+### What a profile owns
+
+While a profile is active, `update_setting()` **refuses** the settings that
+profile declares, naming it:
+
+```
+Rejected 'balance.permadeath': the active profile 'hard' sets it.
+```
+
+A run modifier the options menu can switch off is not a modifier. Every other
+setting stays writable, and such a write goes into the base layer, so a later
+push and pop does not revert the player's own choice.
+
+A `load()` drops every active profile: it re-establishes the base, and a stack
+whose values referred to the previous one would re-apply them over unrelated
+settings.
+
 ## Validation
 
 ```python
@@ -122,7 +293,19 @@ advice, not a veto.
 
 ## Environment overrides
 
-Applied after the file is read, so they win:
+Applied after the file is read, so they win.
+
+Any setting in any section — including a game's own — is reachable as
+`PYGUARA_<SECTION>_<FIELD>`:
+
+```bash
+PYGUARA_DISPLAY_FPS_TARGET=144
+PYGUARA_AUDIO_MUTED=true
+PYGUARA_BALANCE_DROP_RATE=0.75
+```
+
+Four short aliases predate that rule and do not follow it. They stay because
+launch scripts and CI jobs set them:
 
 | Variable | Overrides |
 | --- | --- |
@@ -131,12 +314,33 @@ Applied after the file is read, so they win:
 | `PYGUARA_WINDOW_WIDTH` | `display.screen_width` |
 | `PYGUARA_WINDOW_HEIGHT` | `display.screen_height` |
 
+The explicit form wins where both name the same field — it says which field it
+means, so it is the more deliberate of the two.
+
+Booleans accept `1/true/yes/on` and `0/false/no/off`. Enums accept a member
+name or a value. A `Color` or a nested dataclass is **refused** rather than
+parsed from an invented syntax — the file is the place for those.
+
 An unparseable value is reported and skipped:
 
 ```
 Ignoring PYGUARA_BACKEND='vulkan': not a valid RenderingBackend.
 Expected one of PYGAME, MODERNGL.
 ```
+
+A variable whose section matches but whose field does not is reported too — a
+mistyped field under a real section is a typo, not someone else's variable:
+
+```
+Ignoring PYGUARA_DISPLAY_FPS_TARGEET: 'display' has no setting 'fps_targeet'.
+```
+
+One naming no section at all is left alone; it belongs to something else.
+
+A **missing** config file is written with the engine's defaults *before*
+overrides are applied: the file is the game's to edit, while an override
+belongs to one launch. (It also means the first launch now applies them at all,
+which it previously skipped.)
 
 ## Events
 
@@ -154,7 +358,9 @@ dispatcher.subscribe(OnConfigurationChanged, settings_menu.refresh)
 
 `OnConfigurationChanged` carries `section`, `setting`, `old_value` and
 `new_value` — enough for a settings screen to react without re-reading the
-whole config.
+whole config. A push or pop publishes **one event per setting that actually
+moved**, each carrying `profile`, so a listener can tell a run modifier from
+something the player typed.
 
 ## Rules of thumb
 
@@ -165,3 +371,7 @@ whole config.
    `validate()` if you care.
 4. Adding a field to a config dataclass is enough; loading, saving and
    coercion are driven by the declared types.
+5. A game's own tunables belong in a registered section, not a second JSON
+   file. Register them before `load()`.
+6. Anything temporary — a difficulty preset, a run modifier, an accessibility
+   profile — is a profile, not a set of assignments you plan to undo by hand.

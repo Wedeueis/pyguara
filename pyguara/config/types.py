@@ -1,12 +1,20 @@
 """Configuration data structures."""
 
+from __future__ import annotations
+
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field, fields, is_dataclass
 from enum import Enum
-from typing import Any, get_type_hints
+from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
 
 from pyguara.common.types import Color
 from pyguara.log import get_logger
 from pyguara.log.types import LogLevel
+
+if TYPE_CHECKING:
+    from pyguara.config.sections import SectionRegistry
+
+SectionT = TypeVar("SectionT")
 
 logger = get_logger(__name__)
 
@@ -144,7 +152,15 @@ class DebugConfig:
 
 @dataclass
 class GameConfig:
-    """Master configuration container."""
+    """Master configuration container.
+
+    The five engine sections are declared fields. Sections a *game* defines
+    live in `custom`, keyed by the name they were registered under, and are
+    read, written, coerced and validated by exactly the same machinery --
+    see `pyguara.config.sections`. Reach for them through
+    `section()`/`get_section()` rather than indexing `custom`, so the
+    distinction stops mattering at the call site.
+    """
 
     display: WindowConfig = field(default_factory=WindowConfig)
     audio: AudioConfig = field(default_factory=AudioConfig)
@@ -155,20 +171,105 @@ class GameConfig:
     # Metadata
     version: str = "1.0"
 
+    custom: dict[str, Any] = field(default_factory=dict)
+    """Game-defined sections, name -> instance. Written to the document at
+    the top level, beside the engine's own, so a game's section looks no
+    different from `display` in the file."""
+
+    profiles: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
+    """Named override layers, `profile -> section -> setting -> value`,
+    authored in the config file and applied through
+    `ConfigManager.push_profile()`. Definitions, not values: nothing here
+    affects the config until a profile is pushed."""
+
+    def sections(self) -> Iterator[tuple[str, Any]]:
+        """Yield `(name, instance)` for every section, engine and game alike.
+
+        Engine sections come first, in declaration order, then game-defined
+        ones in registration order. `version`, `custom` and `profiles` are
+        bookkeeping, not sections, and are skipped.
+
+        Yields:
+            Each section's registered name and live instance.
+        """
+        for declared in fields(self):
+            value = getattr(self, declared.name)
+            if is_dataclass(value) and not isinstance(value, type):
+                yield declared.name, value
+        yield from self.custom.items()
+
+    def section_names(self) -> list[str]:
+        """Return every section name, engine sections first.
+
+        Returns:
+            The names accepted by `get_section()` and `update_setting()`.
+        """
+        return [name for name, _ in self.sections()]
+
+    def get_section(self, name: str) -> Any | None:
+        """Look a section up by the name it appears under in the file.
+
+        Args:
+            name: Section name, e.g. `"display"` or a registered
+                `"balance"`.
+
+        Returns:
+            The live section instance, or None if no section has that name.
+        """
+        declared = getattr(self, name, None)
+        if is_dataclass(declared) and not isinstance(declared, type):
+            return declared
+        return self.custom.get(name)
+
+    def section(self, section_type: type[SectionT]) -> SectionT:
+        """Look a section up by its type, keeping the result type-checked.
+
+        The typed counterpart to `get_section()`: game code holds the
+        dataclass, not the string it was registered under, and
+        `custom["balance"]` is `Any` at every call site that touches it.
+
+        Args:
+            section_type: The section's dataclass.
+
+        Returns:
+            The live instance of that section.
+
+        Raises:
+            KeyError: If no section of that type is present -- for a
+                game-defined one, usually because `register_section()` was
+                never called.
+        """
+        for _, value in self.sections():
+            if isinstance(value, section_type):
+                return value
+        raise KeyError(
+            f"No config section of type {section_type.__name__} is present. "
+            f"Register it with ConfigManager.register_section() before load(). "
+            f"Present sections: {', '.join(self.section_names())}."
+        )
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize config to dictionary.
 
-        `asdict()` alone leaves `RenderingBackend` as a plain `Enum` instance
-        (unlike `LogLevel`, an `IntEnum` that's already JSON-safe), which
-        `json.dump()` then rejects -- converted to its string `.value` here
-        to match what `from_dict()` already expects on the way back in.
+        Game-defined sections are hoisted out of `custom` to the top level,
+        so the document reads the same whether a section came from the
+        engine or the game, and `from_dict()` need not know which it was.
+
+        Enums are reduced to their `.value` throughout. `asdict()` leaves
+        `RenderingBackend` as a plain `Enum` instance (unlike `LogLevel`, an
+        `IntEnum` that is already JSON-safe) and `json.dump()` then rejects
+        it; doing it generically means the next enum field added anywhere,
+        including in a game's own section, does not repeat that bug.
         """
         data = asdict(self)
-        data["display"]["backend"] = self.display.backend.value
-        return data
+        data.update(data.pop("custom", {}))
+        document: dict[str, Any] = _jsonify(data)
+        return document
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "GameConfig":
+    def from_dict(
+        cls, data: dict[str, Any], registry: SectionRegistry | None = None
+    ) -> GameConfig:
         """Build a config from a decoded JSON document.
 
         Unknown keys are ignored and logged rather than raising, so a config
@@ -180,28 +281,86 @@ class GameConfig:
 
         Args:
             data: Decoded configuration document.
+            registry: Game-defined sections to build from the document's
+                remaining top-level keys. Without it, only the engine's
+                sections are read and anything else is reported as unknown.
 
         Returns:
             The populated config. Sections absent from `data` keep their
             defaults.
         """
         config = cls()
-        for section_name in ("display", "audio", "input", "physics", "debug"):
+        if registry is not None:
+            config.custom = registry.build_defaults()
+
+        for section_name, current in list(config.sections()):
             section_data = data.get(section_name)
             if section_data is None:
                 continue
-            current = getattr(config, section_name)
-            setattr(
-                config,
-                section_name,
-                _build_section(type(current), section_data, section_name),
-            )
+            if not isinstance(section_data, dict):
+                logger.warning(
+                    f"Config section '{section_name}' should be an object, got "
+                    f"{type(section_data).__name__}; keeping defaults."
+                )
+                continue
+            built = _build_section(type(current), section_data, section_name)
+            if section_name in config.custom:
+                config.custom[section_name] = built
+            else:
+                setattr(config, section_name, built)
 
         version = data.get("version")
         if isinstance(version, str):
             config.version = version
 
+        profiles = data.get("profiles")
+        if isinstance(profiles, dict):
+            config.profiles = profiles
+
+        _report_unknown_sections(data, config)
+
         return config
+
+
+def _report_unknown_sections(data: dict[str, Any], config: GameConfig) -> None:
+    """Warn about top-level document keys that are not sections.
+
+    The common cause is a game-defined section whose `register_section()`
+    call happens after `load()` instead of before it, which otherwise drops
+    the whole section in silence.
+
+    Args:
+        data: The decoded document.
+        config: The config built from it, for the list of known names.
+    """
+    known = set(config.section_names()) | {"version", "profiles"}
+    for key in data:
+        if key not in known:
+            logger.warning(
+                f"Unknown config section '{key}' ignored. Register it with "
+                f"ConfigManager.register_section('{key}', ...) before load(), "
+                f"or remove it from the file."
+            )
+
+
+def _jsonify(value: Any) -> Any:
+    """Reduce enums to their values, recursively, leaving everything else.
+
+    Args:
+        value: Any already-`asdict()`-ed structure.
+
+    Returns:
+        The same structure with every `Enum` replaced by `member.value`.
+    """
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {key: _jsonify(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_jsonify(item) for item in value]
+    if isinstance(value, tuple):
+        return [_jsonify(item) for item in value]
+    return value
 
 
 def _build_section(
