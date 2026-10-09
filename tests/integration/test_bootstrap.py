@@ -38,8 +38,13 @@ def test_component_registry_is_registered_once_with_core_components():
 
     registry = container.get(ComponentRegistry)
 
-    assert len(registry.list_components()) == 17
-    assert registry.get("Transform") is not None
+    # Named, not counted. A bare count breaks every time a component is
+    # legitimately added to core -- it did when `Sprite` and `ChildOf` were
+    # registered for scene round-tripping -- while telling you nothing about
+    # *which* component is present. The clobbering this test guards against
+    # would empty the registry, so a handful of names catches it precisely.
+    for name in ("Transform", "Tag", "RigidBody", "Sprite", "ChildOf"):
+        assert registry.get(name) is not None, f"{name} missing from core registry"
 
 
 @pytest.mark.integration
