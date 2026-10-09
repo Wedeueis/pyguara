@@ -195,6 +195,10 @@ class StudioSession:
         # hardcoded `Actor.AGENT` recorded a script's edits as an agent's,
         # which makes the provenance the field exists for a fiction.
         self._actor = Actor.HUMAN
+        # Set by a harness that owns the frame loop. None in a live
+        # editor, where the application drives its own -- which is why the
+        # run operations check for it rather than assuming one.
+        self._harness: Any = None
 
         self._journal.record(
             Actor.SYSTEM,
@@ -245,6 +249,23 @@ class StudioSession:
     def actor(self) -> Actor:
         """Who edits are attributed to when a caller does not say."""
         return self._actor
+
+    @property
+    def harness(self) -> Any:
+        """The run harness driving the frame loop, or None.
+
+        None in a live editor, where the application drives its own loop
+        and stepping it from an operation would fight with it.
+        """
+        return self._harness
+
+    def attach_harness(self, harness: Any) -> None:
+        """Let the run operations drive frames through `harness`.
+
+        Args:
+            harness: A `StudioHarness` over this session's application.
+        """
+        self._harness = harness
 
     @contextmanager
     def acting_as(self, actor: Actor) -> Iterator[None]:
