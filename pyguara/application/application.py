@@ -9,7 +9,7 @@ regardless of frame rate variations.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
@@ -41,6 +41,30 @@ if TYPE_CHECKING:
 
 # Event queue processing budget (milliseconds per frame)
 DEFAULT_EVENT_QUEUE_TIME_BUDGET_MS = 5.0
+
+
+@runtime_checkable
+class EditorInputSink(Protocol):
+    """Something that may consume an input event before the game sees it.
+
+    Declared here, structurally, rather than importing `EditorLayer`:
+    `pyguara/editor` is an optional dev surface that needs Dear ImGui, and
+    the core runtime must import cleanly without it. `Protocol` over `ABC`
+    for the usual reason in this codebase -- the editor does not have to
+    know this type exists to satisfy it.
+    """
+
+    def process_event(self, event: object) -> bool:
+        """Take one engine event and report whether it was consumed.
+
+        Args:
+            event: An engine event from `Window.poll_events()`.
+
+        Returns:
+            True when the implementation is using that input this frame, so
+            the caller must not also route it to the game.
+        """
+        ...
 
 
 class Application:
@@ -120,7 +144,12 @@ class Application:
 
         # Fixed timestep accumulator
         self._accumulator = 0.0
-        self._fixed_dt = 0.0  # set for real in run(), from config
+        # All three are set for real in begin(), from config. `_fixed_dt`
+        # being 0.0 until then is also what makes `step()` before `begin()`
+        # a no-op rather than an infinite accumulator loop.
+        self._fixed_dt = 0.0
+        self._target_fps = 0
+        self._max_frame_time = 0.0
 
         # Global time-scale and pause. Freely settable by game code at any
         # point; see _effective_time_scale() for how they combine, and
@@ -140,7 +169,43 @@ class Application:
         # is called; SandboxApplication calls it automatically.
         self._asset_reload_watcher: AssetReloadWatcher | None = None
 
+        # The editor layer, looked up once on first use. `attach_editor()`
+        # runs after this constructor, so the lookup cannot happen here.
+        self._editor_layer_checked = False
+        self._editor_layer_cache: EditorInputSink | None = None
+
         self.logger.info("Application instance created.")
+
+    @property
+    def _editor_layer(self) -> EditorInputSink | None:
+        """The attached editor layer, or None when none is attached.
+
+        Resolved from the container on each access rather than cached in
+        `__init__`, because `attach_editor()` runs *after* the application
+        is built -- it needs the render graph the constructor resolves --
+        so a value captured at construction time would always be None.
+
+        The container lookup is a dict hit on a hot path (once per input
+        event), which is why the result is cached for the frame by
+        `_process_input`'s local rather than re-resolved per event.
+
+        Returns:
+            Something that can take an engine event and say whether it used
+            it, or None.
+        """
+        if not self._editor_layer_checked:
+            self._editor_layer_checked = True
+            try:
+                from pyguara.editor.layer import EditorLayer
+
+                self._editor_layer_cache = cast(
+                    "EditorInputSink | None", self._container.get(EditorLayer)
+                )
+            except Exception:
+                # No editor attached, or ImGui is not installed. Both are
+                # the normal case for a shipped game.
+                self._editor_layer_cache = None
+        return self._editor_layer_cache
 
     @property
     def container(self) -> DIContainer:
@@ -181,6 +246,81 @@ class Application:
     def run(self, starting_scene: Scene) -> None:
         """Execute the main game loop with a fixed timestep, until the window closes.
 
+        A thin loop over `step()`, which is where a frame is actually
+        defined; `begin()` does the one-time setup. Everything the loop
+        does per frame is documented on `step()`.
+
+        Dispatches `ApplicationStartEvent` before the first frame, and always
+        calls `shutdown()` on the way out.
+
+        Args:
+            starting_scene: Scene to register and activate before the loop.
+
+        Raises:
+            ValueError: If `physics.fixed_timestep_hz` is not positive.
+            Exception: Anything raised inside the loop, after logging it.
+        """
+        self.begin(starting_scene)
+
+        try:
+            while self.step():
+                pass
+        except KeyboardInterrupt:
+            # Handle Ctrl+C gracefully
+            self.logger.info("KeyboardInterrupt received. Stopping.")
+        except Exception as error:
+            # Log unexpected crashes before shutting down. Bare `raise` rather
+            # than `raise error`, which would append this frame to the
+            # traceback and obscure the original site.
+            self.logger.critical(
+                f"Uncaught exception in game loop: {error}", exc_info=True
+            )
+            raise
+        finally:
+            # CRITICAL: This ensures cleanup happens even if sys.exit() is called
+            self.shutdown()
+
+    def begin(self, starting_scene: Scene) -> None:
+        """Register and activate `starting_scene`, then arm the frame loop.
+
+        Split out of `run()` so a frame can be driven from outside it --
+        `step()` is unusable before this has run, because `_fixed_dt` is
+        still `0.0` and no scene is active. A headless harness, a test, or
+        PyGuara Studio's play-in-editor calls `begin()` then `step()`
+        rather than monkeypatching `_render` and flipping `_is_running`,
+        which is what every such caller in this repository had to do.
+
+        Args:
+            starting_scene: Scene to register and activate.
+
+        Raises:
+            ValueError: If `physics.fixed_timestep_hz` is not positive.
+        """
+        self.logger.info(f"Starting with scene: {starting_scene.name}")
+
+        self._scene_manager.register(starting_scene)
+        self._scene_manager.switch_to(starting_scene.name)
+
+        self._is_running = True
+        physics_config = self._config_manager.config.physics
+        # Read once and held, not per frame: these three decide the shape of
+        # every frame, and re-reading them mid-loop would let a config edit
+        # change the timestep underneath the accumulator.
+        self._target_fps = self._config_manager.config.display.fps_target
+        self._fixed_dt = physics_config.fixed_dt  # also lets _render() get alpha
+        self._max_frame_time = physics_config.max_frame_time
+
+        self.logger.debug(
+            f"Game loop: target_fps={self._target_fps}, "
+            f"physics_hz={physics_config.fixed_timestep_hz}, "
+            f"fixed_dt={self._fixed_dt}"
+        )
+
+        self._event_dispatcher.dispatch(ApplicationStartEvent(source=self))
+
+    def step(self) -> bool:
+        """Run exactly one frame, and report whether to run another.
+
         Each frame measures its own duration, clamps it to
         `physics.max_frame_time`, accumulates it, and runs as many fixed-rate
         updates as that buys before rendering once. Physics therefore behaves
@@ -199,115 +339,85 @@ class Application:
         recording session spent on that frame, and scaling it here would
         reproduce a different physics simulation than what was recorded.
 
-        Dispatches `ApplicationStartEvent` before the first frame, and always
-        calls `shutdown()` on the way out.
+        Exceptions propagate: `run()` owns the logging and the `shutdown()`,
+        so a caller driving frames by hand decides for itself what a crash
+        in frame N means.
 
-        Args:
-            starting_scene: Scene to register and activate before the loop.
-
-        Raises:
-            ValueError: If `physics.fixed_timestep_hz` is not positive.
-            Exception: Anything raised inside the loop, after logging it.
+        Returns:
+            True while the loop should continue -- the app is running and the
+            window is open. False once either stops being true, so
+            `while app.step(): pass` terminates exactly where `run()` does.
+            Also False when called before `begin()`.
         """
-        self.logger.info(f"Starting with scene: {starting_scene.name}")
+        if not (self._is_running and self._window.is_open):
+            return False
 
-        self._scene_manager.register(starting_scene)
-        self._scene_manager.switch_to(starting_scene.name)
+        # 1. Measure frame time
+        frame_time = self._clock.tick(self._target_fps) / 1000.0
 
-        self._is_running = True
-        target_fps = self._config_manager.config.display.fps_target
-        physics_config = self._config_manager.config.physics
-        fixed_dt = physics_config.fixed_dt
-        self._fixed_dt = fixed_dt  # persisted so _render() can compute alpha
-        max_frame_time = physics_config.max_frame_time
+        # Clamp frame time to prevent spiral of death
+        # (when updates take longer than real time, causing ever-growing backlog)
+        if frame_time > self._max_frame_time:
+            frame_time = self._max_frame_time
 
-        self.logger.debug(
-            f"Game loop: target_fps={target_fps}, "
-            f"physics_hz={physics_config.fixed_timestep_hz}, fixed_dt={fixed_dt}"
+        # While a replay drives the game, step the simulation by the
+        # recorded per-frame delta instead of wall-clock time, so the
+        # fixed-step count, tweens, particles and WaitForSeconds
+        # reproduce. clock.tick() above still throttles rendering to the
+        # display rate.
+        is_replay_driven = False
+        if self._replay_player is not None and self._replay_player.is_playing:
+            is_replay_driven = True
+            recorded_dt = self._replay_player.peek_delta()
+            if recorded_dt is not None:
+                frame_time = recorded_dt
+
+        # 2. Input (once per frame, before physics)
+        # Gamepad state must be fresh before poll_events() drains this
+        # frame's SDL events, since that pump is what keeps pygame's
+        # internal joystick device list current.
+        self._input_manager.update()
+        self._process_input(frame_time)
+
+        # 3. Drain queued events once per frame, before the fixed
+        # updates that consume them. Not inside the accumulator loop:
+        # the time budget exists to stop an event death spiral, and a
+        # per-step budget multiplies by the step count, so a lagged
+        # frame could spend 15x the budget at exactly the moment the
+        # spiral is starting.
+        self._event_dispatcher.process_queue(
+            max_time_ms=self._event_queue_time_budget_ms
         )
 
-        self._event_dispatcher.dispatch(ApplicationStartEvent(source=self))
+        # 4. Accumulate time and run fixed updates. time_scale/paused
+        # are ignored while a replay drives the game -- see step()'s
+        # docstring for why scaling recorded_dt would desync physics
+        # from what was actually recorded.
+        simulated_time = (
+            frame_time
+            if is_replay_driven
+            else frame_time * self._effective_time_scale()
+        )
+        # Delayed events run on the same scaled clock as physics,
+        # so a pending `dispatch_after` waits out a pause instead of
+        # firing into a frozen world.
+        self._event_dispatcher.advance(simulated_time)
 
-        try:
-            while self._is_running and self._window.is_open:
-                # 1. Measure frame time
-                frame_time = self._clock.tick(target_fps) / 1000.0
+        self._accumulator += simulated_time
 
-                # Clamp frame time to prevent spiral of death
-                # (when updates take longer than real time, causing ever-growing backlog)
-                if frame_time > max_frame_time:
-                    frame_time = max_frame_time
+        while self._accumulator >= self._fixed_dt:
+            # Fixed-rate update (physics, game logic)
+            self._fixed_update(self._fixed_dt)
+            self._accumulator -= self._fixed_dt
 
-                # While a replay drives the game, step the simulation by the
-                # recorded per-frame delta instead of wall-clock time, so the
-                # fixed-step count, tweens, particles and WaitForSeconds
-                # reproduce. clock.tick() above still throttles rendering to the
-                # display rate.
-                is_replay_driven = False
-                if self._replay_player is not None and self._replay_player.is_playing:
-                    is_replay_driven = True
-                    recorded_dt = self._replay_player.peek_delta()
-                    if recorded_dt is not None:
-                        frame_time = recorded_dt
+        # 5. Variable-rate update (UI, animations that should be smooth)
+        self._update(simulated_time)
 
-                # 2. Input (once per frame, before physics)
-                # Gamepad state must be fresh before poll_events() drains this
-                # frame's SDL events, since that pump is what keeps pygame's
-                # internal joystick device list current.
-                self._input_manager.update()
-                self._process_input(frame_time)
+        # 6. Render at display framerate, interpolating between the
+        # last two fixed steps.
+        self._render()
 
-                # 3. Drain queued events once per frame, before the fixed
-                # updates that consume them. Not inside the accumulator loop:
-                # the time budget exists to stop an event death spiral, and a
-                # per-step budget multiplies by the step count, so a lagged
-                # frame could spend 15x the budget at exactly the moment the
-                # spiral is starting.
-                self._event_dispatcher.process_queue(
-                    max_time_ms=self._event_queue_time_budget_ms
-                )
-
-                # 4. Accumulate time and run fixed updates. time_scale/paused
-                # are ignored while a replay drives the game -- see run()'s
-                # docstring for why scaling recorded_dt would desync physics
-                # from what was actually recorded.
-                simulated_time = (
-                    frame_time
-                    if is_replay_driven
-                    else frame_time * self._effective_time_scale()
-                )
-                # Delayed events run on the same scaled clock as physics,
-                # so a pending `dispatch_after` waits out a pause instead of
-                # firing into a frozen world.
-                self._event_dispatcher.advance(simulated_time)
-
-                self._accumulator += simulated_time
-
-                while self._accumulator >= fixed_dt:
-                    # Fixed-rate update (physics, game logic)
-                    self._fixed_update(fixed_dt)
-                    self._accumulator -= fixed_dt
-
-                # 5. Variable-rate update (UI, animations that should be smooth)
-                self._update(simulated_time)
-
-                # 6. Render at display framerate, interpolating between the
-                # last two fixed steps.
-                self._render()
-        except KeyboardInterrupt:
-            # Handle Ctrl+C gracefully
-            self.logger.info("KeyboardInterrupt received. Stopping.")
-        except Exception as error:
-            # Log unexpected crashes before shutting down. Bare `raise` rather
-            # than `raise error`, which would append this frame to the
-            # traceback and obscure the original site.
-            self.logger.critical(
-                f"Uncaught exception in game loop: {error}", exc_info=True
-            )
-            raise
-        finally:
-            # CRITICAL: This ensures cleanup happens even if sys.exit() is called
-            self.shutdown()
+        return self._is_running and self._window.is_open
 
     def start_recording(self, seed: int | None = None, description: str = "") -> int:
         """Start recording input for a deterministic replay.
@@ -436,6 +546,21 @@ class Application:
                 # The window boundary is the only place a resize is detected;
                 # nothing else could give WindowResizeEvent a publisher.
                 self._event_dispatcher.dispatch(event)
+                continue
+
+            # The editor, when one is attached, gets first refusal. It
+            # returns True for an event it is using -- the cursor is over a
+            # panel, or a text field has focus -- and that event must not
+            # also reach the game, or typing an entity name into the
+            # Inspector would drive the player character at the same time.
+            #
+            # This routing is why the editor is usable at all: `attach_editor`
+            # installs a render pass, so the panels drew from the first
+            # frame, but nothing ever called `EditorLayer.process_event` and
+            # every click fell through to the game.
+            if self._editor_layer is not None and self._editor_layer.process_event(
+                event
+            ):
                 continue
 
             # While a replay drives the game, real input is swallowed rather

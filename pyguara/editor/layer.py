@@ -32,6 +32,13 @@ from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
+_DOCKSPACE_ID = 1
+"""The host dockspace's ImGui id.
+
+Any non-zero constant works; ImGui only needs it stable across frames so a
+dock layout persists.
+"""
+
 
 def default_panels() -> list[EditorPanel]:
     """Return the panel set the editor ships with.
@@ -87,6 +94,12 @@ class EditorLayer:
         imgui.set_current_context(self._context)
         io = imgui.get_io()
         io.config_flags |= imgui.ConfigFlags_.nav_enable_keyboard.value
+        # Docking. What makes this an editor layout rather than a pile of
+        # floating windows: panels snap into splits and tabs, and a
+        # developer's arrangement survives being nudged. `build_frame()`
+        # submits the host dockspace each frame, before any panel, so every
+        # panel is dockable without opting in.
+        io.config_flags |= imgui.ConfigFlags_.docking_enable.value
         # Declared by the layer, not only by the renderer. ImGui 1.92
         # asserts in `new_frame()` unless the backend claims the dynamic
         # texture system -- it otherwise expects a legacy backend to have
@@ -205,6 +218,9 @@ class EditorLayer:
         io.delta_time = max(self._measure_dt() if dt is None else dt, 1e-6)
 
         imgui.new_frame()
+        # Before the menu bar and every panel: a panel docked into this
+        # space is positioned by it, so the space has to exist first.
+        self._submit_dockspace()
         context = PanelContext(
             entity_manager=self._active_entity_manager(),
             selection=self._selection,
@@ -215,6 +231,19 @@ class EditorLayer:
                 panel.draw(context)
         imgui.render()
         return imgui.get_draw_data()
+
+    def _submit_dockspace(self) -> None:
+        """Declare the full-viewport dockspace panels may dock into.
+
+        `pass_thru_central_node` leaves the middle empty rather than
+        painting it: the game is already on screen underneath, and a filled
+        central node would hide it behind a flat panel background. Panels
+        dragged to an edge split off around that hole.
+        """
+        imgui.dock_space_over_viewport(
+            dockspace_id=_DOCKSPACE_ID,
+            flags=imgui.DockNodeFlags_.passthru_central_node.value,
+        )
 
     def _draw_menu_bar(self) -> None:
         """Draw the panel-visibility menu across the top of the window."""
