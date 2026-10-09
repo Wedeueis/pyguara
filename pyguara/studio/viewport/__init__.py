@@ -8,6 +8,7 @@ construction what the game shows.
 and any window, so it can be tested against a real world directly.
 """
 
+from pyguara.studio.viewport.gizmo import Axis, GizmoMode, TransformGizmo
 from pyguara.studio.viewport.panel import (
     MAX_ZOOM,
     MIN_ZOOM,
@@ -30,7 +31,10 @@ from pyguara.studio.viewport.picking import (
 __all__ = [
     "MAX_ZOOM",
     "MIN_ZOOM",
+    "Axis",
+    "GizmoMode",
     "Pick",
+    "TransformGizmo",
     "ViewportOverlay",
     "ViewportPanel",
     "ViewportState",
