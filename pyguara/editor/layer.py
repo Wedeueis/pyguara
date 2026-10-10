@@ -124,6 +124,7 @@ class EditorLayer:
 
         self._layout: DockLayout | None = None
         self._layout_applied = False
+        self._frame_hooks: list[Callable[[], None]] = []
 
         self._context = imgui.create_context()
         # A fresh context starts as the current one, but not necessarily the
@@ -181,6 +182,25 @@ class EditorLayer:
     def toggle(self) -> None:
         """Show or hide the whole editor."""
         self._visible = not self._visible
+
+    def add_frame_hook(self, hook: Callable[[], None]) -> None:
+        """Call `hook` at the start of every frame, before any panel draws.
+
+        The seam something needs when it must react to the world changing
+        but owns no panel of its own. PyGuara Studio uses it to notice a
+        scene becoming active: its session is per-scene and resolved
+        lazily, and without a per-frame nudge nothing ever asks for one --
+        so its panels were never installed under `app.run()`, which is the
+        only way a game actually starts.
+
+        A hook that raises is logged and dropped rather than taking the
+        frame down with it; an editor that stops drawing is a worse
+        failure than one component of it going quiet.
+
+        Args:
+            hook: Called once per frame, with no arguments.
+        """
+        self._frame_hooks.append(hook)
 
     def add_panel(self, panel: EditorPanel) -> None:
         """Append a panel to the draw order.
@@ -280,6 +300,10 @@ class EditorLayer:
         # clock tick would otherwise trip its assert.
         io.delta_time = max(self._measure_dt() if dt is None else dt, 1e-6)
 
+        # Before `new_frame`, so a hook that adds a panel has it drawn on
+        # this frame rather than the next.
+        self._run_frame_hooks()
+
         imgui.new_frame()
         # Before the menu bar and every panel: a panel docked into this
         # space is positioned by it, so the space has to exist first.
@@ -294,6 +318,19 @@ class EditorLayer:
                 panel.draw(context)
         imgui.render()
         return imgui.get_draw_data()
+
+    def _run_frame_hooks(self) -> None:
+        """Run every frame hook, dropping any that raises.
+
+        Iterates a copy, because a hook may legitimately add a panel or
+        another hook -- which is most of why they exist.
+        """
+        for hook in list(self._frame_hooks):
+            try:
+                hook()
+            except Exception as exc:
+                logger.warning(f"Editor frame hook failed and was removed: {exc}")
+                self._frame_hooks.remove(hook)
 
     def _submit_dockspace(self) -> None:
         """Declare the full-viewport dockspace panels may dock into.
