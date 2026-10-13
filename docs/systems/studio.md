@@ -79,6 +79,18 @@ there.
 
 ### Viewport
 
+**Studio owns the screen.** On attach it disables the final blit, so the
+game is not also drawn full-screen behind the panels, and redirects the
+game's UI compositing into the buffer the viewport shows -- so the HUD
+appears over the game, inside the viewport, instead of over the editor's
+panels. `release_screen()` puts all of it back.
+
+The frame is **letterboxed**, not stretched: a docked panel is almost
+never the render target's shape, and a stretched view means a sprite
+lined up in the editor is wrong everywhere else. Every coordinate mapping
+uses the drawn image's rectangle rather than the panel's, or a click
+would be offset by the width of the bars.
+
 Pan with the middle button or space-drag; zoom with the wheel, anchored on
 the cursor. Click to select, ctrl-click to add, drag to marquee. `Enclose`
 switches the marquee between selecting what it touches and only what it

@@ -36,6 +36,7 @@ from imgui_bundle import imgui
 from pyguara.common.types import Rect, Vector2
 from pyguara.editor.panels.base import EditorPanel, PanelContext
 from pyguara.graphics.components.camera import Camera2D
+from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.log import get_logger
 from pyguara.studio.viewport.picking import (
     Pick,
@@ -88,7 +89,13 @@ class ViewportState:
         panning: Whether a pan drag is in progress.
         marquee_start: Where a marquee drag began, in world space, or None.
         content: The panel's content area in window coordinates, as of the
-            last frame. Read by the gizmo, which draws into the same space.
+            last frame.
+        image: Where the frame is actually drawn inside that area, in
+            window coordinates. Letterboxed to the framebuffer's aspect
+            ratio, so it is usually smaller than `content` -- and it, not
+            `content`, is what every coordinate mapping uses. Mapping
+            against the panel instead would offset every click by the size
+            of the bars.
         target: The framebuffer's size as rendered, from the last frame.
     """
 
@@ -99,6 +106,7 @@ class ViewportState:
     panning: bool = False
     marquee_start: Vector2 | None = None
     content: Rect = field(default_factory=lambda: Rect(0, 0, 0, 0))
+    image: Rect = field(default_factory=lambda: Rect(0, 0, 0, 0))
     target: Rect = field(default_factory=lambda: Rect(0, 0, 0, 0))
 
     @property
@@ -110,8 +118,8 @@ class ViewportState:
         by zero.
         """
         return (
-            self.content.width > 0
-            and self.content.height > 0
+            self.image.width > 0
+            and self.image.height > 0
             and self.target.width > 0
             and self.target.height > 0
         )
@@ -293,6 +301,28 @@ class ViewportPanel(EditorPanel):
         texture_id, target_width, target_height = frame
         self._state.target = Rect(0, 0, int(target_width), int(target_height))
 
+        # Letterboxed rather than stretched to the panel. A docked panel is
+        # almost never the render target's aspect ratio, and stretching
+        # means the editor shows a differently-shaped game than the one
+        # that ships -- a sprite checked for alignment here is wrong
+        # everywhere else. `Viewport.create_best_fit` is the engine's own
+        # letterbox maths, already used for the game window.
+        fit = Viewport.create_best_fit(
+            int(content_size.x),
+            int(content_size.y),
+            target_width / target_height,
+        )
+        self._state.image = Rect(
+            int(origin.x) + fit.x, int(origin.y) + fit.y, fit.width, fit.height
+        )
+        if fit.width <= 0 or fit.height <= 0:
+            return
+
+        # Offset into the bars, so the image lands centred in the panel.
+        imgui.set_cursor_screen_pos(
+            imgui.ImVec2(float(self._state.image.x), float(self._state.image.y))
+        )
+
         # The framebuffer's origin is bottom-left and ImGui's is top-left,
         # so the V coordinate is flipped here rather than the image being
         # mirrored anywhere else. Getting this wrong renders a frame that
@@ -304,7 +334,7 @@ class ViewportPanel(EditorPanel):
         # against the ids `register_texture()` minted.
         imgui.image(
             imgui.ImTextureRef(texture_id),
-            imgui.ImVec2(content_size.x, content_size.y),
+            imgui.ImVec2(float(fit.width), float(fit.height)),
             imgui.ImVec2(0.0, 1.0),
             imgui.ImVec2(1.0, 0.0),
         )
@@ -510,7 +540,7 @@ class ViewportPanel(EditorPanel):
         if not self._state.has_geometry or self._state.grid_size <= 0:
             return
 
-        content = self._state.content
+        image = self._state.image
         spacing_px = (
             self._state.grid_size
             * camera.zoom
@@ -520,19 +550,17 @@ class ViewportPanel(EditorPanel):
             return
 
         top_left = self._world_at_panel(camera, Vector2(0, 0))
-        bottom_right = self._world_at_panel(
-            camera, Vector2(content.width, content.height)
-        )
+        bottom_right = self._world_at_panel(camera, Vector2(image.width, image.height))
         step = self._state.grid_size
 
         start_x = int(top_left.x // step) * step
         x = start_x
         while x <= bottom_right.x:
-            panel_x = self._panel_at_world(camera, Vector2(x, 0)).x + content.x
+            panel_x = self._panel_at_world(camera, Vector2(x, 0)).x + image.x
             colour = _GRID_AXIS_COLOUR if abs(x) < 1e-6 else _GRID_COLOUR
             draw_list.add_line(
-                imgui.ImVec2(panel_x, float(content.y)),
-                imgui.ImVec2(panel_x, float(content.y + content.height)),
+                imgui.ImVec2(panel_x, float(image.y)),
+                imgui.ImVec2(panel_x, float(image.y + image.height)),
                 colour,
             )
             x += step
@@ -540,11 +568,11 @@ class ViewportPanel(EditorPanel):
         start_y = int(top_left.y // step) * step
         y = start_y
         while y <= bottom_right.y:
-            panel_y = self._panel_at_world(camera, Vector2(0, y)).y + content.y
+            panel_y = self._panel_at_world(camera, Vector2(0, y)).y + image.y
             colour = _GRID_AXIS_COLOUR if abs(y) < 1e-6 else _GRID_COLOUR
             draw_list.add_line(
-                imgui.ImVec2(float(content.x), panel_y),
-                imgui.ImVec2(float(content.x + content.width), panel_y),
+                imgui.ImVec2(float(image.x), panel_y),
+                imgui.ImVec2(float(image.x + image.width), panel_y),
                 colour,
             )
             y += step
@@ -566,7 +594,7 @@ class ViewportPanel(EditorPanel):
             return
 
         selected = set(context.selection.entity_ids)
-        content = self._state.content
+        image = self._state.image
         for pick in iter_pickable(manager):
             if pick.entity_id not in selected:
                 continue
@@ -586,8 +614,8 @@ class ViewportPanel(EditorPanel):
                 else _SELECTION_COLOUR
             )
             draw_list.add_rect(
-                imgui.ImVec2(top_left.x + content.x, top_left.y + content.y),
-                imgui.ImVec2(bottom_right.x + content.x, bottom_right.y + content.y),
+                imgui.ImVec2(top_left.x + image.x, top_left.y + image.y),
+                imgui.ImVec2(bottom_right.x + image.x, bottom_right.y + image.y),
                 colour,
                 # (rounding, thickness). The binding orders these
                 # differently from the C++ API, which puts flags second.
@@ -606,12 +634,12 @@ class ViewportPanel(EditorPanel):
         if start is None or not self._state.has_geometry:
             return
 
-        content = self._state.content
+        image = self._state.image
         io = imgui.get_io()
         begin = self._panel_at_world(camera, start)
         end = self._panel_at_world(camera, self._world_at_cursor(camera, io))
-        first = imgui.ImVec2(begin.x + content.x, begin.y + content.y)
-        second = imgui.ImVec2(end.x + content.x, end.y + content.y)
+        first = imgui.ImVec2(begin.x + image.x, begin.y + image.y)
+        second = imgui.ImVec2(end.x + image.x, end.y + image.y)
         draw_list.add_rect_filled(first, second, _MARQUEE_FILL)
         draw_list.add_rect(first, second, _MARQUEE_EDGE)
 
@@ -625,11 +653,11 @@ class ViewportPanel(EditorPanel):
         Returns:
             The scale, or `(1, 1)` before the first frame.
         """
-        content = self._state.content
+        image = self._state.image
         target = self._state.target
-        if content.width <= 0 or content.height <= 0:
+        if image.width <= 0 or image.height <= 0:
             return Vector2(1.0, 1.0)
-        return Vector2(target.width / content.width, target.height / content.height)
+        return Vector2(target.width / image.width, target.height / image.height)
 
     def _world_at_cursor(self, camera: Camera2D, io: Any) -> Vector2:
         """Return the world position under the cursor.
@@ -641,10 +669,10 @@ class ViewportPanel(EditorPanel):
         Returns:
             The world position.
         """
-        content = self._state.content
+        image = self._state.image
         return self._world_at_panel(
             camera,
-            Vector2(io.mouse_pos.x - content.x, io.mouse_pos.y - content.y),
+            Vector2(io.mouse_pos.x - image.x, io.mouse_pos.y - image.y),
         )
 
     def _world_at_panel(self, camera: Camera2D, panel_point: Vector2) -> Vector2:
@@ -658,7 +686,7 @@ class ViewportPanel(EditorPanel):
             The world position.
         """
         return screen_to_world(
-            camera, panel_point, self._state.content, self._state.target
+            camera, panel_point, self._state.image, self._state.target
         )
 
     def _panel_at_world(self, camera: Camera2D, world_point: Vector2) -> Vector2:
@@ -672,7 +700,7 @@ class ViewportPanel(EditorPanel):
             The point, relative to the panel's content origin.
         """
         return world_to_panel(
-            camera, world_point, self._state.content, self._state.target
+            camera, world_point, self._state.image, self._state.target
         )
 
     @staticmethod

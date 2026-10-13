@@ -87,6 +87,13 @@ def default_layout() -> Any:
     )
 
 
+EDITOR_BACKGROUND = (0.10, 0.10, 0.12)
+"""What the screen is cleared to behind the panels.
+
+Dark and neutral, so the dockspace reads as chrome rather than as part of
+whatever the game happens to be showing.
+"""
+
 VIEWPORT_SOURCE_DEFAULT = "world"
 """Which framebuffer the viewport shows when `FinalPass` does not say.
 
@@ -133,6 +140,9 @@ class StudioAttachment:
         self._approval_mode = approval_mode
         self._session: StudioSession | None = None
         self._panels_installed = False
+        self._screen_taken = False
+        self._final_was_enabled = True
+        self._ui_present_patched = False
 
     @property
     def layer(self) -> Any:
@@ -241,6 +251,157 @@ class StudioAttachment:
 
         self._layer.set_default_layout(default_layout())
         logger.info("Studio panels installed.")
+
+    def take_over_screen(self) -> None:
+        """Make the editor the only thing on screen, with the game inside it.
+
+        Three changes, which together are the difference between an editor
+        and panels floating over a running game:
+
+        1. **The final blit is disabled.** `FinalPass` copies the composed
+           frame to the default framebuffer, so without this the game is
+           drawn twice -- full-screen behind the panels, and again inside
+           the Viewport panel, which shows the same buffer as an image.
+        2. **The game's UI is redirected into that buffer.** `UIRenderer.
+           present()` composites the HUD onto the *screen*, so it landed on
+           top of the editor's panels. Bound to the viewport's source
+           buffer instead, it lands where it belongs: inside the viewport,
+           over the game it annotates. The same redirect
+           `tools/agent_view.py` uses to capture a frame with its UI.
+        3. **The dockspace stops passing through.** With nothing behind it
+           worth seeing, an empty middle is just a hole.
+
+        Reversed by `release_screen()`, so a game can detach Studio and get
+        its own window back.
+        """
+        if self._screen_taken:
+            return
+        self._screen_taken = True
+
+        graph = self._graph()
+        if graph is None:
+            # No GL graph: `attach_editor` would already have declined, so
+            # this is unreachable in practice and harmless if reached.
+            return
+
+        final_pass = graph.get_pass("final")
+        if final_pass is not None:
+            self._final_was_enabled = final_pass.enabled
+            final_pass.enabled = False
+
+        imgui_pass = graph.get_pass("imgui")
+        if imgui_pass is not None and hasattr(imgui_pass, "set_clear_colour"):
+            imgui_pass.set_clear_colour(EDITOR_BACKGROUND)
+
+        self._layer.passthrough_centre = False
+        self._redirect_game_ui()
+
+    def release_screen(self) -> None:
+        """Give the screen back to the game.
+
+        Safe to call when it was never taken.
+        """
+        if not self._screen_taken:
+            return
+        self._screen_taken = False
+
+        graph = self._graph()
+        if graph is not None:
+            final_pass = graph.get_pass("final")
+            if final_pass is not None:
+                final_pass.enabled = self._final_was_enabled
+            imgui_pass = graph.get_pass("imgui")
+            if imgui_pass is not None and hasattr(imgui_pass, "set_clear_colour"):
+                imgui_pass.set_clear_colour(None)
+
+        self._layer.passthrough_centre = True
+        self._restore_game_ui()
+
+    def _redirect_game_ui(self) -> None:
+        """Composite the game's UI into the viewport's buffer, not the screen.
+
+        Wraps `UIRenderer.present` rather than changing it: the redirect is
+        true only while Studio is attached, and a renderer that knew about
+        editors would be the backend leakage this engine is built to avoid.
+        """
+        try:
+            from pyguara.graphics.protocols import UIRenderer
+
+            # Abstract by design: the container holds a backend
+            # implementation registered under the protocol.
+            renderer = self._container.get(UIRenderer)  # type: ignore[type-abstract]
+        except Exception as exc:  # pragma: no cover - a container without one
+            logger.debug(f"No UI renderer to redirect: {exc}")
+            return
+
+        original = renderer.present
+        self._ui_present_patched = True
+
+        def present_into_viewport() -> None:
+            framebuffer = self._source_framebuffer()
+            if framebuffer is not None:
+                framebuffer.bind()
+            original()
+
+        renderer.present = present_into_viewport  # type: ignore[method-assign]
+
+    def _restore_game_ui(self) -> None:
+        """Put `UIRenderer.present` back.
+
+        The instance attribute is *deleted* rather than reassigned, so the
+        class's own method shows through again and the renderer is left
+        exactly as it was found. Re-assigning the bound method that was
+        captured would leave an instance attribute behind that merely
+        looks right -- and since a bound method is a fresh object on every
+        attribute access, nothing could tell the difference by identity.
+        """
+        if not self._ui_present_patched:
+            return
+        self._ui_present_patched = False
+        try:
+            from pyguara.graphics.protocols import UIRenderer
+
+            # Abstract by design: the container holds a backend
+            # implementation registered under the protocol.
+            renderer = self._container.get(UIRenderer)  # type: ignore[type-abstract]
+            del renderer.present
+        except Exception as exc:  # pragma: no cover - a container without one
+            logger.debug(f"Could not restore the UI renderer: {exc}")
+
+    def _source_framebuffer(self) -> Any:
+        """Return the buffer the finished frame is composed in, or None.
+
+        Returns:
+            The framebuffer `FinalPass` would blit from, which is what the
+            Viewport panel shows.
+        """
+        graph = self._graph()
+        if graph is None:
+            return None
+        manager = getattr(graph, "fbo_manager", None)
+        if manager is None:
+            return None
+
+        name = VIEWPORT_SOURCE_DEFAULT
+        final_pass = graph.get_pass("final")
+        if final_pass is not None:
+            name = getattr(final_pass, "input_fbo_name", name)
+        return manager.get(name)
+
+    def _graph(self) -> Any:
+        """Return the real render graph, or None on a backend without one.
+
+        Returns:
+            The graph, or None -- the Pygame backend registers a stub
+            under the same key.
+        """
+        try:
+            from pyguara.graphics.pipeline.graph import RenderGraph
+
+            graph = self._container.get(RenderGraph)
+        except Exception:
+            return None
+        return graph if isinstance(graph, RenderGraph) else None
 
     # ----------------------------------------------------------------
     # Providers
@@ -412,6 +573,8 @@ def attach_studio(
         approval_mode=approval_mode,
     )
     container.register_instance(StudioAttachment, attachment)
+
+    attachment.take_over_screen()
 
     # Resolved every frame, which is what actually installs the panels.
     #

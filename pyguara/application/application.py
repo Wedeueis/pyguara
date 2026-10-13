@@ -545,6 +545,7 @@ class Application:
             if isinstance(event, WindowResizeEvent):
                 # The window boundary is the only place a resize is detected;
                 # nothing else could give WindowResizeEvent a publisher.
+                self._resize_render_graph(event.width, event.height)
                 self._event_dispatcher.dispatch(event)
                 continue
 
@@ -569,6 +570,30 @@ class Application:
                 self._input_manager.process_event(event)
 
         self._end_replay_frame(frame_time)
+
+    def _resize_render_graph(self, width: int, height: int) -> None:
+        """Resize every framebuffer and pass to the new window size.
+
+        Nothing did this. `WindowResizeEvent` was dispatched to whoever
+        subscribed -- the UI manager -- and the render graph, which is not
+        a subscriber, never heard: its framebuffers kept the size they were
+        created at for the life of the process, and every pass's
+        `on_resize` was dead code. Resizing a window left the scene
+        rendering at the old resolution and stretched, and left an editor
+        overlay drawing its panels into the old window's bounds.
+
+        Args:
+            width: The new window width in pixels.
+            height: The new window height in pixels.
+        """
+        if self._render_graph is None or width <= 0 or height <= 0:
+            return
+        if (
+            self._render_graph.fbo_manager.width == width
+            and self._render_graph.fbo_manager.height == height
+        ):
+            return
+        self._render_graph.resize(width, height)
 
     def _effective_time_scale(self) -> float:
         """Return the scale actually applied to this frame's simulated time.
@@ -723,9 +748,12 @@ class Application:
 
         # Every other pass, in the order its bootstrap registered them --
         # light/composite/post-process (whichever exist) and finally
-        # `"final"`, which blits the result to the screen.
+        # `"final"`, which blits the result to the screen. A pass that
+        # declared `after_ui` is held back; see below.
         for render_pass in self._render_graph.passes:
             if render_pass.name == "world" or not render_pass.enabled:
+                continue
+            if render_pass.after_ui:
                 continue
             render_pass.execute(self._render_graph.ctx, self._render_graph)
 
@@ -733,6 +761,14 @@ class Application:
         self._ui_manager.render(self._ui_renderer)
         self._render_overlays()
         self._ui_renderer.present()
+
+        # Passes that must sit on top of everything the game drew, the
+        # game's own UI included. An editor overlay registered as an
+        # ordinary pass runs mid-chain, and the HUD then composites over
+        # it -- which reads as the editor being *behind* the game.
+        for render_pass in self._render_graph.passes:
+            if render_pass.enabled and render_pass.after_ui:
+                render_pass.execute(self._render_graph.ctx, self._render_graph)
 
         # Present to display
         self._window.present()

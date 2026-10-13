@@ -124,6 +124,12 @@ class EditorLayer:
 
         self._layout: DockLayout | None = None
         self._layout_applied = False
+        self._layout_size: tuple[int, int] = (0, 0)
+        # Leave the middle of the dockspace empty by default, so the game
+        # shows through it. Studio turns this off: it draws the frame into
+        # a Viewport panel, and a second copy of the game behind the
+        # panels is what made the editor look unfinished.
+        self._passthrough_centre = True
         self._frame_hooks: list[Callable[[], None]] = []
 
         self._context = imgui.create_context()
@@ -340,17 +346,38 @@ class EditorLayer:
         central node would hide it behind a flat panel background. Panels
         dragged to an edge split off around that hole.
         """
-        imgui.dock_space_over_viewport(
-            dockspace_id=_DOCKSPACE_ID,
-            flags=imgui.DockNodeFlags_.passthru_central_node.value,
-        )
-        if self._layout is not None and not self._layout_applied:
+        flags = 0
+        if self._passthrough_centre:
+            flags |= imgui.DockNodeFlags_.passthru_central_node.value
+        imgui.dock_space_over_viewport(dockspace_id=_DOCKSPACE_ID, flags=flags)
+        if self._layout is None:
+            return
+
+        size = imgui.get_io().display_size
+        current = (int(size.x), int(size.y))
+        # Re-applied when the window changes size, not only once. The dock
+        # tree is built at a fixed size, so a layout applied at the
+        # starting resolution kept the panels inside the old window's
+        # bounds after a maximise -- the editor occupying a corner of the
+        # screen with the rest left black.
+        if not self._layout_applied or current != self._layout_size:
             # After the dockspace exists -- the builder docks into it --
             # and before any panel's `begin`, which would otherwise take
             # its position for the frame and only snap into place on the
             # next one.
             self._layout_applied = True
+            self._layout_size = current
             self._apply_layout(self._layout)
+
+    @property
+    def passthrough_centre(self) -> bool:
+        """Whether the dockspace leaves its middle empty."""
+        return self._passthrough_centre
+
+    @passthrough_centre.setter
+    def passthrough_centre(self, value: bool) -> None:
+        """Show or hide whatever is behind the dockspace's middle."""
+        self._passthrough_centre = value
 
     def set_default_layout(self, layout: DockLayout | None) -> None:
         """Arrange the panels the next time a frame is built.

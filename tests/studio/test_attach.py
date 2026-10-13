@@ -102,6 +102,8 @@ class TestAttachToARealApplication:
             "session_follows_the_scene",
             "frames_and_operations",
             "panels_install_under_the_real_loop",
+            "studio_owns_the_screen",
+            "the_layout_follows_the_window",
         ],
     )
     def test_scenario(self, scenario: str) -> None:

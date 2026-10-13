@@ -198,11 +198,106 @@ def panels_install_under_the_real_loop() -> None:
         app.shutdown()
 
 
+def studio_owns_the_screen() -> None:
+    """The game is drawn inside the viewport, not behind the panels.
+
+    Three things together, and all three were wrong before: the final blit
+    still copied the frame to the screen, so the game appeared twice;
+    `UIRenderer.present()` composited the HUD onto the screen, so it landed
+    over the panels; and the dockspace left its middle empty for a game
+    that is now inside a panel.
+    """
+    from pyguara.graphics.pipeline.graph import RenderGraph
+    from pyguara.graphics.protocols import UIRenderer
+
+    app = _application()
+    try:
+        graph = app.container.get(RenderGraph)
+        renderer = app.container.get(UIRenderer)  # type: ignore[type-abstract]
+        original_present = renderer.present
+
+        attachment = attach_studio(app.container, project_root=Path.cwd())
+        assert attachment is not None
+        app.begin(_scene(app))
+        app.step()
+
+        final_pass = graph.get_pass("final")
+        assert final_pass is not None
+        assert not final_pass.enabled, (
+            "the final blit still runs, so the game is drawn full-screen "
+            "behind the panels as well as inside the Viewport"
+        )
+
+        imgui_pass = graph.get_pass("imgui")
+        assert imgui_pass is not None
+        assert imgui_pass.after_ui, (
+            "the editor runs mid-chain, so the game's HUD composites over its panels"
+        )
+
+        assert not attachment.layer.passthrough_centre, (
+            "the dockspace still passes through to a game that is now inside a panel"
+        )
+
+        assert renderer.present is not original_present, (
+            "the game's UI still composites to the screen rather than into "
+            "the buffer the Viewport shows"
+        )
+
+        # And it all goes back, so a game can detach Studio.
+        attachment.release_screen()
+        assert final_pass.enabled
+        assert attachment.layer.passthrough_centre
+        # Compared by equality, not identity: a bound method is a fresh
+        # object on every attribute access, so `is` never holds even when
+        # the renderer has been restored exactly.
+        assert renderer.present == original_present
+        assert "present" not in vars(renderer), (
+            "an instance attribute was left behind rather than removed"
+        )
+    finally:
+        app.shutdown()
+
+
+def the_layout_follows_the_window() -> None:
+    """Resizing resizes the framebuffers the viewport reads.
+
+    Maximising used to leave the editor drawing into the old window's
+    bounds, with the rest of the screen black, because nothing told the
+    render graph the window had changed.
+    """
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=Path.cwd())
+        assert attachment is not None
+        app.begin(_scene(app))
+        for _ in range(3):
+            app.step()
+
+        frame = attachment._frame_texture()
+        assert frame is not None
+        _, width, height = frame
+
+        app._resize_render_graph(width * 2, height * 2)
+        for _ in range(3):
+            app.step()
+
+        resized = attachment._frame_texture()
+        assert resized is not None
+        assert resized[1] == width * 2, (
+            f"the framebuffer stayed {resized[1]} wide after a resize to {width * 2}"
+        )
+        assert resized[2] == height * 2
+    finally:
+        app.shutdown()
+
+
 SCENARIOS = {
     "attaches": attaches,
     "session_follows_the_scene": session_follows_the_scene,
     "frames_and_operations": frames_and_operations,
     "panels_install_under_the_real_loop": (panels_install_under_the_real_loop),
+    "studio_owns_the_screen": studio_owns_the_screen,
+    "the_layout_follows_the_window": the_layout_follows_the_window,
 }
 
 
