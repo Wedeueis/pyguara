@@ -170,6 +170,15 @@ class RenderGraph:
         """
         self._fbo_manager.resize_all(width, height)
 
+        # The default framebuffer does not follow the window on its own:
+        # moderngl detects `ctx.screen` once at context creation and caches
+        # its size, so after a resize everything bound to it still draws
+        # into a rectangle the size of the *original* window -- in the
+        # bottom-left corner, GL's origin being there. Setting the viewport
+        # is what `use()` then applies.
+        if self._ctx.screen is not None:
+            self._ctx.screen.viewport = (0, 0, width, height)
+
         for render_pass in self._passes:
             render_pass.on_resize(width, height)
 

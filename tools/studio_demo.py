@@ -60,6 +60,29 @@ DEMOS: dict[str, tuple[str, str, str]] = {
 }
 
 
+def _make_demos_resizable() -> None:
+    """Chain `display.resizable = True` onto every demo's configure hook.
+
+    Demos call `create_container(_configure)` with their own hook, and the
+    flag has to be set before the window exists. Wrapping the factory is
+    how a tool adds one step to a hook it does not own; a game sets the
+    field in its own hook instead.
+    """
+    from pyguara.application import bootstrap
+
+    original = bootstrap.create_container
+
+    def create_resizable(configure=None, register_sections=None):  # type: ignore[no-untyped-def]
+        def chained(config):  # type: ignore[no-untyped-def]
+            if configure is not None:
+                configure(config)
+            config.display.resizable = True
+
+        return original(chained, register_sections)
+
+    bootstrap.create_container = create_resizable  # type: ignore[assignment]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -88,6 +111,15 @@ def main(argv: list[str] | None = None) -> int:
     from pyguara.studio import ApprovalMode, attach_studio
 
     bootstrap_mod, scenes_mod, scene_name = DEMOS[args.demo]
+
+    # A demo's window is fixed-size, and SDL sends no resize event at all
+    # for one -- a window manager may still let the frame be maximised,
+    # and the editor would then draw at the starting resolution in a
+    # corner of a much larger window. The flag is only honoured at
+    # creation, so it is chained onto the demo's own `configure` hook
+    # here rather than set afterwards.
+    _make_demos_resizable()
+
     container = importlib.import_module(bootstrap_mod).configure_game_container()
     app = container.get(Application)
 

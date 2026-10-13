@@ -295,6 +295,7 @@ class StudioAttachment:
 
         self._layer.passthrough_centre = False
         self._redirect_game_ui()
+        self._warn_if_not_resizable()
 
     def release_screen(self) -> None:
         """Give the screen back to the game.
@@ -316,6 +317,40 @@ class StudioAttachment:
 
         self._layer.passthrough_centre = True
         self._restore_game_ui()
+
+    def _warn_if_not_resizable(self) -> None:
+        """Say so when the window cannot be resized, and how to fix it.
+
+        SDL emits no resize event at all for a fixed-size window, and a
+        window manager may still let the frame be maximised -- WSLg does.
+        The engine then carries on rendering at the starting resolution
+        into a corner of a much larger window, with no event to tell it
+        otherwise. That looks like a broken editor and is a one-line
+        configuration fix, so it is worth saying out loud.
+
+        The flag cannot be added to a live window: SDL honours it at
+        creation, and `pygame.Window.resizable` does not take on a window
+        the display module opened. Reopening would recreate the drawable
+        and every GL object with it.
+        """
+        try:
+            from pyguara.config.manager import ConfigManager
+
+            display = self._container.get(ConfigManager).config.display
+        except Exception as exc:  # pragma: no cover - a hand-built container
+            logger.debug(f"Could not read the display config: {exc}")
+            return
+
+        if getattr(display, "resizable", False):
+            return
+
+        logger.warning(
+            "The window is not resizable, so maximising it will leave the "
+            "editor drawing at the starting resolution -- SDL sends no "
+            "resize event for a fixed-size window. Set "
+            "`config.display.resizable = True` in the bootstrap's "
+            "`configure` hook, before the window is created."
+        )
 
     def _redirect_game_ui(self) -> None:
         """Composite the game's UI into the viewport's buffer, not the screen.

@@ -29,6 +29,7 @@ from pyguara.editor.panels.hierarchy import HierarchyPanel
 from pyguara.editor.panels.inspector import InspectorPanel
 from pyguara.editor.renderer import ModernGLImGuiRenderer
 from pyguara.editor.selection import Selection
+from pyguara.editor.theme import apply_theme, scale_for
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -60,8 +61,10 @@ class DockLayout:
         left_ratio: How much of the width the left edge takes.
         right_ratio: How much of the remaining width the right edge takes.
         bottom_ratio: How much of the remaining height the bottom takes.
-        top_ratio: How much of the remaining height the top takes. Small
-            by default: a transport bar is one row of buttons.
+        top_ratio: How much of the remaining height the top takes, or
+            None to size it to exactly one row of controls. A fixed
+            fraction cannot do that: the row's height depends on the UI
+            scale, and a strip that fits at 1.0 clips the row at 1.25.
     """
 
     left: tuple[str, ...] = ()
@@ -72,7 +75,7 @@ class DockLayout:
     left_ratio: float = 0.20
     right_ratio: float = 0.25
     bottom_ratio: float = 0.28
-    top_ratio: float = 0.10
+    top_ratio: float | None = None
 
 
 def default_panels() -> list[EditorPanel]:
@@ -158,6 +161,14 @@ class EditorLayer:
         # into the project root is a surprise, and panel layout is cheap to
         # re-arrange.
         io.set_ini_filename("")
+
+        # A deliberate palette rather than ImGui's default, which is a
+        # debug-overlay style -- square corners, thin separators, a blue
+        # chosen to be visible rather than to be looked at for hours.
+        apply_theme()
+        # 0.0 is "not yet applied", so the first frame always sets it --
+        # no real scale is ever zero.
+        self._ui_scale = 0.0
 
         # Built last, and only now: the context above is current, so the
         # renderer's `backend_flags` reach this layer's IO and not another's.
@@ -302,6 +313,7 @@ class EditorLayer:
 
         io = imgui.get_io()
         io.display_size = imgui.ImVec2(float(width), float(height))
+        self._apply_ui_scale(width, height)
         # ImGui requires a strictly positive delta; two frames inside one
         # clock tick would otherwise trip its assert.
         io.delta_time = max(self._measure_dt() if dt is None else dt, 1e-6)
@@ -337,6 +349,45 @@ class EditorLayer:
             except Exception as exc:
                 logger.warning(f"Editor frame hook failed and was removed: {exc}")
                 self._frame_hooks.remove(hook)
+
+    def _apply_ui_scale(self, width: int, height: int) -> None:
+        """Keep the chrome legible at this window size.
+
+        ImGui's built-in font is a 13px bitmap meant for a debug overlay,
+        and every size in the style is in pixels -- so an editor that is
+        comfortable at 1280 wide is a squint at 4K. The scale is derived
+        from the window and applied to the font and to every spacing,
+        padding and rounding at once.
+
+        Re-derived per frame but applied only on a change, because
+        `scale_all_sizes` multiplies the style it is called on: applying
+        it twice compounds. The style is rebuilt from a pristine copy each
+        time rather than scaled again from where it already is.
+
+        Args:
+            width: The window width in pixels.
+            height: The window height in pixels.
+        """
+        scale = scale_for(width, height)
+        if scale == self._ui_scale:
+            return
+        self._ui_scale = scale
+
+        style = imgui.get_style()
+        apply_theme(style)
+        if scale != 1.0:
+            style.scale_all_sizes(scale)
+        # `font_scale_main`, not the removed `io.font_global_scale`: ImGui
+        # 1.92's dynamic font system rebuilds the atlas at the new size
+        # rather than stretching a 13px bitmap, so scaled text is sharp
+        # instead of blurry.
+        style.font_scale_main = scale
+        logger.debug(f"Editor UI scale is now {scale} for {width}x{height}.")
+
+    @property
+    def ui_scale(self) -> float:
+        """The scale the chrome is currently drawn at."""
+        return self._ui_scale
 
     def _submit_dockspace(self) -> None:
         """Declare the full-viewport dockspace panels may dock into.
@@ -416,11 +467,28 @@ class EditorLayer:
         # taken, and ends up as the viewport's home.
         centre = root
         regions: dict[str, int] = {}
+        display_height = max(float(imgui.get_io().display_size.y), 1.0)
+        # One row of controls, plus the window's own title bar and its
+        # padding above and below. Measured from the live style, because
+        # every one of those grows with the UI scale -- a fixed fraction
+        # that fits at 1.0 clips the row at 1.25.
+        style = imgui.get_style()
+        one_row = (
+            imgui.get_frame_height()
+            + imgui.get_frame_height_with_spacing()
+            + style.window_padding.y * 2.0
+        )
+        top_ratio = (
+            layout.top_ratio
+            if layout.top_ratio is not None
+            else min(one_row / display_height, 0.3)
+        )
+
         for name, direction, ratio in (
             ("left", imgui.Dir.left, layout.left_ratio),
             ("right", imgui.Dir.right, layout.right_ratio),
             ("bottom", imgui.Dir.down, layout.bottom_ratio),
-            ("top", imgui.Dir.up, layout.top_ratio),
+            ("top", imgui.Dir.up, top_ratio),
         ):
             split = internal.dock_builder_split_node(centre, direction, ratio)
             regions[name] = split.id_at_dir

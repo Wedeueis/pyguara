@@ -74,6 +74,13 @@ class PygameGLWindow:
         flags = pygame.OPENGL | pygame.DOUBLEBUF
         if config.fullscreen:
             flags |= pygame.FULLSCREEN
+        if getattr(config, "resizable", False):
+            # Without this SDL emits no resize event at all. A window
+            # manager may still let the frame be maximised -- WSLg does --
+            # and the GL drawable then grows while nothing in the engine
+            # is told, so everything carries on rendering at the starting
+            # resolution into a corner of a much larger window.
+            flags |= pygame.RESIZABLE
 
         # Create the window.
         #
