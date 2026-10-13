@@ -14,6 +14,38 @@ from pyguara.log import get_logger
 logger = get_logger(__name__)
 
 
+def display_flags(config: WindowConfig) -> int:
+    """Return the SDL display flags `config` asks for.
+
+    Its own function so the mapping can be asserted without opening a
+    window: every one of these is decided once, at creation, and SDL will
+    not change most of them afterwards -- which is exactly why getting one
+    wrong is expensive to find.
+
+    Args:
+        config: The window configuration.
+
+    Returns:
+        The flag mask for `pygame.display.set_mode`.
+    """
+    flags = pygame.OPENGL | pygame.DOUBLEBUF
+    if config.fullscreen:
+        flags |= pygame.FULLSCREEN
+    if getattr(config, "borderless", False):
+        # The OS title bar is removed and the editor draws its own. Only
+        # useful with `resizable`, since a borderless window the user
+        # cannot drag an edge of is a window they cannot size.
+        flags |= pygame.NOFRAME
+    if getattr(config, "resizable", False):
+        # Without this SDL emits no resize event at all. A window manager
+        # may still let the frame be maximised -- WSLg does -- and the GL
+        # drawable then grows while nothing in the engine is told, so
+        # everything carries on rendering at the starting resolution into
+        # a corner of a much larger window.
+        flags |= pygame.RESIZABLE
+    return flags
+
+
 class PygameGLWindow:
     """Window backend using Pygame with OpenGL context for ModernGL rendering.
 
@@ -34,6 +66,8 @@ class PygameGLWindow:
         self._is_open = False
         self._width = 0
         self._height = 0
+        self._window_object: Any = None
+        self._is_maximized = False
 
     def open(self, config: WindowConfig) -> bool:
         """Create a Pygame display with OpenGL context.
@@ -70,17 +104,7 @@ class PygameGLWindow:
         pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLEBUFFERS, 1)
         pygame.display.gl_set_attribute(pygame.GL_MULTISAMPLESAMPLES, 4)
 
-        # Build display flags
-        flags = pygame.OPENGL | pygame.DOUBLEBUF
-        if config.fullscreen:
-            flags |= pygame.FULLSCREEN
-        if getattr(config, "resizable", False):
-            # Without this SDL emits no resize event at all. A window
-            # manager may still let the frame be maximised -- WSLg does --
-            # and the GL drawable then grows while nothing in the engine
-            # is told, so everything carries on rendering at the starting
-            # resolution into a corner of a much larger window.
-            flags |= pygame.RESIZABLE
+        flags = display_flags(config)
 
         # Create the window.
         #
@@ -148,6 +172,88 @@ class PygameGLWindow:
         a = fill_color[3] / 255.0 if len(fill_color) > 3 else 1.0
 
         self._ctx.clear(r, g, b, a)
+
+    def minimize(self) -> None:
+        """Iconify the window."""
+        window = self._native_window()
+        if window is not None:
+            window.minimize()
+
+    def maximize(self) -> None:
+        """Fill the work area."""
+        window = self._native_window()
+        if window is not None:
+            window.maximize()
+            self._is_maximized = True
+
+    def restore(self) -> None:
+        """Return to the size before maximising."""
+        window = self._native_window()
+        if window is not None:
+            window.restore()
+            self._is_maximized = False
+
+    @property
+    def is_maximized(self) -> bool:
+        """Whether the window currently fills the work area.
+
+        SDL exposes no direct query through pygame, so this tracks what
+        was asked for. A user maximising through the window manager's own
+        control is not seen -- which is a cosmetic wrong arrow on the
+        restore button, not a wrong window.
+        """
+        return self._is_maximized
+
+    def move_by(self, dx: int, dy: int) -> None:
+        """Move the window by a screen-space delta.
+
+        Args:
+            dx: Horizontal movement in pixels.
+            dy: Vertical movement in pixels.
+        """
+        window = self._native_window()
+        if window is None:
+            return
+        try:
+            x, y = window.position
+            window.position = (int(x + dx), int(y + dy))
+        except Exception as exc:  # pragma: no cover - depends on the WM
+            logger.debug(f"Could not move the window: {exc}")
+
+    def request_close(self) -> None:
+        """Ask the application to shut down, as the OS close button does.
+
+        Posts a quit onto the event queue rather than destroying the
+        window: a borderless window's close button is pressed from inside
+        a frame that is still being drawn, and tearing the GL context down
+        underneath it would take the frame with it. Through the queue, the
+        next `poll_events` reports it and the application runs the same
+        shutdown it runs for the OS's own button.
+        """
+        try:
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+        except Exception as exc:  # pragma: no cover - a full event queue
+            logger.debug(f"Could not post a quit event: {exc}")
+
+    def _native_window(self) -> Any:
+        """Return pygame's window object, or None where it is unavailable.
+
+        Built lazily and cached: `from_display_module()` warns about
+        surface rendering, which is irrelevant here -- the window is a GL
+        drawable -- and there is no reason to hear it twice.
+        """
+        if self._window_object is not None:
+            return self._window_object
+        try:
+            import warnings
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                self._window_object = pygame.Window.from_display_module()
+        except Exception as exc:  # pragma: no cover - old pygame, odd driver
+            logger.debug(f"No window object available: {exc}")
+            return None
+        return self._window_object
 
     def poll_events(self) -> Iterable[Any]:
         """Pump SDL and return engine events (see `pygame.events`)."""

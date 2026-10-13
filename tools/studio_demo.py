@@ -60,13 +60,18 @@ DEMOS: dict[str, tuple[str, str, str]] = {
 }
 
 
-def _make_demos_resizable() -> None:
+def _make_demos_resizable(*, borderless: bool = False) -> None:
     """Chain `display.resizable = True` onto every demo's configure hook.
 
     Demos call `create_container(_configure)` with their own hook, and the
-    flag has to be set before the window exists. Wrapping the factory is
+    flags have to be set before the window exists. Wrapping the factory is
     how a tool adds one step to a hook it does not own; a game sets the
-    field in its own hook instead.
+    fields in its own hook instead.
+
+    Args:
+        borderless: Also drop the OS title bar, so the editor draws its
+            own. Opt-in: a borderless window relies on the editor's own
+            buttons working, and the OS bar is the safe default.
     """
     from pyguara.application import bootstrap
 
@@ -77,6 +82,8 @@ def _make_demos_resizable() -> None:
             if configure is not None:
                 configure(config)
             config.display.resizable = True
+            if borderless:
+                config.display.borderless = True
 
         return original(chained, register_sections)
 
@@ -95,6 +102,14 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "how edits requested by an agent are handled: auto applies "
             "them, ask queues them for approval, plan only describes them"
+        ),
+    )
+    parser.add_argument(
+        "--borderless",
+        action="store_true",
+        help=(
+            "drop the OS title bar and let the editor draw its own, the "
+            "way Godot and VS Code do"
         ),
     )
     parser.add_argument(
@@ -118,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     # corner of a much larger window. The flag is only honoured at
     # creation, so it is chained onto the demo's own `configure` hook
     # here rather than set afterwards.
-    _make_demos_resizable()
+    _make_demos_resizable(borderless=args.borderless)
 
     container = importlib.import_module(bootstrap_mod).configure_game_container()
     app = container.get(Application)

@@ -46,6 +46,11 @@ class WindowConfig:
     # invites a user to break it. An editor sets it, and so does any game
     # whose UI anchors properly.
     resizable: bool = False
+    # Removes the OS title bar so the application can draw its own, the
+    # way a modern editor does. Only sensible together with `resizable`:
+    # a borderless window whose edges cannot be dragged is one the user
+    # cannot size at all.
+    borderless: bool = False
     vsync: bool = True
     default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
     title: str = "Pyguara Engine"

@@ -113,6 +113,47 @@ def attach_editor(
     # screen and the editor lands on top of the finished frame.
     candidate.add_pass(ImGuiPass(layer, width, height))
     container.register_instance(EditorLayer, layer)
+    _install_title_bar(container, layer)
 
     logger.info(f"Editor attached: {len(layer.panels)} panel(s) over ModernGL.")
     return layer
+
+
+def _install_title_bar(container: DIContainer, layer: object) -> None:
+    """Give the editor its own title bar when the window has no frame.
+
+    Only when both halves are there: the window was opened borderless
+    (`display.borderless`), and the backend can actually minimise,
+    maximise and move it. A borderless window whose buttons do nothing is
+    worse than the operating system's own bar, so the absence of either
+    half leaves that bar alone.
+
+    Args:
+        container: The engine container.
+        layer: The `EditorLayer` to give the bar to.
+    """
+    try:
+        from pyguara.config.manager import ConfigManager
+        from pyguara.graphics.window import Window
+
+        display = container.get(ConfigManager).config.display
+        window = container.get(Window)
+    except Exception as exc:  # pragma: no cover - a hand-built container
+        logger.debug(f"No window to draw a title bar for: {exc}")
+        return
+
+    if not getattr(display, "borderless", False):
+        return
+
+    chrome = window.chrome
+    if chrome is None:
+        logger.info(
+            "The window is borderless but this backend offers no window "
+            "controls, so the editor cannot draw its own title bar."
+        )
+        return
+
+    from pyguara.editor.titlebar import TitleBar
+
+    layer.set_title_bar(TitleBar(display.title, chrome))  # type: ignore[attr-defined]
+    logger.info("Editor title bar installed (borderless window).")
