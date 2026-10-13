@@ -24,6 +24,7 @@ opens any of them with Studio attached:
 uv run python tools/studio_demo.py                       # guara_falcao
 uv run python tools/studio_demo.py tamandua_murundus
 uv run python tools/studio_demo.py guara_falcao --mode ask
+uv run python tools/studio_demo.py guara_falcao --borderless
 ```
 
 `main.py` and the remaining demos run on the Pygame backend, where Studio
@@ -76,6 +77,38 @@ Panels open docked — hierarchy left, inspector and components right,
 viewport centre, play on top, history/journal/commands tabbed below — and
 the arrangement is applied once, so dragging a panel elsewhere keeps it
 there.
+
+## The window
+
+Two display flags decide what the operating system gives the editor, and
+both default off so a shipped game is unaffected:
+
+| `display.` | What it does |
+| --- | --- |
+| `resizable` | SDL reports resizes at all. Without it the window manager may still let the frame be maximised -- WSLg does -- while nothing in the engine is told, and the editor carries on drawing at the starting resolution into a corner of a much larger window |
+| `borderless` | Removes the OS title bar, so the editor draws its own |
+
+`borderless` is what the grey Windows-classic frame around the editor was.
+With it set, `attach_editor` installs a `TitleBar`: the panel menu at the
+left, the window title centred, and minimise/maximise/close at the right,
+in the editor's own palette -- the arrangement Godot and VS Code use, and
+for the same reason. The icons are stroked onto the draw list rather than
+written as text, because ImGui's built-in font carries Basic Latin and
+nothing else.
+
+Set only where the backend offers window controls. `Window.chrome`
+answers that: it hands back the backend when it satisfies `IWindowChrome`
+and `None` otherwise, and the editor leaves the OS bar alone in the second
+case. A borderless window whose buttons do nothing is worse than the frame
+it replaced.
+
+Close goes through the window's event queue rather than destroying the
+window: the button is pressed from inside a frame that is still being
+drawn, and the application runs the same shutdown it runs for the OS's own
+button.
+
+Keep `resizable` on wherever `borderless` is: removing the frame removes
+the OS's resize edges with it.
 
 ### Viewport
 
