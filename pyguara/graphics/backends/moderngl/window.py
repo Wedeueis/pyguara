@@ -68,6 +68,9 @@ class PygameGLWindow:
         self._height = 0
         self._window_object: Any = None
         self._is_maximized = False
+        # Where the window is being moved to, held only for the duration
+        # of a drag. See `begin_move`.
+        self._move_target: tuple[int, int] | None = None
 
     def open(self, config: WindowConfig) -> bool:
         """Create a Pygame display with OpenGL context.
@@ -204,6 +207,26 @@ class PygameGLWindow:
         """
         return self._is_maximized
 
+    def begin_move(self) -> None:
+        """Read the window's position once, for the moves about to follow.
+
+        Everything after this adds to that remembered position rather than
+        reading a fresh one. Two reasons, and the second is the one that
+        shows: the read costs something on every frame of a drag, and it
+        is asynchronous -- the window manager applies a move when it gets
+        to it, so a read straight after one can still return the old
+        position, and the delta then lands on top of a stale base.
+        """
+        window = self._native_window()
+        if window is None:
+            return
+        try:
+            x, y = window.position
+            self._move_target = (int(x), int(y))
+        except Exception as exc:  # pragma: no cover - depends on the WM
+            logger.debug(f"Could not read the window position: {exc}")
+            self._move_target = None
+
     def move_by(self, dx: int, dy: int) -> None:
         """Move the window by a screen-space delta.
 
@@ -215,10 +238,20 @@ class PygameGLWindow:
         if window is None:
             return
         try:
-            x, y = window.position
-            window.position = (int(x + dx), int(y + dy))
+            if self._move_target is None:
+                x, y = window.position
+            else:
+                x, y = self._move_target
+            target = (int(x + dx), int(y + dy))
+            if self._move_target is not None:
+                self._move_target = target
+            window.position = target
         except Exception as exc:  # pragma: no cover - depends on the WM
             logger.debug(f"Could not move the window: {exc}")
+
+    def end_move(self) -> None:
+        """Forget the remembered position, so the next run reads afresh."""
+        self._move_target = None
 
     def request_close(self) -> None:
         """Ask the application to shut down, as the OS close button does.

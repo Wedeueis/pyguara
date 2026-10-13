@@ -545,7 +545,7 @@ class Application:
             if isinstance(event, WindowResizeEvent):
                 # The window boundary is the only place a resize is detected;
                 # nothing else could give WindowResizeEvent a publisher.
-                self._resize_render_graph(event.width, event.height)
+                self._resize_render_output(event.width, event.height)
                 self._event_dispatcher.dispatch(event)
                 continue
 
@@ -571,8 +571,8 @@ class Application:
 
         self._end_replay_frame(frame_time)
 
-    def _resize_render_graph(self, width: int, height: int) -> None:
-        """Resize every framebuffer and pass to the new window size.
+    def _resize_render_output(self, width: int, height: int) -> None:
+        """Point everything that draws at the new window size.
 
         Nothing did this. `WindowResizeEvent` was dispatched to whoever
         subscribed -- the UI manager -- and the render graph, which is not
@@ -582,11 +582,26 @@ class Application:
         rendering at the old resolution and stretched, and left an editor
         overlay drawing its panels into the old window's bounds.
 
+        The renderers are the other half, and they are resized whether or
+        not there is a graph: the ModernGL one builds its projection from
+        the size it was constructed with, and the UI one draws onto a
+        surface of that size which it then composites as a fullscreen
+        quad. Both left alone, a wider window stretched the world and the
+        HUD by the ratio between the old aspect and the new -- 1.37x
+        horizontally for a 1280x720 renderer in a 1990x820 window, which
+        is a circle drawn as an ellipse.
+
         Args:
             width: The new window width in pixels.
             height: The new window height in pixels.
         """
-        if self._render_graph is None or width <= 0 or height <= 0:
+        if width <= 0 or height <= 0:
+            return
+
+        self._world_renderer.resize(width, height)
+        self._ui_renderer.resize(width, height)
+
+        if self._render_graph is None:
             return
         if (
             self._render_graph.fbo_manager.width == width

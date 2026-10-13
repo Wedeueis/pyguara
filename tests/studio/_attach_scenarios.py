@@ -277,7 +277,7 @@ def the_layout_follows_the_window() -> None:
         assert frame is not None
         _, width, height = frame
 
-        app._resize_render_graph(width * 2, height * 2)
+        app._resize_render_output(width * 2, height * 2)
         for _ in range(3):
             app.step()
 
@@ -291,6 +291,54 @@ def the_layout_follows_the_window() -> None:
         app.shutdown()
 
 
+def the_menus_are_studios_own() -> None:
+    """Studio replaces the editor's lone panel menu with its full bar.
+
+    And every menu's items draw. A menu is easy to get wrong in a way no
+    smoke test catches, because the items only run while the popup is
+    open -- so each one is opened here and a frame built with it open.
+    """
+    from imgui_bundle import imgui
+
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=Path.cwd())
+        assert attachment is not None
+        app.begin(_scene(app))
+        for _ in range(5):
+            app.step()
+
+        layer = attachment.layer
+        titles = [title for title, _ in layer.menus]
+        assert titles == [
+            "Scene",
+            "Edit",
+            "Entity",
+            "View",
+            "Run",
+            "Agent",
+            "Help",
+        ], titles
+
+        # Draw each menu's items for real. `begin_menu` needs a menu bar
+        # to sit in, so one is opened on a window of its own -- the same
+        # context ImGui's main menu bar gives them.
+        imgui.set_current_context(layer._context)
+        for title, draw_items in layer.menus:
+            layer.build_frame(1280, 720, dt=1 / 60)
+            imgui.new_frame()
+            imgui.begin("##menutest", None, imgui.WindowFlags_.menu_bar.value)
+            if imgui.begin_menu_bar():
+                if imgui.begin_menu(title, True):
+                    draw_items()
+                    imgui.end_menu()
+                imgui.end_menu_bar()
+            imgui.end()
+            imgui.render()
+    finally:
+        app.shutdown()
+
+
 SCENARIOS = {
     "attaches": attaches,
     "session_follows_the_scene": session_follows_the_scene,
@@ -298,6 +346,7 @@ SCENARIOS = {
     "panels_install_under_the_real_loop": (panels_install_under_the_real_loop),
     "studio_owns_the_screen": studio_owns_the_screen,
     "the_layout_follows_the_window": the_layout_follows_the_window,
+    "the_menus_are_studios_own": the_menus_are_studios_own,
 }
 
 

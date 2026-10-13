@@ -196,6 +196,21 @@ class HeadlessBackend:
         """No-op: discard the draw call."""
         ...
 
+    def resize(self, width: int, height: int) -> None:
+        """Record the new size, so `width` and `height` stay truthful.
+
+        Nothing is drawn, but a test that resizes and then asks the
+        renderer how big it is should get the answer it set.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
+        """
+        if width <= 0 or height <= 0:
+            return
+        self._width = width
+        self._height = height
+
     def present(self) -> None:
         """
         Swap the buffers and display the rendered frame to the user.
@@ -278,6 +293,14 @@ class HeadlessUIRenderer:
     def get_text_size(self, text: str, size: int) -> tuple[int, int]:
         """Return a zero size: no text is ever actually measured/rendered."""
         return (0, 0)
+
+    def resize(self, width: int, height: int) -> None:
+        """No-op: nothing is drawn, so there is no surface to re-make.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
+        """
 
     def present(self) -> None:
         """Drop any clip a widget pushed and never popped."""

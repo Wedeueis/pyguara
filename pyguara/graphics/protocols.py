@@ -364,6 +364,25 @@ class IRenderer(Protocol):
         """
         ...
 
+    def resize(self, width: int, height: int) -> None:
+        """Adopt a new drawing size.
+
+        `width` and `height` are read-only, so before this there was no way
+        to tell a renderer the window had changed -- and the ModernGL one
+        builds its orthographic projection from them. A renderer left on
+        the size it was constructed with maps the *original* pixel
+        rectangle onto the new framebuffer, stretching the world by the
+        ratio between the two aspect ratios: a circle came out an ellipse.
+
+        Implementations whose size is read from something else -- a pygame
+        surface is its own size -- have nothing to store, and say so.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
+        """
+        ...
+
     def present(self) -> None:
         """
         Swap the buffers and display the rendered frame to the user.
@@ -408,6 +427,19 @@ class IWindowChrome(Protocol):
         """Ask the application to shut down, as the OS close button does."""
         ...
 
+    def begin_move(self) -> None:
+        """Start a run of moves, such as a drag.
+
+        Lets an implementation read the window's position once instead of
+        once per frame. That read is not free, and worse, it is
+        asynchronous: a window manager applies a move when it gets to it,
+        so a position read straight after one may still be the old one.
+        Adding a delta to that stale value puts the window somewhere
+        nobody asked for, and the correction next frame is the small
+        wobble a hand-rolled drag is known for.
+        """
+        ...
+
     def move_by(self, dx: int, dy: int) -> None:
         """Move the window by a screen-space delta.
 
@@ -416,6 +448,10 @@ class IWindowChrome(Protocol):
         decoration it would have drawn -- so reading back a position and
         setting an absolute one accumulates that error on every drag frame.
         """
+        ...
+
+    def end_move(self) -> None:
+        """Finish a run of moves, dropping anything held for it."""
         ...
 
 
@@ -577,6 +613,21 @@ class UIRenderer(Protocol):
         may be another clip or none at all. A pop with nothing pushed is a
         no-op rather than an error: a widget that pops in a `finally` should
         not turn one bug into two.
+        """
+        ...
+
+    def resize(self, width: int, height: int) -> None:
+        """Adopt a new drawing size.
+
+        The GL implementation draws onto a surface it uploads whole and
+        composites as a fullscreen quad, so a surface left at the original
+        size is stretched across the resized window -- which is what left
+        the HUD distorted. Implementations that draw straight onto the
+        window's own surface have nothing to store.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
         """
         ...
 

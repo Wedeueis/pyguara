@@ -179,6 +179,17 @@ class PygameUIRenderer:
         self._surface = surface
         self._apply_clip(self._clips.current)
 
+    def resize(self, width: int, height: int) -> None:
+        """No-op: this renderer draws straight onto the window's surface.
+
+        There is no intermediate surface of its own to re-make, so a
+        resize changes nothing it holds.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
+        """
+
     def present(self) -> None:
         """Finalize UI rendering.
 
