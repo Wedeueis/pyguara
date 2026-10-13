@@ -118,6 +118,16 @@ def feed_event(event: object) -> None:
     if isinstance(event, MouseButtonEvent):
         button = _MOUSE_BUTTONS.get(event.button)
         if button is not None:
+            # The position the press happened at, before the press itself.
+            # SDL puts it on the event because it cannot be derived: the
+            # last motion event is not necessarily where the cursor is.
+            # Dragging the window by its own title bar is the clearest
+            # case -- the window moves out from under a cursor that never
+            # moved, so every window-relative coordinate changes and no
+            # motion event is emitted. Without this, the click after a
+            # drag is tested against wherever the cursor last *moved* to,
+            # and lands on nothing.
+            io.add_mouse_pos_event(float(event.x), float(event.y))
             io.add_mouse_button_event(button, event.is_down)
         return
 
