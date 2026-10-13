@@ -53,6 +53,10 @@ class RenderGraph:
         self._ctx = ctx
         self._fbo_manager = FramebufferManager(ctx, width, height)
         self._passes: list[BaseRenderPass] = []
+        # Where the rendered image lands, and how big the window holding
+        # it is. The same until the game is letterboxed; see `resize`.
+        self._screen_rect: tuple[int, int, int, int] = (0, 0, width, height)
+        self._window_size: tuple[int, int] = (width, height)
 
         # The chain's format has an owner here rather than being whatever
         # the first pass to reach a buffer happened to ask for. Declaring
@@ -159,16 +163,36 @@ class RenderGraph:
             if render_pass.enabled:
                 render_pass.execute(self._ctx, self)
 
-    def resize(self, width: int, height: int) -> None:
+    def resize(
+        self,
+        width: int,
+        height: int,
+        *,
+        screen: tuple[int, int, int, int] | None = None,
+        window: tuple[int, int] | None = None,
+    ) -> None:
         """Handle viewport resize.
 
         Resizes all framebuffers and notifies passes.
 
+        Three sizes, which are the same thing until the game is
+        letterboxed and then are not:
+
         Args:
-            width: New viewport width.
-            height: New viewport height.
+            width: What the pipeline renders at -- every framebuffer's
+                size, and the resolution the world is drawn at.
+            height: The same, vertically.
+            screen: Where that rendered image lands on the screen, as
+                `(x, y, width, height)` in window pixels. Defaults to
+                filling from the origin. With a letterbox it is inset, and
+                the bars are what is left over.
+            window: The window's own size, which is what a pass drawing
+                directly to the screen needs -- the editor's chrome fills
+                the window, not the letterbox. Defaults to the render size.
         """
         self._fbo_manager.resize_all(width, height)
+        self._window_size = window if window is not None else (width, height)
+        self._screen_rect = screen if screen is not None else (0, 0, width, height)
 
         # The default framebuffer does not follow the window on its own:
         # moderngl detects `ctx.screen` once at context creation and caches
@@ -177,10 +201,20 @@ class RenderGraph:
         # bottom-left corner, GL's origin being there. Setting the viewport
         # is what `use()` then applies.
         if self._ctx.screen is not None:
-            self._ctx.screen.viewport = (0, 0, width, height)
+            self._ctx.screen.viewport = self._screen_rect
 
         for render_pass in self._passes:
-            render_pass.on_resize(width, height)
+            render_pass.on_resize(*self._window_size)
+
+    @property
+    def screen_rect(self) -> tuple[int, int, int, int]:
+        """Where the rendered image lands on screen, in window pixels."""
+        return self._screen_rect
+
+    @property
+    def window_size(self) -> tuple[int, int]:
+        """The window's size, which the letterbox is centred inside."""
+        return self._window_size
 
     def release(self) -> None:
         """Release all GPU resources.

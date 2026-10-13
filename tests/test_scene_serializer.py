@@ -1,11 +1,14 @@
 """Tests for scene serialization."""
 
+import dataclasses
 from typing import Any
 
 import pytest
 
 from pyguara.common.components import ResourceLink, Tag, Transform
+from pyguara.common.modifiers import ModifiableValue, Modifier, ModifierType
 from pyguara.common.types import Vector2
+from pyguara.ecs.component import BaseComponent
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.persistence.manager import PersistenceManager
@@ -786,3 +789,109 @@ class TestFullSceneFidelity:
         assert target.parent_of("child") == "root"
 
         assert target.is_entity_enabled("hidden") is False
+
+
+class TestAnyEnumNotJustTwo:
+    """Enums beyond the two the engine shipped first.
+
+    `_serialize_value` tested for `BodyType` and `ShapeType` by name. Every
+    other enum -- `LightType`, and anything a game declares -- fell to the
+    dataclass arm below, came out as `{}`, and then failed the JSON encode
+    outright: saving `guara_falcao` raised "Object of type LightType is not
+    JSON serializable" and `save_scene` returned False. Not "saved without
+    its lights": did not save.
+    """
+
+    def test_a_light_survives_a_round_trip(
+        self, serializer: SceneSerializer, scene: Any, component_registry: Any
+    ) -> None:
+        from pyguara.graphics.lighting.components import LightSource, LightType
+
+        component_registry.register(LightSource)
+        entity = scene.entity_manager.create_entity("lamp")
+        entity.add_component(LightSource(light_type=LightType.POINT, radius=42.0))
+
+        assert serializer.save_scene(scene, "lit") is True
+
+        reloaded = MockScene("reloaded", EventDispatcher())
+        assert serializer.load_scene(reloaded, "lit") is True
+        light = reloaded.entity_manager.get_entity("lamp").get_component(LightSource)
+        assert light.light_type is LightType.POINT
+        assert light.radius == 42.0
+
+    def test_the_two_named_enums_still_work(
+        self, serializer: SceneSerializer, scene: Any
+    ) -> None:
+        """They were resolved by name rather than by declared type, and a
+        scene written before this still has to load."""
+        entity = scene.entity_manager.create_entity("box")
+        entity.add_component(RigidBody(body_type=BodyType.KINEMATIC))
+        entity.add_component(Collider(shape_type=ShapeType.CIRCLE, dimensions=[3.0]))
+
+        assert serializer.save_scene(scene, "physical") is True
+
+        reloaded = MockScene("reloaded", EventDispatcher())
+        assert serializer.load_scene(reloaded, "physical") is True
+        loaded = reloaded.entity_manager.get_entity("box")
+        assert loaded.get_component(RigidBody).body_type is BodyType.KINEMATIC
+        assert loaded.get_component(Collider).shape_type is ShapeType.CIRCLE
+
+    def test_a_member_name_is_accepted_too(
+        self, serializer: SceneSerializer, scene: Any
+    ) -> None:
+        """The format's whole promise is that a person could have typed
+        the file, and a person types the name."""
+        entity = scene.entity_manager.create_entity("box")
+        entity.add_component(RigidBody(body_type=BodyType.STATIC))
+        serializer.save_scene(scene, "named")
+        stored = serializer.persistence.load_data("named")
+        body = stored["entities"][0]["components"]["RigidBody"]
+        body["body_type"] = "kinematic"
+        serializer.persistence.save_data("named", stored)
+
+        reloaded = MockScene("reloaded", EventDispatcher())
+        assert serializer.load_scene(reloaded, "named") is True
+        loaded = reloaded.entity_manager.get_entity("box")
+        assert loaded.get_component(RigidBody).body_type is BodyType.KINEMATIC
+
+
+@dataclasses.dataclass
+class Stats(BaseComponent):
+    """A component with a modifiable stat, declared at module level.
+
+    Module level on purpose: `get_type_hints` resolves an annotation
+    against its defining module's namespace, and a class nested inside a
+    test function has none to resolve `ModifiableValue` from. That is the
+    test's problem, not the serializer's -- real components live in
+    modules.
+    """
+
+    strength: ModifiableValue = dataclasses.field(
+        default_factory=lambda: ModifiableValue(10.0)
+    )
+
+
+class TestModifiableValue:
+    """A stat with modifiers is written as the number a designer typed."""
+
+    def test_the_base_is_what_is_stored(
+        self, serializer: SceneSerializer, scene: Any, component_registry: Any
+    ) -> None:
+        """Not the modified value, and not the modifier stack: those are
+        runtime state, put there by whatever applied them."""
+        component_registry.register(Stats)
+        strength = ModifiableValue(10.0)
+        strength.add_modifier(Modifier(5.0, ModifierType.FLAT, source="ring"))
+        entity = scene.entity_manager.create_entity("hero")
+        entity.add_component(Stats(strength=strength))
+        assert strength.value == 15.0
+
+        assert serializer.save_scene(scene, "statted") is True
+        stored = serializer.persistence.load_data("statted")
+        assert stored["entities"][0]["components"]["Stats"]["strength"] == 10.0
+
+        reloaded = MockScene("reloaded", EventDispatcher())
+        assert serializer.load_scene(reloaded, "statted") is True
+        loaded = reloaded.entity_manager.get_entity("hero").get_component(Stats)
+        assert isinstance(loaded.strength, ModifiableValue)
+        assert loaded.strength.base == 10.0

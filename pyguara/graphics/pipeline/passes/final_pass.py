@@ -101,6 +101,20 @@ class FinalPass(BaseRenderPass):
             # If input doesn't exist, nothing to blit
             return
 
+        # Clear the whole window before narrowing to where the image
+        # goes. With a letterbox the bars are the part of the window no
+        # pass ever writes, and GL leaves whatever was there -- the
+        # previous frame, smeared, or uninitialised memory.
+        screen = ctx.screen
+        rect = graph.screen_rect
+        window = graph.window_size
+        letterboxed = (rect[2], rect[3]) != window
+        if letterboxed:
+            screen.viewport = (0, 0, window[0], window[1])
+            screen.use()
+            screen.clear(0.0, 0.0, 0.0, 1.0)
+            screen.viewport = rect
+
         # Bind the default framebuffer (screen)
         ctx.screen.use()
 

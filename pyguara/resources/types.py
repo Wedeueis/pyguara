@@ -31,6 +31,29 @@ class Resource(ABC):
         self._path = path
         self._import_meta: AssetMeta | None = None
 
+    def __deepcopy__(self, memo: dict[int, Any]) -> "Resource":
+        """Return this same resource, because a resource is shared.
+
+        A resource is a handle to one loaded asset, usually wrapping a GPU
+        object. Copying one is never what a caller means: `copy.deepcopy`
+        on a `Texture` fails outright ("cannot pickle 'mgl.Texture'"), and
+        on a resource that happened to survive it would mean a second
+        upload of the same image per copy.
+
+        Defined here rather than worked around at each call site, because
+        the call sites cannot see a resource nested inside a component's
+        own dataclass field -- which is how duplicating an entity failed.
+
+        Args:
+            memo: `copy.deepcopy`'s memo, recorded in so that a second
+                reference to this resource resolves to the same object.
+
+        Returns:
+            Self.
+        """
+        memo[id(self)] = self
+        return self
+
     @property
     def path(self) -> str:
         """Get the file path associated with this resource."""

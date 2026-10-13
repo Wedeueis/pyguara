@@ -11,6 +11,7 @@ import enum
 from collections.abc import Callable
 from typing import Any, get_type_hints
 
+from pyguara.common.modifiers import ModifiableValue
 from pyguara.common.types import Vector2
 from pyguara.ecs.component import Component
 from pyguara.log import get_logger
@@ -39,6 +40,7 @@ class ComponentRegistry:
         self._deserializers: dict[str, Callable[[dict[str, Any]], Any]] = {}
         self._type_converters: dict[type, Callable[[Any], Any]] = {
             Vector2: self._convert_vector2,
+            ModifiableValue: self._convert_modifiable,
         }
         # Register built-in deserializers for special components
         self._register_builtin_deserializers()
@@ -246,6 +248,29 @@ class ComponentRegistry:
 
         return value
 
+    def _convert_modifiable(self, value: Any) -> Any:
+        """Rebuild a `ModifiableValue` from the number that was stored.
+
+        A stat is written as its base -- the number a designer typed --
+        because the modifiers stacked on top are runtime state, put there
+        by whatever applied them. Loading one back gives a value with no
+        modifiers, which is the authored state and not a half-remembered
+        playthrough.
+
+        Args:
+            value: What the file held: a number, or a value already.
+
+        Returns:
+            A `ModifiableValue`, or `value` unchanged when it is neither
+            -- which leaves the component's own construction to raise with
+            a better message than this could.
+        """
+        if isinstance(value, ModifiableValue):
+            return value
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return ModifiableValue(float(value))
+        return value
+
     def _convert_enum(self, value: Any, enum_type: type[enum.Enum]) -> Any:
         """Coerce serialized data to an enum member.
 
@@ -344,7 +369,10 @@ class ComponentRegistry:
         """
         self._components.clear()
         self._deserializers.clear()
-        self._type_converters = {Vector2: self._convert_vector2}
+        self._type_converters = {
+            Vector2: self._convert_vector2,
+            ModifiableValue: self._convert_modifiable,
+        }
         self._register_builtin_deserializers()
 
 

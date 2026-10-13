@@ -159,6 +159,7 @@ class StudioSession:
         component_registry: ComponentRegistry | None = None,
         journal: Journal | None = None,
         approval_mode: ApprovalMode = ApprovalMode.AUTO,
+        scene_io: Any = None,
     ) -> None:
         """Open a session over `world`.
 
@@ -175,6 +176,10 @@ class StudioSession:
             journal: Where to record actions. Defaults to an in-memory
                 journal.
             approval_mode: How edits are handled.
+            scene_io: Reaches the serializer and the live scene, for the
+                operations that save and open. None in a session built by
+                hand, and those operations then say what is missing
+                rather than failing somewhere deeper.
         """
         self._world = world
         self._scene_name = scene_name
@@ -185,6 +190,7 @@ class StudioSession:
             else get_component_registry()
         )
         self._journal = journal if journal is not None else Journal()
+        self._scene_io = scene_io
         self._stack = CommandStack(world)
         self._approval_mode = approval_mode
         self._pending: dict[str, PendingEdit] = {}
@@ -209,6 +215,11 @@ class StudioSession:
                 "approval_mode": approval_mode.value,
             },
         )
+
+    @property
+    def scene_io(self) -> Any:
+        """Saving and opening, or None when the session cannot reach them."""
+        return self._scene_io
 
     @property
     def world(self) -> EntityManager:
