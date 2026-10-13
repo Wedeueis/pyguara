@@ -185,7 +185,10 @@ class RenderGraph:
             screen: Where that rendered image lands on the screen, as
                 `(x, y, width, height)` in window pixels. Defaults to
                 filling from the origin. With a letterbox it is inset, and
-                the bars are what is left over.
+                the bars are what is left over. This becomes
+                `ctx.screen.viewport`, which therefore means *where the
+                game's frame goes* -- anything that is not the game and
+                binds the screen has to set its own and put this back.
             window: The window's own size, which is what a pass drawing
                 directly to the screen needs -- the editor's chrome fills
                 the window, not the letterbox. Defaults to the render size.

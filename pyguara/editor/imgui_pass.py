@@ -98,19 +98,40 @@ class ImGuiPass(BaseRenderPass):
         # bound -- a pass added after `final` would have left its own target
         # bound. Binding here makes the editor's target explicit.
         #
+        # And so is the viewport, which is the part that bit. `ctx.screen`'s
+        # viewport is where the **game's** frame goes: with
+        # `display.keep_aspect` the graph narrows it to the letterbox, so
+        # that the game and its HUD land inside their own frame. The editor
+        # is not the game -- it owns the whole window -- and inheriting that
+        # viewport squeezed every panel into the letterbox. On a 2000x876
+        # window that is a horizontal scale of 0.73: compressed text, and a
+        # round sun in the Viewport panel drawn as an ellipse taller than
+        # wide. An ultrawide display makes it worse still.
+        #
+        # Put back afterwards, because the game's UI composites after the
+        # graph runs and has to land inside the letterbox rather than
+        # spilling onto the bars.
+        #
         # `ctx.screen` is `None` on a standalone (offscreen) context, where
         # there is no default framebuffer to bind; the editor then draws
         # into whatever the caller bound, which is what an offscreen
         # capture wants anyway.
-        if ctx.screen is not None:
-            ctx.screen.use()
+        screen = ctx.screen
+        previous = screen.viewport if screen is not None else None
+        if screen is not None:
+            screen.viewport = (0, 0, self._width, self._height)
+            screen.use()
             if self._clear_colour is not None:
                 # Nothing else writes the screen when Studio owns it: the
                 # final blit is disabled so the game appears only inside
                 # the Viewport panel, which leaves the default framebuffer
                 # holding last frame's contents until something clears it.
-                ctx.screen.clear(*self._clear_colour, 1.0)
-        self._layer.render(self._width, self._height)
+                screen.clear(*self._clear_colour, 1.0)
+        try:
+            self._layer.render(self._width, self._height)
+        finally:
+            if screen is not None and previous is not None:
+                screen.viewport = previous
 
     def on_resize(self, width: int, height: int) -> None:
         """Track the new window size.

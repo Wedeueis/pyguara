@@ -105,6 +105,7 @@ class TestAttachToARealApplication:
             "studio_owns_the_screen",
             "the_layout_follows_the_window",
             "the_menus_are_studios_own",
+            "the_editor_gets_the_whole_window",
         ],
     )
     def test_scenario(self, scenario: str) -> None:

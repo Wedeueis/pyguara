@@ -151,6 +151,20 @@ class StudioAttachment:
         return self._container
 
     @property
+    def layout_file(self) -> Path:
+        """Where the panel arrangement is kept between runs.
+
+        Under `.pyguara/` rather than beside the game's own files: it is a
+        tool's state, not the project's, so it belongs somewhere a person
+        can delete without wondering what it was. `.gitignore` carries it.
+
+        Returns:
+            The path. `attach_studio` resolves a project root either way,
+            falling back to the working directory, so there is always one.
+        """
+        return self._project_root / ".pyguara" / "studio-layout.ini"
+
+    @property
     def layer(self) -> Any:
         """The editor layer Studio's panels are drawn by."""
         return self._layer
@@ -276,6 +290,9 @@ class StudioAttachment:
         for panel in panels:
             self._layer.add_panel(panel)
 
+        # Not forced: a layout the last session saved has already been
+        # restored by now, and the shipped arrangement is what applies
+        # when there is none. "Reset Layout" is the way to discard one.
         self._layer.set_default_layout(default_layout())
         self._install_menus()
         logger.info("Studio panels installed.")
@@ -653,6 +670,11 @@ def attach_studio(
         approval_mode=approval_mode,
     )
     container.register_instance(StudioAttachment, attachment)
+
+    # Before any frame is built: ImGui reads the file at the start of the
+    # next `new_frame`, and the panels have to be positioned from what it
+    # loads rather than arranged first and overwritten after.
+    attachment.layer.set_settings_file(attachment.layout_file)
 
     attachment.take_over_screen()
 

@@ -358,7 +358,11 @@ class StudioMenus:
         """Put every panel back where Studio opens it."""
         from pyguara.studio.attach import default_layout
 
-        self._attachment.layer.set_default_layout(default_layout())
+        # Forced: this is the one action that is meant to discard both the
+        # arrangement saved last session and whatever has been dragged
+        # since. Everything else leaves them alone.
+        self._attachment.layer.set_default_layout(default_layout(), force=True)
+        self._attachment.layer.save_settings()
 
     def _quit(self) -> None:
         """Ask the application to shut down, as the close button does."""

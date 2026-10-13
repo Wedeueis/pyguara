@@ -105,6 +105,12 @@ class FinalPass(BaseRenderPass):
         # goes. With a letterbox the bars are the part of the window no
         # pass ever writes, and GL leaves whatever was there -- the
         # previous frame, smeared, or uninitialised memory.
+        #
+        # The letterbox is left set afterwards on purpose: the game's own
+        # UI composites after the graph runs, as a fullscreen quad, and
+        # belongs inside the same frame. `ctx.screen.viewport` means where
+        # the *game's* frame goes, so anything that is not the game --
+        # the editor -- sets its own and puts this back.
         screen = ctx.screen
         rect = graph.screen_rect
         window = graph.window_size

@@ -17,6 +17,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from imgui_bundle import imgui
 
@@ -128,7 +129,12 @@ class EditorLayer:
 
         self._layout: DockLayout | None = None
         self._layout_applied = False
-        self._layout_size: tuple[int, int] = (0, 0)
+        # Set when a caller asks for the shipped arrangement *now* --
+        # View > Reset Layout -- which is the one case that overwrites
+        # both a saved arrangement and whatever the developer dragged.
+        self._force_layout = False
+        self._settings_file: Path | None = None
+        self._settings_restored = False
         # Leave the middle of the dockspace empty by default, so the game
         # shows through it. Studio turns this off: it draws the frame into
         # a Viewport panel, and a second copy of the game behind the
@@ -158,9 +164,12 @@ class EditorLayer:
         # safe and necessary. `ModernGLImGuiRenderer` sets the same bit for
         # when it is driven on its own.
         io.backend_flags |= imgui.BackendFlags_.renderer_has_textures.value
-        # Nothing here writes imgui.ini: a dev tool silently dropping a file
-        # into the project root is a surprise, and panel layout is cheap to
-        # re-arrange.
+        # Nothing is written unless a caller asks, through
+        # `set_settings_file`: a dev tool silently dropping an `imgui.ini`
+        # into the project root is a surprise, and the bare editor and
+        # every test want nothing on disk at all. Studio asks, because an
+        # authoring tool that forgets your layout every time you close it
+        # is an authoring tool you re-arrange every morning.
         io.set_ini_filename("")
 
         # A deliberate palette rather than ImGui's default, which is a
@@ -477,6 +486,11 @@ class EditorLayer:
         if self._passthrough_centre:
             flags |= imgui.DockNodeFlags_.passthru_central_node.value
 
+        # Read before submitting: `dock_space` creates the root node, so
+        # afterwards one always exists. A node here means the tree came
+        # back from the settings file.
+        restored = imgui.internal.dock_builder_get_node(_DOCKSPACE_ID) is not None
+
         offset = self._title_bar.height() if self._title_bar is not None else 0.0
         if offset > 0.0:
             self._submit_inset_dockspace(flags, offset)
@@ -484,22 +498,27 @@ class EditorLayer:
             imgui.dock_space_over_viewport(dockspace_id=_DOCKSPACE_ID, flags=flags)
         if self._layout is None:
             return
-
-        size = imgui.get_io().display_size
-        current = (int(size.x), int(size.y))
-        # Re-applied when the window changes size, not only once. The dock
-        # tree is built at a fixed size, so a layout applied at the
-        # starting resolution kept the panels inside the old window's
-        # bounds after a maximise -- the editor occupying a corner of the
-        # screen with the rest left black.
-        if not self._layout_applied or current != self._layout_size:
-            # After the dockspace exists -- the builder docks into it --
-            # and before any panel's `begin`, which would otherwise take
-            # its position for the frame and only snap into place on the
-            # next one.
+        if self._layout_applied and not self._force_layout:
+            return
+        # A tree restored from the settings file wins: the builder would
+        # overwrite what ImGui had just loaded, and with it every splitter
+        # the developer dragged in the last session.
+        if restored and not self._force_layout:
             self._layout_applied = True
-            self._layout_size = current
-            self._apply_layout(self._layout, offset)
+            return
+
+        # After the dockspace exists -- the builder docks into it -- and
+        # before any panel's `begin`, which would otherwise take its
+        # position for the frame and only snap into place on the next one.
+        #
+        # Once, not on every resize. ImGui keeps each dock node's share of
+        # its parent and rescales when the root changes, which is the
+        # responsive behaviour wanted and what every docking editor does;
+        # rebuilding the tree instead threw away any splitter the
+        # developer had dragged, every time the window moved.
+        self._layout_applied = True
+        self._force_layout = False
+        self._apply_layout(self._layout, offset)
 
     @property
     def passthrough_centre(self) -> bool:
@@ -511,7 +530,9 @@ class EditorLayer:
         """Show or hide whatever is behind the dockspace's middle."""
         self._passthrough_centre = value
 
-    def set_default_layout(self, layout: DockLayout | None) -> None:
+    def set_default_layout(
+        self, layout: DockLayout | None, *, force: bool = False
+    ) -> None:
         """Arrange the panels the next time a frame is built.
 
         Applied once rather than every frame, so a developer who drags a
@@ -523,9 +544,16 @@ class EditorLayer:
         Args:
             layout: Where each panel goes, or None to leave ImGui's
                 defaults alone.
+            force: Apply it even over an arrangement restored from the
+                settings file. What "Reset Layout" means, and the only
+                way to discard a saved one -- installing the default at
+                startup must not, or the saved arrangement would never
+                survive a restart.
         """
         self._layout = layout
         self._layout_applied = False
+        if force:
+            self._force_layout = True
 
     def _apply_layout(self, layout: DockLayout, offset: float = 0.0) -> None:
         """Build the dock tree and assign panels to its regions.
@@ -623,6 +651,57 @@ class EditorLayer:
         finally:
             imgui.end_main_menu_bar()
 
+    def set_settings_file(self, path: Path | None) -> None:
+        """Remember the panel arrangement in `path` between runs.
+
+        ImGui's own settings mechanism, which already stores each window's
+        dock node, size and collapsed state, and restores them by window
+        title. Writing a second one on top of it would be a worse version
+        of something that works.
+
+        Must be called **before the first frame**: ImGui reads the file at
+        the start of the next `new_frame`, and a layout the dock builder
+        has already arranged would be overwritten by what it loads.
+
+        Args:
+            path: Where to keep it. The parent directory is created.
+                None turns persistence off, which is the default.
+        """
+        self._settings_file = path
+        if path is None:
+            self._settings_restored = False
+            imgui.set_current_context(self._context)
+            imgui.get_io().set_ini_filename("")
+            return
+
+        # Recorded before ImGui touches it: afterwards the file exists
+        # either way, and whether a *previous* session wrote one is what
+        # decides if the shipped arrangement still applies.
+        self._settings_restored = path.exists()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning(
+                f"Cannot keep the editor layout in {path}: {exc}. "
+                f"The arrangement will not survive this session."
+            )
+            self._settings_restored = False
+            return
+
+        imgui.set_current_context(self._context)
+        imgui.get_io().set_ini_filename(str(path))
+        logger.debug(f"Editor layout remembered in {path}.")
+
+    @property
+    def settings_file(self) -> Path | None:
+        """Where the panel arrangement is kept, or None."""
+        return self._settings_file
+
+    @property
+    def settings_restored(self) -> bool:
+        """Whether a previous session's arrangement was loaded."""
+        return self._settings_restored
+
     @property
     def menus(self) -> tuple[tuple[str, Callable[[], None]], ...]:
         """The menus, in the order they are laid out."""
@@ -699,9 +778,26 @@ class EditorLayer:
 
         Safe to call more than once.
         """
+        self.save_settings()
         if self._renderer is not None:
             self._renderer.release()
             self._renderer = None
         if self._context is not None:
             imgui.destroy_context(self._context)
             self._context = None  # type: ignore[assignment]
+
+    def save_settings(self) -> None:
+        """Write the panel arrangement out now, if one is being kept.
+
+        ImGui saves on its own timer -- `io.ini_saving_rate`, five seconds
+        by default -- so the last few edits before a clean shutdown would
+        otherwise be the ones lost. Does nothing when no settings file is
+        set, which is the default.
+        """
+        if self._settings_file is None or self._context is None:
+            return
+        try:
+            imgui.set_current_context(self._context)
+            imgui.save_ini_settings_to_disk(str(self._settings_file))
+        except Exception as exc:  # pragma: no cover - a read-only directory
+            logger.warning(f"Could not write the editor layout: {exc}")
