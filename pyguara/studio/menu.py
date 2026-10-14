@@ -411,7 +411,13 @@ class StudioMenus:
         payload = result.to_dict()
         if not payload.get("ok", False):
             if record:
-                logger.warning(f"Menu action '{name}' failed: {payload.get('error')}")
+                # On screen, not only in the log. A menu item that closes
+                # and does nothing is indistinguishable from one that is
+                # broken, and the operation's error already names the
+                # correction -- it just had nowhere to be read.
+                error = str(payload.get("error") or "failed")
+                logger.warning(f"Menu action '{name}' failed: {error}")
+                self._attachment.layer.toasts.error(f"{name}: {error}")
             return None
         data = payload.get("data")
         return data if isinstance(data, dict) else payload

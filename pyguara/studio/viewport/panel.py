@@ -191,6 +191,7 @@ class ViewportPanel(EditorPanel):
         camera_provider: Any = None,
         texture_provider: Any = None,
         physics_provider: Any = None,
+        running_provider: Any = None,
         overlays: list[ViewportOverlay] | None = None,
         visible: bool = True,
     ) -> None:
@@ -208,6 +209,9 @@ class ViewportPanel(EditorPanel):
             texture_provider: Returns `(texture_id, width, height)` for the
                 frame to show, or None when there is nothing to show.
             physics_provider: Returns an `IPhysicsEngine`, or None.
+            running_provider: Returns True while the game is simulating.
+                Used for the warning below the toolbar, which is the
+                honest answer to "the gizmo does not move the entity".
             overlays: Things that draw over the image, such as the gizmo.
             visible: Whether the panel draws from the first frame.
         """
@@ -215,6 +219,7 @@ class ViewportPanel(EditorPanel):
         self._camera_provider = camera_provider
         self._texture_provider = texture_provider
         self._physics_provider = physics_provider
+        self._running_provider = running_provider
         self._overlays = list(overlays or [])
         self._state = ViewportState()
 
@@ -240,6 +245,7 @@ class ViewportPanel(EditorPanel):
         imgui.begin(self.title)
         try:
             self._draw_toolbar()
+            self._draw_running_warning()
             manager = context.entity_manager
             if manager is None:
                 imgui.text_disabled("No active scene.")
@@ -254,6 +260,38 @@ class ViewportPanel(EditorPanel):
         finally:
             # Dear ImGui owes an End for every Begin, collapsed or not.
             imgui.end()
+
+    def _draw_running_warning(self) -> None:
+        """Say that the game is overwriting what it drives.
+
+        The single most confusing thing about editing a live scene: drag
+        the gizmo, let go, and the entity snaps back -- because whatever
+        drives it (a controller, a physics body, a follow system) writes
+        its transform again on the next tick. The edit *did* happen; it
+        was simply outlived.
+
+        Always on while running, rather than a toast per edit: it is a
+        property of the state, not an event, and a message that appeared
+        on every drag would be noise by the third one.
+        """
+        if self._running_provider is None:
+            return
+        try:
+            running = bool(self._running_provider())
+        except Exception:  # pragma: no cover - a torn-down application
+            return
+        if not running:
+            return
+
+        imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(0.95, 0.72, 0.30, 1.0))
+        try:
+            imgui.text_wrapped(
+                "Running -- the game rewrites what it drives, so an edit to "
+                "one of those is overwritten on the next tick. Pause in the "
+                "Play panel to edit."
+            )
+        finally:
+            imgui.pop_style_color()
 
     def _draw_toolbar(self) -> None:
         """Draw the grid, snap and selection-mode controls."""

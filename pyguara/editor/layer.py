@@ -32,6 +32,7 @@ from pyguara.editor.renderer import ModernGLImGuiRenderer
 from pyguara.editor.selection import Selection
 from pyguara.editor.theme import apply_theme, scale_for
 from pyguara.editor.titlebar import TitleBar
+from pyguara.editor.toasts import ToastStack
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -182,6 +183,7 @@ class EditorLayer:
         # Set when the window is borderless and the backend can move it.
         # None leaves the operating system's own title bar in place.
         self._title_bar: TitleBar | None = None
+        self._toasts = ToastStack()
         # One source for the menus, drawn either into ImGui's main menu
         # bar or into the editor's own title bar. Studio replaces this
         # with its own set; on its own the editor offers the panel list.
@@ -238,6 +240,24 @@ class EditorLayer:
         """
         self._frame_hooks.append(hook)
 
+    def replace_panel(self, index: int, panel: EditorPanel) -> None:
+        """Put `panel` where the one at `index` was.
+
+        The draw order is the dock layout's order, so a replacement has to
+        land in the same slot rather than at the end -- a panel appended
+        instead would open loose while the layout kept a place for the one
+        it replaced.
+
+        Args:
+            index: Where in the draw order to put it.
+            panel: The replacement.
+
+        Raises:
+            IndexError: If `index` names no panel.
+        """
+        self._panels[index] = panel
+        panel.toasts = self._toasts
+
     def add_panel(self, panel: EditorPanel) -> None:
         """Append a panel to the draw order.
 
@@ -245,6 +265,10 @@ class EditorLayer:
             panel: The panel to add.
         """
         self._panels.append(panel)
+        # So the panel can say something on screen rather than only to the
+        # log. A refused edit that reports nothing reads as a control that
+        # does not work.
+        panel.toasts = self._toasts
 
     def register_texture(self, texture: object) -> int | None:
         """Make a texture drawable by a panel, returning its ImGui id.
@@ -355,6 +379,9 @@ class EditorLayer:
         for panel in self._panels:
             if panel.visible:
                 panel.draw(context)
+        # Last, so they sit over every panel. They take no input, so
+        # nothing underneath becomes unclickable while one is up.
+        self._toasts.draw(float(width), float(height))
         imgui.render()
         return imgui.get_draw_data()
 
@@ -701,6 +728,11 @@ class EditorLayer:
     def settings_restored(self) -> bool:
         """Whether a previous session's arrangement was loaded."""
         return self._settings_restored
+
+    @property
+    def toasts(self) -> ToastStack:
+        """The short-lived messages shown over the editor."""
+        return self._toasts
 
     @property
     def menus(self) -> tuple[tuple[str, Callable[[], None]], ...]:
