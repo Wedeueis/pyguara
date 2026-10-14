@@ -291,10 +291,12 @@ class StudioMenus:
         Returns:
             The id, or None when nothing is selected.
         """
-        selection = self._selection()
-        entity_id = getattr(selection, "primary", None)
-        if entity_id is None:
-            entity_id = getattr(selection, "selected_id", None)
+        # `Selection.entity_id` is the accessor; there is no `primary`.
+        # Guessing at the name meant this always returned None, which left
+        # Delete, Duplicate and Add Component greyed out whatever was
+        # selected -- a menu that is never enabled looks like one that does
+        # not work.
+        entity_id = self._selection().entity_id
         return str(entity_id) if entity_id is not None else None
 
     def _play_panel(self) -> Any:

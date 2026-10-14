@@ -68,6 +68,14 @@ class Scene(ABC):
 
         # Built in resolve_dependencies(), which needs the DI container for
         # AudioSourceSystem's dependencies and the active IRenderer backend.
+        #
+        # **The camera this scene renders with.** Not "a camera the base
+        # class happens to provide": everything that has to turn a world
+        # position into a screen one from outside the frame reads this --
+        # Studio's viewport, its picking, and the transform gizmo. A scene
+        # that overrides `render()` and draws with a camera of its own must
+        # assign it here, or those draw in the wrong place while the frame
+        # itself looks right, which is a confusing way to find out.
         self.camera: Camera2D | None = None
         self.render_system: RenderSystem | None = None
         self.prefab_factory: PrefabFactory | None = None

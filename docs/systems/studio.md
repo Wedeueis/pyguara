@@ -65,7 +65,7 @@ rather than four. See [ADR 0001](../adr/0001-one-mutation-seam-for-studio.md).
 | Panel | What it is for |
 | --- | --- |
 | **Viewport** | The rendered frame, with pan, zoom, a grid, selection, marquee and the transform gizmo over it |
-| **Hierarchy** | The entity tree, from the ECS parent/child relation |
+| **Hierarchy** | The entity tree, with a filter and same-prefix grouping |
 | **Inspector** | The selected entity's components, edited by reflection |
 | **Play** | Pause, resume, single-step and slow the running game |
 | **History** | Every edit, oldest first. Clicking a row rewinds to it |
@@ -75,6 +75,45 @@ rather than four. See [ADR 0001](../adr/0001-one-mutation-seam-for-studio.md).
 
 Panels open docked -- hierarchy left, inspector and components right,
 viewport centre, play on top, history/journal/commands tabbed below.
+
+### Finding an entity
+
+An ECS scene has none of the pressure a Godot scene has to hang a level's
+tiles off a parent, so a generated level arrives as hundreds of flat
+siblings. The demo this was reported from put 252 rows in the Hierarchy
+panel, 232 of them tiles.
+
+Two answers, both from Godot's Scene dock:
+
+- **A filter box.** Typing narrows the list to what is being worked on.
+- **Grouping.** Runs of siblings sharing a name prefix -- everything up to
+  the first numeric segment, so `tile_0_0` through `tile_19_11` are all
+  `tile` -- fold into one row once there are four or more of them. 252
+  rows become twelve.
+
+The grouping is **display only**: no entity is named `tile`, nothing is
+reparented, and the row says so on hover. A row that looked like a parent
+and was not would be a worse lie than the long list it replaced.
+
+Selecting an entity anywhere else -- clicking in the viewport, an agent's
+operation -- scrolls the panel to it and opens the group holding it.
+
+The panel reads and selects; it does not edit. Every change goes through
+an operation, so it lands on one history and in one journal.
+
+### The camera the gizmo trusts
+
+`Scene.camera` is **the camera the scene renders with**, and everything
+that turns a world position into a screen one from outside the frame reads
+it: the Viewport panel, picking, and the transform gizmo.
+
+A scene that overrides `render()` and draws with a camera of its own has
+to assign it there. Nothing fails if it does not -- the frame looks right,
+because the scene is using the camera it meant to. Only the editor is
+wrong, and quietly: `guara_falcao` drew the gizmo hundreds of pixels from
+the entity it belonged to, over the game's own pause button.
+`tests/test_demo_bootstrap_conventions.py` now refuses a demo that builds
+a camera and never assigns it.
 
 ### The arrangement
 

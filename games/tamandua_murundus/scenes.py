@@ -194,6 +194,11 @@ class ClearingScene(Scene):
 
     def on_enter(self) -> None:
         """Build the clearing, the mounds and the anteater."""
+        # One camera, and it is `Scene.camera`. This scene draws its world
+        # by hand, so nothing else writes that attribute -- and everything
+        # mapping world to screen from outside the frame reads it: Studio's
+        # viewport, its picking, and the transform gizmo.
+        self.camera = self._camera
         self.fx = CerradoFX(
             self.container,
             self.entity_manager,

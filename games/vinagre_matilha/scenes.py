@@ -221,6 +221,10 @@ class GameScene(Scene):
 
     def on_enter(self) -> None:
         """Build the level, register systems, and wire input/events."""
+        # One camera, and it is `Scene.camera`. This scene draws by hand
+        # with its own shake camera, so nothing else writes that attribute
+        # -- and Studio's viewport, picking and gizmo all read it.
+        self.camera = self._shake_camera
         ui_manager = self.container.get(UIManager)
         ui_manager.clear()
 
