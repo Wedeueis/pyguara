@@ -136,6 +136,58 @@ so, rather than silently clearing the selection, which is indistinguishable
 from a click that missed. Editing the game's runtime UI is not something
 Studio does.
 
+## Edit, then play
+
+The lifecycle every editor has, and the one Studio did not. **Studio
+attaches in edit mode: the scene is loaded and nothing simulates.**
+
+| | Edit | Play |
+| --- | --- | --- |
+| The game | stopped | running |
+| Edits | everything | refused, naming Stop |
+| The scene | is what you see | is a copy, restored on Stop |
+
+Press **Play** and Studio copies the whole world and lets the game run.
+Press **Stop** and that copy goes back, exactly as it was when Play was
+pressed. Pause and Step are about watching a running game, not editing
+one, and live inside Play.
+
+Three engines, one agreement: Godot runs the game in its own process,
+Unreal in its own world, Unity in the same world and discards the changes
+on Stop. **The scene you edit and the game you run are not the same thing
+at the same time.** Studio used to attach to a running game and edit it
+live -- Unity's case without the discard -- and that is where every
+confusing symptom came from: a gizmo drag overwritten by the controller on
+the next tick, a pan reclaimed by the follow system, an edit outlived
+before it could be seen.
+
+Editing is **refused** while playing rather than discarded. Unity allows
+it and throws it away, which everyone treats as a footgun; refusing costs
+nothing and the message says to press Stop.
+
+`WorldSnapshot` is what makes Stop mean something. It does **not** go
+through `SceneSerializer`, which silently skips any component the registry
+does not know -- which is every component a game defines unless it
+registered them, and the stated reason there was no reset before. It
+copies the live components instead, the way the command stack already
+captures a subtree, so a component it has never heard of is copied exactly
+as well as one it has. Measured on `guara_falcao`: 252 entities, 14 ms
+each way, nothing lost.
+
+Two details that are easy to get wrong and are tested:
+
+- **Copied, not referenced.** Holding the live component means the game
+  mutates the very object the snapshot is meant to restore, and Stop puts
+  back exactly what play left behind.
+- **Engine handles are cleared.** A copied `RigidBody._body_handle` points
+  at a body the backend removed with the entity. Cleared, the physics
+  system builds a fresh one, which is what it already does for an entity
+  it has not seen.
+
+`run_frames` is not Play. An agent stepping a stopped game frame by frame
+is editing, not playing, and its edits are allowed throughout -- which is
+the whole point of the edit/run/check loop.
+
 ### Why an edit may not show
 
 Reported as "the controls over an entity's components do not seem to have

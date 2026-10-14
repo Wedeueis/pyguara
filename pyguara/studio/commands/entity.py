@@ -376,7 +376,7 @@ class DuplicateEntity(EditCommand):
                     # Deep-copied, not shared: two entities holding one
                     # component instance means editing either changes
                     # both, and the second would never be notified.
-                    components=[_copy_component(c) for c in snapshot.components],
+                    components=[copy_component(c) for c in snapshot.components],
                     tags=set(snapshot.tags),
                     enabled=snapshot.enabled,
                     # The root keeps the original's parent; a copied child
@@ -389,7 +389,7 @@ class DuplicateEntity(EditCommand):
         return copies
 
 
-def _copy_component(component: Component) -> Component:
+def copy_component(component: Component) -> Component:
     """Return an independent copy of `component`.
 
     Deep, because a component holds mutable values -- a `Vector2`, a list

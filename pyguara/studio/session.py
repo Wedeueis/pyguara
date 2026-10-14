@@ -46,6 +46,31 @@ from pyguara.studio.model.snapshot import (
 logger = get_logger(__name__)
 
 
+class EditorMode(str, Enum):
+    """Whether the scene is being edited or the game is being played.
+
+    The lifecycle every editor has, and the one Studio did not: Godot runs
+    the game in its own process, Unreal in its own world, Unity in the
+    same world and throws the changes away on Stop. All three agree on the
+    part that matters -- **the scene you edit and the game you run are not
+    the same thing at the same time.**
+
+    Studio attached to a *running* game and edited it live, which is the
+    Unity case without the discard, and every confusing symptom came from
+    it: a gizmo drag overwritten by the controller on the next tick, a pan
+    reclaimed by the follow system, an edit that "did nothing" because the
+    game had already moved on.
+    """
+
+    EDIT = "edit"
+    """Nothing simulates. The scene is the thing on screen, and it is
+    editable."""
+
+    PLAY = "play"
+    """The game runs. Edits are refused rather than silently lost, and
+    Stop puts the scene back as it was."""
+
+
 class ApprovalMode(str, Enum):
     """How an edit requested by an actor is handled.
 
@@ -191,6 +216,10 @@ class StudioSession:
         )
         self._journal = journal if journal is not None else Journal()
         self._scene_io = scene_io
+        # Edit unless something says otherwise: a session built by hand,
+        # or driven by the agent harness, is editing a scene that is not
+        # running. The editor sets this when Play is pressed.
+        self._mode = EditorMode.EDIT
         self._stack = CommandStack(world)
         self._approval_mode = approval_mode
         self._pending: dict[str, PendingEdit] = {}
@@ -215,6 +244,23 @@ class StudioSession:
                 "approval_mode": approval_mode.value,
             },
         )
+
+    @property
+    def mode(self) -> EditorMode:
+        """Whether the scene is being edited or the game is playing."""
+        return self._mode
+
+    def set_mode(self, mode: EditorMode) -> None:
+        """Switch between editing the scene and playing the game.
+
+        Args:
+            mode: The mode to enter.
+        """
+        if mode is self._mode:
+            return
+        self._mode = mode
+        self._journal.record(Actor.SYSTEM, "mode", detail={"mode": mode.value})
+        logger.info(f"Studio is now in {mode.value} mode.")
 
     @property
     def scene_io(self) -> Any:
@@ -355,6 +401,15 @@ class StudioSession:
         """
         action = action or type(command).__name__
         actor = actor if actor is not None else self._actor
+
+        if self._mode is EditorMode.PLAY:
+            raise EditError(
+                "The game is playing, and a playing game is not editable: "
+                "it rewrites what it drives on every tick, so an edit made "
+                "now would be overwritten before it could be seen -- and "
+                "discarded anyway when Stop restores the scene. Press Stop "
+                "to go back to the scene as it was and edit that."
+            )
 
         if self._approval_mode is ApprovalMode.PLAN:
             return self._plan(command, actor=actor, action=action)

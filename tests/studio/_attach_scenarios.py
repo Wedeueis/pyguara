@@ -597,6 +597,120 @@ def _drawn_entity(world: object) -> str:
     raise AssertionError("this demo draws nothing from a Transform")
 
 
+def editing_and_playing_are_separate() -> None:
+    """Edit, play, stop -- the lifecycle every editor has.
+
+    Studio used to attach to a *running* game and edit it live, which is
+    Unity's play mode without the discard, and every confusing symptom
+    came from it: a gizmo drag overwritten by the controller on the next
+    tick, a pan reclaimed by the follow system, an edit outlived before it
+    could be seen.
+
+    Godot runs the game in its own process, Unreal in its own world, Unity
+    in the same world and throws the changes away on Stop. All three agree
+    on the part that matters: the scene you edit and the game you run are
+    not the same thing at the same time.
+    """
+    from pyguara.studio.agent.journal import Actor
+    from pyguara.studio.session import EditorMode
+
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=_project_root())
+        assert attachment is not None
+        app.begin(_scene(app))
+        for _ in range(6):
+            app.step()
+
+        session = attachment.session
+        assert session is not None
+        world = session.world
+        play = next(panel for panel in attachment.layer.panels if panel.title == "Play")
+
+        def call(name: str, **arguments: object) -> object:
+            return attachment.operations.invoke(
+                session, name, dict(arguments), actor=Actor.HUMAN
+            )
+
+        def x_of(entity_id: str) -> float:
+            return float(
+                world.get_entity(entity_id).get_component(Transform).position.x
+            )
+
+        subject = _drawn_entity(world)
+
+        # --- attaches in edit mode -----------------------------------
+        assert session.mode is EditorMode.EDIT, (
+            "Studio attached to a running game: everything it drives "
+            "overwrites an edit before it can be seen"
+        )
+        assert app.paused is True
+        assert play.playing is False
+
+        # --- and edit mode edits -------------------------------------
+        result = call(
+            "set_field",
+            entity_id=subject,
+            component="Transform",
+            field="position",
+            value={"x": 777, "y": 16},
+        )
+        assert result.ok, result.error
+        assert abs(x_of(subject) - 777) < 1.0
+
+        # --- play runs ------------------------------------------------
+        play.play()
+        for _ in range(6):
+            app.step()
+        assert session.mode is EditorMode.PLAY
+        assert app.paused is False
+        assert play.playing is True
+
+        # --- and refuses edits ----------------------------------------
+        result = call(
+            "set_field",
+            entity_id=subject,
+            component="Transform",
+            field="position",
+            value={"x": 1, "y": 16},
+        )
+        assert not result.ok, "a playing game accepted an edit"
+        assert "Stop" in str(result.error), (
+            f"the refusal has to say how to get back to editing: {result.error}"
+        )
+
+        # --- the game changes the world -------------------------------
+        transform = world.get_entity(subject).get_component(Transform)
+        transform.position = Vector2(5000, transform.position.y)
+        for _ in range(20):
+            app.step()
+        assert x_of(subject) > 4000
+
+        # --- and stop puts it back ------------------------------------
+        play.stop()
+        for _ in range(4):
+            app.step()
+        assert session.mode is EditorMode.EDIT
+        assert app.paused is True
+        assert abs(x_of(subject) - 777) < 1.0, (
+            f"Stop left the scene at {x_of(subject)} rather than restoring "
+            f"the 777 it was edited to: the snapshot is not being put back"
+        )
+
+        # --- editable again -------------------------------------------
+        result = call(
+            "set_field",
+            entity_id=subject,
+            component="Transform",
+            field="position",
+            value={"x": 888, "y": 16},
+        )
+        assert result.ok, result.error
+        assert abs(x_of(subject) - 888) < 1.0
+    finally:
+        app.shutdown()
+
+
 SCENARIOS = {
     "attaches": attaches,
     "session_follows_the_scene": session_follows_the_scene,
@@ -607,6 +721,7 @@ SCENARIOS = {
     "the_menus_are_studios_own": the_menus_are_studios_own,
     "the_editor_gets_the_whole_window": the_editor_gets_the_whole_window,
     "the_edit_lifecycle_works": the_edit_lifecycle_works,
+    "editing_and_playing_are_separate": editing_and_playing_are_separate,
 }
 
 
