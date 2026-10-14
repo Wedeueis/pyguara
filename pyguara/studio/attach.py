@@ -275,6 +275,7 @@ class StudioAttachment:
             texture_provider=self._frame_texture,
             physics_provider=self._physics_engine,
             running_provider=self._is_running,
+            ui_provider=self._ui_manager,
             overlays=[gizmo],
         )
 
@@ -583,6 +584,22 @@ class StudioAttachment:
         if application is None:
             return False
         return not bool(getattr(application, "paused", False))
+
+    def _ui_manager(self) -> Any:
+        """Return the game's `UIManager`, or None.
+
+        Only so the viewport can explain a click that landed on the HUD.
+        The HUD is not entities and Studio does not edit it.
+
+        Returns:
+            The manager, or None when the container has none.
+        """
+        try:
+            from pyguara.ui.manager import UIManager
+
+            return self._container.get(UIManager)
+        except Exception:  # pragma: no cover - a container with no UI
+            return None
 
     def _physics_engine(self) -> Any:
         """Return the physics engine, or None.

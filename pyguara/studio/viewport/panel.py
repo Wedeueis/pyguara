@@ -42,11 +42,35 @@ from pyguara.studio.viewport.picking import (
     Pick,
     iter_pickable,
     marquee_rect,
-    pick_at,
     pick_in_region,
+    picks_at,
     screen_to_world,
     world_to_panel,
 )
+
+
+def _rect_contains(rect: Any, point: Vector2) -> bool:
+    """Whether `rect` holds `point`.
+
+    Args:
+        rect: Something with x, y, width and height, or None.
+        point: The point to test.
+
+    Returns:
+        True when it does.
+    """
+    if rect is None:
+        return False
+    return bool(
+        rect.x <= point.x <= rect.x + rect.width
+        and rect.y <= point.y <= rect.y + rect.height
+    )
+
+
+CYCLE_TOLERANCE = 2.0
+"""How far, in world units, a click may land from the last one and still
+count as the same spot. Zero would make cycling depend on the cursor not
+having moved by a single pixel, which no hand manages."""
 
 logger = get_logger(__name__)
 
@@ -192,6 +216,7 @@ class ViewportPanel(EditorPanel):
         texture_provider: Any = None,
         physics_provider: Any = None,
         running_provider: Any = None,
+        ui_provider: Any = None,
         overlays: list[ViewportOverlay] | None = None,
         visible: bool = True,
     ) -> None:
@@ -209,6 +234,9 @@ class ViewportPanel(EditorPanel):
             texture_provider: Returns `(texture_id, width, height)` for the
                 frame to show, or None when there is nothing to show.
             physics_provider: Returns an `IPhysicsEngine`, or None.
+            ui_provider: Returns the `UIManager`, or None. Used only to
+                explain a click that landed on the HUD, which is not an
+                entity and never will be.
             running_provider: Returns True while the game is simulating.
                 Used for the warning below the toolbar, which is the
                 honest answer to "the gizmo does not move the entity".
@@ -220,6 +248,10 @@ class ViewportPanel(EditorPanel):
         self._texture_provider = texture_provider
         self._physics_provider = physics_provider
         self._running_provider = running_provider
+        self._ui_provider = ui_provider
+        # Where the last click landed and which of the stacked candidates
+        # it took, so clicking again walks behind it. See `_next_in_cycle`.
+        self._cycle: tuple[float, float, int] | None = None
         self._overlays = list(overlays or [])
         self._state = ViewportState()
 
@@ -244,14 +276,15 @@ class ViewportPanel(EditorPanel):
         """
         imgui.begin(self.title)
         try:
-            self._draw_toolbar()
-            self._draw_running_warning()
             manager = context.entity_manager
+            camera = self._resolve(self._camera_provider)
+            self._draw_toolbar()
+            if camera is not None:
+                self._draw_view_controls(camera)
+            self._draw_running_warning()
             if manager is None:
                 imgui.text_disabled("No active scene.")
                 return
-
-            camera = self._resolve(self._camera_provider)
             if camera is None:
                 imgui.text_disabled("No camera. The scene has one once it is entered.")
                 return
@@ -260,6 +293,43 @@ class ViewportPanel(EditorPanel):
         finally:
             # Dear ImGui owes an End for every Begin, collapsed or not.
             imgui.end()
+
+    def _draw_view_controls(self, camera: Camera2D) -> None:
+        """Say who is driving the view, and offer it back.
+
+        A pan takes the camera from the game, which is what makes it stay
+        put -- and what makes a way back necessary. Godot and Unity avoid
+        the question by rendering the editor view themselves; Studio shows
+        the game's own frame, so there is one camera and this is the
+        switch.
+
+        Args:
+            camera: The camera the frame was rendered with.
+        """
+        imgui.same_line()
+        if camera.view_overridden:
+            imgui.text_disabled("|")
+            imgui.same_line()
+            imgui.push_style_color(imgui.Col_.text, imgui.ImVec4(0.26, 0.59, 0.98, 1.0))
+            imgui.text("Free view")
+            imgui.pop_style_color()
+            imgui.same_line()
+            if imgui.button("Follow game"):
+                camera.release_view()
+            if imgui.is_item_hovered():
+                imgui.set_tooltip(
+                    "Hand the camera back. The game has been driving its "
+                    "own position all along, so it resumes where it is now, "
+                    "not where the view was left."
+                )
+            return
+
+        imgui.text_disabled("|  Following the game")
+        if imgui.is_item_hovered():
+            imgui.set_tooltip(
+                "Drag with the middle button, or hold space and drag, to "
+                "take the view. Scrolling zooms and takes it too."
+            )
 
     def _draw_running_warning(self) -> None:
         """Say that the game is overwriting what it drives.
@@ -288,7 +358,8 @@ class ViewportPanel(EditorPanel):
             imgui.text_wrapped(
                 "Running -- the game rewrites what it drives, so an edit to "
                 "one of those is overwritten on the next tick. Pause in the "
-                "Play panel to edit."
+                "Play panel to edit. (The view is yours either way: pan or "
+                "zoom and it stays.)"
             )
         finally:
             imgui.pop_style_color()
@@ -470,8 +541,17 @@ class ViewportPanel(EditorPanel):
         if delta.x == 0.0 and delta.y == 0.0:
             return
         scale = self._panel_to_target_scale()
-        camera.position = camera.position - Vector2(
-            (delta.x * scale.x) / camera.zoom, (delta.y * scale.y) / camera.zoom
+        # Through the view override, not by writing the camera's position.
+        # The game's follow system writes that every tick, so a pan that
+        # went there lasted until the next one -- measured, the view was
+        # back where the game wanted it within forty frames, and the click
+        # that followed landed on whatever had moved under the cursor.
+        camera.take_view(
+            camera.position
+            - Vector2(
+                (delta.x * scale.x) / camera.zoom,
+                (delta.y * scale.y) / camera.zoom,
+            )
         )
 
     def _zoom(self, camera: Camera2D, wheel: float) -> None:
@@ -497,9 +577,9 @@ class ViewportPanel(EditorPanel):
         if clamped == camera.zoom:
             return
 
-        camera.zoom = clamped
+        camera.take_view(zoom=clamped)
         after = self._world_at_cursor(camera, io)
-        camera.position = camera.position + (anchor - after)
+        camera.take_view(camera.position + (anchor - after))
 
     def _pick(
         self, context: PanelContext, camera: Camera2D, io: Any, *, additive: bool
@@ -516,22 +596,113 @@ class ViewportPanel(EditorPanel):
         if manager is None or not self._state.has_geometry:
             return
 
-        hit = pick_at(
+        world_point = self._world_at_cursor(camera, io)
+        candidates = picks_at(
             manager,
-            self._world_at_cursor(camera, io),
+            world_point,
             physics=self._resolve(self._physics_provider),
         )
-        if hit is None:
+        if not candidates:
             # Clicking empty space clears, unless adding -- a ctrl-click
             # that missed should not throw away a careful selection.
             if not additive:
                 context.selection.clear()
+            self._cycle = None
+            self._explain_a_hud_click(camera, io)
             return
 
+        hit = candidates[self._next_in_cycle(world_point, candidates, additive)]
         if additive:
             context.selection.toggle(hit.entity_id)
         else:
             context.selection.select(hit.entity_id)
+
+    def _explain_a_hud_click(self, camera: Camera2D, io: Any) -> None:
+        """Say so when the click landed on the HUD rather than on nothing.
+
+        The HUD is `UIManager` widgets, not entities: it has its own tree,
+        its own layers and its own hit testing, and no amount of entity
+        picking will ever reach it. A click on the pause button that
+        silently cleared the selection is indistinguishable from a click
+        that missed, which is how it was reported.
+
+        Args:
+            camera: The camera the frame was rendered with.
+            io: ImGui's IO, for the cursor position.
+        """
+        manager = self._resolve(self._ui_provider)
+        if manager is None:
+            return
+
+        # The HUD is laid out in the rendered frame's own coordinates, not
+        # in the world and not in the panel: the point has to be mapped
+        # back into the framebuffer the widgets were drawn into.
+        image = self._state.image
+        scale = self._panel_to_target_scale()
+        point = Vector2(
+            (io.mouse_pos.x - image.x) * scale.x,
+            (io.mouse_pos.y - image.y) * scale.y,
+        )
+
+        try:
+            for root in manager.elements():
+                hit = root.hit_test(point)
+                if hit is None or not _rect_contains(getattr(hit, "rect", None), point):
+                    continue
+                self.report(
+                    f"That is a HUD widget ({type(hit).__name__}), not a "
+                    f"scene entity. The HUD is the game's own UI -- its own "
+                    f"tree, drawn over the frame -- and the Hierarchy lists "
+                    f"entities.",
+                    level="warning",
+                )
+                return
+        except Exception as exc:  # pragma: no cover - depends on the game's UI
+            logger.debug(f"Could not test the UI under the cursor: {exc}")
+
+    def _next_in_cycle(
+        self, world_point: Vector2, candidates: list[Pick], additive: bool
+    ) -> int:
+        """Return which of the stacked candidates this click selects.
+
+        Clicking the same spot again takes the next one *behind* the last,
+        and wraps. It is how Godot's editor reaches a node under another
+        one, and without it a background tile beneath a platform cannot be
+        selected at all -- the front-most thing wins every click, for
+        ever.
+
+        Keyed on the point rather than on time: clicking somewhere else
+        and coming back starts at the front again, which is what a person
+        means by a fresh click.
+
+        Args:
+            world_point: Where the click landed, in world coordinates.
+            candidates: What is there, front-most first.
+            additive: Whether this click adds to the selection. An
+                additive click does not cycle -- it is building a set, and
+                walking backwards through a stack while doing so is not
+                what anyone means.
+
+        Returns:
+            The index into `candidates`.
+        """
+        if additive:
+            self._cycle = None
+            return 0
+
+        near = CYCLE_TOLERANCE
+        previous = self._cycle
+        if (
+            previous is not None
+            and abs(previous[0] - world_point.x) <= near
+            and abs(previous[1] - world_point.y) <= near
+            and previous[2] < len(candidates)
+        ):
+            index = (previous[2] + 1) % len(candidates)
+        else:
+            index = 0
+        self._cycle = (world_point.x, world_point.y, index)
+        return index
 
     def _continue_marquee(
         self, context: PanelContext, camera: Camera2D, io: Any

@@ -128,6 +128,12 @@ def fallback_bounds(
     )
 
 
+_NO_DEPTH = 1 << 30
+"""The sort key for something with no drawing to order it by -- a
+collider with no sprite. Behind everything, because nothing says it is in
+front of anything."""
+
+
 def _depth_of(sprite: Sprite | None) -> int:
     """Return a sort key for a sprite, lower being in front.
 
@@ -196,22 +202,61 @@ def pick_at(
     Returns:
         The entity under the point, or None.
     """
+    candidates = picks_at(world, world_point, physics=physics)
+    return candidates[0] if candidates else None
+
+
+def picks_at(
+    world: EntityManager, world_point: Vector2, *, physics: object | None = None
+) -> list[Pick]:
+    """Return everything under `world_point`, front-most first.
+
+    The plural is what makes a crowded scene usable: clicking the same
+    spot twice walks *back* through what is stacked there, which is how
+    Godot's editor reaches a node behind another one, and the only way to
+    select a background tile under a platform at all.
+
+    Ordered by what is drawn in front. Physics contributes extra
+    candidates -- a collider is a deliberate statement about an entity's
+    extent, where a sprite box is inferred from its image -- but no longer
+    *overrides* the order. It used to: `point_query` returns shapes
+    most-enclosing first, which has nothing to do with what is on top, so
+    clicking the player could hand back the platform it was standing on.
+
+    Args:
+        world: The world to read.
+        world_point: Where to look, in world coordinates.
+        physics: An `IPhysicsEngine`, or None to use sprite bounds only.
+
+    Returns:
+        The entities under the point, front-most first. Empty when there
+        is nothing there.
+    """
+    ordered = iter_pickable(world)
+    by_id = {pick.entity_id: pick for pick in ordered}
+
+    hits = [pick for pick in ordered if _contains(pick.bounds, world_point)]
+    found = {pick.entity_id for pick in hits}
+
     if physics is not None:
-        entity_id = _physics_point_pick(physics, world_point)
-        if entity_id is not None:
-            for pick in iter_pickable(world):
-                if pick.entity_id == entity_id:
-                    return pick
-            # Picked something with a body but no transform to measure.
-            return Pick(
-                entity_id=entity_id,
-                bounds=Rect(int(world_point.x), int(world_point.y), 1, 1),
+        for entity_id in _physics_point_picks(physics, world_point):
+            if entity_id in found:
+                continue
+            found.add(entity_id)
+            # Kept in draw order with everything else. One with no
+            # transform to measure sorts behind, since nothing says it is
+            # in front of anything.
+            hits.append(
+                by_id.get(entity_id)
+                or Pick(
+                    entity_id=entity_id,
+                    bounds=Rect(int(world_point.x), int(world_point.y), 1, 1),
+                    depth=_NO_DEPTH,
+                )
             )
 
-    for pick in iter_pickable(world):
-        if _contains(pick.bounds, world_point):
-            return pick
-    return None
+    hits.sort(key=lambda pick: (pick.depth, pick.entity_id))
+    return hits
 
 
 def pick_in_region(
@@ -240,7 +285,7 @@ def pick_in_region(
     return matches
 
 
-def _physics_point_pick(physics: object, world_point: Vector2) -> str | None:
+def _physics_point_picks(physics: object, world_point: Vector2) -> list[str]:
     """Ask the physics engine what is under a point.
 
     Args:
@@ -248,23 +293,22 @@ def _physics_point_pick(physics: object, world_point: Vector2) -> str | None:
         world_point: Where to look.
 
     Returns:
-        The front-most entity id as a string, or None. `point_query`
-        returns ids ordered most-deeply-enclosing first, so the first
-        result is the best pick when shapes stack.
+        Every entity id with a shape there, in whatever order the engine
+        reports. Deliberately *not* treated as a ranking: `point_query`
+        orders by how deeply the point is enclosed, which says nothing
+        about what is drawn on top -- the caller re-sorts by draw order.
     """
     query = getattr(physics, "point_query", None)
     if query is None:
-        return None
+        return []
     try:
         hits = query(world_point)
     except Exception as exc:
         # A physics engine that cannot answer must not break picking;
         # sprite bounds still work.
         logger.debug(f"point_query failed, falling back to sprite bounds: {exc}")
-        return None
-    if not hits:
-        return None
-    return str(hits[0])
+        return []
+    return [str(hit) for hit in hits or ()]
 
 
 def _contains(bounds: Rect, point: Vector2) -> bool:
