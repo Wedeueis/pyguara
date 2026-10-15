@@ -29,6 +29,8 @@ from pyguara.editor.panels.hierarchy import HierarchyPanel
 from pyguara.editor.panels.inspector import InspectorPanel
 from pyguara.editor.renderer import ModernGLImGuiRenderer
 from pyguara.editor.selection import Selection
+from pyguara.editor.theme import apply_theme, scale_for
+from pyguara.editor.titlebar import TitleBar
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -60,8 +62,10 @@ class DockLayout:
         left_ratio: How much of the width the left edge takes.
         right_ratio: How much of the remaining width the right edge takes.
         bottom_ratio: How much of the remaining height the bottom takes.
-        top_ratio: How much of the remaining height the top takes. Small
-            by default: a transport bar is one row of buttons.
+        top_ratio: How much of the remaining height the top takes, or
+            None to size it to exactly one row of controls. A fixed
+            fraction cannot do that: the row's height depends on the UI
+            scale, and a strip that fits at 1.0 clips the row at 1.25.
     """
 
     left: tuple[str, ...] = ()
@@ -72,7 +76,7 @@ class DockLayout:
     left_ratio: float = 0.20
     right_ratio: float = 0.25
     bottom_ratio: float = 0.28
-    top_ratio: float = 0.10
+    top_ratio: float | None = None
 
 
 def default_panels() -> list[EditorPanel]:
@@ -158,6 +162,17 @@ class EditorLayer:
         # into the project root is a surprise, and panel layout is cheap to
         # re-arrange.
         io.set_ini_filename("")
+
+        # A deliberate palette rather than ImGui's default, which is a
+        # debug-overlay style -- square corners, thin separators, a blue
+        # chosen to be visible rather than to be looked at for hours.
+        apply_theme()
+        # 0.0 is "not yet applied", so the first frame always sets it --
+        # no real scale is ever zero.
+        self._ui_scale = 0.0
+        # Set when the window is borderless and the backend can move it.
+        # None leaves the operating system's own title bar in place.
+        self._title_bar: TitleBar | None = None
 
         # Built last, and only now: the context above is current, so the
         # renderer's `backend_flags` reach this layer's IO and not another's.
@@ -302,6 +317,7 @@ class EditorLayer:
 
         io = imgui.get_io()
         io.display_size = imgui.ImVec2(float(width), float(height))
+        self._apply_ui_scale(width, height)
         # ImGui requires a strictly positive delta; two frames inside one
         # clock tick would otherwise trip its assert.
         io.delta_time = max(self._measure_dt() if dt is None else dt, 1e-6)
@@ -311,6 +327,8 @@ class EditorLayer:
         self._run_frame_hooks()
 
         imgui.new_frame()
+        # Before the dockspace, which is inset below whatever it takes.
+        self._draw_title_bar(width)
         # Before the menu bar and every panel: a panel docked into this
         # space is positioned by it, so the space has to exist first.
         self._submit_dockspace()
@@ -325,6 +343,49 @@ class EditorLayer:
         imgui.render()
         return imgui.get_draw_data()
 
+    def _submit_inset_dockspace(self, flags: int, offset: float) -> None:
+        """Submit a dockspace that starts below the editor's title bar.
+
+        `dock_space_over_viewport` covers the whole viewport, so with a
+        title bar of our own it would sit *under* the bar and swallow its
+        clicks. The host window is submitted by hand instead, inset by the
+        bar's height.
+
+        Args:
+            flags: Dock node flags.
+            offset: How far down the dockspace starts, in pixels.
+        """
+        size = imgui.get_io().display_size
+        imgui.set_next_window_pos(imgui.ImVec2(0.0, offset))
+        imgui.set_next_window_size(imgui.ImVec2(size.x, max(size.y - offset, 1.0)))
+        imgui.push_style_var(imgui.StyleVar_.window_rounding, 0.0)
+        imgui.push_style_var(imgui.StyleVar_.window_border_size, 0.0)
+        imgui.push_style_var(imgui.StyleVar_.window_padding, imgui.ImVec2(0.0, 0.0))
+        imgui.begin(
+            "##dockhost",
+            None,
+            imgui.WindowFlags_.no_decoration.value
+            | imgui.WindowFlags_.no_move.value
+            | imgui.WindowFlags_.no_saved_settings.value
+            | imgui.WindowFlags_.no_bring_to_front_on_focus.value
+            | imgui.WindowFlags_.no_docking.value
+            | imgui.WindowFlags_.no_nav_focus.value,
+        )
+        imgui.pop_style_var(3)
+        try:
+            imgui.dock_space(_DOCKSPACE_ID, imgui.ImVec2(0.0, 0.0), flags)
+        finally:
+            imgui.end()
+
+    def _draw_title_bar(self, width: int) -> None:
+        """Draw the editor's own title bar, if it has one.
+
+        Args:
+            width: The window width in pixels.
+        """
+        if self._title_bar is not None:
+            self._title_bar.draw(float(width))
+
     def _run_frame_hooks(self) -> None:
         """Run every frame hook, dropping any that raises.
 
@@ -338,6 +399,66 @@ class EditorLayer:
                 logger.warning(f"Editor frame hook failed and was removed: {exc}")
                 self._frame_hooks.remove(hook)
 
+    def _apply_ui_scale(self, width: int, height: int) -> None:
+        """Keep the chrome legible at this window size.
+
+        ImGui's built-in font is a 13px bitmap meant for a debug overlay,
+        and every size in the style is in pixels -- so an editor that is
+        comfortable at 1280 wide is a squint at 4K. The scale is derived
+        from the window and applied to the font and to every spacing,
+        padding and rounding at once.
+
+        Re-derived per frame but applied only on a change, because
+        `scale_all_sizes` multiplies the style it is called on: applying
+        it twice compounds. The style is rebuilt from a pristine copy each
+        time rather than scaled again from where it already is.
+
+        Args:
+            width: The window width in pixels.
+            height: The window height in pixels.
+        """
+        scale = scale_for(width, height)
+        if scale == self._ui_scale:
+            return
+        self._ui_scale = scale
+
+        style = imgui.get_style()
+        apply_theme(style)
+        if scale != 1.0:
+            style.scale_all_sizes(scale)
+        # `font_scale_main`, not the removed `io.font_global_scale`: ImGui
+        # 1.92's dynamic font system rebuilds the atlas at the new size
+        # rather than stretching a 13px bitmap, so scaled text is sharp
+        # instead of blurry.
+        style.font_scale_main = scale
+        logger.debug(f"Editor UI scale is now {scale} for {width}x{height}.")
+
+    @property
+    def title_bar(self) -> TitleBar | None:
+        """The editor's own title bar, or None when the OS draws one."""
+        return self._title_bar
+
+    def set_title_bar(self, title_bar: TitleBar | None) -> None:
+        """Draw `title_bar` across the top of every frame.
+
+        The bar is also given the panel menu, so that the menu lives in
+        the one strip of chrome rather than in a second row below it, and
+        the dock layout is rebuilt, since the space below the bar is a
+        different height from the whole viewport.
+
+        Args:
+            title_bar: The bar, or None to leave the OS's own.
+        """
+        self._title_bar = title_bar
+        if title_bar is not None and title_bar.menu is None:
+            title_bar.menu = self.draw_panel_menu_items
+        self._layout_applied = False
+
+    @property
+    def ui_scale(self) -> float:
+        """The scale the chrome is currently drawn at."""
+        return self._ui_scale
+
     def _submit_dockspace(self) -> None:
         """Declare the full-viewport dockspace panels may dock into.
 
@@ -349,7 +470,12 @@ class EditorLayer:
         flags = 0
         if self._passthrough_centre:
             flags |= imgui.DockNodeFlags_.passthru_central_node.value
-        imgui.dock_space_over_viewport(dockspace_id=_DOCKSPACE_ID, flags=flags)
+
+        offset = self._title_bar.height() if self._title_bar is not None else 0.0
+        if offset > 0.0:
+            self._submit_inset_dockspace(flags, offset)
+        else:
+            imgui.dock_space_over_viewport(dockspace_id=_DOCKSPACE_ID, flags=flags)
         if self._layout is None:
             return
 
@@ -367,7 +493,7 @@ class EditorLayer:
             # next one.
             self._layout_applied = True
             self._layout_size = current
-            self._apply_layout(self._layout)
+            self._apply_layout(self._layout, offset)
 
     @property
     def passthrough_centre(self) -> bool:
@@ -395,11 +521,16 @@ class EditorLayer:
         self._layout = layout
         self._layout_applied = False
 
-    def _apply_layout(self, layout: DockLayout) -> None:
+    def _apply_layout(self, layout: DockLayout, offset: float = 0.0) -> None:
         """Build the dock tree and assign panels to its regions.
 
         Args:
             layout: Which panel titles belong in which region.
+            offset: How much of the window the dockspace does not cover,
+                because the editor's own title bar is above it. The tree
+                is built against the space the panels actually get, or
+                every ratio is measured against a window that is taller
+                than the one they are in.
         """
         internal = imgui.internal
         root = _DOCKSPACE_ID
@@ -408,7 +539,9 @@ class EditorLayer:
         internal.dock_builder_add_node(
             root, imgui.internal.DockNodeFlagsPrivate_.dock_space.value
         )
-        internal.dock_builder_set_node_size(root, imgui.get_io().display_size)
+        display = imgui.get_io().display_size
+        available = imgui.ImVec2(display.x, max(display.y - offset, 1.0))
+        internal.dock_builder_set_node_size(root, available)
 
         # Split off each side in turn. Every split returns the new node and
         # what is left of the one it came from, and the remainder becomes
@@ -416,11 +549,34 @@ class EditorLayer:
         # taken, and ends up as the viewport's home.
         centre = root
         regions: dict[str, int] = {}
+        display_height = max(float(available.y), 1.0)
+        # One row of controls, plus the window's own title bar and its
+        # padding above and below. Measured from the live style, because
+        # every one of those grows with the UI scale -- a fixed fraction
+        # that fits at 1.0 clips the row at 1.25.
+        style = imgui.get_style()
+        one_row = (
+            imgui.get_frame_height()
+            + imgui.get_frame_height_with_spacing()
+            + style.window_padding.y * 2.0
+        )
+        # Measured against what is left after the bottom strip, not against
+        # the whole window: the top split is taken last, from the remainder,
+        # so a ratio of the full height under-allocates it by exactly the
+        # bottom's share -- which is what left the Play panel one row short
+        # and scrolling.
+        remaining = display_height * max(1.0 - layout.bottom_ratio, 0.05)
+        top_ratio = (
+            layout.top_ratio
+            if layout.top_ratio is not None
+            else min(one_row / remaining, 0.3)
+        )
+
         for name, direction, ratio in (
             ("left", imgui.Dir.left, layout.left_ratio),
             ("right", imgui.Dir.right, layout.right_ratio),
             ("bottom", imgui.Dir.down, layout.bottom_ratio),
-            ("top", imgui.Dir.up, layout.top_ratio),
+            ("top", imgui.Dir.up, top_ratio),
         ):
             split = internal.dock_builder_split_node(centre, direction, ratio)
             regions[name] = split.id_at_dir
@@ -441,20 +597,36 @@ class EditorLayer:
         logger.debug("Applied the default dock layout.")
 
     def _draw_menu_bar(self) -> None:
-        """Draw the panel-visibility menu across the top of the window."""
+        """Draw the panel-visibility menu across the top of the window.
+
+        Skipped when the editor draws its own title bar, which hosts the
+        same menu: ImGui's main menu bar always sits at the top edge of
+        the viewport, so the two would occupy the same strip.
+        """
+        if self._title_bar is not None:
+            return
         if not imgui.begin_main_menu_bar():
             return
         try:
             if imgui.begin_menu("Panels", True):
                 try:
-                    for panel in self._panels:
-                        clicked, _ = imgui.menu_item(panel.title, "", panel.visible)
-                        if clicked:
-                            panel.toggle()
+                    self.draw_panel_menu_items()
                 finally:
                     imgui.end_menu()
         finally:
             imgui.end_main_menu_bar()
+
+    def draw_panel_menu_items(self) -> None:
+        """Draw one toggle per panel, inside an open menu or popup.
+
+        Public because the title bar draws the same items in its own
+        popup, and the panel list belongs to the layer rather than to the
+        bar.
+        """
+        for panel in self._panels:
+            clicked, _ = imgui.menu_item(panel.title, "", panel.visible)
+            if clicked:
+                panel.toggle()
 
     def _measure_dt(self) -> float:
         """Return seconds since the previous measured frame.

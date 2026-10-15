@@ -43,6 +43,7 @@ class TestEveryProtocolIsRuntimeCheckable:
             "IRenderPass",
             "IRenderer",
             "IWindowBackend",
+            "IWindowChrome",
             "Renderable",
             "ShapeRenderer",
             "TextureFactory",

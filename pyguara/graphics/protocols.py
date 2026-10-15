@@ -378,6 +378,48 @@ class IRenderer(Protocol):
 
 
 @runtime_checkable
+class IWindowChrome(Protocol):
+    """Window-manager controls, for a window that draws its own title bar.
+
+    Separate from `IWindowBackend` because it is genuinely optional: a
+    backend that cannot offer these is usable, it simply cannot host a
+    borderless editor. A caller tests with `isinstance` and falls back to
+    the operating system's own title bar.
+    """
+
+    def minimize(self) -> None:
+        """Iconify the window."""
+        ...
+
+    def maximize(self) -> None:
+        """Fill the work area."""
+        ...
+
+    def restore(self) -> None:
+        """Return to the size before maximising."""
+        ...
+
+    @property
+    def is_maximized(self) -> bool:
+        """Whether the window currently fills the work area."""
+        ...
+
+    def request_close(self) -> None:
+        """Ask the application to shut down, as the OS close button does."""
+        ...
+
+    def move_by(self, dx: int, dy: int) -> None:
+        """Move the window by a screen-space delta.
+
+        A delta rather than an absolute position: a window manager may
+        place a window somewhere other than asked -- WSLg offsets by the
+        decoration it would have drawn -- so reading back a position and
+        setting an absolute one accumulates that error on every drag frame.
+        """
+        ...
+
+
+@runtime_checkable
 class IWindowBackend(Protocol):
     """Interface for OS-specific window management systems.
 

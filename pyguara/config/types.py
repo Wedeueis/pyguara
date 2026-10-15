@@ -41,6 +41,16 @@ class WindowConfig:
     screen_height: int = 800
     fps_target: int = 60
     fullscreen: bool = False
+    # Off by default: a game that lays its UI out for one resolution and
+    # never handles a resize is the common case, and a resizable window
+    # invites a user to break it. An editor sets it, and so does any game
+    # whose UI anchors properly.
+    resizable: bool = False
+    # Removes the OS title bar so the application can draw its own, the
+    # way a modern editor does. Only sensible together with `resizable`:
+    # a borderless window whose edges cannot be dragged is one the user
+    # cannot size at all.
+    borderless: bool = False
     vsync: bool = True
     default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
     title: str = "Pyguara Engine"

@@ -130,12 +130,15 @@ class PlayControlsPanel(EditorPanel):
                 self.request_step()
             imgui.end_disabled()
 
+            # Everything on one row. A transport bar docked to a thin
+            # strip has no second row to give: at any UI scale above 1 the
+            # speed control fell off the bottom behind a scrollbar.
             imgui.same_line()
-            imgui.text_disabled("paused" if paused else "running")
-
             scale = float(getattr(self._application, "time_scale", 1.0))
-            imgui.set_next_item_width(160)
-            changed, new_scale = imgui.slider_float("Speed", scale, 0.0, MAX_TIME_SCALE)
+            imgui.set_next_item_width(140)
+            changed, new_scale = imgui.slider_float(
+                "##speed", scale, 0.0, MAX_TIME_SCALE, "%.2fx"
+            )
             if changed:
                 self._application.time_scale = max(0.0, new_scale)
 
@@ -143,11 +146,10 @@ class PlayControlsPanel(EditorPanel):
             if imgui.button("1x"):
                 self._application.time_scale = 1.0
 
-            if paused:
-                imgui.text_disabled(
-                    "Paused. Gizmo drags are not re-solved by physics while "
-                    "the game is stopped."
-                )
+            imgui.same_line()
+            imgui.text_disabled(
+                "paused -- physics is not re-solving drags" if paused else "running"
+            )
         finally:
             # Dear ImGui owes an End for every Begin, collapsed or not.
             imgui.end()

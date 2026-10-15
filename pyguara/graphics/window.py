@@ -5,7 +5,7 @@ from typing import Any
 
 from pyguara.common.types import Color
 from pyguara.config.types import WindowConfig
-from pyguara.graphics.protocols import IWindowBackend
+from pyguara.graphics.protocols import IWindowBackend, IWindowChrome
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -68,6 +68,21 @@ class Window:
             native events into these (issue #9), so no caller touches SDL.
         """
         return self._backend.poll_events()
+
+    @property
+    def chrome(self) -> Any | None:
+        """The backend's window controls, or None where it has none.
+
+        A backend that cannot minimise, maximise or move its window is
+        perfectly usable -- it simply cannot host a borderless editor, and
+        the caller falls back to the operating system's title bar.
+
+        Returns:
+            Something satisfying `IWindowChrome`, or None.
+        """
+        if isinstance(self._backend, IWindowChrome):
+            return self._backend
+        return None
 
     def set_title(self, title: str) -> None:
         """Update the window title dynamically."""

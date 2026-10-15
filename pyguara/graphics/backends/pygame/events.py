@@ -80,6 +80,14 @@ def translate_event(raw: Any) -> object | None:
     if etype == pygame.VIDEORESIZE:
         return WindowResizeEvent(width=raw.w, height=raw.h)
 
+    # SDL2's own window event, which carries the size as `x`/`y` rather
+    # than `w`/`h`. `VIDEORESIZE` above is pygame's compatibility event and
+    # does not fire for every path that changes a window's size -- a
+    # maximise under some window managers raises only this one, which is
+    # how maximising left the engine rendering at the old resolution.
+    if etype == pygame.WINDOWSIZECHANGED:
+        return WindowResizeEvent(width=raw.x, height=raw.y)
+
     return None
 
 
