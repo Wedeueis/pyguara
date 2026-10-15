@@ -57,6 +57,16 @@ class LightSource(BaseComponent):
     flicker_speed: float = 10.0  # Hz
     flicker_intensity: float = 0.1  # How much intensity varies
 
+    def __post_init__(self) -> None:
+        """Initialise the BaseComponent state the dataclass `__init__` skips.
+
+        Calls the base explicitly rather than via `super()`: with
+        `slots=True` the decorator returns a *new* class, and a
+        zero-argument `super()` still resolves against the discarded
+        original, raising TypeError on every instantiation.
+        """
+        BaseComponent.__init__(self)
+
 
 @dataclass(slots=True)
 class AmbientLight(BaseComponent):
@@ -72,3 +82,13 @@ class AmbientLight(BaseComponent):
 
     color: Color = field(default_factory=lambda: Color(30, 30, 40))
     intensity: float = 0.3
+
+    def __post_init__(self) -> None:
+        """Initialise the BaseComponent state the dataclass `__init__` skips.
+
+        Calls the base explicitly rather than via `super()`: with
+        `slots=True` the decorator returns a *new* class, and a
+        zero-argument `super()` still resolves against the discarded
+        original, raising TypeError on every instantiation.
+        """
+        BaseComponent.__init__(self)
