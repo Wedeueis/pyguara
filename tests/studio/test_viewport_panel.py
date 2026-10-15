@@ -337,13 +337,13 @@ class TestZoom:
         _frame(panel, viewport_world, selection, mouse=cursor)
         _frame(panel, viewport_world, selection, mouse=cursor)
 
-        content = panel.state.content
-        panel_point = Vector2(cursor[0] - content.x, cursor[1] - content.y)
+        image = panel.state.image
+        panel_point = Vector2(cursor[0] - image.x, cursor[1] - image.y)
         from pyguara.studio.viewport.picking import screen_to_world
 
-        before = screen_to_world(camera, panel_point, content, panel.state.target)
+        before = screen_to_world(camera, panel_point, image, panel.state.target)
         _frame(panel, viewport_world, selection, mouse=cursor, wheel=1.0)
-        after = screen_to_world(camera, panel_point, content, panel.state.target)
+        after = screen_to_world(camera, panel_point, image, panel.state.target)
 
         assert after.x == pytest.approx(before.x, abs=0.5)
         assert after.y == pytest.approx(before.y, abs=0.5)
@@ -525,11 +525,15 @@ class TestPickingThroughThePanel:
         selection: Selection,
     ) -> None:
         """The camera is at the origin, so `hero` is at the panel centre."""
+        # Two frames: an ImGui window's content region is not settled on
+        # the first, so geometry read after one is stale and every derived
+        # click coordinate lands somewhere else.
         _frame(panel, viewport_world, selection)
-        content = panel.state.content
+        _frame(panel, viewport_world, selection)
+        image = panel.state.image
         centre = (
-            content.x + content.width / 2,
-            content.y + content.height / 2,
+            image.x + image.width / 2,
+            image.y + image.height / 2,
         )
 
         self._click(panel, viewport_world, selection, centre)
@@ -544,10 +548,16 @@ class TestPickingThroughThePanel:
         selection: Selection,
     ) -> None:
         selection.select("rock")
+        # Two frames: an ImGui window's content region is not settled on
+        # the first, so geometry read after one is stale.
         _frame(panel, viewport_world, selection)
-        content = panel.state.content
+        _frame(panel, viewport_world, selection)
+        image = panel.state.image
 
-        self._click(panel, viewport_world, selection, (content.x + 2, content.y + 2))
+        # Inside the drawn frame, not the letterbox bar beside it: the bar
+        # is not part of the scene, and a click there deliberately does
+        # nothing at all.
+        self._click(panel, viewport_world, selection, (image.x + 2, image.y + 2))
 
         assert selection.entity_id is None
 
@@ -562,14 +572,112 @@ class TestPickingThroughThePanel:
         selection."""
         selection.select("rock")
         _frame(panel, viewport_world, selection)
-        content = panel.state.content
+        _frame(panel, viewport_world, selection)
+        image = panel.state.image
 
         self._click(
             panel,
             viewport_world,
             selection,
-            (content.x + 2, content.y + 2),
+            (image.x + 2, image.y + 2),
             ctrl=True,
         )
 
         assert selection.entity_id == "rock"
+
+
+class TestLetterboxing:
+    """The frame keeps its aspect ratio inside the panel.
+
+    A docked panel is almost never the render target's shape, and
+    stretching means the editor shows a differently-proportioned game than
+    the one that ships -- a sprite lined up here is wrong everywhere else.
+    """
+
+    def test_the_image_fits_inside_the_panel(
+        self,
+        gui: None,
+        panel: ViewportPanel,
+        viewport_world: EntityManager,
+        selection: Selection,
+    ) -> None:
+        _frame(panel, viewport_world, selection)
+        _frame(panel, viewport_world, selection)
+
+        image, content = panel.state.image, panel.state.content
+        assert image.width <= content.width
+        assert image.height <= content.height
+
+    def test_the_image_keeps_the_target_aspect_ratio(
+        self,
+        gui: None,
+        panel: ViewportPanel,
+        viewport_world: EntityManager,
+        selection: Selection,
+    ) -> None:
+        _frame(panel, viewport_world, selection)
+        _frame(panel, viewport_world, selection)
+
+        image, target = panel.state.image, panel.state.target
+        assert image.width / image.height == pytest.approx(
+            target.width / target.height, abs=0.02
+        )
+
+    def test_the_image_is_centred(
+        self,
+        gui: None,
+        panel: ViewportPanel,
+        viewport_world: EntityManager,
+        selection: Selection,
+    ) -> None:
+        _frame(panel, viewport_world, selection)
+        _frame(panel, viewport_world, selection)
+
+        image, content = panel.state.image, panel.state.content
+        left = image.x - content.x
+        right = (content.x + content.width) - (image.x + image.width)
+        assert abs(left - right) <= 1
+
+    def test_the_panel_is_pillarboxed_when_wider_than_the_target(
+        self,
+        gui: None,
+        panel: ViewportPanel,
+        viewport_world: EntityManager,
+        selection: Selection,
+    ) -> None:
+        """The 640x480 panel is wider than 800x600 is, proportionally."""
+        _frame(panel, viewport_world, selection)
+        _frame(panel, viewport_world, selection)
+
+        assert panel.state.image.x > panel.state.content.x
+        assert panel.state.image.height == panel.state.content.height
+
+    def test_coordinates_map_against_the_image_not_the_panel(
+        self,
+        gui: None,
+        panel: ViewportPanel,
+        camera: Camera2D,
+        viewport_world: EntityManager,
+        selection: Selection,
+    ) -> None:
+        """Mapping against the panel would offset every click by the width
+        of the bars -- a gizmo handle drawn where it cannot be grabbed."""
+        _frame(panel, viewport_world, selection)
+        _frame(panel, viewport_world, selection)
+
+        from pyguara.studio.viewport.picking import screen_to_world
+
+        image = panel.state.image
+        centre_of_image = Vector2(image.width / 2, image.height / 2)
+        world = screen_to_world(camera, centre_of_image, image, panel.state.target)
+
+        # The camera sits at the origin, so the centre of the drawn frame
+        # is the world origin.
+        assert world.x == pytest.approx(0.0, abs=1.0)
+        assert world.y == pytest.approx(0.0, abs=1.0)
+
+    def test_geometry_is_false_when_the_image_has_no_area(self) -> None:
+        state = ViewportState()
+        state.content = Rect(0, 0, 800, 600)
+        state.target = Rect(0, 0, 800, 600)
+        assert state.has_geometry is False

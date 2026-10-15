@@ -37,6 +37,7 @@ class ImGuiPass(BaseRenderPass):
         height: int,
         *,
         enabled: bool = True,
+        clear_colour: tuple[float, float, float] | None = None,
     ) -> None:
         """Initialize the pass.
 
@@ -46,19 +47,43 @@ class ImGuiPass(BaseRenderPass):
             width: Initial target width in pixels.
             height: Initial target height in pixels.
             enabled: Whether the pass draws.
+            clear_colour: Clear the screen to this before drawing. None
+                leaves whatever is on screen, which is what the plain
+                editor wants -- it has no viewport panel, so the game
+                showing through its dockspace *is* the view. Studio sets
+                one, because it shows the frame inside a Viewport panel
+                and a second copy of the game behind the panels is the
+                thing that makes it look unfinished.
         """
-        super().__init__(PASS_NAME, enabled=enabled)
+        # `after_ui`, so the editor is drawn on top of everything the game
+        # drew -- its HUD included. As an ordinary pass it ran mid-chain
+        # and `UIRenderer.present()` composited the game's UI over the
+        # panels afterwards.
+        super().__init__(PASS_NAME, enabled=enabled, after_ui=True)
         self._layer = layer
         self._width = width
         self._height = height
+        self._clear_colour = clear_colour
 
     @property
     def layer(self) -> EditorLayer:
         """The editor layer this pass draws."""
         return self._layer
 
+    def set_clear_colour(self, colour: tuple[float, float, float] | None) -> None:
+        """Clear the screen to `colour` before drawing, or stop clearing.
+
+        Args:
+            colour: An RGB triple in 0..1, or None to leave the screen as
+                whatever the rest of the frame left on it.
+        """
+        self._clear_colour = colour
+
     def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
         """Draw the editor onto the default framebuffer.
+
+        Runs after the game's UI has been composited, not with the rest
+        of the chain -- see `after_ui` on `BaseRenderPass`.
 
         Args:
             ctx: The ModernGL context.
@@ -79,6 +104,12 @@ class ImGuiPass(BaseRenderPass):
         # capture wants anyway.
         if ctx.screen is not None:
             ctx.screen.use()
+            if self._clear_colour is not None:
+                # Nothing else writes the screen when Studio owns it: the
+                # final blit is disabled so the game appears only inside
+                # the Viewport panel, which leaves the default framebuffer
+                # holding last frame's contents until something clears it.
+                ctx.screen.clear(*self._clear_colour, 1.0)
         self._layer.render(self._width, self._height)
 
     def on_resize(self, width: int, height: int) -> None:

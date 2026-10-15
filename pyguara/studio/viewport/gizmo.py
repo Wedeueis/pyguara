@@ -622,7 +622,10 @@ class TransformGizmo(ViewportOverlay):
         if draw_list is None:  # pragma: no cover - headless overlay tests
             return
 
-        offset = Vector2(state.content.x, state.content.y)
+        # The image area, not the panel: the frame is letterboxed
+        # inside the panel, and anchoring handles to the panel would
+        # draw them offset from the entity by the size of the bars.
+        offset = Vector2(state.image.x, state.image.y)
         active = self._drag.axis if self._drag is not None else None
 
         def point(position: Vector2) -> Any:
@@ -767,7 +770,7 @@ class TransformGizmo(ViewportOverlay):
 
     @staticmethod
     def _cursor_in_panel(state: ViewportState) -> Vector2:
-        """Return the cursor relative to the panel's content origin.
+        """Return the cursor relative to the drawn image's origin.
 
         Args:
             state: The viewport's geometry.
@@ -776,7 +779,7 @@ class TransformGizmo(ViewportOverlay):
             The cursor position.
         """
         mouse = imgui.get_io().mouse_pos
-        return Vector2(mouse.x - state.content.x, mouse.y - state.content.y)
+        return Vector2(mouse.x - state.image.x, mouse.y - state.image.y)
 
     @staticmethod
     def _to_panel(
@@ -792,7 +795,7 @@ class TransformGizmo(ViewportOverlay):
         Returns:
             The panel-relative position.
         """
-        return world_to_panel(camera, world_point, state.content, state.target)
+        return world_to_panel(camera, world_point, state.image, state.target)
 
     @staticmethod
     def _to_world(
@@ -808,4 +811,4 @@ class TransformGizmo(ViewportOverlay):
         Returns:
             The world position.
         """
-        return screen_to_world(camera, panel_point, state.content, state.target)
+        return screen_to_world(camera, panel_point, state.image, state.target)

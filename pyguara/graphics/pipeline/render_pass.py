@@ -23,20 +23,34 @@ class BaseRenderPass(ABC):
     post-processing, UI compositing).
     """
 
-    def __init__(self, name: str, *, enabled: bool = True) -> None:
+    def __init__(
+        self, name: str, *, enabled: bool = True, after_ui: bool = False
+    ) -> None:
         """Initialize the render pass.
 
         Args:
             name: Unique identifier for this pass.
             enabled: Whether this pass should execute.
+            after_ui: Run after the game's UI has been composited rather
+                than with the rest of the chain. For an overlay that must
+                sit on top of everything the game drew -- an editor, a
+                debug surface. Without it the pass runs mid-chain and the
+                game's HUD composites over it, which looks like the
+                overlay is behind the game.
         """
         self._name = name
         self._enabled = enabled
+        self._after_ui = after_ui
 
     @property
     def name(self) -> str:
         """Unique identifier for this pass."""
         return self._name
+
+    @property
+    def after_ui(self) -> bool:
+        """Whether this pass runs after the game's UI is composited."""
+        return self._after_ui
 
     @property
     def enabled(self) -> bool:
