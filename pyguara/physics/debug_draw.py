@@ -16,6 +16,7 @@ from pyguara.common.components import Transform
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.protocols import IRenderer
+from pyguara.physics.bounds import collider_bounds
 from pyguara.physics.components import Collider, RigidBody
 from pyguara.physics.types import BodyType, ShapeType
 
@@ -64,16 +65,21 @@ class ColliderDebugRenderer:
         for entity in self._entity_manager.get_entities_with(Transform, Collider):
             transform = entity.get_component(Transform)
             collider = entity.get_component(Collider)
-            position = transform.position - offset
             colour = self._colour(entity, collider)
 
+            # Through `collider_bounds`, so this overlay and the simulation
+            # cannot disagree about where a collider is. They used to: this
+            # applied `collider.offset` and the pymunk BOX branch and every
+            # mover probe did not, so the outline was drawn somewhere the
+            # physics had nothing. The default is unreachable -- the query
+            # above requires a `Collider`.
+            centre_world, _ = collider_bounds(transform, collider, Vector2.zero())
+            centre = centre_world - offset
+
             if collider.shape_type == ShapeType.CIRCLE:
-                renderer.draw_circle(
-                    position + collider.offset, collider.dimensions[0], colour, width=1
-                )
+                renderer.draw_circle(centre, collider.dimensions[0], colour, width=1)
             else:
                 width, height = collider.dimensions[0], collider.dimensions[1]
-                centre = position + collider.offset
                 renderer.draw_rect(
                     Rect(
                         int(centre.x - width / 2),

@@ -597,8 +597,37 @@ class PymunkEngine:
             shape = pymunk.Circle(body, radius, (offset.x, offset.y))
         elif shape_type == ShapeType.BOX:
             width, height = dimensions
-            # Pymunk Box is a Poly
-            shape = pymunk.Poly.create_box(body, size=(width, height))
+            # Built from vertices rather than `Poly.create_box`, because
+            # only the `Poly` constructor takes a transform and the
+            # transform is what applies `offset`. `create_box` always
+            # centres on the body's origin, so a collider that does not sit
+            # on its entity's origin simulated in the wrong place while
+            # `debug_draw` drew it in the right one. BOX is the default
+            # shape type, so this was the common path -- unnoticed only
+            # because nothing in the engine or the demos sets an offset.
+            half_width, half_height = width / 2.0, height / 2.0
+            shape = pymunk.Poly(
+                body,
+                [
+                    (-half_width, -half_height),
+                    (-half_width, half_height),
+                    (half_width, half_height),
+                    (half_width, -half_height),
+                ],
+                pymunk.Transform(tx=offset.x, ty=offset.y),
+            )
+        else:
+            # SEGMENT and POLYGON are in `ShapeType` and are not handled
+            # here. Before this they fell through with `shape` still None,
+            # so `add_shape` returned None having attached nothing: a
+            # collider that silently does not exist, on a body that still
+            # moves and still reports as physical. Raising is the lesser
+            # surprise.
+            raise NotImplementedError(
+                f"{shape_type.name} colliders are not implemented by the "
+                f"pymunk backend. Supported: "
+                f"{ShapeType.CIRCLE.name}, {ShapeType.BOX.name}."
+            )
 
         if shape:
             shape.density = material.density

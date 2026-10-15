@@ -581,3 +581,69 @@ class TestCeilingHeadBump:
         world.run(1)  # one tick of falling before it reaches the floor
 
         assert world.body.velocity.y > 0.0
+
+
+class OffsetPlatformer(Platformer):
+    """A character whose collider does not sit on its transform origin.
+
+    The shape every game with a sprite pivot at the feet wants: the origin
+    at ground level, the collider box centred on the body above it. Before
+    `Collider.offset` was honoured by the movers, this character probed from
+    its origin instead, so it stood with its box buried in the floor.
+    """
+
+    COLLIDER_OFFSET = Vector2(0.0, -PLAYER_HEIGHT / 2)
+
+    def __init__(self) -> None:
+        """Replace the character with an identical, offset-collider one."""
+        super().__init__()
+        self.entities.remove_entity(self.player.id)
+        self.entities.flush_pending_removals()
+
+        self.player = self.entities.create_entity()
+        self.player.add_component(Transform(position=Vector2(400.0, RESTING_Y)))
+        self.player.add_component(CharacterBody())
+        self.player.add_component(
+            Collider(
+                shape_type=ShapeType.BOX,
+                dimensions=[24.0, PLAYER_HEIGHT],
+                offset=self.COLLIDER_OFFSET,
+            )
+        )
+        self.player.add_component(PlatformerController(jump_force=350.0))
+
+
+def test_an_offset_collider_rests_on_the_floor_not_in_it() -> None:
+    """The collider's bottom edge should end up on the floor, which puts the
+    *origin* `offset` further down than an unoffset character's.
+
+    Without the offset applied, the probe tests the origin's box: the
+    character settles with its real collider half-buried, and the resting
+    origin is wrong by exactly the offset.
+    """
+    world = OffsetPlatformer()
+    world.run(90)
+
+    assert world.controller.is_grounded, "should have landed on the floor"
+
+    collider_centre_y = world.y + world.COLLIDER_OFFSET.y
+    assert collider_centre_y == pytest.approx(
+        GROUND_TOP - PLAYER_HEIGHT / 2, abs=1.0
+    ), "the collider should be resting on the floor, not sunk into it"
+
+
+def test_an_offset_collider_still_jumps_and_lands() -> None:
+    """A regression guard on the round trip: the mover sweeps in collider
+    space and the result is converted back to the entity's origin, so a
+    sign error there would show up as drift across a jump."""
+    world = OffsetPlatformer()
+    world.run(90)
+    resting = world.y
+
+    height = world.jump()
+    assert height > 20.0, "should have left the ground"
+
+    world.run(120)
+    assert world.y == pytest.approx(resting, abs=1.0), (
+        "should return to the same resting origin after landing"
+    )

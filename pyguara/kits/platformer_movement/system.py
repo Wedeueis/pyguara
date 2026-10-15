@@ -20,6 +20,7 @@ from pyguara.kits.platformer_movement.controller import (
     PlatformerInput,
     PlatformerState,
 )
+from pyguara.physics.bounds import collider_bounds
 from pyguara.physics.character_mover import CharacterMover
 from pyguara.physics.components import CharacterBody, Collider, Pushable
 from pyguara.physics.protocols import IPhysicsEngine
@@ -112,11 +113,15 @@ class PlatformerSystem:
                 if entity.has_component(Collider)
                 else None
             )
-            half_extents = (
-                Vector2(collider.dimensions[0] / 2, collider.dimensions[1] / 2)
-                if collider
-                else _DEFAULT_HALF_EXTENTS
+            # `collider_bounds` applies `collider.offset`, so a collider
+            # that does not sit on its entity's origin probes where
+            # `debug_draw` already draws it. The offset is kept to undo on
+            # the way back out: the mover works in collider-centre space,
+            # and `Transform.position` is the entity's origin.
+            centre, half_extents = collider_bounds(
+                transform, collider, _DEFAULT_HALF_EXTENTS
             )
+            collider_offset = collider.offset if collider else Vector2(0.0, 0.0)
 
             # Consume this tick's movement/jump intent
             if controller.pending_input.move < 0:
@@ -131,9 +136,9 @@ class PlatformerSystem:
             # Ground/wall detection, from where the character ended up last
             # tick -- movement itself happens at the end of this one.
             self._update_ground_detection(
-                controller, body, transform, half_extents, entity.id
+                controller, body, centre, half_extents, entity.id
             )
-            self._update_wall_detection(controller, transform, half_extents, entity.id)
+            self._update_wall_detection(controller, centre, half_extents, entity.id)
 
             self._update_timers(controller, delta_time)
             self._update_state(controller)
@@ -143,7 +148,15 @@ class PlatformerSystem:
             self._apply_movement(controller, body)
             self._handle_jump(controller, body)
 
-            self._move(body, transform, half_extents, delta_time, entity.id)
+            self._move(
+                body,
+                transform,
+                centre,
+                collider_offset,
+                half_extents,
+                delta_time,
+                entity.id,
+            )
 
             # Reset intent for next frame
             controller.pending_input = PlatformerInput()
@@ -166,7 +179,7 @@ class PlatformerSystem:
         self,
         controller: PlatformerController,
         body: CharacterBody,
-        transform: Transform,
+        centre: Vector2,
         half_extents: Vector2,
         entity_id: int | str,
     ) -> None:
@@ -175,15 +188,13 @@ class PlatformerSystem:
         Args:
             controller: PlatformerController component.
             body: CharacterBody, whose `grounded` mirrors the result.
-            transform: Transform component.
+            centre: The collider's centre in world space, offset included.
             half_extents: The character's half width and half height.
             entity_id: The character, excluded from the probe. Harmless to
                 pass even though the character has no shape to exclude --
                 it just never matches.
         """
-        hit = self._mover.probe(
-            transform.position, half_extents, Vector2(0, 1), entity_id
-        )
+        hit = self._mover.probe(centre, half_extents, Vector2(0, 1), entity_id)
 
         was_grounded = controller.is_grounded
         body.grounded = hit is not None
@@ -218,7 +229,7 @@ class PlatformerSystem:
     def _update_wall_detection(
         self,
         controller: PlatformerController,
-        transform: Transform,
+        centre: Vector2,
         half_extents: Vector2,
         entity_id: int | str,
     ) -> None:
@@ -226,7 +237,7 @@ class PlatformerSystem:
 
         Args:
             controller: PlatformerController component.
-            transform: Transform component.
+            centre: The collider's centre in world space, offset included.
             half_extents: The character's half width and half height.
             entity_id: The character, excluded so it cannot detect itself.
         """
@@ -236,12 +247,8 @@ class PlatformerSystem:
         ray_y_offset = -10  # Cast from upper body, not centre
         probe_half = Vector2(controller.wall_check_distance / 2, 10.0)
 
-        left_centre = transform.position + Vector2(
-            -(half_extents.x + probe_half.x), ray_y_offset
-        )
-        right_centre = transform.position + Vector2(
-            half_extents.x + probe_half.x, ray_y_offset
-        )
+        left_centre = centre + Vector2(-(half_extents.x + probe_half.x), ray_y_offset)
+        right_centre = centre + Vector2(half_extents.x + probe_half.x, ray_y_offset)
 
         controller.on_wall_left = (
             self._physics_engine.overlap_box(
@@ -465,6 +472,8 @@ class PlatformerSystem:
         self,
         body: CharacterBody,
         transform: Transform,
+        centre: Vector2,
+        collider_offset: Vector2,
         half_extents: Vector2,
         delta_time: float,
         entity_id: int | str,
@@ -474,12 +483,16 @@ class PlatformerSystem:
         Args:
             body: CharacterBody providing velocity and the remainder
                 accumulator, and receiving the updated remainder.
-            transform: Transform providing and receiving position.
+            transform: Transform receiving the resulting position.
+            centre: The collider's centre in world space, offset included --
+                the space the mover sweeps in.
+            collider_offset: `Collider.offset`, subtracted from the result to
+                get back to the entity's origin.
             half_extents: The character's half width and half height.
             delta_time: Time elapsed since last update.
             entity_id: The character, excluded from overlap tests.
         """
-        origin = transform.position
+        origin = centre
         delta = body.velocity * delta_time
         result = self._mover.move(
             origin, half_extents, delta, body._remainder, entity_id
@@ -532,7 +545,8 @@ class PlatformerSystem:
         if result.hit_y and delta.y < 0 and body.velocity.y < 0:
             body.velocity = Vector2(body.velocity.x, 0.0)
 
-        transform.position = result.position
+        # Back to origin space: the mover swept the collider's centre.
+        transform.position = result.position - collider_offset
         body._remainder = result.remainder
 
     def _push_if_pushable(

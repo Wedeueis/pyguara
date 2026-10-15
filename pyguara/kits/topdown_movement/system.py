@@ -14,9 +14,9 @@ from __future__ import annotations
 from pyguara.common.components import Transform
 from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
-from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.kits.topdown_movement.body import TopDownBody
+from pyguara.physics.bounds import collider_bounds
 from pyguara.physics.character_mover import CharacterMover
 from pyguara.physics.components import Collider
 from pyguara.physics.protocols import IPhysicsEngine
@@ -69,27 +69,30 @@ class TopDownSystem:
         for entity in self._entity_manager.get_entities_with(TopDownBody, Transform):
             body = entity.get_component(TopDownBody)
             transform = entity.get_component(Transform)
-            half_extents = self._half_extents(entity)
+            # The collider's centre, not the entity's origin: `offset`
+            # moves the box the mover sweeps, and is subtracted again on
+            # the way out.
+            collider = (
+                entity.get_component(Collider)
+                if entity.has_component(Collider)
+                else None
+            )
+            centre, half_extents = collider_bounds(
+                transform, collider, _DEFAULT_HALF_EXTENTS
+            )
+            collider_offset = collider.offset if collider else Vector2(0.0, 0.0)
 
             result = self._mover.move(
-                transform.position,
+                centre,
                 half_extents,
                 body.velocity * delta_time,
                 body._remainder,
                 entity.id,
             )
-            transform.position = result.position
+            transform.position = result.position - collider_offset
             body._remainder = result.remainder
 
         self._separate_actors()
-
-    @staticmethod
-    def _half_extents(entity: Entity) -> Vector2:
-        """Return the character's half width/height, from its `Collider` if any."""
-        if not entity.has_component(Collider):
-            return _DEFAULT_HALF_EXTENTS
-        dimensions = entity.get_component(Collider).dimensions
-        return Vector2(dimensions[0] / 2, dimensions[1] / 2)
 
     def _separate_actors(self) -> None:
         """Push every overlapping, separation-enabled actor pair apart.

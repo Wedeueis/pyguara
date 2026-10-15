@@ -30,6 +30,7 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
+from pyguara.physics.bounds import collider_bounds
 from pyguara.physics.character_mover import SKIN
 from pyguara.physics.components import CharacterBody, Collider
 from pyguara.physics.events import OnActorSquished
@@ -43,11 +44,20 @@ RIDE_TOLERANCE = 1.0
 _DEFAULT_HALF_EXTENTS = Vector2(12.0, 20.0)
 
 
-def _half_extents(collider: Collider | None) -> Vector2:
-    """Half width/height from a Collider, or a sane default without one."""
-    if collider is None:
-        return _DEFAULT_HALF_EXTENTS
-    return Vector2(collider.dimensions[0] / 2, collider.dimensions[1] / 2)
+def _bounds(entity: Entity) -> tuple[Vector2, Vector2]:
+    """`(centre, half_extents)` for an entity, with `Collider.offset` applied.
+
+    Goes through `collider_bounds` so the solid mover, the character movers
+    and the debug overlay all agree on where a collider is. They did not:
+    this module read `transform.position` as the centre while
+    `debug_draw.py` added the offset.
+    """
+    collider = (
+        entity.get_component(Collider) if entity.has_component(Collider) else None
+    )
+    return collider_bounds(
+        entity.get_component(Transform), collider, _DEFAULT_HALF_EXTENTS
+    )
 
 
 def _shrink(half: Vector2) -> Vector2:
@@ -138,14 +148,9 @@ class SolidMover:
         if delta.x == 0.0 and delta.y == 0.0:
             return
 
-        solid_transform = solid_entity.get_component(Transform)
-        solid_half = _half_extents(
-            solid_entity.get_component(Collider)
-            if solid_entity.has_component(Collider)
-            else None
-        )
-        solid_pos_before = solid_transform.position - delta
-        solid_pos_after = solid_transform.position
+        solid_centre, solid_half = _bounds(solid_entity)
+        solid_pos_before = solid_centre - delta
+        solid_pos_after = solid_centre
 
         for actor in self._entity_manager.get_entities_with(
             CharacterBody, Transform, Collider
@@ -154,16 +159,14 @@ class SolidMover:
                 continue
             body = actor.get_component(CharacterBody)
             transform = actor.get_component(Transform)
-            half = _half_extents(actor.get_component(Collider))
+            centre, half = _bounds(actor)
 
-            if _is_riding(transform.position, half, solid_pos_before, solid_half):
+            if _is_riding(centre, half, solid_pos_before, solid_half):
                 self._displace(actor, body, transform, delta, solid_entity.id)
                 body.riding = solid_entity.id
                 continue
 
-            push = _push_delta(
-                transform.position, half, solid_pos_after, solid_half, delta
-            )
+            push = _push_delta(centre, half, solid_pos_after, solid_half, delta)
             if push.x != 0.0 or push.y != 0.0:
                 self._displace(actor, body, transform, push, solid_entity.id)
 
@@ -190,14 +193,14 @@ class SolidMover:
             which case its Transform is left exactly where it started.
         """
         transform = entity.get_component(Transform)
-        half = _half_extents(
-            entity.get_component(Collider) if entity.has_component(Collider) else None
-        )
+        centre, half = _bounds(entity)
         origin = transform.position
         transform.position = origin + delta
 
+        # The box is tested at the collider's centre, which moved with the
+        # transform; `transform.position` alone is the entity's origin.
         blocker = self._engine.overlap_box(
-            transform.position, _shrink(half), ignore_entity_id=entity.id
+            centre + delta, _shrink(half), ignore_entity_id=entity.id
         )
         if blocker is not None:
             transform.position = origin
@@ -216,11 +219,9 @@ class SolidMover:
     ) -> None:
         """Move an actor directly and check what that left it overlapping."""
         transform.position = transform.position + delta
-        half = _half_extents(
-            actor.get_component(Collider) if actor.has_component(Collider) else None
-        )
+        centre, half = _bounds(actor)
         blocker = self._engine.overlap_box(
-            transform.position, _shrink(half), ignore_entity_id=solid_id
+            centre, _shrink(half), ignore_entity_id=solid_id
         )
         if blocker is not None:
             body.squished = True
