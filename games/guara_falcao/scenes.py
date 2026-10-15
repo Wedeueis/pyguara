@@ -146,6 +146,14 @@ class TitleScene(Scene):
 
     def on_enter(self) -> None:
         """Build the backdrop's lights, the walker and the menu."""
+        # One camera, and it is `Scene.camera`. This scene draws its world
+        # by hand rather than through the render system, so nothing else
+        # would ever write that attribute -- and everything that maps world
+        # to screen from outside the frame reads it: Studio's viewport, its
+        # picking, and the transform gizmo. Left unassigned, those used the
+        # base class's untouched camera at the origin and drew the gizmo
+        # hundreds of pixels from the entity it belonged to.
+        self.camera = self._camera
         self._lighting = LightingSystem(self.entity_manager)
         _sun(self, WINDOW_WIDTH)
         attach_lighting(self.container, self._lighting)
@@ -431,7 +439,16 @@ class GameScene(Scene):
         self._player_stats_system = PlayerStatsSystem(self.entity_manager)
 
         # Setup camera
-        self._camera = Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
+        # One camera, and it is `Scene.camera`. This scene draws its world
+        # by hand rather than through the render system, so nothing else
+        # would ever write that attribute -- and everything that maps world
+        # to screen from outside the frame reads it: Studio's viewport, its
+        # picking, and the transform gizmo. Left unassigned, those used the
+        # base class's untouched camera at the origin and drew the gizmo
+        # hundreds of pixels from the entity it belonged to.
+        if self.camera is None:  # pragma: no cover - no renderer in the container
+            self.camera = Camera2D(WINDOW_WIDTH, WINDOW_HEIGHT)
+        self._camera = self.camera
         self._camera_follow.set_camera(self._camera)
 
         # Loaded before the first `_link_player`, which is what attaches

@@ -185,3 +185,38 @@ def test_only_the_render_graph_builds_a_framebuffer_manager() -> None:
         "everything else uses `render_graph.fbo_manager`, or a second set of "
         "buffers is allocated that no pass ever reads."
     )
+
+
+SCENES = sorted(GAMES_DIR.glob("*/scenes.py"))
+
+CONSTRUCTS_A_CAMERA = re.compile(r"\bCamera2D\s*\(")
+ASSIGNS_THE_SCENE_CAMERA = re.compile(r"\bself\.camera\s*=")
+
+
+@pytest.mark.parametrize("scenes", SCENES, ids=lambda p: str(p.parent.name))
+def test_a_scene_with_its_own_camera_assigns_it(scenes: Path) -> None:
+    """`Scene.camera` is the camera the scene renders with, full stop.
+
+    Everything that turns a world position into a screen one from outside
+    the frame reads it: Studio's viewport, its picking, and the transform
+    gizmo. A scene that overrides `render()` and draws with a camera of
+    its own -- which several here do, because they draw by hand rather
+    than through the render system -- leaves that attribute holding the
+    base class's untouched camera at the origin.
+
+    Nothing fails. The frame looks right, because the scene is using the
+    camera it meant to; only the editor is wrong, and it is wrong
+    quietly: `guara_falcao` drew the gizmo hundreds of pixels from the
+    entity it belonged to, which is a confusing way to find out.
+    """
+    source = scenes.read_text()
+    if not CONSTRUCTS_A_CAMERA.search(source):
+        return
+
+    assert ASSIGNS_THE_SCENE_CAMERA.search(source), (
+        f"{scenes.parent.name}/scenes.py builds a Camera2D of its own but "
+        f"never assigns `self.camera`. Everything that maps world to "
+        f"screen from outside the frame -- Studio's viewport, picking and "
+        f"the gizmo -- reads `Scene.camera`, and would use the base "
+        f"class's untouched one at the origin instead."
+    )
