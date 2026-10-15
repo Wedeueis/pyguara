@@ -83,29 +83,33 @@ class GLTextureFactory:
     ) -> GLTexture:
         """Create a GLTexture from raw RGBA pixel data.
 
-        Note: The data should be in standard top-to-bottom row order.
-        This factory handles the vertical flip required for OpenGL's
-        bottom-left origin coordinate system.
+        Rows go up in the order given, top row first -- which is what
+        every producer in this tree already has: pygame's
+        `image.tobytes(..., False)` and PIL's `tobytes("raw", "RGBA")`.
+
+        This used to reverse them, on the reasoning that OpenGL's origin
+        is bottom-left. That is true of GL in general and not of this
+        renderer: the sprite quad carries `v = 0` on its *top* vertex
+        (`_create_quad_vbo`) and the projection inverts Y
+        (`top = 0.0, bottom = height`), so it wants plain top-down rows --
+        exactly what `loaders.py` hands `ctx.texture` directly, and what
+        `tests/integration/test_gl_texture_orientation.py` pins.
+
+        The flip was not harmless. `draw_text` pre-flipped to cancel it,
+        so text came out right by luck, while `SpriteSheet` handed over
+        PIL's top-down bytes and every frame uploaded upside down -- latent
+        only because no GL demo loads a sheet.
 
         Args:
             path: Identifier/name for the texture.
-            data: Raw RGBA pixel data (4 bytes per pixel, top-to-bottom).
+            data: Raw RGBA pixel data, 4 bytes per pixel, top row first.
             width: Width of the image in pixels.
             height: Height of the image in pixels.
 
         Returns:
             A GLTexture ready for GPU rendering.
         """
-        # Flip the image vertically for OpenGL (origin at bottom-left)
-        # Each row is width * 4 bytes (RGBA)
-        row_size = width * 4
-        flipped_data = b"".join(
-            data[i : i + row_size]
-            for i in range((height - 1) * row_size, -1, -row_size)
-        )
-
-        # Create GPU texture
-        gl_texture = self._ctx.texture((width, height), 4, flipped_data)
+        gl_texture = self._ctx.texture((width, height), 4, data)
         gl_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
 
         return GLTexture(path, gl_texture, width, height)
