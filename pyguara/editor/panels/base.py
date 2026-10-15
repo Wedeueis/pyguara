@@ -12,9 +12,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 from pyguara.ecs.manager import EntityManager
 from pyguara.editor.selection import Selection
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -47,6 +51,28 @@ class EditorPanel(ABC):
         """
         self._title = title
         self._visible = visible
+        # Set by the layer when the panel is added. None while the panel
+        # stands alone, which is how the tests drive it.
+        self.toasts: Any = None
+
+    def report(self, message: str, *, level: str = "error") -> None:
+        """Say something to the person at the keyboard.
+
+        A panel that refuses an edit has to say so *on screen*. A log line
+        is not a report: the person sees the control accept a value and
+        nothing happen, which is indistinguishable from a control that
+        does not work -- and is how it was reported.
+
+        Args:
+            message: What to say.
+            level: "info", "warning" or "error".
+        """
+        if self.toasts is None:
+            logger.info(f"{self.title}: {message}")
+            return
+        from pyguara.editor.toasts import Level
+
+        self.toasts.push(message, Level(level))
 
     @property
     def title(self) -> str:

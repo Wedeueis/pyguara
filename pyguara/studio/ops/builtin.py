@@ -21,6 +21,7 @@ Three conventions run through all of them:
 
 from __future__ import annotations
 
+import dataclasses
 import difflib
 from typing import TYPE_CHECKING, Any
 
@@ -208,9 +209,50 @@ def _build_component(
     try:
         return session.registry.create(name, fields)
     except Exception as exc:
+        missing = _fields_without_defaults(session, name) - set(fields)
+        if missing:
+            # Python's own message is "__init__() missing 1 required
+            # positional argument", which names the argument and not the
+            # component, and says nothing about how to supply it. A
+            # `Sprite` cannot be attached without a texture, and a menu
+            # that offers it with no fields will fail every time -- so the
+            # reply has to be the one that tells you what to send.
+            raise OperationError(
+                f"A {name} cannot be built without "
+                f"{', '.join(sorted(missing))}: {exc}. Pass it in 'fields'; "
+                f"`component_schema` gives the type and, for an enum, the "
+                f"valid members."
+            ) from exc
         raise OperationError(
             f"Could not build a {name} from {fields!r}: {exc}"
         ) from exc
+
+
+def _fields_without_defaults(session: StudioSession, name: str) -> set[str]:
+    """Return the component's fields that have to be supplied.
+
+    Args:
+        session: The session, for its registry.
+        name: The component's registered name.
+
+    Returns:
+        Field names with neither a default nor a default factory, or an
+        empty set when the component cannot be reflected over -- in which
+        case the caller falls back to the plain message.
+    """
+    # Widened to `object` first: `is_dataclass` is a TypeGuard, and
+    # narrowing a component type through it leaves mypy with an empty
+    # intersection, so it calls everything after unreachable.
+    component_type: object = session.registry.get(name)
+    if component_type is None or not dataclasses.is_dataclass(component_type):
+        return set()
+    return {
+        field.name
+        for field in dataclasses.fields(component_type)
+        if field.default is dataclasses.MISSING
+        and field.default_factory is dataclasses.MISSING
+        and not field.name.startswith("_")
+    }
 
 
 # --------------------------------------------------------------------

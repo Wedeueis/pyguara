@@ -101,6 +101,42 @@ operation -- scrolls the panel to it and opens the group holding it.
 The panel reads and selects; it does not edit. Every change goes through
 an operation, so it lands on one history and in one journal.
 
+### Why an edit may not show
+
+Reported as "the controls over an entity's components do not seem to have
+any effect". Driving the whole loop and measuring it separates three
+things that look identical from the outside:
+
+| What happened | How to tell |
+| --- | --- |
+| The edit was **refused** | A toast says so, naming the correction. Before, it was a log line nobody saw |
+| The edit landed, and **the game overwrote it** | The Viewport says *Running* in amber. Whatever drives the entity -- a controller, a physics body, a follow system -- writes its transform again on the next tick. Pause and the edit stands |
+| The edit landed, and **nothing draws from that component** | The world changed and the frame did not. A game that draws by hand from its own data renders the same picture whatever the component says |
+
+The third is not a Studio bug and cannot be fixed from here: a component
+is authored state, and only a game that renders from it will show a change
+to it. Every demo in `games/` draws by hand, so editing a `Sprite`'s
+colour changes the component and nothing else. Entities those demos *do*
+draw from their `Transform` -- the player, the tiles -- move when moved.
+
+`the_edit_lifecycle_works` in `tests/studio/_attach_scenarios.py` drives
+the whole loop against a real demo with the game paused, and asserts the
+frame actually changed. Paused, because a running game changes the frame
+every tick and a pixel comparison would say nothing.
+
+### Everything goes through an operation, including the Inspector
+
+The base editor's Inspector writes straight onto the component, which is
+right for an editor with no session behind it. In Studio it was a second
+way to change the world: a field typed into it reached no history,
+appeared in no journal, and applied even in `plan` mode, which is supposed
+to change nothing.
+
+`StudioInspectorPanel` overrides the one method that writes, so a person
+typing a value calls the same `set_field` an agent calls. One seam, one
+history, one record -- which is the premise the whole design rests on, and
+it had a hole in it exactly where most editing happens.
+
 ### The camera the gizmo trusts
 
 `Scene.camera` is **the camera the scene renders with**, and everything

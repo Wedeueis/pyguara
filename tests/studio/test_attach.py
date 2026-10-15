@@ -106,6 +106,7 @@ class TestAttachToARealApplication:
             "the_layout_follows_the_window",
             "the_menus_are_studios_own",
             "the_editor_gets_the_whole_window",
+            "the_edit_lifecycle_works",
         ],
     )
     def test_scenario(self, scenario: str) -> None:

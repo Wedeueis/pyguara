@@ -125,10 +125,41 @@ class InspectorPanel(EditorPanel):
                     field.name, value, read_only=frozen
                 )
                 if changed:
-                    setattr(component, field.name, new_value)
-                    manager.notify_component_changed(entity_id, component_type)
+                    self.write(manager, entity_id, component, field.name, new_value)
         finally:
             imgui.pop_id()
+
+    def write(
+        self,
+        manager: EntityManager,
+        entity_id: str,
+        component: Component,
+        field_name: str,
+        value: Any,
+    ) -> None:
+        """Apply one accepted field edit.
+
+        The seam. This panel belongs to the base editor, which has no
+        command stack to route through, so the default is the direct
+        write -- plus the notification, without which anything mirroring
+        the component (a physics body, a render batch, the spatial index)
+        keeps the old value.
+
+        Studio overrides it to go through an operation instead, so that a
+        field typed here lands on the same history, in the same journal
+        and under the same approval mode as the same field set by an
+        agent. Writing here directly is how an editing surface quietly
+        grows a second way to change the world.
+
+        Args:
+            manager: The world the component belongs to.
+            entity_id: The owning entity.
+            component: The component being edited.
+            field_name: The field that changed.
+            value: Its new value.
+        """
+        setattr(component, field_name, value)
+        manager.notify_component_changed(entity_id, type(component))
 
     @staticmethod
     def _is_frozen(component: Component) -> bool:

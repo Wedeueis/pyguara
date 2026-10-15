@@ -25,6 +25,7 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 from pyguara.application.bootstrap import create_application  # noqa: E402
 from pyguara.common.components import Transform  # noqa: E402
+from pyguara.common.types import Vector2  # noqa: E402
 from pyguara.config.types import RenderingBackend  # noqa: E402
 from pyguara.studio.attach import StudioAttachment, attach_studio  # noqa: E402
 
@@ -434,6 +435,168 @@ def the_editor_gets_the_whole_window() -> None:
         app.shutdown()
 
 
+def the_edit_lifecycle_works() -> None:
+    """Create, edit, undo and destroy, end to end, against a real demo.
+
+    Reported as "the controls over an entity's components do not seem to
+    have any effect". Driving the whole loop and *measuring* it is the
+    only way to tell apart the three things that look identical from the
+    outside: an edit that is refused, an edit that lands on a component
+    nothing draws, and an edit the running game overwrites on its next
+    tick.
+
+    The game is paused throughout. Unpaused, the frame changes every tick
+    on its own and a pixel comparison says nothing about the edit.
+    """
+    from pyguara.common.components import Transform
+    from pyguara.graphics.pipeline.graph import RenderGraph
+    from pyguara.studio.agent.journal import Actor
+    from pyguara.studio.session import ApprovalMode
+
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=_project_root())
+        assert attachment is not None
+        app.begin(_scene(app))
+        for _ in range(8):
+            app.step()
+
+        app.paused = True
+        for _ in range(3):
+            app.step()
+
+        session = attachment.session
+        assert session is not None
+        world = session.world
+        ops = attachment.operations
+        graph = app.container.get(RenderGraph)
+
+        def call(name: str, **arguments: object) -> object:
+            return ops.invoke(session, name, dict(arguments), actor=Actor.HUMAN)
+
+        def frame() -> bytes:
+            fbo = graph.fbo_manager.get("world")
+            assert fbo is not None, "no world framebuffer to compare"
+            return bytes(fbo.fbo.read(components=3))
+
+        def settle(count: int = 4) -> None:
+            for _ in range(count):
+                app.step()
+
+        # --- create -------------------------------------------------
+        result = call("create_entity", entity_id="probe")
+        assert result.ok, result.error
+        settle()
+        assert world.get_entity("probe") is not None
+
+        result = call(
+            "add_component",
+            entity_id="probe",
+            component="Transform",
+            fields={"position": {"x": 300, "y": 300}},
+        )
+        assert result.ok, result.error
+        assert world.get_entity("probe").get_component(Transform) is not None
+
+        # --- a component that cannot be built blind -----------------
+        result = call("add_component", entity_id="probe", component="Sprite")
+        assert not result.ok, "a Sprite was built with no texture"
+        assert "texture" in str(result.error), (
+            f"the refusal has to name the field that is missing, not just "
+            f"that one is: {result.error}"
+        )
+
+        # --- an edit the game does not drive ------------------------
+        subject = _drawn_entity(world)
+        transform = world.get_entity(subject).get_component(Transform)
+        origin = transform.position.x
+        before = frame()
+        result = call(
+            "set_field",
+            entity_id=subject,
+            component="Transform",
+            field="position",
+            value={"x": origin + 220, "y": transform.position.y},
+        )
+        assert result.ok, result.error
+        settle()
+        moved = world.get_entity(subject).get_component(Transform).position.x
+        assert abs(moved - (origin + 220)) < 1.0, (
+            f"the component did not take the edit: {moved} != {origin + 220}"
+        )
+        assert frame() != before, (
+            f"'{subject}' moved in the world and the frame did not change. "
+            f"Either the edit did not reach the renderer, or this demo does "
+            f"not draw that entity from its Transform."
+        )
+
+        # --- the Inspector is an operation too ----------------------
+        inspector = next(
+            panel for panel in attachment.layer.panels if panel.title == "Inspector"
+        )
+        undoable = len(session.stack.undo_labels)
+        recorded = len(session.journal.entries)
+        inspector.write(
+            world, subject, transform, "position", Vector2(origin, transform.position.y)
+        )
+        assert len(session.stack.undo_labels) == undoable + 1, (
+            "an Inspector edit did not reach the history -- it is writing "
+            "onto the component directly, which is a second way to change "
+            "the world"
+        )
+        assert len(session.journal.entries) > recorded
+
+        # --- plan mode changes nothing ------------------------------
+        session.set_approval_mode(ApprovalMode.PLAN)
+        planned = world.get_entity(subject).get_component(Transform).position.x
+        inspector.write(
+            world, subject, transform, "position", Vector2(planned + 500, 0)
+        )
+        assert (
+            world.get_entity(subject).get_component(Transform).position.x == planned
+        ), "plan mode applied the edit"
+        session.set_approval_mode(ApprovalMode.AUTO)
+
+        # --- a refusal reaches the screen ---------------------------
+        attachment.layer.toasts.clear()
+        inspector.write(world, subject, transform, "no_such_field", 1)
+        assert attachment.layer.toasts.toasts, (
+            "a refused edit said nothing on screen, which is exactly what "
+            "a control that does not work looks like"
+        )
+
+        # --- undo and destroy ---------------------------------------
+        assert call("history", operation="undo").ok
+        assert call("destroy_entity", entity_id="probe").ok
+        settle()
+        assert world.get_entity("probe") is None
+    finally:
+        app.shutdown()
+
+
+def _drawn_entity(world: object) -> str:
+    """Return an entity this demo draws from its own Transform.
+
+    Not every entity is: a demo that draws its level from its own data
+    renders the same picture whatever the entity's Transform says, and
+    asserting on the frame for one of those would fail for a reason that
+    has nothing to do with the editor.
+
+    Args:
+        world: The entity manager.
+
+    Returns:
+        The entity id.
+    """
+    from pyguara.common.components import Transform
+
+    for candidate in ("player", "tile_0_0"):
+        entity = world.get_entity(candidate)  # type: ignore[attr-defined]
+        if entity is not None and entity.has_component(Transform):
+            return candidate
+    raise AssertionError("this demo draws nothing from a Transform")
+
+
 SCENARIOS = {
     "attaches": attaches,
     "session_follows_the_scene": session_follows_the_scene,
@@ -443,6 +606,7 @@ SCENARIOS = {
     "the_layout_follows_the_window": the_layout_follows_the_window,
     "the_menus_are_studios_own": the_menus_are_studios_own,
     "the_editor_gets_the_whole_window": the_editor_gets_the_whole_window,
+    "the_edit_lifecycle_works": the_edit_lifecycle_works,
 }
 
 

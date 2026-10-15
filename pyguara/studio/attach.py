@@ -274,6 +274,7 @@ class StudioAttachment:
             camera_provider=self._active_camera,
             texture_provider=self._frame_texture,
             physics_provider=self._physics_engine,
+            running_provider=self._is_running,
             overlays=[gizmo],
         )
 
@@ -287,6 +288,13 @@ class StudioAttachment:
         application = self._application()
         if application is not None:
             panels.insert(1, PlayControlsPanel(application))
+        # The base editor's Inspector writes straight onto the component.
+        # That is right for an editor with no session and wrong here: a
+        # field typed into it reached no history, appeared in no journal,
+        # and applied even in `plan` mode, which is supposed to change
+        # nothing. Studio's routes the same edit through `set_field`.
+        self._replace_inspector()
+
         for panel in panels:
             self._layer.add_panel(panel)
 
@@ -296,6 +304,17 @@ class StudioAttachment:
         self._layer.set_default_layout(default_layout())
         self._install_menus()
         logger.info("Studio panels installed.")
+
+    def _replace_inspector(self) -> None:
+        """Swap the base editor's Inspector for one that uses operations."""
+        from pyguara.studio.panels.inspector import StudioInspectorPanel
+
+        for index, panel in enumerate(self._layer.panels):
+            if panel.title != "Inspector":
+                continue
+            replacement = StudioInspectorPanel(self, visible=panel.visible)
+            self._layer.replace_panel(index, replacement)
+            return
 
     def _install_menus(self) -> None:
         """Replace the editor's lone panel menu with Studio's menu bar.
@@ -552,6 +571,18 @@ class StudioAttachment:
             return self._container.get(Application)
         except Exception:
             return None
+
+    def _is_running(self) -> bool:
+        """Whether the game is simulating rather than paused.
+
+        Returns:
+            True while it is, False when paused or when there is no
+            application to ask.
+        """
+        application = self._application()
+        if application is None:
+            return False
+        return not bool(getattr(application, "paused", False))
 
     def _physics_engine(self) -> Any:
         """Return the physics engine, or None.
