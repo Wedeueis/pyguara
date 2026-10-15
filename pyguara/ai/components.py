@@ -107,6 +107,16 @@ class Navigator(StrictComponent):
     current_index: int = 0
     reach_threshold: float = 5.0
 
+    def __post_init__(self) -> None:
+        """Initialise the StrictComponent state the dataclass `__init__` skips.
+
+        Calls the base explicitly rather than via `super()`, matching
+        the spelling the rest of the engine uses -- it is correct whether
+        or not the dataclass is `slots=True`, which a zero-argument
+        `super()` is not.
+        """
+        StrictComponent.__init__(self)
+
     @pure_query
     def get_current_target(self) -> Vector2 | None:
         """Return the current imediate destination."""

@@ -66,3 +66,13 @@ class PrefabInstance(BaseComponent):
 
     prefab_path: str = ""
     instance_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Initialise the BaseComponent state the dataclass `__init__` skips.
+
+        Calls the base explicitly rather than via `super()`, matching
+        the spelling the rest of the engine uses -- it is correct whether
+        or not the dataclass is `slots=True`, which a zero-argument
+        `super()` is not.
+        """
+        BaseComponent.__init__(self)

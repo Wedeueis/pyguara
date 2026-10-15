@@ -119,6 +119,55 @@ newest-first specifically, because it was the order that fell over.
 
 ---
 
+## Components
+
+### The `entity` slot, and why it is initialised per class
+
+`BaseComponent.__slots__` declares `entity`, but almost every component is a
+`@dataclass` whose generated `__init__` never chains to the base -- so the slot
+stays unset and reading `entity` before `on_attach` raises `AttributeError`.
+Around 35 modules work around this with a `__post_init__` that calls the base
+`__init__` by name. Four components had simply forgotten to.
+
+Fixing it once on the base class looks obviously right and is not. Both central
+options were implemented and measured, against the same tree, min of 7 rounds:
+
+**Construction, nanoseconds**
+
+| | baseline | `__new__` on base | `__getattr__` on base |
+| --- | --- | --- | --- |
+| `Bare()` (no fields) | 196 | 383 | 195 |
+| `Transform()` | 1,116 | 1,357 | 1,190 |
+| `Transform(position=…)` | 1,254 | 1,619 | 1,304 |
+| `Health()` (dataclass) | 322 | 408 | 212 |
+
+**Attribute reads, nanoseconds** — what a system does thousands of times a frame
+
+| | baseline | `__getattr__` on base |
+| --- | --- | --- |
+| `tag.name` | 32.2 | 41.0 (+27%) |
+| `transform.entity` | 32.3 | 41.2 (+28%) |
+| `transform.position` (property) | 52.7 | 100.2 (**+90%**) |
+| `transform.world_position` (cached) | 84.9 | 131.1 (+54%) |
+
+`__new__` costs ~190 ns on every component ever constructed, and deleting the 35
+redundant `__post_init__` calls only buys ~95 ns of that back.
+
+`__getattr__` is free to construct -- and that is the trap. Defining it anywhere
+in a class's MRO takes CPython off the `PyObject_GenericGetAttr` fast path for
+every instance of that class, so *successful* attribute access gets slower
+whether or not the hook ever fires. A property read nearly doubles. Components
+are the most-read objects in the engine, so this trades a one-time cost at
+construction for a permanent tax on every frame: much the worse deal, and
+invisible unless you measure reads rather than construction.
+
+So the slot is still initialised per class, and the guard against forgetting is
+`tests/test_component_entity_slot.py`, which finds every `BaseComponent`
+subclass by reflection and fails naming the class and the line to add. A test
+costs nothing at runtime.
+
+---
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.
