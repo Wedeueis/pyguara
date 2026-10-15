@@ -15,12 +15,24 @@ rather than making it the default:
   window is only usable if the application provides its own, and the
   `resizable` flag is what lets the window manager keep doing that.
 
-Dragging moves the window by a **delta** rather than to an absolute
-position. A window manager may place a window somewhere other than asked
--- WSLg offsets by the decoration it would otherwise have drawn -- so
-reading a position back and setting an absolute one accumulates that
-error on every frame of a drag, and the window walks away from the
-cursor.
+Dragging moves the window by a delta, but the delta is measured from
+where the bar was **grabbed**, not from the previous frame. The
+distinction is the whole difference between a drag that works and one
+that does not, because the pointer position SDL reports is relative to
+the window the drag is moving:
+
+- Frame to frame, moving the window by the pointer's delta cancels
+  itself. The window moves right by 10, the pointer has not moved on
+  screen, so its window-relative position is now 10 to the left, and the
+  next frame moves the window back. Measured, that window tracked the
+  cursor at exactly half speed, stepping on alternate frames -- which is
+  what a clunky, broken-feeling drag is.
+- From the grab point, it is self-correcting. The offset is the distance
+  the window is *behind* the cursor; moving by it brings the pointer back
+  onto the grab point, and the next frame's offset is zero. Nothing
+  accumulates, and no absolute position is ever set -- which still
+  matters, since a window manager may place a window somewhere other than
+  asked (WSLg offsets by the decoration it would otherwise have drawn).
 """
 
 from __future__ import annotations
@@ -79,6 +91,9 @@ class TitleBar:
         self._close_requested = False
         self.menu = menu
         self._menu_width = 0.0
+        # Where in the bar the drag started, in window coordinates. The
+        # point the window is steered to keep under the cursor.
+        self._grab: tuple[float, float] | None = None
 
     @property
     def title(self) -> str:
@@ -341,34 +356,47 @@ class TitleBar:
             width: The window width.
             scale: The UI scale.
         """
+        io = imgui.get_io()
         buttons_start = width - BUTTON_WIDTH * scale * 3
 
         if imgui.is_mouse_released(imgui.MouseButton_.left):
-            self._dragging = False
+            self._stop_dragging()
 
         if not self._dragging:
             hovered = imgui.is_window_hovered(
                 imgui.HoveredFlags_.allow_when_blocked_by_active_item.value
             )
             pressed = imgui.is_mouse_clicked(imgui.MouseButton_.left)
-            mouse_x = imgui.get_io().mouse_pos.x
+            mouse_x = io.mouse_pos.x
             over_buttons = mouse_x >= buttons_start or mouse_x < self._menu_width
             if hovered and pressed and not over_buttons:
                 self._dragging = True
+                self._grab = (io.mouse_pos.x, io.mouse_pos.y)
                 # A double-click on the bar maximises, which is what every
                 # window manager does and what a user will try first.
                 if imgui.is_mouse_double_clicked(imgui.MouseButton_.left):
-                    self._dragging = False
+                    self._stop_dragging()
                     self._toggle_maximize()
             return
 
-        if not imgui.is_mouse_down(imgui.MouseButton_.left):
-            self._dragging = False
+        if not imgui.is_mouse_down(imgui.MouseButton_.left) or self._grab is None:
+            self._stop_dragging()
             return
 
-        delta = imgui.get_io().mouse_delta
-        if delta.x or delta.y:
-            self._move(int(delta.x), int(delta.y))
+        # How far the window is behind the cursor. Truncated rather than
+        # rounded, and the remainder deliberately left in place: it stays
+        # in the offset and is paid off by a later frame, instead of being
+        # rounded away a fraction at a time until the window has drifted
+        # off the grab point.
+        dx = int(io.mouse_pos.x - self._grab[0])
+        dy = int(io.mouse_pos.y - self._grab[1])
+        if dx or dy:
+            self._move(dx, dy)
+
+    def _stop_dragging(self) -> None:
+        """End a drag, forgetting where it was grabbed."""
+        self._dragging = False
+        self._grab = None
 
     # ----------------------------------------------------------------
     # Window actions, each tolerant of a backend that cannot do it

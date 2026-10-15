@@ -41,6 +41,19 @@ class TestMouse:
         _frame(imgui_ctx)
         assert (imgui_ctx.mouse_pos.x, imgui_ctx.mouse_pos.y) == (120.0, 80.0)
 
+    def test_a_press_also_carries_its_own_position(self, imgui_ctx: Any) -> None:
+        """SDL puts the cursor position on the button event because it
+        cannot be derived from the motion events: the window can move out
+        from under a cursor that never moved -- dragging it by its own
+        title bar does exactly that -- and every window-relative
+        coordinate changes with no motion emitted. A click tested against
+        the last place the cursor *moved* to then lands on nothing."""
+        editor_input.feed_event(MouseMotionEvent(x=10, y=10, rel_x=0, rel_y=0))
+        _frame(imgui_ctx)
+        editor_input.feed_event(MouseButtonEvent(button=1, x=640, y=15, is_down=True))
+        _frame(imgui_ctx)
+        assert (imgui_ctx.mouse_pos.x, imgui_ctx.mouse_pos.y) == (640.0, 15.0)
+
     @pytest.mark.parametrize(
         ("engine_button", "imgui_index"),
         [(1, 0), (3, 1), (2, 2)],

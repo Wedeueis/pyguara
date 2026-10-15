@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from pyguara.di.container import DIContainer
+from pyguara.events.input import MouseButtonEvent
 
 pytest.importorskip("imgui_bundle")
 
@@ -243,6 +244,89 @@ class TestDragging:
         finally:
             layer.release()
 
+    def test_the_window_tracks_the_cursor_one_to_one(self) -> None:
+        """The position SDL reports is relative to the window being moved,
+        so a drag that moves by the frame-to-frame delta cancels itself:
+        measured, the window tracked at exactly half speed, stepping on
+        alternate frames. Measuring from the grab point instead is
+        self-correcting, and this is what that is worth."""
+        chrome = FakeChrome()
+        bar = TitleBar("Studio", chrome)
+        layer = _layer(bar)
+        io = imgui.get_io()
+        # The cursor in screen space, and where the window starts.
+        cursor_x = 500.0
+        window_x = 0.0
+        try:
+
+            def frame() -> None:
+                io.add_mouse_pos_event(cursor_x - window_x, HEIGHT * 0.5)
+                layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+
+            frame()
+            frame()
+            io.add_mouse_button_event(0, True)
+            frame()
+            assert bar.dragging
+
+            for _ in range(6):
+                cursor_x += 10.0
+                frame()
+                for call in chrome.calls:
+                    if isinstance(call, tuple) and call[0] == "move":
+                        window_x += call[1]
+                chrome.calls.clear()
+
+            assert window_x == pytest.approx(60.0)
+        finally:
+            layer.release()
+
+    def test_a_still_cursor_stops_asking_the_window_to_move(self) -> None:
+        """Every move is a round trip to the window manager. Holding the
+        button without moving must cost nothing."""
+        chrome = FakeChrome()
+        bar = TitleBar("Studio", chrome)
+        layer = _layer(bar)
+        io = imgui.get_io()
+        try:
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_pos_event(400.0, HEIGHT * 0.5)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_button_event(0, True)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            chrome.calls.clear()
+            for _ in range(5):
+                layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            assert chrome.calls == []
+        finally:
+            layer.release()
+
+    def test_releasing_forgets_where_the_drag_started(self) -> None:
+        """A stale grab point would make the next press jump the window by
+        the distance between the two."""
+        chrome = FakeChrome()
+        bar = TitleBar("Studio", chrome)
+        layer = _layer(bar)
+        io = imgui.get_io()
+        try:
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_pos_event(300.0, HEIGHT * 0.5)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_button_event(0, True)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_button_event(0, False)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            chrome.calls.clear()
+            # Press again somewhere far away. The first frame of the new
+            # drag must not move the window at all.
+            io.add_mouse_pos_event(700.0, HEIGHT * 0.5)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_button_event(0, True)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            assert chrome.calls == []
+        finally:
+            layer.release()
+
     def test_pressing_a_window_button_does_not_start_a_drag(self) -> None:
         chrome = FakeChrome()
         bar = TitleBar("Studio", chrome)
@@ -275,6 +359,37 @@ class TestDragging:
             io.add_mouse_button_event(0, True)
             layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
             assert not bar.dragging
+        finally:
+            layer.release()
+
+
+@pytest.mark.unit
+class TestRouting:
+    def test_a_click_with_no_preceding_motion_still_presses(self) -> None:
+        """What a drag leaves behind: the window moved out from under a
+        cursor that never moved, so every window-relative coordinate
+        changed and SDL emitted no motion event. The press carries its own
+        position, and routing it through the layer has to keep it."""
+        chrome = FakeChrome()
+        bar = TitleBar("Studio", chrome)
+        layer = _layer(bar)
+        try:
+            # Settle with the cursor somewhere else entirely.
+            imgui.get_io().add_mouse_pos_event(10.0, 400.0)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+
+            close_x = int(WIDTH - BUTTON_WIDTH * 0.5)
+            close_y = int(HEIGHT * 0.5)
+            layer.process_event(
+                MouseButtonEvent(button=1, x=close_x, y=close_y, is_down=True)
+            )
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            layer.process_event(
+                MouseButtonEvent(button=1, x=close_x, y=close_y, is_down=False)
+            )
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            assert bar.close_requested
         finally:
             layer.release()
 
