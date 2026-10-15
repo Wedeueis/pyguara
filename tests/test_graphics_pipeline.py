@@ -249,3 +249,38 @@ class TestTheGraphDeclaresTheHdrChain:
         graph = RenderGraph(MagicMock(), 800, 600)
 
         assert [graph.fbo_manager.get(name) for name in STANDARD_CHAIN] == [None] * 4
+
+
+class TestNoPassIsRegisteredOnlyToBeSkipped:
+    """A pass in the graph is a pass the frame loop runs.
+
+    `WorldPass` broke that. It was registered by `bootstrap`, then skipped
+    by name in `Application._render_with_graph` (`if render_pass.name ==
+    "world"`), so its `execute` never ran -- and with it, its `submit`,
+    `set_camera`, queue and batcher. All of it was unreachable, while
+    reading as the pass that draws the world. The audit that looked at this
+    reported its sorting as buggy, which was true and beside the point: the
+    code could not run.
+
+    The world FBO is bound and cleared by the frame loop before the scenes
+    draw into it, which no pass can do -- passes execute after the scenes.
+    So there is nothing for a world pass to be.
+    """
+
+    def test_the_default_graph_has_no_pass_the_loop_skips(self) -> None:
+        """The skip was by name, so the name is what must not come back."""
+        from pyguara.graphics.pipeline.buffers import WORLD_FBO_NAME
+        from pyguara.graphics.pipeline.passes import FinalPass
+
+        graph = RenderGraph(MagicMock(), 320, 240)
+        graph.add_pass(FinalPass(MagicMock(), input_fbo_name=WORLD_FBO_NAME))
+
+        assert [p.name for p in graph.passes] == ["final"]
+        assert WORLD_FBO_NAME not in [p.name for p in graph.passes]
+
+    def test_the_passes_package_no_longer_offers_one(self) -> None:
+        """Exported, it invites being registered again."""
+        from pyguara.graphics.pipeline import passes
+
+        assert "WorldPass" not in passes.__all__
+        assert not hasattr(passes, "WorldPass")
