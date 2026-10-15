@@ -554,13 +554,11 @@ class ModernGLRenderer:
         rgba = (color.r, color.g, color.b, color.a)
         surf = font.render(text, True, rgba)
 
-        # Flipped on the way out: `GLTextureFactory.create_from_bytes()`
-        # flips what it is given (for GL's bottom-left origin), so handing
-        # it a surface in pygame's natural top-down order leaves the glyphs
-        # upside down on screen. Every other upload path in this backend
-        # pre-flips for the same reason -- see `loaders.py` and
-        # `ui_renderer.py`. This path had simply never been run.
-        data = pygame.image.tobytes(surf, "RGBA", True)
+        # Top-down, like every other upload in this backend. This used to
+        # pass `True` to cancel a flip inside `create_from_bytes`; that
+        # flip is gone, so the two wrongs that made a right are both now
+        # absent.
+        data = pygame.image.tobytes(surf, "RGBA", False)
         gl_texture = self._texture_factory.create_from_bytes(
             "<draw_text>", data, surf.get_width(), surf.get_height()
         )

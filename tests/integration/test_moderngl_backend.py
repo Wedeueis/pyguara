@@ -359,3 +359,25 @@ def test_gl_texture_reports_its_vram_so_the_budget_can_see_it() -> None:
     texture = GLTexture("test.png", MagicMock(), 32, 32)
 
     assert texture.size_bytes > 0
+
+
+def test_draw_text_uploads_its_glyphs_top_down(mock_ctx: MagicMock) -> None:
+    """`draw_text` pre-flipped its surface to cancel a flip inside
+    `GLTextureFactory.create_from_bytes`, so text came out the right way up
+    via two wrongs. Both are gone, and this pins the result rather than the
+    cancellation: what reaches `ctx.texture` must match pygame's own
+    top-down byte order for the rendered surface.
+    """
+    import pygame
+
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    renderer.draw_text("Hi", Vector2(10, 10), Color(255, 255, 255))
+
+    size, components, uploaded = mock_ctx.texture.call_args.args
+    surface = renderer._get_font(16).render("Hi", True, (255, 255, 255, 255))
+
+    assert size == surface.get_size()
+    assert components == 4
+    assert bytes(uploaded) == pygame.image.tobytes(surface, "RGBA", False)

@@ -28,6 +28,7 @@ import pytest
 
 from pyguara.common.types import Vector2
 from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+from pyguara.graphics.backends.moderngl.texture import GLTexture, GLTextureFactory
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.components.particles import ParticleSystem
 from pyguara.graphics.types import RenderBatch
@@ -156,3 +157,70 @@ def test_a_tinted_particle_reaches_the_gpu_tinted(
     particles.render(renderer, camera)
 
     assert _centre_pixel(fbo) == (255, 0, 0)
+
+
+def _draw_and_read(gl_ctx: Any, texture: Any) -> Any:
+    """Render one textured quad filling the framebuffer, and read it back."""
+    fbo = gl_ctx.simple_framebuffer((_SIZE, _SIZE))
+    fbo.use()
+    renderer = ModernGLRenderer(gl_ctx, _SIZE, _SIZE)
+    try:
+        renderer.clear((0, 0, 0, 255))
+        renderer.render_batch(
+            RenderBatch(texture=texture, destinations=[(_SIZE / 2, _SIZE / 2)])
+        )
+        raw = np.frombuffer(fbo.read(components=3), dtype=np.uint8)
+        return raw.reshape((_SIZE, _SIZE, 3)).copy()
+    finally:
+        renderer.release()
+        fbo.release()
+
+
+def test_the_factory_and_the_loader_draw_the_same_image_the_same_way_up(
+    gl_ctx: Any,
+) -> None:
+    """The one assertion a mock cannot make: what actually lands on screen.
+
+    Two upload paths existed with two conventions --
+    `GLTextureFactory.create_from_bytes` reversed the rows and
+    `loaders.py` did not -- so whether an image came out the right way up
+    depended on which one it went through, and `SpriteSheet` went through
+    the reversing one.
+
+    Differential on purpose: it asserts the two paths agree without this
+    test needing to know which end of `fbo.read()` is the top, which is its
+    own GL convention and not what is under test.
+    """
+    width = height = 8
+    red, blue = bytes((255, 0, 0, 255)), bytes((0, 0, 255, 255))
+    top_down = red * width * (height // 2) + blue * width * (height // 2)
+
+    via_factory = GLTextureFactory(gl_ctx).create_from_bytes(
+        "factory", top_down, width, height
+    )
+    # How `loaders.py` uploads: straight to `ctx.texture`, no reordering.
+    via_loader = GLTexture(
+        "loader", gl_ctx.texture((width, height), 4, top_down), width, height
+    )
+
+    try:
+        factory_pixels = _draw_and_read(gl_ctx, via_factory)
+        loader_pixels = _draw_and_read(gl_ctx, via_loader)
+    finally:
+        via_factory.release()
+        via_loader.release()
+
+    # Not vacuous: the drawn quad has to be asymmetric top-to-bottom, or
+    # a flip would be invisible and this would prove nothing. The quad
+    # covers only the middle of the framebuffer, so locate it rather than
+    # assuming its extent.
+    column = factory_pixels[:, _SIZE // 2]
+    lit = [i for i, pixel in enumerate(column) if tuple(pixel) != (0, 0, 0)]
+    assert lit, "nothing was drawn"
+    assert tuple(column[lit[0]]) != tuple(column[lit[-1]]), (
+        "the test texture rendered symmetrically, so it proves nothing"
+    )
+
+    assert np.array_equal(factory_pixels, loader_pixels), (
+        "the factory and the loader disagree about which way up an image goes"
+    )

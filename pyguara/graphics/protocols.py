@@ -655,9 +655,15 @@ class TextureFactory(Protocol):
     ) -> Texture:
         """Create a texture from raw RGBA pixel data.
 
+        Rows are **top-down**: 4 bytes per pixel, row-major, the image's
+        top row first. Stated because the silence here is how the backends
+        drifted -- "row-major order" says nothing about which end is the
+        top, and the ModernGL factory spent some time reversing rows while
+        its sibling loader did not.
+
         Args:
             path: Identifier/name for the texture (used for caching/debugging).
-            data: Raw RGBA pixel data (4 bytes per pixel, row-major order).
+            data: Raw RGBA pixel data, 4 bytes per pixel, top row first.
             width: Width of the image in pixels.
             height: Height of the image in pixels.
 

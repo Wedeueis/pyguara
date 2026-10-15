@@ -24,6 +24,7 @@ import pygame
 import pytest
 
 from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
+from pyguara.graphics.backends.moderngl.texture import GLTextureFactory
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
@@ -131,3 +132,81 @@ class TestOrientation:
         assert top and bottom
         assert all(row[3] == 0.0 for row in top), "the top of the quad samples v=0"
         assert all(row[3] == 1.0 for row in bottom)
+
+
+class TestTheFactoryKeepsTheRowOrder:
+    """`GLTextureFactory.create_from_bytes` used to reverse the rows.
+
+    The reasoning in its docstring was that OpenGL's origin is bottom-left.
+    True of GL in general, not of this renderer -- see the module docstring
+    above. So the factory disagreed with the loader beside it, and whether
+    an upload came out the right way up depended on which of the two it
+    went through.
+    """
+
+    def _top_down(self) -> bytes:
+        """The striped image as raw bytes, top row first.
+
+        What both producers in this tree hand over: pygame's
+        `image.tobytes(..., False)` and PIL's `tobytes("raw", "RGBA")`.
+        """
+        return b"".join(bytes(colour) * WIDTH for colour in (TOP, MIDDLE, BOTTOM))
+
+    def test_the_first_row_uploaded_is_the_first_row_given(
+        self, ctx: MagicMock
+    ) -> None:
+        GLTextureFactory(ctx).create_from_bytes(
+            "probe", self._top_down(), WIDTH, HEIGHT
+        )
+
+        assert _rows(_uploaded(ctx))[0] == TOP
+
+    def test_the_last_row_uploaded_is_the_last_row_given(self, ctx: MagicMock) -> None:
+        GLTextureFactory(ctx).create_from_bytes(
+            "probe", self._top_down(), WIDTH, HEIGHT
+        )
+
+        assert _rows(_uploaded(ctx))[-1] == BOTTOM
+
+    def test_the_factory_and_the_loader_agree(
+        self, ctx: MagicMock, striped: str
+    ) -> None:
+        """The actual defect: two upload paths, two conventions. Whichever
+        way round the convention goes, these two must match."""
+        GLTextureLoader(ctx).load(striped)
+        via_loader = _uploaded(ctx)
+
+        ctx.texture.reset_mock()
+        GLTextureFactory(ctx).create_from_bytes(
+            "probe", self._top_down(), WIDTH, HEIGHT
+        )
+        via_factory = _uploaded(ctx)
+
+        assert _rows(via_factory) == _rows(via_loader)
+
+
+class TestSpriteSheetUploadsTheRightWayUp:
+    """Every sliced frame was upside down on the GL backend.
+
+    `SpriteSheet` hands the factory PIL's `tobytes("raw", "RGBA")`, which is
+    top-down, and the factory reversed it. Latent only because no GL demo
+    loads a sheet -- they all generate their textures at runtime, through
+    paths that are vertically symmetric or that pre-flipped to cancel it.
+    """
+
+    def test_a_sliced_frame_keeps_its_top_row_on_top(self, ctx: MagicMock) -> None:
+        from PIL import Image
+
+        from pyguara.graphics.spritesheet import SpriteSheet
+
+        # One frame, three stripes, same as the file fixture.
+        image = Image.new("RGBA", (WIDTH, HEIGHT))
+        for x in range(WIDTH):
+            image.putpixel((x, 0), TOP)
+            image.putpixel((x, 1), MIDDLE)
+            image.putpixel((x, 2), BOTTOM)
+
+        sheet = SpriteSheet.from_image(image, GLTextureFactory(ctx), "sheet.png")
+        sheet.slice_grid(WIDTH, HEIGHT)
+
+        assert _rows(_uploaded(ctx))[0] == TOP
