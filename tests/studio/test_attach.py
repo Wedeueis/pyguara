@@ -107,6 +107,7 @@ class TestAttachToARealApplication:
             "the_menus_are_studios_own",
             "the_editor_gets_the_whole_window",
             "the_edit_lifecycle_works",
+            "editing_and_playing_are_separate",
         ],
     )
     def test_scenario(self, scenario: str) -> None:

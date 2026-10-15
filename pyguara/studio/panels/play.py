@@ -11,14 +11,24 @@ moving scene. Dragging a gizmo while physics is integrating is possible
 and almost never what anyone means, because the body is re-solved
 underneath the drag.
 
-**There is no "reset to where play began".** It would mean restoring the
-whole world, and the only mechanism for that is `SceneSerializer`, which
-silently skips any component the registry does not know -- which is every
-component a *game* defines unless it registered them. A reset that
-quietly dropped the player's controller would be worse than no reset, so
-the panel says what to do instead: save the scene before playing and load
-it afterwards, which goes through the same serializer with the loss made
-visible.
+**Play and Stop are a lifecycle, not a pause button.** Every editor has
+one: Godot runs the game in its own process, Unreal in its own world,
+Unity in the same world and discards the changes on Stop. All three agree
+on the part that matters -- the scene you edit and the game you run are
+not the same thing at the same time. Studio used to attach to a *running*
+game and edit it live, which is the Unity case without the discard, and
+every confusing symptom came from it.
+
+So: **Play** copies the whole world and lets the game run, **Stop** puts
+that copy back, and while it is playing an edit is refused rather than
+silently lost. Pause and Step stay what they were -- they are about
+watching a running game, not about editing one.
+
+This panel used to say outright that there was no "reset to where play
+began", and gave a good reason: the only mechanism for restoring a world
+was `SceneSerializer`, which silently skips any component the registry
+does not know. `WorldSnapshot` does not go through the serializer -- it
+copies the live components -- so nothing can be silently skipped.
 """
 
 from __future__ import annotations
@@ -48,16 +58,24 @@ _STEP_FRAMES = 1
 class PlayControlsPanel(EditorPanel):
     """Pause, resume, single-step and slow down the running game."""
 
-    def __init__(self, application: Any, *, visible: bool = True) -> None:
+    def __init__(
+        self, application: Any, session_provider: Any = None, *, visible: bool = True
+    ) -> None:
         """Initialize the panel.
 
         Args:
             application: The `Application` to drive.
+            session_provider: Returns the `StudioSession`, or None. A
+                callable rather than the session itself, because it is
+                replaced on a scene switch and a held one would snapshot a
+                world that is no longer on screen.
             visible: Whether it draws from the first frame.
         """
         super().__init__("Play", visible=visible)
         self._application = application
+        self._session_provider = session_provider
         self._pending_steps = 0
+        self._snapshot: Any = None
 
     @property
     def paused(self) -> bool:
@@ -106,6 +124,75 @@ class PlayControlsPanel(EditorPanel):
         if self._pending_steps <= 0:
             self._application.paused = True
 
+    @property
+    def playing(self) -> bool:
+        """Whether the game is being played rather than the scene edited."""
+        return self._snapshot is not None
+
+    def play(self) -> None:
+        """Copy the scene, then let the game run.
+
+        The copy is what makes Stop mean something. Taken before a single
+        tick, so it is the scene as authored rather than the scene one
+        frame into play.
+        """
+        if self.playing:
+            return
+        session = self._session()
+        if session is None:
+            self.report(
+                "No Studio session, so the scene cannot be copied -- and "
+                "without a copy, Stop could not put it back.",
+                level="warning",
+            )
+            return
+
+        from pyguara.studio.model.worldsnapshot import WorldSnapshot
+        from pyguara.studio.session import EditorMode
+
+        self._snapshot = WorldSnapshot.capture(session.world)
+        session.set_mode(EditorMode.PLAY)
+        self._application.paused = False
+        self.report(f"Playing. {self._snapshot.count} entities copied.", level="info")
+
+    def stop(self) -> None:
+        """Put the scene back as it was, and make it editable again."""
+        if not self.playing:
+            return
+        session = self._session()
+        self._application.paused = True
+        self._pending_steps = 0
+        snapshot = self._snapshot
+        self._snapshot = None
+
+        if session is None:
+            return
+
+        from pyguara.studio.session import EditorMode
+
+        session.set_mode(EditorMode.EDIT)
+        snapshot.restore(session.world)
+        # Nothing on the history describes this world any more: the
+        # commands were applied to entities that have just been replaced,
+        # so reverting one would apply its inverse to an entity it never
+        # touched.
+        session.stack.clear()
+        self.report(f"Stopped. {snapshot.count} entities restored.", level="info")
+
+    def _session(self) -> Any:
+        """Return the live session, or None.
+
+        Returns:
+            The session, or None before a scene is open.
+        """
+        if self._session_provider is None:
+            return None
+        try:
+            return self._session_provider()
+        except Exception as exc:  # pragma: no cover - a torn-down container
+            logger.debug(f"No session to play against: {exc}")
+            return None
+
     def draw(self, context: PanelContext) -> None:
         """Draw the transport controls.
 
@@ -118,9 +205,30 @@ class PlayControlsPanel(EditorPanel):
         imgui.begin(self.title)
         try:
             paused = self.paused
+            playing = self.playing
 
+            if not playing:
+                if imgui.button("Play"):
+                    self.play()
+                if imgui.is_item_hovered():
+                    imgui.set_tooltip(
+                        "Copy the scene and run the game. Edits are refused "
+                        "while it plays, and Stop puts the scene back."
+                    )
+            else:
+                if imgui.button("Stop"):
+                    self.stop()
+                if imgui.is_item_hovered():
+                    imgui.set_tooltip(
+                        "Put the scene back exactly as it was when Play was "
+                        "pressed, and make it editable again."
+                    )
+
+            imgui.same_line()
+            imgui.begin_disabled(not playing)
             if imgui.button("Resume" if paused else "Pause"):
                 self.toggle_pause()
+            imgui.end_disabled()
 
             imgui.same_line()
             # Stepping an already-running game would be a no-op the user
@@ -147,9 +255,14 @@ class PlayControlsPanel(EditorPanel):
                 self._application.time_scale = 1.0
 
             imgui.same_line()
-            imgui.text_disabled(
-                "paused -- physics is not re-solving drags" if paused else "running"
-            )
+            if not playing:
+                imgui.push_style_color(
+                    imgui.Col_.text, imgui.ImVec4(0.26, 0.59, 0.98, 1.0)
+                )
+                imgui.text("editing")
+                imgui.pop_style_color()
+            else:
+                imgui.text_disabled("paused" if paused else "playing")
         finally:
             # Dear ImGui owes an End for every Begin, collapsed or not.
             imgui.end()

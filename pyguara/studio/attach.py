@@ -288,7 +288,14 @@ class StudioAttachment:
         ]
         application = self._application()
         if application is not None:
-            panels.insert(1, PlayControlsPanel(application))
+            panels.insert(1, PlayControlsPanel(application, lambda: self.session))
+            # Edit mode: the scene is the thing on screen and it is
+            # editable. Studio used to attach to a *running* game, which
+            # is where every "the controls have no effect" symptom came
+            # from -- a gizmo drag overwritten by the controller, a pan
+            # reclaimed by the follow system, an edit outlived before it
+            # could be seen. Press Play to run it.
+            application.paused = True
         # The base editor's Inspector writes straight onto the component.
         # That is right for an editor with no session and wrong here: a
         # field typed into it reached no history, appeared in no journal,
@@ -574,12 +581,17 @@ class StudioAttachment:
             return None
 
     def _is_running(self) -> bool:
-        """Whether the game is simulating rather than paused.
+        """Whether the game is playing rather than the scene being edited.
 
         Returns:
-            True while it is, False when paused or when there is no
+            True while it is, False in edit mode or when there is no
             application to ask.
         """
+        session = self._session
+        if session is not None:
+            from pyguara.studio.session import EditorMode
+
+            return session.mode is EditorMode.PLAY
         application = self._application()
         if application is None:
             return False
