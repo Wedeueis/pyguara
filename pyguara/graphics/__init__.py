@@ -28,6 +28,9 @@ from pyguara.graphics.components.camera import (
     CameraZoomTransition,
 )
 from pyguara.graphics.components.floating_text import FloatingText
+from pyguara.graphics.components.geometry import Box, Circle, Geometry
+from pyguara.graphics.components.particles import ParticleSystem
+from pyguara.graphics.components.screen_flash import ScreenFlash
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.ninepatch import (
     NinePatchMetrics,
@@ -54,12 +57,17 @@ __all__ = [
     "AnimationStateMachine",
     "AnimationTransition",
     "Animator",
+    "Box",
     "Camera2D",
     "CameraFollowConstraints",
     "CameraFraming",
     "CameraShake",
     "CameraZoomTransition",
+    "Circle",
     "FloatingText",
+    "Geometry",
+    "ParticleSystem",
+    "ScreenFlash",
     "Sprite",
     # Pipeline
     "AnimationSystem",
