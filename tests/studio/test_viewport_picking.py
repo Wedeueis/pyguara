@@ -29,6 +29,7 @@ from pyguara.studio.viewport.picking import (
     marquee_rect,
     pick_at,
     pick_in_region,
+    picks_at,
     screen_to_world,
     sprite_bounds,
     world_to_panel,
@@ -232,7 +233,13 @@ class TestPickAt:
 
 
 class TestPickAtWithPhysics:
-    """Physics first, where there is any."""
+    """Physics contributes candidates; draw order ranks them.
+
+    It used to decide outright, and that was the bug: `point_query` orders
+    by how deeply the point is enclosed, which has nothing to do with what
+    is on top. Clicking the player in a demo handed back the platform it
+    was standing on.
+    """
 
     class _Engine:
         """Just enough of `IPhysicsEngine` to answer a point query."""
@@ -245,20 +252,30 @@ class TestPickAtWithPhysics:
             self.queried.append(point)
             return self.hits
 
-    def test_a_collider_hit_wins_over_sprite_bounds(self, scene: EntityManager) -> None:
-        """A collider is a deliberate statement about an entity's extent;
-        a sprite box is inferred from its image."""
-        engine = self._Engine(["big"])
-        pick = pick_at(scene, Vector2(0, 0), physics=engine)
-        assert pick is not None
-        assert pick.entity_id == "big"
+    def test_a_collider_adds_a_candidate(self, scene: EntityManager) -> None:
+        """A collider is a deliberate statement about an entity's extent,
+        where a sprite box is inferred from its image -- so it is worth
+        consulting even for an entity whose sprite does not cover the
+        point."""
+        engine = self._Engine(["far"])
 
-    def test_the_first_physics_hit_is_used(self, scene: EntityManager) -> None:
-        """`point_query` orders results most-deeply-enclosing first."""
+        candidates = picks_at(scene, Vector2(0, 0), physics=engine)
+
+        assert "far" in [pick.entity_id for pick in candidates]
+
+    def test_draw_order_decides_which_one_wins(self, scene: EntityManager) -> None:
+        """Not the order `point_query` happened to report. The front-most
+        thing is the thing that was clicked."""
         engine = self._Engine(["far", "big"])
+
         pick = pick_at(scene, Vector2(0, 0), physics=engine)
+
         assert pick is not None
-        assert pick.entity_id == "far"
+        assert pick.entity_id == "small", (
+            f"picked {pick.entity_id}: the physics order was treated as a "
+            f"ranking again, so a click lands on whatever encloses it most "
+            f"deeply rather than on what is drawn on top"
+        )
 
     def test_it_falls_back_to_sprites_when_physics_finds_nothing(
         self, scene: EntityManager
@@ -276,9 +293,27 @@ class TestPickAtWithPhysics:
         assert pick is not None
         assert pick.bounds.width == 64
 
-    def test_a_hit_with_no_transform_still_returns(self, scene: EntityManager) -> None:
+    def test_a_hit_with_no_transform_sorts_behind(self, scene: EntityManager) -> None:
+        """It is still offered -- a body with no sprite is a real thing to
+        select -- but nothing says it is in front of anything, so it does
+        not take a click from something that is drawn there."""
         engine = self._Engine(["ghost_body"])
-        pick = pick_at(scene, Vector2(0, 0), physics=engine)
+
+        candidates = picks_at(scene, Vector2(0, 0), physics=engine)
+        ids = [pick.entity_id for pick in candidates]
+
+        assert "ghost_body" in ids
+        assert ids[-1] == "ghost_body"
+        assert ids[0] == "small"
+
+    def test_a_body_with_no_sprite_is_still_pickable_alone(
+        self, world: EntityManager
+    ) -> None:
+        """Where there is nothing drawn to beat it."""
+        engine = self._Engine(["ghost_body"])
+
+        pick = pick_at(world, Vector2(0, 0), physics=engine)
+
         assert pick is not None
         assert pick.entity_id == "ghost_body"
 
@@ -426,3 +461,40 @@ class TestCoordinateMapping:
         camera = Camera2D(800, 600)
         screen_to_world(camera, Vector2(0, 0), Rect(0, 0, 0, 0), Rect(0, 0, 800, 600))
         world_to_panel(camera, Vector2(0, 0), Rect(0, 0, 400, 300), Rect(0, 0, 0, 0))
+
+
+@pytest.mark.unit
+class TestReachingWhatIsBehind:
+    """Clicking the same spot walks back through what is stacked there.
+
+    Without it the front-most thing wins every click for ever, and a
+    background tile under a platform cannot be selected at all -- which is
+    how it was reported.
+    """
+
+    @pytest.fixture
+    def stack(self) -> EntityManager:
+        """Three sprites on top of each other, on different layers."""
+        world = EntityManager()
+        for name, layer in (("back", 0), ("middle", 1), ("front", 2)):
+            entity = world.create_entity(name)
+            entity.add_component(Transform())
+            sprite = _sprite(64, 64)
+            sprite.layer = layer
+            entity.add_component(sprite)
+        return world
+
+    def test_everything_under_the_point_is_offered(self, stack: EntityManager) -> None:
+        ids = [pick.entity_id for pick in picks_at(stack, Vector2(0, 0))]
+
+        assert ids == ["front", "middle", "back"], ids
+
+    def test_the_front_most_is_first(self, stack: EntityManager) -> None:
+        """So a single click still does the obvious thing."""
+        pick = pick_at(stack, Vector2(0, 0))
+
+        assert pick is not None
+        assert pick.entity_id == "front"
+
+    def test_nothing_there_is_an_empty_list(self, stack: EntityManager) -> None:
+        assert picks_at(stack, Vector2(9000, 9000)) == []

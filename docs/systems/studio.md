@@ -101,6 +101,41 @@ operation -- scrolls the panel to it and opens the group holding it.
 The panel reads and selects; it does not edit. Every change goes through
 an operation, so it lands on one history and in one journal.
 
+### The view is yours, and selection reaches what is behind
+
+**Panning takes the camera.** Studio shows the game's own framebuffer, so
+there is exactly one camera and panning has to move it -- and a game whose
+follow system writes it every tick wins. Measured: a pan put the camera at
+(-97, 178) and forty frames later the follow system had it at (204, 387),
+so the click that followed landed on whatever had moved under the cursor.
+That is what "the middle button broke selection" was.
+
+So the viewport *takes* the view, as Godot's and Unity's editor views are
+separate from the game's camera. The game keeps writing where it wants the
+camera; those writes are recorded and not displayed. The toolbar says
+which it is -- *Following the game*, or *Free view* with a **Follow game**
+button that hands it back, resuming wherever the game had got to rather
+than where the view was left.
+
+**Clicking again reaches what is behind.** Picking returns everything
+under the point, front-most first, and clicking the same spot walks back
+through the stack -- the only way to select a background tile under a
+platform, and how Godot's editor reaches a node behind another one.
+Clicking somewhere else starts at the front again.
+
+Physics still contributes candidates, because a collider is a deliberate
+statement about an entity's extent where a sprite box is inferred from an
+image. It no longer *decides*: `point_query` orders by how deeply the
+point is enclosed, which has nothing to do with what is on top, and
+clicking the player used to hand back the platform it was standing on.
+
+**The HUD is not entities.** It is `UIManager` widgets with their own
+tree, their own layers and their own hit testing, drawn over the frame; no
+amount of entity picking reaches it. A click that lands on one now says
+so, rather than silently clearing the selection, which is indistinguishable
+from a click that missed. Editing the game's runtime UI is not something
+Studio does.
+
 ### Why an edit may not show
 
 Reported as "the controls over an entity's components do not seem to have

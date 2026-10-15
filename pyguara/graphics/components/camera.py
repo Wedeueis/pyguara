@@ -202,9 +202,17 @@ class Camera2D:
                 explicit viewport is passed.
             height (int): Height of the target viewport/screen.
         """
-        self.position: Vector2 = Vector2.zero()
+        self._position: Vector2 = Vector2.zero()
         self._default_viewport: Rect = Rect(0, 0, width, height)
         self._zoom: float = 1.0
+
+        # Set while an editor is driving the view. The game keeps writing
+        # `position` and `zoom` -- its follow system does so every tick --
+        # and those writes are still recorded, so releasing hands the
+        # camera back exactly where the game had got to. Until then, what
+        # everything *reads* is the override. See `take_view`.
+        self._view_position: Vector2 | None = None
+        self._view_zoom: float | None = None
 
         # Camera effects
         self._shake: CameraShake | None = None
@@ -231,6 +239,75 @@ class Camera2D:
         self._follow_target_velocity: Vector2 = Vector2.zero()
 
     @property
+    def position(self) -> Vector2:
+        """The centre of the camera in world coordinates.
+
+        While a view override is held this is the override, so that a game
+        drawing by hand from `camera.position` follows the editor's view
+        exactly as the render pipeline does. The game's own writes keep
+        landing underneath, where `release_view` finds them.
+        """
+        return self._position if self._view_position is None else self._view_position
+
+    @position.setter
+    def position(self, value: Vector2) -> None:
+        """Set where the game wants the camera.
+
+        Recorded even while an editor holds the view, and ignored for
+        display until it is released -- which is the whole point. A follow
+        system that kept winning would drag the view back the moment the
+        hand let go of the middle button, which is what it did.
+
+        Args:
+            value: The new centre, in world coordinates.
+        """
+        self._position = value
+
+    @property
+    def view_overridden(self) -> bool:
+        """Whether something other than the game is driving the view."""
+        return self._view_position is not None or self._view_zoom is not None
+
+    def take_view(
+        self, position: Vector2 | None = None, zoom: float | None = None
+    ) -> None:
+        """Drive the view from outside the game.
+
+        What an editor does when a person pans or zooms: Godot's 2D editor
+        view and Unity's Scene view are not the game's camera, and the
+        reason is this -- a camera the game writes every tick cannot also
+        be navigated by hand.
+
+        Idempotent, so a drag can call it on every frame without having to
+        track whether it already holds the view.
+
+        Args:
+            position: Where to look, or None to take the current position.
+            zoom: The scale, or None to take the current one.
+        """
+        if self._view_position is None:
+            self._view_position = self._position
+        if self._view_zoom is None:
+            self._view_zoom = self._zoom
+        if position is not None:
+            self._view_position = position
+        if zoom is not None:
+            if zoom <= 0:
+                raise ValueError(f"Camera zoom must be positive, got {zoom}.")
+            self._view_zoom = zoom
+
+    def release_view(self) -> None:
+        """Hand the view back to the game.
+
+        It resumes from wherever its own writes had got to, not from where
+        the editor left the view: the follow system has been tracking the
+        player the whole time and snapping to that is what "follow the
+        game again" means.
+        """
+        self._view_position = None
+        self._view_zoom = None
+
+    @property
     def view_position(self) -> Vector2:
         """Where the camera actually looks this frame.
 
@@ -250,8 +327,11 @@ class Camera2D:
 
     @property
     def zoom(self) -> float:
-        """The scale factor: 1.0 is natural size, 2.0 twice as large."""
-        return self._zoom
+        """The scale factor: 1.0 is natural size, 2.0 twice as large.
+
+        The override while one is held, for the same reason `position` is.
+        """
+        return self._zoom if self._view_zoom is None else self._view_zoom
 
     @zoom.setter
     def zoom(self, value: float) -> None:
