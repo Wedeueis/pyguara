@@ -102,6 +102,27 @@ class Resource(ABC):
         """
         return 0
 
+    def release(self) -> None:
+        """Free whatever this resource holds outside Python's heap.
+
+        A no-op by default, because most resources hold nothing but
+        Python objects and dropping the last reference is enough.
+
+        It exists so `ResourceManager` has something to call on every
+        eviction without knowing what kind of resource it is holding.
+        That matters for anything backed by a driver allocation: a
+        `GLTexture` owns a `moderngl.Texture` in VRAM, which the garbage
+        collector cannot see and will not free, so removing it from the
+        cache without calling this orphans it on the GPU for the life of
+        the process. `size_bytes` above counts that memory towards the
+        budget, so an eviction that does not free it evicts for nothing.
+
+        Implementations must be **idempotent** -- eviction and an explicit
+        teardown can both reach the same resource -- and must leave the
+        object safe to repr and to drop afterwards.
+        """
+        return None
+
 
 class Texture(Resource):
     """Abstract contract for a 2D image or texture."""

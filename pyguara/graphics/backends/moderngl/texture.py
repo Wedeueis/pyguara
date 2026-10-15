@@ -31,6 +31,7 @@ class GLTexture(Texture):
         self._texture = gl_texture
         self._width = tex_width
         self._height = tex_height
+        self._released = False
 
     @property
     def width(self) -> int:
@@ -51,10 +52,17 @@ class GLTexture(Texture):
         return self._texture
 
     def release(self) -> None:
-        """Release the GPU texture resources.
+        """Release the GPU texture, freeing its VRAM.
 
-        Should be called when the texture is no longer needed to free GPU memory.
+        Idempotent: `ResourceManager` calls this on every eviction, and a
+        backend teardown may reach the same texture, so a second call has
+        to be harmless. It previously left `self._texture` in place, so
+        the second call went through to moderngl on an already-released
+        texture.
         """
+        if self._released:
+            return
+        self._released = True
         if self._texture is not None:
             self._texture.release()
 

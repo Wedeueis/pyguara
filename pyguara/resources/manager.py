@@ -267,6 +267,12 @@ class ResourceManager:
         cached = self._cache.get(actual_path)
         if cached is not None:
             if isinstance(cached, resource_type):
+                # Same as the hit in `load()`: a hit is a use, and the
+                # budget's eviction order is only meaningful if uses
+                # refresh it. Without this, anything reached only through
+                # `load_async()` kept its original rank forever and was
+                # evicted as though it had never been touched.
+                self._cache.move_to_end(actual_path)
                 request.resource = cached
                 request.state = LoadState.READY
             else:
@@ -461,6 +467,14 @@ class ResourceManager:
         self._cache[request.key] = resource
         # Same lifecycle as load(): enters unpinned, as a cache-get.
         self._reference_counts.setdefault(request.key, 0)
+
+        # And the same budget enforcement, protecting what just arrived --
+        # a resource should never be evicted to make room for itself. This
+        # was missing, so a game that loaded everything through
+        # `preload()` / `load_async()` had a cache budget that was never
+        # applied at all.
+        self.evict_to_budget(protect=request.key)
+
         request.resource = resource
         request.state = LoadState.READY
 
@@ -601,6 +615,15 @@ class ResourceManager:
         self._meta_loader.invalidate(actual_path)
         resource = self._load_from_disk(actual_path, old_type)
 
+        # Released, not merely overwritten. Hot-reload is the one path that
+        # replaces a live resource, so before this it leaked one driver
+        # allocation per file save -- the most-exercised leak of the set,
+        # and the least visible, because a development session never runs
+        # long enough for it to matter and a shipped game never hits it.
+        # The reference count survives: callers that acquired the old
+        # instance still hold a claim on the key.
+        self._evict_entry(actual_path, drop_refcount=False)
+
         self._cache[actual_path] = resource
         logger.debug("Reloaded resource: %s", actual_path)
         return resource
@@ -629,6 +652,39 @@ class ResourceManager:
             self._reference_counts[actual_path] = 0
 
         self._reference_counts[actual_path] += 1
+
+    def _evict_entry(self, key: str, *, drop_refcount: bool = True) -> None:
+        """Drop one cache entry, releasing whatever it holds first.
+
+        Every eviction path goes through here. `del self._cache[key]` on its
+        own frees only the Python object: a `GLTexture` owns a
+        `moderngl.Texture` in VRAM that the garbage collector cannot see, so
+        dropping the reference without releasing it orphaned the allocation
+        for the life of the process. `size_bytes` counts that memory towards
+        the cache budget, so `evict_to_budget` was evicting to reclaim
+        memory it never actually reclaimed.
+
+        Args:
+            key: The resolved cache key to evict. Absent keys are ignored,
+                so a caller need not check first.
+            drop_refcount: Also forget the reference count. False where the
+                caller is replacing the entry rather than retiring it, as
+                `reload()` does.
+        """
+        resource = self._cache.pop(key, None)
+        if resource is not None:
+            try:
+                resource.release()
+            except Exception as exc:
+                # An eviction that cannot free its driver handle is worth
+                # knowing about, but it must not leave the entry in the
+                # cache or abort the caller's unload.
+                logger.error(
+                    "Releasing resource failed, evicting anyway: %s (%s)", key, exc
+                )
+
+        if drop_refcount:
+            self._reference_counts.pop(key, None)
 
     def release(self, path_or_name: str) -> None:
         """
@@ -664,8 +720,7 @@ class ResourceManager:
 
         # Auto-unload when ref count reaches zero
         if self._reference_counts[actual_path] == 0:
-            del self._cache[actual_path]
-            del self._reference_counts[actual_path]
+            self._evict_entry(actual_path)
             logger.debug("Auto-unloaded resource (ref count 0): %s", actual_path)
 
     def unload(self, path_or_name: str, force: bool = False) -> None:
@@ -686,10 +741,7 @@ class ResourceManager:
 
         if force:
             # Force unload regardless of ref count
-            if actual_path in self._cache:
-                del self._cache[actual_path]
-            if actual_path in self._reference_counts:
-                del self._reference_counts[actual_path]
+            self._evict_entry(actual_path)
             logger.debug("Force unloaded resource: %s", actual_path)
         else:
             # Respect reference counting (same as release())
@@ -698,16 +750,13 @@ class ResourceManager:
                 or self._reference_counts[actual_path] <= 0
             ):
                 # No references, safe to unload
-                del self._cache[actual_path]
-                if actual_path in self._reference_counts:
-                    del self._reference_counts[actual_path]
+                self._evict_entry(actual_path)
                 logger.debug("Unloaded resource: %s", actual_path)
             else:
                 # Has references, just decrement
                 self._reference_counts[actual_path] -= 1
                 if self._reference_counts[actual_path] == 0:
-                    del self._cache[actual_path]
-                    del self._reference_counts[actual_path]
+                    self._evict_entry(actual_path)
                     logger.debug("Unloaded resource (ref count 0): %s", actual_path)
                 else:
                     logger.debug(
@@ -730,9 +779,7 @@ class ResourceManager:
         ]
 
         for path in to_unload:
-            if path in self._cache:
-                del self._cache[path]
-            del self._reference_counts[path]
+            self._evict_entry(path)
             logger.debug("Batch unloaded resource: %s", path)
 
         return len(to_unload)
@@ -831,8 +878,7 @@ class ResourceManager:
                 # amount, which is not a step towards a target. Left alone
                 # rather than thrown away for no measurable gain.
                 continue
-            del self._cache[path]
-            self._reference_counts.pop(path, None)
+            self._evict_entry(path)
             total -= size
             evicted += 1
             logger.debug("Evicted to stay under cache budget: %s", path)
