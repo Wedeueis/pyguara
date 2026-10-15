@@ -195,3 +195,10 @@ Thumbs.db
 # sources are committed; the art stays out of the repository and is
 # distributed with the design system itself.
 docs/design_system/assets/
+
+# `guara_falcao`'s contact sheet: a 2.4MB JPEG, over the pre-commit
+# large-file cap. `tools/slice_spritesheet.py` cuts it into the per-frame
+# PNGs under `games/guara_falcao/assets/textures/`, and those ARE
+# committed -- the sheet itself is only needed to re-derive them from a
+# re-export, so it stays out and is kept beside the design-system art.
+assets/textures/pyguara_platformer_spritesheet.jpg
