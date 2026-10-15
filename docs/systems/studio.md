@@ -73,10 +73,29 @@ rather than four. See [ADR 0001](../adr/0001-one-mutation-seam-for-studio.md).
 | **Components** | Every registered component, its fields and its enum members |
 | **Commands** | A person calling the operations an agent calls |
 
-Panels open docked — hierarchy left, inspector and components right,
-viewport centre, play on top, history/journal/commands tabbed below — and
-the arrangement is applied once, so dragging a panel elsewhere keeps it
-there.
+Panels open docked -- hierarchy left, inspector and components right,
+viewport centre, play on top, history/journal/commands tabbed below.
+
+### The arrangement
+
+Applied **once**, not on every resize, and then left to ImGui. Three
+consequences, all of them what a docking editor is expected to do:
+
+- A splitter you drag stays dragged.
+- Widening the window widens the **viewport**, not the side docks. They
+  keep the width they were given. Rebuilding the tree on each resize --
+  which is what this used to do -- forced them back to a percentage
+  instead, so on a 21:9 display the hierarchy took a third of the screen
+  and clipped its text anyway.
+- The arrangement survives a restart. ImGui's own settings file carries
+  it, in `<project>/.pyguara/studio-layout.ini` -- a tool's state rather
+  than the project's, out of the way and easy to delete. `.gitignore`
+  carries it. The bare editor and every test write nothing: persistence is
+  opt-in through `EditorLayer.set_settings_file`, and Studio is what opts
+  in.
+
+*View > Reset Layout* is the one action that discards both a saved
+arrangement and whatever has been dragged since.
 
 ## The menus
 
@@ -142,6 +161,24 @@ button.
 
 Keep `resizable` on wherever `borderless` is: removing the frame removes
 the OS's resize edges with it.
+
+### Who the window belongs to
+
+`ctx.screen.viewport` means **where the game's frame goes**. With
+`keep_aspect` the render graph narrows it to the letterbox, so the game
+and its HUD land inside their own frame however the window is dragged.
+
+The editor is not the game: it owns the whole window, and its pass sets
+the window viewport for its own draw and puts the letterbox back
+afterwards -- back, because the game's UI composites after the graph runs
+and belongs inside the frame rather than on the bars.
+
+Getting that wrong is not subtle. Inheriting the letterbox squeezed every
+panel by the ratio between the two: on a 2000x876 window that is a
+horizontal scale of 0.73, which reads as compressed text and a round sun
+in the Viewport panel drawn as an ellipse taller than wide. An ultrawide
+display makes it worse -- at 21:9 more than a quarter of the window is
+bars.
 
 ### Viewport
 

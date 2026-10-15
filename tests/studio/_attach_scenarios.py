@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 os.environ["SDL_VIDEODRIVER"] = "offscreen"
@@ -26,6 +27,20 @@ from pyguara.application.bootstrap import create_application  # noqa: E402
 from pyguara.common.components import Transform  # noqa: E402
 from pyguara.config.types import RenderingBackend  # noqa: E402
 from pyguara.studio.attach import StudioAttachment, attach_studio  # noqa: E402
+
+
+def _project_root() -> Path:
+    """Return a throwaway directory to attach Studio against.
+
+    Not the repository. Studio keeps the panel arrangement in
+    `<project_root>/.pyguara/`, and a test that wrote it into the checkout
+    would be the surprise the editor's settings are deliberately opt-in to
+    avoid. Nothing here reads the project's own files.
+
+    Returns:
+        A fresh temporary directory, cleaned up with the process.
+    """
+    return Path(tempfile.mkdtemp(prefix="pyguara-studio-scenario-"))
 
 
 def _configure(config: object) -> None:
@@ -50,7 +65,7 @@ def attaches() -> None:
     """It attaches, registers itself, and has no session before a scene."""
     app = _application()
     try:
-        attachment = attach_studio(app.container, project_root=Path.cwd())
+        attachment = attach_studio(app.container, project_root=_project_root())
         assert attachment is not None, "attach_studio declined"
         assert isinstance(app.container.get(StudioAttachment), StudioAttachment)
 
@@ -69,7 +84,7 @@ def session_follows_the_scene() -> None:
     """A session opens over the active scene, and the panels install."""
     app = _application()
     try:
-        attachment = attach_studio(app.container, project_root=Path.cwd())
+        attachment = attach_studio(app.container, project_root=_project_root())
         assert attachment is not None
         scene = _scene(app)
         app.begin(scene)
@@ -112,7 +127,7 @@ def frames_and_operations() -> None:
     """Frames step, the viewport gets a texture, and operations apply."""
     app = _application()
     try:
-        attachment = attach_studio(app.container, project_root=Path.cwd())
+        attachment = attach_studio(app.container, project_root=_project_root())
         assert attachment is not None
         app.begin(_scene(app))
 
@@ -171,7 +186,7 @@ def panels_install_under_the_real_loop() -> None:
     """
     app = _application()
     try:
-        attachment = attach_studio(app.container, project_root=Path.cwd())
+        attachment = attach_studio(app.container, project_root=_project_root())
         assert attachment is not None
         app.begin(_scene(app))
 
@@ -216,7 +231,7 @@ def studio_owns_the_screen() -> None:
         renderer = app.container.get(UIRenderer)  # type: ignore[type-abstract]
         original_present = renderer.present
 
-        attachment = attach_studio(app.container, project_root=Path.cwd())
+        attachment = attach_studio(app.container, project_root=_project_root())
         assert attachment is not None
         app.begin(_scene(app))
         app.step()
@@ -267,7 +282,7 @@ def the_layout_follows_the_window() -> None:
     """
     app = _application()
     try:
-        attachment = attach_studio(app.container, project_root=Path.cwd())
+        attachment = attach_studio(app.container, project_root=_project_root())
         assert attachment is not None
         app.begin(_scene(app))
         for _ in range(3):
@@ -323,7 +338,7 @@ def the_menus_are_studios_own() -> None:
 
     app = _application()
     try:
-        attachment = attach_studio(app.container, project_root=Path.cwd())
+        attachment = attach_studio(app.container, project_root=_project_root())
         assert attachment is not None
         app.begin(_scene(app))
         for _ in range(5):
@@ -360,6 +375,65 @@ def the_menus_are_studios_own() -> None:
         app.shutdown()
 
 
+def the_editor_gets_the_whole_window() -> None:
+    """The editor is not letterboxed with the game.
+
+    `ctx.screen.viewport` is where the *game's* frame goes: with
+    `keep_aspect` the graph narrows it, and the editor's pass used to
+    inherit it -- every panel squeezed into the letterbox while ImGui laid
+    them out for the whole window. On the 2000x876 window this was
+    reported from that is a horizontal scale of 0.73, and an ultrawide
+    display makes it worse.
+    """
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=_project_root())
+        assert attachment is not None
+        app.begin(_scene(app))
+        for _ in range(5):
+            app.step()
+
+        display = app._config_manager.config.display
+        display.keep_aspect = True
+        # Deliberately not the configured shape, so there are bars.
+        window = (display.screen_width + 700, display.screen_height)
+        app._resize_render_output(*window)
+
+        graph = app._render_graph
+        assert graph.screen_rect[2:] != window, "nothing was letterboxed"
+
+        seen: list[tuple[int, int, int, int]] = []
+        imgui_pass = graph.get_pass("imgui")
+        original = imgui_pass._layer.render
+
+        def record(width: int, height: int, dt: float | None = None) -> None:
+            ctx = graph.ctx
+            if ctx.screen is not None:
+                seen.append(tuple(ctx.screen.viewport))
+            original(width, height, dt)
+
+        imgui_pass._layer.render = record
+        try:
+            for _ in range(3):
+                app.step()
+        finally:
+            imgui_pass._layer.render = original
+
+        assert seen, "the editor never drew"
+        for viewport in seen:
+            assert viewport == (0, 0, *window), (
+                f"the editor drew under {viewport} rather than the whole "
+                f"window {window}; it is being squeezed into the game's "
+                f"letterbox {graph.screen_rect}"
+            )
+
+        # And put back, because the game's UI composites after the graph
+        # and belongs inside the frame rather than on the bars.
+        assert tuple(graph.ctx.screen.viewport) == graph.screen_rect
+    finally:
+        app.shutdown()
+
+
 SCENARIOS = {
     "attaches": attaches,
     "session_follows_the_scene": session_follows_the_scene,
@@ -368,6 +442,7 @@ SCENARIOS = {
     "studio_owns_the_screen": studio_owns_the_screen,
     "the_layout_follows_the_window": the_layout_follows_the_window,
     "the_menus_are_studios_own": the_menus_are_studios_own,
+    "the_editor_gets_the_whole_window": the_editor_gets_the_whole_window,
 }
 
 

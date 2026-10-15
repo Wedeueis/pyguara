@@ -183,6 +183,10 @@ Thumbs.db
 # Frames written by tools/agent_view.py
 .agent-view/
 
+# PyGuara Studio's own state -- the panel arrangement it remembers between
+# runs. A tool's state, not the project's.
+.pyguara/
+
 # WSL/Windows download markers, one per file copied in from a browser
 *:Zone.Identifier
 
