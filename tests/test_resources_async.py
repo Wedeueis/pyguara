@@ -412,3 +412,78 @@ class TestDecodePool:
         _drain(manager, manager.preload([("/x/0.img", Img)]))
         manager.shutdown_decode_pool()
         assert not manager._decode_pool.started
+
+
+@pytest.mark.unit
+class TestTheAsyncPathHonoursTheCache:
+    """`load_async()` and `load()` share one cache, so they have to share its
+    rules. Two were only implemented on the synchronous side, which left the
+    cache budget inert for any game that preloads everything.
+    """
+
+    class Sized(Resource):
+        """An `Img` that admits to a size, so the budget can act on it."""
+
+        @property
+        def native_handle(self) -> str:
+            return "sized"
+
+        @property
+        def size_bytes(self) -> int:
+            return 1_000_000
+
+    class SizedLoader(TwoPhaseLoader):
+        @property
+        def supported_extensions(self) -> list[str]:
+            return [".img"]
+
+        def upload(
+            self, path: str, decoded: object, meta: AssetMeta | None
+        ) -> Resource:
+            return TestTheAsyncPathHonoursTheCache.Sized(path)
+
+    def test_a_cache_hit_refreshes_the_eviction_order(self) -> None:
+        """`load()` moves a hit to the end; the class docstring calls that
+        "what makes the budget's eviction order mean anything". The async hit
+        used `.get()`, which does not, so anything reached only through
+        `load_async()` kept its original rank forever and was evicted as
+        though it had never been touched."""
+        manager = _manager(self.SizedLoader())
+        first = manager.load_async("a.img", self.Sized)
+        second = manager.load_async("b.img", self.Sized)
+        for request in (first, second):
+            while request.state is not LoadState.READY:
+                manager.pump(budget_ms=0.0)
+                time.sleep(0.001)
+
+        manager.load_async("a.img", self.Sized)  # a hit, and a use
+
+        assert list(manager._cache.keys())[-1] == "a.img"
+
+    def test_a_completed_async_load_enforces_the_budget(self) -> None:
+        """`load()` calls `evict_to_budget` after inserting; `_finish` did
+        not, so the ceiling was never applied on this path at all."""
+        manager = _manager(self.SizedLoader())
+        manager.set_cache_budget(2_500_000)  # room for two of five
+
+        requests = [manager.load_async(f"a{i}.img", self.Sized) for i in range(5)]
+        for request in requests:
+            while request.state is LoadState.PENDING:
+                manager.pump(budget_ms=0.0)
+                time.sleep(0.001)
+
+        assert manager.cache_size_bytes() <= 2_500_000
+
+    def test_the_arriving_resource_is_not_evicted_to_fit_itself(self) -> None:
+        """`load()` passes `protect=`; without it a budget smaller than one
+        resource would discard the very thing that was just awaited."""
+        manager = _manager(self.SizedLoader())
+        manager.set_cache_budget(1)  # smaller than any single resource
+
+        request = manager.load_async("a.img", self.Sized)
+        while request.state is LoadState.PENDING:
+            manager.pump(budget_ms=0.0)
+            time.sleep(0.001)
+
+        assert request.state is LoadState.READY
+        assert request.resource is not None

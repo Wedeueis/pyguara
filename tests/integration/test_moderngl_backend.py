@@ -334,3 +334,28 @@ def test_ui_renderer(mock_ctx: MagicMock) -> None:
 
         # Verify dirty flag was cleared
         assert not renderer._dirty
+
+
+def test_gl_texture_release_is_idempotent() -> None:
+    """`ResourceManager` releases on every eviction, and a backend teardown
+    may reach the same texture, so a second call has to be harmless.
+
+    It previously left `self._texture` in place and no flag, so the second
+    call went through to moderngl on an already-released texture.
+    """
+    mock_gl_tex = MagicMock()
+    texture = GLTexture("test.png", mock_gl_tex, 32, 32)
+
+    texture.release()
+    texture.release()
+    texture.release()
+
+    assert mock_gl_tex.release.call_count == 1
+
+
+def test_gl_texture_reports_its_vram_so_the_budget_can_see_it() -> None:
+    """The point of releasing on eviction: this is the memory the cache
+    budget is counting, and the only thing that can free it."""
+    texture = GLTexture("test.png", MagicMock(), 32, 32)
+
+    assert texture.size_bytes > 0

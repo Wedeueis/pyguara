@@ -524,3 +524,158 @@ class TestLoadErrorContext:
 
         assert excinfo.value.name == "level.json"
         assert "JSONDecodeError" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------
+# Eviction releases what the resource holds
+# --------------------------------------------------------------------------
+class CountingRes(Resource):
+    """A resource that records whether it was released, and claims a size.
+
+    Standing in for `GLTexture`, which owns a `moderngl.Texture` in VRAM.
+    The garbage collector cannot see a driver allocation, so dropping the
+    last Python reference frees nothing -- the cache has to say so.
+    """
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path)
+        self.release_calls = 0
+
+    @property
+    def native_handle(self) -> str:
+        return "counting"
+
+    @property
+    def size_bytes(self) -> int:
+        return 1_000_000
+
+    def release(self) -> None:
+        self.release_calls += 1
+
+
+class CountingLoader:
+    """Hands out a fresh CountingRes per load, without touching the disk."""
+
+    @property
+    def supported_extensions(self) -> list[str]:
+        return [".count"]
+
+    def load(self, path: str) -> CountingRes:
+        return CountingRes(path)
+
+
+def _counting_mgr() -> ResourceManager:
+    manager = ResourceManager()
+    manager.register_loader(CountingLoader())  # type: ignore[arg-type]
+    return manager
+
+
+def test_base_resource_release_is_a_harmless_noop() -> None:
+    """Most resources hold nothing but Python objects, so the base has to be
+    callable without each subclass opting in."""
+    assert MockRes("a.mock").release() is None
+
+
+def test_release_to_zero_refs_releases_the_resource() -> None:
+    manager = _counting_mgr()
+    res = manager.load("a.count", CountingRes)
+    manager.acquire("a.count")
+
+    manager.release("a.count")
+
+    assert res.release_calls == 1
+
+
+def test_forced_unload_releases_the_resource() -> None:
+    manager = _counting_mgr()
+    res = manager.load("a.count", CountingRes)
+
+    manager.unload("a.count", force=True)
+
+    assert res.release_calls == 1
+
+
+def test_unload_releases_an_unpinned_resource() -> None:
+    manager = _counting_mgr()
+    res = manager.load("a.count", CountingRes)
+
+    manager.unload("a.count")
+
+    assert res.release_calls == 1
+
+
+def test_unload_releases_when_the_last_reference_goes() -> None:
+    manager = _counting_mgr()
+    res = manager.load("a.count", CountingRes)
+    manager.acquire("a.count")
+
+    manager.unload("a.count")
+
+    assert res.release_calls == 1
+
+
+def test_unload_unused_releases_everything_it_sweeps() -> None:
+    manager = _counting_mgr()
+    resources = [manager.load(f"a{i}.count", CountingRes) for i in range(3)]
+
+    assert manager.unload_unused() == 3
+
+    assert [r.release_calls for r in resources] == [1, 1, 1]
+
+
+def test_evicting_to_budget_releases_what_it_evicts() -> None:
+    """The budget counts `size_bytes`, which for a texture is GPU memory. An
+    eviction that does not release it reclaims nothing it was counting."""
+    manager = _counting_mgr()
+    manager.set_cache_budget(2_500_000)  # room for two of the three
+    resources = [manager.load(f"a{i}.count", CountingRes) for i in range(3)]
+
+    assert sum(r.release_calls for r in resources) >= 1
+    assert manager.cache_size_bytes() <= 2_500_000
+
+
+def test_reload_releases_the_instance_it_replaces() -> None:
+    """Hot-reload is the one path that replaces a live resource, so it leaked
+    one driver allocation per file save."""
+    manager = _counting_mgr()
+    old = manager.load("a.count", CountingRes)
+
+    new = manager.reload("a.count")
+
+    assert old.release_calls == 1
+    assert new is not old
+
+
+def test_reload_keeps_the_reference_count_it_found() -> None:
+    """Releasing the old instance must not retire the key: a caller that
+    acquired it still holds a claim."""
+    manager = _counting_mgr()
+    manager.load("a.count", CountingRes)
+    manager.acquire("a.count")
+
+    manager.reload("a.count")
+
+    # Still pinned, so a sweep leaves it alone.
+    assert manager.unload_unused() == 0
+
+
+def test_a_resource_that_raises_on_release_is_still_evicted() -> None:
+    """An eviction that cannot free its driver handle must not leave the
+    entry in the cache or abort the caller's unload."""
+
+    class Hostile(CountingRes):
+        def release(self) -> None:
+            raise RuntimeError("driver is gone")
+
+    manager = ResourceManager()
+
+    class HostileLoader(CountingLoader):
+        def load(self, path: str) -> CountingRes:
+            return Hostile(path)
+
+    manager.register_loader(HostileLoader())  # type: ignore[arg-type]
+    manager.load("a.count", CountingRes)
+
+    manager.unload("a.count", force=True)
+
+    assert manager.cache_size_bytes() == 0
