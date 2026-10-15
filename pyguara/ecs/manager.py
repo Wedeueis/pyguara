@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from collections.abc import Set as AbstractSet
+from itertools import filterfalse
 from typing import TypeVar, overload
 
 from pyguara.ecs.component import Component
@@ -691,10 +692,22 @@ class EntityManager:
         if not component_types and not without and not any_of:
             return
 
-        disabled = self._disabled
-        for entity_id in self._matching_entity_ids(component_types, without, any_of):
-            if entity_id in disabled:
-                continue
+        # Filtered in C, and only when there is anything to filter -- the
+        # `if` is where most of the win is, since nothing is disabled in a
+        # game that does not pool, and the test was being paid per entity
+        # regardless. `filterfalse` over an eager `ids - self._disabled`
+        # on purpose: see `_matching_entity_ids` on why that set must not
+        # be mutated, and note the lazy form also keeps the original
+        # semantics of consulting `_disabled` as iteration proceeds rather
+        # than snapshotting it up front. Measured in
+        # `docs/guides/performance.md`; the eager difference was slower.
+        entity_ids: Iterable[str] = self._matching_entity_ids(
+            component_types, without, any_of
+        )
+        if self._disabled:
+            entity_ids = filterfalse(self._disabled.__contains__, entity_ids)
+
+        for entity_id in entity_ids:
             entity = self._entities.get(entity_id)
             if entity is not None:
                 yield entity
@@ -738,16 +751,18 @@ class EntityManager:
         Yields:
             Each matching entity.
         """
-        cached_ids = self._query_cache.get_cached(*component_types)
+        cached = self._query_cache.get_cached(*component_types)
 
-        if cached_ids is None:
+        if cached is None:
             yield from self.get_entities_with(*component_types)
             return
 
-        disabled = self._disabled
+        cached_ids: Iterable[str] = cached
+
+        if self._disabled:
+            cached_ids = filterfalse(self._disabled.__contains__, cached_ids)
+
         for entity_id in cached_ids:
-            if entity_id in disabled:
-                continue
             entity = self._entities.get(entity_id)
             if entity is not None:
                 yield entity
@@ -800,10 +815,20 @@ class EntityManager:
         if not component_types:
             return
 
-        disabled = self._disabled
-        for entity_id in self._matching_entity_ids(component_types):
-            if entity_id in disabled:
-                continue
+        # Filtered in C, and only when there is anything to filter -- the
+        # `if` is where most of the win is, since nothing is disabled in a
+        # game that does not pool, and the test was being paid per entity
+        # regardless. `filterfalse` over an eager `ids - self._disabled`
+        # on purpose: see `_matching_entity_ids` on why that set must not
+        # be mutated, and note the lazy form also keeps the original
+        # semantics of consulting `_disabled` as iteration proceeds rather
+        # than snapshotting it up front. Measured in
+        # `docs/guides/performance.md`; the eager difference was slower.
+        entity_ids: Iterable[str] = self._matching_entity_ids(component_types)
+        if self._disabled:
+            entity_ids = filterfalse(self._disabled.__contains__, entity_ids)
+
+        for entity_id in entity_ids:
             entity = self._entities.get(entity_id)
             if entity is None:
                 continue
@@ -827,10 +852,20 @@ class EntityManager:
         if not component_types:
             return
 
-        disabled = self._disabled
-        for entity_id in self._matching_entity_ids(component_types):
-            if entity_id in disabled:
-                continue
+        # Filtered in C, and only when there is anything to filter -- the
+        # `if` is where most of the win is, since nothing is disabled in a
+        # game that does not pool, and the test was being paid per entity
+        # regardless. `filterfalse` over an eager `ids - self._disabled`
+        # on purpose: see `_matching_entity_ids` on why that set must not
+        # be mutated, and note the lazy form also keeps the original
+        # semantics of consulting `_disabled` as iteration proceeds rather
+        # than snapshotting it up front. Measured in
+        # `docs/guides/performance.md`; the eager difference was slower.
+        entity_ids: Iterable[str] = self._matching_entity_ids(component_types)
+        if self._disabled:
+            entity_ids = filterfalse(self._disabled.__contains__, entity_ids)
+
+        for entity_id in entity_ids:
             entity = self._entities.get(entity_id)
             if entity is None:
                 continue
@@ -889,6 +924,14 @@ class EntityManager:
         mid-frame; callers must still skip ids whose entity is already
         soft-removed. Any additional term produces a new set, so the aliasing
         never escapes into a result the caller could be surprised by.
+
+        **A caller must therefore never mutate what this returns.** The
+        public queries filter disabled entities with `ids - self._disabled`,
+        which builds a new set; the in-place spellings (`-=`,
+        `difference_update`) would delete those ids from the component index
+        itself, and the entities would simply stop matching any query from
+        then on. The return type is `AbstractSet` to say so -- note it can
+        also be a `KeysView` or a `frozenset`, not only a `set`.
 
         Args:
             component_types: Classes an entity must all carry. May be empty

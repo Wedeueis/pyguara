@@ -117,6 +117,52 @@ faster** in the worst order, and faster than the old *best* order too, since a
 dict insert beats a list memmove. `test_pool_churn_is_linear` measures
 newest-first specifically, because it was the order that fell over.
 
+### Filtering disabled entities out of a query
+
+`get_entities_with`, `get_entities_with_cached`, `get_components` and
+`get_components_with_entity` all have to drop entities parked by
+`set_entity_enabled(False)`. The obvious advice -- "stop testing membership per
+entity in Python, do one set difference in C" -- was measured and **is wrong
+here**. 10,000 entities, each with `Transform` and `Tag`, min of 5 rounds,
+milliseconds:
+
+| query | disabled | per-entity test | `ids - disabled` | `filterfalse` |
+| --- | --- | --- | --- | --- |
+| `get_entities_with(Transform)` | 0 | 1.37 | 1.21 | **1.19** |
+| `get_entities_with(Transform, Tag)` | 0 | 2.06 | 1.87 | **1.69** |
+| `get_components(Transform)` | 0 | 9.03 | 8.37 | **6.89** |
+| `get_entities_with(Transform)` | 1,000 | **1.48** | 1.42 | 1.57–1.76 |
+| `get_entities_with(Transform, Tag)` | 1,000 | **2.05** | 2.41 | 2.04 |
+| `get_components(Transform)` | 1,000 | 7.97 | 7.34 | **7.36** |
+| `get_entities_with(Transform)` | 5,000 | 1.09 | 1.10 | **1.00** |
+| `get_entities_with(Transform, Tag)` | 5,000 | **1.49** | 1.96 | 1.51 |
+| `get_components(Transform)` | 5,000 | 4.17 | 3.73 | **3.19** |
+
+The eager difference loses badly exactly where the filter does any work: with
+5,000 disabled, `get_entities_with(Transform, Tag)` went from 1.49 ms to
+1.96 ms, **32% slower**. Building a new 5,000-entry set costs more than 10,000
+membership tests that allocate nothing — and a multi-type query has already
+paid to build its intersection, so this is a second full set per call.
+
+`itertools.filterfalse` over a bound `set.__contains__` wins instead: the
+per-item work runs in C without materialising anything. Two further reasons it
+is the right shape, beyond the numbers:
+
+- It is **lazy, like the code it replaced**. The old loop consulted the live
+  `_disabled` set as it went, so disabling an entity mid-iteration took effect;
+  an eager difference snapshots instead. Same semantics, not just same results.
+- It cannot corrupt the index. For a single-type query `_matching_entity_ids`
+  returns the **live component index**, so `ids -= disabled` would delete those
+  entities from the index permanently — they would stop matching every later
+  query, re-enabled or not. `TestFilteringDisabledLeavesTheIndexIntact` in
+  `tests/test_ecs_dormancy.py` fails if anyone writes it that way.
+
+Most of the remaining win is simply **not filtering when nothing is disabled**,
+which is the common case for any game that does not pool: the old code paid a
+membership test per entity regardless. Where a moderate number are disabled the
+three strategies are within noise of each other, and that cell moved around by
+±20% between rounds — read the 0-disabled column as the real result.
+
 ---
 
 ## Components

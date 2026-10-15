@@ -272,3 +272,70 @@ def _factory(manager: EntityManager, index: int):
     entity.add_component(Alpha(value=index))
     entity.add_component(Beta(value=index))
     return entity
+
+
+class TestFilteringDisabledLeavesTheIndexIntact:
+    """The disabled filter is a set difference, and for a single-type query
+    `_matching_entity_ids` returns the **live component index** rather than a
+    copy. So the difference has to build a new set: the in-place spellings
+    (`-=`, `difference_update`) would delete those ids from the index itself,
+    and the entities would stop matching every later query -- including after
+    being re-enabled, and including for component types the query never
+    mentioned.
+
+    These tests fail loudly if anyone converts the filter to an in-place
+    operation for speed.
+    """
+
+    def _world(self):
+        manager = EntityManager()
+        kept, parked = manager.create_entity(), manager.create_entity()
+        for entity in (kept, parked):
+            entity.add_component(Alpha())
+            entity.add_component(Beta())
+        manager.set_entity_enabled(parked.id, False)
+        return manager, kept, parked
+
+    def test_a_query_does_not_shrink_the_index_it_read(self):
+        manager, kept, parked = self._world()
+
+        for _ in range(3):
+            assert {e.id for e in manager.get_entities_with(Alpha)} == {kept.id}
+
+        manager.set_entity_enabled(parked.id, True)
+        assert {e.id for e in manager.get_entities_with(Alpha)} == {kept.id, parked.id}
+
+    def test_a_single_type_query_does_not_disturb_other_types(self):
+        manager, kept, parked = self._world()
+
+        list(manager.get_entities_with(Alpha))
+        manager.set_entity_enabled(parked.id, True)
+
+        assert {e.id for e in manager.get_entities_with(Beta)} == {kept.id, parked.id}
+        assert {e.id for e in manager.get_entities_with(Alpha, Beta)} == {
+            kept.id,
+            parked.id,
+        }
+
+    def test_the_component_consuming_queries_leave_it_intact_too(self):
+        manager, kept, parked = self._world()
+
+        assert len(list(manager.get_components(Alpha))) == 1
+        assert len(list(manager.get_components_with_entity(Alpha))) == 1
+
+        manager.set_entity_enabled(parked.id, True)
+        assert len(list(manager.get_components(Alpha))) == 2
+        assert len(list(manager.get_components_with_entity(Alpha))) == 2
+
+    def test_a_cached_query_leaves_its_snapshot_intact(self):
+        manager, kept, parked = self._world()
+
+        for _ in range(3):
+            got = {e.id for e in manager.get_entities_with_cached(Alpha)}
+            assert got == {kept.id}
+
+        manager.set_entity_enabled(parked.id, True)
+        assert {e.id for e in manager.get_entities_with_cached(Alpha)} == {
+            kept.id,
+            parked.id,
+        }
