@@ -282,6 +282,45 @@ four fifths to a bit over two thirds — it is still where the time is, so
 anything further done to this path should still be aimed at it, and the
 remaining cost is dominated by turning Python lists of tuples into arrays.
 
+### `draw_text` — milliseconds per frame, 20 strings
+
+`draw_text` rasterises a string with `pygame.font` and uploads it as a GL
+texture. It used to release that texture at the end of the call, reasoning that
+"a fresh piece of text has nothing to reuse anyway" -- true of a string seen
+once, and wrong about what actually calls it. `FloatingText` redraws the same
+damage numbers every frame for the life of the entry, and the debug overlays
+redraw whole static panels, so the common case was twenty uploads and twenty
+frees per frame for pixels identical to the previous frame's.
+
+Real GL, standalone context, min of 5 rounds of 120 frames:
+
+| 20 strings per frame | released per call | cached |
+| --- | --- | --- |
+| the same 20 strings each frame | 9.98 | **1.03** |
+| 20 brand-new strings each frame | **11.10** | 16.44 |
+
+The steady-state case is where the engine actually lives, and it gives back
+**9 ms of a 16.7 ms frame**.
+
+The second row is the honest cost, and it is not the bound's fault -- it
+measures the same at a limit of 32, 64, 128 and 256. Releasing inside the call
+meant the driver freed a block and immediately allocated one the same size, over
+and over, which an allocator handles about as well as it handles anything.
+Caching decouples the two: a miss allocates a new texture while freeing one from
+hundreds of frames ago, and the reuse is gone. So text that never repeats pays
+~45% more than it did.
+
+That is accepted rather than solved. Twenty entirely new strings every frame
+already cost 11 ms before this change -- two thirds of the frame -- so it was
+not a case anything could ship with, and the shape that *is* shipped is the
+first row. A string that changes every frame on its own (an FPS counter) is one
+miss, not twenty.
+
+Two limitations worth knowing: the cache is bounded by **entry count, not
+bytes**, so 256 long strings hold more than 256 short ones; and these textures
+are the renderer's own, outside `ResourceManager`, so they do not count towards
+its cache budget.
+
 ### Instance layout width
 
 Packing and uploading 20000 instances, at each width the layout has had:

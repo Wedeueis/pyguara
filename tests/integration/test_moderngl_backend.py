@@ -9,7 +9,10 @@ import pytest
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
-from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+from pyguara.graphics.backends.moderngl.renderer import (
+    _TEXT_CACHE_LIMIT,
+    ModernGLRenderer,
+)
 from pyguara.graphics.backends.moderngl.texture import GLTexture
 from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
 
@@ -264,12 +267,15 @@ def test_draw_text_uploads_a_texture_and_draws_it(mock_ctx: MagicMock) -> None:
     renderer._vao.render.assert_called()
 
 
-def test_draw_text_releases_the_ephemeral_texture_after_drawing(
-    mock_ctx: MagicMock,
-) -> None:
-    """The uploaded texture is a one-off for this call, not cached for
-    reuse -- it must be released immediately, unlike a loaded asset
-    texture, which stays alive across frames."""
+def test_draw_text_keeps_the_texture_it_uploaded(mock_ctx: MagicMock) -> None:
+    """The inverse of what this test used to assert, deliberately.
+
+    It previously pinned "released immediately, because a fresh piece of
+    text has nothing to reuse anyway". True of a string seen once, and
+    wrong about what actually calls `draw_text`: `FloatingText` redraws the
+    same damage numbers every frame for the life of the entry. The texture
+    is now kept and reused, and `release()` owns freeing it.
+    """
     with patch("builtins.open", mock_open(read_data="shader source")):
         renderer = ModernGLRenderer(mock_ctx, 800, 600)
 
@@ -281,7 +287,81 @@ def test_draw_text_releases_the_ephemeral_texture_after_drawing(
 
     renderer.draw_text("Hi", Vector2(10, 10), Color(255, 255, 255))
 
+    created_gl_texture.release.assert_not_called()
+
+
+def test_drawing_the_same_string_again_uploads_nothing(mock_ctx: MagicMock) -> None:
+    """The reason the cache exists: twenty live damage numbers cost twenty
+    uploads and twenty frees *per frame*, for pixels identical to the
+    previous frame's."""
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    for _ in range(5):
+        renderer.draw_text("37", Vector2(10, 10), Color(255, 0, 0))
+
+    assert mock_ctx.texture.call_count == 1
+
+
+def test_text_that_looks_different_is_cached_separately(mock_ctx: MagicMock) -> None:
+    """Everything that changes the pixels is in the key -- and nothing that
+    does not, or the same glyphs drawn twice would upload twice."""
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    white, red = Color(255, 255, 255), Color(255, 0, 0)
+    renderer.draw_text("A", Vector2(0, 0), white)
+    renderer.draw_text("B", Vector2(0, 0), white)  # different string
+    renderer.draw_text("A", Vector2(0, 0), red)  # different colour
+    renderer.draw_text("A", Vector2(0, 0), white, size=32)  # different size
+
+    assert mock_ctx.texture.call_count == 4
+
+    renderer.draw_text("A", Vector2(99, 99), white)  # position is not pixels
+
+    assert mock_ctx.texture.call_count == 4
+
+
+def test_the_text_cache_is_bounded_and_releases_what_it_evicts(
+    mock_ctx: MagicMock,
+) -> None:
+    """An FPS counter changes every frame, so the cache needs a ceiling --
+    and reaching it has to free the GPU memory, which the garbage collector
+    cannot do for a driver allocation."""
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    created: list[MagicMock] = []
+
+    def fake_texture(*args: object, **kwargs: object) -> MagicMock:
+        texture = MagicMock()
+        created.append(texture)
+        return texture
+
+    mock_ctx.texture.side_effect = fake_texture
+
+    overshoot = 10
+    for n in range(_TEXT_CACHE_LIMIT + overshoot):
+        renderer.draw_text(str(n), Vector2(0, 0), Color(255, 255, 255))
+
+    assert len(renderer._text_cache) == _TEXT_CACHE_LIMIT
+    assert sum(1 for texture in created if texture.release.called) == overshoot
+
+
+def test_releasing_the_renderer_frees_the_cached_text(mock_ctx: MagicMock) -> None:
+    """`draw_text` no longer frees what it draws, so this is the only thing
+    that does."""
+    with patch("builtins.open", mock_open(read_data="shader source")):
+        renderer = ModernGLRenderer(mock_ctx, 800, 600)
+
+    created_gl_texture = MagicMock()
+    mock_ctx.texture.side_effect = lambda *a, **k: created_gl_texture
+    renderer.draw_text("Hi", Vector2(10, 10), Color(255, 255, 255))
+
+    renderer.release()
+
     created_gl_texture.release.assert_called_once()
+    assert len(renderer._text_cache) == 0
 
 
 def test_draw_text_empty_string_is_a_noop(mock_ctx: MagicMock) -> None:
