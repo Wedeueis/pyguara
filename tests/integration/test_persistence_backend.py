@@ -578,3 +578,111 @@ class TestFormatVersion:
         # The newer save is still there, untouched.
         assert path.read_bytes() == newer
         assert list(tmp_path.glob("slot.save.corrupt.*")) == []
+
+
+# --------------------------------------------------------------------------- #
+# A save file is data, not code                                               #
+# --------------------------------------------------------------------------- #
+class TestSaveFileIsNotCode:
+    """A save names its own encoding in its header, so the format is input
+    from the file. While `"binary"` (pickle) was a format, that meant a
+    `.save` could ask to be unpickled -- and `pickle.loads` runs whatever
+    the bytes say. The checksum was no obstacle: it travels in the same
+    header, so a rewritten save carries a matching digest of its own
+    payload.
+    """
+
+    @staticmethod
+    def _forge(path, payload, checksum, fmt):
+        """Write a save blob with a header of our choosing."""
+        meta = {
+            "version": "0.5.0",
+            "timestamp": "2026-10-15T00:00:00+00:00",
+            "data_type": "dict",
+            "checksum": checksum,
+            "save_version": 1,
+            "format": fmt,
+            "compressed": False,
+            "format_version": CONTAINER_FORMAT_VERSION,
+        }
+        header = json.dumps(meta, separators=(",", ":")).encode()
+        path.write_bytes(header + b"\n" + payload)
+
+    @pytest.mark.parametrize("verify", [True, False])
+    @pytest.mark.parametrize("digest", ["sha256", "md5"])
+    def test_a_save_asking_for_pickle_runs_nothing(
+        self, manager, tmp_path, verify, digest
+    ):
+        """The regression test for the whole change.
+
+        Parametrised over both digests and both integrity settings on
+        purpose. A single case proves less than it looks: forged with a
+        SHA-256 digest and `verify=True`, the *old* code also refused this
+        file -- not because it rejected pickle, but because it computed MD5
+        and the checksums disagreed. The case that actually pins the
+        vulnerability is `verify=False`, where the format gate is the only
+        thing between the file and `pickle.loads`.
+        """
+        import hashlib
+        import pickle
+
+        sentinel = tmp_path / f"executed-{digest}-{verify}"
+
+        class Exploit:
+            def __reduce__(self):
+                return (pathlib.Path.touch, (sentinel,))
+
+        payload = pickle.dumps(Exploit())
+        checksum = hashlib.new(digest, payload).hexdigest()  # noqa: S324
+        self._forge(tmp_path / "forged.save", payload, checksum, "binary")
+
+        assert manager.load_data("forged", verify_integrity=verify) is None
+        assert not sentinel.exists(), "a save file executed code"
+
+    def test_an_unknown_format_is_refused_by_name(self, manager, tmp_path):
+        import hashlib
+
+        payload = b"whatever"
+        self._forge(
+            tmp_path / "odd.save",
+            payload,
+            hashlib.sha256(payload).hexdigest(),
+            "yaml-ish",
+        )
+
+        assert manager.load_data("odd") is None
+
+    def test_new_saves_record_a_sha256_digest(self, manager, tmp_path):
+        manager.save_data("game", {"hp": 10})
+        meta = json.loads((tmp_path / "game.save").read_bytes().partition(b"\n")[0])
+
+        assert len(meta["checksum"]) == 64
+
+    def test_a_save_carrying_a_legacy_md5_digest_still_loads(self, manager, tmp_path):
+        """Saves written before the digest moved to SHA-256 are read, not
+        rejected -- the length tells the two apart."""
+        import hashlib
+
+        payload = json.dumps({"hp": 7}).encode()
+        self._forge(
+            tmp_path / "old.save",
+            payload,
+            hashlib.md5(payload).hexdigest(),  # noqa: S324
+            "json",
+        )
+
+        assert manager.load_data("old", verify_integrity=True) == {"hp": 7}
+
+    def test_a_legacy_md5_digest_that_disagrees_is_still_rejected(
+        self, manager, tmp_path
+    ):
+        payload = json.dumps({"hp": 7}).encode()
+        self._forge(tmp_path / "bad.save", payload, "0" * 32, "json")
+
+        assert manager.load_data("bad", verify_integrity=True) is None
+
+    def test_a_digest_of_an_unrecognised_length_is_refused(self, manager, tmp_path):
+        payload = json.dumps({"hp": 7}).encode()
+        self._forge(tmp_path / "weird.save", payload, "abc123", "json")
+
+        assert manager.load_data("weird", verify_integrity=True) is None

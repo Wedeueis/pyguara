@@ -2,7 +2,6 @@
 
 import dataclasses
 import json
-import pickle
 from typing import Any
 
 import msgpack
@@ -86,7 +85,15 @@ def game_object_hook(dct: dict[str, Any]) -> Any:
 
 
 class Serializer:
-    """Serialises game data to JSON or pickled bytes, and back."""
+    """Serialises game data to JSON or MessagePack, and back.
+
+    There is deliberately no pickle format. A save file names its own
+    encoding in its header, so supporting pickle meant a file could ask
+    to be unpickled -- and `pickle.loads` on bytes the engine did not
+    write executes whatever those bytes say. The checksum was no
+    obstacle, travelling in the same attacker-written header. JSON and
+    MessagePack both decode to inert data.
+    """
 
     def __init__(self, default_format: SerializationFormat = SerializationFormat.JSON):
         """Initialise the serialiser.
@@ -123,9 +130,6 @@ class Serializer:
             # which msgpack packs natively; game_object_hook rebuilds them.
             return bytes(msgpack.packb(prepare_for_json(data), use_bin_type=True))
 
-        elif fmt == SerializationFormat.BINARY:
-            return pickle.dumps(data)
-
         raise ValueError(f"Unsupported serialization format: {fmt}")
 
     def deserialize(
@@ -152,8 +156,5 @@ class Serializer:
             return msgpack.unpackb(
                 data, object_hook=game_object_hook, raw=False, strict_map_key=False
             )
-
-        elif fmt == SerializationFormat.BINARY:
-            return pickle.loads(data)
 
         raise ValueError(f"Unsupported serialization format: {fmt}")
