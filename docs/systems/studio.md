@@ -88,8 +88,8 @@ path, land in one history, and read the same way in the journal.
 
 | Menu | What is in it |
 | --- | --- |
-| **Scene** | Which scene is open, and Quit |
-| **Edit** | Undo, Redo, Delete Entity, Deselect |
+| **Scene** | Save, Open, New, and Quit |
+| **Edit** | Undo, Redo, Duplicate, Delete Entity, Deselect |
 | **Entity** | Create Empty, Add Component, Enable/Disable |
 | **View** | The panels, and Reset Layout |
 | **Run** | Pause/Resume, Step, the time-scale presets |
@@ -105,11 +105,11 @@ The same menus are drawn into the editor's own title bar when the window
 is borderless, and into ImGui's main menu bar when it is not. One list,
 two places, so the two can never disagree about what the editor offers.
 
-**What is greyed out is missing on purpose.** *Open Scene* and *New
-Scene* are disabled because there is no operation behind them yet. Adding
-them to the menu alone would let a person reach a state an agent cannot,
-which is the one thing this design exists to prevent. The fix is the
-operation, not a menu entry that reaches around it.
+**What is greyed out is greyed out for a reason.** *Save* and *Open* need
+a session that can reach the serializer, which one built by hand has no
+container for; the menu disables them rather than offering an action that
+fails. Nothing in the bar reaches around an operation to do its work, so
+there is no state a person can reach that an agent cannot.
 
 ## The window
 
@@ -202,9 +202,21 @@ pyguara studio mcp
 | --- | --- |
 | Discovery | `list_operations`, `project_overview`, `list_components`, `component_schema` |
 | Reading | `scene_summary`, `scene_tree`, `get_entity`, `find_entities` |
-| Editing | `create_entity`, `destroy_entity`, `add_component`, `remove_component`, `set_field`, `set_parent`, `set_enabled`, `set_tags` |
+| Editing | `create_entity`, `destroy_entity`, `duplicate_entity`, `add_component`, `remove_component`, `set_field`, `set_parent`, `set_enabled`, `set_tags` |
 | Running | `run_frames`, `capture_frame` |
-| Session | `history`, `journal`, `approvals` |
+| Session | `history`, `journal`, `approvals`, `scene` |
+
+`scene` carries four verbs behind an "operation" argument -- save, open,
+new and list -- as `history` does. The flat surface is budgeted, because
+a client's tool limit is spent on the verbs used every minute, and saving
+is not one of them.
+
+Two of those four clear the undo history, and say so: opening, because
+every command on the stack describes a world that no longer exists, and
+saving, because undoing past a save leaves the file and the world
+disagreeing with nothing on screen to show it. Emptying the scene does
+not -- it is a destroy of every root inside one transaction, so it stays
+a single undoable entry.
 
 Each declares a **risk class** — `read`, `edit`, `run` or `write_disk` —
 so a caller can express "read anything, ask before writing" without

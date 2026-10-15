@@ -276,6 +276,8 @@ class PygameRenderGraph:
             height: Viewport height.
         """
         self._fbo_manager = PygameFramebufferManager(width, height)
+        self._screen_rect: tuple[int, int, int, int] = (0, 0, width, height)
+        self._window_size: tuple[int, int] = (width, height)
         self._passes: list[Any] = []
 
     @property
@@ -339,14 +341,37 @@ class PygameRenderGraph:
         """Do nothing - Pygame renders directly without passes."""
         pass
 
-    def resize(self, width: int, height: int) -> None:
+    def resize(
+        self,
+        width: int,
+        height: int,
+        *,
+        screen: tuple[int, int, int, int] | None = None,
+        window: tuple[int, int] | None = None,
+    ) -> None:
         """Handle resize.
 
         Args:
-            width: New width.
-            height: New height.
+            width: What the pipeline renders at.
+            height: The same, vertically.
+            screen: Where that lands on screen. Recorded so `screen_rect`
+                answers, and otherwise unused: this backend blits through
+                pygame rather than through a GL viewport.
+            window: The window's own size.
         """
         self._fbo_manager.resize_all(width, height)
+        self._window_size = window if window is not None else (width, height)
+        self._screen_rect = screen if screen is not None else (0, 0, width, height)
+
+    @property
+    def screen_rect(self) -> tuple[int, int, int, int]:
+        """Where the rendered image lands on screen, in window pixels."""
+        return self._screen_rect
+
+    @property
+    def window_size(self) -> tuple[int, int]:
+        """The window's size, which the letterbox is centred inside."""
+        return self._window_size
 
     def release(self) -> None:
         """No-op release."""

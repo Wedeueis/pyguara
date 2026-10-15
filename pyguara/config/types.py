@@ -51,6 +51,14 @@ class WindowConfig:
     # a borderless window whose edges cannot be dragged is one the user
     # cannot size at all.
     borderless: bool = False
+    # Draw the game at the aspect ratio of `screen_width` x `screen_height`
+    # whatever shape the window takes, with black bars across the
+    # remainder. On by default, so every player sees the same framing:
+    # without it a wider window simply shows more world, and a level that
+    # was composed for one shape reveals whatever lies past its edge.
+    # A game that *wants* the extra view -- most ultrawide-aware
+    # platformers do -- turns this off.
+    keep_aspect: bool = True
     vsync: bool = True
     default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
     title: str = "Pyguara Engine"

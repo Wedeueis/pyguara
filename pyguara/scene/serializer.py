@@ -29,9 +29,12 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable
-from typing import Any
+from enum import Enum
+from functools import cache
+from typing import Any, get_type_hints
 
 from pyguara.common.components import Transform
+from pyguara.common.modifiers import ModifiableValue
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
@@ -54,6 +57,61 @@ would otherwise be indistinguishable from a resource handle.
 
 TextureResolver = Callable[[str], Texture | None]
 """Turns a stored resource path back into a live texture, or None."""
+
+
+@cache
+def _resolved_hints(cls: type) -> dict[str, Any]:
+    """Return `cls`'s annotations as types rather than strings.
+
+    Cached, because resolving them walks the defining module's namespace
+    and a scene load calls this once per component instance -- 252
+    entities in the smallest demo.
+
+    Args:
+        cls: The component class.
+
+    Returns:
+        Field name to resolved type. Empty when the annotations cannot be
+        resolved, which leaves each field's raw `field.type` in play and
+        the behaviour exactly as it was.
+    """
+    try:
+        return dict(get_type_hints(cls))
+    except Exception as exc:  # pragma: no cover - a forward ref we cannot see
+        logger.debug(f"Could not resolve {cls.__name__}'s annotations: {exc}")
+        return {}
+
+
+def _to_enum(enum_type: type[Enum], value: Any) -> Any:
+    """Turn a stored value back into a member of `enum_type`.
+
+    Accepts the stored value, a member name, or a member already. A stored
+    enum is its `value`, but a hand-written scene file is likely to carry
+    the name -- and the point of this format is that a person could have
+    written it.
+
+    Args:
+        enum_type: The enum to produce.
+        value: What the file held.
+
+    Returns:
+        The member, or `value` unchanged when it matches nothing. Leaving
+        it alone lets the component's own construction raise with a
+        message naming the valid members, which is better than one from
+        here.
+    """
+    if isinstance(value, enum_type):
+        return value
+    try:
+        return enum_type(value)
+    except ValueError:
+        pass
+    if isinstance(value, str):
+        try:
+            return enum_type[value.upper()]
+        except KeyError:
+            pass
+    return value
 
 
 class SceneSerializer:
@@ -275,11 +333,18 @@ class SceneSerializer:
             return t
 
         if dataclasses.is_dataclass(cls):
-            # Filter and convert values for dataclass fields
+            # Resolved rather than read off the field. Component modules
+            # use `from __future__ import annotations`, so `field.type` is
+            # the *string* "LightType", not the class -- which is why the
+            # original code compared names and could only ever know the
+            # two it had been told about.
+            hints = _resolved_hints(cls)
             filtered = {}
             for field in dataclasses.fields(cls):
                 if field.name in data and not field.name.startswith("_"):
-                    value = self._deserialize_value(data[field.name], field.type)
+                    value = self._deserialize_value(
+                        data[field.name], hints.get(field.name, field.type)
+                    )
                     filtered[field.name] = value
             return cls(**filtered)
 
@@ -299,21 +364,25 @@ class SceneSerializer:
         if isinstance(value, dict) and "x" in value and "y" in value:
             return Vector2(value["x"], value["y"])
 
-        # Handle BodyType enum
-        if type_hint == BodyType or (
-            isinstance(value, (str, int)) and str(type_hint) == "BodyType"
+        if (
+            isinstance(type_hint, type)
+            and issubclass(type_hint, ModifiableValue)
+            and isinstance(value, (int, float))
         ):
-            if isinstance(value, str):
-                return BodyType[value.upper()]
-            return BodyType(value)
+            return ModifiableValue(float(value))
 
-        # Handle ShapeType enum
-        if type_hint == ShapeType or (
-            isinstance(value, (str, int)) and str(type_hint) == "ShapeType"
-        ):
-            if isinstance(value, str):
-                return ShapeType[value.upper()]
-            return ShapeType(value)
+        # Any enum the field is declared as, by the same reasoning as the
+        # encode: the two the engine shipped first are not the only two.
+        if isinstance(type_hint, type) and issubclass(type_hint, Enum):
+            return _to_enum(type_hint, value)
+
+        # Named rather than declared. A type hint arrives as a string
+        # under `from __future__ import annotations`, and the two enums
+        # the engine resolves by name are kept resolvable so a scene
+        # written before this still loads.
+        for enum_type in (BodyType, ShapeType):
+            if str(type_hint) == enum_type.__name__ and isinstance(value, (str, int)):
+                return _to_enum(enum_type, value)
 
         # Handle lists
         if isinstance(value, list):
@@ -396,8 +465,20 @@ class SceneSerializer:
         """
         if isinstance(value, Vector2):
             return {"x": value.x, "y": value.y}
-        if isinstance(value, (BodyType, ShapeType)):
+        # Every enum, not a list of the two the engine happened to ship
+        # first. A `LightType` -- or any enum a game declares -- took the
+        # dataclass arm below, came out as `{}`, and then failed the JSON
+        # encode outright: saving `guara_falcao` raised "Object of type
+        # LightType is not JSON serializable".
+        if isinstance(value, Enum):
             return value.value
+        # Its base, which is the authored number. The modifiers stacked on
+        # top are runtime state -- a buff, a ring being worn -- put there
+        # by whatever applied them and re-applied the same way; writing
+        # them into a scene file would make a snapshot of one playthrough
+        # part of the level.
+        if isinstance(value, ModifiableValue):
+            return value.base
         # Before the dataclass arm: a `Resource` subclass may well be one,
         # and encoding a texture field by field would store a backend
         # surface rather than the path needed to load it again.

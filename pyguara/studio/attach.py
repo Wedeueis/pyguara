@@ -208,7 +208,28 @@ class StudioAttachment:
             component_registry=self._resolve_registry(),
             journal=self._journal,
             approval_mode=self._approval_mode,
+            scene_io=self._scene_io(),
         )
+
+    def _scene_io(self) -> Any:
+        """Build the session's way to the serializer and the live scene.
+
+        Returns:
+            A `SceneIO`, or None when the container has no serializer --
+            in which case saving and opening say so rather than failing
+            somewhere deeper.
+        """
+        try:
+            from pyguara.scene.manager import SceneManager
+            from pyguara.scene.serializer import SceneSerializer
+            from pyguara.studio.sceneio import SceneIO
+
+            serializer = self._container.get(SceneSerializer)
+            manager = self._container.get(SceneManager)
+        except Exception as exc:
+            logger.info(f"Studio cannot save or open scenes in this container: {exc}")
+            return None
+        return SceneIO(serializer, lambda: manager.current_scene)
 
     def _install_panels(self) -> None:
         """Add Studio's panels to the layer, once.

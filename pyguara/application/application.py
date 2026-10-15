@@ -21,6 +21,7 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.events.lifecycle import ApplicationStartEvent, QuitEvent
 from pyguara.events.resources import ResourceReloaded
 from pyguara.events.window import WindowResizeEvent
+from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
@@ -598,17 +599,64 @@ class Application:
         if width <= 0 or height <= 0:
             return
 
-        self._world_renderer.resize(width, height)
-        self._ui_renderer.resize(width, height)
+        render, screen = self._render_target(width, height)
+
+        self._world_renderer.resize(*render)
+        self._ui_renderer.resize(*render)
 
         if self._render_graph is None:
             return
         if (
-            self._render_graph.fbo_manager.width == width
-            and self._render_graph.fbo_manager.height == height
+            self._render_graph.fbo_manager.width == render[0]
+            and self._render_graph.fbo_manager.height == render[1]
+            and self._render_graph.window_size == (width, height)
+            and self._render_graph.screen_rect == screen
         ):
             return
-        self._render_graph.resize(width, height)
+        self._render_graph.resize(*render, screen=screen, window=(width, height))
+
+    def _render_target(
+        self, width: int, height: int
+    ) -> tuple[tuple[int, int], tuple[int, int, int, int]]:
+        """Return what the game renders at, and where that lands.
+
+        With `display.keep_aspect` the game keeps rendering at the
+        configured resolution however the window is dragged, and the
+        result is scaled into the largest rectangle of that shape the
+        window holds; the leftover becomes bars. Every player then sees
+        exactly the same framing.
+
+        Rendering at the configured resolution rather than at the
+        window's is the point, and the half that is easy to miss: a
+        framebuffer grown to match a bigger window is not distorted, but
+        it does hold *more pixels*, and a renderer working in pixel
+        coordinates fills them with more world. The window's shape would
+        be respected and the framing still would not be. This is Godot's
+        `viewport` stretch mode, and the reason it is the one to copy.
+
+        Without the flag the game fills the window and a wider one shows
+        more world, which is what an ultrawide-aware game wants.
+
+        Args:
+            width: The window width in pixels.
+            height: The window height in pixels.
+
+        Returns:
+            `((render_width, render_height), (x, y, width, height))`.
+        """
+        display = self._config_manager.config.display
+        if not getattr(display, "keep_aspect", False):
+            return ((width, height), (0, 0, width, height))
+
+        design_width = max(int(display.screen_width), 1)
+        design_height = max(int(display.screen_height), 1)
+        fit = Viewport.create_best_fit(width, height, design_width / design_height)
+        if fit.width <= 0 or fit.height <= 0:
+            return ((design_width, design_height), (0, 0, width, height))
+        return (
+            (design_width, design_height),
+            (fit.x, fit.y, fit.width, fit.height),
+        )
 
     def _effective_time_scale(self) -> float:
         """Return the scale actually applied to this frame's simulated time.

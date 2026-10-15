@@ -277,6 +277,27 @@ def the_layout_follows_the_window() -> None:
         assert frame is not None
         _, width, height = frame
 
+        # The window keeps its shape, so with `keep_aspect` the game
+        # renders at the configured resolution and is scaled up: what has
+        # to follow the window is the graph's idea of how big the window
+        # is, which is what the editor's own chrome is laid out against.
+        app._resize_render_output(width * 2, height * 2)
+        for _ in range(3):
+            app.step()
+
+        graph = app._render_graph
+        assert graph.window_size == (width * 2, height * 2), (
+            f"the graph still thinks the window is {graph.window_size} "
+            f"after a resize to {(width * 2, height * 2)}"
+        )
+        assert graph.screen_rect == (0, 0, width * 2, height * 2), (
+            "a window of the configured shape must get no bars"
+        )
+
+        # And with it off, the framebuffer itself follows the window --
+        # the original symptom, where it stayed put for the life of the
+        # process and the editor drew into a corner of the screen.
+        app._config_manager.config.display.keep_aspect = False
         app._resize_render_output(width * 2, height * 2)
         for _ in range(3):
             app.step()

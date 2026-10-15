@@ -275,6 +275,172 @@ class CreateEntity(EditCommand):
         return description
 
 
+class DuplicateEntity(EditCommand):
+    """Copy an entity and everything it owns, under fresh ids.
+
+    Ctrl+D, and the most-used way to build a level: place one platform
+    well and make twenty. The copy keeps the original's parent, so a
+    duplicated child lands beside its sibling rather than at the root.
+
+    The ids are minted once, at the first apply, and reused by every later
+    redo. Minting again would give the redo different ids from the undo
+    that preceded it, and anything holding one -- a selection, an agent's
+    next call -- would be pointing at an entity that no longer exists.
+    """
+
+    def __init__(self, entity_id: str, *, suffix: str = "_copy") -> None:
+        """Describe the entity to copy.
+
+        Args:
+            entity_id: The root of the subtree to copy.
+            suffix: Appended to each id, with a number added if that is
+                taken.
+        """
+        super().__init__()
+        self._entity_id = entity_id
+        self._suffix = suffix
+        self._snapshots: list[EntitySnapshot] = []
+
+    @property
+    def label(self) -> str:
+        """What the history shows."""
+        count = len(self._snapshots)
+        if count > 1:
+            return f"Duplicate {self._entity_id} (+{count - 1})"
+        return f"Duplicate {self._entity_id}"
+
+    @property
+    def created_ids(self) -> tuple[str, ...]:
+        """The ids of the copies, root first."""
+        return tuple(snapshot.entity_id for snapshot in self._snapshots)
+
+    def _apply(self, world: EntityManager) -> None:
+        """Mint the copies the first time, and rebuild them after that.
+
+        Args:
+            world: The world to change.
+
+        Raises:
+            EditError: If the entity does not exist.
+        """
+        if not self._snapshots:
+            self._snapshots = self._plan_copies(world)
+        restore_subtree(world, self._snapshots)
+
+    def _revert(self, world: EntityManager) -> None:
+        """Remove the copies, deepest first.
+
+        Args:
+            world: The world to change.
+        """
+        for snapshot in reversed(self._snapshots):
+            world.remove_entity(snapshot.entity_id)
+
+    def _plan_copies(self, world: EntityManager) -> list[EntitySnapshot]:
+        """Build the snapshots that describe the copies.
+
+        Args:
+            world: The world to read.
+
+        Returns:
+            One snapshot per copy, parents first.
+
+        Raises:
+            EditError: If the entity does not exist.
+        """
+        originals = snapshot_subtree(world, self._entity_id)
+        # Decided before anything is built, so a child's `parent_id` can
+        # be rewritten to its copied parent rather than to the original.
+        renames = {
+            snapshot.entity_id: _free_id(world, snapshot.entity_id, self._suffix)
+            for snapshot in originals
+        }
+        # The chosen ids are not in the world yet, so `_free_id` cannot see
+        # the ones picked moments ago. Checked here instead.
+        taken: set[str] = set()
+        for original_id, new_id in list(renames.items()):
+            candidate = new_id
+            index = 2
+            while candidate in taken:
+                candidate = f"{new_id}_{index}"
+                index += 1
+            renames[original_id] = candidate
+            taken.add(candidate)
+
+        copies: list[EntitySnapshot] = []
+        for snapshot in originals:
+            parent = snapshot.parent_id
+            copies.append(
+                EntitySnapshot(
+                    entity_id=renames[snapshot.entity_id],
+                    # Deep-copied, not shared: two entities holding one
+                    # component instance means editing either changes
+                    # both, and the second would never be notified.
+                    components=[_copy_component(c) for c in snapshot.components],
+                    tags=set(snapshot.tags),
+                    enabled=snapshot.enabled,
+                    # The root keeps the original's parent; a copied child
+                    # is parented to its copied parent.
+                    parent_id=(
+                        renames.get(parent, parent) if parent is not None else None
+                    ),
+                )
+            )
+        return copies
+
+
+def _copy_component(component: Component) -> Component:
+    """Return an independent copy of `component`.
+
+    Deep, because a component holds mutable values -- a `Vector2`, a list
+    of points -- and two entities sharing one means editing either changes
+    both, with the second never notified.
+
+    The owning entity is cut out of the copy rather than followed: an
+    `Entity` refuses `deepcopy` outright, because copying one would alias
+    the live manager callbacks and the physics and audio handles of the
+    original. `add_component` sets the back-reference on the way in, so
+    leaving it None here is what it expects anyway.
+
+    Resources need nothing here. `Resource.__deepcopy__` returns itself,
+    a resource being a shared handle to one loaded asset -- which is where
+    that belongs, since a call site cannot see one nested inside a
+    component's own dataclass field.
+
+    Args:
+        component: The component to copy.
+
+    Returns:
+        A copy sharing everything that is shared and nothing that is not.
+    """
+    owner = getattr(component, "entity", None)
+    memo: dict[int, Any] = {id(owner): None} if owner is not None else {}
+    duplicate = copy.deepcopy(component, memo)
+    if hasattr(duplicate, "entity"):
+        duplicate.entity = None
+    return duplicate
+
+
+def _free_id(world: EntityManager, entity_id: str, suffix: str) -> str:
+    """Return an id like `entity_id + suffix` that nothing holds.
+
+    Args:
+        world: The world to check against.
+        entity_id: The id being copied.
+        suffix: What to append.
+
+    Returns:
+        An unused id.
+    """
+    candidate = f"{entity_id}{suffix}"
+    if world.get_entity(candidate) is None:
+        return candidate
+    index = 2
+    while world.get_entity(f"{candidate}_{index}") is not None:
+        index += 1
+    return f"{candidate}_{index}"
+
+
 class DestroyEntity(EditCommand):
     """Remove an entity, and whatever cascades with it."""
 

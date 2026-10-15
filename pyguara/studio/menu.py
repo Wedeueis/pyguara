@@ -107,21 +107,41 @@ class StudioMenus:
     # ----------------------------------------------------------------
 
     def _scene_menu(self) -> None:
-        """Scene: what the open scene is, and leaving."""
+        """Scene: saving, opening, emptying, and leaving."""
         session = self._session()
         name = session.scene_name if session is not None else None
         imgui.text_disabled(name or "no scene open")
         imgui.separator()
 
-        # Opening and creating scenes are absent because the operations
-        # are. Adding them to the menu alone would mean a person could
-        # reach a state an agent cannot, which is the one thing this
-        # design is for.
-        imgui.menu_item("Open Scene...", "", False, False)
-        imgui.menu_item("New Scene", "", False, False)
+        can_write = session is not None and session.scene_io is not None
+        if imgui.menu_item("Save Scene", "Ctrl+S", False, can_write)[0]:
+            self._invoke("scene", {"operation": "save"})
+
+        if imgui.begin_menu("Open Scene", can_write):
+            try:
+                self._scene_items()
+            finally:
+                imgui.end_menu()
+
+        if imgui.menu_item("New Scene", "", False, session is not None)[0]:
+            self._invoke("scene", {"operation": "new"})
+
         imgui.separator()
         if imgui.menu_item_simple("Quit", "Alt+F4"):
             self._quit()
+
+    def _scene_items(self) -> None:
+        """List every saved scene as a menu entry."""
+        result = self._invoke("scene", {"operation": "list"}, record=False)
+        names = []
+        if result is not None and isinstance(result.get("scenes"), list):
+            names = [str(name) for name in result["scenes"]]
+        if not names:
+            imgui.text_disabled("nothing saved yet")
+            return
+        for name in names:
+            if imgui.menu_item_simple(name):
+                self._invoke("scene", {"operation": "open", "name": name})
 
     def _edit_menu(self) -> None:
         """Edit: the history, and acting on the selection."""
@@ -137,6 +157,8 @@ class StudioMenus:
         imgui.separator()
 
         selected = self._selected_id()
+        if imgui.menu_item("Duplicate", "Ctrl+D", False, selected is not None)[0]:
+            self._invoke("duplicate_entity", {"entity_id": selected})
         if imgui.menu_item("Delete Entity", "Del", False, selected is not None)[0]:
             self._invoke("destroy_entity", {"entity_id": selected})
         if imgui.menu_item("Deselect", "Esc", False, selected is not None)[0]:
@@ -145,7 +167,7 @@ class StudioMenus:
     def _entity_menu(self) -> None:
         """Entity: making one, and giving it components."""
         if imgui.menu_item_simple("Create Empty"):
-            self._invoke("create_entity", {})
+            self._invoke("create_entity", {"entity_id": self._free_entity_id()})
 
         selected = self._selected_id()
         enabled = selected is not None
@@ -282,6 +304,26 @@ class StudioMenus:
             The panel, or None when no application is attached.
         """
         return self._find_panel("Play")
+
+    def _free_entity_id(self) -> str:
+        """Return an entity id nothing holds.
+
+        `create_entity` takes an id rather than minting one, so that undo
+        and redo produce the same entity -- which means the menu has to
+        pick one. Unity names it GameObject and Godot Node2D; here the
+        word for the thing is entity.
+
+        Returns:
+            An unused id.
+        """
+        session = self._session()
+        if session is None:
+            return "entity"
+        world = session.world
+        index = 1
+        while world.get_entity(f"entity_{index}") is not None:
+            index += 1
+        return f"entity_{index}"
 
     def _find_panel(self, title: str) -> Any:
         """Return the panel with `title`, or None.
