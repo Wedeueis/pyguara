@@ -11,7 +11,6 @@ class SerializationFormat(Enum):
 
     JSON = "json"
     MSGPACK = "msgpack"
-    BINARY = "binary"
 
 
 @dataclass
@@ -26,9 +25,14 @@ class SaveMetadata:
         version: The engine version string when the data was saved.
         timestamp: When the data was saved (timezone-aware, UTC).
         data_type: The class name of the stored object.
-        checksum: MD5 hash of the stored payload bytes, for integrity
+        checksum: SHA-256 hash of the stored payload bytes, for integrity
             verification. Covers the payload exactly as written to disk
-            (after compression, if any).
+            (after compression, if any). Saves written before this was
+            SHA-256 carry a 32-character MD5 digest instead, and are still
+            read; the length tells the two apart. Note that a checksum
+            detects corruption, not tampering -- it travels in the same
+            header as the payload it describes, so a rewritten save can
+            carry a matching digest.
         save_version: Integer schema version, for migration tracking.
         format: The ``SerializationFormat`` value the payload is encoded in.
         compressed: Whether the payload bytes are gzip-compressed.

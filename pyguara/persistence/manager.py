@@ -107,9 +107,7 @@ class PersistenceManager:
             save_version: The schema version of the data, for migrations.
             compress: If True, gzip the serialized payload before writing.
             fmt: Serialization format. JSON (the default) stays
-                human-readable; MSGPACK is more compact; BINARY (pickle)
-                handles arbitrary objects but must only be loaded from
-                trusted files.
+                human-readable; MSGPACK is more compact.
 
         Returns:
             True if the blob was written, False if serialization or the
@@ -124,7 +122,7 @@ class PersistenceManager:
                 version=_ENGINE_VERSION,
                 timestamp=datetime.now(timezone.utc),  # noqa: UP017 (mypy py3.10)
                 data_type=type(data).__name__,
-                checksum=hashlib.md5(payload).hexdigest(),  # noqa: S324
+                checksum=hashlib.sha256(payload).hexdigest(),
                 save_version=save_version,
                 format=fmt.value,
                 compressed=compress,
@@ -246,18 +244,15 @@ class PersistenceManager:
             )
 
         if verify_integrity:
-            stored = meta_dict.get("checksum")
-            calculated = hashlib.md5(payload).hexdigest()  # noqa: S324
-            if stored != calculated:
-                raise ValueError(
-                    f"Integrity check failed for '{key}': checksum {calculated} "
-                    f"does not match the recorded {stored}"
-                )
+            self._verify_checksum(key, meta_dict.get("checksum"), payload)
+
+        # Resolved before decompression so a save cannot name an encoding
+        # this build refuses and still have its payload touched.
+        fmt = self._resolve_format(key, meta_dict.get("format", "json"))
 
         if meta_dict.get("compressed"):
             payload = gzip.decompress(payload)
 
-        fmt = SerializationFormat(meta_dict.get("format", "json"))
         data = self.serializer.deserialize(payload, format_type=fmt)
 
         if self.migration_manager and isinstance(data, dict):
@@ -390,6 +385,78 @@ class PersistenceManager:
         meta_dict["timestamp"] = metadata.timestamp.isoformat()
         header = json.dumps(meta_dict, separators=(",", ":")).encode("utf-8")
         return header + _HEADER_SEP + payload
+
+    @staticmethod
+    def _verify_checksum(key: str, stored: str | None, payload: bytes) -> None:
+        """Check the payload against the digest recorded in its header.
+
+        The digest length picks the algorithm: 64 characters is SHA-256,
+        which is what this build writes, and 32 is the MD5 that saves
+        written earlier carry. Reading both means an existing save still
+        loads without a migration.
+
+        This detects corruption -- a truncated write, a bad sector. It is
+        not a tamper check, and cannot be: the digest sits in the same
+        header as the payload, so anyone who can rewrite one can rewrite
+        the other. What keeps a rewritten save from doing harm is that
+        every format this build will decode produces inert data.
+
+        Args:
+            key: Unique identifier, for the message.
+            stored: The digest recorded in the header, if any.
+            payload: The payload bytes exactly as read from storage.
+
+        Raises:
+            ValueError: If the digest is missing, an unrecognised length,
+                or disagrees with the payload.
+        """
+        if not stored:
+            raise ValueError(f"Save '{key}' carries no checksum to verify")
+
+        algorithms = {64: "sha256", 32: "md5"}
+        name = algorithms.get(len(stored))
+        if name is None:
+            raise ValueError(
+                f"Save '{key}' has a {len(stored)}-character checksum, which "
+                f"matches no digest this build knows (SHA-256 or MD5)"
+            )
+
+        calculated = hashlib.new(name, payload).hexdigest()
+        if stored != calculated:
+            raise ValueError(
+                f"Integrity check failed for '{key}': {name} {calculated} "
+                f"does not match the recorded {stored}"
+            )
+
+    @staticmethod
+    def _resolve_format(key: str, name: str) -> SerializationFormat:
+        """Resolve the header's format name against what this build decodes.
+
+        A save file names its own encoding, which means the name is input
+        from the file rather than from the caller. Every member of
+        `SerializationFormat` decodes to inert data, so matching one is
+        enough -- but an unknown name gets a message that says so, rather
+        than the bare `ValueError` the enum would raise. `"binary"`, the
+        pickle format this engine used to support, lands here.
+
+        Args:
+            key: Unique identifier, for the message.
+            name: The ``format`` value read from the header.
+
+        Returns:
+            The matching format.
+
+        Raises:
+            ValueError: If no format matches the name.
+        """
+        try:
+            return SerializationFormat(name)
+        except ValueError:
+            supported = ", ".join(sorted(f.value for f in SerializationFormat))
+            raise ValueError(
+                f"Save '{key}' is encoded as '{name}', which this build does "
+                f"not decode. Supported formats: {supported}."
+            ) from None
 
     @staticmethod
     def _unframe(blob: bytes) -> tuple[dict[str, Any], bytes]:

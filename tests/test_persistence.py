@@ -94,16 +94,32 @@ def test_msgpack_is_more_compact_than_json():
 
 
 # --------------------------------------------------------------------------- #
-# BINARY (pickle)                                                              #
+# No pickle                                                                    #
 # --------------------------------------------------------------------------- #
-def test_binary_roundtrips_arbitrary_object():
+def test_there_is_no_pickle_format():
+    """A save names its own encoding in its header, so a pickle format let a
+    *file* ask to be unpickled -- which runs whatever the file says. The
+    format is gone rather than guarded; see the manager's end-to-end test."""
+    assert not hasattr(SerializationFormat, "BINARY")
+    assert "binary" not in {f.value for f in SerializationFormat}
+
+
+def test_the_serializer_module_does_not_import_pickle():
+    """Removed from the module, not merely unreferenced -- so a later edit
+    cannot reach for an import that is already sitting there."""
+    import pyguara.persistence.serializer as serializer
+
+    assert not hasattr(serializer, "pickle")
+
+
+def test_every_remaining_format_decodes_to_inert_data():
+    """What makes a rewritten save harmless: JSON and MessagePack produce
+    data, never behaviour."""
     s = Serializer()
     obj = _Component("P", Vector2(5, 6), Color(1, 1, 1))
-    back = s.deserialize(
-        s.serialize(obj, SerializationFormat.BINARY), SerializationFormat.BINARY
-    )
-    assert isinstance(back, _Component)
-    assert back.name == "P"
+    for fmt in SerializationFormat:
+        back = s.deserialize(s.serialize(obj, fmt), fmt)
+        assert type(back) is dict, f"{fmt.value} reconstructed a {type(back)}"
 
 
 # --------------------------------------------------------------------------- #
