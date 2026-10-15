@@ -44,3 +44,45 @@ def test_importing_the_package_pulls_in_no_rendering_backend():
     assert result.stdout.strip() == "0 0", (
         f"pyguara.graphics imported a backend: {result.stdout!r}"
     )
+
+
+def test_components_package_exports_components_not_widgets():
+    """`pyguara.graphics.components.__init__` was a verbatim copy of
+    `pyguara.ui.components.__init__`, so the graphics package exported
+    `Button` and `Panel` and no `Sprite` at all."""
+    import pyguara.graphics.components as components
+
+    assert "Sprite" in components.__all__
+    assert "Button" not in components.__all__
+
+    missing = [n for n in components.__all__ if not hasattr(components, n)]
+    assert missing == []
+
+
+def test_the_components_the_root_used_to_omit_are_reachable():
+    """Geometry, particles and the screen flash were only reachable by
+    importing their submodules by hand."""
+    for name in ("Box", "Circle", "Geometry", "ParticleSystem", "ScreenFlash"):
+        assert name in graphics.__all__
+
+
+def test_importing_components_pulls_in_no_ui():
+    """`pyguara.graphics` must not depend on `pyguara.ui`. The copied
+    `__init__` inverted that -- importing any graphics component dragged the
+    whole widget toolkit in behind it. A fresh interpreter, because by now
+    the session has imported it anyway."""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import pyguara.graphics.components; "
+            "print(int('pyguara.ui' in sys.modules))",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout.strip() == "0", (
+        "pyguara.graphics.components imported pyguara.ui"
+    )
