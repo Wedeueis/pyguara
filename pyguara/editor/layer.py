@@ -15,7 +15,7 @@ unexecuted until it was deleted.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from imgui_bundle import imgui
@@ -173,6 +173,12 @@ class EditorLayer:
         # Set when the window is borderless and the backend can move it.
         # None leaves the operating system's own title bar in place.
         self._title_bar: TitleBar | None = None
+        # One source for the menus, drawn either into ImGui's main menu
+        # bar or into the editor's own title bar. Studio replaces this
+        # with its own set; on its own the editor offers the panel list.
+        self._menus: list[tuple[str, Callable[[], None]]] = [
+            ("Panels", self.draw_panel_menu_items)
+        ]
 
         # Built last, and only now: the context above is current, so the
         # renderer's `backend_flags` reach this layer's IO and not another's.
@@ -450,8 +456,8 @@ class EditorLayer:
             title_bar: The bar, or None to leave the OS's own.
         """
         self._title_bar = title_bar
-        if title_bar is not None and title_bar.menu is None:
-            title_bar.menu = self.draw_panel_menu_items
+        if title_bar is not None and not title_bar.menus:
+            title_bar.menus = self._menus
         self._layout_applied = False
 
     @property
@@ -603,18 +609,37 @@ class EditorLayer:
         same menu: ImGui's main menu bar always sits at the top edge of
         the viewport, so the two would occupy the same strip.
         """
-        if self._title_bar is not None:
+        if self._title_bar is not None or not self._menus:
             return
         if not imgui.begin_main_menu_bar():
             return
         try:
-            if imgui.begin_menu("Panels", True):
-                try:
-                    self.draw_panel_menu_items()
-                finally:
-                    imgui.end_menu()
+            for label, draw_items in self._menus:
+                if imgui.begin_menu(label, True):
+                    try:
+                        draw_items()
+                    finally:
+                        imgui.end_menu()
         finally:
             imgui.end_main_menu_bar()
+
+    @property
+    def menus(self) -> tuple[tuple[str, Callable[[], None]], ...]:
+        """The menus, in the order they are laid out."""
+        return tuple(self._menus)
+
+    def set_menus(self, menus: Sequence[tuple[str, Callable[[], None]]]) -> None:
+        """Replace the menus with `menus`.
+
+        The title bar, when there is one, is pointed at the same list, so
+        the two never disagree about what the editor offers.
+
+        Args:
+            menus: Each a title and something that draws its items.
+        """
+        self._menus = list(menus)
+        if self._title_bar is not None:
+            self._title_bar.menus = self._menus
 
     def draw_panel_menu_items(self) -> None:
         """Draw one toggle per panel, inside an open menu or popup.

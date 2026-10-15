@@ -76,13 +76,22 @@ class TestResizePropagation:
     def test_a_headless_app_has_no_graph_and_does_not_mind(self, app) -> None:
         """The headless backend registers none; resizing must be a no-op
         rather than an attribute error."""
-        app._resize_render_graph(1920, 1080)
+        app._resize_render_output(1920, 1080)
+
+    def test_the_renderers_follow_even_with_no_graph(self, app) -> None:
+        """A renderer's size is not the graph's business: a backend that
+        draws straight to the window has no graph and still has to know
+        how big the window is."""
+        app._resize_render_output(1920, 1080)
+
+        assert app._world_renderer.width == 1920
+        assert app._world_renderer.height == 1080
 
     def test_a_zero_sized_window_is_ignored(self, app) -> None:
         """Minimising reports zero, and resizing a framebuffer to it would
         fail inside the driver."""
-        app._resize_render_graph(0, 0)
-        app._resize_render_graph(-1, 100)
+        app._resize_render_output(0, 0)
+        app._resize_render_output(-1, 100)
 
 
 @pytest.mark.integration
@@ -122,7 +131,7 @@ class TestResizeReachesTheGraph:
         graph.fbo_manager.get_or_create("world")
         assert graph.fbo_manager.width == 800
 
-        app._resize_render_graph(1920, 1080)
+        app._resize_render_output(1920, 1080)
 
         assert graph.fbo_manager.width == 1920
         assert graph.fbo_manager.height == 1080
@@ -132,9 +141,18 @@ class TestResizeReachesTheGraph:
         recorder = _RecordingPass("recorder", [])
         app._render_graph.add_pass(recorder)
 
-        app._resize_render_graph(1920, 1080)
+        app._resize_render_output(1920, 1080)
 
         assert recorder.sizes == [(1920, 1080)]
+
+    def test_the_renderers_are_resized_too(self, app) -> None:
+        """The other half of the symptom. The graph's framebuffers grew
+        and the renderers did not, so the world kept being drawn at the
+        old size and stretched across the new one."""
+        app._resize_render_output(1990, 820)
+
+        assert app._world_renderer.width == 1990
+        assert app._world_renderer.height == 820
 
     def test_an_unchanged_size_does_no_work(self, app) -> None:
         """A window event fires for a move as well as a resize, and
@@ -142,7 +160,7 @@ class TestResizeReachesTheGraph:
         recorder = _RecordingPass("recorder", [])
         app._render_graph.add_pass(recorder)
 
-        app._resize_render_graph(800, 600)
+        app._resize_render_output(800, 600)
 
         assert recorder.sizes == []
 

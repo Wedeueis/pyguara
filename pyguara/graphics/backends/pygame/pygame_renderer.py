@@ -245,6 +245,20 @@ class PygameBackend:
         surf = font.render(text, True, to_pygame_color(color))
         self._screen.blit(surf, (int(position.x), int(position.y)))
 
+    def resize(self, width: int, height: int) -> None:
+        """No-op: this renderer's size *is* its surface's size.
+
+        `width` and `height` read straight off the display surface, so
+        there is nothing here to keep in step. A backend that replaces its
+        surface on resize hands the renderer the new one; until then the
+        old surface is still the one being drawn to, and recording a size
+        that disagreed with it would be worse than recording nothing.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
+        """
+
     def present(self) -> None:
         """Swap display buffers."""
         pygame.display.flip()

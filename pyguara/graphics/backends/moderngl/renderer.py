@@ -324,6 +324,27 @@ class ModernGLRenderer:
             ],
         )
 
+    def resize(self, width: int, height: int) -> None:
+        """Adopt a new drawing size and rebuild the projection.
+
+        The projection maps pixels one to one onto the framebuffer, so it
+        is correct only while the two agree. Nothing rebuilt it before,
+        and a resized window therefore drew the original rectangle
+        stretched across the new one -- measured at 1.37x horizontally for
+        a 1280x720 renderer in a 1990x820 window.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
+        """
+        if width <= 0 or height <= 0:
+            return
+        if width == self._width and height == self._height:
+            return
+        self._width = width
+        self._height = height
+        self._update_projection()
+
     def _update_projection(self) -> None:
         """Set up orthographic projection matrix.
 

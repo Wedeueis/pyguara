@@ -140,9 +140,15 @@ class StudioAttachment:
         self._approval_mode = approval_mode
         self._session: StudioSession | None = None
         self._panels_installed = False
+        self._menus: Any = None
         self._screen_taken = False
         self._final_was_enabled = True
         self._ui_present_patched = False
+
+    @property
+    def container(self) -> Any:
+        """The engine container Studio was attached to."""
+        return self._container
 
     @property
     def layer(self) -> Any:
@@ -250,7 +256,25 @@ class StudioAttachment:
             self._layer.add_panel(panel)
 
         self._layer.set_default_layout(default_layout())
+        self._install_menus()
         logger.info("Studio panels installed.")
+
+    def _install_menus(self) -> None:
+        """Replace the editor's lone panel menu with Studio's menu bar.
+
+        Here rather than at attach time because every menu acts on the
+        session, and the session only exists once a scene is open. The
+        same object draws into the editor's own title bar or into ImGui's
+        main menu bar, whichever the window has.
+        """
+        from pyguara.studio.menu import StudioMenus
+
+        self._menus = StudioMenus(self)
+        self._layer.set_menus(self._menus.menus())
+        # Anything a menu opens and that outlives the click -- the About
+        # window -- is drawn from a frame hook, since a popup begun inside
+        # a menu closes with it.
+        self._layer.add_frame_hook(self._menus.draw_overlays)
 
     def take_over_screen(self) -> None:
         """Make the editor the only thing on screen, with the game inside it.

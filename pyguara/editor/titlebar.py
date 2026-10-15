@@ -37,7 +37,7 @@ the window the drag is moving:
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from imgui_bundle import imgui
@@ -56,10 +56,8 @@ these are the targets a user hits without looking."""
 ICON_SIZE = 10.0
 """How large a window button's icon is drawn, unscaled."""
 
-MENU_LABEL = "Panels"
-"""The menu the bar opens on the left. One menu, so it is a labelled
-button with a popup rather than a menu bar -- which would be a second row
-and defeat the point of drawing the bar ourselves."""
+MENU_PADDING = 24.0
+"""Horizontal padding around a menu's label, unscaled."""
 
 _CLOSE_HOVER = imgui.ImVec4(0.78, 0.22, 0.24, 1.0)
 _BUTTON_HOVER = imgui.ImVec4(1.0, 1.0, 1.0, 0.10)
@@ -74,22 +72,22 @@ class TitleBar:
         title: str,
         chrome: Any,
         *,
-        menu: Callable[[], None] | None = None,
+        menus: Sequence[tuple[str, Callable[[], None]]] = (),
     ) -> None:
         """Initialize the bar.
 
         Args:
             title: What to show in the middle.
             chrome: Something satisfying `IWindowChrome`.
-            menu: Draws the contents of the bar's menu popup. Set by the
-                editor layer, which owns the panel list. None draws no
-                menu button at all.
+            menus: The menus to lay out along the left, each a title and
+                something that draws its items. Set by the editor layer,
+                which owns them. Empty draws no menus at all.
         """
         self._title = title
         self._chrome = chrome
         self._dragging = False
         self._close_requested = False
-        self.menu = menu
+        self.menus: Sequence[tuple[str, Callable[[], None]]] = menus
         self._menu_width = 0.0
         # Where in the bar the drag started, in window coordinates. The
         # point the window is steered to keep under the cursor.
@@ -187,29 +185,36 @@ class TitleBar:
             height: The bar height.
             scale: The UI scale.
         """
-        if self.menu is None:
+        if not self.menus:
             self._menu_width = 0.0
             return
 
-        width = imgui.calc_text_size(MENU_LABEL).x + 24.0 * scale
-        self._menu_width = width
-
-        imgui.set_cursor_pos(imgui.ImVec2(0.0, 0.0))
         imgui.push_style_var(imgui.StyleVar_.frame_rounding, 0.0)
         imgui.push_style_color(imgui.Col_.button, _TRANSPARENT)
         imgui.push_style_color(imgui.Col_.button_hovered, _BUTTON_HOVER)
         imgui.push_style_color(imgui.Col_.button_active, _BUTTON_HOVER)
+        offset = 0.0
         try:
-            if imgui.button(MENU_LABEL, imgui.ImVec2(width, height)):
-                imgui.open_popup("##titlebar_menu")
-            if imgui.begin_popup("##titlebar_menu"):
+            for index, (label, draw_items) in enumerate(self.menus):
+                width = imgui.calc_text_size(label).x + MENU_PADDING * scale
+                imgui.set_cursor_pos(imgui.ImVec2(offset, 0.0))
+                imgui.push_id(f"menu{index}")
+                popup = f"##titlebar_menu_{index}"
                 try:
-                    self.menu()
+                    if imgui.button(label, imgui.ImVec2(width, height)):
+                        imgui.open_popup(popup)
+                    if imgui.begin_popup(popup):
+                        try:
+                            draw_items()
+                        finally:
+                            imgui.end_popup()
                 finally:
-                    imgui.end_popup()
+                    imgui.pop_id()
+                offset += width
         finally:
             imgui.pop_style_color(3)
             imgui.pop_style_var()
+        self._menu_width = offset
 
     def _draw_title(self, width: float, height: float) -> None:
         """Centre the title text vertically and horizontally.
@@ -372,6 +377,7 @@ class TitleBar:
             if hovered and pressed and not over_buttons:
                 self._dragging = True
                 self._grab = (io.mouse_pos.x, io.mouse_pos.y)
+                self._attempt("begin_move", lambda: self._chrome.begin_move())
                 # A double-click on the bar maximises, which is what every
                 # window manager does and what a user will try first.
                 if imgui.is_mouse_double_clicked(imgui.MouseButton_.left):
@@ -395,6 +401,8 @@ class TitleBar:
 
     def _stop_dragging(self) -> None:
         """End a drag, forgetting where it was grabbed."""
+        if self._dragging:
+            self._attempt("end_move", lambda: self._chrome.end_move())
         self._dragging = False
         self._grab = None
 
@@ -423,6 +431,14 @@ class TitleBar:
     def _move(self, dx: int, dy: int) -> None:
         """Move the window by a delta."""
         self._attempt("move", lambda: self._chrome.move_by(dx, dy))
+
+    def request_close(self) -> None:
+        """Ask the application to close, as pressing the button does.
+
+        Public so a menu's Quit and the bar's own button are one action
+        rather than two that might drift apart.
+        """
+        self._close()
 
     def _close(self) -> None:
         """Ask the window to close, and record that it was asked.

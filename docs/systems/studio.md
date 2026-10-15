@@ -78,6 +78,39 @@ viewport centre, play on top, history/journal/commands tabbed below — and
 the arrangement is applied once, so dragging a panel elsewhere keeps it
 there.
 
+## The menus
+
+Studio's menu bar is built over the **operation registry**, not over the
+editor's internals. An entry that changes the scene calls the same
+operation an agent calls over MCP or JSON lines, so a person choosing
+*Entity > Create Empty* and an agent calling `create_entity` take one
+path, land in one history, and read the same way in the journal.
+
+| Menu | What is in it |
+| --- | --- |
+| **Scene** | Which scene is open, and Quit |
+| **Edit** | Undo, Redo, Delete Entity, Deselect |
+| **Entity** | Create Empty, Add Component, Enable/Disable |
+| **View** | The panels, and Reset Layout |
+| **Run** | Pause/Resume, Step, the time-scale presets |
+| **Agent** | The approval mode, Approvals, Journal, and the commands that let an agent in |
+| **Help** | The documentation link, and About |
+
+The names follow Godot and Unity where they agree -- Scene is Godot's
+File, Entity is this engine's word for Godot's Node and Unity's
+GameObject -- because a menu bar is not the place to be original. **Agent**
+has no equivalent in either, and is the point of Studio.
+
+The same menus are drawn into the editor's own title bar when the window
+is borderless, and into ImGui's main menu bar when it is not. One list,
+two places, so the two can never disagree about what the editor offers.
+
+**What is greyed out is missing on purpose.** *Open Scene* and *New
+Scene* are disabled because there is no operation behind them yet. Adding
+them to the menu alone would let a person reach a state an agent cannot,
+which is the one thing this design exists to prevent. The fix is the
+operation, not a menu entry that reaches around it.
+
 ## The window
 
 Two display flags decide what the operating system gives the editor, and

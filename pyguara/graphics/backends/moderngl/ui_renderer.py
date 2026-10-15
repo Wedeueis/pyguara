@@ -299,6 +299,34 @@ class GLUIRenderer:
             )
         self._apply_clip(self._clips.clear())
 
+    def resize(self, width: int, height: int) -> None:
+        """Adopt a new surface size.
+
+        The UI is drawn on a pygame surface, uploaded whole and composited
+        as a fullscreen quad -- so a surface left at the original size is
+        stretched across the resized window, which is what left the HUD
+        distorted. Both the surface and the texture it uploads into are
+        replaced.
+
+        Anything drawn this frame is lost with the surface it was drawn
+        on. That is correct: it was laid out for the old size, and the
+        frame is about to be drawn again for the new one.
+
+        Args:
+            width: The new width in pixels.
+            height: The new height in pixels.
+        """
+        if width <= 0 or height <= 0:
+            return
+        if width == self._width and height == self._height:
+            return
+        self._width = width
+        self._height = height
+        self._surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        self._texture.release()
+        self._texture = self._ctx.texture((width, height), 4)
+        self._dirty = False
+
     def present(self) -> None:
         """Upload UI surface to GPU and render as overlay.
 

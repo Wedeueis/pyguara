@@ -54,8 +54,14 @@ class FakeChrome:
     def is_maximized(self) -> bool:
         return self.maximized
 
+    def begin_move(self) -> None:
+        self.calls.append("begin_move")
+
     def move_by(self, dx: int, dy: int) -> None:
         self.calls.append(("move", dx, dy))
+
+    def end_move(self) -> None:
+        self.calls.append("end_move")
 
 
 class RefusingChrome(FakeChrome):
@@ -73,7 +79,13 @@ class RefusingChrome(FakeChrome):
     def request_close(self) -> None:
         raise RuntimeError("no")
 
+    def begin_move(self) -> None:
+        raise RuntimeError("no")
+
     def move_by(self, dx: int, dy: int) -> None:
+        raise RuntimeError("no")
+
+    def end_move(self) -> None:
         raise RuntimeError("no")
 
     @property
@@ -155,22 +167,37 @@ class TestDrawing:
         bar.title = "Studio - quintal_cerrado"
         assert bar.title == "Studio - quintal_cerrado"
 
-    def test_the_layer_lends_the_bar_its_panel_menu(self) -> None:
+    def test_the_layer_lends_the_bar_its_menus(self) -> None:
         bar = TitleBar("Studio", FakeChrome())
         layer = _layer(bar)
         try:
-            assert bar.menu == layer.draw_panel_menu_items
+            assert [label for label, _ in bar.menus] == ["Panels"]
         finally:
             layer.release()
 
-    def test_a_menu_passed_in_is_left_alone(self) -> None:
+    def test_menus_passed_in_are_left_alone(self) -> None:
         def mine() -> None:  # pragma: no cover - never drawn here
             pass
 
-        bar = TitleBar("Studio", FakeChrome(), menu=mine)
+        bar = TitleBar("Studio", FakeChrome(), menus=[("Mine", mine)])
         layer = _layer(bar)
         try:
-            assert bar.menu is mine
+            assert [label for label, _ in bar.menus] == ["Mine"]
+        finally:
+            layer.release()
+
+    def test_replacing_the_layer_menus_reaches_the_bar(self) -> None:
+        """One source: a bar showing a different set from the main menu
+        bar would be two answers to what the editor offers."""
+
+        def mine() -> None:  # pragma: no cover - never drawn here
+            pass
+
+        bar = TitleBar("Studio", FakeChrome())
+        layer = _layer(bar)
+        try:
+            layer.set_menus([("Scene", mine), ("Edit", mine)])
+            assert [label for label, _ in bar.menus] == ["Scene", "Edit"]
         finally:
             layer.release()
 
@@ -323,7 +350,9 @@ class TestDragging:
             layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
             io.add_mouse_button_event(0, True)
             layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
-            assert chrome.calls == []
+            # The new drag reads the position afresh; what must not happen
+            # is a move, which a stale grab point would have produced.
+            assert [c for c in chrome.calls if c != "begin_move"] == []
         finally:
             layer.release()
 
@@ -344,6 +373,32 @@ class TestDragging:
             assert not any(
                 isinstance(call, tuple) and call[0] == "move" for call in chrome.calls
             )
+        finally:
+            layer.release()
+
+    def test_a_drag_reads_the_window_position_once(self) -> None:
+        """Not once per frame. The read costs something on every frame of
+        a drag and is asynchronous besides, so a position read straight
+        after a move can still be the old one."""
+        chrome = FakeChrome()
+        bar = TitleBar("Studio", chrome)
+        layer = _layer(bar)
+        io = imgui.get_io()
+        try:
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_pos_event(400.0, HEIGHT * 0.5)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            io.add_mouse_button_event(0, True)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            assert chrome.calls.count("begin_move") == 1
+            for step in range(3):
+                io.add_mouse_pos_event(410.0 + step * 10, HEIGHT * 0.5)
+                layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            assert chrome.calls.count("begin_move") == 1
+            assert "end_move" not in chrome.calls
+            io.add_mouse_button_event(0, False)
+            layer.build_frame(WIDTH, HEIGHT_PX, dt=1 / 60)
+            assert chrome.calls.count("end_move") == 1
         finally:
             layer.release()
 
