@@ -798,11 +798,13 @@ class Application:
         world_fbo.bind()
         world_fbo.clear(self._config_manager.config.display.default_color)
 
-        # Render scenes to the world FBO. `WorldPass` itself is not run:
-        # its own camera-gated `Renderable` queue is a second, unrelated
-        # drawing path (see its own docstring) that no current game
-        # submits to -- every one of them draws immediately here instead,
-        # which needs the "world" FBO bound first, exactly as above.
+        # Render scenes straight into the world FBO. This is where the
+        # world is drawn: there is no "world" pass, because the bind above
+        # has to happen *before* the scenes render and every pass runs
+        # after them. (There used to be a `WorldPass`, carrying its own
+        # camera-gated `Renderable` queue that no game ever submitted to;
+        # it was registered, skipped here by name, and deleted once that
+        # was established.)
         # Re-bound before *each* stacked scene, not once: a scene below
         # may still execute a pass itself and leave its output bound.
         self._scene_manager.render(
@@ -814,7 +816,7 @@ class Application:
         # `"final"`, which blits the result to the screen. A pass that
         # declared `after_ui` is held back; see below.
         for render_pass in self._render_graph.passes:
-            if render_pass.name == "world" or not render_pass.enabled:
+            if not render_pass.enabled:
                 continue
             if render_pass.after_ui:
                 continue

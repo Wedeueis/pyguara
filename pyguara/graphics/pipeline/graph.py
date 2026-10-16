@@ -30,11 +30,15 @@ class RenderGraph:
     - Methods to add/remove/query passes
 
     Typical pass order for a 2D game with lighting and post-processing:
-    1. WorldPass - Render sprites to world FBO
-    2. LightPass - Render lights to light FBO (Phase C)
-    3. CompositePass - Multiply world * light (Phase C)
-    4. PostProcessPass - Apply bloom, vignette, etc. (Phase D)
-    5. FinalPass - Blit result to screen
+    1. LightPass - Render lights to light FBO
+    2. CompositePass - Multiply world * light
+    3. PostProcessPass - Apply bloom, vignette, etc.
+    4. FinalPass - Blit result to screen
+
+    The world itself is not a pass. `Application._render_with_graph` binds
+    and clears the world FBO and then lets the scenes draw straight into
+    it, because that has to happen *before* the scenes render and every
+    pass here runs after them.
     """
 
     def __init__(

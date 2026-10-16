@@ -348,7 +348,7 @@ def _setup_container(
         container.register_instance(TextureFactory, gl_texture_factory)  # type: ignore[type-abstract]
 
         # Render Pipeline (FBO management and render graph)
-        from pyguara.graphics.pipeline.passes import FinalPass, WorldPass
+        from pyguara.graphics.pipeline.passes import FinalPass
 
         render_graph = RenderGraph(ctx, disp_cfg.screen_width, disp_cfg.screen_height)
 
@@ -362,15 +362,16 @@ def _setup_container(
         # looked at the engine.
         container.register_instance(FramebufferManager, render_graph.fbo_manager)
 
-        # Setup default render passes
-        world_pass = WorldPass(gl_renderer)
+        # Setup default render passes. There is no "world" pass: the world
+        # FBO is bound and cleared by `Application._render_with_graph`
+        # before the scenes draw into it, which a pass cannot do -- passes
+        # run *after* the scenes in that loop. `FinalPass` reads the buffer
+        # by name.
         final_pass = FinalPass(ctx, input_fbo_name="world")
 
-        render_graph.add_pass(world_pass)
         render_graph.add_pass(final_pass)
 
         container.register_instance(RenderGraph, render_graph)
-        container.register_instance(WorldPass, world_pass)
 
         # Store texture loader for later registration
         gl_texture_loader = GLTextureLoader(ctx)

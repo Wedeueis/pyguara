@@ -21,7 +21,7 @@ import pytest
 
 from pyguara.graphics import protocols
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
-from pyguara.graphics.pipeline.passes import PostProcessPass, WorldPass
+from pyguara.graphics.pipeline.passes import FinalPass, PostProcessPass
 from pyguara.graphics.protocols import IFramebuffer, IRenderPass
 
 
@@ -79,8 +79,8 @@ class TestRenderPassesConform:
     passes compile shaders in `__init__` and are covered by the integration
     suite instead."""
 
-    def test_world_pass_conforms(self) -> None:
-        assert isinstance(WorldPass(MagicMock()), IRenderPass)
+    def test_final_pass_conforms(self) -> None:
+        assert isinstance(FinalPass(MagicMock()), IRenderPass)
 
     def test_post_process_pass_conforms(self) -> None:
         assert isinstance(PostProcessPass(MagicMock()), IRenderPass)
