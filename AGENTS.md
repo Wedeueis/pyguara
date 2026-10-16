@@ -495,8 +495,23 @@ cargo build --release                # build it; both pools then use it
 PYGUARA_NO_NATIVE=1 uv run pytest    # force the Python path
 ```
 
-Per instance, `accelerate=False` pins the Python pool and `accelerate=True`
-demands the native one; the default picks whichever is available.
+**The store is one engine-wide choice**, not a per-subsystem one:
+`PerformanceConfig.native_acceleration` is `off`, `auto` (the default) or
+`required`, resolved once at bootstrap by `pyguara.native.configure()` and
+reported in the boot log. `required` fails at *startup* without the
+extension, which is what a game depending on native performance should
+ship. `pyguara.native.describe()` says which store is in force and where
+it came from.
+
+It is engine-wide because a store picked silently from whether a `.so`
+happens to be on disk means the same game, with the same code and seed,
+behaves differently on a machine that built the extension and one that
+did not -- invisible for a particle, gameplay for a flock. See
+`docs/adr/0004-the-native-boundary.md`, Decision 4.
+
+`accelerate=True`/`False` on a pool still overrides it, because the parity
+tests have to construct both stores side by side. That is what it is for,
+not a second place to configure the engine.
 
 Written outside the generated block above on purpose: `pyguara studio
 instructions` rewrites what is inside it, and an earlier version of this
