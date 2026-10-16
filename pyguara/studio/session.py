@@ -460,10 +460,15 @@ class StudioSession:
 
         Applied and reverted rather than predicted. The diff is then the
         real consequence, which is only possible because every command
-        carries its own inverse. The cost is that anything watching
-        component changes sees the edit and its undo go past -- physics
-        bodies and the spatial index are rebuilt twice and end where they
-        started.
+        carries its own inverse.
+
+        The whole pair runs inside `suppress_notifications()`, so nothing
+        watching the world is told about an edit that is about to be
+        undone. It used to see the edit and its undo go past: harmless for
+        a field change, not harmless for a planned **delete**, which
+        dropped the entity from the spatial index and queued its physics
+        body for teardown before the revert -- and the revert has no
+        `entity_created` hook to put either back.
 
         Args:
             command: The edit to describe.
@@ -479,15 +484,16 @@ class StudioSession:
                 the most useful thing a plan can report.
         """
         before = self.snapshot()
-        try:
-            command.apply(self._world)
-        except EditError as exc:
-            self._journal.record(actor, action, ok=False, error=str(exc))
-            raise
+        with self._world.suppress_notifications():
+            try:
+                command.apply(self._world)
+            except EditError as exc:
+                self._journal.record(actor, action, ok=False, error=str(exc))
+                raise
 
-        description = command.describe()
-        diff = diff_snapshots(before, self.snapshot())
-        command.revert(self._world)
+            description = command.describe()
+            diff = diff_snapshots(before, self.snapshot())
+            command.revert(self._world)
 
         self._journal.record(actor, action, detail={"planned": True, **description})
         return EditOutcome(
@@ -500,9 +506,11 @@ class StudioSession:
     def _queue(self, command: EditCommand, *, actor: Actor, action: str) -> EditOutcome:
         """Hold `command` for a person, carrying the diff it would make.
 
-        The diff is obtained the same way `_plan` does, so a reviewer sees
-        the consequence rather than the request. The command is left
-        reverted and re-applied on approval.
+        The diff is obtained the same way `_plan` does -- including inside
+        `suppress_notifications()`, so a queued edit nobody has approved
+        yet does not reach the physics bodies or the spatial index. The
+        command is left reverted and re-applied on approval, and *that*
+        apply notifies normally, because by then the edit is real.
 
         Args:
             command: The edit to queue.
@@ -517,15 +525,16 @@ class StudioSession:
                 cannot be made is not worth a person's attention.
         """
         before = self.snapshot()
-        try:
-            command.apply(self._world)
-        except EditError as exc:
-            self._journal.record(actor, action, ok=False, error=str(exc))
-            raise
+        with self._world.suppress_notifications():
+            try:
+                command.apply(self._world)
+            except EditError as exc:
+                self._journal.record(actor, action, ok=False, error=str(exc))
+                raise
 
-        description = command.describe()
-        diff = diff_snapshots(before, self.snapshot())
-        command.revert(self._world)
+            description = command.describe()
+            diff = diff_snapshots(before, self.snapshot())
+            command.revert(self._world)
 
         pending_id = uuid.uuid4().hex[:12]
         self._pending[pending_id] = PendingEdit(
