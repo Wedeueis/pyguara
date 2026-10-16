@@ -325,6 +325,14 @@ class ParticleSystem:
         faster formulation here would make the two paths disagree, and
         parity is worth more than a burst being slightly cheaper.
 
+        **Only as many as will fit are drawn for.** The Python loop asks
+        for a slot before it draws and gives up when there is none, so an
+        overflowing burst consumes nothing for the particles it drops.
+        Drawing `count` sets regardless would leave the two streams at
+        different positions afterwards, and every later emission would
+        then differ -- which is the same thing `_burst_native` guards in
+        `Sparks`.
+
         Args:
             texture: Resolved to an index the native pool stores.
             position: Emission origin.
@@ -340,10 +348,13 @@ class ParticleSystem:
             color_start: Tint at birth, or None for no colour animation.
             color_end: Tint at death, or None.
         """
+        assert self._native is not None
+        spawnable = min(count, self._capacity - int(self._native.live_count()))
+
         velocity_x: list[float] = []
         velocity_y: list[float] = []
         rotations: list[float] = []
-        for _ in range(count):
+        for _ in range(spawnable):
             angle = self._rng.uniform(0, spread)
             direction = Vector2.right().rotate_degrees(angle)
             velocity = direction * self._rng.uniform(speed * 0.5, speed * 1.5)
@@ -351,7 +362,6 @@ class ParticleSystem:
             velocity_y.append(velocity.y)
             rotations.append(self._rng.uniform(0, 360))
 
-        assert self._native is not None
         self._native.emit(
             self._texture_slot(texture),
             position.x,
