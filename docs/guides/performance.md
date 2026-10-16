@@ -214,6 +214,49 @@ costs nothing at runtime.
 
 ---
 
+## Character movement
+
+### The swept `CharacterMover` probe -- milliseconds per fixed tick
+
+`CharacterMover` moves an entity one **whole pixel** at a time along each
+axis and tests every step. That is deliberate: it is the guarantee that stops
+a fast mover tunnelling through a wall, and the module docstring says so. Each
+step calls `overlap_box`, and `PymunkEngine._probe_shape` answers it by
+constructing a fresh kinematic `pymunk.Body` **and** a fresh `pymunk.Poly` on
+the CFFI heap -- it is a `@staticmethod`, so there is nowhere to cache them.
+
+The cost therefore grows with how **fast** things move, not how many there
+are. Characters running at 240 px/s on a floor, 60 ticks per measurement:
+
+| Movers | ms / tick | Probes / tick | CFFI objects / tick | CFFI objects / simulated second |
+| --- | --- | --- | --- | --- |
+| 1 | 0.12 | 4.0 | 8.0 | 478 |
+| 10 | 1.12 | 39.8 | 79.7 | 4,780 |
+| 50 | **6.07** | 209.4 | 418.7 | **25,124** |
+
+Fifty movers spend **over a third of a 16.7 ms frame** on movement alone,
+before anything is drawn. The allocation figures are counted rather than
+sampled: `_probe_shape` allocates exactly two CFFI objects per call, so the
+count is the probe count doubled.
+
+For reference, the audit that raised this estimated "18,000+ CFFI
+allocations/second" without saying under what conditions. The shape of the
+claim is right; the number lands between 10 and 50 movers at this speed, and
+is now pinned to a scenario rather than asserted.
+
+**Measured and deliberately not fixed.** RFC-0003's Marco 4 moves the whole
+sweep into Rust against static AABBs, removing the CFFI path rather than
+optimising it -- so a Python-side fix (a cached probe body, or routing
+`overlap_box` through the `space.bb_query` that `region_query` already uses)
+would be thrown away. These numbers are that milestone's acceptance
+criterion. If RFC-0003 is declined, they are the justification for doing the
+Python fix after all.
+
+What must *not* change in either language: every pixel is still tested.
+Bisecting the walk would be faster and would reintroduce tunnelling.
+
+---
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.
