@@ -2,6 +2,7 @@
 
 import math
 from collections import OrderedDict
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -16,7 +17,14 @@ from pyguara.graphics.backends.moderngl.blend import (
 )
 from pyguara.graphics.backends.moderngl.texture import GLTexture, GLTextureFactory
 from pyguara.graphics.materials.material import Material
-from pyguara.graphics.types import RenderBatch
+from pyguara.graphics.types import (
+    SHAPE_INSTANCE_FLOATS as _PACKED_SHAPE_FLOATS,
+)
+from pyguara.graphics.types import (
+    RenderBatch,
+    ShapeBatch,
+    ShapeKind,
+)
 from pyguara.resources.types import Texture
 
 # Shader file paths (relative to this module)
@@ -68,14 +76,17 @@ class ModernGLRenderer:
     REQUIRED_ATTRIBUTES = ("in_vert", "in_pos")
 
     # Shape instance layout: pos(2) + size(2) + rot(1) + color(4) + width(1)
-    # + shape_type(1) = 11 floats = 44 bytes.
-    SHAPE_INSTANCE_FLOATS = 11
+    # + shape_type(1) = 11 floats = 44 bytes. Taken from `graphics.types`
+    # rather than restated, because `ShapeBatch` now carries rows in it and
+    # two copies of a layout is one too many.
+    SHAPE_INSTANCE_FLOATS = _PACKED_SHAPE_FLOATS
     SHAPE_INSTANCE_STRIDE = SHAPE_INSTANCE_FLOATS * 4
 
-    # Shape-type discriminants, matching shape.frag's branch.
-    SHAPE_TYPE_RECT = 0.0
-    SHAPE_TYPE_CIRCLE = 1.0
-    SHAPE_TYPE_LINE = 2.0
+    # Shape-type discriminants, matching shape.frag's branch. Floats
+    # because they are an instance column; `ShapeKind` is the enum.
+    SHAPE_TYPE_RECT = float(ShapeKind.RECT)
+    SHAPE_TYPE_CIRCLE = float(ShapeKind.CIRCLE)
+    SHAPE_TYPE_LINE = float(ShapeKind.LINE)
 
     def __init__(self, ctx: moderngl.Context, width: int, height: int) -> None:
         """Initialize the renderer.
@@ -142,7 +153,10 @@ class ModernGLRenderer:
         self._shape_capacities: dict[float, int] = {}
         self._shape_vbos: dict[float, moderngl.Buffer] = {}
         self._shape_vaos: dict[float, moderngl.VertexArray] = {}
-        self._shape_pending: dict[float, list[list[float]]] = {}
+        # Rows rather than lists of floats: `render_shapes` extends a
+        # bucket with rows packed elsewhere, and `_flush_shapes` only
+        # ever measures and array-ifies them.
+        self._shape_pending: dict[float, list[Sequence[float]]] = {}
         for shape_type in (
             self.SHAPE_TYPE_RECT,
             self.SHAPE_TYPE_CIRCLE,
@@ -856,6 +870,26 @@ class ModernGLRenderer:
                 self.SHAPE_TYPE_LINE,
             ]
         )
+
+    def render_shapes(self, batch: ShapeBatch) -> None:
+        """Queue many primitives of one kind, flushed with the rest.
+
+        What makes `ShapeBatch` worth having: the rows arrive in the
+        instance layout this renderer already accumulates, so a batch of
+        four thousand shapes is one list `extend` and no per-shape Python
+        work at all. The rows land in the same bucket `draw_circle` fills,
+        so they draw in the same order and at the same point in the frame.
+
+        Rows are trusted to be the right width -- `_flush_shapes` builds
+        one array from the whole bucket, so a short row would raise there
+        with a shape mismatch rather than corrupt the draw. Validating
+        every row here would reintroduce the per-row Python cost this
+        exists to remove.
+
+        Args:
+            batch: Packed rows, all of one `ShapeKind`.
+        """
+        self._shape_pending[float(batch.kind)].extend(batch.instances)
 
     def present(self) -> None:
         """Swap display buffers.

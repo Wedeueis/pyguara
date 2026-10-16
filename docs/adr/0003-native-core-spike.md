@@ -309,6 +309,103 @@ directly instead.
 5. **Hold Marco 2** (the render batcher) until the zero-copy buffer claim is
    prototyped. It is the most invasive milestone and depends on the buffer
    protocol working exactly as described.
+   *Amended after the sparks increment below:* a narrow slice of batched
+   submission came forward out of necessity, as `ShapeBatch` — Python lists
+   of packed rows, not a zero-copy buffer. The claim Marco 2 rests on is
+   still untested.
+
+## Marco 3, increment 2 — sparks, where the render half *is* the frame
+
+Recommendation 4 above said to port the pools' render packing as well as
+their arithmetic, on the evidence that `update` was 84% of a particle
+frame. Applied to `Sparks` that reasoning inverts, and the measurement is
+the only thing that showed it:
+
+| | `update` | `render` | render's share |
+| --- | ---: | ---: | ---: |
+| 1000 particles | 1.574 ms | 0.367 ms | 19% |
+| 1000 sparks, dots | 2.063 ms | 2.759 ms | 57% |
+| 1000 sparks, streaks | 2.009 ms | 5.360 ms | **73%** |
+
+The cause is structural rather than incidental. A particle is a sprite, so
+a thousand of them reach the renderer as **one** `RenderBatch` per texture.
+A spark is a primitive, so a thousand of them reach it as a thousand
+`draw_circle` or `draw_line` calls. Porting only the arithmetic would
+therefore have capped sparks at **1.4-1.8x** however fast the arithmetic
+became — a milestone not worth shipping.
+
+### So the render half needed a batched submission, and its shape was measured
+
+Four candidates, at 1000 live:
+
+| Candidate | dots | streaks | frame speedup |
+| --- | ---: | ---: | ---: |
+| Python, per primitive (baseline) | 2.525 ms | 5.165 ms | — |
+| native rows, handed over whole | **0.329 ms** | **0.349 ms** | **13-20x** |
+| native draw-call parameters, looped | 2.318 ms | 3.096 ms | 1.9-2.3x |
+| native draw-call parameters, NumPy pack | 1.288 ms | 1.217 ms | 3.4-5.8x |
+
+The two "parameters" candidates are the ones that keep the instance layout
+private to the renderer, which is the cleaner layering. They lose by 4-10x,
+for the reason that keeps recurring in this ADR: anything that walks the
+elements in Python afterwards gives the saving straight back.
+
+So `ShapeBatch` carries **packed rows** in the eleven-float layout now
+documented in `pyguara/graphics/types.py`, and `ShapeBatchRenderer` is an
+optional capability that only the ModernGL world renderer satisfies —
+because it is the only backend where accepting one is a list `extend` of
+something it already holds. Every other renderer keeps the per-primitive
+path and the native arithmetic, which is the 1.9x that remains.
+
+That layout was already being built by `GLRenderer.draw_rect`,
+`draw_circle` and `draw_line` and read per instance by the shape shader.
+What changed is that it is now named and documented, because a layout that
+crosses a boundary undeclared is exactly how the texture-orientation
+convention drifted (W6).
+
+### End to end
+
+| Live | Path | `update` | `render` | Frame | |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1000 dots | Python | 2.063 | 2.759 | 4.822 | |
+| 1000 dots | **native** | 0.003 | 0.287 | **0.290** | **16.6x** |
+| 1000 streaks | Python | 2.009 | 5.360 | 7.368 | |
+| 1000 streaks | **native** | 0.003 | 0.299 | **0.302** | **24.4x** |
+| 4000 streaks | Python | 8.085 | 21.937 | 30.021 | |
+| 4000 streaks | **native** | 0.011 | 1.269 | **1.280** | **23.5x** |
+
+### Two bugs this increment turned up
+
+**The native emission paths consumed the RNG stream differently from the
+Python ones.** `ParticleSystem.emit` and `Sparks.burst` ask for a free slot
+*before* they draw, so a burst that overflows the pool consumes nothing for
+the elements it drops. Both `_emit_native` and a first draft of
+`_burst_native` drew `count` sets regardless, which left the two stores'
+streams at different positions after any overflowing burst — and then every
+*later* burst differed, while the burst that caused it looked correct. This
+was live in the merged particle pool. Both now clamp to the free slots, and
+`test_an_overflowing_burst_leaves_both_streams_in_step` in each parity file
+fails without the clamp.
+
+**`tools/bench_native_pool.py` had been broken since the particle pool
+landed**, raising `StopIteration`: it was written against the spike's pool
+API (`emit(count, x, y, ...)`, `position_at`) and hand-seeded a Python
+`Particle` that the accelerated default no longer creates. Rewritten to
+measure whole frames of both pools through the public API, with parity left
+to the parity tests — a benchmark that also claimed to prove correctness
+proved neither.
+
+### And one finding about the *Python* path
+
+The published particle table emits an untinted burst. A burst with a colour
+animation — fire, smoke, anything that fades — costs the Python path 6.0 ms
+of a 7.6 ms frame at 1000 live, because `_particle_color` constructs two
+`Color` objects and lerps them per particle. Natively it is unchanged, so
+the speedup there is **55-58x** rather than 18x. Read the other way, that is
+the cheapest unclaimed win left in `particles.py`, and it is in Python.
+Recorded, deliberately not taken: the remediation plan's "no interim Python
+optimisation that Rust would replace" still holds.
+
 
 ## Options for the maths rewrite
 
@@ -371,6 +468,10 @@ smuggled in as a consequence of a maths optimisation. **D stays rejected.**
   future pymunk rather than trusted from a document written against 7.2.0.
 - `tools/count_vector_ops.py` — the `Vector2` frame-traffic measurement that
   decides Marco 1.
-- `Cargo.toml`, `rust/src/` — the Marco 3 prototype: one SoA particle pool,
-  standalone so `uv sync` still works without Rust.
-- `tools/bench_native_pool.py` — Marco 3's number, with the parity check.
+- `Cargo.toml`, `rust/src/` — the Marco 3 pools, standalone so `uv sync`
+  still works without Rust: `particles.rs` and `sparks.rs`.
+- `tools/bench_native_pool.py` — Marco 3's numbers, for both pools and
+  whole frames rather than `update` alone.
+- `pyguara/graphics/types.py`'s `ShapeBatch` / `ShapeKind` and
+  `protocols.py`'s `ShapeBatchRenderer` — what the sparks increment needed
+  and the measurement above chose the shape of.

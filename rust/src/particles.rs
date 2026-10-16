@@ -19,8 +19,7 @@
 
 use pyo3::prelude::*;
 
-/// An RGBA tint as the renderer wants it.
-type Rgba = (u8, u8, u8, u8);
+use crate::Rgba;
 
 /// One texture's packed draw data: id, screen positions, tints, any tinted.
 type TextureBatch = (u32, Vec<(f32, f32)>, Vec<Rgba>, bool);

@@ -21,6 +21,14 @@ replaces all three pools with Rust SoA, and a milestone claiming 45x needs
 a baseline it can be held to. These numbers say where that 45x would have
 to come from -- the per-element arithmetic, which is exactly what SoA plus
 SIMD addresses, rather than the bookkeeping.
+
+Marco 3 has since landed for particles and sparks, so **every pool here is
+pinned to its Python store** with `accelerate=False`. That is deliberate
+rather than lazy: these figures describe the implementation a contributor
+without a Rust toolchain runs, and they are the baseline the native pool's
+numbers in `docs/guides/performance.md` are quoted against. The one test
+that does look at the native store asserts only that it is wired up and
+materially faster -- a budget on it would be a budget on the timer.
 """
 
 from __future__ import annotations
@@ -59,7 +67,7 @@ class _FakeTexture:
 
 def _particles(capacity: int, live: int) -> ParticleSystem:
     """A particle system with `live` of `capacity` slots occupied."""
-    system = ParticleSystem(capacity=capacity)
+    system = ParticleSystem(capacity=capacity, accelerate=False)
     if live:
         system.emit(
             _FakeTexture(),  # type: ignore[arg-type]
@@ -72,7 +80,7 @@ def _particles(capacity: int, live: int) -> ParticleSystem:
 
 def _sparks(capacity: int, live: int) -> Sparks:
     """A spark pool with `live` of `capacity` slots occupied."""
-    pool = Sparks(capacity=capacity)
+    pool = Sparks(capacity=capacity, accelerate=False)
     if live:
         pool.burst(
             Vector2(0.0, 0.0),
@@ -145,3 +153,51 @@ def test_sweep_spark_update(benchmark, live: int) -> None:
     pool = _sparks(CAPACITY, live)
 
     benchmark(lambda: pool.update(1.0 / 60.0))
+
+
+@pytest.mark.performance
+@pytest.mark.parametrize(
+    ("make", "native"),
+    [
+        (_particles, lambda n: ParticleSystem(capacity=n)),
+        (_sparks, lambda n: Sparks(capacity=n)),
+    ],
+    ids=["particles", "sparks"],
+)
+def test_the_native_store_is_wired_up_and_materially_faster(make, native) -> None:
+    """That the accelerator is reached at all, which is easy to lose.
+
+    `_native.py` falls back silently when the extension is missing or stale
+    -- that is the point of it -- so a broken build, a renamed class or a
+    lookup that stopped finding `target/release/` all present as "the
+    Python pool, and nobody noticed". This is the test that notices.
+
+    A quarter of the Python cost, where the measured margin is over a
+    hundredfold. The assertion is loose because a shared runner is noisy
+    and because the exact figure belongs in
+    `docs/guides/performance.md`, not in a test that would then have to be
+    retuned per machine.
+    """
+    accelerated = native(CAPACITY)
+    if not accelerated.accelerated:
+        pytest.skip("native extension not built; `cargo build --release`")
+
+    python_pool = make(CAPACITY, CAPACITY)
+    _fill(accelerated, CAPACITY)
+
+    python_time = measure(lambda: python_pool.update(1.0 / 60.0))
+    native_time = measure(lambda: accelerated.update(1.0 / 60.0))
+
+    assert native_time < python_time * 0.25, (
+        f"the native store took {native_time / max(python_time, 1e-9):.0%} of "
+        f"the Python one. Either it is not actually being used, or the "
+        f"arithmetic has regressed to within noise of interpreted Python."
+    )
+
+
+def _fill(pool, live: int) -> None:
+    """Occupy `live` slots, whichever pool kind this is."""
+    if isinstance(pool, Sparks):
+        pool.burst(Vector2(0.0, 0.0), Color(255, 255, 255), count=live, life=1e6)
+    else:
+        pool.emit(_FakeTexture(), Vector2(0.0, 0.0), count=live, life=1e6)

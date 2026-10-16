@@ -283,8 +283,84 @@ lerp and the per-texture grouping -- is what turns that into 15-20x.
 **What is left is the Python lists.** Inside the native path, `render` is now
 94% of the frame (0.119 ms of 0.126 ms), and almost all of that is building
 `list[tuple[float, float]]` for `RenderBatch`. Handing over a buffer instead
-needs the renderer to accept one, which is RFC-0003's Marco 2. That is the
-next increment, and this table is the baseline it would be measured against.
+needs the renderer to accept one, which is RFC-0003's Marco 2. That is still
+the next increment there, and this table is its baseline.
+
+**The table above is the conservative case.** It emits an untinted burst. A
+burst with a colour animation -- which fire, smoke and every fading effect
+sets -- is far worse in Python and no worse natively, because
+`_particle_color` builds two `Color` objects and lerps them per particle
+where the native pool lerps four bytes:
+
+| Live | Burst | Python frame | native frame | |
+| ---: | --- | ---: | ---: | ---: |
+| 1000 | plain | 1.941 | 0.105 | 18.5x |
+| 1000 | **fading** | 7.643 | 0.132 | **57.8x** |
+| 4000 | plain | 8.335 | 0.484 | 17.2x |
+| 4000 | **fading** | 31.260 | 0.568 | **55.0x** |
+
+Read the other way, that is a finding about the *Python* path: 1000 fading
+particles spend 6.0 ms of a 7.6 ms frame on colour, and lerping the four
+channels as integers instead of through `Color` would reclaim most of it.
+Deliberately not done -- see "Deliberately not doing" in the remediation
+plan -- but it is the cheapest unclaimed win left in `particles.py`.
+
+
+### The native spark pool -- milliseconds per frame
+
+`Sparks` can be backed by the same way (`accelerate=`, `PYGUARA_NO_NATIVE=1`),
+and the shape of its win is different enough to be worth its own table.
+
+A spark is one primitive, so the Python pool makes one `draw_circle` or
+`draw_line` call per live spark. That makes **render the frame**, where for
+particles it was the arithmetic:
+
+| | `update` | `render` | render's share |
+| --- | ---: | ---: | ---: |
+| 1000 particles, plain | 1.574 | 0.367 | 19% |
+| 1000 sparks, dots | 2.063 | 2.759 | 57% |
+| 1000 sparks, streaks | 2.009 | 5.360 | 73% |
+
+So porting only `update` would have capped sparks at 1.4-1.8x however fast
+the arithmetic got. The render half needs the primitives handed over in one
+call, which is what `ShapeBatch` and `ShapeBatchRenderer` exist for -- and
+measuring the alternatives is what chose that shape:
+
+| Render candidate | 1000 dots | 1000 streaks | frame |
+| --- | ---: | ---: | ---: |
+| Python, per primitive | 2.525 | 5.165 | — |
+| native rows + `ShapeBatch` | **0.329** | **0.349** | **13-20x** |
+| native params + draw calls | 2.318 | 3.096 | 1.9-2.3x |
+| native params + NumPy pack | 1.288 | 1.217 | 3.4-5.8x |
+
+Packing the instance rows natively wins by 4-10x over handing back draw-call
+parameters, because anything that then walks the sparks in Python gives the
+saving straight back. That is why `ShapeBatch.instances` carries packed rows
+in the layout `graphics/types.py` documents rather than semantic arrays.
+
+End to end, both stores, min of 5 rounds:
+
+| Live | Path | `update` | `render` | Frame | |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1000 dots | Python | 2.063 | 2.759 | 4.822 | |
+| 1000 dots | **native** | 0.003 | 0.287 | **0.290** | **16.6x** |
+| 1000 streaks | Python | 2.009 | 5.360 | 7.368 | |
+| 1000 streaks | **native** | 0.003 | 0.299 | **0.302** | **24.4x** |
+| 4000 dots | Python | 8.077 | 11.012 | 19.089 | |
+| 4000 dots | **native** | 0.011 | 1.161 | **1.172** | **16.3x** |
+| 4000 streaks | Python | 8.085 | 21.937 | 30.021 | |
+| 4000 streaks | **native** | 0.011 | 1.269 | **1.280** | **23.5x** |
+
+A streak costs the Python pool twice what a dot does and costs the native
+pool the same, which is the clearest statement of what moved: the geometry a
+capsule needs is arithmetic, and arithmetic is no longer the frame.
+
+**Only the ModernGL world renderer takes the batch.** Any other renderer gets
+one call per spark, as before, keeping the native arithmetic and about 1.9x.
+That is deliberate: a software backend would be looping internally anyway, so
+claiming the capability would buy nothing and hide that fact.
+
+Reproduce both tables with `uv run python tools/bench_native_pool.py`.
 
 **Two things to know before trusting a re-measurement.** Use a real texture
 object, not a `MagicMock`: the Python path hashes and compares the texture

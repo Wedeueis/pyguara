@@ -75,6 +75,41 @@ def test_a_burst_larger_than_the_pool_fills_it_and_stops() -> None:
     assert python_pool.live_count == native_pool.live_count == 8
 
 
+def test_an_overflowing_burst_leaves_both_streams_in_step() -> None:
+    """The subtle one, and the reason `_emit_native` counts free slots.
+
+    The Python loop asks for a slot before it draws, so an emission that
+    overflows consumes nothing for the particles it drops. A native path
+    that drew `count` sets regardless would come out of the emission with
+    its stream further along -- and then *every later emission* would
+    differ, while the one that caused it looked perfectly fine. This
+    asserts on a later emission for exactly that reason.
+    """
+    python_pool, native_pool = _pair(capacity=8)
+    texture = MagicMock()
+
+    for pool in (python_pool, native_pool):
+        pool.emit(texture, Vector2.zero(), count=40, speed=50.0, life=0.05)
+        for _ in range(10):  # retire the lot, freeing the pool
+            pool.update(DT)
+        assert pool.live_count == 0
+        pool.emit(texture, Vector2.zero(), count=4, speed=100.0, life=5.0)
+
+    expected = sorted(
+        (p.velocity.x, p.velocity.y) for p in python_pool._pool if p.active
+    )
+    got = sorted(
+        native_pool._native.slot(i)[2:4]
+        for i in range(8)
+        if native_pool._native.slot(i)[6]
+    )
+
+    assert len(expected) == len(got) == 4
+    for (ex, ey), (gx, gy) in zip(expected, got, strict=True):
+        assert gx == pytest.approx(ex, abs=0.01)
+        assert gy == pytest.approx(ey, abs=0.01)
+
+
 def test_positions_agree_after_a_hundred_ticks() -> None:
     """The integration, compared where it has had time to diverge."""
     python_pool, native_pool = _pair()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import TYPE_CHECKING
@@ -115,3 +116,63 @@ class RenderBatch:
 
     # Optional material for custom shaders/uniforms
     material: Material | None = None
+
+
+class ShapeKind(IntEnum):
+    """Which primitive a packed shape row describes.
+
+    The values are the ones the ModernGL shape shader branches on, so a
+    row's kind column and the bucket it lands in are the same number.
+    """
+
+    RECT = 0
+    CIRCLE = 1
+    LINE = 2
+
+
+# A packed primitive is eleven floats, in this order:
+#
+#     0  centre x          in screen pixels
+#     1  centre y
+#     2  half width        a circle's radius; a capsule's half length
+#                          plus its half thickness
+#     3  half height       a circle's radius; a capsule's half thickness
+#     4  rotation          radians, counter-clockwise
+#     5  red               0.0 - 1.0
+#     6  green
+#     7  blue
+#     8  alpha
+#     9  stroke width      pixels; 0 fills the shape
+#     10 kind              a `ShapeKind` value
+#
+# This is not a new representation: it is what `GLRenderer.draw_rect`,
+# `draw_circle` and `draw_line` have always built and what the shape shader
+# reads per instance. It is named and documented here because `ShapeBatch`
+# now carries it across a boundary, and a layout that crosses a boundary
+# undeclared is how the texture-orientation convention drifted.
+SHAPE_INSTANCE_FLOATS = 11
+
+
+@dataclass(frozen=True, slots=True)
+class ShapeBatch:
+    """Many primitives of one kind, packed for a single instanced draw.
+
+    `RenderBatch` for shapes. It exists because the per-primitive calls are
+    the wrong granularity for anything that draws thousands of them: a
+    1000-spark frame spends 55-71% of itself in `draw_circle`/`draw_line`
+    call overhead, and handing the rows over in one call removes it
+    (measured 8-15x on the render half; see `docs/guides/performance.md`).
+
+    Rows arrive already packed because the producer is usually better
+    placed to pack them -- `Sparks`' native pool fills them in Rust, and
+    anything that re-walked them element by element in Python would give
+    the saving straight back.
+
+    Attributes:
+        kind: The primitive every row describes.
+        instances: One row of `SHAPE_INSTANCE_FLOATS` floats per primitive,
+            in the layout documented above.
+    """
+
+    kind: ShapeKind
+    instances: Sequence[Sequence[float]]

@@ -123,8 +123,11 @@ def _report(label: str, ticks: int) -> None:
 
 
 def _particles(capacity: int, live: int) -> ParticleSystem:
-    """A particle system with `live` slots occupied."""
-    system = ParticleSystem(capacity=capacity)
+    """A particle system with `live` slots occupied.
+
+    Pinned to the Python store, for the reason `_sparks` below gives.
+    """
+    system = ParticleSystem(capacity=capacity, accelerate=False)
     if live:
         system.emit(
             _FakeTexture(),  # type: ignore[arg-type]
@@ -136,8 +139,13 @@ def _particles(capacity: int, live: int) -> ParticleSystem:
 
 
 def _sparks(capacity: int, live: int) -> Sparks:
-    """A spark pool with `live` slots occupied."""
-    pool = Sparks(capacity=capacity)
+    """A spark pool with `live` slots occupied.
+
+    Pinned to the Python store: this tool counts `Vector2` operations in
+    Python, and the native pool has none to count. Its own figures live in
+    `docs/guides/performance.md`.
+    """
+    pool = Sparks(capacity=capacity, accelerate=False)
     if live:
         pool.burst(Vector2(0.0, 0.0), count=live, life=1e6, color=Color(255, 255, 255))
     return pool
