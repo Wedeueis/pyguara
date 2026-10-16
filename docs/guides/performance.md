@@ -259,6 +259,42 @@ Bisecting the walk would be faster and would reintroduce tunnelling.
 
 ## Object pools
 
+### The native particle pool -- milliseconds per frame
+
+`ParticleSystem` can be backed by a native structure-of-arrays pool
+(`cargo build --release`; see `pyguara/graphics/components/_native.py`). The
+Python pool is kept and used whenever the extension is absent, so this is an
+accelerator rather than a requirement.
+
+Both paths, the same seeded burst, min of 5 rounds:
+
+| Live | Path | `update` | `render` | Frame | |
+| ---: | --- | ---: | ---: | ---: | ---: |
+| 1000 | Python | 2.132 | 0.442 | 2.574 | |
+| 1000 | **native** | 0.006 | 0.119 | **0.126** | **20.5x** |
+| 4000 | Python | 6.517 | 1.326 | 7.843 | |
+| 4000 | **native** | 0.025 | 0.511 | **0.537** | **14.6x** |
+
+The arithmetic alone is ~268x (2.13 ms -> 0.006 ms), but `update` is only
+84% of the frame, so porting it by itself would have capped out near 6x.
+Packing for render natively -- the world-to-screen transform, the colour
+lerp and the per-texture grouping -- is what turns that into 15-20x.
+
+**What is left is the Python lists.** Inside the native path, `render` is now
+94% of the frame (0.119 ms of 0.126 ms), and almost all of that is building
+`list[tuple[float, float]]` for `RenderBatch`. Handing over a buffer instead
+needs the renderer to accept one, which is RFC-0003's Marco 2. That is the
+next increment, and this table is the baseline it would be measured against.
+
+**Two things to know before trusting a re-measurement.** Use a real texture
+object, not a `MagicMock`: the Python path hashes and compares the texture
+once per particle, which is cheap for a real object and pathological for a
+mock -- it inflated an early version of this table to a fictitious 325x.
+And the native pool stores f32 where Python uses f64, so positions drift
+sub-pixel over a lifetime; the parity tests bound that rather than ignoring
+it.
+
+
 ### `ParticleSystem` / `Sparks` update -- milliseconds per frame
 
 All three self-contained pools -- particles, sparks and projectiles --

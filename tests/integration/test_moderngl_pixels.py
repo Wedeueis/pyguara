@@ -224,3 +224,78 @@ def test_the_factory_and_the_loader_draw_the_same_image_the_same_way_up(
     assert np.array_equal(factory_pixels, loader_pixels), (
         "the factory and the loader disagree about which way up an image goes"
     )
+
+
+def test_both_particle_stores_rasterise_the_same_frame(gl_ctx: Any) -> None:
+    """The native particle pool draws what the Python one draws.
+
+    `tests/test_native_particle_parity.py` compares the `RenderBatch`es the
+    two stores produce, which is the real guard. This is the one assertion
+    that comparison cannot make: that the batches end up as the same
+    pixels, through a real GL context.
+
+    Worth having because **no demo or visual snapshot uses particles** --
+    the 11 Syrupy snapshots pass whatever this code does, so without this
+    the render half of the native pool had no pixel-level coverage at all.
+    """
+    from unittest.mock import MagicMock
+
+    from pyguara.common.random import RandomStream
+    from pyguara.common.types import Vector2
+    from pyguara.graphics.components.particles import ParticleSystem
+
+    if not ParticleSystem(capacity=1).accelerated:
+        pytest.skip("native extension not built; `cargo build --release`")
+
+    camera = MagicMock()
+    camera.zoom = 1.0
+    camera.screen_offset.return_value = Vector2(0.0, 0.0)
+
+    frames = []
+    for accelerate in (False, True):
+        texture = _WhiteTexture(gl_ctx)
+        # The same seed, so both spawn the same particles: `emit` takes
+        # three draws per particle and a different stream means a different
+        # burst, which would make the comparison meaningless.
+        pool = ParticleSystem(
+            capacity=32, rng=RandomStream(4242), accelerate=accelerate
+        )
+        pool.emit(
+            texture,  # type: ignore[arg-type]
+            Vector2(_SIZE / 2, _SIZE / 2),
+            count=8,
+            speed=40.0,
+            life=10.0,
+            color_start=(255, 0, 0, 255),
+            color_end=(0, 0, 255, 255),
+        )
+        for _ in range(12):
+            pool.update(1.0 / 60.0)
+
+        fbo = gl_ctx.simple_framebuffer((_SIZE, _SIZE))
+        fbo.use()
+        renderer = ModernGLRenderer(gl_ctx, _SIZE, _SIZE)
+        try:
+            renderer.clear((0, 0, 0, 255))
+            pool.render(renderer, camera)
+            raw = np.frombuffer(fbo.read(components=3), dtype=np.uint8)
+            frames.append(raw.reshape((_SIZE, _SIZE, 3)).copy())
+        finally:
+            renderer.release()
+            fbo.release()
+            texture.release()
+
+    python_frame, native_frame = frames
+
+    # Not vacuous: something has to have been drawn, or two black frames
+    # would agree perfectly and prove nothing.
+    assert python_frame.any(), "the Python store drew nothing"
+    assert native_frame.any(), "the native store drew nothing"
+
+    # Allowed to differ by one level per channel: the native pool stores
+    # f32 where Python uses f64, and the colour lerp rounds independently.
+    difference = np.abs(python_frame.astype(np.int16) - native_frame.astype(np.int16))
+    assert difference.max() <= 1, (
+        f"the two stores rasterised different frames (max channel difference "
+        f"{difference.max()})"
+    )
