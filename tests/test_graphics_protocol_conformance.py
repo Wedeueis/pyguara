@@ -45,6 +45,7 @@ class TestEveryProtocolIsRuntimeCheckable:
             "IWindowBackend",
             "IWindowChrome",
             "Renderable",
+            "ShapeBatchRenderer",
             "ShapeRenderer",
             "TextureFactory",
             "UIRenderer",
@@ -84,3 +85,29 @@ class TestRenderPassesConform:
 
     def test_post_process_pass_conforms(self) -> None:
         assert isinstance(PostProcessPass(MagicMock()), IRenderPass)
+
+
+class TestShapeBatchRendererIsACapability:
+    """`ShapeBatchRenderer` is optional by design, so both answers matter.
+
+    A caller picks its route with `isinstance`, which means "does not
+    satisfy it" is as much a contract as "does". If the pygame backend ever
+    grows a `render_shapes` that just loops, `Sparks` would start handing
+    it batches and these would catch the change rather than it being
+    noticed as a slowdown.
+    """
+
+    def test_the_moderngl_renderer_satisfies_it(self) -> None:
+        from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+
+        assert hasattr(ModernGLRenderer, "render_shapes")
+
+    def test_the_pygame_backend_does_not(self) -> None:
+        from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+
+        assert not hasattr(PygameBackend, "render_shapes")
+
+    def test_the_headless_backend_does_not(self) -> None:
+        from pyguara.graphics.backends.headless_renderer import HeadlessBackend
+
+        assert not hasattr(HeadlessBackend, "render_shapes")

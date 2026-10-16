@@ -44,10 +44,17 @@ from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.protocols import (
     IRenderer,
     Renderable,
+    ShapeBatchRenderer,
     UIRenderer,
 )
 from pyguara.graphics.spritesheet import SpriteSheet
-from pyguara.graphics.types import Layer, RenderBatch, RenderCommand
+from pyguara.graphics.types import (
+    Layer,
+    RenderBatch,
+    RenderCommand,
+    ShapeBatch,
+    ShapeKind,
+)
 from pyguara.graphics.window import Window
 
 __all__ = [
@@ -78,11 +85,14 @@ __all__ = [
     # Protocols
     "IRenderer",
     "Renderable",
+    "ShapeBatchRenderer",
     "UIRenderer",
     # Types
     "Layer",
     "RenderBatch",
     "RenderCommand",
+    "ShapeBatch",
+    "ShapeKind",
     # Textures
     "Atlas",
     "AtlasRegion",

@@ -17,7 +17,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.config.types import WindowConfig
-from pyguara.graphics.types import RenderBatch
+from pyguara.graphics.types import RenderBatch, ShapeBatch
 from pyguara.resources.types import Texture
 
 
@@ -215,6 +215,40 @@ class ShapeRenderer(Protocol):
         self, text: str, position: Vector2, color: Color, size: int = 16
     ) -> None:
         """Draw a text string."""
+        ...
+
+
+@runtime_checkable
+class ShapeBatchRenderer(Protocol):
+    """A renderer that can take many primitives of one kind in one call.
+
+    A capability, not a requirement. Like `ShapeRenderer` above, no
+    renderer implements it by name -- a backend that can batch shapes
+    satisfies it structurally, and one that cannot simply does not, which
+    is what a caller tests with `isinstance`.
+
+    Only the ModernGL world renderer satisfies it today, because it is the
+    only backend where batching is free: its shape instances are already
+    accumulated per kind and drawn with one instanced call each, so a batch
+    is an `extend` of a list it is already holding. A software backend
+    would have to loop over the rows and draw them one at a time, which is
+    what its caller was doing anyway -- so it gains nothing by claiming the
+    capability, and claiming it would hide that fact.
+
+    Callers therefore keep their per-primitive path and use this when it is
+    offered: see `Sparks.render`.
+    """
+
+    def render_shapes(self, batch: ShapeBatch) -> None:
+        """Draw every primitive in `batch`.
+
+        Drawing order follows the per-kind grouping the backend already
+        uses, exactly as a sequence of `draw_circle` calls would -- a batch
+        is not a way to reorder a frame.
+
+        Args:
+            batch: Packed rows, all of one `ShapeKind`.
+        """
         ...
 
 
