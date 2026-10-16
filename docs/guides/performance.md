@@ -413,11 +413,35 @@ Two separate causes, and they want separate fixes:
   8-directional movement with corner-cutting refused, one expansion is
   roughly thirty interpreter operations. This is also why a native port
   must take the grid rather than the graph -- see ADR 0004, Decision 2.
-- **The cadence.** `games/vinagre_matilha` recomputes **every fixed tick**,
+- **The cadence.** `games/vinagre_matilha` recomputed **every fixed tick**,
   60 times a second, on the 30x20 row above. Its goal is the jaguar's cell,
   which at 158 px/s across 32 px cells changes once every 12 ticks at a
-  sprint -- so at least eleven of twelve recomputes reproduce the field
-  that was already there. Guarding that is Python and costs nothing.
+  sprint -- so at least eleven of twelve recomputes reproduced the field
+  that was already there. **Fixed**, in the engine rather than the demo:
+
+  | Grid | cold recompute | unchanged re-ask | |
+  | --- | ---: | ---: | ---: |
+  | 30x20 | 5.000 ms (30% of a frame) | **0.0016 ms** (0.01%) | 3114x |
+  | 96x96 | 85.859 ms (515%) | **0.0336 ms** (0.20%) | 2557x |
+
+  `FlowFieldService.recompute()` now skips work that would reproduce the
+  field it holds, keyed on the goals **and a fingerprint of the graph** --
+  by content, because a `GridGraph` is mutated at runtime and a key over
+  the goals alone would steer through a wall that had been opened.
+  Fingerprinting the walls and weights costs 0.03-0.06% of a recompute
+  (2.7 us against 5.0 ms at 30x20; 77 us against 241 ms at 160x160), so
+  soundness is free and there is no invalidation contract to forget.
+
+**What that does to the native port is worth stating, because it is not
+"never mind".** The guard removes the *redundant* recomputes; a genuine one
+still costs what the table above says. On a 30x20 grid that is a 5 ms spike
+every fifth of a second, survivable. On 96x96 it is a single **85 ms
+stall** -- five frames dropped the moment a goal moves. So the port's
+justification moves from throughput to **worst-case latency**: it turns a
+five-frame hitch into a sub-millisecond one. ADR 0004's Decision 6 says to
+settle the algorithm before the boundary, and this is what that looks like
+in practice -- the guard did not remove the case for porting, it changed
+what the porting is for.
 
 Reproduce with `uv run python tools/price_native_boundary.py`.
 
