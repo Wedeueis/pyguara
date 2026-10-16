@@ -345,3 +345,103 @@ def test_interpolation_is_not_clamped_so_elastic_easings_still_overshoot():
     """Clamping here would flatten exactly the part of the curve that makes
     those easings worth having."""
     assert interpolate(0.0, 100.0, 1.2) == pytest.approx(120.0)
+
+
+class TestAPositionTweenIsRenderedSmoothly:
+    """`TweenSystem` runs on the fixed step, so a tween moves a position 60
+    times a second however fast the display is.
+
+    A physics body already copes: `PhysicsSystem` sets
+    `Transform.interpolate`, the scene manager snapshots `previous_position`
+    before each tick, and the render path lerps between them. A tween on an
+    entity with no `RigidBody` had none of that, so at 120 or 144 Hz the
+    sprite held still for two or three frames and then jumped -- the judder
+    `render_position`'s own docstring describes.
+
+    Opting the transform in keeps the fixed step, and with it the ordering
+    guarantee (a tween driving a position is applied before steering, AI or
+    the scene's update reads it) and reproducibility under replay, both of
+    which moving the tick to `variable_update` would cost.
+    """
+
+    def test_tweening_a_position_switches_on_interpolation(self) -> None:
+        manager = EntityManager()
+        entity = manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0.0, 0.0)))
+        assert entity.transform.interpolate is False
+
+        tween_property(entity, "transform.position", Vector2(10.0, 0.0), 1.0)
+
+        assert entity.transform.interpolate is True
+
+    def test_previous_position_is_seeded_so_the_first_frame_does_not_jump(
+        self,
+    ) -> None:
+        """Mirrors `PhysicsSystem`'s opt-in. Without the seed the first
+        rendered frame lerps from whatever the field happened to hold."""
+        manager = EntityManager()
+        entity = manager.create_entity()
+        transform = Transform(position=Vector2(5.0, 7.0))
+        # Deliberately stale, so the assertion cannot pass on the default:
+        # `previous_position` starts equal to `position`, which would make
+        # this vacuous.
+        transform.previous_position = Vector2(-99.0, -99.0)
+        entity.add_component(transform)
+
+        tween_property(entity, "transform.position", Vector2(10.0, 0.0), 1.0)
+
+        assert entity.transform.previous_position == Vector2(5.0, 7.0)
+
+    def test_a_finished_tween_puts_interpolation_back(self) -> None:
+        manager = EntityManager()
+        entity = manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0.0, 0.0)))
+        tween_property(entity, "transform.position", Vector2(10.0, 0.0), 0.1)
+        system = TweenSystem(manager)
+
+        for _ in range(12):  # past the 0.1s duration at 60Hz
+            system.update(1.0 / 60.0)
+
+        assert entity.transform.interpolate is False
+
+    def test_a_transform_already_interpolating_is_left_alone(self) -> None:
+        """Not ours to turn off: something else asked for it."""
+        manager = EntityManager()
+        entity = manager.create_entity()
+        transform = Transform(position=Vector2(0.0, 0.0))
+        transform.interpolate = True
+        entity.add_component(transform)
+        tween_property(entity, "transform.position", Vector2(10.0, 0.0), 0.1)
+        system = TweenSystem(manager)
+
+        for _ in range(12):
+            system.update(1.0 / 60.0)
+
+        assert entity.transform.interpolate is True
+
+    def test_a_physics_bodys_flag_survives_a_finished_tween(self) -> None:
+        """Physics sets `interpolate` for the life of the body, so clearing
+        it here would stop interpolating something that still needs it."""
+        from pyguara.physics.components import RigidBody
+
+        manager = EntityManager()
+        entity = manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0.0, 0.0)))
+        entity.add_component(RigidBody())
+        tween_property(entity, "transform.position", Vector2(10.0, 0.0), 0.1)
+        entity.transform.interpolate = True  # as PhysicsSystem would
+        system = TweenSystem(manager)
+
+        for _ in range(12):
+            system.update(1.0 / 60.0)
+
+        assert entity.transform.interpolate is True
+
+    def test_tweening_something_other_than_a_position_changes_no_flag(self) -> None:
+        manager = EntityManager()
+        entity = manager.create_entity()
+        entity.add_component(Transform(position=Vector2(0.0, 0.0)))
+
+        tween_property(entity, "transform.rotation", 1.0, 1.0)
+
+        assert entity.transform.interpolate is False
