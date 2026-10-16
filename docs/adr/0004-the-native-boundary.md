@@ -253,8 +253,18 @@ jaguar that is circling or winding up produces none at all.
 
 Porting the solver would make that 30% into 0.2% and leave the engine
 recomputing an unchanged field sixty times a second. Guarding the
-recompute is a few lines of Python and comes first. Both are worth doing;
-the order is not optional.
+recompute comes first. Both are worth doing; the order is not optional.
+
+**Done, and it changed what the port is for.** `FlowFieldService` now
+skips a recompute that would reproduce the field it holds, keyed on the
+goals and a content fingerprint of the graph -- 3114x on the unchanged
+path, and 30% of a frame down to 0.01%. What it does *not* touch is the
+cost of a recompute that genuinely has to happen: still 5 ms at 30x20 and
+**85 ms at 96x96**, which is five frames dropped the moment a goal moves.
+So the port is still wanted, for **worst-case latency** rather than for
+throughput. That is the whole value of taking the two questions in this
+order: answering the algorithmic one first did not cancel the boundary
+work, it corrected the reason for it.
 
 ## Consequences — Track R, re-sequenced by measured ceiling
 
