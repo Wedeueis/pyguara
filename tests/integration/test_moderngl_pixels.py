@@ -299,3 +299,74 @@ def test_both_particle_stores_rasterise_the_same_frame(gl_ctx: Any) -> None:
         f"the two stores rasterised different frames (max channel difference "
         f"{difference.max()})"
     )
+
+
+@pytest.mark.parametrize("streak", [False, True], ids=["dots", "streaks"])
+def test_both_spark_stores_rasterise_the_same_frame(gl_ctx: Any, streak: bool) -> None:
+    """The native spark pool draws what the Python one draws.
+
+    The sibling of the particle test above, and it carries more weight,
+    because the two spark paths do not merely compute the same thing by
+    different arithmetic -- they reach the renderer through **different
+    calls**. The Python pool makes one `draw_circle` or `draw_line` per
+    spark; the native pool hands over packed instance rows through
+    `render_shapes`. Those rows are built in Rust against a layout the
+    renderer owns, and nothing but a real rasterisation proves the two
+    agree about it: a transposed column or a radius in the thickness slot
+    would pass every unit test in `tests/test_native_spark_parity.py`,
+    which compares the native routes only against each other.
+
+    Both dots and streaks, because they are different primitives and the
+    capsule row is the derived one.
+    """
+    from pyguara.common.random import RandomStream
+    from pyguara.common.types import Color
+    from pyguara.graphics.vfx.sparks import Sparks
+
+    if not Sparks(capacity=1).accelerated:
+        pytest.skip("native extension not built; `cargo build --release`")
+
+    frames = []
+    for accelerate in (False, True):
+        # The same seed: `burst` takes three draws per spark, so a
+        # different stream means a different burst and no comparison.
+        pool = Sparks(capacity=32, rng=RandomStream(2024), accelerate=accelerate)
+        pool.burst(
+            Vector2(_SIZE / 2, _SIZE / 2),
+            Color(255, 180, 60),
+            count=10,
+            speed=30.0,
+            life=4.0,
+            radius=4.0,
+            gravity=0.0,
+            streak=streak,
+        )
+        for _ in range(12):
+            pool.update(1.0 / 60.0)
+
+        fbo = gl_ctx.simple_framebuffer((_SIZE, _SIZE))
+        fbo.use()
+        renderer = ModernGLRenderer(gl_ctx, _SIZE, _SIZE)
+        try:
+            renderer.clear((0, 0, 0, 255))
+            pool.render(renderer)
+            renderer.end_frame()  # shapes are queued, not drawn immediately
+            raw = np.frombuffer(fbo.read(components=3), dtype=np.uint8)
+            frames.append(raw.reshape((_SIZE, _SIZE, 3)).copy())
+        finally:
+            renderer.release()
+            fbo.release()
+
+    python_frame, native_frame = frames
+
+    # Not vacuous: two black frames would agree perfectly.
+    assert python_frame.any(), "the Python store drew nothing"
+    assert native_frame.any(), "the native store drew nothing"
+
+    # Allowed to differ by one level per channel: the native pool stores
+    # f32 where Python uses f64, and the alpha fade truncates.
+    difference = np.abs(python_frame.astype(np.int16) - native_frame.astype(np.int16))
+    assert difference.max() <= 1, (
+        f"the two stores rasterised different frames (max channel difference "
+        f"{difference.max()})"
+    )
