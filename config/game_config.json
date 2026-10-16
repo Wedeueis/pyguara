@@ -25,6 +25,9 @@
         "gravity_x": 0.0,
         "gravity_y": 0.0
     },
+    "performance": {
+        "native_acceleration": "auto"
+    },
     "debug": {
         "log_level": "INFO",
         "log_to_file": true,

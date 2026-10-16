@@ -39,9 +39,9 @@ from dataclasses import dataclass, field
 
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
-from pyguara.graphics.components._native import native_module
 from pyguara.graphics.protocols import IRenderer, ShapeBatchRenderer
 from pyguara.graphics.types import ShapeBatch, ShapeKind
+from pyguara.native import native_module
 
 
 @dataclass(slots=True)
@@ -78,10 +78,13 @@ class Sparks:
                 way `ParticleSystem` does.
             rng: Random stream driving spread and speed jitter.
             accelerate: Whether to back the pool with the native
-                structure-of-arrays pool. None, the default, uses it when
-                the extension is available and the Python pool otherwise.
-                True demands it and raises if it is missing; False forces
-                the Python pool, which is what the parity tests do.
+                structure-of-arrays pool. None, the default, defers to the
+                engine-wide setting -- `PerformanceConfig.native_acceleration`,
+                resolved once at bootstrap -- so a game decides this in one
+                place rather than per pool. True demands the extension and
+                raises if it is missing; False forces the Python pool.
+                Both are overrides for tests and for the parity suite,
+                not a second configuration surface.
 
         Raises:
             RuntimeError: If `accelerate=True` and the extension is absent.

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
 from pyguara.common.types import Color
 from pyguara.log import get_logger
 from pyguara.log.types import LogLevel
+from pyguara.native import NativeAcceleration
 
 if TYPE_CHECKING:
     from pyguara.config.sections import SectionRegistry
@@ -144,6 +145,22 @@ class PhysicsConfig:
 
 
 @dataclass
+class PerformanceConfig:
+    """How the engine trades portability for speed.
+
+    One setting today, and it is deliberately engine-wide rather than per
+    subsystem: see `NativeAcceleration` and
+    `docs/adr/0004-the-native-boundary.md`, Decision 4.
+    """
+
+    native_acceleration: NativeAcceleration = NativeAcceleration.AUTO
+    """Whether the compiled extension backs the engine. `auto` (the
+    default) uses it where available and Python otherwise; `off` never
+    uses it; `required` fails at startup without it, which is what a game
+    depending on native performance should ship."""
+
+
+@dataclass
 class DebugConfig:
     """Engine debugging and logging configuration."""
 
@@ -172,7 +189,7 @@ class DebugConfig:
 class GameConfig:
     """Master configuration container.
 
-    The five engine sections are declared fields. Sections a *game* defines
+    The six engine sections are declared fields. Sections a *game* defines
     live in `custom`, keyed by the name they were registered under, and are
     read, written, coerced and validated by exactly the same machinery --
     see `pyguara.config.sections`. Reach for them through
@@ -184,6 +201,7 @@ class GameConfig:
     audio: AudioConfig = field(default_factory=AudioConfig)
     input: InputConfig = field(default_factory=InputConfig)
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
+    performance: PerformanceConfig = field(default_factory=PerformanceConfig)
     debug: DebugConfig = field(default_factory=DebugConfig)
 
     # Metadata

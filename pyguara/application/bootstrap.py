@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+from pyguara import native
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock, FixedClock
 from pyguara.audio.audio_system import IAudioSystem
@@ -246,6 +247,15 @@ def _setup_container(
     # 3.2 Setup bootrap temp logger
     logger = log_manager.get_logger("Bootstrap")
     logger.info("Core services (Events, Config, Log) initialized.")
+
+    # 3.3 Resolve the native store, once, for the whole process.
+    #
+    # Here rather than later because `required` has to fail at *startup*:
+    # a game that depends on native performance should learn the extension
+    # is missing from a clear error at boot, not from its frame times. And
+    # before anything constructs a pool, because that is what reads it.
+    native.configure(config_manager.config.performance.native_acceleration)
+    logger.info(native.describe())
 
     # Initialize the container to register the core services
     container = DIContainer()
