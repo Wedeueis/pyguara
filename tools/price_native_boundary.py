@@ -1,0 +1,427 @@
+#!/usr/bin/env python3
+"""The admission test for a native port, applied to every candidate.
+
+`docs/adr/0004-the-native-boundary.md` says a subsystem earns a Rust
+implementation when
+
+    ceiling = T_py / (T_cross + T_pinned)
+
+is large enough to be worth a second implementation forever, where
+
+    T_py      what the candidate's per-tick work costs in Python now
+    T_cross   what getting the data in and the results out costs, per
+              tick, measured in Python -- because that is where it is paid
+    T_pinned  Python work that cannot move at all: the ECS, the event
+              dispatcher, resource handles, caller-supplied callbacks
+
+This prices every candidate the same way, so the next one is evaluated
+rather than argued about.
+
+**On the landed rows.** For work that is already built, `T_cross` is
+measured directly as what the native path still costs, so `ceiling` and
+"achieved" are the same number by construction -- those rows calibrate
+the *measurement*, not the formula. The formula was tested the only way
+it can be, in advance:
+
+    particles   predicted ~6x porting `update` alone, because `update` was
+                84% of the frame; built the boundary out to include the
+                render pack instead and got 18-20x.
+    sparks      predicted 1.4-1.8x porting `update` alone, because render
+                was 55-73%; predicted 13-20x with a batched handoff.
+                Achieved 16.6-24.4x.
+
+Both predictions came from this arithmetic before any Rust was written,
+and both held. That is the evidence for using it on the rows below that
+are not built yet.
+
+    uv run python tools/price_native_boundary.py
+
+Needs the extension for the landed rows (`cargo build --release`); they
+are skipped without it and the unbuilt candidates still price.
+"""
+
+from __future__ import annotations
+
+import math
+import os
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+
+from pyguara.ai.flocking_system import FlockingAgent  # noqa: E402
+from pyguara.ai.pathfinding.flow_field import dijkstra_map, flow_field  # noqa: E402
+from pyguara.ai.pathfinding.grid import GridGraph  # noqa: E402
+from pyguara.common.components import Transform  # noqa: E402
+from pyguara.common.random import RandomStream  # noqa: E402
+from pyguara.common.spatial import SpatialHash  # noqa: E402
+from pyguara.common.types import Color, Vector2  # noqa: E402
+from pyguara.ecs.manager import EntityManager  # noqa: E402
+from pyguara.events.dispatcher import EventDispatcher  # noqa: E402
+from pyguara.graphics.components.particles import ParticleSystem  # noqa: E402
+from pyguara.graphics.types import ShapeBatch  # noqa: E402
+from pyguara.graphics.vfx.sparks import Sparks  # noqa: E402
+from pyguara.kits.action_combat import Health, Hurtbox  # noqa: E402
+from pyguara.kits.projectiles.projectile import Projectile  # noqa: E402
+from pyguara.kits.projectiles.system import ProjectileSystem  # noqa: E402
+
+DT = 1.0 / 60.0
+LIFE = 1e6  # outlive the measurement
+FRAME_BUDGET_MS = 1000.0 / 60.0
+
+
+@dataclass(frozen=True)
+class Row:
+    """One candidate's price."""
+
+    name: str
+    python_ms: float
+    cross_ms: float
+    pinned_ms: float
+    note: str
+
+    @property
+    def ceiling(self) -> float:
+        """How many times faster the whole candidate could get."""
+        floor = self.cross_ms + self.pinned_ms
+        return self.python_ms / floor if floor > 1e-9 else math.inf
+
+
+def measure(fn: object, iterations: int = 40) -> float:
+    """Fastest of `iterations` runs, in milliseconds.
+
+    Fastest rather than mean: a shared machine's slow runs say something
+    about the machine, and every figure here is compared against another
+    figure from the same run.
+    """
+    fn()  # type: ignore[operator]
+    best = math.inf
+    for _ in range(iterations):
+        start = time.perf_counter()
+        fn()  # type: ignore[operator]
+        best = min(best, time.perf_counter() - start)
+    return best * 1000.0
+
+
+class _FakeTexture:
+    """A texture a pool can hold without a GL context.
+
+    A real class rather than a `MagicMock`: the Python particle path
+    groups by `p.texture not in batches`, so it hashes the texture once
+    per particle, and a mock's `__hash__` goes through its call machinery.
+    That inflated an early benchmark to a fictitious 325x.
+    """
+
+    @property
+    def width(self) -> int:
+        """Width in pixels."""
+        return 8
+
+    @property
+    def height(self) -> int:
+        """Height in pixels."""
+        return 8
+
+    @property
+    def native_handle(self) -> object:
+        """Never bound; the pool only stores it."""
+        return self
+
+
+class _Camera:
+    """No zoom, no offset, so screen space is world space."""
+
+    zoom = 1.0
+
+    def screen_offset(self, _viewport: object) -> Vector2:
+        """No offset."""
+        return Vector2.zero()
+
+
+class _Sink:
+    """Consumes batches, so nothing is measured packing into a void."""
+
+    width = 1280
+    height = 720
+
+    def render_batch(self, batch: object) -> None:
+        """Walk the batch's destinations."""
+        len(batch.destinations)  # type: ignore[attr-defined]
+
+    def draw_circle(
+        self, center: Vector2, radius: float, color: Color, width: int = 0
+    ) -> None:
+        """Count a circle."""
+        self._count = getattr(self, "_count", 0) + 1
+
+    def draw_line(
+        self, start: Vector2, end: Vector2, color: Color, width: int = 1
+    ) -> None:
+        """Count a line."""
+        self._count = getattr(self, "_count", 0) + 1
+
+    def render_shapes(self, batch: ShapeBatch) -> None:
+        """Walk a shape batch."""
+        len(batch.instances)
+
+
+def price_particles(live: int) -> Row | None:
+    """Landed. Calibration row: predicted ceiling against achieved speedup."""
+    if not ParticleSystem(capacity=1).accelerated:
+        return None
+
+    sink, camera = _Sink(), _Camera()
+    pools = {}
+    for accelerate in (False, True):
+        pool = ParticleSystem(live, RandomStream(7), accelerate=accelerate)
+        pool.emit(
+            _FakeTexture(),  # type: ignore[arg-type]
+            Vector2.zero(),
+            count=live,
+            speed=100.0,
+            life=LIFE,
+        )
+        pools[accelerate] = pool
+
+    python_ms = measure(lambda: pools[False].update(DT)) + measure(
+        lambda: pools[False].render(sink, camera)  # type: ignore[arg-type]
+    )
+    # The native path's whole remaining cost *is* its boundary: `update` is
+    # native and `pack_for_render`'s output is Python lists.
+    cross_ms = measure(lambda: pools[True].update(DT)) + measure(
+        lambda: pools[True].render(sink, camera)  # type: ignore[arg-type]
+    )
+    return Row(
+        f"particles, {live} live",
+        python_ms,
+        cross_ms,
+        0.0,
+        f"LANDED, achieved {python_ms / cross_ms:.1f}x",
+    )
+
+
+def price_sparks(live: int, streak: bool) -> Row | None:
+    """Landed. The row that justified `ShapeBatch`."""
+    if not Sparks(capacity=1).accelerated:
+        return None
+
+    sink = _Sink()
+    pools = {}
+    for accelerate in (False, True):
+        pool = Sparks(live, RandomStream(7), accelerate=accelerate)
+        pool.burst(
+            Vector2.zero(),
+            Color(255, 180, 60),
+            count=live,
+            life=LIFE,
+            streak=streak,
+        )
+        pools[accelerate] = pool
+
+    python_ms = measure(lambda: pools[False].update(DT)) + measure(
+        lambda: pools[False].render(sink)  # type: ignore[arg-type]
+    )
+    cross_ms = measure(lambda: pools[True].update(DT)) + measure(
+        lambda: pools[True].render(sink)  # type: ignore[arg-type]
+    )
+    kind = "streaks" if streak else "dots"
+    return Row(
+        f"sparks, {live} {kind}",
+        python_ms,
+        cross_ms,
+        0.0,
+        f"LANDED, achieved {python_ms / cross_ms:.1f}x",
+    )
+
+
+def price_projectiles(live: int) -> Row:
+    """Declined. The hit check is pinned and the pool is not opaque."""
+    manager = EntityManager()
+    dispatcher = EventDispatcher()
+    index: SpatialHash[str] = SpatialHash()
+    for i in range(200):
+        entity = manager.create_entity(f"target_{i}")
+        entity.add_component(Hurtbox(team="enemy"))
+        entity.add_component(Health(current=100.0, max_health=100.0))
+        # Far from the projectiles: the frame being priced is the common
+        # one, flying rather than landing.
+        index.insert(entity.id, Vector2(5000.0 + i * 40.0, 5000.0))
+
+    system = ProjectileSystem(manager, dispatcher, index, capacity=live)
+    texture = _FakeTexture()
+    for i in range(live):
+        system.spawn(
+            texture,  # type: ignore[arg-type]
+            Vector2(float(i), 0.0),
+            Vector2(10.0, 5.0),
+            life=LIFE,
+            team="player",
+            damage=5.0,
+        )
+
+    def integrate_only() -> None:
+        """`update` minus the hit check, to price them apart."""
+        for projectile in system._pool:
+            if not projectile.active:
+                continue
+            projectile.life -= DT
+            projectile.position = projectile.position + projectile.velocity * DT
+
+    sink, camera = _Sink(), _Camera()
+    full = measure(lambda: system.update(DT))
+    integrate = measure(integrate_only)
+    render = measure(lambda: system.render(sink, camera))  # type: ignore[arg-type]
+    pinned = full - integrate  # the spatial query, the ECS, apply_damage
+
+    # Not opaque: `get_active()` is public and `games/protocolo_bandeira`
+    # reads `.position`/`.velocity` off it every frame, so a native pool
+    # has to rebuild the `Vector2`s it removed.
+    mirrors = [Projectile(active=True) for _ in range(live)]
+    packed = [(float(i), float(i) * 2.0) for i in range(live)]
+
+    def sync_back() -> None:
+        for mirror, (x, y) in zip(mirrors, packed, strict=True):
+            mirror.position = Vector2(x, y)
+
+    # A native pool would also pack for render, which the particle pool
+    # measures at ~0.10 ms per 1000 elements. Borrowed rather than guessed:
+    # it is the same `Vec<(f32, f32)>`-into-Python-lists crossing.
+    native_render_pack_ms = 0.10
+
+    return Row(
+        f"projectiles, {live} live",
+        integrate + pinned + render,
+        measure(sync_back) + native_render_pack_ms,
+        pinned,
+        "DECLINED, not opaque",
+    )
+
+
+def price_flocking(agents: int) -> Row:
+    """Not built. Passes despite not being opaque: dense per-agent work."""
+    from tests.performance.conftest import build_flock, uniform_spread_for
+
+    manager, system = build_flock(agents, spread=uniform_spread_for(agents))
+    system.update(DT)
+
+    entities = list(manager.get_entities_with_cached(FlockingAgent, Transform))
+    flock = [entity.get_component(FlockingAgent) for entity in entities]
+    transforms = [entity.get_component(Transform) for entity in entities]
+
+    def upload() -> list[float]:
+        """Positions, velocities and every per-agent parameter."""
+        out: list[float] = []
+        for transform, agent in zip(transforms, flock, strict=True):
+            position, velocity = transform.position, agent.velocity
+            out += [position.x, position.y, velocity.x, velocity.y]
+            out += [
+                agent.neighbor_radius,
+                agent.separation_radius,
+                agent.cohesion_weight,
+                agent.alignment_weight,
+                agent.separation_weight,
+                agent.max_speed,
+                agent.max_force,
+                agent.mass,
+                agent.seek_weight,
+                1.0 if agent.enabled else 0.0,
+            ]
+            target = agent.seek_target
+            out += [1.0, target.x, target.y] if target else [0.0, 0.0, 0.0]
+        return out
+
+    packed = [0.5] * (agents * 4)
+
+    def download() -> None:
+        """Back into the ECS components everything else reads."""
+        for slot, (transform, agent) in enumerate(zip(transforms, flock, strict=True)):
+            base = slot * 4
+            transform.position = Vector2(packed[base], packed[base + 1])
+            agent.velocity = Vector2(packed[base + 2], packed[base + 3])
+
+    return Row(
+        f"flocking, {agents} agents",
+        measure(lambda: system.update(DT), iterations=12),
+        measure(upload, iterations=12) + measure(download, iterations=12),
+        0.0,
+        "not built",
+    )
+
+
+def price_flow_field(side: int) -> Row:
+    """Not built, and the strongest candidate in the engine."""
+    graph = GridGraph(side, side, allow_diagonal=True)
+    goals = [(side // 2, side // 2)]
+    for y in range(side):
+        for x in range(side):
+            if (x * 7 + y * 13) % 8 == 0 and (x, y) != goals[0]:
+                graph.walls.add((x, y))
+
+    cost_map = dijkstra_map(graph, goals)
+
+    def upload() -> tuple[list[int], list[float]]:
+        """The grid, flattened. Changes rarely, so this is a ceiling."""
+        blocked = [0] * (side * side)
+        for x, y in graph.walls:
+            blocked[y * side + x] = 1
+        weights = [
+            graph.weights.get((x, y), 1.0) for y in range(side) for x in range(side)
+        ]
+        return blocked, weights
+
+    python_ms = measure(lambda: dijkstra_map(graph, goals), iterations=5) + measure(
+        lambda: flow_field(graph, cost_map), iterations=5
+    )
+
+    return Row(
+        f"flow field, {side}x{side}",
+        python_ms,
+        measure(upload, iterations=5),
+        0.0,
+        "not built; the field stays native and is queried",
+    )
+
+
+def main() -> int:
+    """Price every candidate and print the table.
+
+    Returns:
+        0 always; this reports rather than asserts.
+    """
+    rows: list[Row | None] = [
+        price_particles(1000),
+        price_sparks(1000, streak=False),
+        price_sparks(1000, streak=True),
+        price_flow_field(96),
+        price_flocking(1000),
+        price_projectiles(1000),
+    ]
+
+    header = (
+        f"{'candidate':26} {'T_py':>9} {'T_cross':>9} {'T_pinned':>9} "
+        f"{'ceiling':>9}  note"
+    )
+    print(header)
+    print("-" * (len(header) + 12))
+    for row in rows:
+        if row is None:
+            continue
+        print(
+            f"{row.name:26} {row.python_ms:8.3f}m {row.cross_ms:8.3f}m "
+            f"{row.pinned_ms:8.3f}m {row.ceiling:8.1f}x  {row.note}"
+        )
+
+    print(f"\nT_py as a share of a {FRAME_BUDGET_MS:.1f} ms frame, for scale:")
+    for row in rows:
+        if row is None:
+            continue
+        print(f"  {row.name:26} {row.python_ms / FRAME_BUDGET_MS:6.0%}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
