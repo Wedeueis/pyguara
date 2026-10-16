@@ -29,11 +29,20 @@ class ReplaySerializer:
     # Highest replay format version this serializer can read. Replay has no
     # migration layer (unlike persistence): a newer file is refused, not upgraded.
     #
-    # Reading v1 and v2 needs no migration either way: v2 only added an
-    # optional `controller_id` to gamepad events, which a v1 file simply
+    # Reading v1, v2 and v3 needs no migration either way. v2 only added
+    # an optional `controller_id` to gamepad events, which a v1 file simply
     # does not carry and which decodes as None -- the single-pad case, and
-    # how every v1 replay behaved anyway.
-    SUPPORTED_VERSION = 2
+    # how every v1 replay behaved anyway. v3 added `native_store`, which an
+    # older file does not carry and which decodes as "" -- "unknown", which
+    # playback treats as "do not refuse" rather than as "python".
+    #
+    # **Bump this with `ReplayRecorder.FORMAT_VERSION`, in the same
+    # commit.** They are two halves of one number, and moving only the
+    # recorder makes every freshly recorded replay unloadable by the
+    # serializer that just wrote it.
+    # `tests/integration/test_replay_wiring.py` catches that, which is how
+    # it was caught.
+    SUPPORTED_VERSION = 3
 
     def save(
         self,

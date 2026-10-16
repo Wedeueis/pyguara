@@ -140,6 +140,16 @@ class ReplayMetadata:
         duration: Total duration in seconds.
         frame_count: Total number of frames.
         description: Optional description of the replay.
+        native_store: Which implementation ran the simulation, `"native"`
+            or `"python"` -- see `pyguara.native.store_name()`. A replay
+            only reproduces under the store that recorded it: the two are
+            deterministic individually and cannot be made bit-identical to
+            each other, because `SpatialHash` yields neighbours in Python
+            `set` iteration order and no Rust can reproduce that, so float
+            sums differ in their last bits and a chaotic system such as a
+            flock diverges from there. Empty in replays recorded before
+            this field existed, which means "unknown" rather than
+            "python" and so is not refused.
     """
 
     version: int = 1
@@ -150,6 +160,7 @@ class ReplayMetadata:
     duration: float = 0.0
     frame_count: int = 0
     description: str = ""
+    native_store: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dictionary."""
@@ -162,6 +173,7 @@ class ReplayMetadata:
             "duration": self.duration,
             "frame_count": self.frame_count,
             "description": self.description,
+            "native_store": self.native_store,
         }
 
     @classmethod
@@ -176,6 +188,7 @@ class ReplayMetadata:
             duration=data.get("duration", 0.0),
             frame_count=data.get("frame_count", 0),
             description=data.get("description", ""),
+            native_store=data.get("native_store", ""),
         )
 
 

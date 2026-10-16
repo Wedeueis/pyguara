@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
+from pyguara import native
 from pyguara.application.clock import Clock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
@@ -513,17 +514,26 @@ class Application:
         """
         return self._replay_serializer.save(data, path, compress=compress)
 
-    def load_replay(self, path: str) -> bool:
+    def load_replay(self, path: str, *, allow_store_mismatch: bool = False) -> bool:
         """Load a saved replay from disk and start driving input from it.
 
         Args:
             path: File path to load, as saved by `save_recording()`.
+            allow_store_mismatch: Play a replay recorded under the other
+                native store anyway. The default refuses, because such a
+                replay does not reproduce -- see the raise below. Pass
+                True to watch it regardless, which is reasonable for a
+                recording whose value is the inputs rather than the
+                outcome, and for a machine that cannot build the
+                extension.
 
         Returns:
             True if the replay was loaded and playback started.
 
         Raises:
-            RuntimeError: If currently recording.
+            RuntimeError: If currently recording, or if the replay was
+                recorded under a different native store and
+                `allow_store_mismatch` is False.
         """
         if self._replay_recorder is not None:
             raise RuntimeError("Cannot play back a replay while recording")
@@ -531,6 +541,27 @@ class Application:
         data = self._replay_serializer.load(path)
         if data is None:
             return False
+
+        recorded_store = data.metadata.native_store
+        current_store = native.store_name()
+        if (
+            recorded_store
+            and recorded_store != current_store
+            and not allow_store_mismatch
+        ):
+            # The two stores are each deterministic and are not identical
+            # to each other, so this replay will drift rather than
+            # reproduce. Refusing is the point of recording the store at
+            # all: the alternative is a playback that looks fine for a
+            # few seconds and then quietly stops matching, which is far
+            # harder to diagnose than an error at load.
+            raise RuntimeError(
+                f"This replay was recorded with the '{recorded_store}' "
+                f"store and this process is running '{current_store}', so "
+                f"it will diverge rather than reproduce. Set "
+                f"`native_acceleration` to match, or pass "
+                f"`allow_store_mismatch=True` to watch it anyway."
+            )
 
         # Before the first frame, so the recorded inputs drive a world
         # making the same random choices. Without this the seed was recorded

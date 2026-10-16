@@ -170,12 +170,15 @@ The choice therefore moves out of the subsystems:
   refused rather than quietly divergent. `ReplayRecorder.FORMAT_VERSION`
   has to move for this, as it did for W11's `controller_id`.
 
-**Implementation status: decided, not built.** `_native.py` still
-resolves per instance from disk as described above, which is safe only
-while particles and sparks are the sole native subsystems. The switch
-is a prerequisite for the flocking increment, not a cleanup to do
-afterwards, and retrofitting the two landed pools onto it is part of
-that work.
+**Implementation status: built.** `pyguara/native.py` resolves the store
+once at bootstrap from `PerformanceConfig.native_acceleration`, reports
+it through `describe()` in the boot log, and raises at startup under
+`required` with no extension. `ReplayMetadata.native_store` records which
+store produced a recording, and `Application.load_replay` refuses a
+cross-store playback unless asked to allow it. A replay from before the
+field reads as unknown rather than as `python`, because there is no way
+to know what it ran under and refusing every existing recording would
+guard against a divergence nobody can confirm happened.
 
 ### What the engine does and does not promise
 
