@@ -257,6 +257,42 @@ Bisecting the walk would be faster and would reintroduce tunnelling.
 
 ---
 
+## Object pools
+
+### `ParticleSystem` / `Sparks` update -- milliseconds per frame
+
+All three self-contained pools -- particles, sparks and projectiles --
+pre-allocate their slots and hand them out, so they allocate nothing per
+frame. They do walk their **whole capacity** every frame, live slots and dead
+alike, and that reads like the thing to fix.
+
+Measured, it is not:
+
+| Pool | Capacity | Live | ms / update | us / slot |
+| --- | ---: | ---: | ---: | ---: |
+| particles | 1000 | 0 | 0.024 | 0.024 |
+| particles | 1000 | 10 | 0.046 | — |
+| particles | 1000 | 1000 | 2.196 | 2.196 |
+| particles | 4000 | 0 | 0.104 | 0.026 |
+| particles | 4000 | 4000 | **9.020** | 2.255 |
+| sparks | 1000 | 0 | 0.011 | 0.011 |
+| sparks | 1000 | 1000 | 2.849 | 2.849 |
+| sparks | 4000 | 4000 | **11.454** | 2.863 |
+
+A dead slot costs one boolean test: **0.024 us**. A live one costs **2.2 us**,
+ninety times as much. So an idle 1000-slot pool costs 0.024 ms -- nothing --
+and compacting the pool to skip dead slots would buy back exactly that.
+
+**The cost is the per-element arithmetic.** 4000 live particles take 9 ms and
+4000 sparks 11.5 ms, over half a 16.7 ms frame for one pool. That is where a
+vectorised rewrite would have to win, and it is the opposite of where the
+"walks the whole capacity" reading points.
+
+Defensible scale on this machine: roughly **1000 live particles at 60 Hz**
+(2.2 ms) alongside everything else a frame does; 4000 is not reachable.
+
+---
+
 ## Rendering, CPU side
 
 These are the portable figures, and the surprise is where the time goes.
