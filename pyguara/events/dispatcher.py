@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import queue
 import time
+import weakref
 from collections import defaultdict, deque
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -28,6 +29,51 @@ DEFAULT_QUEUE_WARNING_THRESHOLD = 10000
 DEFAULT_MAX_HISTORY_SIZE = 1000
 
 
+class _OwnerRef:
+    """A reference to a subscription's owner, weak where that is possible.
+
+    The dispatcher needs to answer one question -- "is this record's owner
+    that object?" -- without being the reason the object stays alive.
+
+    `id()` used to serve for this, and had a hazard: once an owner is
+    collected its id can be reused, so `clear_subscribers(owner=new_thing)`
+    could match a stale record belonging to something else entirely. A
+    weakref identifies the object itself and reports honestly when it is
+    gone.
+
+    `owner` is documented as "anything at all", and some things cannot be
+    weakly referenced (an int, a string, a tuple). Those are held
+    **strongly** rather than rejected, because tightening the API is not
+    what this is for -- and noted here because such an owner is then kept
+    alive by its own subscription.
+    """
+
+    __slots__ = ("_ref", "_strong")
+
+    def __init__(self, owner: object) -> None:
+        """Hold `owner` weakly if it supports it, strongly otherwise."""
+        self._strong: object | None = None
+        self._ref: weakref.ref[Any] | None = None
+        try:
+            self._ref = weakref.ref(owner)
+        except TypeError:
+            self._strong = owner
+
+    def get(self) -> object | None:
+        """Return the owner, or None once it has been collected."""
+        if self._ref is not None:
+            return self._ref()
+        return self._strong
+
+    def is_dead(self) -> bool:
+        """Whether the owner has been collected."""
+        return self._ref is not None and self._ref() is None
+
+    def points_to(self, owner: object) -> bool:
+        """Whether this refers to exactly `owner` (identity, not equality)."""
+        return self.get() is owner
+
+
 @dataclass
 class HandlerRecord:
     """One subscription: the callback plus how and when it should run.
@@ -36,17 +82,26 @@ class HandlerRecord:
         callback: Receives the event. Returning False stops propagation.
         priority: Higher runs first.
         filter_func: Optional predicate; the callback runs only if it passes.
-        owner: Whatever registered this, for bulk teardown. Held as an id
-            rather than a reference so a subscription never keeps its owner
-            alive -- a scene that leaks its handlers should not also leak
-            itself.
+        owner: Whatever registered this, for bulk teardown, held through
+            `_OwnerRef` so the dispatcher adds no strong reference of its
+            own.
+
+            Note this does **not** mean a subscription cannot keep its
+            owner alive, which this attribute's docstring used to claim.
+            The usual call is
+            `dispatcher.subscribe(E, self._on_e, owner=self)`, and the
+            bound method in `callback` holds `__self__` -- the owner --
+            strongly. So the owner lives as long as the subscription does,
+            whatever this field holds. What the weak reference buys is that
+            the *identity* is honest: a collected owner reports as gone
+            instead of leaving an id that a later object can reuse.
         once: True if the subscription removes itself after one delivery.
     """
 
     callback: Callable[[Any], bool | None]
     priority: int
     filter_func: Callable[[Any], bool] | None
-    owner: int | None = None
+    owner: _OwnerRef | None = None
     once: bool = False
 
 
@@ -140,8 +195,11 @@ class EventDispatcher:
                 returns True.
             owner: Anything at all -- a scene, a system -- that
                 `clear_subscribers(owner=...)` can later drop in one call.
-                The dispatcher keeps only its `id()`, never a reference, so
-                subscribing cannot keep the owner alive.
+                Held weakly where the object allows it, so the dispatcher
+                adds no strong reference of its own. It is **not** true
+                that subscribing cannot keep the owner alive, as this said
+                before: a bound-method handler holds its `self`, which is
+                normally the owner.
             once: Remove the subscription after its first delivery. The
                 handler still runs; it simply does not run again.
         """
@@ -149,7 +207,7 @@ class EventDispatcher:
             callback=handler,
             priority=priority,
             filter_func=filter_func,
-            owner=None if owner is None else id(owner),
+            owner=None if owner is None else _OwnerRef(owner),
             once=once,
         )
         self._listeners[event_type].append(record)
@@ -227,13 +285,23 @@ class EventDispatcher:
                 unowned ones" -- pass the owner to be selective.
         """
         if owner is not None:
-            owner_id = id(owner)
             types = [event_type] if event_type is not None else list(self._listeners)
             for cls in types:
                 records = self._listeners.get(cls)
                 if records is None:
                     continue
-                self._listeners[cls] = [r for r in records if r.owner != owner_id]
+                # Records whose owner has been collected go too. They can
+                # never be cleared by owner again -- nobody holds the object
+                # to pass -- so they would sit here for the life of the
+                # dispatcher. (Only reachable when `owner` was a different
+                # object from the handler's `self`; a bound method keeps its
+                # own owner alive.)
+                self._listeners[cls] = [
+                    r
+                    for r in records
+                    if r.owner is None
+                    or not (r.owner.points_to(owner) or r.owner.is_dead())
+                ]
         elif event_type is not None:
             self._listeners.pop(event_type, None)
         else:
