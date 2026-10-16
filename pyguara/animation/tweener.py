@@ -27,10 +27,12 @@ from typing import Any
 from pyguara.animation.easing import EasingType
 from pyguara.animation.timeline import Animatable
 from pyguara.animation.tween import Tween
+from pyguara.common.components import Transform
 from pyguara.ecs.component import BaseComponent
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.log import get_logger
+from pyguara.physics.components import RigidBody
 
 logger = get_logger(__name__)
 
@@ -52,11 +54,17 @@ class Binding:
             `tools.tweakable.TweakableLeaf` carries one.
         path: The path this binding was created from, for messages and for
             `stop_property()`.
+        interpolated: The `Transform` this binding switched into visual
+            interpolation, or None if it did not. Set only when the binding
+            drives `transform.position` on a transform that was not already
+            interpolating, so `TweenSystem` can put it back when the tween
+            ends and never clears a flag something else owns.
     """
 
     animatable: Animatable
     apply: Callable[[Any], None]
     path: str = ""
+    interpolated: Transform | None = None
 
 
 class Tweener(BaseComponent):
@@ -80,10 +88,16 @@ class TweenTarget:
         current: The value the property holds right now, which becomes the
             tween's start point.
         apply: Writes a new value back.
+        container: The object holding the final attribute, and
+        attribute: its name -- together enough to recognise *what* is being
+            tweened without re-parsing the path. `_interpolate_position_tween`
+            uses them to spot a `Transform.position` tween.
     """
 
     current: Any
     apply: Callable[[Any], None]
+    container: Any = None
+    attribute: str = ""
 
 
 def resolve_property(entity: Entity, path: str) -> TweenTarget:
@@ -148,7 +162,52 @@ def resolve_property(entity: Entity, path: str) -> TweenTarget:
     return TweenTarget(
         current=getattr(container, final),
         apply=lambda value: setattr(held, final, value),
+        container=held,
+        attribute=final,
     )
+
+
+def _interpolate_position_tween(target: TweenTarget) -> Transform | None:
+    """Switch a position-driving tween's transform into visual interpolation.
+
+    `TweenSystem` runs on the **fixed** step, so a tween moves a position 60
+    times a second however fast the display is. For a physics body that is
+    already handled: `PhysicsSystem` sets `Transform.interpolate`, the scene
+    manager snapshots `previous_position` before each tick, and the render
+    path lerps between the two. A tween on an entity with no `RigidBody`
+    had none of that, so on a 120 or 144 Hz display the sprite held still
+    for two or three frames and then jumped -- the judder
+    `render_position`'s own docstring describes.
+
+    Opting the transform in is the fix that keeps the fixed step. Moving
+    the tick to `variable_update` would also look smooth and would cost
+    two things worth more: the ordering guarantee documented at
+    `scene/base.py:120-123` (a tween driving a position must be applied
+    before steering, AI or the scene's update reads it this tick), and
+    reproducibility -- a framerate-dependent tween does not replay, which
+    is the thing `RandomService` seeding was just fixed to protect.
+
+    Mirrors `PhysicsSystem`'s own opt-in, including seeding
+    `previous_position`: without it the first rendered frame lerps from
+    whatever the field happened to hold.
+
+    Args:
+        target: The resolved destination.
+
+    Returns:
+        The transform that was switched on, so the caller can put it back
+        later -- or None if this is not a position tween, or the transform
+        was interpolating already and is therefore not ours to restore.
+    """
+    container = target.container
+    if not isinstance(container, Transform) or target.attribute != "position":
+        return None
+    if container.interpolate:
+        return None
+
+    container.interpolate = True
+    container.previous_position = container.position
+    return container
 
 
 def tween_property(
@@ -212,7 +271,14 @@ def tween_property(
         on_complete=on_complete,
     )
     tween.start()
-    tweener.bindings.append(Binding(animatable=tween, apply=target.apply, path=path))
+    tweener.bindings.append(
+        Binding(
+            animatable=tween,
+            apply=target.apply,
+            path=path,
+            interpolated=_interpolate_position_tween(target),
+        )
+    )
     return tween
 
 
@@ -337,6 +403,31 @@ class TweenSystem:
                 # stopped it, or started a replacement on the same path.
                 if binding in tweener.bindings:
                     tweener.bindings.remove(binding)
+                self._restore_interpolation(binding, entity)
+
+    @staticmethod
+    def _restore_interpolation(binding: Binding, entity: Entity) -> None:
+        """Put `interpolate` back after a position tween ends.
+
+        Only for a transform this binding switched on itself -- `Binding`
+        records that, so a transform that was already interpolating is left
+        alone. And never for an entity with a `RigidBody`: physics owns
+        that flag and sets it for the life of the body, so clearing it here
+        would stop interpolating a body that still needs it. A tween can
+        finish on a physics entity if something tweened its position
+        directly.
+
+        Args:
+            binding: The finished binding.
+            entity: Its entity, checked for a `RigidBody`.
+        """
+        transform = binding.interpolated
+        if transform is None:
+            return
+        binding.interpolated = None
+        if entity.has_component(RigidBody):
+            return
+        transform.interpolate = False
 
     @staticmethod
     def _write(binding: Binding, entity: Entity) -> bool:
