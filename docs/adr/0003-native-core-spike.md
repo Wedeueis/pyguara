@@ -55,25 +55,58 @@ Vector2 -> Vec2d -> tuple -> object
 tuple and CFFI accepts it structurally. A PyO3 `#[pyclass]` cannot extend a
 variable-length built-in like `tuple`, so a Rust `Vector2` cannot be one.
 
-### What that costs
+### What that costs — measured, and smaller than it first looked
 
-Converting at the boundary works — `body.position = (v.x, v.y)` — and costs
-**+85 ns per crossing** (608 ns → 694 ns, min of 5 × 200k). There are 21
-vector-passing pymunk call sites in `physics/backends/pymunk_impl.py`.
+Converting at the boundary works: `body.position = (v.x, v.y)`, at **+85 ns
+per crossing** (608 ns → 694 ns), across 21 vector-passing call sites in
+`physics/backends/pymunk_impl.py` — the only file in the engine that touches
+pymunk.
 
-That is the wrong direction for a change whose purpose is removing
-per-operation overhead, and it means every physics interaction pays a tax to
-make the maths faster.
+The first version of this ADR stopped there and recommended dropping the
+maths rewrite, reasoning that a conversion tax is the wrong direction for a
+change meant to remove overhead. **That was asserted, not measured, and it
+was wrong.** Counting the crossings a tick actually makes, by wrapping the
+CFFI-facing property accessors:
+
+| Scene | Crossings / tick | Tax at 85 ns |
+| --- | ---: | ---: |
+| 100 dynamic bodies | 200 (all reads) | 0.017 ms |
+| 100 bodies + 20 movers | 280 | **0.024 ms** |
+| 50 movers | 211 (all writes) | 0.018 ms |
+
+0.024 ms is **0.14% of a 16.7 ms frame**. The tax is noise.
+
+What is *not* noise is what `Vector2` costs today:
+
+| Operation | ns |
+| --- | ---: |
+| `Vector2 + Vector2` | 432 |
+| `Vector2 * float` | **1,115** |
+| `Vector2.normalize()` | **1,847** |
+| `Vector2.magnitude` | 253 |
+| `Vector2(x, y)` | 246 |
+| scalar equivalent | ~67 |
+
+So the question is not the pymunk tax. It is whether enough game code does
+vector arithmetic for a faster `Vector2` to repay a rewrite — and there is a
+reason to doubt it: the RFC's own motivation notes that `flock_force` was
+already rewritten in scalar variables to escape this cost. If the hot loops
+have already hand-optimised `Vector2` away, what remains are API boundaries
+where 400 ns does not matter.
+
+**That is the thing to measure next, and it has not been measured.**
 
 ### Consequence
 
-**Marco 1 must drop `Vector2`, or the RFC must replace pymunk.** Those are
-very different proposals, and the second is not what was proposed.
+The blocker is real but narrower than "drop the maths rewrite": `Vector2`
+cannot be a pyclass *and* keep structural pymunk compatibility, so Marco 1
+has to pick a boundary strategy. Four exist — see "Options for the maths
+rewrite".
 
-A Rust core can still use `glam::Vec2` *internally* — nothing about
-`pathfinding.rs` or `procgen.rs` requires the Python-facing `Vector2` to be
-Rust. The RFC's own "what stays in Python" table already keeps physics on
-pymunk, so the two halves of its Marco 1 are in tension with each other.
+Note also that pymunk is not a thin layer to swap: 7 of the demos use
+`RigidBody` dynamics, and the backend implements joints, collision
+callbacks, raycasts and region queries on top of Chipmunk's solver.
+
 
 ## Finding 2 — the "today" column was not measured against this tree
 
@@ -135,9 +168,11 @@ features it wants.
 
 **Narrow the RFC to its best-evidenced parts, and do not start with Marco 1.**
 
-1. **Drop the `Vector2`/`Rect`/`Color` rewrite** (Marco 1's maths half).
-   Finding 1 makes it a conversion tax at 21 physics call sites rather than a
-   speedup. `SpatialHash` has no such constraint and can stay.
+1. **Decide Marco 1's maths half on a measurement that does not exist yet**
+   -- how many `Vector2` operations a real frame performs. The pymunk tax is
+   0.024 ms and does not decide it; the per-op cost (up to 1,847 ns) could
+   decide it either way. `SpatialHash` has no such constraint and can
+   proceed regardless. See "Options for the maths rewrite".
 2. **Benchmark `dijkstra_map`, the flow field and WFC first.** They are the
    RFC's own best-value claim and the only numbers with nothing behind them.
    A flow field is pure in, pure out — dimensions and seeds in, coordinates
@@ -150,9 +185,48 @@ features it wants.
    prototyped. It is the most invasive milestone and depends on the buffer
    protocol working exactly as described.
 
-If any of that is unwelcome, the alternative is honest and should be said
-plainly: accepting Marco 1 as written means accepting either a per-crossing
-conversion tax on all physics, or replacing pymunk.
+## Options for the maths rewrite
+
+Four, in increasing order of commitment. The pymunk tax (0.024 ms/tick)
+does not distinguish them; what does is how much the engine would gain from
+a faster `Vector2`, which is unmeasured.
+
+**A. Keep `Vector2` in Python; Rust uses `glam` internally.** The Rust
+modules take and return floats, tuples or buffers. Nothing about
+`pathfinding.rs`, `procgen.rs` or the pools needs the Python-facing vector
+to be Rust. Zero compatibility risk, zero tax, and it forfeits the per-op
+win — which may be most of the win already gone, if the hot loops have
+hand-optimised `Vector2` away.
+
+**B. Rust `Vector2`, converting to tuples at the pymunk seam.** The tax is
+0.024 ms/tick, confined to one file. The real compatibility surface is
+**not** pymunk: it is everything relying on `Vector2` being a `tuple` —
+unpacking (`x, y = v`), `tuple(v)`, equality against literal tuples, use as
+a dict key, indexing. The 10 `isinstance(..., Vector2)` sites are fine, a
+pyclass being a real type; the tuple-ness needs an audit this spike did not
+do. Gated on the frame-op measurement above.
+
+**C. Replace pymunk with a Rust physics crate** (`rapier2d` the obvious
+candidate). Removes the CFFI boundary, lets `Vector2` be Rust natively, and
+makes Marco 4's sweep native in the same stroke. It is also a different
+proposal from the one on the table: a different solver changes game feel,
+and the backend's `one_way` platform behaviour, joints, collision callbacks
+and every physics test would be reimplemented against it. Seven demos use
+`RigidBody`, so this is not a corner of the engine. The honest version of
+this option is that it is a project, not a milestone.
+
+**D. A hand-written C-level type that genuinely subclasses `tuple`.**
+CPython permits it — `Vec2d` is one — but PyO3's `#[pyclass]` cannot express
+it, so this means raw `pyo3::ffi` and a manually built `PyTypeObject`,
+giving up the memory safety that motivates using Rust at all. Named so it is
+considered-and-rejected rather than unexplored.
+
+**A is the default**, being the only one that needs no further evidence. B
+becomes right if a frame turns out to perform thousands of vector operations
+outside the already-optimised loops. C is a separate decision about the
+physics backend, which should not be smuggled in as a consequence of a
+maths optimisation.
+
 
 ## What this spike produced
 
