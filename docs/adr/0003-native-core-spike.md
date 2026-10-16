@@ -1,5 +1,13 @@
 # ADR 0003: RFC-0003's native Rust core — what Marco 0 found
 
+> **Generalised by [ADR 0004](0004-the-native-boundary.md).** This
+> document measured the first milestone and recommended an order.
+> ADR 0004 replaces that order with a test a candidate can be put
+> through before any Rust is written, after the sparks increment
+> below showed the same reasoning giving answers between 1.4x and
+> 25x for the same module depending only on where the boundary was
+> drawn. Read this for the measurements; read 0004 for the rule.
+
 - **Status:** proposed — the decision in "Recommendation" is the one being asked for
 - **Date:** 2026-10-16
 - **Context:** `project/backlog/active/rust_core.md` (RFC-0003), [issue #305](https://github.com/Wedeueis/pyguara/issues/305)
