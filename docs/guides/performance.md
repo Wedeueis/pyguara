@@ -362,6 +362,65 @@ claiming the capability would buy nothing and hide that fact.
 
 Reproduce both tables with `uv run python tools/bench_native_pool.py`.
 
+
+### Pricing a native port before writing it
+
+`docs/adr/0004-the-native-boundary.md` turns the two tables above into a
+test a candidate can be put through in advance:
+
+    ceiling = T_py / (T_cross + T_pinned)
+
+where `T_cross` is what getting data in and results out costs per tick,
+measured in Python because that is where it is paid, and `T_pinned` is work
+that cannot move at all -- the ECS, the event dispatcher, resource handles.
+
+`uv run python tools/price_native_boundary.py` computes it for every
+candidate:
+
+| Candidate | `T_py` | `T_cross` | `T_pinned` | ceiling | |
+| --- | ---: | ---: | ---: | ---: | --- |
+| flow field, 96x96 | 84.139 | 0.522 | — | **161x** | not built |
+| particles, 1000 | 1.904 | 0.104 | — | 18.3x | landed |
+| sparks, 1000 streaks | 5.881 | 0.343 | — | 17.1x | landed |
+| flocking, 1000 agents | 16.337 | 1.123 | — | **14.5x** | not built |
+| sparks, 1000 dots | 4.035 | 0.324 | — | 12.5x | landed |
+| projectiles, 1000 | 3.062 | 0.346 | 1.153 | **2.0x** | declined |
+
+As a share of a 16.7 ms frame, `T_py` alone is 505% for a 96x96 flow-field
+recompute, 98% for 1000 flocking agents, 35% for 1000 streaked sparks and
+18% for 1000 projectiles.
+
+
+### Flow fields -- the number nobody had measured
+
+`dijkstra_map` + `flow_field` over a `GridGraph`, 12% walls, 8-directional:
+
+| Grid | Cells | `dijkstra_map` | `flow_field` | recompute | share of a frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 30x20 | 600 | 2.911 | 2.114 | **5.024** | 30% |
+| 48x48 | 2304 | 11.716 | 8.548 | 20.264 | 122% |
+| 96x96 | 9216 | 48.534 | 35.225 | **83.759** | 505% |
+| 160x160 | 25600 | 139.231 | 100.161 | 239.392 | 1436% |
+
+A `vector_at` query against a computed field, by contrast, is **0.6 us**.
+So the field is cheap to *use* and, above about 2000 cells, cannot be
+recomputed at interactive rates at all.
+
+Two separate causes, and they want separate fixes:
+
+- **The interface.** `dijkstra_map(graph, goals)` takes a `Graph`
+  **protocol** and calls `get_neighbors` and `cost` per node expansion. For
+  8-directional movement with corner-cutting refused, one expansion is
+  roughly thirty interpreter operations. This is also why a native port
+  must take the grid rather than the graph -- see ADR 0004, Decision 2.
+- **The cadence.** `games/vinagre_matilha` recomputes **every fixed tick**,
+  60 times a second, on the 30x20 row above. Its goal is the jaguar's cell,
+  which at 158 px/s across 32 px cells changes once every 12 ticks at a
+  sprint -- so at least eleven of twelve recomputes reproduce the field
+  that was already there. Guarding that is Python and costs nothing.
+
+Reproduce with `uv run python tools/price_native_boundary.py`.
+
 **Two things to know before trusting a re-measurement.** Use a real texture
 object, not a `MagicMock`: the Python path hashes and compares the texture
 once per particle, which is cheap for a real object and pathological for a
