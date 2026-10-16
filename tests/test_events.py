@@ -1,3 +1,5 @@
+import gc
+import weakref
 from dataclasses import dataclass
 from typing import Any
 
@@ -1127,3 +1129,99 @@ class TestDispatchAfter:
         dispatcher.advance(0.2)
 
         assert received == ["early", "late"]
+
+
+class TestOwnerIsHeldWeakly:
+    """`HandlerRecord.owner` was `id(owner)`, with a docstring claiming a
+    subscription "cannot keep the owner alive". It can, and does: the usual
+    call passes a bound method, which holds its `self` -- normally the owner
+    -- strongly. The `id()` indirection bought nothing for that, and cost
+    something: once an owner is collected its id can be reused, so clearing
+    by a *new* object could match a stale record belonging to something else.
+
+    The reference is now weak where the object allows it, which makes the
+    identity honest. The retention is unchanged and is now documented
+    rather than denied -- making callbacks weak too would silently drop
+    handlers bound to temporaries, which is a separate decision.
+    """
+
+    def test_clearing_by_owner_still_drops_that_owners_handlers(self):
+        dispatcher = EventDispatcher()
+        owner = _Owner()
+        dispatcher.subscribe(CustomEvent, owner.handle, owner=owner)
+
+        dispatcher.clear_subscribers(owner=owner)
+        dispatcher.dispatch(CustomEvent(data="x"))
+
+        assert owner.calls == 0
+
+    def test_clearing_by_a_different_owner_leaves_handlers_alone(self):
+        dispatcher = EventDispatcher()
+        mine, theirs = _Owner(), _Owner()
+        dispatcher.subscribe(CustomEvent, mine.handle, owner=mine)
+
+        dispatcher.clear_subscribers(owner=theirs)
+        dispatcher.dispatch(CustomEvent(data="x"))
+
+        assert mine.calls == 1
+
+    def test_a_recycled_id_cannot_claim_a_dead_owners_handlers(self):
+        """The hazard `id()` carried. Reachable only when the owner is not
+        the handler's `self`, since a bound method keeps its own owner
+        alive -- so the handler here is a plain function."""
+        dispatcher = EventDispatcher()
+        seen: list[int] = []
+
+        dead = _Owner()
+        dispatcher.subscribe(CustomEvent, lambda event: seen.append(1), owner=dead)
+        del dead
+        gc.collect()
+
+        # A fresh object, which may well have been handed the collected
+        # one's address.
+        replacement = _Owner()
+        dispatcher.clear_subscribers(owner=replacement)
+        dispatcher.dispatch(CustomEvent(data="x"))
+
+        # The record went -- but because its owner is gone, not because the
+        # replacement matched it. Either way the replacement never owned it.
+        assert seen == []
+
+    def test_an_owner_that_cannot_be_weakly_referenced_still_works(self):
+        """`owner` is documented as "anything at all", and an int or a
+        string cannot be weakly referenced. Those are held strongly rather
+        than rejected."""
+        dispatcher = EventDispatcher()
+        calls: list[int] = []
+        dispatcher.subscribe(CustomEvent, lambda event: calls.append(1), owner="hud")
+
+        dispatcher.dispatch(CustomEvent(data="x"))
+        assert calls == [1]
+
+        dispatcher.clear_subscribers(owner="hud")
+        dispatcher.dispatch(CustomEvent(data="x"))
+        assert calls == [1]
+
+    def test_the_dispatcher_adds_no_strong_reference_of_its_own(self):
+        """What the weakref does buy, isolated from the bound-method
+        retention: with a plain-function handler, the owner is collectable."""
+        dispatcher = EventDispatcher()
+        owner = _Owner()
+        dispatcher.subscribe(CustomEvent, lambda event: None, owner=owner)
+        ref = weakref.ref(owner)
+
+        del owner
+        gc.collect()
+
+        assert ref() is None
+
+
+class _Owner:
+    """A subscriber that counts deliveries, for the owner-reference tests."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def handle(self, event: object) -> None:
+        """Count one delivery."""
+        self.calls += 1
