@@ -94,7 +94,56 @@ already rewritten in scalar variables to escape this cost. If the hot loops
 have already hand-optimised `Vector2` away, what remains are API boundaries
 where 400 ns does not matter.
 
-**That is the thing to measure next, and it has not been measured.**
+### Measured: where the `Vector2` traffic actually is
+
+Counted with `tools/count_vector_ops.py`, which wraps the operators and
+tallies them.
+
+**The Python code that runs every frame barely touches `Vector2`.** Across
+every demo that runs without a GL context: **1–8 operations per frame**,
+0.0002–0.0022 ms. Those demos sit in menus and idle scenes, so this is a
+floor rather than a representative figure — but it is the floor for
+general game and engine code.
+
+**The hot systems are saturated with it.** Per tick:
+
+| System | Vector2 ops | Implied ms | Share of that system's measured cost |
+| --- | ---: | ---: | ---: |
+| Flocking, 500 agents | 5,502 | 2.85 | — |
+| Flocking, 1000 agents | 11,000 | 5.69 | **36%** of 16.0 ms |
+| Flocking, 2000 agents | 22,001 | 11.38 | **33%** of 34.3 ms |
+| Particles, 1000 live | 4,000 | 0.99 | **45%** of 2.20 ms |
+| Particles, 4000 live | 16,000 | 3.94 | **44%** of 9.02 ms |
+| Sparks, 1000 live | 5,000 | 2.29 | **80%** of 2.85 ms |
+
+Construction dominates — 6 `Vector2` objects per agent per tick in
+flocking, 4 per particle — not arithmetic.
+
+This **refutes the doubt stated above**. `flock_force` itself is scalar, but
+the system around it (reading and writing `transform.position`, integrating
+velocity) builds `Vector2` objects per element per tick. A third to four
+fifths of the hot systems' cost is this type.
+
+### And yet the conclusion does not change
+
+A Rust `Vector2` would address that traffic — and **Marco 3 removes it
+entirely**. Rewriting the pools and the flocking solver as Rust SoA means
+positions and velocities live in native arrays; no Python `Vector2` is
+constructed per element at all. Optimising the type would be optimising
+traffic the next milestone deletes.
+
+So the two readings converge on the same answer for opposite reasons:
+
+- If Marco 3 happens, a Rust `Vector2` is **redundant** — it speeds up what
+  Marco 3 removes, and what remains in Python does 1–8 ops a frame.
+- If Marco 3 does *not* happen, a Rust `Vector2` becomes **the cheapest
+  substantial win available**: it would recover a large share of 33–80% of
+  the hot systems' cost without restructuring them, for one type's
+  compatibility risk.
+
+That is a real fork, and it is about Marco 3 rather than about the maths.
+
+
 
 ### Consequence
 
@@ -168,11 +217,13 @@ features it wants.
 
 **Narrow the RFC to its best-evidenced parts, and do not start with Marco 1.**
 
-1. **Decide Marco 1's maths half on a measurement that does not exist yet**
-   -- how many `Vector2` operations a real frame performs. The pymunk tax is
-   0.024 ms and does not decide it; the per-op cost (up to 1,847 ns) could
-   decide it either way. `SpatialHash` has no such constraint and can
-   proceed regardless. See "Options for the maths rewrite".
+1. **Drop Marco 1's maths half — if Marco 3 goes ahead.** Now measured:
+   the hot systems spend 33–80% of their time in `Vector2`, and Marco 3
+   deletes that traffic by moving the data into native arrays, so
+   optimising the type would optimise what the next milestone removes. The
+   Python code that remains does 1–8 operations a frame. If Marco 3 is
+   *declined*, this inverts and the maths rewrite becomes the cheapest
+   substantial win available. `SpatialHash` is unaffected either way.
 2. **Benchmark `dijkstra_map`, the flow field and WFC first.** They are the
    RFC's own best-value claim and the only numbers with nothing behind them.
    A flow field is pure in, pure out — dimensions and seeds in, coordinates
@@ -221,11 +272,18 @@ it, so this means raw `pyo3::ffi` and a manually built `PyTypeObject`,
 giving up the memory safety that motivates using Rust at all. Named so it is
 considered-and-rejected rather than unexplored.
 
-**A is the default**, being the only one that needs no further evidence. B
-becomes right if a frame turns out to perform thousands of vector operations
-outside the already-optimised loops. C is a separate decision about the
-physics backend, which should not be smuggled in as a consequence of a
-maths optimisation.
+**A, conditional on Marco 3.** The measurement settles it: a frame does
+perform thousands of vector operations, but all of them inside the three
+systems Marco 3 rewrites in Rust, where no Python `Vector2` would be
+constructed at all. Outside those, a frame does 1–8.
+
+**B if Marco 3 is declined.** Then that 33–80% stays in Python and a Rust
+`Vector2` recovers a large share of it without restructuring anything — the
+best ratio of win to risk on the table, subject to the tuple-compatibility
+audit above.
+
+**C is a separate decision** about the physics backend and should not be
+smuggled in as a consequence of a maths optimisation. **D stays rejected.**
 
 
 ## What this spike produced
@@ -234,5 +292,7 @@ maths optimisation.
 - `tests/performance/test_perf_physics_probe.py` — the sweep baseline, added
   as W8 ahead of this.
 - Pool and probe figures in `docs/guides/performance.md`.
-- The pymunk/CFFI pre-flight result, reproducible from the snippet in
-  Finding 1.
+- `tools/preflight_pymunk_vector.py` — finding 1, re-runnable against a
+  future pymunk rather than trusted from a document written against 7.2.0.
+- `tools/count_vector_ops.py` — the `Vector2` frame-traffic measurement that
+  decides Marco 1.
