@@ -1,3 +1,5 @@
+import pytest
+
 from pyguara.common.types import Vector2
 from pyguara.graphics.components.animation import (
     AnimationClip,
@@ -47,31 +49,53 @@ def test_animator_playback():
     assert sprite.texture == tex1
 
 
-def test_particle_system_emission():
+@pytest.mark.parametrize("accelerate", [False, True])
+def test_particle_system_emission(accelerate):
+    """Particles are spawned, moved and recycled.
+
+    Run against both backing stores. It used to read `ps._pool` directly,
+    which only the Python store has -- the native one keeps its state in
+    flat arrays with no per-particle objects to hand out. `live_count` is
+    the question it was really asking, and asking it that way makes the
+    test cover both.
     """
-    Unit Test: Particle Emission & Lifecycle
-    Verifies that particles are spawned, moved, and recycled.
-    """
-    ps = ParticleSystem(capacity=10)
+    if accelerate and not ParticleSystem(capacity=1).accelerated:
+        pytest.skip("native extension not built; `cargo build --release`")
+
+    ps = ParticleSystem(capacity=10, accelerate=accelerate)
     tex = MockTexture("smoke")
 
     # 1. Emit
+    ps.emit(tex, Vector2(0, 0), count=5, speed=100, life=1.0)
+
+    assert ps.live_count == 5
+
+    # 2. Update (Move)
+    ps.update(0.5)
+    assert ps.live_count == 5
+
+    # 3. Kill (Life expires)
+    ps.update(0.6)  # Total 1.1s
+    assert ps.live_count == 0
+
+
+def test_particle_state_is_readable_on_the_python_store():
+    """The per-particle detail the parametrised test above gave up.
+
+    Only meaningful for the Python store, so it is asserted here rather
+    than lost: the native store has no `Particle` objects by design.
+    """
+    ps = ParticleSystem(capacity=10, accelerate=False)
+    tex = MockTexture("smoke")
+
     ps.emit(tex, Vector2(0, 0), count=5, speed=100, life=1.0)
 
     active = [p for p in ps._pool if p.active]
     assert len(active) == 5
     assert active[0].texture == tex
     assert active[0].life == 1.0
-    # Velocity should be non-zero
     assert active[0].velocity.length > 0
 
-    # 2. Update (Move)
     ps.update(0.5)
-    # Positions should have changed from 0,0
     assert active[0].position != Vector2(0, 0)
     assert active[0].life == 0.5
-
-    # 3. Kill (Life expires)
-    ps.update(0.6)  # Total 1.1s
-    active_now = [p for p in ps._pool if p.active]
-    assert len(active_now) == 0

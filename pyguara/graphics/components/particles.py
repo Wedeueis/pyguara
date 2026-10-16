@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Color, Vector2
+from pyguara.graphics.components._native import native_module
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.graphics.protocols import IRenderer
@@ -108,7 +109,13 @@ class ParticleSystem:
     and batching (Render) of thousands of small entities.
     """
 
-    def __init__(self, capacity: int = 1000, rng: RandomStream | None = None):
+    def __init__(
+        self,
+        capacity: int = 1000,
+        rng: RandomStream | None = None,
+        *,
+        accelerate: bool | None = None,
+    ):
         """
         Initialize the particle pool.
 
@@ -117,15 +124,75 @@ class ParticleSystem:
                             Higher numbers use more RAM but allow denser effects.
             rng (RandomStream | None): Random stream driving per-particle
                 spread/speed/rotation. Defaults to a fresh, unseeded stream.
+            accelerate: Whether to back the pool with the native
+                structure-of-arrays pool. None, the default, uses it when
+                the extension is available and the Python pool otherwise.
+                True demands it and raises if it is missing; False forces
+                the Python pool, which is what the parity tests do.
+
+        Raises:
+            RuntimeError: If `accelerate=True` and the extension is absent.
         """
-        # Pre-allocate the pool to avoid runtime instantiation
-        self._pool = [
-            Particle(Vector2.zero(), Vector2.zero(), 0.0) for _ in range(capacity)
-        ]
         self._capacity = capacity
         # Pointer to the next available slot (Simple Ring Buffer or Search)
         self._next_index = 0
         self._rng = rng if rng is not None else RandomStream()
+
+        native = native_module() if accelerate is not False else None
+        if accelerate and native is None:
+            raise RuntimeError(
+                "accelerate=True but the native extension is not available. "
+                "Build it with `cargo build --release`, or leave "
+                "`accelerate` unset to fall back to Python."
+            )
+
+        self._native = native.NativeParticlePool(capacity) if native else None
+        # Textures cannot live in a float column, so the native pool holds
+        # an index into this list and the mapping stays here.
+        self._textures: list[Texture] = []
+        self._texture_ids: dict[int, int] = {}
+
+        # Only the Python path has per-particle objects. Kept as `_pool` for
+        # the code that has always read it; empty under acceleration, where
+        # `live_count` is the way to ask.
+        self._pool: list[Particle] = (
+            []
+            if self._native is not None
+            else [
+                Particle(Vector2.zero(), Vector2.zero(), 0.0) for _ in range(capacity)
+            ]
+        )
+
+    @property
+    def accelerated(self) -> bool:
+        """Whether this pool is backed by the native extension."""
+        return self._native is not None
+
+    @property
+    def live_count(self) -> int:
+        """How many particles are currently alive.
+
+        The way to ask on either path: the Python pool exposes `_pool` and
+        the native one has no per-particle objects to expose.
+        """
+        if self._native is not None:
+            return int(self._native.live_count())
+        return sum(1 for particle in self._pool if particle.active)
+
+    def _texture_slot(self, texture: Texture) -> int:
+        """Return this texture's index, registering it on first use.
+
+        Keyed on identity rather than equality: a `Texture` is a handle to a
+        GPU allocation, and two handles to the same image are still two
+        bindings.
+        """
+        key = id(texture)
+        slot = self._texture_ids.get(key)
+        if slot is None:
+            slot = len(self._textures)
+            self._texture_ids[key] = slot
+            self._textures.append(texture)
+        return slot
 
     def emit(
         self,
@@ -161,6 +228,24 @@ class ParticleSystem:
             color_start (Optional[tuple]): Initial RGBA color (r, g, b, a).
             color_end (Optional[tuple]): Final RGBA color for fade effect.
         """
+        if self._native is not None:
+            self._emit_native(
+                texture,
+                position,
+                count,
+                speed,
+                spread,
+                life,
+                acceleration,
+                damping,
+                angular_velocity,
+                scale,
+                scale_velocity,
+                color_start,
+                color_end,
+            )
+            return
+
         spawned = 0
         search_start = self._next_index
 
@@ -207,6 +292,120 @@ class ParticleSystem:
             if self._next_index == search_start:
                 # Optional: Force overwrite oldest? For now, just stop emitting.
                 break
+
+    def _emit_native(
+        self,
+        texture: Texture,
+        position: Vector2,
+        count: int,
+        speed: float,
+        spread: float,
+        life: float,
+        acceleration: Vector2,
+        damping: float,
+        angular_velocity: float,
+        scale: Vector2,
+        scale_velocity: Vector2,
+        color_start: tuple[int, int, int, int] | None,
+        color_end: tuple[int, int, int, int] | None,
+    ) -> None:
+        """Spawn a burst into the native pool.
+
+        **The random draws stay here on purpose.** `emit` takes three per
+        particle from the engine's seeded `RandomStream` -- angle, speed and
+        initial rotation -- and a replay restores that seed to reproduce a
+        run. Drawing them in Rust would put them outside what the seed
+        controls, so a recorded session would stop reproducing. They are
+        computed here and handed over as whole arrays, which also satisfies
+        the one-crossing-per-burst rule: this is a single FFI call however
+        many particles it spawns.
+
+        The arithmetic is kept identical to the Python path, including
+        building each direction through `Vector2.rotate_degrees` -- a
+        faster formulation here would make the two paths disagree, and
+        parity is worth more than a burst being slightly cheaper.
+
+        Args:
+            texture: Resolved to an index the native pool stores.
+            position: Emission origin.
+            count: How many to spawn; the pool drops any it cannot fit.
+            speed: Base speed, jittered per particle.
+            spread: Angle spread in degrees.
+            life: Seconds each particle lives.
+            acceleration: Shared across the burst.
+            damping: Shared velocity decay.
+            angular_velocity: Shared spin.
+            scale: Shared initial scale.
+            scale_velocity: Shared scale change per second.
+            color_start: Tint at birth, or None for no colour animation.
+            color_end: Tint at death, or None.
+        """
+        velocity_x: list[float] = []
+        velocity_y: list[float] = []
+        rotations: list[float] = []
+        for _ in range(count):
+            angle = self._rng.uniform(0, spread)
+            direction = Vector2.right().rotate_degrees(angle)
+            velocity = direction * self._rng.uniform(speed * 0.5, speed * 1.5)
+            velocity_x.append(velocity.x)
+            velocity_y.append(velocity.y)
+            rotations.append(self._rng.uniform(0, 360))
+
+        assert self._native is not None
+        self._native.emit(
+            self._texture_slot(texture),
+            position.x,
+            position.y,
+            velocity_x,
+            velocity_y,
+            rotations,
+            life,
+            acceleration.x,
+            acceleration.y,
+            damping,
+            angular_velocity,
+            scale.x,
+            scale.y,
+            scale_velocity.x,
+            scale_velocity.y,
+            color_start,
+            color_end,
+        )
+
+    def _render_native(
+        self,
+        backend: IRenderer,
+        zoom: float,
+        offset_x: float,
+        offset_y: float,
+    ) -> None:
+        """Draw the native pool, one `RenderBatch` per texture.
+
+        The world-to-screen transform, the colour lerp and the grouping all
+        happen natively; this turns the result back into the
+        `RenderBatch`es the renderer takes. The lists crossing the boundary
+        are still Python lists, because `RenderBatch` wants
+        `list[tuple[float, float]]` -- handing over a buffer needs the
+        renderer to accept one, which is RFC-0003's Marco 2.
+
+        Args:
+            backend: Receives one batch per texture.
+            zoom: Camera zoom.
+            offset_x: World-to-screen x offset.
+            offset_y: World-to-screen y offset.
+        """
+        assert self._native is not None
+        for slot, destinations, tints, tinted in self._native.pack_for_render(
+            zoom, offset_x, offset_y
+        ):
+            backend.render_batch(
+                RenderBatch(
+                    self._textures[slot],
+                    destinations,
+                    colors=tints if tinted else [],
+                    colors_enabled=tinted,
+                )
+            )
 
     def emit_preset(
         self,
@@ -260,6 +459,10 @@ class ParticleSystem:
         Args:
             dt (float): Delta time in seconds.
         """
+        if self._native is not None:
+            self._native.update(dt)
+            return
+
         for p in self._pool:
             if p.active:
                 p.life -= dt
@@ -301,13 +504,17 @@ class ParticleSystem:
         if viewport is None:
             viewport = Viewport(0, 0, backend.width, backend.height)
 
+        zoom = camera.zoom
+        offset_vec = camera.screen_offset(viewport)
+        offset_x, offset_y = offset_vec.x, offset_vec.y
+
+        if self._native is not None:
+            self._render_native(backend, zoom, offset_x, offset_y)
+            return
+
         batches: dict[Texture, list[tuple[float, float]]] = {}
         colors: dict[Texture, list[tuple[int, int, int, int]]] = {}
         has_color: dict[Texture, bool] = {}
-        zoom = camera.zoom
-
-        offset_vec = camera.screen_offset(viewport)
-        offset_x, offset_y = offset_vec.x, offset_vec.y
 
         for p in self._pool:
             if p.active and p.texture:
