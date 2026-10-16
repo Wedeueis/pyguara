@@ -210,13 +210,22 @@ class InputManager:
             InputEventType.GAMEPAD_BUTTON_DOWN,
             InputEventType.GAMEPAD_BUTTON_UP,
         ):
+            # `controller_id` forwarded, so the player router resolves the
+            # pad back to whoever was holding it. Without it every pad
+            # arrived as None and `player_for(device, None)` mapped them all
+            # to one player, so a two-pad co-op replay drove one character
+            # with both sets of inputs. None for a pre-v2 replay, which is
+            # the single-pad case and routes as it always did.
             self._handle_input(
                 InputDevice.GAMEPAD,
                 event.code,
                 is_down=event.event_type == InputEventType.GAMEPAD_BUTTON_DOWN,
+                controller_id=event.controller_id,
             )
         elif event.event_type == InputEventType.GAMEPAD_AXIS:
-            self._handle_axis(event.code, event.value)
+            self._handle_axis(
+                event.code, event.value, controller_id=event.controller_id
+            )
         elif event.event_type == InputEventType.ACTION and event.action is not None:
             # A recorded synthetic action (ReplayRecorder.record_action())
             # was never tied to a physical device even at record time, so
@@ -251,7 +260,9 @@ class InputManager:
             controller_id=event.controller_id,
         )
         if self._recorder is not None and self._recorder.is_recording:
-            self._recorder.record_gamepad_button(event.button.value, event.is_pressed)
+            self._recorder.record_gamepad_button(
+                event.button.value, event.is_pressed, event.controller_id
+            )
 
     def _on_gamepad_axis(self, event: GamepadAxisEvent) -> None:
         """Translate a GamepadManager axis-state change into bound Actions."""
@@ -259,7 +270,9 @@ class InputManager:
             event.axis.value, event.value, controller_id=event.controller_id
         )
         if self._recorder is not None and self._recorder.is_recording:
-            self._recorder.record_gamepad_axis(event.axis.value, event.value)
+            self._recorder.record_gamepad_axis(
+                event.axis.value, event.value, event.controller_id
+            )
 
     def register_action(
         self, name: str, action_type: ActionType, deadzone: float = 0.1

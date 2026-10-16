@@ -729,3 +729,74 @@ class TestReplayInputWiring:
         assert seen[0].key_code == 97
         assert seen[0].is_down
         assert 64 in seen[0].modifiers
+
+
+class TestGamepadIdentitySurvivesTheRoundTrip:
+    """A recorded gamepad event carries which pad produced it.
+
+    It did not. `InputManager._on_gamepad_button` **had** `controller_id`
+    and dropped it on the way to the recorder, so on playback every pad
+    arrived as None, `player_for(device, None)` resolved them all to one
+    player, and a two-pad co-op session replayed as one character driven by
+    both sets of inputs.
+    """
+
+    def test_a_gamepad_event_keeps_its_pad_through_the_codecs(self) -> None:
+        event = RecordedInputEvent(
+            event_type=InputEventType.GAMEPAD_BUTTON_DOWN,
+            device="gamepad",
+            code=3,
+            controller_id=1,
+        )
+
+        assert RecordedInputEvent.from_dict(event.to_dict()).controller_id == 1
+
+    def test_two_pads_stay_distinguishable(self) -> None:
+        """The point: the same button on two pads must not collapse."""
+        events = [
+            RecordedInputEvent(
+                event_type=InputEventType.GAMEPAD_BUTTON_DOWN,
+                device="gamepad",
+                code=3,
+                controller_id=pad,
+            )
+            for pad in (0, 1)
+        ]
+
+        decoded = [RecordedInputEvent.from_dict(e.to_dict()) for e in events]
+
+        assert [e.controller_id for e in decoded] == [0, 1]
+
+    def test_a_replay_recorded_before_the_field_existed_reads_as_none(self) -> None:
+        """v1 files have no `controller_id`. Absent is the single-pad case,
+        which is how every v1 replay behaved anyway -- so they load rather
+        than needing a migration."""
+        v1_payload = {
+            "event_type": "GAMEPAD_BUTTON_DOWN",
+            "device": "gamepad",
+            "code": 3,
+            "value": 1.0,
+        }
+
+        assert RecordedInputEvent.from_dict(v1_payload).controller_id is None
+
+    def test_a_non_gamepad_event_carries_no_pad(self) -> None:
+        event = RecordedInputEvent(
+            event_type=InputEventType.KEY_DOWN, device="keyboard", code=97
+        )
+
+        assert "controller_id" not in event.to_dict()
+
+    def test_the_recorder_stores_the_pad_it_is_given(self) -> None:
+        recorder = ReplayRecorder()
+        recorder.start_recording(seed=1, scene_name="s")
+
+        recorder.begin_frame(0, 0.0, 0.0)
+        recorder.record_gamepad_button(button=3, pressed=True, controller_id=1)
+        recorder.record_gamepad_axis(axis=0, value=0.5, controller_id=1)
+        recorder.end_frame()
+        data = recorder.stop_recording()
+
+        assert data is not None
+        recorded = [event for frame in data.frames for event in frame.events]
+        assert [e.controller_id for e in recorded] == [1, 1]

@@ -215,3 +215,78 @@ def test_recorded_session_replays_to_the_same_entity_state(tmp_path):
 
     playback_position = playback_entity.get_component(Transform).position
     assert playback_position == recorded_position
+
+
+def test_recording_pins_the_seed_the_game_is_actually_drawing_from(tmp_path):
+    """`ReplayRecorder` mints a seed from the global `random` module when
+    given None, so the number stamped into the metadata bore no relation to
+    anything the game drew from. A replay could not reproduce even for a
+    game that dutifully seeded itself from `player.seed`.
+    """
+    app = create_application()
+    _boot(app)
+
+    live_seed = app._rng().root_seed
+    recorded_seed = app.start_recording()
+
+    assert recorded_seed == live_seed
+
+
+def test_recording_with_an_explicit_seed_reroots_the_service(tmp_path):
+    """The other direction: if a caller names a seed, the run has to adopt
+    it, or the recording describes a world the game is not in."""
+    app = create_application()
+    _boot(app)
+
+    app.start_recording(seed=4242)
+
+    assert app._rng().root_seed == 4242
+
+
+def test_playback_restores_the_recorded_seed(tmp_path):
+    """The whole point of recording a seed. Before this it was consumed by
+    nothing, so a replay re-ran the inputs against fresh randomness."""
+    record_app = create_application()
+    _boot(record_app)
+    record_app._window.poll_events = _make_poll_events(_scripted_frames())
+    record_app.start_recording(seed=31337)
+
+    for _ in range(NUM_FRAMES):
+        record_app._process_input(FIXED_DT)
+
+    replay_data = record_app.stop_recording()
+    assert replay_data is not None
+    replay_path = str(tmp_path / "seeded")
+    assert record_app.save_recording(replay_data, replay_path)
+
+    playback_app = create_application()
+    _boot(playback_app)
+    # Deliberately on a different seed, so a restore is the only way it
+    # can end up on the recorded one.
+    playback_app._rng().reseed(1)
+
+    assert playback_app.load_replay(replay_path + ".replay.gz")
+
+    assert playback_app._rng().root_seed == 31337
+
+
+def test_a_replay_reproduces_the_random_draws_of_the_run(tmp_path):
+    """The property a game depends on, rather than the seed as a number:
+    the same stream yields the same values on playback."""
+    record_app = create_application()
+    _boot(record_app)
+    record_app.start_recording(seed=777)
+    drawn = [record_app._rng().stream("loot").randint(0, 10_000) for _ in range(5)]
+    replay_data = record_app.stop_recording()
+    assert replay_data is not None
+    replay_path = str(tmp_path / "draws")
+    assert record_app.save_recording(replay_data, replay_path)
+
+    playback_app = create_application()
+    _boot(playback_app)
+    playback_app._rng().reseed(1)
+    assert playback_app.load_replay(replay_path + ".replay.gz")
+
+    assert [
+        playback_app._rng().stream("loot").randint(0, 10_000) for _ in range(5)
+    ] == drawn
