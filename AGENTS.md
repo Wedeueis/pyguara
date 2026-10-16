@@ -484,27 +484,39 @@ Working rules, which the operations themselves enforce:
 
 ## The optional native extension
 
-`ParticleSystem` runs ~15-20x faster backed by a native structure-of-arrays
-pool. It is **optional**: the pure-Python pool is kept and used whenever the
-extension is absent, so `uv sync` and `pip install pyguara` need no Rust
-toolchain and nothing in this repository requires one.
+`ParticleSystem` and `Sparks` run 15-25x faster backed by native
+structure-of-arrays pools. It is **optional**: the pure-Python pools are kept
+and used whenever the extension is absent, so `uv sync` and
+`pip install pyguara` need no Rust toolchain and nothing in this repository
+requires one.
 
 ```bash
-cargo build --release                # build it; ParticleSystem then uses it
+cargo build --release                # build it; both pools then use it
 PYGUARA_NO_NATIVE=1 uv run pytest    # force the Python path
 ```
+
+Per instance, `accelerate=False` pins the Python pool and `accelerate=True`
+demands the native one; the default picks whichever is available.
 
 Written outside the generated block above on purpose: `pyguara studio
 instructions` rewrites what is inside it, and an earlier version of this
 section was placed there and silently deleted on the next regeneration.
 
 The price of keeping two implementations is that they must agree, which is
-paid by `tests/test_native_particle_parity.py` running the same operations
-against both, plus a real-GL pixel comparison in
-`tests/integration/test_moderngl_pixels.py`. Both **skip** when the
+paid by `tests/test_native_particle_parity.py` and
+`tests/test_native_spark_parity.py` running the same operations against
+both, plus real-GL pixel comparisons in
+`tests/integration/test_moderngl_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles.
+on anything touching particles or sparks.
+
+`Sparks` also added `ShapeBatch` and the `ShapeBatchRenderer` capability
+(`pyguara/graphics/types.py`, `protocols.py`), because a spark is one
+primitive and 55-73% of a Python spark frame is `draw_circle`/`draw_line`
+call overhead. Only the ModernGL world renderer takes a batch; every other
+renderer keeps the per-primitive path, and `tests/test_graphics_protocol_conformance.py`
+asserts both halves of that on purpose.
 
 The crate is deliberately not wired into `pyproject.toml`'s build-system.
 Whoever wires it up should know that `maturin build` reads the project name
