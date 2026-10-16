@@ -1,0 +1,26 @@
+# Spike crate for RFC-0003's Marco 3. Deliberately NOT wired into
+# `pyproject.toml`'s build-system: this builds as a standalone wheel so
+# `uv sync` keeps working for anyone who does not have a Rust toolchain,
+# and the repository stays buildable while the milestone is still a
+# question. See `docs/adr/0003-native-core-spike.md`.
+[package]
+name = "pyguara_core_rs"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "pyguara_core_rs"
+crate-type = ["cdylib"]
+path = "rust/src/lib.rs"
+
+[dependencies]
+# The RFC pins pyo3 0.23 against edition 2024, which needs rustc >= 1.85 --
+# newer than that pyo3 line. Resolved by using a current pyo3 instead; the
+# toolchain here is 1.99.
+pyo3 = { version = "0.26", features = ["extension-module", "abi3-py312"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3

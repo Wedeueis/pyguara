@@ -213,17 +213,84 @@ should be before Marco 1 starts: it pairs `pyo3 = "0.23"` with Rust
 and it assumes `abi3-py312` supports the `frozen`, `eq` and `hash` pyclass
 features it wants.
 
+## Finding 5 — Marco 3 prototyped: 268× on the arithmetic, ~6× on the frame
+
+A Rust toolchain was installed (1.99.1, so edition 2024 is available — one of
+finding 4's open pins resolved) and one of Marco 3's three pools built as a
+structure-of-arrays `#[pyclass]`: `rust/src/pools.rs`, measured by
+`tools/bench_native_pool.py`.
+
+Scope is deliberately one pool, not three plus flocking. One real number
+decides the milestone; three would not decide it harder.
+
+**Parity first.** Both pools seeded with identical state and ticked 60
+times agree to 0.000038 px — f32 rounding, nothing else. `ParticleSystem.emit`
+randomises speed over `[speed*0.5, speed*1.5]`, so the two cannot be seeded
+through their own emit paths and compared; the first attempt at this
+"disagreed" by 40 px for exactly that reason.
+
+**The arithmetic:**
+
+| Scenario | Python | Rust | Speedup |
+| --- | ---: | ---: | ---: |
+| 1000 live / 1000 capacity | 1.63 ms | 0.006 ms | **268×** |
+| 4000 live / 4000 capacity | 6.66 ms | 0.025 ms | **268×** |
+| 0 live / 1000 capacity | 0.022 ms | 0.001 ms | 36× |
+
+The RFC claimed ~45×. The measured figure is six times better than claimed —
+the first of its numbers to come out *in its favour*.
+
+**But the frame is not only arithmetic.** `update` is 84% of the pool's cost
+and `render` the other 16% (0.442 ms of 2.73 ms at 1000 live; 1.85 ms of
+10.99 ms at 4000). So porting `update` alone is bounded by Amdahl:
+
+| Live | Python frame | With native update | End to end |
+| ---: | ---: | ---: | ---: |
+| 1000 | 2.73 ms | 0.45 ms | **6.1×** |
+| 4000 | 10.99 ms | 1.87 ms | **5.9×** |
+
+**~6× end to end, and render becomes the bottleneck.** Getting past that
+needs the RFC's `pack_for_render` writing `GpuSpriteInstance` buffers
+directly — which is untested here, and carries the same zero-copy
+buffer-protocol risk as Marco 2.
+
+### What the prototype does not do
+
+Honest limits, because they are where the remaining design risk is:
+
+- **No textures, colour interpolation or material.** The real `Particle`
+  carries a `Texture` reference and `color_start`/`color_end`. Those are
+  Python objects; an SoA pool needs them indexed or kept Python-side, and
+  that interface is unexplored.
+- **f32, where Python uses f64.** Fine for particles (0.000038 px over 60
+  ticks) and a deliberate choice for memory and SIMD, but it is a
+  behaviour change, not a free one.
+- **No render packing**, per above — the thing that decides whether the
+  milestone is worth 6× or much more.
+- **One pool of three.** Sparks and projectiles have the same shape;
+  projectiles additionally query the spatial hash, which means either a
+  native hash too or a crossing per projectile.
+
+The crate is **not wired into `pyproject.toml`**: it builds standalone via
+`cargo build --release`, so `uv sync` keeps working for anyone without a
+Rust toolchain and the repository stays buildable while this is still a
+question. Note that `maturin build` reads the project name from
+`pyproject.toml` and produces a wheel called `pyguara-0.5.0`, which would
+overwrite the real package — the benchmark loads the compiled library
+directly instead.
+
 ## Recommendation
 
 **Narrow the RFC to its best-evidenced parts, and do not start with Marco 1.**
 
-1. **Drop Marco 1's maths half — if Marco 3 goes ahead.** Now measured:
-   the hot systems spend 33–80% of their time in `Vector2`, and Marco 3
-   deletes that traffic by moving the data into native arrays, so
-   optimising the type would optimise what the next milestone removes. The
-   Python code that remains does 1–8 operations a frame. If Marco 3 is
-   *declined*, this inverts and the maths rewrite becomes the cheapest
-   substantial win available. `SpatialHash` is unaffected either way.
+1. **Drop Marco 1's maths half.** Both halves of this are now measured, so
+   it is a decision rather than a bet. The hot systems spend 33–80% of their
+   time in `Vector2`; Marco 3 deletes that traffic by moving the data into
+   native arrays, and finding 5 shows it does so at 268x on the arithmetic.
+   The Python code that remains does 1–8 vector operations a frame. So the
+   maths rewrite optimises what Marco 3 removes, for a compatibility risk
+   (`Vector2` is a `tuple`; pymunk needs it to be) that buys nothing once
+   Marco 3 lands. `SpatialHash` is unaffected and can proceed.
 2. **Benchmark `dijkstra_map`, the flow field and WFC first.** They are the
    RFC's own best-value claim and the only numbers with nothing behind them.
    A flow field is pure in, pure out — dimensions and seeds in, coordinates
@@ -231,7 +298,14 @@ features it wants.
    to port.
 3. **Then prototype exactly that one module**, as Marco 0 intended, with the
    toolchain pins verified.
-4. **Keep Marco 3.** Finding 3 supports it, and the baselines now exist.
+4. **Do Marco 3, and do its render packing in the same milestone.** Finding
+   5 measured the pool: 268x on the arithmetic, six times better than the
+   RFC claimed. But `update` is only 84% of the pool's frame, so porting it
+   alone caps out at ~6x end to end and makes `render` the bottleneck. The
+   milestone is worth doing and worth scoping to include `pack_for_render`,
+   which is also where the remaining risk is -- textures and colour are
+   Python objects an SoA pool has nowhere to put, and the zero-copy buffer
+   claim is still untested.
 5. **Hold Marco 2** (the render batcher) until the zero-copy buffer claim is
    prototyped. It is the most invasive milestone and depends on the buffer
    protocol working exactly as described.
@@ -272,15 +346,16 @@ it, so this means raw `pyo3::ffi` and a manually built `PyTypeObject`,
 giving up the memory safety that motivates using Rust at all. Named so it is
 considered-and-rejected rather than unexplored.
 
-**A, conditional on Marco 3.** The measurement settles it: a frame does
-perform thousands of vector operations, but all of them inside the three
-systems Marco 3 rewrites in Rust, where no Python `Vector2` would be
-constructed at all. Outside those, a frame does 1–8.
+**A.** The measurements settle it rather than leaving it conditional: a
+frame does perform thousands of vector operations, all of them inside the
+systems Marco 3 rewrites — and Marco 3 is now measured working, at 268x on
+the pool arithmetic. Outside those systems a frame does 1–8 operations, so
+there is nothing left for a faster `Vector2` to speed up.
 
-**B if Marco 3 is declined.** Then that 33–80% stays in Python and a Rust
-`Vector2` recovers a large share of it without restructuring anything — the
-best ratio of win to risk on the table, subject to the tuple-compatibility
-audit above.
+**B only if Marco 3 is abandoned.** Then that 33–80% stays in Python and a
+Rust `Vector2` recovers a large share of it without restructuring anything,
+subject to the tuple-compatibility audit above. Keep this on the shelf
+rather than in the plan.
 
 **C is a separate decision** about the physics backend and should not be
 smuggled in as a consequence of a maths optimisation. **D stays rejected.**
@@ -296,3 +371,6 @@ smuggled in as a consequence of a maths optimisation. **D stays rejected.**
   future pymunk rather than trusted from a document written against 7.2.0.
 - `tools/count_vector_ops.py` — the `Vector2` frame-traffic measurement that
   decides Marco 1.
+- `Cargo.toml`, `rust/src/` — the Marco 3 prototype: one SoA particle pool,
+  standalone so `uv sync` still works without Rust.
+- `tools/bench_native_pool.py` — Marco 3's number, with the parity check.
