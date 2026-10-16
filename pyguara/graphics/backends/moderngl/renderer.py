@@ -1,6 +1,7 @@
 """ModernGL implementation of the Rendering Protocol with hardware instancing."""
 
 import math
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -13,13 +14,21 @@ from pyguara.graphics.backends.moderngl.blend import (
     DEFAULT_BLEND_MODE,
     apply_blend_mode,
 )
-from pyguara.graphics.backends.moderngl.texture import GLTextureFactory
+from pyguara.graphics.backends.moderngl.texture import GLTexture, GLTextureFactory
 from pyguara.graphics.materials.material import Material
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 
 # Shader file paths (relative to this module)
 _SHADER_DIR = Path(__file__).parent / "shaders"
+
+# How many rasterised strings to keep on the GPU at once. Each entry is one
+# small texture -- a 20-character line at size 16 is a few tens of KB -- so
+# a couple of hundred is cheap next to one background tile, and well past
+# what a frame draws. Beyond the bound the oldest goes, which makes the
+# worst case (a string that changes every frame, like an FPS counter) cost
+# what it cost before the cache existed rather than growing without end.
+_TEXT_CACHE_LIMIT = 256
 
 
 class ModernGLRenderer:
@@ -85,13 +94,17 @@ class ModernGLRenderer:
         # a second window backend -- draw the same as one over a window.
         apply_blend_mode(ctx, DEFAULT_BLEND_MODE)
 
-        # CPU-rasterized text: rendered via pygame.font, uploaded as an
-        # ephemeral GL texture per draw_text() call and released immediately
-        # after -- see draw_text() for why this doesn't use a persistent
-        # glyph atlas or a shader-based text pipeline.
+        # CPU-rasterized text: rendered via pygame.font and uploaded as a
+        # GL texture, then kept, keyed on what was drawn -- see draw_text()
+        # for why this is not a persistent glyph atlas or a shader-based
+        # text pipeline. Fonts are cached separately because one font
+        # serves every string at its size.
         if not pygame.font.get_init():
             pygame.font.init()
         self._font_cache: dict[int, pygame.font.Font] = {}
+        self._text_cache: OrderedDict[
+            tuple[str, int, tuple[int, int, int, int]], GLTexture
+        ] = OrderedDict()
         self._texture_factory = GLTextureFactory(ctx)
 
         # Compile shaders and create program
@@ -531,51 +544,97 @@ class ModernGLRenderer:
             self._font_cache[size] = pygame.font.SysFont("arial", size)
         return self._font_cache[size]
 
+    def _text_texture(self, text: str, size: int, color: Color) -> GLTexture:
+        """Return the texture for this exact string, rasterising on a miss.
+
+        Keyed on everything that changes the pixels -- the string, the point
+        size and the colour -- so two calls that would produce the same
+        image share one upload. `FloatingText` draws the same damage
+        numbers every frame for the life of the entry, and the debug
+        overlays redraw whole static panels, so the hit rate on a real
+        frame is high.
+
+        Bounded, and LRU on access: a string that changes every frame
+        cannot grow the cache without end, it just keeps missing, which is
+        what the uncached path did anyway.
+
+        Args:
+            text: The string to rasterise. Assumed non-empty.
+            size: Point size.
+            color: Glyph colour, baked into the texture.
+
+        Returns:
+            A texture owned by this renderer -- the caller must **not**
+            release it. `release()` frees the whole cache.
+        """
+        key = (text, size, (color.r, color.g, color.b, color.a))
+
+        cached = self._text_cache.get(key)
+        if cached is not None:
+            self._text_cache.move_to_end(key)
+            return cached
+
+        surface = self._get_font(size).render(
+            text, True, (color.r, color.g, color.b, color.a)
+        )
+        # Top-down, like every other upload in this backend.
+        texture = self._texture_factory.create_from_bytes(
+            "<draw_text>",
+            pygame.image.tobytes(surface, "RGBA", False),
+            surface.get_width(),
+            surface.get_height(),
+        )
+
+        self._text_cache[key] = texture
+        while len(self._text_cache) > _TEXT_CACHE_LIMIT:
+            _, evicted = self._text_cache.popitem(last=False)
+            evicted.release()
+
+        return texture
+
     def draw_text(
         self, text: str, position: Vector2, color: Color, size: int = 16
     ) -> None:
         """Draw a text string, in screen space (see `IRenderer.draw_text`).
 
-        No persistent glyph atlas: this rasterizes the whole string on the
-        CPU via `pygame.font` (as `UIRenderer`'s ModernGL implementation
-        already does for UI text), uploads it as one ephemeral GL texture,
-        draws it through the same single-instance path `draw_texture()`
-        uses, then releases the texture immediately -- an ordinary
-        `draw_texture()` call keeps its texture alive for reuse across
-        frames, but a fresh piece of text has nothing to reuse anyway.
-        Fine for occasional world-space text (damage numbers, prompts);
-        a hot path drawing many strings a frame would want a real atlas.
+        Still no persistent glyph atlas: this rasterizes the whole string
+        on the CPU via `pygame.font` (as `UIRenderer`'s ModernGL
+        implementation already does for UI text) and draws it through the
+        same single-instance path `draw_texture()` uses. What changed is
+        that the upload is **kept**, keyed on the string, size and colour,
+        rather than allocated and destroyed per call.
+
+        It used to release the texture immediately, on the reasoning that
+        "a fresh piece of text has nothing to reuse anyway". That is true
+        of a string seen once and wrong about the thing that actually calls
+        this: `FloatingText` redraws the same damage numbers every frame
+        for the life of the entry, and the debug overlays redraw entire
+        static panels. Twenty live numbers cost twenty allocations and
+        twenty frees *per frame*, for pixels identical to the previous
+        frame's.
+
+        A string that genuinely changes every frame -- an FPS counter --
+        still misses every frame, and costs what it always did. See
+        `_TEXT_CACHE_LIMIT` for the bound that keeps that from
+        accumulating.
         """
         self._flush_shapes()
         if not text:
             return
 
-        font = self._get_font(size)
-        rgba = (color.r, color.g, color.b, color.a)
-        surf = font.render(text, True, rgba)
+        texture = self._text_texture(text, size, color)
 
-        # Top-down, like every other upload in this backend. This used to
-        # pass `True` to cancel a flip inside `create_from_bytes`; that
-        # flip is gone, so the two wrongs that made a right are both now
-        # absent.
-        data = pygame.image.tobytes(surf, "RGBA", False)
-        gl_texture = self._texture_factory.create_from_bytes(
-            "<draw_text>", data, surf.get_width(), surf.get_height()
+        # `draw_texture()` centres its quad on the position, but
+        # `draw_text()` is anchored top-left -- that is what the pygame
+        # backend does and what callers expect, so shift by half the
+        # rendered size to match. Without this, text drawn near an edge
+        # is half off-screen, and the two backends disagree about what
+        # the same coordinates mean.
+        centred = Vector2(
+            position.x + texture.width / 2.0,
+            position.y + texture.height / 2.0,
         )
-        try:
-            # `draw_texture()` centres its quad on the position, but
-            # `draw_text()` is anchored top-left -- that is what the pygame
-            # backend does and what callers expect, so shift by half the
-            # rendered size to match. Without this, text drawn near an edge
-            # is half off-screen, and the two backends disagree about what
-            # the same coordinates mean.
-            centred = Vector2(
-                position.x + surf.get_width() / 2.0,
-                position.y + surf.get_height() / 2.0,
-            )
-            self.draw_texture(gl_texture, centred)
-        finally:
-            gl_texture.release()
+        self.draw_texture(texture, centred)
 
     def render_batch(self, batch: RenderBatch) -> None:
         """Optimized method to draw many instances of the same texture.
@@ -833,3 +892,10 @@ class ModernGLRenderer:
             self._shape_quad_vbo.release()
         if self._shape_program:
             self._shape_program.release()
+
+        # The cached text textures are owned here, not by the caller --
+        # `draw_text()` no longer releases what it draws, so this is the
+        # only thing that frees them.
+        for texture in self._text_cache.values():
+            texture.release()
+        self._text_cache.clear()
