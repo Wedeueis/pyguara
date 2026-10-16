@@ -262,7 +262,7 @@ Bisecting the walk would be faster and would reintroduce tunnelling.
 ### The native particle pool -- milliseconds per frame
 
 `ParticleSystem` can be backed by a native structure-of-arrays pool
-(`cargo build --release`; see `pyguara/graphics/components/_native.py`). The
+(`cargo build --release`; see `pyguara/native.py`). The
 Python pool is kept and used whenever the extension is absent, so this is an
 accelerator rather than a requirement.
 

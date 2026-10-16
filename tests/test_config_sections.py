@@ -238,6 +238,7 @@ def test_section_names_list_engine_sections_first():
         "audio",
         "input",
         "physics",
+        "performance",
         "debug",
         "balance",
     ]

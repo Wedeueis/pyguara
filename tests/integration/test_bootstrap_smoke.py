@@ -74,3 +74,34 @@ def test_create_sandbox_application_boots_runs_and_shuts_down_cleanly():
     assert app._is_running is False
     assert app._window.is_open is False
     assert app._log_manager._loggers == {}
+
+
+def test_bootstrap_resolves_the_native_store_from_config():
+    """The engine-wide switch is wired, and wired *before* anything reads it.
+
+    `pyguara.native` holds process-wide state that pools consult at
+    construction, so "the config value reaches it" is the whole contract --
+    and nothing else in the suite runs the real bootstrap, which is the
+    gap this file exists for in the first place.
+
+    Asserted through `configure`, the hook that runs after the config
+    loads and before the window, because that is where a game sets this.
+    """
+    from pyguara import native
+    from pyguara.config.types import GameConfig
+    from pyguara.native import NativeAcceleration
+
+    def pick_python(config: GameConfig) -> None:
+        config.performance.native_acceleration = NativeAcceleration.OFF
+
+    try:
+        app = create_application(configure=pick_python)
+
+        assert native.resolved() is NativeAcceleration.OFF
+        assert native.in_use() is False
+
+        app._window.close()
+    finally:
+        # Process-wide state: leaving it OFF would decide the store for
+        # every test that runs after this one.
+        native.reset_for_tests()

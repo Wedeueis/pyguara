@@ -8,7 +8,7 @@
 //!
 //! The extension is **optional**. The pure-Python pools are kept and used
 //! whenever it is absent, so the engine installs and runs with no Rust
-//! toolchain; `pyguara/graphics/components/_native.py` is the seam, and the
+//! toolchain; `pyguara/native.py` is the seam, and the
 //! price -- two implementations that must agree -- is paid by the parity
 //! tests beside it.
 //!
