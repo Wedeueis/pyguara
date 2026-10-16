@@ -38,6 +38,12 @@ class RecordedInputEvent:
         position: Optional mouse position for mouse events.
         modifiers: Held modifier key codes (shift/ctrl/alt) at event time, for
             keyboard and mouse events. Empty for other devices.
+        controller_id: Which gamepad produced the event, for gamepad events;
+            None for every other device. `InputManager` routes a pad to a
+            player by this, so without it a replay of a local co-op session
+            resolves every pad to one player and both sets of inputs arrive
+            on the same character. Absent in replays recorded before the
+            field existed, which read as None.
     """
 
     event_type: InputEventType
@@ -47,6 +53,7 @@ class RecordedInputEvent:
     action: str | None = None
     position: tuple[float, float] | None = None
     modifiers: list[int] = field(default_factory=list)
+    controller_id: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to serializable dictionary."""
@@ -62,6 +69,8 @@ class RecordedInputEvent:
             data["position"] = list(self.position)
         if self.modifiers:
             data["modifiers"] = list(self.modifiers)
+        if self.controller_id is not None:
+            data["controller_id"] = self.controller_id
         return data
 
     @classmethod
@@ -78,6 +87,7 @@ class RecordedInputEvent:
             action=data.get("action"),
             position=position,
             modifiers=list(data.get("modifiers", [])),
+            controller_id=data.get("controller_id"),
         )
 
 

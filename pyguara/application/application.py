@@ -26,6 +26,7 @@ from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.window import Window
 from pyguara.input.manager import InputManager
 from pyguara.log.manager import LogManager
+from pyguara.random.service import RandomService
 from pyguara.replay.player import ReplayPlayer
 from pyguara.replay.recorder import ReplayRecorder
 from pyguara.replay.serializer import ReplaySerializer
@@ -424,8 +425,10 @@ class Application:
         """Start recording input for a deterministic replay.
 
         Args:
-            seed: Random seed to record alongside the session. Generates one if
-                not provided.
+            seed: Random seed to record alongside the session. Defaults to the
+                seed `RandomService` is currently rooted on, which is the one
+                the game is drawing from -- and, if given, re-roots the
+                service so the recording and the run agree.
             description: Optional human-readable description for the replay.
 
         Returns:
@@ -436,6 +439,18 @@ class Application:
         """
         if self._replay_player is not None:
             raise RuntimeError("Cannot record while a replay is playing back")
+
+        # The seed has to be the engine's, not a fresh one. `ReplayRecorder`
+        # mints from the global `random` module when given None, which
+        # stamped a number into the metadata that bore no relation to
+        # anything the game drew from -- so a replay could not reproduce
+        # even for a game that dutifully seeded itself from
+        # `player.seed`. An explicit seed re-roots the service instead, so
+        # the two cannot disagree in the other direction either.
+        if seed is None:
+            seed = self._rng().root_seed
+        else:
+            self._rng().reseed(seed)
 
         current_scene = self._scene_manager.current_scene
         scene_name = current_scene.name if current_scene is not None else ""
@@ -448,6 +463,26 @@ class Application:
         self._replay_frame_id = 0
         self._replay_clock = 0.0
         return seed_used
+
+    def _rng(self) -> RandomService:
+        """Resolve the container's RNG service, on demand.
+
+        Not resolved in `__init__` on purpose. Replay is the only thing here
+        that needs it, and requiring it at construction would make every
+        hand-wired container -- `games/boot_process` is one, deliberately --
+        register a service it never uses. Resolved here, a container without
+        it still builds an `Application`, and only recording or playback
+        fails, loudly, which is the one place it matters.
+
+        Returns:
+            The container's `RandomService`.
+
+        Raises:
+            ServiceNotFoundException: If the container has none. Better than
+                quietly substituting a different RNG, which would leave a
+                replay not reproducing for no visible reason.
+        """
+        return self._container.get(RandomService)
 
     def stop_recording(self) -> ReplayData | None:
         """Stop recording and return the captured replay data.
@@ -496,6 +531,11 @@ class Application:
         data = self._replay_serializer.load(path)
         if data is None:
             return False
+
+        # Before the first frame, so the recorded inputs drive a world
+        # making the same random choices. Without this the seed was recorded
+        # and consumed by nothing.
+        self._rng().reseed(data.metadata.seed)
 
         self._replay_player = ReplayPlayer(data)
         self._replay_player.start_playback()

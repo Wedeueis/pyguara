@@ -28,7 +28,12 @@ class ReplaySerializer:
 
     # Highest replay format version this serializer can read. Replay has no
     # migration layer (unlike persistence): a newer file is refused, not upgraded.
-    SUPPORTED_VERSION = 1
+    #
+    # Reading v1 and v2 needs no migration either way: v2 only added an
+    # optional `controller_id` to gamepad events, which a v1 file simply
+    # does not carry and which decodes as None -- the single-pad case, and
+    # how every v1 replay behaved anyway.
+    SUPPORTED_VERSION = 2
 
     def save(
         self,

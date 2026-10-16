@@ -49,6 +49,27 @@ class RandomService:
         """The seed every named stream is deterministically derived from."""
         return self._root_seed
 
+    def reseed(self, root_seed: int) -> None:
+        """Re-root every stream on a new seed, discarding draws so far.
+
+        For replay: a recording stores the root seed it ran under, and
+        playback has to put the service back on it before the first frame,
+        or the recorded inputs drive a world making different random
+        choices. `restore_state()` can also do this, but saying
+        `restore_state({"root_seed": s, "streams": {}})` to mean "start
+        again from `s`" reads like a snapshot restore and is not one.
+
+        Streams are dropped rather than reseeded in place, so the next
+        `stream(name)` derives from the new root exactly as a fresh service
+        would -- which is what makes a replay reproduce rather than merely
+        continue.
+
+        Args:
+            root_seed: The new root seed.
+        """
+        self._root_seed = root_seed
+        self._streams = {}
+
     def stream(self, name: str) -> RandomStream:
         """Get the named stream, creating it deterministically on first use."""
         if name not in self._streams:

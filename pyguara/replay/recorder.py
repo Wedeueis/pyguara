@@ -42,8 +42,14 @@ class ReplayRecorder:
         replay_data = recorder.stop_recording()
     """
 
-    # Current replay format version
-    FORMAT_VERSION = 1
+    # Current replay format version.
+    #
+    # 2 added `controller_id` to gamepad events. Version 1 replays still
+    # load: the field is optional and absent reads as None, which is what a
+    # single-pad session means anyway. The bump is so a *newer* replay is
+    # recognisably newer to an older build rather than silently losing pad
+    # identity.
+    FORMAT_VERSION = 2
 
     try:
         _ENGINE_VERSION = version("pyguara")
@@ -296,12 +302,18 @@ class ReplayRecorder:
             )
         )
 
-    def record_gamepad_button(self, button: int, pressed: bool) -> None:
+    def record_gamepad_button(
+        self, button: int, pressed: bool, controller_id: int | None = None
+    ) -> None:
         """Record a gamepad button event.
 
         Args:
             button: Button code.
             pressed: True if pressed, False if released.
+            controller_id: Which pad it came from. Optional so existing
+                callers keep working, but `InputManager` passes it -- it is
+                what lets a local co-op replay route each pad back to the
+                player that was holding it.
         """
         self.record_event(
             RecordedInputEvent(
@@ -313,15 +325,20 @@ class ReplayRecorder:
                 device="gamepad",
                 code=button,
                 value=1.0 if pressed else 0.0,
+                controller_id=controller_id,
             )
         )
 
-    def record_gamepad_axis(self, axis: int, value: float) -> None:
+    def record_gamepad_axis(
+        self, axis: int, value: float, controller_id: int | None = None
+    ) -> None:
         """Record a gamepad axis movement.
 
         Args:
             axis: Axis index.
             value: Axis value (-1.0 to 1.0).
+            controller_id: Which pad it came from; see
+                `record_gamepad_button`.
         """
         self.record_event(
             RecordedInputEvent(
@@ -329,6 +346,7 @@ class ReplayRecorder:
                 device="gamepad",
                 code=axis,
                 value=value,
+                controller_id=controller_id,
             )
         )
 

@@ -126,3 +126,44 @@ def test_service_default_root_seed_is_present_and_int() -> None:
     service = RandomService()
 
     assert isinstance(service.root_seed, int)
+
+
+class TestReseed:
+    """`reseed()` exists for replay: a recording stores the root seed it ran
+    under, and playback has to put the service back on it before the first
+    frame or the recorded inputs drive a world making different choices.
+
+    `restore_state()` could do it, but
+    `restore_state({"root_seed": s, "streams": {}})` to mean "start again
+    from s" reads like a snapshot restore and is not one.
+    """
+
+    def test_reseeding_reproduces_a_fresh_service_on_that_seed(self) -> None:
+        """The property replay depends on: same seed, same draws."""
+        pristine = RandomService(root_seed=99)
+        reference = [pristine.stream("loot").randint(0, 10_000) for _ in range(5)]
+
+        service = RandomService(root_seed=1)
+        service.stream("loot").randint(0, 10_000)  # draw first, as a run would
+        service.reseed(99)
+
+        assert [
+            service.stream("loot").randint(0, 10_000) for _ in range(5)
+        ] == reference
+
+    def test_reseeding_reports_the_new_root(self) -> None:
+        service = RandomService(root_seed=1)
+
+        service.reseed(7)
+
+        assert service.root_seed == 7
+
+    def test_reseeding_discards_streams_rather_than_continuing_them(self) -> None:
+        """Reseeding in place would leave a stream mid-sequence, so a replay
+        would continue rather than reproduce."""
+        service = RandomService(root_seed=5)
+        before = service.stream("loot")
+
+        service.reseed(5)  # the *same* seed
+
+        assert service.stream("loot") is not before
