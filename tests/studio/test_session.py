@@ -18,6 +18,7 @@ from pyguara.studio.commands.base import EditError
 from pyguara.studio.commands.entity import (
     AddComponent,
     CreateEntity,
+    DestroyEntity,
     SetEnabled,
     SetField,
 )
@@ -100,6 +101,27 @@ class TestPlanMode:
         before = planning.snapshot()
         planning.apply(SetField("root", Transform, "rotation", 1.0))
         assert diff_snapshots(before, planning.snapshot()).is_empty
+
+    def test_planning_tells_no_observer_anything_happened(
+        self, planning: StudioSession, populated: EntityManager
+    ) -> None:
+        """The world ends where it started, but observers used to see the
+        edit and its undo go past on the way. Harmless for a field change;
+        a planned **delete** dropped the entity from the spatial index and
+        queued its physics body for teardown, and the revert has no
+        `entity_created` hook to put either back."""
+        removed: list[str] = []
+        changed: list[str] = []
+        populated.subscribe_entity_removed(lambda e: removed.append(e.id))
+        populated.subscribe_component_changed(
+            Transform, lambda e, c: changed.append(e.id)
+        )
+
+        planning.apply(SetField("root", Transform, "rotation", 1.0))
+        planning.apply(DestroyEntity("loose"))
+
+        assert removed == []
+        assert changed == []
 
     def test_the_status_says_planned(self, planning: StudioSession) -> None:
         outcome = planning.apply(SetField("root", Transform, "rotation", 1.0))

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from collections.abc import Set as AbstractSet
+from contextlib import contextmanager
 from itertools import filterfalse
 from typing import TypeVar, overload
 
@@ -74,6 +75,7 @@ class EntityManager:
         # a single slot would let whichever registered last silently displace
         # the others.
         self._entity_removed_callbacks: list[EntityRemovedCallback] = []
+        self._notifications_suppressed = False
 
         # Per-component-type observers. Keyed by the exact type subscribed
         # to, not by subclass: a HUD watching `Health` wants `Health`, and
@@ -236,8 +238,9 @@ class EntityManager:
 
         # Iterate a copy: a subscriber may unsubscribe itself, or tear down a
         # subsystem that unsubscribes, while it is being notified.
-        for callback in list(self._entity_removed_callbacks):
-            callback(entity)
+        if not self._notifications_suppressed:
+            for callback in list(self._entity_removed_callbacks):
+                callback(entity)
 
         for component_type in entity._components:
             self._pending_index_cleanup.append((component_type, entity_id))
@@ -455,9 +458,8 @@ class EntityManager:
         if callbacks is not None and callback in callbacks:
             callbacks.remove(callback)
 
-    @staticmethod
     def _notify(
-        callbacks: list[ComponentCallback], entity: Entity, component: Component
+        self, callbacks: list[ComponentCallback], entity: Entity, component: Component
     ) -> None:
         """Run every callback, over a copy of the list.
 
@@ -465,13 +467,51 @@ class EntityManager:
         unsubscribes, while it is being notified -- the same reason
         `remove_entity()` iterates a copy of its own subscribers.
 
+        Does nothing inside `suppress_notifications()`.
+
         Args:
             callbacks: The callbacks to run.
             entity: The entity involved.
             component: The component involved.
         """
+        if self._notifications_suppressed:
+            return
         for callback in list(callbacks):
             callback(entity, component)
+
+    @contextmanager
+    def suppress_notifications(self) -> Iterator[None]:
+        """Run a block without telling observers anything changed.
+
+        For an edit that is going to be undone before anyone could act on
+        it. PyGuara Studio's plan and ask modes apply a command, diff the
+        result and revert it, which is the only way to show a *real* diff
+        rather than a predicted one -- but every observer saw the edit and
+        its undo go past. A planned **delete** was the sharp end: the
+        spatial index dropped the entry and the physics system queued the
+        body for teardown, for an edit that never happened, and the revert
+        has no `entity_created` hook to undo that with.
+
+        Safe precisely because the block is a matched pair. Suppressing one
+        half would leave observers holding a stale world; suppressing an
+        apply *and* its revert leaves them holding the world they already
+        had, which is the one they were last told about.
+
+        Not for muting an edit that stands. An observer that misses a real
+        change stays wrong until something else happens to correct it --
+        that is the bug class `notify_component_changed` exists to prevent.
+
+        Yields:
+            None. Notifications resume on exit, including after an
+            exception, so a command that raises mid-apply cannot leave the
+            manager permanently silent.
+        """
+        previous = self._notifications_suppressed
+        self._notifications_suppressed = True
+        try:
+            yield
+        finally:
+            self._notifications_suppressed = previous
 
     # -------------------------------------------------------------------------
     # Lookup

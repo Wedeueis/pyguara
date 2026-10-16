@@ -11,6 +11,7 @@ one of them conflicted with its siblings on exactly those lines.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 
 import pytest
@@ -296,3 +297,98 @@ class TestSubscriptionManagement:
         world.create_entity("b").add_component(Health())
 
         assert calls == ["once", "after", "after"]
+
+
+class TestSuppressNotifications:
+    """For an edit that is going to be undone before anyone could act on it.
+
+    PyGuara Studio's plan and ask modes apply a command, diff the result and
+    revert it -- the only way to show a *real* diff rather than a predicted
+    one. Every observer used to see the edit and its undo go past, which is
+    harmless for a field change and not harmless for a planned delete: the
+    spatial index dropped the entry and the physics system queued the body
+    for teardown, for an edit that never happened.
+    """
+
+    def test_a_removal_inside_the_block_tells_nobody(self):
+        manager = EntityManager()
+        entity = manager.create_entity()
+        entity.add_component(Health(current=50))
+        seen: list[str] = []
+        manager.subscribe_entity_removed(lambda e: seen.append(e.id))
+
+        with manager.suppress_notifications():
+            manager.remove_entity(entity.id)
+            manager.flush_pending_removals()
+
+        assert seen == []
+
+    def test_component_changes_inside_the_block_tell_nobody(self):
+        manager = EntityManager()
+        entity = manager.create_entity()
+        seen: list[str] = []
+        manager.subscribe_component_added(Health, lambda e, c: seen.append("added"))
+        manager.subscribe_component_removed(Health, lambda e, c: seen.append("removed"))
+        manager.subscribe_component_changed(Health, lambda e, c: seen.append("changed"))
+
+        with manager.suppress_notifications():
+            entity.add_component(Health(current=50))
+            manager.notify_component_changed(entity.id, Health)
+            entity.remove_component(Health)
+
+        assert seen == []
+
+    def test_notifications_resume_afterwards(self):
+        manager = EntityManager()
+        entity = manager.create_entity()
+        seen: list[str] = []
+        manager.subscribe_component_added(Health, lambda e, c: seen.append("added"))
+
+        with manager.suppress_notifications():
+            pass
+        entity.add_component(Health(current=50))
+
+        assert seen == ["added"]
+
+    def test_notifications_resume_after_an_exception(self):
+        """A command that raises mid-apply must not leave the manager
+        permanently silent."""
+        manager = EntityManager()
+        entity = manager.create_entity()
+        seen: list[str] = []
+        manager.subscribe_component_added(Health, lambda e, c: seen.append("added"))
+
+        with (
+            contextlib.suppress(RuntimeError),
+            manager.suppress_notifications(),
+        ):
+            raise RuntimeError("the command exploded")
+
+        entity.add_component(Health(current=50))
+
+        assert seen == ["added"]
+
+    def test_nesting_restores_the_outer_state_not_the_default(self):
+        manager = EntityManager()
+        entity = manager.create_entity()
+        seen: list[str] = []
+        manager.subscribe_component_added(Health, lambda e, c: seen.append("added"))
+
+        with manager.suppress_notifications():
+            with manager.suppress_notifications():
+                pass
+            # Still inside the outer block, so still silent.
+            entity.add_component(Health(current=50))
+
+        assert seen == []
+
+    def test_the_index_is_still_maintained_while_silent(self):
+        """Suppressing observers must not suppress the manager's own
+        bookkeeping -- a query after the block has to see the truth."""
+        manager = EntityManager()
+        entity = manager.create_entity()
+
+        with manager.suppress_notifications():
+            entity.add_component(Health(current=50))
+
+        assert [e.id for e in manager.get_entities_with(Health)] == [entity.id]
