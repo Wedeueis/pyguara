@@ -484,13 +484,14 @@ Working rules, which the operations themselves enforce:
 
 ## The optional native extension
 
-Three subsystems have a native implementation beside the Python one:
+Four subsystems have a native implementation beside the Python one:
 
 | | native gain | |
 | --- | ---: | --- |
 | `FlowFieldService` | **46-53x** | 96x96 recompute, 85 ms -> 1.6 ms |
 | `ParticleSystem` | 15-20x | whole frame, update plus render pack |
 | `Sparks` | 13-24x | whole frame, via `ShapeBatch` |
+| `FlockingSystem` | 8-19x | whole tick, 1000 agents 16 ms -> 1.9 ms |
 
 It is **optional**: the pure-Python implementations are kept and used
 whenever the extension is absent, so `uv sync` and `pip install pyguara`
@@ -525,13 +526,14 @@ section was placed there and silently deleted on the next regeneration.
 
 The price of keeping two implementations is that they must agree, which is
 paid by `tests/test_native_particle_parity.py`,
-`tests/test_native_spark_parity.py` and
-`tests/test_native_flow_field_parity.py` running the same operations
+`tests/test_native_spark_parity.py`,
+`tests/test_native_flow_field_parity.py` and
+`tests/test_native_flocking_parity.py` running the same operations
 against both, plus real-GL pixel comparisons in
 `tests/integration/test_moderngl_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles, sparks or pathfinding.
+on anything touching particles, sparks, pathfinding or flocking.
 
 **How closely they have to agree depends on what the subsystem is for.**
 The pools compare with a tolerance, because they hold f32 where Python
@@ -540,7 +542,17 @@ holds f64 and a spark half a pixel away is a spark. The flow field is
 enemies and one cell pointing elsewhere is a pack that goes the other way
 round a wall. Changing `1.414` to `SQRT_2` in `rust/src/flowfield.rs`, or
 reordering its neighbour table, breaks that on purpose -- both are
-sabotage-tested. See `docs/adr/0004-the-native-boundary.md`, Decision 5.
+sabotage-tested.
+
+Flocking is the one case where exactness is **not available**: a radius
+query yields each cell's members in CPython set iteration order, and
+`flock_force` sums over them, so the last bits differ. Its parity suite
+therefore has one permitted cause and pins everything else exactly --
+including a bit-exact tier on constructed geometry where no agent has
+more than one flockmate, because a tolerance loose enough to admit the
+ordering (6.4e-13) can never catch a transcription slip (one ulp). If
+you touch `rust/src/flocking.rs`, read that file's module docstring
+first. See `docs/adr/0004-the-native-boundary.md`, Decision 5.
 
 The flow field is also where to look for how a native boundary should be
 shaped: nothing outside `FlowFieldService` reads a cell, so the cost map
