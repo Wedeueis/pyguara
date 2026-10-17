@@ -193,10 +193,39 @@ guard against a divergence nobody can confirm happened.
 
 ### What the engine does and does not promise
 
-- **Promised: each store is deterministic in itself.** Same store, same
-  seed, same inputs, same result. The native solvers are sequential by
-  default; any `rayon` parallelism is opt-in per call and documented as
-  giving up this guarantee.
+- **Promised: each store is deterministic given the same iteration
+  order.** The native solvers are sequential by default; any `rayon`
+  parallelism is opt-in per call and documented as giving up this
+  guarantee.
+
+  That wording is a correction. This bullet used to read "same store,
+  same seed, same inputs, same result", and **the engine does not keep
+  that promise** — neither store does. `EntityManager.create_entity`
+  assigns `uuid4` ids and `get_entities_with_cached` iterates a set of
+  them, so the order a system visits its entities differs between
+  processes. For most systems that is invisible. For a Gauss-Seidel one
+  it is the simulation: `FlockingSystem` has agents steering by the
+  already-moved positions of those ahead of them, so who goes first
+  decides the outcome. Three runs of one seeded flock give three
+  different states.
+
+  Found while building the flocking parity suite, from a probe that
+  compared two worlds built from the same seed and could not match them
+  slot for slot. It is pre-existing, it predates every native store, and
+  both stores inherit it identically — the native one is handed its
+  agents in whatever order Python resolved them. Tracked as issue #324,
+  where the fix is noted as a *behaviour* change rather than a bug fix,
+  because the sweep order it would pin is currently arbitrary and every
+  existing flock settles the way it does because of it.
+
+  **The consequence for Decision 4's last bullet is worth stating
+  plainly.** A replay records the store it was made under and refuses a
+  cross-store playback, which is necessary and is not sufficient: a
+  replay of anything containing a flock does not reproduce under the
+  *same* store either. The guard is still right — it removes one of two
+  causes, and the one a player could trip by installing a wheel — but
+  "replays reproduce" is not something this engine can claim for
+  flocking games until #324 is resolved.
 - **Not promised: the two stores agree bit for bit.** They cannot, and the
   reason is worth recording because it is not a thing better engineering
   fixes. `SpatialHash` buckets keys in a Python `set`, and set iteration
@@ -212,6 +241,7 @@ guard against a divergence nobody can confirm happened.
   reproduce without reimplementing CPython's set probing. Floating-point
   addition is not associative, so the sums differ in their last bits, and a
   flock is chaotic enough to turn that into visible divergence over time.
+
 
   This is the whole reason Decision 4 exists. For particles it would be
   cosmetic; for a flock of enemies it is gameplay.

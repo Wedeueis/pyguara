@@ -192,6 +192,13 @@ def describe() -> str:
     Logged at bootstrap, because Decision 4 of ADR 0004 asks for the
     resolved store to be *observable*: a choice that changes behaviour and
     is not reported is the thing being fixed.
+
+    The store is named with `store_name()`'s token rather than spelled
+    out in prose. It used to read "-> Python" in one branch and
+    "-> native" in the other, which is one fact in two spellings -- and
+    the moment a second reporter existed, `status()`, the two could not
+    be checked against each other without a case fudge. Same fact, same
+    token, in every report of it.
     """
     mode = _effective_mode()
     overridden = (
@@ -205,8 +212,48 @@ def describe() -> str:
             if mode is NativeAcceleration.OFF
             else "no compiled extension found"
         )
-        return f"native acceleration: {mode.value}{overridden} -> Python ({reason})"
-    return f"native acceleration: {mode.value}{overridden} -> native ({_source})"
+        return (
+            f"native acceleration: {mode.value}{overridden} -> "
+            f"{store_name()} ({reason})"
+        )
+    return (
+        f"native acceleration: {mode.value}{overridden} -> {store_name()} ({_source})"
+    )
+
+
+def status() -> dict[str, Any]:
+    """Return the resolved store as structured facts.
+
+    `describe()`'s companion, and the split is deliberate: that one is one
+    line of prose for a boot log, this one is for anything that has to
+    *compare* or render the same facts -- Studio's `project_overview`,
+    and the tests that assert the two agree.
+
+    ADR 0004's Decision 4 asks for the resolved store to be observable,
+    on the grounds that a silent choice which changes behaviour is the
+    defect being fixed. A boot line satisfies that for whoever starts the
+    process; an agent or an author who attached to a running Studio
+    session never saw it.
+
+    `source` is a path on this machine and is meant to be: two people
+    reading the same project get different answers, which is exactly the
+    thing worth seeing. That is also why this is **not** part of
+    `ProjectMap` -- `pyguara studio instructions` renders one into a
+    committed `AGENTS.md`, and a local `.so` path has no business there.
+
+    Returns:
+        `store` ("native" or "python"), `mode` (the configured setting),
+        `source` (where the library was loaded from, or None), and
+        `env_override` (whether `PYGUARA_NO_NATIVE` is forcing the
+        answer).
+    """
+    module = native_module()
+    return {
+        "store": "native" if module is not None else "python",
+        "mode": _effective_mode().value,
+        "source": _source,
+        "env_override": bool(os.environ.get(_ENV_DISABLE)),
+    }
 
 
 def native_module() -> Any | None:

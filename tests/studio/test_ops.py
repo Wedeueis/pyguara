@@ -13,6 +13,8 @@ usable by a machine rather than merely callable:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from pyguara.common.components import Tag, Transform
@@ -853,3 +855,133 @@ class TestRegistryMechanics:
         from pyguara.studio.ops.builtin import default_registry
 
         assert default_registry() is default_registry()
+
+
+class TestProjectOverviewReportsTheEngine:
+    """Which native store is running, where an agent will actually see it.
+
+    ADR 0004's Decision 4 made the store one engine-wide choice and asked
+    for it to be **observable**, on the grounds that a choice which
+    changes behaviour and is not reported is the defect being fixed. The
+    engine half of that shipped -- `pyguara.native.describe()` goes into
+    the boot log -- and the Studio half did not, which #321 said out
+    loud. This is it.
+
+    It matters more now than when Decision 4 was written. With particles
+    and sparks native, the store was a frame-rate question. With the flow
+    field and flocking native, two machines running the same project with
+    the same seed simulate differently, and an author asking Studio "why
+    does the pack go left here and right there" has no other way to find
+    out.
+    """
+
+    @staticmethod
+    def _session(world: EntityManager, registry: object, root: Path) -> StudioSession:
+        return StudioSession(
+            world,
+            scene_name="test_scene",
+            component_registry=registry,  # type: ignore[arg-type]
+            project_root=root,
+        )
+
+    def test_the_json_form_carries_the_resolved_store(
+        self,
+        ops: OperationRegistry,
+        populated: EntityManager,
+        core_registry,
+        tmp_path: Path,
+    ) -> None:
+        from pyguara import native
+
+        session = self._session(populated, core_registry, tmp_path)
+
+        result = _call(ops, session, "project_overview")
+
+        assert isinstance(result, dict)
+        assert result["engine"]["store"] == native.store_name()
+
+    def test_the_markdown_form_says_it_too(
+        self,
+        ops: OperationRegistry,
+        populated: EntityManager,
+        core_registry,
+        tmp_path: Path,
+    ) -> None:
+        """An agent asking for prose should not have to ask twice."""
+        from pyguara import native
+
+        session = self._session(populated, core_registry, tmp_path)
+
+        result = _call(ops, session, "project_overview", format="markdown")
+
+        assert isinstance(result, dict)
+        assert "## Engine" in result["markdown"]
+        assert native.store_name() in result["markdown"]
+
+    def test_it_agrees_with_the_line_the_boot_log_prints(
+        self,
+        ops: OperationRegistry,
+        populated: EntityManager,
+        core_registry,
+        tmp_path: Path,
+    ) -> None:
+        """Two reports of one fact are two chances to disagree.
+
+        `describe()` composes prose for a human and `status()` returns
+        fields for a machine. They read the same module state, so the
+        only way they diverge is if one is changed and the other is not.
+        """
+        from pyguara import native
+
+        session = self._session(populated, core_registry, tmp_path)
+
+        status = _call(ops, session, "project_overview")
+        assert isinstance(status, dict)
+        engine = status["engine"]
+        described = native.describe()
+
+        assert f"-> {engine['store']}" in described
+        assert described.startswith(f"native acceleration: {engine['mode']}")
+
+    def test_the_markdown_still_honours_its_budget(
+        self,
+        ops: OperationRegistry,
+        populated: EntityManager,
+        core_registry,
+        tmp_path: Path,
+    ) -> None:
+        """The engine section is reserved out of the budget, not added to it.
+
+        `to_markdown` documents a character ceiling and a caller may be
+        spending it against a context window. A section appended
+        afterwards would quietly break that promise for every caller at
+        once, which is the sort of thing nobody notices until an
+        instruction file is truncated by the client instead.
+        """
+        session = self._session(populated, core_registry, tmp_path)
+
+        for budget in (80, 200, 600, 4000):
+            result = _call(
+                ops, session, "project_overview", format="markdown", budget=budget
+            )
+            assert isinstance(result, dict)
+            assert len(result["markdown"]) <= budget, budget
+
+    def test_the_project_map_itself_stays_machine_independent(
+        self, tmp_path: Path, core_registry
+    ) -> None:
+        """The reason this lives in the handler and not on `ProjectMap`.
+
+        `pyguara studio instructions` renders a `ProjectMap` into a
+        committed `AGENTS.md`. If the map carried the resolved store, a
+        local `target/release/libpyguara_core_rs.so` path would land in
+        version control and churn between every contributor -- and
+        between the same contributor before and after `cargo build`.
+        """
+        from pyguara.studio.model.projectmap import build_project_map
+
+        project_map = build_project_map(tmp_path, registry=core_registry)
+
+        assert "engine" not in project_map.to_dict()
+        assert "Engine" not in project_map.to_markdown()
+        assert "native" not in project_map.to_markdown().lower()

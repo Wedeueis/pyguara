@@ -141,15 +141,27 @@ class ReplayMetadata:
         frame_count: Total number of frames.
         description: Optional description of the replay.
         native_store: Which implementation ran the simulation, `"native"`
-            or `"python"` -- see `pyguara.native.store_name()`. A replay
-            only reproduces under the store that recorded it: the two are
-            deterministic individually and cannot be made bit-identical to
-            each other, because `SpatialHash` yields neighbours in Python
-            `set` iteration order and no Rust can reproduce that, so float
-            sums differ in their last bits and a chaotic system such as a
-            flock diverges from there. Empty in replays recorded before
+            or `"python"` -- see `pyguara.native.store_name()`. The two
+            cannot be made bit-identical, because `SpatialHash` yields
+            neighbours in Python `set` iteration order, no Rust can
+            reproduce that, and a chaotic system such as a flock diverges
+            from a last-bit difference. So a replay made under one store
+            is refused under the other. Empty in replays recorded before
             this field existed, which means "unknown" rather than
             "python" and so is not refused.
+
+            **Matching stores is necessary and not sufficient**, and an
+            earlier version of this docstring implied otherwise by
+            calling the two "deterministic individually". Neither is:
+            `EntityManager` assigns `uuid4` ids and
+            `get_entities_with_cached` iterates a set of them, so the
+            order a system visits its entities differs between
+            processes -- and for a Gauss-Seidel system such as
+            `FlockingSystem`, that order *is* the simulation. A replay
+            of a scene containing a flock therefore does not reproduce
+            under the same store either. Issue #324. This field still
+            earns its keep: it removes the one divergence a player can
+            cause by installing a different wheel.
     """
 
     version: int = 1
