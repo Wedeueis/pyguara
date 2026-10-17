@@ -25,6 +25,7 @@ import dataclasses
 import difflib
 from typing import TYPE_CHECKING, Any
 
+from pyguara import native
 from pyguara.ecs.component import Component
 from pyguara.studio.commands.entity import (
     AddComponent,
@@ -260,8 +261,32 @@ def _fields_without_defaults(session: StudioSession, name: str) -> set[str]:
 # --------------------------------------------------------------------
 
 
+def _engine_section(status: dict[str, Any]) -> str:
+    """Render the resolved native store as a Markdown section."""
+    lines = [
+        "## Engine",
+        "",
+        f"- Native acceleration: **{status['store']}** (mode: {status['mode']})",
+    ]
+    if status["env_override"]:
+        lines.append("- `PYGUARA_NO_NATIVE` is set, overriding the mode")
+    if status["source"]:
+        lines.append(f"- Extension: `{status['source']}`")
+    return "\n".join(lines)
+
+
 def _project_overview(session: StudioSession, arguments: dict[str, Any]) -> Any:
-    """Return the budgeted project inventory."""
+    """Return the budgeted project inventory, and which engine is running it.
+
+    The store is reported here, in the handler, rather than on
+    `ProjectMap`. ADR 0004's Decision 4 wants it observable and this is
+    the call an agent is told to make first, so this is where it is
+    seen -- but it is a fact about *this process on this machine*, not
+    about the project, and `ProjectMap` is also what
+    `pyguara studio instructions` renders into a committed `AGENTS.md`.
+    Carried there, a local `target/release/*.so` path would land in
+    version control and churn between contributors.
+    """
     if session.project_root is None:
         raise OperationError(
             "This session has no project root, so there is no project to "
@@ -269,9 +294,18 @@ def _project_overview(session: StudioSession, arguments: dict[str, Any]) -> Any:
         )
     budget = int(arguments.get("budget", 8000))
     project_map = build_project_map(session.project_root, registry=session.registry)
+    status = native.status()
     if arguments.get("format") == "markdown":
-        return {"markdown": project_map.to_markdown(budget)}
-    return project_map.to_dict()
+        # Reserved out of the budget rather than appended to it, so the
+        # documented character ceiling stays a ceiling. The engine
+        # section goes first: it is three lines, and it is the part a
+        # reader cannot find out any other way.
+        section = _engine_section(status)
+        remaining = budget - len(section) - 2
+        if remaining <= 0:
+            return {"markdown": section[:budget]}
+        return {"markdown": f"{section}\n\n{project_map.to_markdown(remaining)}"}
+    return {**project_map.to_dict(), "engine": status}
 
 
 def _list_components(session: StudioSession, arguments: dict[str, Any]) -> Any:
@@ -892,7 +926,10 @@ _OPERATIONS: tuple[Operation, ...] = (
     Operation(
         name="project_overview",
         summary="Inventory the project: scenes, prefabs, components, assets.",
-        detail="Read this first in an unfamiliar project.",
+        detail=(
+            "Read this first in an unfamiliar project. Also reports which "
+            "native store is in force, which changes simulation results."
+        ),
         risk=RiskClass.READ,
         parameters=_schema(
             {
