@@ -290,3 +290,97 @@ def test_a_replay_reproduces_the_random_draws_of_the_run(tmp_path):
     assert [
         playback_app._rng().stream("loot").randint(0, 10_000) for _ in range(5)
     ] == drawn
+
+
+def test_playback_refuses_a_replay_from_the_other_store(tmp_path):
+    """A replay only reproduces under the store that recorded it.
+
+    `docs/adr/0004-the-native-boundary.md`, Decision 4. The two stores are
+    each deterministic and cannot be made identical to each other, so this
+    replay would drift rather than reproduce -- and a playback that
+    matches for a few seconds and then quietly stops is far harder to
+    diagnose than an error at load. Hence the refusal.
+
+    Driven by rewriting the saved metadata rather than by building the
+    other store, because the point under test is the comparison, and a
+    test that needed a Rust toolchain to exercise the refusal would skip
+    on exactly the machines the refusal protects.
+    """
+    from pyguara import native
+    from pyguara.replay.serializer import load_replay, save_replay
+
+    record_app = create_application()
+    scene = _boot(record_app)
+    record_app._window.poll_events = _make_poll_events(_scripted_frames())
+    record_app.start_recording(seed=11)
+    _run_frames(record_app, scene, NUM_FRAMES)
+    replay_data = record_app.stop_recording()
+    assert replay_data is not None
+    assert replay_data.metadata.native_store == native.store_name()
+    record_app.shutdown()
+
+    # Restamp it as the store this process is *not* running.
+    other = "python" if native.store_name() == "native" else "native"
+    replay_data.metadata.native_store = other
+    path = str(tmp_path / "other-store.replay.gz")
+    assert save_replay(replay_data, path)
+    assert load_replay(path).metadata.native_store == other
+
+    playback_app = create_application()
+    _boot(playback_app)
+    try:
+        with pytest.raises(RuntimeError, match="diverge rather than reproduce"):
+            playback_app.load_replay(path)
+
+        # ...and watching it anyway stays possible, for a recording whose
+        # value is its inputs rather than its outcome.
+        assert playback_app.load_replay(path, allow_store_mismatch=True) is True
+    finally:
+        playback_app.shutdown()
+
+
+def test_playback_accepts_a_genuine_pre_field_replay(tmp_path):
+    """Versions 1 and 2 predate the field, so absence is not a mismatch.
+
+    Reading a missing `native_store` as "python" would refuse every
+    pre-existing replay on a native build, to guard against a divergence
+    nobody can confirm happened.
+
+    The file here is rewritten to be a **real v2 file** -- the key removed
+    and the version lowered -- rather than a v3 file carrying an empty
+    string. The difference matters: setting the field exercises the
+    comparison but not the decoding, and it was a sabotage check that
+    showed the weaker version of this test passing with
+    `from_dict` defaulting the field to "python".
+    """
+    import gzip
+    import json
+
+    from pyguara.replay.serializer import save_replay
+
+    record_app = create_application()
+    scene = _boot(record_app)
+    record_app._window.poll_events = _make_poll_events(_scripted_frames())
+    record_app.start_recording(seed=12)
+    _run_frames(record_app, scene, NUM_FRAMES)
+    replay_data = record_app.stop_recording()
+    assert replay_data is not None
+    record_app.shutdown()
+
+    path = str(tmp_path / "pre-field.replay.gz")
+    assert save_replay(replay_data, path)
+
+    # Rewrite it as a file recorded before the field existed.
+    with gzip.open(path, "rt", encoding="utf-8") as handle:
+        document = json.load(handle)
+    del document["metadata"]["native_store"]
+    document["metadata"]["version"] = 2
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        json.dump(document, handle, separators=(",", ":"))
+
+    playback_app = create_application()
+    _boot(playback_app)
+    try:
+        assert playback_app.load_replay(path) is True
+    finally:
+        playback_app.shutdown()

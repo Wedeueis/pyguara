@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 
+from pyguara import native
 from pyguara.log import get_logger
 from pyguara.replay.types import (
     InputEventType,
@@ -49,7 +50,15 @@ class ReplayRecorder:
     # single-pad session means anyway. The bump is so a *newer* replay is
     # recognisably newer to an older build rather than silently losing pad
     # identity.
-    FORMAT_VERSION = 2
+    #
+    # 3 added `native_store`, because a replay only reproduces under the
+    # store that recorded it. Versions 1 and 2 still load, with the field
+    # empty -- which reads as "unknown", not as "python", so an old replay
+    # is played rather than refused. There is no way to know what those
+    # ran under, and refusing them would break every existing recording to
+    # protect against a divergence that only exists once a gameplay system
+    # is native.
+    FORMAT_VERSION = 3
 
     try:
         _ENGINE_VERSION = version("pyguara")
@@ -126,6 +135,7 @@ class ReplayRecorder:
                 engine_version=self._engine_version,
                 recorded_at=datetime.now(timezone.utc).isoformat(),  # noqa: UP017
                 description=description,
+                native_store=native.store_name(),
             )
         )
 

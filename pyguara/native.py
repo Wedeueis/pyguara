@@ -172,6 +172,20 @@ def in_use() -> bool:
     return native_module() is not None
 
 
+def store_name() -> str:
+    """Return a short, comparable name for the store in force.
+
+    `"native"` or `"python"`. Separate from `describe()`, which is prose
+    for a human and carries a filesystem path: this is the token that gets
+    written into a replay's metadata and compared on playback, so it has
+    to be stable across machines and short enough to read in a JSON file.
+
+    Returns:
+        The store's name.
+    """
+    return "native" if native_module() is not None else "python"
+
+
 def describe() -> str:
     """Return one line saying which store is in force and why.
 

@@ -11,6 +11,7 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pytest
 
+from pyguara import native
 from pyguara.replay.player import ReplayPlayer
 from pyguara.replay.recorder import ReplayRecorder
 from pyguara.replay.serializer import ReplaySerializer, load_replay, save_replay
@@ -800,3 +801,58 @@ class TestGamepadIdentitySurvivesTheRoundTrip:
         assert data is not None
         recorded = [event for frame in data.frames for event in frame.events]
         assert [e.controller_id for e in recorded] == [1, 1]
+
+
+class TestTheRecordedStore:
+    """A replay records which implementation produced it.
+
+    The other half of `docs/adr/0004-the-native-boundary.md`'s Decision 4.
+    The native and Python stores are each deterministic and **cannot** be
+    made identical to each other: `SpatialHash` yields neighbours in
+    Python `set` iteration order, which depends on insertion order and the
+    probe sequence and which no Rust can reproduce, so float sums differ
+    in their last bits and a chaotic system such as a flock diverges from
+    there.
+
+    That makes "which store ran" part of a replay's identity, exactly as
+    its seed is. Recording it is what lets playback refuse instead of
+    quietly drifting -- which is the failure this exists to prevent,
+    because a playback that matches for a few seconds and then stops is
+    far harder to diagnose than an error at load.
+    """
+
+    def test_a_recording_stamps_the_store_that_made_it(self) -> None:
+        recorder = ReplayRecorder()
+        recorder.start_recording(seed=1, scene_name="test")
+
+        data = recorder.stop_recording()
+
+        assert data.metadata.native_store == native.store_name()
+        assert data.metadata.native_store in {"native", "python"}
+
+    def test_the_store_survives_a_round_trip(self) -> None:
+        """It has to reach the file, not just the dataclass."""
+        metadata = ReplayMetadata(native_store="native")
+
+        restored = ReplayMetadata.from_dict(metadata.to_dict())
+
+        assert restored.native_store == "native"
+
+    def test_an_older_replay_reads_as_unknown_rather_than_python(self) -> None:
+        """Version 1 and 2 replays predate the field entirely.
+
+        "Unknown" and "python" have to be different values, because
+        playback refuses a *mismatch* and there is no way to know what an
+        older recording ran under. Reading absence as "python" would
+        refuse every pre-existing replay on a native build, to protect
+        against a divergence nobody can confirm happened.
+        """
+        restored = ReplayMetadata.from_dict(
+            {"version": 2, "seed": 7, "start_scene": "old"}
+        )
+
+        assert restored.native_store == ""
+
+    def test_the_format_version_moved(self) -> None:
+        """A newer replay should be recognisably newer to an older build."""
+        assert ReplayRecorder.FORMAT_VERSION >= 3
