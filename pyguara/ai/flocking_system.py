@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import cast
+from typing import Any, cast
 
 from pyguara.ai.steering import SteeringBehavior
 from pyguara.common.components import Transform
@@ -23,6 +23,15 @@ from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.ecs.component import StrictComponent
 from pyguara.ecs.manager import EntityManager
+from pyguara.native import native_module
+
+# Floats per agent in the row `_pack` writes; mirrors `STRIDE` in
+# `rust/src/flocking.rs`, which rejects a length that is not a multiple.
+_STRIDE = 15
+
+# `tuple.__new__`, which is what `NamedTuple._make` calls, bound once
+# rather than looked up per vector. See `_tick_natively`.
+_new_vector = tuple.__new__
 
 
 @dataclass(slots=True)
@@ -215,6 +224,24 @@ class FlockingSystem:
     rebuild costs nothing extra and, unlike an incrementally-maintained
     hash, can never accumulate a stale entry for a despawned entity.
 
+    Backed by the optional native extension when it is available, which
+    is **8.6x** at 1000 agents -- 16 ms down to 1.9 ms, or 96% of a frame
+    budget down to 11% -- and up to 19x on a clumped flock, which is the
+    case a horde converging on the player creates. It prices far below
+    the flow field's 57x for a structural reason worth knowing before
+    trying to improve it: a flock is not *opaque*. Every agent is an ECS
+    entity whose `Transform` other systems read, so the whole flock
+    crosses the boundary every tick and the crossing is 63% of a native
+    tick. See `docs/adr/0004-the-native-boundary.md`, Decision 3.
+
+    **The sweep order is not reproducible across processes**, and that is
+    a property of the ECS rather than of this system or its native
+    store. `get_entities_with_cached` iterates a set of uuid4 ids, so the
+    slot order differs every run -- and because the sweep is
+    Gauss-Seidel, the order is part of the simulation. A seeded flock
+    therefore does not tick the same way twice. Issue #324; both stores
+    inherit it equally, and each is deterministic given its input.
+
     Example:
         >>> system_manager.register(FlockingSystem(entity_manager), priority=150)
     """
@@ -224,6 +251,8 @@ class FlockingSystem:
         entity_manager: EntityManager,
         cell_size: float = 64.0,
         groups: int = 1,
+        *,
+        accelerate: bool | None = None,
     ) -> None:
         """Initialize the flocking system.
 
@@ -237,6 +266,17 @@ class FlockingSystem:
                 while *every* agent still integrates its position, so
                 motion stays smooth and only the decision rate drops.
                 Values below 1 are clamped to 1.
+            accelerate: Whether to steer the flock natively. None, the
+                default, defers to the engine-wide setting --
+                `PerformanceConfig.native_acceleration`, resolved once at
+                bootstrap -- so a game decides this in one place rather
+                than per system. True demands the extension and raises if
+                it is missing; False forces the Python path. Both are
+                overrides for tests and for the parity suite, not a
+                second configuration surface.
+
+        Raises:
+            RuntimeError: If `accelerate=True` and the extension is absent.
         """
         self._entity_manager = entity_manager
         self._cell_size = cell_size
@@ -247,6 +287,20 @@ class FlockingSystem:
         entity_manager.register_cached_query(FlockingAgent, Transform)
         self._groups = max(1, groups)
         self._tick = 0
+
+        native = native_module() if accelerate is not False else None
+        if accelerate and native is None:
+            raise RuntimeError(
+                "accelerate=True but the native extension is not available. "
+                "Build it with `cargo build --release`, or leave "
+                "`accelerate` unset to fall back to Python."
+            )
+        self._native: Any | None = native.NativeFlockingSolver() if native else None
+
+    @property
+    def accelerated(self) -> bool:
+        """Whether this system steers its flock natively."""
+        return self._native is not None
 
     @staticmethod
     def _neighbors_of(
@@ -294,6 +348,109 @@ class FlockingSystem:
             # entities, so unlike an id lookup they cannot miss.
             yield transforms[slot].position, agents[slot].velocity
 
+    def _pack(
+        self, agents: list[FlockingAgent], transforms: list[Transform]
+    ) -> list[float]:
+        """Flatten the flock into one row of `_STRIDE` floats per agent.
+
+        The upload half of the native crossing, and unavoidable: unlike a
+        flow field, a flock is not opaque -- every agent is an ECS entity
+        whose position other systems read -- so there is no version of
+        this that keeps the state native between ticks. Measured at 0.25
+        ms for 1000 agents.
+
+        `seek_weight` is zeroed here when there is no target, rather than
+        sending a presence flag, so the native side's `!= 0.0` is exactly
+        this method's `agent.seek_weight and agent.seek_target is not
+        None`.
+
+        Args:
+            agents: This tick's `FlockingAgent` components, by slot.
+            transforms: This tick's `Transform` components, by slot.
+
+        Returns:
+            `len(agents) * _STRIDE` floats.
+        """
+        flat: list[float] = []
+        extend = flat.extend
+        for slot, agent in enumerate(agents):
+            position = transforms[slot].position
+            velocity = agent.velocity
+            target = agent.seek_target
+            if target is None or not agent.seek_weight:
+                seek_weight = seek_x = seek_y = 0.0
+            else:
+                seek_weight, seek_x, seek_y = agent.seek_weight, target.x, target.y
+            extend(
+                (
+                    position.x,
+                    position.y,
+                    velocity.x,
+                    velocity.y,
+                    agent.max_speed,
+                    agent.max_force,
+                    agent.mass,
+                    agent.neighbor_radius,
+                    agent.separation_radius,
+                    agent.cohesion_weight,
+                    agent.alignment_weight,
+                    agent.separation_weight,
+                    seek_weight,
+                    seek_x,
+                    seek_y,
+                )
+            )
+        return flat
+
+    def _tick_natively(
+        self,
+        dt: float,
+        groups: int,
+        steering_group: int,
+        agents: list[FlockingAgent],
+        transforms: list[Transform],
+    ) -> None:
+        """Steer the whole flock in one crossing, and write the result back.
+
+        The write-back is the expensive half -- 0.6 ms of the 0.9 ms
+        crossing at 1000 agents, against a 0.5 ms native solve -- and
+        almost all of it is building the two `Vector2` each agent needs.
+        Hence `_new_vector`: `tuple.__new__(Vector2, pair)` is what
+        `NamedTuple._make` calls, produces an identical object, and is
+        **1.8x** cheaper than `Vector2(x, y)`, which runs namedtuple's
+        generated `__new__` first. That is 15% of a native tick, so it is
+        worth the one line of explanation.
+
+        A disabled agent is skipped rather than written back with the
+        unchanged row the solver returns for it, so that the Python and
+        native paths leave an identical object graph and not merely
+        identical values.
+
+        Args:
+            dt: Delta time in seconds.
+            groups: How many ticks steering is spread across.
+            steering_group: Which group thinks this tick.
+            agents: This tick's `FlockingAgent` components, by slot.
+            transforms: This tick's `Transform` components, by slot.
+        """
+        assert self._native is not None
+        enabled = [agent.enabled for agent in agents]
+        rows = self._native.tick(
+            dt,
+            self._cell_size,
+            groups,
+            steering_group,
+            self._pack(agents, transforms),
+            enabled,
+        )
+        for (position, velocity), agent, transform, is_enabled in zip(
+            rows, agents, transforms, enabled, strict=True
+        ):
+            if not is_enabled:
+                continue
+            transform.position = _new_vector(Vector2, position)
+            agent.velocity = _new_vector(Vector2, velocity)
+
     def update(self, dt: float) -> None:
         """Update all flocking agents.
 
@@ -313,13 +470,18 @@ class FlockingSystem:
         agents = [entity.get_component(FlockingAgent) for entity in entities]
         transforms = [entity.get_component(Transform) for entity in entities]
 
+        groups = self._groups
+        steering_group = self._tick % groups
+        self._tick += 1
+
+        if self._native is not None:
+            self._tick_natively(dt, groups, steering_group, agents, transforms)
+            return
+
         spatial_hash: SpatialHash[int] = SpatialHash(cell_size=self._cell_size)
         for slot, transform in enumerate(transforms):
             spatial_hash.insert(slot, transform.position)
 
-        groups = self._groups
-        steering_group = self._tick % groups
-        self._tick += 1
         # One group's worth of accumulated acceleration, so a staggered
         # agent turns at the same rate as an unstaggered one instead of
         # `groups` times slower.

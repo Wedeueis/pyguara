@@ -59,7 +59,7 @@ writing:
 | flow field, 96x96 | 83.247 | 1.479 | — | **56.3x** | landed, 56.3x (priced 161x) |
 | particles, 1000 | 1.942 | 0.104 | — | 18.7x | landed, 18.7x |
 | sparks, 1000 streaks | 5.865 | 0.339 | — | 17.3x | landed, 17.3x |
-| flocking, 1000 agents | 17.206 | 1.118 | — | **15.4x** | not built |
+| flocking, 1000 agents | 16.555 | 1.849 | — | **9.0x** | landed, 9.0x (priced 15.4x) |
 | sparks, 1000 dots | 4.077 | 0.321 | — | 12.7x | landed, 12.7x |
 | projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
 
@@ -77,10 +77,25 @@ priced at 161x, with `T_cross` as the 0.522 ms wall-mask upload against
 boundary — almost nothing is paid there — it simply does not model the
 native work behind it, and the native sweep costs 1.3 ms. So read a
 number from this table as the answer to "is this far above 5x", which is
-the decision it exists for, and not as a forecast. Three candidates
-forecast closely and one overshot by 2.9x; the difference is whether the
-native work is negligible beside the handoff, which is a property of the
-candidate.
+the decision it exists for, and not as a forecast.
+
+**Flocking then overshot for the opposite reason, which is the more
+useful lesson.** It priced at 15.4x and achieved 9.0x, and here the
+native work is *not* the explanation — the solve is 0.5 ms of a 1.85 ms
+tick. The crossing itself was underestimated, by 65%, because
+`T_cross` was measured as the Python loops that pack and unpack and a
+real crossing is more than those loops: PyO3's own conversion of a
+15,000-float list into a `Vec<f64>`, the result tuples it allocates
+coming back, and the per-tick ECS prologue — resolving entities and
+components — which is 0.31 ms and is paid whichever store runs. At 17 ms
+that prologue was 2% and invisible; at 1.85 ms it is 17%.
+
+So the two calibration rows fail in different directions and neither is
+the formula being wrong. Price a candidate, check it clears 5x by a wide
+margin, and expect the achieved figure to be *lower*: by the native work
+when the handoff is trivial, and by the conversions and the shared
+prologue when the handoff is not. Both corrections point the same way,
+which at least makes the formula optimistic rather than unreliable.
 
 **The threshold is 5x**, and it is a judgement about maintenance rather
 than about speed: a native implementation is a second implementation
@@ -120,7 +135,7 @@ outward; its absence is what pins projectiles.
 | `ParticleSystem` | yes | nothing holds a `Particle`; the output is per-texture batches |
 | `Sparks` | yes | nothing holds a `_Spark`; the output is per-kind batches |
 | flow field | yes, **built** | `vector_at`/`cost_at` are the only readers, and they ask rather than fetch; the field never returns to Python |
-| `FlockingSystem` | **no** | agents are ECS entities; `Transform` and `FlockingAgent` are read by rendering, the spatial index and AI |
+| `FlockingSystem` | **no** | agents are ECS entities; `Transform` and `FlockingAgent` are read by rendering, the spatial index and AI — built anyway, at 9.0x against the field's 56.7x, which is what non-opacity costs |
 | `ProjectileSystem` | **no** | `get_active()` is public, and `games/protocolo_bandeira` reads `.position`/`.velocity` off every projectile, every frame |
 
 Non-opaque does not mean "no". It means the boundary is pinned at the
@@ -242,6 +257,75 @@ levels, because each tier catches what the others cannot:
    a Dijkstra cost map is order-independent given non-negative weights —
    unlike a flock's force sums, which are not. So: ask whether exactness
    is reachable before settling for a tolerance, and state which it is.
+
+   **Flocking is the case where the answer was no, and working out why
+   changed what the tolerance is for.** The first reason is the obvious
+   one: `SpatialHash._cells` is a `dict[Cell, set[int]]`, so a radius
+   query yields each cell's members in CPython set iteration order, and
+   `flock_force` sums over them. Different order, different last bit —
+   measured at 46% of agents and a worst relative difference of 6.4e-13.
+   Reproducing that order in Rust would mean reimplementing a CPython
+   internal and depending on it not changing.
+
+   The second reason is sharper and was found by accident, while
+   debugging a parity probe that compared two worlds built from the same
+   seed. **A seeded flock does not tick the same way twice in Python
+   either.** `EntityManager` hands out random uuid4 ids and
+   `get_entities_with_cached` iterates a set of them, so the sweep
+   order — which *is* the Gauss-Seidel order, and therefore part of the
+   simulation — differs between processes. Three runs of one seeded
+   flock give three different states. So "bit-exact with Python" was
+   never an available contract here: there is no single Python answer to
+   be exact to. That is a pre-existing defect rather than anything the
+   port introduced — it is issue #324, and the fix is a behaviour change
+   rather than a bug fix, because the sweep order it would pin is
+   currently arbitrary — and it does not block the port — but it does mean the native store is *more* reproducible than
+   the Python one it mirrors, which is the opposite of what a tolerance
+   usually implies.
+
+   **What the tolerance then has to be is: one permitted cause, stated,
+   with everything else pinned exactly.** This is the rule the flocking
+   port adds, and the reason it matters is a measurement. A transcription
+   slip — writing `dx * (target / len)` for `(dx / len) * target`, which
+   is the same expression refactored — moves a result by about one ulp.
+   The ordering noise it is being compared against is 6.4e-13, three
+   orders of magnitude *larger*. **No tolerance wide enough to admit the
+   ordering could ever catch such a slip**, so a tolerance-only parity
+   suite does not test the arithmetic at all; it only tests that nothing
+   is grossly wrong. Confirmed by sabotage: that exact refactor passes
+   every tolerance test in the suite.
+
+   The remedy is to find a regime where the permitted cause cannot
+   operate, and assert `==` there. For flocking that is constructed
+   geometry in which no agent has more than one flockmate, so the sum has
+   no order to differ in — and it has to be *constructed*, because
+   picking the one-neighbour agents out of a random flock leaks: a lone
+   agent reads its flockmate's live position, and that flockmate may
+   itself have been perturbed (measured: 47 of 48 agreed, and the one
+   exception had inherited a neighbour's divergence). In that regime the
+   whole tick is bit-exact through every branch — clamping, coincident
+   agents, seek, staggering, forty ticks — which is what makes the
+   tolerance on real flocks evidence of summation order rather than a
+   blanket amnesty.
+
+   Two smaller findings from the same round, recorded so nobody re-derives
+   them. **Getting `Vector2.length` exact required changing it**: pymunk
+   spells it `sqrt(x**2 + y**2)`, `x**2` goes through the platform's
+   `pow`, and glibc's `pow` disagrees with `x * x` for 0.08% of inputs,
+   so the length — and everything `normalized()` divides by — was only as
+   portable as the libm underneath. It is now `sqrt(x * x + y * y)`,
+   which is also 1.6x faster and no less accurate (over 200k vectors the
+   two differ 70 times, with the `pow` form closer 34 and the
+   multiplication form 36). And **several plausible-looking sabotages
+   turn out not to be differences at all**: `>` against `>=` on any of
+   the three clamps is unobservable, because at the threshold the scale
+   factor is `max / sqrt(max * max)`, which is exactly 1.0; a flockmate
+   exactly on the separation radius contributes `(1 - d/r) * max_speed`,
+   which is exactly 0.0; and the `want_cohesion`-style flags are a pure
+   optimisation, because a term scaled by a zero weight is zero either
+   way. A sabotage that nothing catches is sometimes a complete suite
+   rather than a missing test, and the way to tell is to work out whether
+   the sabotage changed the answer at all.
 2. **Consumer parity.** The same calls reach the renderer, the ECS and the
    dispatcher. This tier exists because the native spark path reaches the
    renderer through *different methods* than the Python one.
@@ -337,9 +421,34 @@ is almost its reverse:
    and A* is a per-query cost rather than a per-frame one, so it does not
    obviously have a ratio worth computing — which is the point: measure
    it before claiming it. The flow field is what the 161x was about.
-2. **Flocking** — 14.5x at 1000 agents, which is 98% of a frame today.
-   Gated on Decision 4's switch, because it is the first gameplay system
-   to go native.
+2. **Flocking — BUILT.** Priced at 15.4x at 1000 agents, which was 99%
+   of a frame, and achieved **9.0x** — 16.6 ms down to 1.85 ms, or 11% of
+   a frame. The first port of something that is *not* opaque: every agent
+   is an ECS entity, so unlike the field, the whole flock crosses every
+   tick and the crossing is 63% of the native tick rather than a rounding
+   error. That is the price of non-opacity, measured, and it is the
+   difference between this row and the field's 56.7x.
+
+   Where it pays best is the case it was really for. A flock converging
+   on the player makes every agent everyone's neighbour, so the tick goes
+   quadratic: at 2000 agents Python goes from 34 ms spread to 74 ms
+   clumped, while the native store goes from 3.9 ms to 4.6 ms. Clumping
+   costs Python 2.2x and the native store 1.26x, because what density
+   multiplies is the per-neighbour arithmetic and not the handoff. So the
+   advantage *grows* in the regime a horde actually creates, which the
+   uniform-density figure above understates.
+
+   **Staggering is now largely redundant**, which is worth saying because
+   it is a knob demos set. `groups` exists to spread steering across
+   ticks, and in Python it works: 3000 agents go from 50 ms to 20 ms at
+   `groups=4`. Natively the same change moves 6.2 ms to 5.2 ms, because
+   what it skips is the steering and what remains is the crossing and the
+   prologue. A game on the native store should reach for it only after
+   measuring.
+
+   It is also the first port to need a **tolerance** rather than `==`,
+   with one permitted cause and the arithmetic pinned separately — see
+   Decision 5, which this increment rewrote.
 3. **`SpatialHash`, as native state for native consumers only** — never as
    a Python-facing index returning `list[K]`. Projectiles then become a
    consequence of it rather than a milestone of their own.

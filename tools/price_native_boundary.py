@@ -61,7 +61,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from pyguara.ai.flocking_system import FlockingAgent  # noqa: E402
+from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem  # noqa: E402
 from pyguara.ai.pathfinding.flow_field import dijkstra_map, flow_field  # noqa: E402
 from pyguara.ai.pathfinding.flow_field_service import (  # noqa: E402
     FlowFieldService,
@@ -313,10 +313,20 @@ def price_projectiles(live: int) -> Row:
 
 
 def price_flocking(agents: int) -> Row:
-    """Not built. Passes despite not being opaque: dense per-agent work."""
+    """Landed, and the row that priced worst of the three gameplay ports.
+
+    It passes the threshold despite not being opaque -- every agent is an
+    ECS entity, so positions and velocities cross every tick -- purely on
+    the density of the per-agent work. That is also why it prices at 19x
+    where the flow field prices at 161x, and why what it *achieves* is
+    lower again: the crossing is 63% of a native tick here, against
+    almost nothing there.
+    """
     from tests.performance.conftest import build_flock, uniform_spread_for
 
-    manager, system = build_flock(agents, spread=uniform_spread_for(agents))
+    manager, system = build_flock(
+        agents, spread=uniform_spread_for(agents), accelerate=False
+    )
     system.update(DT)
 
     entities = list(manager.get_entities_with_cached(FlockingAgent, Transform))
@@ -354,12 +364,26 @@ def price_flocking(agents: int) -> Row:
             transform.position = Vector2(packed[base], packed[base + 1])
             agent.velocity = Vector2(packed[base + 2], packed[base + 3])
 
+    python_ms = measure(lambda: system.update(DT), iterations=12)
+    native = FlockingSystem(manager, accelerate=None)
+    if not native.accelerated:
+        return Row(
+            f"flocking, {agents} agents",
+            python_ms,
+            measure(upload, iterations=12) + measure(download, iterations=12),
+            0.0,
+            "every agent would cross every tick (extension not built)",
+        )
+
+    # The whole landed tick, not the handoff alone: for this candidate the
+    # two are nearly the same thing, which is the finding.
+    cross_ms = measure(lambda: native.update(DT), iterations=12)
     return Row(
         f"flocking, {agents} agents",
-        measure(lambda: system.update(DT), iterations=12),
-        measure(upload, iterations=12) + measure(download, iterations=12),
+        python_ms,
+        cross_ms,
         0.0,
-        "not built",
+        f"LANDED, achieved {python_ms / cross_ms:.1f}x",
     )
 
 

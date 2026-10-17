@@ -29,6 +29,7 @@
 
 use pyo3::prelude::*;
 
+mod flocking;
 mod flowfield;
 mod particles;
 mod sparks;
@@ -39,6 +40,7 @@ pub type Rgba = (u8, u8, u8, u8);
 /// Register the module's classes.
 #[pymodule]
 fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<flocking::NativeFlockingSolver>()?;
     module.add_class::<flowfield::NativeFlowField>()?;
     module.add_class::<particles::NativeParticlePool>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
