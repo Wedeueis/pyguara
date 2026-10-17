@@ -190,7 +190,7 @@ class TestTheReport:
         report = native.describe()
 
         assert "off" in report
-        assert "Python" in report
+        assert "python" in report
 
     def test_it_names_the_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A choice that changes behaviour and is not reported is the bug."""
@@ -206,3 +206,97 @@ class TestTheReport:
 
         assert "native" in native.describe()
         assert "pyguara_core_rs" in native.describe()
+
+
+class TestTheStructuredStatus:
+    """`status()` is `describe()` for a machine, and must not drift from it.
+
+    Two reports of one fact are two chances to disagree, so these mostly
+    assert that they do not. The division of labour: Studio asserts that
+    it *reports* whatever this module says
+    (`tests/studio/test_ops.py::TestProjectOverviewReportsTheEngine`),
+    and this asserts that what it says is true. Keeping the mode tests
+    here is not tidiness -- the mode is process-wide module state, and
+    this file is where the fixture that isolates it lives.
+    """
+
+    @pytest.mark.parametrize(
+        "mode",
+        [NativeAcceleration.OFF, NativeAcceleration.AUTO, NativeAcceleration.REQUIRED],
+    )
+    def test_the_mode_is_the_configured_one(self, mode: NativeAcceleration) -> None:
+        """Not pinned by a default-environment test, which reads `auto`.
+
+        A `status()` that returned a hardcoded "auto" passed every other
+        test of it, because the suite runs under `auto`. This one
+        configures each mode in turn, which is the only way the field is
+        checked at all.
+        """
+        if mode is NativeAcceleration.REQUIRED and not _built():
+            pytest.skip("native extension not built; `cargo build --release`")
+        native.configure(mode)
+
+        assert native.status()["mode"] == mode.value
+
+    def test_the_store_is_the_one_actually_in_force(self) -> None:
+        native.configure(NativeAcceleration.OFF)
+        assert native.status()["store"] == "python"
+
+        native.configure(NativeAcceleration.AUTO)
+        assert native.status()["store"] == native.store_name()
+
+    def test_auto_without_an_extension_is_honest_about_running_python(self) -> None:
+        """`auto` resolves to `auto`, and the store is the honest question.
+
+        The same distinction `in_use()` exists for: a mode of `auto` says
+        what was asked for, not what happened.
+        """
+        if _built():
+            pytest.skip("the extension is built, so auto does find one")
+        native.configure(NativeAcceleration.AUTO)
+
+        status = native.status()
+        assert status["mode"] == "auto"
+        assert status["store"] == "python"
+        assert status["source"] is None
+
+    def test_the_environment_override_is_reported_as_such(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Otherwise the report says `off` and nobody knows who chose it."""
+        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
+        native.reset_for_tests()
+
+        status = native.status()
+        assert status["env_override"] is True
+        assert status["store"] == "python"
+
+    def test_the_source_names_the_library_that_was_loaded(self) -> None:
+        if not _built():
+            pytest.skip("native extension not built; `cargo build --release`")
+        native.configure(NativeAcceleration.AUTO)
+
+        source = native.status()["source"]
+        assert source is not None
+        assert "pyguara_core_rs" in source
+
+    @pytest.mark.parametrize("mode", [NativeAcceleration.OFF, NativeAcceleration.AUTO])
+    def test_it_does_not_drift_from_the_prose_report(
+        self, mode: NativeAcceleration
+    ) -> None:
+        """Both read the same module state; the risk is one being changed.
+
+        Plain string containment, deliberately. An earlier version of
+        this needed a `.capitalize()` and a `.replace()` to pass, because
+        `describe()` said "-> Python" in one branch and "-> native" in
+        the other. A test that has to normalise before comparing is
+        reporting a real inconsistency, and the fix belonged in
+        `describe()`, not here.
+        """
+        native.configure(mode)
+
+        status = native.status()
+        described = native.describe()
+
+        assert described.startswith(f"native acceleration: {status['mode']}")
+        assert f"-> {status['store']} " in described
