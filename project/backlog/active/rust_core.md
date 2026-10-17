@@ -1,8 +1,41 @@
 ---
 
+> ## Nota de estado — adicionada 2026-10-17
+>
+> **Este RFC foi aceito em parte, e o documento abaixo é o registo
+> original, não o plano em vigor.** O que decide o trabalho hoje é
+> `docs/adr/0003-native-core-spike.md` (o spike que mediu as alegações
+> deste RFC) e `docs/adr/0004-the-native-boundary.md` (o padrão que saiu
+> dele). Onde os dois discordarem, os ADRs ganham.
+>
+> O que mudou, em resumo:
+>
+> * **A ordem dos Marcos está quase invertida.** O RFC propõe matemática,
+>   batcher, pools, pathfinding. Medido, o teto é maior exatamente ao
+>   contrário: pathfinding (56x), flocking (15x), pools (13-19x),
+>   `Vector2` (nada, porque as pools removem o tráfego que ele
+>   otimizaria).
+> * **Construído:** as pools de partículas e sparks (Marco 3, em parte) e
+>   o flow field (Fase 5, em parte) — 85 ms para 1,6 ms num grid 96x96, e
+>   *bit-exact* com o Python.
+> * **Recusado, com o número registado:** a metade matemática do Marco 1
+>   (`Vector2` como `#[pyclass]` quebra o `isinstance` do pymunk e
+>   otimiza o que o Marco 3 remove) e as pools de projéteis sozinhas
+>   (2,1x, abaixo do limiar de 5x).
+> * **Ainda em aberto:** o solver de flocking, o `SpatialHash` nativo
+>   apenas como estado para consumidores nativos, o Marco 2 (o
+>   *handoff* zero-copy continua sem protótipo) e o WFC, que segue sem
+>   medição.
+> * **A extensão é um acelerador opcional, não uma reescrita.** O
+>   `maturin` não substituiu o `hatchling`: o crate é construído à parte
+>   com `cargo build --release` e `uv sync` continua a produzir um
+>   *checkout* funcional sem Rust. Ver `AGENTS.md`.
+
+---
+
 # RFC-0003: Núcleo Nativo Híbrido em Rust (`pyguara._core_rs`)
 
-* **Status:** Proposto
+* **Status:** Aceito em parte — ver a nota de estado acima
 * **Data:** Outubro de 2026
 * **Alvo:** PyGuara v0.4.0+
 * **Stack Nativa:** Rust (Edition 2024), `PyO3` (v0.23+), `maturin`, `glam` (SIMD), `rayon` (Data Parallelism), `rustc-hash` (`FxHashMap`)

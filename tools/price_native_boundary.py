@@ -29,10 +29,18 @@ it can be, in advance:
     sparks      predicted 1.4-1.8x porting `update` alone, because render
                 was 55-73%; predicted 13-20x with a batched handoff.
                 Achieved 16.6-24.4x.
+    flow field  predicted 161x, achieved 56x.
 
-Both predictions came from this arithmetic before any Rust was written,
-and both held. That is the evidence for using it on the rows below that
-are not built yet.
+**The flow field is the row that shows what kind of number this is.** It
+is a *ceiling*, and for the first time the limit turned out not to be the
+boundary: the upload really is 0.5 ms against 83 ms, so the formula was
+right that almost nothing is paid at the crossing, but the native sweep
+itself costs 1.3 ms and the formula does not model it. Nothing is wrong
+with that -- a ceiling that reads 161x says "far above the 5x threshold",
+not "expect 161x" -- but a reader comparing a prediction to an outcome
+should know that the pools' predictions landed close because their native
+work was genuinely negligible beside their handoff, and that is a
+property of those candidates rather than of the arithmetic.
 
     uv run python tools/price_native_boundary.py
 
@@ -55,6 +63,9 @@ sys.path.insert(0, str(_ROOT))
 
 from pyguara.ai.flocking_system import FlockingAgent  # noqa: E402
 from pyguara.ai.pathfinding.flow_field import dijkstra_map, flow_field  # noqa: E402
+from pyguara.ai.pathfinding.flow_field_service import (  # noqa: E402
+    FlowFieldService,
+)
 from pyguara.ai.pathfinding.grid import GridGraph  # noqa: E402
 from pyguara.common.components import Transform  # noqa: E402
 from pyguara.common.random import RandomStream  # noqa: E402
@@ -353,7 +364,15 @@ def price_flocking(agents: int) -> Row:
 
 
 def price_flow_field(side: int) -> Row:
-    """Not built, and the strongest candidate in the engine."""
+    """Landed, and the largest margin in the engine.
+
+    `T_cross` is what the native path still costs per genuine recompute,
+    which for this candidate is the wall-mask upload plus the sweep
+    itself -- there is no download at all, because the field stays native
+    and is queried through `vector_at`. That is the opacity ADR 0004's
+    Decision 3 describes, and it is why this row prices so much better
+    than flocking's, which has to hand every agent back every tick.
+    """
     graph = GridGraph(side, side, allow_diagonal=True)
     goals = [(side // 2, side // 2)]
     for y in range(side):
@@ -362,27 +381,40 @@ def price_flow_field(side: int) -> Row:
                 graph.walls.add((x, y))
 
     cost_map = dijkstra_map(graph, goals)
-
-    def upload() -> tuple[list[int], list[float]]:
-        """The grid, flattened. Changes rarely, so this is a ceiling."""
-        blocked = [0] * (side * side)
-        for x, y in graph.walls:
-            blocked[y * side + x] = 1
-        weights = [
-            graph.weights.get((x, y), 1.0) for y in range(side) for x in range(side)
-        ]
-        return blocked, weights
-
     python_ms = measure(lambda: dijkstra_map(graph, goals), iterations=5) + measure(
         lambda: flow_field(graph, cost_map), iterations=5
     )
 
+    if not FlowFieldService(graph).accelerated:
+
+        def upload() -> tuple[list[int], list[float]]:
+            """The grid, flattened. Changes rarely, so this is a ceiling."""
+            blocked = [0] * (side * side)
+            for x, y in graph.walls:
+                blocked[y * side + x] = 1
+            weights = [
+                graph.weights.get((x, y), 1.0) for y in range(side) for x in range(side)
+            ]
+            return blocked, weights
+
+        return Row(
+            f"flow field, {side}x{side}",
+            python_ms,
+            measure(upload, iterations=5),
+            0.0,
+            "the field would stay native and be queried (extension not built)",
+        )
+
+    # A fresh service per round, so the upload is paid rather than skipped:
+    # the guard would otherwise answer the second ask from cache and this
+    # would price a cache hit.
+    cross_ms = measure(lambda: FlowFieldService(graph).recompute(goals), iterations=5)
     return Row(
         f"flow field, {side}x{side}",
         python_ms,
-        measure(upload, iterations=5),
+        cross_ms,
         0.0,
-        "not built; the field stays native and is queried",
+        f"LANDED, achieved {python_ms / cross_ms:.1f}x",
     )
 
 

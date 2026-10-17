@@ -484,14 +484,20 @@ Working rules, which the operations themselves enforce:
 
 ## The optional native extension
 
-`ParticleSystem` and `Sparks` run 15-25x faster backed by native
-structure-of-arrays pools. It is **optional**: the pure-Python pools are kept
-and used whenever the extension is absent, so `uv sync` and
-`pip install pyguara` need no Rust toolchain and nothing in this repository
-requires one.
+Three subsystems have a native implementation beside the Python one:
+
+| | native gain | |
+| --- | ---: | --- |
+| `FlowFieldService` | **46-53x** | 96x96 recompute, 85 ms -> 1.6 ms |
+| `ParticleSystem` | 15-20x | whole frame, update plus render pack |
+| `Sparks` | 13-24x | whole frame, via `ShapeBatch` |
+
+It is **optional**: the pure-Python implementations are kept and used
+whenever the extension is absent, so `uv sync` and `pip install pyguara`
+need no Rust toolchain and nothing in this repository requires one.
 
 ```bash
-cargo build --release                # build it; both pools then use it
+cargo build --release                # build it; all three then use it
 PYGUARA_NO_NATIVE=1 uv run pytest    # force the Python path
 ```
 
@@ -509,22 +515,38 @@ behaves differently on a machine that built the extension and one that
 did not -- invisible for a particle, gameplay for a flock. See
 `docs/adr/0004-the-native-boundary.md`, Decision 4.
 
-`accelerate=True`/`False` on a pool still overrides it, because the parity
-tests have to construct both stores side by side. That is what it is for,
-not a second place to configure the engine.
+`accelerate=True`/`False` on a pool or a service still overrides it,
+because the parity tests have to construct both stores side by side. That
+is what it is for, not a second place to configure the engine.
 
 Written outside the generated block above on purpose: `pyguara studio
 instructions` rewrites what is inside it, and an earlier version of this
 section was placed there and silently deleted on the next regeneration.
 
 The price of keeping two implementations is that they must agree, which is
-paid by `tests/test_native_particle_parity.py` and
-`tests/test_native_spark_parity.py` running the same operations against
-both, plus real-GL pixel comparisons in
+paid by `tests/test_native_particle_parity.py`,
+`tests/test_native_spark_parity.py` and
+`tests/test_native_flow_field_parity.py` running the same operations
+against both, plus real-GL pixel comparisons in
 `tests/integration/test_moderngl_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles or sparks.
+on anything touching particles, sparks or pathfinding.
+
+**How closely they have to agree depends on what the subsystem is for.**
+The pools compare with a tolerance, because they hold f32 where Python
+holds f64 and a spark half a pixel away is a spark. The flow field is
+**bit-exact** and tested with `==` on every cell, because a field steers
+enemies and one cell pointing elsewhere is a pack that goes the other way
+round a wall. Changing `1.414` to `SQRT_2` in `rust/src/flowfield.rs`, or
+reordering its neighbour table, breaks that on purpose -- both are
+sabotage-tested. See `docs/adr/0004-the-native-boundary.md`, Decision 5.
+
+The flow field is also where to look for how a native boundary should be
+shaped: nothing outside `FlowFieldService` reads a cell, so the cost map
+and the field never come back to Python and only `vector_at` crosses --
+which is why it prices at 50x where flocking, whose agents are ECS
+entities, prices at 15x.
 
 `Sparks` also added `ShapeBatch` and the `ShapeBatchRenderer` capability
 (`pyguara/graphics/types.py`, `protocols.py`), because a spark is one

@@ -56,12 +56,12 @@ writing:
 
 | Candidate | `T_py` | `T_cross` | `T_pinned` | ceiling | |
 | --- | ---: | ---: | ---: | ---: | --- |
-| flow field, 96x96 | 84.139 | 0.522 | — | **161x** | not built |
-| particles, 1000 | 1.904 | 0.104 | — | 18.3x | landed, 18.3x |
-| sparks, 1000 streaks | 5.881 | 0.343 | — | 17.1x | landed, 17.1x |
-| flocking, 1000 agents | 16.337 | 1.123 | — | **14.5x** | not built |
-| sparks, 1000 dots | 4.035 | 0.324 | — | 12.5x | landed, 12.5x |
-| projectiles, 1000 | 3.062 | 0.346 | 1.153 | **2.0x** | declined |
+| flow field, 96x96 | 83.247 | 1.479 | — | **56.3x** | landed, 56.3x (priced 161x) |
+| particles, 1000 | 1.942 | 0.104 | — | 18.7x | landed, 18.7x |
+| sparks, 1000 streaks | 5.865 | 0.339 | — | 17.3x | landed, 17.3x |
+| flocking, 1000 agents | 17.206 | 1.118 | — | **15.4x** | not built |
+| sparks, 1000 dots | 4.077 | 0.321 | — | 12.7x | landed, 12.7x |
+| projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
 
 **The landed rows do not prove the formula**; for built work `T_cross` is
 measured directly, so the ceiling and the achieved speedup are the same
@@ -70,6 +70,17 @@ advance: it predicted ~6x for porting particles' `update` alone and
 1.4-1.8x for sparks' alone, which is why both milestones were scoped wider,
 and it predicted 13-20x for a batched spark handoff against an achieved
 16.6-24.4x. Both predictions preceded the Rust.
+
+**And the flow field is where the word "ceiling" earned its keep.** It
+priced at 161x, with `T_cross` as the 0.522 ms wall-mask upload against
+84 ms of Python, and it achieved 56x. The formula was not wrong about the
+boundary — almost nothing is paid there — it simply does not model the
+native work behind it, and the native sweep costs 1.3 ms. So read a
+number from this table as the answer to "is this far above 5x", which is
+the decision it exists for, and not as a forecast. Three candidates
+forecast closely and one overshot by 2.9x; the difference is whether the
+native work is negligible beside the handoff, which is a property of the
+candidate.
 
 **The threshold is 5x**, and it is a judgement about maintenance rather
 than about speed: a native implementation is a second implementation
@@ -108,7 +119,7 @@ outward; its absence is what pins projectiles.
 | --- | --- | --- |
 | `ParticleSystem` | yes | nothing holds a `Particle`; the output is per-texture batches |
 | `Sparks` | yes | nothing holds a `_Spark`; the output is per-kind batches |
-| flow field | yes, if queried | `vector_at` is the only reader, and it asks rather than fetches |
+| flow field | yes, **built** | `vector_at`/`cost_at` are the only readers, and they ask rather than fetch; the field never returns to Python |
 | `FlockingSystem` | **no** | agents are ECS entities; `Transform` and `FlockingAgent` are read by rendering, the spatial index and AI |
 | `ProjectileSystem` | **no** | `get_active()` is public, and `games/protocolo_bandeira` reads `.position`/`.velocity` off every projectile, every frame |
 
@@ -215,6 +226,22 @@ levels, because each tier catches what the others cannot:
    same numbers, to a stated tolerance, with the tolerance's cause stated
    (f32 against f64, summation order). If a tolerance ever has to be
    loosened, that is a finding and not a maintenance chore.
+
+   **The tolerance is a function of what the subsystem is for, and the
+   default is zero.** A spark half a pixel to the left is a spark, so the
+   pools compare with a tolerance and say why. A flow field steers
+   enemies, so one cell whose descent neighbour differs is a pack that
+   goes the other way round a wall — there is no tolerance that means
+   anything, and the native field is therefore bit-exact and tested with
+   `==` on every cell. Exactness was not free, and it is worth knowing
+   what it cost, because the next candidate pays the same bill: f64
+   throughout rather than f32, `GridGraph.get_neighbors`' iteration order
+   replicated exactly because the descent pass's tie-break *is* that
+   order, and the rounded `1.414` kept over `SQRT_2` because agreeing
+   matters more than being accurate. What made it reachable at all is that
+   a Dijkstra cost map is order-independent given non-negative weights —
+   unlike a flock's force sums, which are not. So: ask whether exactness
+   is reachable before settling for a tolerance, and state which it is.
 2. **Consumer parity.** The same calls reach the renderer, the ECS and the
    dispatcher. This tier exists because the native spark path reaches the
    renderer through *different methods* than the Python one.
@@ -269,17 +296,47 @@ throughput. That is the whole value of taking the two questions in this
 order: answering the algorithmic one first did not cancel the boundary
 work, it corrected the reason for it.
 
+**Both are now done, and each is still doing its own job.** The native
+sweep brings 96x96 to 1.6 ms, so the five-frame hitch is a tenth of a
+frame. The guard is not thereby redundant: 1.6 ms sixty times a second is
+10% of every frame for a field that did not change, so the guard is still
+what keeps a per-tick caller off the recompute path. Had the order been
+reversed, the port would have shipped and the demo would still be
+recomputing an unchanged field sixty times a second — at 1.6 ms instead of
+5 ms, which is precisely the kind of win that stops anyone looking.
+
 ## Consequences — Track R, re-sequenced by measured ceiling
 
 RFC-0003's order was maths, batcher, pools, pathfinding. The measured order
 is almost its reverse:
 
-1. **Flow field and pathfinding** — 161x at 96x96, opaque, and already
-   costing a shipped demo 30% of its frame. Preceded by the Python guard
-   from Decision 6. This is what ADR 0003's recommendation 2 asked for and
-   nobody had measured; now measured, a 96x96 recompute is **505% of a
-   frame**, which makes it less an optimisation than a feature that cannot
-   currently be used at interactive rates.
+1. **The flow field — BUILT.** Priced at 161x at 96x96,
+   opaque, and already costing a shipped demo 30% of its frame. Preceded
+   by the Python guard from Decision 6. This is what ADR 0003's
+   recommendation 2 asked for and nobody had measured; measured, a 96x96
+   Python recompute is **505% of a frame**, which made it less an
+   optimisation than a feature that could not be used at interactive
+   rates. It is now **1.6 ms, 46-53x**, and bit-exact with the Python
+   sweep rather than merely close — the first native port where that was
+   required rather than nice, because a field steers gameplay. The field
+   stays native and only the query crosses, which is Decision 3's opacity
+   paying for itself.
+
+   **It also calibrated Decision 1, and not entirely flatteringly.** The
+   161x was a *ceiling* and the achieved figure is 56x, because `T_cross`
+   models the boundary and the native sweep costs 1.3 ms of its own. The
+   decision the number was computed for — is this far above 5x — was
+   right; a reader comparing prediction to outcome should take 161x as
+   "well above the threshold" and not as a forecast. The pools' forecasts
+   landed close because their native work was negligible beside their
+   handoff, which is a property of those candidates rather than of the
+   formula.
+
+   **`AStarPathfinder` and the WFC generator are not ported**, and this
+   item should not be read as covering them. Neither has a measurement,
+   and A* is a per-query cost rather than a per-frame one, so it does not
+   obviously have a ratio worth computing — which is the point: measure
+   it before claiming it. The flow field is what the 161x was about.
 2. **Flocking** — 14.5x at 1000 agents, which is 98% of a frame today.
    Gated on Decision 4's switch, because it is the first gameplay system
    to go native.
