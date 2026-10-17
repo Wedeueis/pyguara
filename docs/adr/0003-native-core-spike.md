@@ -304,6 +304,11 @@ directly instead.
    A flow field is pure in, pure out — dimensions and seeds in, coordinates
    out — so it is both the cheapest thing to measure and the cheapest thing
    to port.
+   *Done, and it was the right place to look.* Measured, a 96x96 Python
+   recompute is 85 ms — 513% of a frame, so the feature could not be used
+   at interactive rates on a grid that size at all. Guarded first per ADR
+   0004's Decision 6, then ported: **1.6 ms, 46-53x**, bit-exact. WFC
+   remains unmeasured.
 3. **Then prototype exactly that one module**, as Marco 0 intended, with the
    toolchain pins verified.
 4. **Do Marco 3, and do its render packing in the same milestone.** Finding
@@ -483,3 +488,8 @@ smuggled in as a consequence of a maths optimisation. **D stays rejected.**
 - `pyguara/graphics/types.py`'s `ShapeBatch` / `ShapeKind` and
   `protocols.py`'s `ShapeBatchRenderer` — what the sparks increment needed
   and the measurement above chose the shape of.
+- `rust/src/flowfield.rs` and `tests/performance/test_perf_pathfinding.py`
+  — recommendation 2's module, which turned out to be the engine's largest
+  margin and its first native port of something that is not cosmetic. Its
+  standard is `docs/adr/0004-the-native-boundary.md`, which this spike's
+  findings are what produced.

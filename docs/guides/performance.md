@@ -379,16 +379,29 @@ candidate:
 
 | Candidate | `T_py` | `T_cross` | `T_pinned` | ceiling | |
 | --- | ---: | ---: | ---: | ---: | --- |
-| flow field, 96x96 | 84.139 | 0.522 | — | **161x** | not built |
-| particles, 1000 | 1.904 | 0.104 | — | 18.3x | landed |
-| sparks, 1000 streaks | 5.881 | 0.343 | — | 17.1x | landed |
-| flocking, 1000 agents | 16.337 | 1.123 | — | **14.5x** | not built |
-| sparks, 1000 dots | 4.035 | 0.324 | — | 12.5x | landed |
-| projectiles, 1000 | 3.062 | 0.346 | 1.153 | **2.0x** | declined |
+| flow field, 96x96 | 83.247 | 1.479 | — | **56.3x** | landed |
+| particles, 1000 | 1.942 | 0.104 | — | 18.7x | landed |
+| sparks, 1000 streaks | 5.865 | 0.339 | — | 17.3x | landed |
+| flocking, 1000 agents | 17.206 | 1.118 | — | **15.4x** | not built |
+| sparks, 1000 dots | 4.077 | 0.321 | — | 12.7x | landed |
+| projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
 
-As a share of a 16.7 ms frame, `T_py` alone is 505% for a 96x96 flow-field
-recompute, 98% for 1000 flocking agents, 35% for 1000 streaked sparks and
+As a share of a 16.7 ms frame, `T_py` alone is 499% for a 96x96 flow-field
+recompute, 103% for 1000 flocking agents, 35% for 1000 streaked sparks and
 18% for 1000 projectiles.
+
+**What the flow-field row looked like before it was built, and why the
+difference matters.** Priced in advance its `T_cross` was the wall-mask
+upload alone -- 0.522 ms against 84.139 ms -- for a ceiling of **161x**.
+Built, it achieves **56x**. Nothing about the prediction was wrong: the
+upload really is almost free, and the formula models the *boundary*, not
+the native work behind it. The native sweep costs 1.3 ms, and for the
+first time among these candidates that, rather than the handoff, is the
+limit. The pools' predictions landed close because their native work was
+genuinely negligible beside their handoff; that is a property of those
+candidates, not of the arithmetic. A ceiling of 161x means "far above the
+5x threshold", which is the decision it was computed for, and it does not
+mean "expect 161x".
 
 
 ### Flow fields -- the number nobody had measured
@@ -443,7 +456,50 @@ settle the algorithm before the boundary, and this is what that looks like
 in practice -- the guard did not remove the case for porting, it changed
 what the porting is for.
 
-Reproduce with `uv run python tools/price_native_boundary.py`.
+
+#### Ported. 85 ms to 1.6 ms
+
+`FlowFieldService` is backed by the native sweep when the extension is
+built, measured end to end -- a fresh service per round, so the wall-mask
+upload is paid rather than skipped:
+
+| Grid | Cells | Python | native | | share of a frame |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 30x30 | 900 | 7.519 | **0.162** | 46x | 45% -> 1.0% |
+| 64x64 | 4096 | 36.449 | **0.739** | 49x | 219% -> 4.4% |
+| 96x96 | 9216 | 85.586 | **1.629** | 53x | 513% -> 9.8% |
+
+The five-frame hitch is a tenth of a frame. Note what that does *not*
+change: the guard above is still what keeps a per-tick caller off the
+recompute path at all, because 1.6 ms sixty times a second is still 10% of
+every frame for a field that did not change.
+
+**The field never comes back to Python**, and that is the whole reason the
+margin is this size. Nothing outside `FlowFieldService` reads an individual
+cell -- `vector_at` and `cost_at` are the only ways in -- so the cost map
+and the descent field both stay native and there is no download. ADR 0004
+calls this opacity, and it is the difference between this row and
+flocking's, which has to hand every agent's position back every tick.
+
+`vector_at` got cheaper too, by **5.7x** (3.27 us -> 0.575 us), and the
+boundary had to be picked for it to. A crossing that returned the descent
+neighbour would have made the method *slower*: the lookup was never the
+cost. Four `Vector2` operations after it are 3.1 us of the 3.27, against
+0.044 us for a crossing. So the direction is computed natively and the
+whole method is one crossing.
+
+**Bit-exact, not close.** The pools compare with a tolerance because they
+hold f32 and a spark half a pixel off is a spark. A flow field steers
+gameplay, so `tests/test_native_flow_field_parity.py` asserts equality on
+every cell of every grid it builds. Three things make that reachable: f64
+on both sides, `GridGraph.get_neighbors`' order replicated exactly
+(the descent pass takes the first strictly-cheaper neighbour, so the order
+*is* the tie-break), and the fact that a Dijkstra cost map is
+order-independent given non-negative weights.
+
+Reproduce with `uv run python tools/price_native_boundary.py`, or
+`uv run pytest tests/performance/test_perf_pathfinding.py -m slow` for the
+table.
 
 **Two things to know before trusting a re-measurement.** Use a real texture
 object, not a `MagicMock`: the Python path hashes and compares the texture
