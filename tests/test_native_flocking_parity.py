@@ -613,9 +613,21 @@ class TestRealFlocksAgreeWithinSummationNoise:
         _assert_close(after_python, _state(agents, transforms))
 
     def test_an_empty_flock(self) -> None:
+        """Both halves, because they are not the same question.
+
+        `FlockingSystem.update` returns before reaching either store when
+        there are no entities, so driving it only proves the
+        short-circuit. The solver's own empty case is unreachable from
+        the engine today and still worth pinning: it is what a flock
+        that despawned mid-level looks like to a future caller, and the
+        grid sizes its buckets from the agent count.
+        """
         manager = EntityManager()
-        system = FlockingSystem(manager, accelerate=True)
-        system.update(DT)  # must not raise
+        FlockingSystem(manager, accelerate=True).update(DT)  # must not raise
+
+        solver = native_module().NativeFlockingSolver()
+        assert solver.tick(DT, CELL, 1, 0, [], []) == []
+        assert list(solver.neighbour_counts()) == []
 
 
 class TestTheFlockBehavesTheSameOverManyTicks:
