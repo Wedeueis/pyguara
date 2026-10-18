@@ -10,7 +10,7 @@ Tested against `Application._process_input` with a fake window, rather
 than through a real ImGui layer, because what is being asserted is the
 *routing*: that an attached sink is consulted, that a consumed event stops
 there, and that an unconsumed one carries on to the `InputManager`.
-`tests/test_editor_input.py` covers the translation itself.
+`tests/studio/test_editor_input.py` covers the translation itself.
 """
 
 from __future__ import annotations

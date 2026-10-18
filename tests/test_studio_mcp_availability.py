@@ -1,6 +1,6 @@
 """The MCP SDK must be importable in a dev install, and say so when not.
 
-The same guard `tests/test_editor_availability.py` provides, for the same
+The same guard `tests/studio/test_editor_availability.py` provides, for the same
 reason and after the same lesson. The engine's first optional dependency
 was pyimgui's PyOpenGL requirement, which was declared nowhere: the
 editor's `HAS_IMGUI` was unconditionally `False` in every install, every

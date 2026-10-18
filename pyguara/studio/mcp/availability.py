@@ -1,6 +1,6 @@
 """Whether the MCP SDK is importable, resolved once here.
 
-This module exists for the same reason `pyguara/editor/availability.py`
+This module exists for the same reason `pyguara/studio/availability.py`
 does, and the history behind it is worth restating because this is the
 second optional dependency the engine has taken on.
 
