@@ -396,24 +396,35 @@ def test_pygame_backend_draw_rect_untouched() -> None:
 
 
 def test_ui_renderer(mock_ctx: MagicMock) -> None:
-    """UI Renderer should use pygame surface and upload texture."""
+    """UI Renderer should use pygame surface and upload texture.
+
+    Asserts the *size* of what reaches the texture, not which pygame
+    function produced it. It used to patch `pygame.image.tobytes` and
+    assert the sentinel came back out, which pinned the mechanism rather
+    than the behaviour: the renderer now hands GL the surface's own
+    buffer and calls neither `tobytes` nor `transform.flip`, so the old
+    assertion failed on a change that made the frame 3.3 ms cheaper and
+    left every pixel identical. What matters here is that a whole
+    surface's worth of pixels is uploaded and the dirty flag clears;
+    `tests/integration/test_ui_renderer_pixels.py` checks that they are
+    the *right* pixels, against real GL.
+    """
     renderer = GLUIRenderer(mock_ctx, 800, 600)
 
     # Draw something
     renderer.draw_rect(Rect(0, 0, 10, 10), Color(255, 0, 0))
     assert renderer._dirty
 
-    # Present (upload)
-    with patch("pygame.image.tobytes", return_value=b"uidata"):
-        renderer.present()
+    renderer.present()
 
-        # Check texture write
-        tex = renderer._texture
-        assert isinstance(tex, MagicMock)
-        tex.write.assert_called_with(b"uidata")
+    tex = renderer._texture
+    assert isinstance(tex, MagicMock)
+    tex.write.assert_called_once()
+    (uploaded,) = tex.write.call_args.args
+    assert uploaded.length == 800 * 600 * 4
 
-        # Verify dirty flag was cleared
-        assert not renderer._dirty
+    # Verify dirty flag was cleared
+    assert not renderer._dirty
 
 
 def test_gl_texture_release_is_idempotent() -> None:

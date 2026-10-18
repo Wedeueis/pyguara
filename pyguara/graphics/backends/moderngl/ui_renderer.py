@@ -87,27 +87,32 @@ class GLUIRenderer:
             fragment_shader=_UI_FRAG_SHADER,
         )
 
-        # Fullscreen quad (NDC coordinates)
-        # Note: UV is flipped vertically for OpenGL
+        # Fullscreen quad (NDC coordinates).
+        #
+        # `v` runs 1 at the bottom of the screen to 0 at the top, which
+        # inverts the texture vertically in the sampler. `present()` used
+        # to do it with `pygame.transform.flip`, a full-surface CPU copy
+        # per frame -- 0.2 ms at 1280x720 and 1.0 ms at 1920x1080, for an
+        # operation the texture unit does for nothing.
         vertices = np.array(
             [
                 # x     y    u    v
                 -1.0,
                 -1.0,
                 0.0,
-                0.0,
+                1.0,
+                1.0,
+                -1.0,
+                1.0,
                 1.0,
                 -1.0,
                 1.0,
                 0.0,
-                -1.0,
-                1.0,
                 0.0,
                 1.0,
                 1.0,
                 1.0,
-                1.0,
-                1.0,
+                0.0,
             ],
             dtype="f4",
         )
@@ -117,19 +122,42 @@ class GLUIRenderer:
             [(self._vbo, "2f 2f", "in_vert", "in_uv")],
         )
 
-        # Create texture for UI surface
-        self._texture = self._ctx.texture((width, height), 4)
-        self._texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
-        # No swizzle. `present()` uploads via `pygame.image.tobytes(surface,
-        # "RGBA")`, which normalises whatever the surface holds internally
-        # into R,G,B,A byte order -- so telling GL to read those bytes as
-        # BGRA converts a second time and swaps red with blue. This was
-        # invisible for as long as it existed because nothing could
-        # capture the UI layer (#162); the first capture that could showed
-        # Protocolo Bandeira's brown menu buttons rendered blue.
-        self._texture.swizzle = "RGBA"
+        self._texture = self._make_texture(width, height)
 
         self._dirty = False
+
+    def _make_texture(self, width: int, height: int) -> moderngl.Texture:
+        """Build the overlay texture, with the filter and swizzle it needs.
+
+        One place, because `resize()` replaces the texture too and used to
+        build a bare one -- so a resized window silently lost both
+        settings. That was survivable only while the swizzle happened to
+        be the default; it stops being survivable the moment the upload
+        depends on it, which is now.
+
+        **The swizzle is `BGRA` because the upload is raw.** `present()`
+        hands GL the surface's own memory, and a 32-bit pygame surface
+        holds B,G,R,A in that byte order (its masks say so: red is
+        0x00FF0000, blue 0x000000FF). The sampler reorders for free; the
+        alternative is `pygame.image.tobytes(surface, "RGBA")`, which
+        normalises the same bytes on the CPU at 3 ms a frame at 1280x720.
+
+        Getting this wrong is not subtle and has happened here: the
+        renderer once read raw bytes as RGBA and Protocolo Bandeira's
+        brown menu buttons came out blue, which went unnoticed for as long
+        as nothing could capture the UI layer (#162).
+
+        Args:
+            width: Texture width in pixels.
+            height: Texture height in pixels.
+
+        Returns:
+            The texture, ready to be written to.
+        """
+        texture = self._ctx.texture((width, height), 4)
+        texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+        texture.swizzle = "BGRA"
+        return texture
 
     def clear(self) -> None:
         """Clear the UI surface for a new frame."""
@@ -325,7 +353,7 @@ class GLUIRenderer:
         self._height = height
         self._surface = pygame.Surface((width, height), pygame.SRCALPHA)
         self._texture.release()
-        self._texture = self._ctx.texture((width, height), 4)
+        self._texture = self._make_texture(width, height)
         self._dirty = False
 
     def present(self) -> None:
@@ -342,14 +370,7 @@ class GLUIRenderer:
         if not self._dirty:
             return
 
-        # Flip surface vertically for OpenGL
-        flipped = pygame.transform.flip(self._surface, False, True)
-
-        # Get raw pixel data
-        data = pygame.image.tobytes(flipped, "RGBA", False)
-
-        # Upload to GPU texture
-        self._texture.write(data)
+        self._texture.write(self._pixels())
 
         # Render fullscreen quad with UI texture
         self._texture.use(0)
@@ -359,6 +380,57 @@ class GLUIRenderer:
         # Clear for next frame
         self._surface.fill((0, 0, 0, 0))
         self._dirty = False
+
+    def _pixels(self) -> Any:
+        """Return the surface's own memory, after checking it is uploadable.
+
+        A 32-bit pygame surface is a contiguous block of B,G,R,A pixels
+        with no row padding -- `get_pitch()` is `width * 4` at every
+        width -- so there is nothing to convert, and the texture unit does
+        the channel reorder and the vertical flip for nothing.
+
+        **This raises rather than falling back.** The first version
+        converted with `pygame.image.tobytes` when the layout disagreed,
+        and sabotage showed why that was the wrong shape: this renderer
+        only ever owns a surface it built itself in `__init__` or
+        `resize`, so the fallback could not run, and a second code path
+        no test can reach is a second code path that can be wrong
+        undetected -- it was already carrying its own channel-order trap.
+        A surface that is not 4 bytes per pixel, or whose rows are padded,
+        means something assigned `_surface` something this class does not
+        make (a `subsurface` has a wider pitch), and that is a programming
+        error here, not bad input from a caller. `UIRenderer.draw_texture`
+        clips an out-of-bounds source rect instead of refusing it,
+        because that *is* caller data and the frame should survive it;
+        a broken internal invariant is the opposite case.
+
+        Returns:
+            A buffer of `width * height * 4` bytes, B,G,R,A per pixel,
+            the top row first.
+
+        Raises:
+            RuntimeError: If the surface is not the tightly packed 32-bit
+                surface the upload and the texture's swizzle assume.
+        """
+        buffer = self._surface.get_buffer()
+        expected = self._width * self._height * 4
+        if buffer.length != expected:
+            # One comparison rather than three. The buffer's length is
+            # what the texture write actually consumes, and it is wrong
+            # for every way the surface can be wrong: fewer bytes per
+            # pixel, padded rows, or dimensions that are not the ones the
+            # texture was made for. Checking the pitch instead let a
+            # 16x16 subsurface of a 32x32 surface through, because its
+            # pitch is the parent's and matched by coincidence.
+            raise RuntimeError(
+                f"The UI surface holds {buffer.length} bytes where the "
+                f"{self._width}x{self._height} texture needs {expected}. "
+                f"`present()` hands GL the surface's raw memory, so a padded, "
+                f"non-32-bit or wrongly sized surface would upload as garbage "
+                f"rather than fail. This renderer builds its own surface in "
+                f"`__init__` and `resize`; something replaced it."
+            )
+        return buffer
 
     def release(self) -> None:
         """Release GPU resources."""
