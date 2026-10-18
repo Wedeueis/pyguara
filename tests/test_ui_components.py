@@ -312,3 +312,223 @@ class TestLabelAlignment:
         label.render(mock_renderer)
 
         assert label.rect.height == 33
+
+
+class _MeasuringRenderer:
+    """A `UIRenderer` whose text metrics are arithmetic, not a font.
+
+    At the default size 16: 10 px per character and a 20 px line, so
+    every expectation below is a number a reader can check rather than a
+    number Arial produced. Both scale with the requested size, so a test
+    can change `font_size` and see the layout respond.
+    """
+
+    LINE_HEIGHT = 20
+
+    def __init__(self) -> None:
+        self.texts: list[tuple[str, float, float]] = []
+        self.measurements = 0
+
+    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
+        self.measurements += 1
+        return (len(text) * 10 * size // 16, self.LINE_HEIGHT * size // 16)
+
+    def draw_text(
+        self, text: str, position: Vector2, color: Color, size: int = 16
+    ) -> None:
+        self.texts.append((text, position.x, position.y))
+
+    def __getattr__(self, name: str) -> Any:
+        return MagicMock()
+
+
+class TestALabelWrapsToItsWidth:
+    """Text longer than the label used to run straight out of it.
+
+    `Label` made exactly one `draw_text` call however long the string
+    was, so a 150 px label drew 423 px of text -- 273 px of overflow,
+    over whatever sat beside it.
+    """
+
+    SENTENCE = "the guara falcon circles the cerrado"
+
+    def test_a_long_line_becomes_several(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label(self.SENTENCE, Vector2(0, 0), width=120)
+
+        label.render(renderer)
+
+        assert len(label.lines) > 1
+        assert len(renderer.texts) == len(label.lines)
+
+    def test_no_line_exceeds_the_width(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label(self.SENTENCE, Vector2(0, 0), width=120)
+
+        label.render(renderer)
+
+        for line in label.lines:
+            assert len(line) * 10 <= 120
+
+    def test_the_height_grows_with_the_line_count(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label(self.SENTENCE, Vector2(0, 0), width=120)
+
+        label.render(renderer)
+
+        assert label.rect.height == 20 * len(label.lines)
+
+    def test_the_lines_are_stacked_one_line_height_apart(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label(self.SENTENCE, Vector2(7, 13), width=120)
+
+        label.render(renderer)
+
+        ys = [y for _, _, y in renderer.texts]
+        assert ys == [13 + 20 * i for i in range(len(ys))]
+
+    def test_no_word_is_lost(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label(self.SENTENCE, Vector2(0, 0), width=120)
+
+        label.render(renderer)
+
+        assert " ".join(label.lines).split() == self.SENTENCE.split()
+
+    def test_a_short_label_is_unchanged(self) -> None:
+        """One line, one draw call, the height it always had."""
+        renderer = _MeasuringRenderer()
+        label = Label("Hi", Vector2(5, 5), width=200)
+
+        label.render(renderer)
+
+        assert label.lines == ["Hi"]
+        assert renderer.texts == [("Hi", 5, 5)]
+        assert label.rect.height == 20
+
+
+class TestALabelHonoursExplicitNewlines:
+    """Measure and draw disagreed about `\\n`, so layout was wrong.
+
+    `get_text_size` is `pygame.font.Font.size`, which measures one line
+    and ignores newlines; `draw_text` is `Font.render`, which honours
+    them. "first line\\nsecond line" measured 146x18 and drew 79x38 -- the
+    width too wide by 67 px and the height exactly half, so a container
+    stacking siblings from the measured height put the next widget on top
+    of the second line.
+    """
+
+    def test_an_auto_sized_label_still_splits_on_a_newline(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("one\nthree", Vector2(0, 0))
+
+        label.render(renderer)
+
+        assert label.lines == ["one", "three"]
+        assert len(renderer.texts) == 2
+
+    def test_its_width_is_the_widest_line_not_the_whole_string(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("one\nthree", Vector2(0, 0))
+
+        label.render(renderer)
+
+        # "three" is 5 characters; the un-split string would measure 9.
+        assert label.rect.width == 50
+
+    def test_its_height_counts_every_line(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("one\nthree", Vector2(0, 0))
+
+        label.render(renderer)
+
+        assert label.rect.height == 40
+
+    def test_a_blank_line_takes_its_height_without_being_drawn(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("a\n\nb", Vector2(0, 0))
+
+        label.render(renderer)
+
+        assert label.lines == ["a", "", "b"]
+        assert label.rect.height == 60
+        assert [text for text, _, _ in renderer.texts] == ["a", "b"]
+        # And "b" is on the third line, not the second.
+        assert renderer.texts[1][2] == 40
+
+
+class TestAlignmentIsPerLine:
+    """A centred paragraph should look centred, not like a centred block."""
+
+    def test_each_line_is_centred_on_its_own_width(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("aaaa\nbb", Vector2(0, 0), width=200, align=TextAlign.CENTER)
+
+        label.render(renderer)
+
+        xs = [x for _, x, _ in renderer.texts]
+        assert xs == [(200 - 40) // 2, (200 - 20) // 2]
+        assert xs[0] != xs[1]
+
+    def test_each_line_is_right_aligned_on_its_own_width(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("aaaa\nbb", Vector2(0, 0), width=200, align=TextAlign.RIGHT)
+
+        label.render(renderer)
+
+        xs = [x for _, x, _ in renderer.texts]
+        assert xs == [200 - 40, 200 - 20]
+
+
+class TestTheWrapIsCached:
+    """`render` measures every frame; wrapping costs a measurement a word.
+
+    A static HUD label must re-wrap once, not sixty times a second.
+    """
+
+    def test_a_second_render_does_not_re_wrap(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("the guara falcon circles", Vector2(0, 0), width=120)
+
+        label.render(renderer)
+        after_first = renderer.measurements
+        label.render(renderer)
+        after_second = renderer.measurements
+
+        # The second pass still measures the line height and each line,
+        # but not every candidate considered while breaking the text.
+        assert after_second - after_first < after_first
+
+    def test_changing_the_text_re_wraps(self) -> None:
+        renderer = _MeasuringRenderer()
+        label = Label("short", Vector2(0, 0), width=120)
+        label.render(renderer)
+
+        label.set_text("the guara falcon circles the cerrado")
+        label.render(renderer)
+
+        assert len(label.lines) > 1
+
+    def test_changing_the_font_size_re_wraps(self) -> None:
+        """Bigger glyphs mean fewer words per line, cache or no cache."""
+        renderer = _MeasuringRenderer()
+        label = Label("aa bb cc dd", Vector2(0, 0), width=80)
+        label.render(renderer)
+        at_sixteen = len(label.lines)
+
+        label.font_size = 32
+        label.render(renderer)
+
+        assert len(label.lines) > at_sixteen
+
+    def test_a_resized_label_re_wraps(self) -> None:
+        """A container that widens the label must get wider lines."""
+        renderer = _MeasuringRenderer()
+        label = Label("aaaa bbbb cccc", Vector2(0, 0), width=50)
+        label.render(renderer)
+        narrow = len(label.lines)
+
+        label.rect.width = 200
+        label.render(renderer)
+
+        assert len(label.lines) < narrow
