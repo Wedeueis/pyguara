@@ -61,7 +61,13 @@ writing:
 | sparks, 1000 streaks | 5.865 | 0.339 | — | 17.3x | landed, 17.3x |
 | flocking, 1000 agents | 16.555 | 1.849 | — | **9.0x** | landed, 9.0x (priced 15.4x) |
 | sparks, 1000 dots | 4.077 | 0.321 | — | 12.7x | landed, 12.7x |
+| spatial index, 1000 keys | 7.453 | 0.439 | — | **17.0x** | landed, 17.0x |
 | projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
+
+The spatial index is the one row that is **not a subsystem**, and reading
+it as one would be a mistake: its 17x is what the *index* costs, while
+what its consumers feel is 1.3x to 4.3x. Decision 7 is about that gap and
+about why a primitive is still admitted on its own figure.
 
 **The landed rows do not prove the formula**; for built work `T_cross` is
 measured directly, so the ceiling and the achieved speedup are the same
@@ -149,7 +155,10 @@ must cross back for it.
 - **Projectiles fail.** Six operations per projectile for the same two
   `Vector2`s. A native pool removes 2.37 ms of integration per 1000 and
   pays 0.35 ms back on the sync, with the 1.15 ms hit check pinned
-  regardless. Net 2.0x.
+  regardless. Net 2.0x. The hit check's *broad-phase* has since been
+  unpinned by Decision 7's native index, and it moved the whole subsystem
+  1.32x — so the decline now stands on a measurement rather than an
+  estimate.
 
 That is the useful form of the rule: **native work per element must greatly
 exceed the Python values that have to cross back for it.** Particles and
@@ -163,10 +172,16 @@ In order of preference:
 1. **Make the consumer batch-aware.** What `ShapeBatch` did for the
    renderer. Best outcome: the boundary moves and the Python side gets
    simpler too.
-2. **Move the consumer inside the line.** The reason a native
-   `SpatialHash` is the wrong shape and a native *hit broad-phase* is the
-   right one: one returns `list[K]` of Python keys per query, the other
-   returns the few pairs that actually collided.
+2. **Move the consumer inside the line.** Sometimes right, and the
+   example this originally gave was not: it said a native `SpatialHash`
+   was the wrong shape because it "returns `list[K]` of Python keys per
+   query", where a native hit broad-phase would return only the pairs
+   that collided. Measured, that crossing is 4% of the Python broad-phase
+   it replaces, and the index landed at 17x as a Python-facing store —
+   see **Decision 7**, which also explains why the instinct that it would
+   not rescue projectiles was right for an entirely different reason.
+   Keep the remedy; distrust the argument. A crossing that scales with
+   `k` is only expensive if the work it replaces does not.
 3. **Accept the pinned boundary** if density still passes — flocking.
 4. **Decline, and record the ratio** — projectiles.
 
@@ -419,6 +434,131 @@ reversed, the port would have shipped and the demo would still be
 recomputing an unchanged field sixty times a second — at 1.6 ms instead of
 5 ms, which is precisely the kind of win that stops anyone looking.
 
+## Decision 7 — A shared primitive is priced on itself, and Amdahl decides what a consumer feels
+
+This decision exists because **Decision 3 got one wrong, and the way it
+was wrong is more useful than the correction.**
+
+Decision 3's remedy 2 said a native `SpatialHash` is "the wrong shape"
+because it "returns `list[K]` of Python keys per query", and Track R item
+3 was sequenced as native state for native consumers only. The reasoning
+is that a per-query crossing scales with how many candidates the query
+found. **That is true and it does not matter**, which the measurement
+settles:
+
+| | |
+| --- | ---: |
+| Python broad-phase, 1000 keys, one query each, k=17 | 6.97 ms |
+| the `list[K]` crossing alone | 0.39 ms |
+| …as a share of what it replaces | **4%** |
+
+The crossing scales with `k`. So does the Python broad-phase, at about
+twenty times the cost per candidate: Python pays a dict lookup, two
+subtractions and a multiply-add where the crossing pays an incref and a
+list append. **The ratio is therefore roughly flat in density** — 20.5x
+at k=17, 22.3x at k=32, and still 16.0x in the degenerate case where
+every key is everyone's neighbour. Decision 3 reasoned about one side of
+a ratio.
+
+Two things made it work that are worth copying. The index **holds** the
+`PyObject` the caller inserted, so returning a candidate is a reference
+count rather than a string allocation — returning `Vec<String>` would have
+made the original objection true. And `Vector2` is a `tuple` subclass, so
+a position crosses through PyO3's tuple fast path with no attribute
+access.
+
+### What it delivered, and the number that matters more
+
+The index itself: **17x** on a tick of re-sync-then-query at 1000 keys,
+insert 4.9x and queries 20.5x. Every consumer got it **without changing a
+line**, which is the argument for this shape over a per-consumer port.
+
+And then Amdahl:
+
+| consumer, unchanged | Python | native index | |
+| --- | ---: | ---: | ---: |
+| `TopDownSystem` separation, 1000 clumped | 17.3 ms | 9.25 ms | 1.87x |
+| `TopDownSystem` separation, 1000 uniform | 2.82 ms | 0.83 ms | 3.42x |
+| `TopDownSystem` separation, 200 | 0.66 ms | 0.15 ms | 4.30x |
+| `FlockingSystem`, Python steering, 1000 | 16.4 ms | 9.8 ms | 1.67x |
+| `SpatialIndexSystem.update`, 2000 tracked | 1.79 ms | 1.15 ms | 1.55x |
+| `MagnetSystem.update`, 100 magnets | 1.69 ms | 1.19 ms | 1.43x |
+| `ProjectileSystem.update`, 1000 live | 2.81 ms | 2.13 ms | 1.32x |
+
+**A 17x primitive bought between 1.3x and 4.3x.** The broad-phase was
+never most of any consumer's tick — what follows a query is an ECS lookup,
+a component fetch and some arithmetic, all of it Python, all of it
+untouched. So:
+
+> **Price a shared primitive on itself; price a subsystem end to end. Do
+> not quote the first and mean the second.**
+
+The 5x threshold in Decision 1 is written for a subsystem. A primitive
+clears it on its own figure *and* pays its parity bill once for five
+consumers instead of once each, which is better leverage per unit of
+permanent maintenance than any previous port — the flow field's 56x
+serves one caller. That is the case for admitting it at 17x while its
+consumers see 1.3x, and it is a weaker case than any row above it.
+
+### Where Decision 3 was right after all
+
+"Projectiles then become a consequence of it" — item 3's second sentence —
+is **false, measured at 1.32x.** A first projection said 10.7x, by
+assuming the pinned 1.53 ms hit check would move native wholesale. Only
+its broad-phase did; the ECS lookups, the `Hurtbox`/`Health` checks and
+the team comparison stayed, and they are the bulk. Reaching 10x there
+needs a native pool that also filters by team natively, which puts
+gameplay data inside the index — a separate decision, not a consequence of
+this one. **Projectiles stay declined**, now at 1.32x with an accelerated
+index rather than an estimated 2.0x, which makes the decline firmer.
+
+### The cost, stated
+
+**One access pattern is asymptotically slower than Python.** The native
+grid rebuilds on the first query after any write — free for the pattern
+every consumer has (sync the whole index, then sweep it: one rebuild for
+`n` queries) and quadratic for a caller that *alternates* insert and
+query, where Python's incremental insert is O(1).
+
+| keys | alternating, native against Python |
+| ---: | ---: |
+| 250 | 1.9x faster |
+| 1000 | 0.52x |
+| 4000 | **0.13x** |
+
+Nothing in the engine alternates and `accelerate=False` is the remedy, but
+this is the first native store that is *worse* at something rather than
+merely different, so it is written down here and bounded by a test rather
+than left to be discovered.
+
+### Two findings about the parity discipline itself
+
+**A store that becomes the default silently disarms its own references.**
+`tests/test_native_flocking_parity.py` rebuilds a Python `SpatialHash` as
+the reference its first tier compares against. The moment `SpatialHash`
+had a native store and defaulted to `auto`, that reference became native
+and the tier compared the native grid with itself. Demonstrated: with the
+distance test sabotaged from `<=` to `<`, the unpinned suite passed all 69
+tests and the pinned one failed 2. The same applies to
+`tests/performance/conftest.py`'s `build_hash`, whose complexity guards
+would have measured whichever store the contributor happened to have
+built, and to `tests/test_common_spatial.py`, which would have gone on
+passing while testing only one store.
+
+> **Adding a native store to an existing class changes the meaning of
+> every test that constructs it.** Pin every reference and every
+> complexity guard to the Python store explicitly, and parametrise the
+> unit suite over both.
+
+**And `accelerate=False` has to mean it all the way down.**
+`FlockingSystem`'s Python path builds its own `SpatialHash`, with no
+`accelerate` argument — so `FlockingSystem(accelerate=False)` quietly
+indexed natively, and the "Python" flocking tick measured 9.8 ms instead
+of 16.4 ms. That silently restated Decision 1's flocking row from 9.0x to
+5.2x, and put native code inside a parity suite's Python reference. A
+subsystem that forces the Python path must force it in everything it
+constructs.
+
 ## Consequences — Track R, re-sequenced by measured ceiling
 
 RFC-0003's order was maths, batcher, pools, pathfinding. The measured order
@@ -479,9 +619,26 @@ is almost its reverse:
    It is also the first port to need a **tolerance** rather than `==`,
    with one permitted cause and the arithmetic pinned separately — see
    Decision 5, which this increment rewrote.
-3. **`SpatialHash`, as native state for native consumers only** — never as
-   a Python-facing index returning `list[K]`. Projectiles then become a
-   consequence of it rather than a milestone of their own.
+3. **`SpatialHash` — BUILT, and not in the shape this item specified.**
+   It said "native state for native consumers only — never as a
+   Python-facing index returning `list[K]`", and the `list[K]` crossing
+   measures at **4%** of the Python broad-phase it replaces. So it landed
+   as a drop-in native store behind the same methods: **17x** on the
+   index, and every consumer — flocking, actor separation, magnet
+   pickups, projectile hits, two demos — got it without changing a line.
+   Decision 7 has the measurement, and what it cost to have been wrong.
+
+   **What the consumers actually feel is 1.3x to 4.3x**, because the
+   broad-phase was never most of anyone's tick. The best of them is the
+   case this is really for: `TopDownSystem`'s actor separation at 1000
+   clumped actors, 104% of a frame down to 56%. The worst is projectiles
+   at 1.32x, so this item's second sentence — "projectiles then become a
+   consequence of it" — is **false**, and they stay declined.
+
+   It is also the first native store that is *worse* than Python at
+   something: an alternating insert/query loop is quadratic against
+   Python's linear, 0.13x at 4000 keys. No consumer does that; the cost is
+   bounded by a test and `accelerate=False` is the remedy.
 4. **Marco 2's buffer handoff** — still unprototyped, and now with a bar to
    beat: `ShapeBatch` gets 13-20x out of ordinary Python lists, so the
    zero-copy claim has to be worth more than that.

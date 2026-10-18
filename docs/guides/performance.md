@@ -141,6 +141,79 @@ halved when `_candidates` stopped allocating a set per query to deduplicate keys
 that cannot be duplicated: `insert` discards a key from its old cell before
 adding it to the new one, so a key lives in exactly one cell.
 
+#### Ported. 7.5 ms to 0.44 ms
+
+A tick of the index is what `SpatialIndexSystem` and its consumers do
+together: re-insert every tracked key, then query once per key. At 1000
+keys that is 7.45 ms in Python — 45% of a frame for the *index alone*,
+before a single consumer has done anything with the results.
+
+| 1000 keys, per tick | Python | native | |
+| --- | ---: | ---: | ---: |
+| insert all | 0.480 | 0.099 | 4.9x |
+| query all (k=17) | 6.973 | 0.340 | **20.5x** |
+| both | 7.453 | 0.439 | **17.0x** |
+
+**The ratio barely moves with density**, which is the whole reason this
+port exists in the shape it does. ADR 0004 had ruled out a Python-facing
+native index because each query hands back a Python list whose length
+grows with the candidate count. It does — and so does the Python
+broad-phase it replaces, about twenty times more expensively per
+candidate, so the two scale together:
+
+| | k | Python | native | |
+| --- | ---: | ---: | ---: | ---: |
+| radius 64 | 17 | 6.97 | 0.34 | 20.5x |
+| radius 128 | 32 | 11.75 | 0.53 | 22.3x |
+| every key coincident | 1000 | 210.5 | 13.2 | 16.0x |
+
+#### What a consumer gets, which is much less
+
+Nothing below changed a line of its own code; the index under it changed.
+This is Amdahl, and it is the most useful number in this section:
+
+| consumer | Python | native index | | of a frame |
+| --- | ---: | ---: | ---: | --- |
+| `TopDownSystem` separation, 1000 clumped | 17.30 | 9.25 | 1.87x | 104% → 56% |
+| `TopDownSystem` separation, 1000 uniform | 2.82 | 0.83 | 3.42x | 17% → 5% |
+| `TopDownSystem` separation, 200 actors | 0.66 | 0.15 | 4.30x | 4.0% → 0.9% |
+| `FlockingSystem`, Python steering, 1000 | 16.37 | 9.8 | 1.67x | 98% → 59% |
+| `SpatialIndexSystem.update`, 10000 tracked | 13.17 | 9.73 | 1.35x | 79% → 58% |
+| `SpatialIndexSystem.update`, 2000 tracked | 1.79 | 1.15 | 1.55x | 11% → 7% |
+| `MagnetSystem.update`, 100 magnets | 1.69 | 1.19 | 1.43x | 10% → 7% |
+| `ProjectileSystem.update`, 1000 live | 2.81 | 2.13 | 1.32x | 17% → 13% |
+
+A 17x primitive bought 1.3-4.3x, because the broad-phase was never most
+of anyone's tick: what follows a query is an ECS lookup, a component
+fetch and arithmetic, all of it Python and all of it untouched. The row
+that justifies the port is `TopDownSystem` at crowd scale — a dropped
+frame becoming half a frame — and the row that does not is projectiles,
+which stay declined.
+
+The flocking row is a measurement rather than a configuration: the Python
+steering path now pins its own index to `accelerate=False`, because a
+"Python path" that indexes natively is not one, and because a parity
+suite's Python reference has to be Python all the way down.
+
+#### The regime where Python wins
+
+The native grid rebuilds on the first query after any write. Every
+consumer syncs the whole index and then sweeps it, so one rebuild serves
+`n` queries and the rebuild is free. A caller that **alternates** insert
+and query pays one rebuild per query — O(n²) against Python's O(n):
+
+| keys | Python | native | |
+| ---: | ---: | ---: | ---: |
+| 250 | 1.29 | 0.69 | 1.9x faster |
+| 1000 | 4.81 | 9.21 | 0.52x |
+| 4000 | 18.51 | 139.77 | **0.13x** |
+
+Nothing in the engine does this, and `accelerate=False` is the answer for
+a game that does. It is the first native store that is *worse* than
+Python at something, so
+`test_alternating_writes_and_queries_stays_within_its_known_penalty`
+bounds it rather than leaving it to be discovered.
+
 ### `EntityPool` — draining a full pool, milliseconds
 
 | Pool size | Newest-first | Oldest-first | Newest-first, before the fix |
