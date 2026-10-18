@@ -198,15 +198,37 @@ class TestARegionTheTextureDoesNotContain:
 
 
 class TestADegenerateDestination:
-    @pytest.mark.parametrize("rect", [Rect(0, 0, 0, 5), Rect(0, 0, 5, 0)])
-    def test_a_zero_extent_destination_draws_nothing(
+    """Zero and negative are not the same case, and only one of them was
+    going to raise. `pygame.transform.scale` accepts a zero extent and
+    hands back a 0-pixel surface, so a zero-sized draw was already
+    harmless; it refuses a negative one with "Cannot scale to negative
+    size". `Rect` truncates to int and validates nothing, and a UI layout
+    that subtracts two paddings from a narrow parent produces a negative
+    width without anybody writing one -- so the negative case is the one
+    the guard exists for, and both are pinned here."""
+
+    @pytest.mark.parametrize(
+        "rect",
+        [Rect(0, 0, 0, 5), Rect(0, 0, 5, 0), Rect(0, 0, -5, 5), Rect(0, 0, 5, -5)],
+        ids=["zero width", "zero height", "negative width", "negative height"],
+    )
+    def test_a_degenerate_destination_draws_nothing(
         self, renderer: Any, target: pygame.Surface, rect: Rect
     ) -> None:
-        """A nine-patch with a zero-width edge produces three of these per
-        frame, so they have to be free rather than an error."""
         renderer.draw_texture(_striped(), rect)
 
         assert _colours(target) == {(0, 0, 0, 0)}
+
+    @pytest.mark.parametrize(
+        "rect", [Rect(0, 0, -5, 5), Rect(0, 0, 5, -5)], ids=["width", "height"]
+    )
+    def test_a_negative_destination_does_not_raise(
+        self, renderer: Any, target: pygame.Surface, rect: Rect
+    ) -> None:
+        """Stated separately from the pixel assertion above, because
+        "drew nothing" and "did not take the frame down with it" are
+        different promises and only the second is about the guard."""
+        renderer.draw_texture(_striped(), rect, None, Rect(0, 1, 3, 1))
 
 
 class TestTheModernGLBackendOnlyReuploadsWhenSomethingLanded:

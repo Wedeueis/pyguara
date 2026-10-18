@@ -57,9 +57,12 @@ def blit_texture(
         texture: The source surface.
         rect: Where to draw, in destination coordinates. A non-positive
             extent draws nothing, matching the shape helpers in
-            `surface_blending` -- a nine-patch with one zero-width edge
-            asks for three of those per frame, so they have to be free
-            rather than an error.
+            `surface_blending`. Zero would survive without the check --
+            `pygame.transform.scale` returns a 0-pixel surface for it --
+            but a negative one raises "Cannot scale to negative size",
+            and `Rect` validates nothing, so a layout subtracting two
+            paddings from a narrow parent reaches here with a negative
+            width without anybody having written one.
         tint: An `(r, g, b)` multiply, or None for none. Deliberately RGB
             and not RGBA: a UI tint recolours, where a sprite or particle
             tint also fades, and the world renderer's batch path uses the
