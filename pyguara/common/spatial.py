@@ -26,6 +26,18 @@ that the ADR had previously ruled this shape out, on reasoning a
 measurement contradicted, and what each *consumer* actually gains, which
 is far less than the index does.
 
+**One exotic key shape diverges**: the native store holds an exclusive
+borrow of itself for the duration of a call, so a key whose `__hash__` or
+`__eq__` re-enters the same index raises `RuntimeError: Already
+borrowed`. The Python store survives a re-entry that fires once and
+recurses to a stack overflow if it fires every time, so this is one store
+failing loudly where the other fails slowly rather than one being safe.
+No engine key does either -- they are entity ids. The *safe* version of
+that shape is relied on throughout, though: a query returns a
+materialised list, so iterating one while removing keys from the index is
+fine on both stores, and that is pinned by a test rather than left to
+chance.
+
 **One pattern is slower on the native store**, and asymptotically so:
 alternating `insert` and a query, rather than syncing the whole index and
 then sweeping it. The native grid rebuilds on the first query after any

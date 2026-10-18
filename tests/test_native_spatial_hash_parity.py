@@ -661,6 +661,51 @@ class TestTheNativeStoreRefusesWhatPythonMerelySurvives:
 
         assert python.query_radius(Vector2(1e300, 0.0), 1.0) == ["key"]
 
+    def test_a_key_that_re_enters_while_being_hashed_raises(self) -> None:
+        """Every native method holds an exclusive borrow for its duration.
+
+        So a key whose `__hash__` calls back into the same index gets
+        `RuntimeError: Already borrowed`, where the Python store -- whose
+        state is ordinary dicts -- simply works. No engine key does this;
+        they are entity id strings. It is pinned because `SpatialHash`
+        otherwise promises to take whatever hashable key the caller likes,
+        and an unstated divergence is the thing this file exists to
+        prevent.
+
+        The re-entry is fired exactly once below. Left unbounded it
+        recurses forever in the *Python* store too -- the nested query
+        hashes the same key again -- so "Python tolerates this" means it
+        tolerates a bounded re-entry, not that it is safe for arbitrary
+        keys. Neither store is.
+
+        The *safe* version of the same shape is the one that matters and
+        is tested in `tests/test_common_spatial.py`: a query materialises
+        its result before returning, so iterating one while removing keys
+        works on both stores.
+        """
+        python = SpatialHash[object](cell_size=64.0, accelerate=False)
+        native = SpatialHash[object](cell_size=64.0, accelerate=True)
+
+        class ReEntersOnce:
+            def __init__(self, index: SpatialHash[object]) -> None:
+                self.index = index
+                self.fired = False
+
+            def __hash__(self) -> int:
+                if not self.fired:
+                    self.fired = True
+                    self.index.query_radius(Vector2(0.0, 0.0), 10.0)
+                return 42
+
+            def __eq__(self, other: object) -> bool:
+                return self is other
+
+        python.insert(ReEntersOnce(python), Vector2(1.0, 1.0))
+        assert len(python.query_radius(Vector2(1.0, 1.0), 10.0)) == 1
+
+        with pytest.raises(RuntimeError, match="Already borrowed"):
+            native.insert(ReEntersOnce(native), Vector2(1.0, 1.0))
+
     @pytest.mark.parametrize("cell_size", [0.0, -1.0, float("nan"), float("inf")])
     def test_a_nonsense_cell_size_is_refused(self, cell_size: float) -> None:
         """The Python store divides by it and produces nonsense or raises

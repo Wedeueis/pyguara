@@ -29,6 +29,24 @@
 //! `tests/performance/test_perf_spatial.py` bounds how bad it is allowed
 //! to get.
 //!
+//! **A key that re-enters the index while being hashed raises here and
+//! does not in Python.** Every method takes `&mut self`, so PyO3 holds an
+//! exclusive borrow for its duration and a nested call gets
+//! `RuntimeError: Already borrowed`. Reaching it takes a key whose
+//! `__hash__` or `__eq__` calls back into the same index, which no engine
+//! key does -- they are entity id strings. Nor is Python's tolerance
+//! worth much: it survives a re-entry that fires *once*, and recurses
+//! until the stack runs out if the key re-enters every time, since the
+//! nested query hashes it again. So this is one store failing loudly
+//! where the other fails slowly. It is stated because `SpatialHash`
+//! otherwise promises to take whatever key the caller likes, and because
+//! the *safe* version of the same shape is load-bearing:
+//! a query materialises its result list before returning, so the engine's
+//! real pattern -- iterate a query, destroy an entity, let
+//! `SpatialIndexSystem` remove it -- releases the borrow first and works.
+//! Returning a lazy view instead would break that, which is what
+//! `test_the_index_can_be_mutated_from_inside_a_loop_over_a_query` is for.
+//!
 //! **Parity is bit-exact and the suite asserts it on every operation.**
 //! An index decides which enemy a magnet pulls and which target a bullet
 //! hits, so this is the flow field's regime rather than the particle

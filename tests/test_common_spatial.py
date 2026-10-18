@@ -173,3 +173,36 @@ def test_a_key_reinserted_with_a_new_mask_is_filtered_by_the_new_one(
 
     assert grid.query_radius(Vector2(0, 0), radius=10.0, mask=0b01) == []
     assert grid.query_radius(Vector2(0, 0), radius=10.0, mask=0b10) == ["key"]
+
+
+def test_the_index_can_be_mutated_from_inside_a_loop_over_a_query(
+    accelerate: bool,
+) -> None:
+    """A query result is a materialised list, not a live view.
+
+    This is the engine's actual pattern and it is native-only hazardous:
+    `ProjectileSystem` iterates `query_radius` and applies damage, which
+    dispatches an event, which can destroy an entity, which brings
+    `SpatialIndexSystem._on_entity_destroyed` round to `remove()` -- all
+    while the `for` loop is still running. The native methods take
+    `&mut self`, so if a query ever handed back something lazy the
+    re-entry would raise `RuntimeError: Already borrowed` instead of
+    working.
+
+    Pinned rather than assumed, because the natural optimisation -- return
+    an iterator, skip building the list -- would break it, and nothing
+    else in the suite would notice.
+    """
+    grid = SpatialHash[str](cell_size=64.0, accelerate=accelerate)
+    for index in range(8):
+        grid.insert(f"key-{index}", Vector2(float(index), 0.0))
+
+    seen = []
+    for key in grid.query_radius(Vector2(0.0, 0.0), 100.0):
+        seen.append(key)
+        grid.remove(key)
+        grid.insert(f"replacement-{key}", Vector2(100.0, 100.0))
+
+    assert sorted(seen) == sorted(f"key-{index}" for index in range(8))
+    assert grid.query_radius(Vector2(0.0, 0.0), 100.0) == []
+    assert len(grid.query_radius(Vector2(100.0, 100.0), 1.0)) == 8
