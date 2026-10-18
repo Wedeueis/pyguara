@@ -1,9 +1,11 @@
 """Tests for nine-patch sprite system."""
 
-from pyguara.common.types import Rect, Vector2
+from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.ninepatch import (
     NinePatchMetrics,
     NinePatchSprite,
+    render_ninepatch,
+    texture_size,
 )
 
 
@@ -337,3 +339,352 @@ class TestNinePatchSourceRects:
         rects = self._sprite(16).get_dest_rects(0, 0, 4, 4)
 
         assert all(r.width >= 0 and r.height >= 0 for r in rects)
+
+
+class TestTheSourceRectsFollowTheSpriteIntoAnAtlas:
+    """`NinePatchSprite.source_rect` was declared, documented as "Source
+    rectangle in the texture", and read by nothing in the class, so a
+    nine-patch packed into an atlas reported its slices at the atlas's
+    own origin -- it would have drawn whatever happened to sit in the
+    sheet's top-left corner."""
+
+    @staticmethod
+    def _at(origin: tuple[int, int], size: int = 16, edge: int = 4):
+        return NinePatchSprite(
+            texture_path="atlas.png",
+            metrics=NinePatchMetrics.uniform(edge),
+            source_rect=Rect(origin[0], origin[1], size, size),
+        )
+
+    def test_the_slices_are_offset_by_the_regions_origin(self):
+        rects = self._at((100, 200)).get_patch_rects(16, 16)
+
+        assert rects[0] == Rect(100, 200, 4, 4)
+
+    def test_every_slice_stays_inside_the_region(self):
+        region = Rect(100, 200, 16, 16)
+        rects = self._at((100, 200)).get_patch_rects(16, 16)
+
+        assert all(
+            region.x <= r.x and r.x + r.width <= region.x + region.width for r in rects
+        )
+        assert all(
+            region.y <= r.y and r.y + r.height <= region.y + region.height
+            for r in rects
+        )
+
+    def test_the_slices_still_tile_the_region(self):
+        rects = self._at((100, 200)).get_patch_rects(16, 16)
+
+        assert sum(r.width * r.height for r in rects) == 16 * 16
+
+    def test_the_regions_own_extent_wins_over_the_arguments(self):
+        """A caller that passes the whole sheet's size, which is what it
+        has to hand, must not get slices sized to the sheet."""
+        rects = self._at((100, 200), size=16).get_patch_rects(512, 512)
+
+        assert rects[4] == Rect(104, 204, 8, 8)
+
+    def test_a_sprite_without_a_region_is_unchanged(self):
+        """The two existing callers pass a bare texture; nothing about them
+        may move."""
+        bare = NinePatchSprite(
+            texture_path="panel.png", metrics=NinePatchMetrics.uniform(4)
+        )
+
+        assert bare.get_patch_rects(16, 16)[0] == Rect(0, 0, 4, 4)
+
+    def test_edges_too_big_for_the_region_are_still_rejected(self):
+        """The fit check has to measure the region, not the sheet, or an
+        atlas entry escapes it entirely."""
+        import pytest
+
+        sprite = self._at((100, 200), size=16, edge=12)
+
+        with pytest.raises(ValueError, match="12\\+12.*16x16"):
+            sprite.get_patch_rects(512, 512)
+
+
+class TestRenderNinepatchActuallyDraws:
+    """It was a `pass` with a comment explaining that a real implementation
+    would need the texture's size -- while being exported from
+    `pyguara.graphics.__init__`, so the public API included a function
+    that drew nothing."""
+
+    @staticmethod
+    def _recorder():
+        calls: list[tuple[Rect, Rect | None]] = []
+
+        class Recording:
+            def draw_texture(self, texture, rect, color=None, source_rect=None):
+                calls.append((rect, source_rect))
+
+        return Recording(), calls
+
+    @staticmethod
+    def _texture(width: int = 16, height: int = 16):
+        class Sized:
+            def __init__(self) -> None:
+                self.width = width
+                self.height = height
+
+        return Sized()
+
+    def test_nine_slices_reach_the_renderer(self):
+        renderer, calls = self._recorder()
+        sprite = NinePatchSprite(
+            texture_path="panel.png", metrics=NinePatchMetrics.uniform(4)
+        )
+
+        drawn = render_ninepatch(renderer, sprite, self._texture(), 0, 0, 64, 32)
+
+        assert drawn == 9
+        assert len(calls) == 9
+
+    def test_every_slice_names_its_own_source_region(self):
+        """Nine draws of the whole texture would also be nine draws; the
+        point is that each is a different region of it."""
+        renderer, calls = self._recorder()
+        sprite = NinePatchSprite(
+            texture_path="panel.png", metrics=NinePatchMetrics.uniform(4)
+        )
+
+        render_ninepatch(renderer, sprite, self._texture(), 0, 0, 64, 32)
+
+        sources = [source for _, source in calls]
+        assert all(source is not None for source in sources)
+        assert len({(s.x, s.y, s.width, s.height) for s in sources if s}) == 9
+
+    def test_the_corners_keep_their_size_and_the_centre_stretches(self):
+        """The whole reason a nine-patch exists."""
+        renderer, calls = self._recorder()
+        sprite = NinePatchSprite(
+            texture_path="panel.png", metrics=NinePatchMetrics.uniform(4)
+        )
+
+        render_ninepatch(renderer, sprite, self._texture(), 0, 0, 64, 32)
+
+        top_left = calls[0][0]
+        centre = calls[4][0]
+        assert top_left.size == (4, 4)
+        assert centre.size == (64 - 8, 32 - 8)
+
+    def test_the_destination_is_covered_exactly(self):
+        renderer, calls = self._recorder()
+        sprite = NinePatchSprite(
+            texture_path="panel.png", metrics=NinePatchMetrics.uniform(4)
+        )
+
+        render_ninepatch(renderer, sprite, self._texture(), 10, 20, 64, 32)
+
+        covered = sum(rect.width * rect.height for rect, _ in calls)
+        assert covered == 64 * 32
+        assert min(rect.x for rect, _ in calls) == 10
+        assert max(rect.x + rect.width for rect, _ in calls) == 74
+
+    def test_an_atlas_backed_sprite_draws_from_its_own_region(self):
+        renderer, calls = self._recorder()
+        sprite = NinePatchSprite(
+            texture_path="atlas.png",
+            metrics=NinePatchMetrics.uniform(4),
+            source_rect=Rect(100, 200, 16, 16),
+        )
+
+        render_ninepatch(renderer, sprite, self._texture(512, 512), 0, 0, 64, 32)
+
+        assert calls[0][1] == Rect(100, 200, 4, 4)
+
+    def test_a_zero_width_edge_skips_its_three_slices(self):
+        """`metrics.left == 0` is legal -- a plate with no left border --
+        and makes three destination rects zero-width. Drawing them would
+        reach `transform.scale`, which raises on a zero extent."""
+        renderer, calls = self._recorder()
+        sprite = NinePatchSprite(
+            texture_path="panel.png",
+            metrics=NinePatchMetrics(left=0, right=4, top=4, bottom=4),
+        )
+
+        drawn = render_ninepatch(renderer, sprite, self._texture(), 0, 0, 64, 32)
+
+        assert drawn == 6
+        assert all(rect.width > 0 and rect.height > 0 for rect, _ in calls)
+
+    def test_a_tint_reaches_every_slice(self):
+        tints: list[object] = []
+
+        class Recording:
+            def draw_texture(self, texture, rect, color=None, source_rect=None):
+                tints.append(color)
+
+        sprite = NinePatchSprite(
+            texture_path="panel.png", metrics=NinePatchMetrics.uniform(4)
+        )
+        red = Color(255, 0, 0, 255)
+
+        render_ninepatch(Recording(), sprite, self._texture(), 0, 0, 64, 32, red)
+
+        assert tints == [red] * 9
+
+
+class TestTheTextureSizeIsReadFromEitherShapeOfTexture:
+    """`UIRenderer.draw_texture` is annotated `texture: Any` and the real
+    backends want a `pygame.Surface`, while the world side passes a
+    `resources.Texture`. Both reach a UI renderer, so both have to work
+    here, and `Any` tells a caller nothing about which."""
+
+    def test_a_resource_texture_answers_through_its_properties(self):
+        class Wrapped:
+            width = 32
+            height = 48
+
+        assert texture_size(Wrapped()) == (32, 48)
+
+    def test_a_backend_surface_answers_through_its_getters(self):
+        import pygame
+
+        pygame.init()
+        try:
+            assert texture_size(pygame.Surface((32, 48))) == (32, 48)
+        finally:
+            pygame.quit()
+
+    def test_anything_else_is_refused_by_name(self):
+        """At the boundary, not four slices into the loop with an
+        AttributeError from inside a draw call."""
+        import pytest
+
+        with pytest.raises(TypeError, match="str has neither"):
+            texture_size("assets/panel.png")
+
+
+class TestARealRendererProducesTheExpectedPixels:
+    """The recorder above proves nine regions reach a renderer with the
+    right geometry. This proves a real one turns them into the frame a
+    nine-patch is for: corners at their own size, edges stretched along
+    one axis, centre along both, and no seam between them.
+
+    Driven through `PygameUIRenderer`, which is the same `blit_texture`
+    the ModernGL UI renderer uses.
+    """
+
+    CELLS = [
+        [(200, 0, 0), (0, 200, 0), (0, 0, 200)],
+        [(200, 200, 0), (200, 200, 200), (0, 200, 200)],
+        [(100, 0, 100), (0, 100, 0), (0, 0, 100)],
+    ]
+    """Nine distinguishable colours, one per patch, so a slice drawn from
+    the wrong region shows up as the wrong colour rather than as nothing."""
+
+    def _texture(self, pygame, cell: int = 3):
+        texture = pygame.Surface((cell * 3, cell * 3), pygame.SRCALPHA)
+        for row in range(3):
+            for column in range(3):
+                red, green, blue = self.CELLS[row][column]
+                texture.fill(
+                    (red, green, blue, 255),
+                    pygame.Rect(column * cell, row * cell, cell, cell),
+                )
+        return texture
+
+    def _render(self, size: int = 15, cell: int = 3):
+        import pygame
+
+        from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+
+        pygame.init()
+        target = pygame.Surface((size, size), pygame.SRCALPHA)
+        sprite = NinePatchSprite(
+            texture_path="plate.png", metrics=NinePatchMetrics.uniform(cell)
+        )
+        drawn = render_ninepatch(
+            PygameUIRenderer(target),
+            sprite,
+            self._texture(pygame, cell),
+            0,
+            0,
+            size,
+            size,
+        )
+        return target, drawn
+
+    def test_every_pixel_of_the_destination_is_covered(self):
+        """Nine rects that tile the destination must leave no gap. A
+        rounding slip in the stretched spans shows up here as a
+        transparent seam."""
+        import pygame
+
+        target, drawn = self._render()
+        try:
+            assert drawn == 9
+            transparent = [
+                (x, y)
+                for x in range(15)
+                for y in range(15)
+                if target.get_at((x, y)).a == 0
+            ]
+            assert transparent == []
+        finally:
+            pygame.quit()
+
+    def test_the_corners_are_their_own_colours_at_their_own_size(self):
+        import pygame
+
+        target, _ = self._render()
+        try:
+            assert tuple(target.get_at((0, 0)))[:3] == self.CELLS[0][0]
+            assert tuple(target.get_at((14, 0)))[:3] == self.CELLS[0][2]
+            assert tuple(target.get_at((0, 14)))[:3] == self.CELLS[2][0]
+            assert tuple(target.get_at((14, 14)))[:3] == self.CELLS[2][2]
+            # One pixel past the corner is already the stretched edge.
+            assert tuple(target.get_at((3, 0)))[:3] == self.CELLS[0][1]
+        finally:
+            pygame.quit()
+
+    def test_the_centre_is_stretched_across_the_middle(self):
+        import pygame
+
+        target, _ = self._render()
+        try:
+            middle = {
+                tuple(target.get_at((x, y)))[:3]
+                for x in range(3, 12)
+                for y in range(3, 12)
+            }
+            assert middle == {self.CELLS[1][1]}
+        finally:
+            pygame.quit()
+
+    def test_the_edges_stretch_along_one_axis_only(self):
+        """The top edge is one colour across its whole span and the left
+        edge down its whole span -- if the implementation stretched a
+        corner instead, these would be two colours."""
+        import pygame
+
+        target, _ = self._render()
+        try:
+            top = {tuple(target.get_at((x, 1)))[:3] for x in range(3, 12)}
+            left = {tuple(target.get_at((1, y)))[:3] for y in range(3, 12)}
+            assert top == {self.CELLS[0][1]}
+            assert left == {self.CELLS[1][0]}
+        finally:
+            pygame.quit()
+
+    def test_a_destination_at_the_minimum_degenerates_to_four_corners(self):
+        """`get_dest_rects` clamps up to the minimum rather than letting the
+        corners overlap, and at exactly that minimum the stretchable spans
+        are all zero -- so a nine-patch is four corners and nothing else.
+        Worth pinning because it is the case that would otherwise reach
+        `transform.scale` with a zero extent and raise, and because a
+        caller sizing a panel to its content can land here by accident."""
+        import pygame
+
+        target, drawn = self._render(size=4)
+        try:
+            assert drawn == 4
+            # The corners still cover the whole visible target: the clamp
+            # means the draw is 6x6 and pygame clips it to the surface.
+            assert all(
+                target.get_at((x, y)).a == 255 for x in range(4) for y in range(4)
+            )
+        finally:
+            pygame.quit()

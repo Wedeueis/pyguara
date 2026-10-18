@@ -285,7 +285,11 @@ class HeadlessUIRenderer:
         ...
 
     def draw_texture(
-        self, texture: Any, rect: Rect, color: Color | None = None
+        self,
+        texture: Any,
+        rect: Rect,
+        color: Color | None = None,
+        source_rect: Rect | None = None,
     ) -> None:
         """No-op: discard the draw call."""
         ...

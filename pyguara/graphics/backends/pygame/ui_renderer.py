@@ -12,6 +12,7 @@ from pyguara.graphics.backends.surface_blending import (
     blit_blended_polygon,
     blit_blended_rect,
 )
+from pyguara.graphics.backends.surface_texture import blit_texture
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -117,28 +118,29 @@ class PygameUIRenderer:
         self._surface.blit(texture, (int(position.x), int(position.y)))
 
     def draw_texture(
-        self, texture: Any, rect: Rect, color: Color | None = None
+        self,
+        texture: Any,
+        rect: Rect,
+        color: Color | None = None,
+        source_rect: Rect | None = None,
     ) -> None:
-        """Draw an image texture."""
+        """Draw an image texture, or the `source_rect` region of it.
+
+        Shares `blit_texture` with the ModernGL UI renderer, which draws
+        onto an offscreen surface of its own: the two bodies were
+        identical, and a source region that worked on one backend and not
+        the other would be worse than none at all.
+        """
         if not isinstance(texture, pygame.Surface):
             return
 
-        target_rect = pygame.Rect(rect.x, rect.y, rect.width, rect.height)
-
-        if texture.get_width() != rect.width or texture.get_height() != rect.height:
-            scaled_tex = pygame.transform.scale(
-                texture, (int(rect.width), int(rect.height))
-            )
-        else:
-            scaled_tex = texture
-
-        if color:
-            rgba = self._to_pygame_color(color)
-            tinted_tex = scaled_tex.copy()
-            tinted_tex.fill(rgba[0:3], special_flags=pygame.BLEND_RGBA_MULT)
-            self._surface.blit(tinted_tex, target_rect)
-        else:
-            self._surface.blit(scaled_tex, target_rect)
+        blit_texture(
+            self._surface,
+            texture,
+            rect,
+            self._to_pygame_color(color)[0:3] if color else None,
+            source_rect,
+        )
 
     def get_text_size(self, text: str, size: int) -> tuple[int, int]:
         """Calculate the width/height of a string."""

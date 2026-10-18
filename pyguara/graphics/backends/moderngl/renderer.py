@@ -507,11 +507,11 @@ class ModernGLRenderer:
     def draw_texture(
         self,
         texture: Texture,
-        position: Vector2,
+        destination: Vector2,
         rotation: float = 0.0,
         scale: Vector2 = Vector2(1, 1),
     ) -> None:
-        """Draw a single texture at the given position.
+        """Draw a single texture centred on the given position.
 
         For single sprite draws. For better performance with many sprites,
         use render_batch() instead.
@@ -533,7 +533,7 @@ class ModernGLRenderer:
         packed = instancing.pack_sprite_instances(
             RenderBatch(
                 texture=texture,
-                destinations=[(position.x, position.y)],
+                destinations=[(destination.x, destination.y)],
                 rotations=[rotation],
                 scales=[(scale.x, scale.y)],
                 transforms_enabled=True,

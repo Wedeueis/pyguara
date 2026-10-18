@@ -111,3 +111,102 @@ class TestShapeBatchRendererIsACapability:
         from pyguara.graphics.backends.headless_renderer import HeadlessBackend
 
         assert not hasattr(HeadlessBackend, "render_shapes")
+
+
+def _parameters(function: object) -> list[tuple[str, object]]:
+    """The `(name, default)` pairs of a method, `self` dropped.
+
+    Names and defaults only, not annotations: the modules disagree about
+    `from __future__ import annotations`, so the same type reads back as
+    `Rect` from one file and `'Rect'` from another, and that difference
+    means nothing to a caller.
+    """
+    signature = inspect.signature(function)  # type: ignore[arg-type]
+    return [
+        (name, parameter.default)
+        for name, parameter in signature.parameters.items()
+        if name != "self"
+    ]
+
+
+def _signature_drift(protocol: type, implementation: type) -> list[str]:
+    """Every public method whose signature differs from the protocol's."""
+    drift = []
+    for name, declared in inspect.getmembers(protocol, inspect.isfunction):
+        if name.startswith("_"):
+            continue
+        provided = getattr(implementation, name, None)
+        if not callable(provided):
+            drift.append(f"{name}: missing entirely")
+            continue
+        want, have = _parameters(declared), _parameters(provided)
+        if want != have:
+            drift.append(f"{name}: protocol takes {want}, implementation takes {have}")
+    return drift
+
+
+def _ui_renderers() -> list[type]:
+    from pyguara.graphics.backends.headless_renderer import HeadlessUIRenderer
+    from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
+    from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+
+    return [HeadlessUIRenderer, PygameUIRenderer, GLUIRenderer]
+
+
+def _world_renderers() -> list[type]:
+    from pyguara.graphics.backends.headless_renderer import HeadlessBackend
+    from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+    from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+
+    return [HeadlessBackend, PygameBackend, ModernGLRenderer]
+
+
+class TestEveryRendererKeepsItsProtocolSignature:
+    """`isinstance` against a runtime-checkable Protocol checks method
+    *names*, so every conformance assertion above stays green when a
+    backend's parameters drift from the ones the protocol advertises.
+
+    That is not hypothetical, and it is not cheap to find by hand:
+    `UIRenderer` has three implementations in three separate packages, so
+    a parameter added to one of its methods can be forgotten in two
+    places that still pass `isinstance`, still type-check (mypy does not
+    check a class against a Protocol it never annotates), and fail only
+    at the first call that passes the new argument.
+
+    `IRenderer.draw_texture` had already drifted in exactly that way, and
+    this check is what found it: the protocol named its second parameter
+    `destination` while both shipped backends called it `position`, so a
+    keyword the protocol advertised raised `TypeError` on every real
+    renderer. Nothing noticed, because every caller in the engine, the
+    demos and the tests passes it positionally -- which is also why
+    correcting the two backends changed no behaviour.
+    """
+
+    @pytest.mark.parametrize(
+        "implementation", _ui_renderers(), ids=lambda c: str(c.__name__)
+    )
+    def test_a_ui_renderer_matches_the_protocol(self, implementation: type) -> None:
+        from pyguara.graphics.protocols import UIRenderer
+
+        assert _signature_drift(UIRenderer, implementation) == []
+
+    @pytest.mark.parametrize(
+        "implementation", _world_renderers(), ids=lambda c: str(c.__name__)
+    )
+    def test_a_world_renderer_matches_the_protocol(self, implementation: type) -> None:
+        from pyguara.graphics.protocols import IRenderer
+
+        assert _signature_drift(IRenderer, implementation) == []
+
+    def test_the_drift_check_can_actually_fail(self) -> None:
+        """The guard above is only worth having if it catches a change, and
+        a reflection-driven comparison is easy to write so loosely that it
+        never does. This is the control: a renderer missing the newest
+        parameter is reported, by name."""
+        from pyguara.graphics.protocols import UIRenderer
+
+        class Behind:
+            def draw_texture(self, texture: object, rect: object) -> None: ...
+
+        drift = _signature_drift(UIRenderer, Behind)
+        assert any("draw_texture" in line for line in drift)
