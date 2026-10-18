@@ -14,7 +14,24 @@ dependency-free JSON-lines transport goes through `pyguara/studio/
 __init__.py`, which imports this module, so a module-level ImGui import
 here would make the transport need ImGui after all -- precisely the
 coupling the optional MCP extra was kept out of. That regression happened
-once already, when the default dock layout was first wired up.
+once already, when the default dock layout was first wired up, and the
+surface for it grew when the ImGui editor layer moved into this same
+package: `pyguara.studio.layer` is now one unguarded import away from
+every module the transport loads.
+
+**Both halves of that are asserted in a subprocess, and the reason is
+worth reading before changing it.** This file used to install an
+`importlib` meta-path finder that raised on `imgui_bundle`, pop
+`pyguara.studio*` out of `sys.modules`, and re-import. A meta-path finder
+is consulted only on a `sys.modules` miss, and by the time any test runs,
+`imgui_bundle` is already cached -- imported by another test module, or,
+under exactly the regression this guards, by this file's own
+collection-time `from pyguara.studio.attach import ...`. So the blocker
+was never reached and the test passed either way. It was verified
+vacuous: adding `from pyguara.studio.layer import EditorLayer` to
+`pyguara/studio/__init__.py` left it green. A fresh interpreter has
+nothing cached, which is the only place either property can be tested at
+all.
 """
 
 from __future__ import annotations
@@ -22,7 +39,6 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from importlib.abc import MetaPathFinder
 from pathlib import Path
 
 os.environ.setdefault("SDL_VIDEODRIVER", "offscreen")
@@ -37,36 +53,101 @@ from pyguara.studio.attach import (
 
 
 class TestImgulIndependence:
-    """The agent surface must work with no ImGui installed."""
+    """The agent surface must work with no ImGui installed.
 
-    def test_the_ops_transport_imports_without_imgui(self) -> None:
-        """Asserted by blocking the import rather than by reading the
-        source, because the coupling that broke this was three modules
-        away -- `studio/__init__` imports `attach`, which imported the
-        editor layer, which imports ImGui at module scope."""
+    Each test is a fresh interpreter; see the module docstring for why
+    in-process is not an option here.
+    """
 
-        class _Blocker(MetaPathFinder):
-            def find_spec(self, name, path=None, target=None):  # type: ignore[no-untyped-def]
-                if name == "imgui_bundle" or name.startswith("imgui_bundle."):
-                    raise ImportError("No module named imgui_bundle")
-                return None
+    _TRANSPORT_IMPORTS = (
+        "import pyguara.studio\n"
+        "import pyguara.studio.ops.stdio\n"
+        "import pyguara.studio.session\n"
+    )
 
-        blocker = _Blocker()
-        removed = [
-            name for name in list(sys.modules) if name.startswith("pyguara.studio")
-        ]
-        saved = {name: sys.modules.pop(name) for name in removed}
-        sys.meta_path.insert(0, blocker)
-        try:
-            import pyguara.studio  # noqa: F401
-            import pyguara.studio.ops.stdio  # noqa: F401
-            import pyguara.studio.session  # noqa: F401
-        finally:
-            sys.meta_path.remove(blocker)
-            for name in list(sys.modules):
-                if name.startswith("pyguara.studio"):
-                    del sys.modules[name]
-            sys.modules.update(saved)
+    @staticmethod
+    def _run(code: str) -> str:
+        """Run `code` in a fresh interpreter and return its stdout.
+
+        Args:
+            code: The program to run.
+
+        Returns:
+            Its stripped standard output.
+        """
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+
+    def test_the_ops_transport_does_not_import_imgui(self) -> None:
+        """The stronger of the two, and the one that catches a slip.
+
+        Not "it still works without ImGui" but "it never asked for
+        ImGui" -- which is also the only form that catches a module-scope
+        `pyguara.studio.availability` import, since that one *handles*
+        the absence and would satisfy the weaker property while still
+        loading the extension on every `pyguara studio ops`.
+        """
+        loaded = self._run(
+            "import sys\n"
+            + self._TRANSPORT_IMPORTS
+            + "print(sorted(m for m in sys.modules if m.startswith('imgui')))\n"
+        )
+        assert loaded == "[]", (
+            f"importing the agent transport pulled in {loaded} -- some module "
+            "the transport loads now imports Dear ImGui at module scope"
+        )
+
+    def test_the_ops_transport_imports_with_imgui_unavailable(self) -> None:
+        """And it works when ImGui is genuinely not installed.
+
+        Blocked with a meta-path finder installed before anything else is
+        imported, so the finder is actually reached.
+        """
+        assert (
+            self._run(
+                "import sys\n"
+                "from importlib.abc import MetaPathFinder\n"
+                "class Blocker(MetaPathFinder):\n"
+                "    def find_spec(self, name, path=None, target=None):\n"
+                "        if name.partition('.')[0] == 'imgui_bundle':\n"
+                "            raise ImportError('No module named imgui_bundle')\n"
+                "        return None\n"
+                "sys.meta_path.insert(0, Blocker())\n"
+                + self._TRANSPORT_IMPORTS
+                + "print('imported')\n"
+            )
+            == "imported"
+        )
+
+    def test_the_blocker_would_be_reached(self) -> None:
+        """The control for the test above: with the finder installed, the
+        import it blocks really does fail. Without this, a finder that
+        silently stopped matching would make that test vacuous in the
+        same way the in-process version was."""
+        assert (
+            self._run(
+                "import sys\n"
+                "from importlib.abc import MetaPathFinder\n"
+                "class Blocker(MetaPathFinder):\n"
+                "    def find_spec(self, name, path=None, target=None):\n"
+                "        if name.partition('.')[0] == 'imgui_bundle':\n"
+                "            raise ImportError('No module named imgui_bundle')\n"
+                "        return None\n"
+                "sys.meta_path.insert(0, Blocker())\n"
+                "try:\n"
+                "    import pyguara.studio.layer\n"
+                "except ImportError:\n"
+                "    print('blocked')\n"
+                "else:\n"
+                "    print('not blocked')\n"
+            )
+            == "blocked"
+        )
 
     def test_the_default_layout_is_plain_data(self) -> None:
         """Titles rather than a `DockLayout`, so this module can be
