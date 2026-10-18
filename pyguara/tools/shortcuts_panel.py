@@ -7,15 +7,15 @@ from pyguara.input.keys import key_name
 from pyguara.tools.base import Tool
 from pyguara.tools.manager import ToolManager
 
-# Keys a tool handles internally (not global toggles), so they never appear in
-# ToolManager's shortcut map. Kept as a short static list rather than left
-# undocumented.
-_IN_TOOL_KEYS = [
-    ("TAB", "Entity Inspector: cycle entities (when standalone)"),
-    ("S", "Config Inspector: save"),
-    ("Q / W / E", "Transform Gizmo: translate / rotate / scale"),
-    ("ESC", "Transform Gizmo: clear selection (when standalone)"),
-]
+# There is deliberately no "in-tool keys" section any more. It listed four
+# bindings -- the inspector's TAB, the config editor's S, the gizmo's
+# Q/W/E and ESC -- and all four belonged to tools that are now Studio's.
+# No overlay tool handles a key of its own today, so the section would be
+# an empty heading, and a heading that is sometimes empty is how a stale
+# one goes unnoticed. If a tool grows an internal key, it should say so
+# itself rather than through a list here that nothing checks: that list
+# was hand-maintained precisely because `ToolManager` cannot see those
+# keys, which is also why it could drift.
 
 
 class ShortcutsPanel(Tool):
@@ -23,8 +23,14 @@ class ShortcutsPanel(Tool):
 
     The toggle table is built from `ToolManager.iter_shortcuts()` at render
     time, so it cannot drift from what `SandboxApplication` actually
-    registered. Falls back to just F12 if no `ToolManager` is in the
-    container.
+    registered -- which is the only reason this panel survived the overlay
+    losing five of its tools without needing an edit. Falls back to just
+    F12 if no `ToolManager` is in the container.
+
+    One line is hard-coded, and deliberately: that authoring lives in
+    PyGuara Studio. Someone reaching for F2 or F9 out of habit opens this
+    panel next, and an overlay that simply no longer lists them leaves
+    them looking for a key that was removed rather than moved.
     """
 
     def __init__(self, container: DIContainer) -> None:
@@ -75,9 +81,9 @@ class ShortcutsPanel(Tool):
             y += 28
 
         y += 16
-        renderer.draw_text("In-tool keys", Vector2(x, y), Color(255, 255, 0), 16)
-        y += 24
-        for key, desc in _IN_TOOL_KEYS:
-            renderer.draw_text(key, Vector2(x, y), Color(100, 200, 255), 14)
-            renderer.draw_text(desc, Vector2(x + 90, y), Color(200, 200, 200), 14)
-            y += 20
+        renderer.draw_text(
+            "Authoring is PyGuara Studio (ModernGL)",
+            Vector2(x, y),
+            Color(160, 160, 170),
+            14,
+        )

@@ -34,67 +34,79 @@ Press **F12** to toggle the whole overlay, then a function key per tool.
 | Key | Tool | Purpose |
 | --- | --- | --- |
 | F1 | `PerformanceMonitor` | FPS, frame timing, counts |
-| F2 | `EntityInspector` | Inspect + live-edit the selected entity's components |
 | F3 | `EventMonitor` | Rolling log of recent engine events |
 | F4 | `PhysicsDebugger` | Collision shape wireframes |
-| F5 | `HierarchyTool` | List scene entities, click to select |
-| F6 | `ConfigInspector` | Live-edit `GameConfig`, `S` to save |
-| F7 | `AssetsTool` | Browse resources, spawn entities from data |
 | F8 | `ShortcutsPanel` | This table, in-game (read live from the `ToolManager`) |
-| F9 | `TransformGizmo` | Position/rotation/scale handles on the selected entity; `Q`/`W`/`E` switch mode |
 
 `ShortcutsPanel` builds its table from `ToolManager.iter_shortcuts()` at
 render time, so it stays in step with whatever `SandboxApplication`
 registered rather than a hand-kept copy.
 
-> **Screen-space only.** `TransformGizmo` and `PhysicsDebugger` currently
-> draw and hit-test using `Transform.position` as a *screen* coordinate --
-> no camera transform. They line up only with the camera at the origin at
-> zoom 1. The world-to-screen unification (issue #23) is the fix.
+### What the overlay does not do, and where it went
 
-## Hierarchy + Inspector
+**F2, F5, F6, F7 and F9 are unbound**, and the gaps are deliberate rather
+than a renumbering: a developer reaching for the old key finds nothing
+there instead of something else.
 
-`HierarchyTool` lists every entity in the active scene and publishes the
-clicked one as `hierarchy.selected_entity`. `EntityInspector` takes a
-`selection_provider` and follows it:
+| Was | Does what | Now |
+| --- | --- | --- |
+| F5 `HierarchyTool` | List entities, click to select | Studio's **Hierarchy** panel |
+| F2 `EntityInspector` | Inspect and live-edit components | Studio's **Inspector** panel |
+| F9 `TransformGizmo` | Translate/rotate/scale handles | Studio's **viewport gizmo** |
+| F6 `ConfigInspector` | Live-edit `GameConfig`, `S` to save | **nothing yet** — [#330](https://github.com/Wedeueis/pyguara/issues/330) |
+| F7 `AssetsTool` | Browse resources, spawn from a `DataResource` | **nothing yet** — [#330](https://github.com/Wedeueis/pyguara/issues/330) |
+
+The first three were duplicates, and the weaker of the two copies.
+Studio's gizmo is 814 lines against 353: it has drag state, handle
+hit-testing, axis locking, snapping and one undo entry per drag, where
+the overlay's drew arrows and read `Q`/`W`/`E`. Its Inspector routes an
+accepted edit through `set_field`, so the change lands on an undo stack
+and in an audit journal; the overlay's wrote straight onto the component.
+Keeping both meant two ways to change the world, only one of which kept a
+record.
+
+**The last two were not duplicates**, and removing them removed
+capability. They went with the rest because they were built on the same
+widget layer, `pyguara/tools/tweakable.py`, and that layer is why none of
+these were good enough to keep: **nothing in the overlay scrolls** — a
+grep for `scroll` or `wheel` across the package returned nothing, so a
+list longer than its panel simply ran off the bottom — and its number
+editor stepped by a hard-coded `1.0` when you clicked the left or right
+half of a row, which cannot express a `0.5` damping value at all. #330
+records both for Studio, which has a scrolling dockable surface to put
+them on.
+
+> **Screen-space only.** `PhysicsDebugger` draws using `Transform.position`
+> as a *screen* coordinate -- no camera transform. It lines up only with
+> the camera at the origin at zoom 1. The world-to-screen unification
+> (issue #23) is the fix.
+
+## Authoring, as opposed to diagnosing
+
+The overlay reports; it does not author. Everything that *changes* the
+world now lives in [PyGuara Studio](studio.md), which is attached
+explicitly and is ModernGL-only:
 
 ```python
-hierarchy = HierarchyTool(container)
-inspector = EntityInspector(
-    container, selection_provider=lambda: hierarchy.selected_entity
-)
+from pyguara.application.bootstrap import create_application
+from pyguara.studio import attach_studio
+
+app = create_application()
+attach_studio(app.container)
+app.run(MyScene("game", app._event_dispatcher))
 ```
 
-With no `selection_provider`, `EntityInspector` runs standalone and **TAB**
-cycles through entities instead.
+**On the Pygame backend there is no authoring surface**, and that is the
+honest statement of the trade. Studio and the editor layer need the GL
+context the render graph owns, and a Pygame window is a software surface
+with none. What that backend keeps is this overlay: frame timing, the
+event stream, collision wireframes and the shortcut table -- enough to
+debug a running game, not enough to build a scene in one.
 
-The inspector reflects each component's fields. Fields of an editable type --
-`bool`, `int`/`float`, `Enum`, `Vector2`, `Color`, or a nested dataclass of
-those -- render as click-to-edit rows that write straight back onto the live
-component (a number row steps down on its left half, up on its right;
-`bool` toggles; `Enum` cycles). Other field types show read-only. The
-dispatch lives in `pyguara.tools.tweakable` and is shared with
-`ConfigInspector`.
-
-## Assets browser
-
-`AssetsTool` lists what `ResourceManager.index_directory()` has mapped and
-what is currently loaded. Select a `DataResource` (a `.json` data file) to
-get a read-only preview and two actions:
-
-* **Spawn into Scene** -- creates an entity, attaches a `ResourceLink`, and
-  for every `{"ComponentName": {...}}` entry whose name is in the shared
-  `ComponentRegistry`, builds that component via `registry.create(...)` --
-  the same path `SceneSerializer` uses when loading a scene. Unregistered
-  keys and components that fail to build are skipped with a warning.
-* **Reload** -- `ResourceManager.reload(path)`, re-reading the file and its
-  `.meta` sidecar.
-
-Scene save/load is available programmatically through `SceneSerializer`
-(`save_scene` / `load_scene`); the overlay no longer exposes it as a menu --
-that belongs to #53. `EntityManager.clear()` is the supported way to empty a
-world before reloading (it fires `subscribe_entity_removed` callbacks and
-flushes cached queries).
+Scene save/load remains available programmatically through
+`SceneSerializer` (`save_scene` / `load_scene`), and `EntityManager.clear()`
+is the supported way to empty a world before reloading -- it fires
+`subscribe_entity_removed` callbacks and flushes cached queries.
 
 ## Writing a custom tool
 
