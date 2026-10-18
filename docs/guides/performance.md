@@ -893,6 +893,72 @@ bytes**, so 256 long strings hold more than 256 short ones; and these textures
 are the renderer's own, outside `ResourceManager`, so they do not count towards
 its cache budget.
 
+### The UI overlay — milliseconds per frame, and why the HUD does not matter
+
+The ModernGL UI renderer is a hybrid. Every widget is rasterised by pygame onto
+an offscreen surface, and `present()` uploads that whole surface as a texture
+and composites it as a fullscreen quad. So the cost of a UI frame is set by the
+**window area**, not by what the UI drew.
+
+That is not a figure of speech. One `draw_text` in the corner and a
+forty-nine-primitive HUD — panels, bars, an eight-slot item belt, a minimap,
+a six-line stat block — cost the same, because the rasterising is the part that
+scales with content and the rasterising is 3% of it:
+
+| 1280x720 | one label | a full HUD (49 primitives) |
+| --- | --- | --- |
+| rasterise the widgets | 0.006 | 0.330 |
+| everything else | 10.9 | 9.8 |
+
+Real GL, standalone context, `pytest-benchmark` minimum. The machine is a
+3050 behind Mesa-on-D3D12, so the upload number is a driver number and will
+differ by an order of magnitude elsewhere; the CPU numbers below transfer.
+
+**Where the frame went, before and after:**
+
+| Whole UI frame, ms | 1280x720 | 1920x1080 |
+| --- | --- | --- |
+| before | 10.1 | 26.7 |
+| after | **5.8** | **12-14** |
+| | *43% faster* | *~50% faster* |
+
+The 1080p figure is a range because it is: repeated runs on this machine land
+between 11.6 and 13.8 ms, where the 720p one holds to within 5%. Reported as
+measured rather than as the prettiest run.
+
+Two full-surface CPU copies stood in front of the upload, and neither was
+buying anything:
+
+- `pygame.transform.flip`, to turn the surface upside down for OpenGL. The
+  quad's `v` coordinate now runs 1 at the bottom of the screen instead, so the
+  sampler does it for nothing.
+- `pygame.image.tobytes(surface, "RGBA")`, to normalise the surface's pixels.
+  A 32-bit pygame surface is already a contiguous block of B,G,R,A pixels with
+  no row padding, so `present()` hands GL the surface's own memory and sets the
+  texture's swizzle to `BGRA`. The texture unit reorders for free.
+
+| Measured alone, ms | 1280x720 | 1920x1080 |
+| --- | --- | --- |
+| the two CPU copies | 3.4 | 12.7 |
+| the raw upload that remains | 5.8 | 12.5 |
+
+The copies are the portable half — same cost on any machine with the same pixel
+count. The end-to-end saving (4.3 ms at 720p) is a little larger than the copies
+measured alone, because the old path also allocated a flipped `Surface` and a
+`bytes` object every frame.
+
+**What is left is the upload itself, and only instancing removes it.** At 720p
+a UI frame still costs 5.8 ms whether it draws one label or a HUD — a third of
+a 16.7 ms budget, bought by an FPS counter. Drawing the primitives as instanced
+SDF shapes instead would make the cost proportional to the UI, but the shape
+shader (`shaders/shape.frag`) has no rounded-rect and no polygon SDF today,
+while `border_radius` has 30 live call sites in this repository. That is
+workstream W16 proper, tracked as
+[#334](https://github.com/Wedeueis/pyguara/issues/334) rather than guessed at.
+It also carries a decision that is not an engineering one: pygame's rasteriser
+and an SDF shader disagree about antialiasing, rounded corners and line caps,
+so every shipped HUD would change slightly.
+
 ### Instance layout width
 
 Packing and uploading 20000 instances, at each width the layout has had:
