@@ -2,7 +2,7 @@
 
 What a scene file is meant to be: everything needed to rebuild the world a
 designer authored, in a shape a human could have typed. That makes
-round-trip fidelity the whole contract, and four things used to fall
+round-trip fidelity the whole contract, and five things used to fall
 through it -- each silently, which is the part that mattered:
 
 - **Entity tags.** `entity.tags` is a plain `set[str]` with no component
@@ -10,6 +10,13 @@ through it -- each silently, which is the part that mattered:
 - **Ownership.** `ChildOf` was not in the component registry, so
   `load_scene` skipped it and every parent/child link -- and the cascade
   destroy that rides on it -- was lost.
+- **Spatial parenting.** The engine's *other* kind of parent. A
+  `Transform` points at its parent `Transform` rather than at an entity,
+  so there was nothing a file could name, and the field was simply not
+  written. This one does not merely flatten a hierarchy: a parented
+  transform's stored position is *local*, so dropping the link makes it
+  come back as a world coordinate. A turret saved at (10, 0) under a hull
+  at (100, 200) reloaded 190 pixels away.
 - **Enabled state.** `EntityManager` holds disabled ids in a side set, not
   on the entity, so a disabled entity reloaded as enabled.
 - **Resources.** A `Sprite` holds a live `Texture`, not a path. Encoding it
