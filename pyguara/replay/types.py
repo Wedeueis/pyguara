@@ -142,12 +142,15 @@ class ReplayMetadata:
         description: Optional description of the replay.
         native_store: Which implementation ran the simulation, `"native"`
             or `"python"` -- see `pyguara.native.store_name()`. The two
-            cannot be made bit-identical, because `SpatialHash` yields
-            neighbours in Python `set` iteration order, no Rust can
-            reproduce that, and a chaotic system such as a flock diverges
-            from a last-bit difference. So a replay made under one store
-            is refused under the other. Empty in replays recorded before
-            this field existed, which means "unknown" rather than
+            cannot be made bit-identical, and the spatial index is where
+            it starts: the Python store yields a query's candidates in
+            `set` iteration order, which no Rust can reproduce, and a
+            chaotic system such as a flock diverges from a last-bit
+            difference. (The index has a native store of its own now, but
+            that changes nothing here -- it makes the orders differ in a
+            second place rather than in none.) So a replay made under one
+            store is refused under the other. Empty in replays recorded
+            before this field existed, which means "unknown" rather than
             "python" and so is not refused.
 
             **Matching stores is necessary and not sufficient**, and an
