@@ -382,33 +382,55 @@ class GLUIRenderer:
         self._dirty = False
 
     def _pixels(self) -> Any:
-        """Return the surface's pixels, in the byte order the texture expects.
+        """Return the surface's own memory, after checking it is uploadable.
 
-        Normally the surface's own memory, handed to GL with no copy at
-        all. A 32-bit surface is a contiguous block of B,G,R,A pixels with
-        no row padding -- `get_pitch()` is `width * 4` for every width --
-        so there is nothing to convert and the texture unit does the
-        reorder and the vertical flip.
+        A 32-bit pygame surface is a contiguous block of B,G,R,A pixels
+        with no row padding -- `get_pitch()` is `width * 4` at every
+        width -- so there is nothing to convert, and the texture unit does
+        the channel reorder and the vertical flip for nothing.
 
-        The guard is not decoration. `get_buffer()` exposes the real
-        layout, and a surface that is not 4 bytes per pixel, or whose rows
-        are padded, would upload as garbage rather than fail. This
-        renderer only ever owns a surface it made itself, so the fallback
-        should never run; it costs one comparison a frame to be sure, and
-        a `subsurface` already has a pitch wider than its width.
+        **This raises rather than falling back.** The first version
+        converted with `pygame.image.tobytes` when the layout disagreed,
+        and sabotage showed why that was the wrong shape: this renderer
+        only ever owns a surface it built itself in `__init__` or
+        `resize`, so the fallback could not run, and a second code path
+        no test can reach is a second code path that can be wrong
+        undetected -- it was already carrying its own channel-order trap.
+        A surface that is not 4 bytes per pixel, or whose rows are padded,
+        means something assigned `_surface` something this class does not
+        make (a `subsurface` has a wider pitch), and that is a programming
+        error here, not bad input from a caller. `UIRenderer.draw_texture`
+        clips an out-of-bounds source rect instead of refusing it,
+        because that *is* caller data and the frame should survive it;
+        a broken internal invariant is the opposite case.
 
         Returns:
             A buffer of `width * height * 4` bytes, B,G,R,A per pixel,
             the top row first.
+
+        Raises:
+            RuntimeError: If the surface is not the tightly packed 32-bit
+                surface the upload and the texture's swizzle assume.
         """
-        if self._surface.get_bytesize() == 4 and self._surface.get_pitch() == (
-            self._width * 4
-        ):
-            return self._surface.get_buffer()
-        # BGRA, not RGBA: the swizzle is set for the fast path above, and
-        # a fallback that disagreed with it would swap red and blue on
-        # exactly the frames nobody tests.
-        return pygame.image.tobytes(self._surface, "BGRA", False)
+        buffer = self._surface.get_buffer()
+        expected = self._width * self._height * 4
+        if buffer.length != expected:
+            # One comparison rather than three. The buffer's length is
+            # what the texture write actually consumes, and it is wrong
+            # for every way the surface can be wrong: fewer bytes per
+            # pixel, padded rows, or dimensions that are not the ones the
+            # texture was made for. Checking the pitch instead let a
+            # 16x16 subsurface of a 32x32 surface through, because its
+            # pitch is the parent's and matched by coincidence.
+            raise RuntimeError(
+                f"The UI surface holds {buffer.length} bytes where the "
+                f"{self._width}x{self._height} texture needs {expected}. "
+                f"`present()` hands GL the surface's raw memory, so a padded, "
+                f"non-32-bit or wrongly sized surface would upload as garbage "
+                f"rather than fail. This renderer builds its own surface in "
+                f"`__init__` and `resize`; something replaced it."
+            )
+        return buffer
 
     def release(self) -> None:
         """Release GPU resources."""

@@ -331,25 +331,29 @@ class TestTheFrameIsNotCopiedOnTheWayToTheGpu:
 
         assert calls == []
 
-    def test_the_fallback_still_agrees_with_the_fast_path(
+    def test_a_surface_that_cannot_be_uploaded_raw_says_so(
         self, blended_ctx: Any
     ) -> None:
-        """A surface whose rows are padded cannot be uploaded raw, so
-        `_pixels` converts instead -- and the conversion has to produce
-        the same byte order the swizzle is set for, or it swaps red and
-        blue on exactly the frames nobody looks at."""
+        """The upload reads the surface's memory directly, so a padded or
+        non-32-bit surface would reach the GPU as garbage rather than
+        fail. This renderer builds its own surface and cannot normally
+        hold such a thing -- which is the point: if one is ever there,
+        something replaced `_surface`, and that is worth a name rather
+        than a frame of noise."""
         import pygame
+        import pytest as _pytest
 
         if not pygame.get_init():
             pygame.init()
         renderer = GLUIRenderer(blended_ctx, 32, 32)
         try:
-            renderer.draw_rect(Rect(0, 0, 32, 32), Color(10, 20, 200, 255))
-            raw = bytes(renderer._pixels())
-            # Force the fallback by making the pitch disagree with the width.
-            renderer._width = 31
-            converted = bytes(renderer._pixels())
+            # Stand in for a surface this class did not make. A
+            # subsurface is the realistic one: it shares its parent's
+            # pitch, so it slips past a pitch comparison and is caught
+            # only by how many bytes it actually holds.
+            renderer._surface = renderer._surface.subsurface((0, 0, 16, 16))
+
+            with _pytest.raises(RuntimeError, match="bytes where the"):
+                renderer._pixels()
         finally:
             renderer.release()
-
-        assert converted == raw
