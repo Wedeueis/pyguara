@@ -33,7 +33,7 @@ from enum import Enum
 from functools import cache
 from typing import Any, get_type_hints
 
-from pyguara.common.components import Transform
+from pyguara.common.components import Transform, set_parent
 from pyguara.common.modifiers import ModifiableValue
 from pyguara.common.types import Vector2
 from pyguara.ecs.entity import Entity
@@ -190,10 +190,19 @@ class SceneSerializer:
         manager = scene.entity_manager
         manager.clear()
 
-        # Two passes. Ownership is restored only once every entity exists:
-        # `set_parent` raises KeyError for a parent it cannot find, and a
-        # child may appear before its parent in the file.
+        # Two passes. Both kinds of parent are restored only once every
+        # entity exists: `set_parent` raises KeyError for a parent it cannot
+        # find, and a child may appear before its parent in the file.
+        #
+        # The two kinds are separate on purpose, and both have to be here.
+        # `ChildOf` is *ownership* and cascades on destroy; `Transform`
+        # parenting is *spatial* and is what makes a child's stored position
+        # local. Only the first survived a save: a turret stored at local
+        # (10, 0) under a hull at (100, 200) reloaded as a root at world
+        # (10, 0), having moved 190 pixels, because its position was read
+        # back as a world coordinate.
         parents: dict[str, str] = {}
+        transform_parents: dict[str, str] = {}
         disabled: list[str] = []
 
         for ent_data in data.get("entities", []):
@@ -213,6 +222,10 @@ class SceneSerializer:
                     if parent_id:
                         parents[entity.id] = parent_id
                     continue
+                if comp_name == "Transform":
+                    spatial_parent = comp_raw_data.get("parent", "")
+                    if spatial_parent:
+                        transform_parents[entity.id] = spatial_parent
                 self._load_component(entity, comp_name, comp_raw_data)
 
         for child_id, parent_id in parents.items():
@@ -224,10 +237,72 @@ class SceneSerializer:
                     f"The entity is loaded, unparented."
                 )
 
+        self._restore_transform_parents(manager, transform_parents)
+
         for entity_id in disabled:
             manager.set_entity_enabled(entity_id, False)
 
         return True
+
+    def _restore_transform_parents(
+        self, manager: EntityManager, links: dict[str, str]
+    ) -> None:
+        """Re-link spatial `Transform` hierarchies after every entity exists.
+
+        **`keep_world_transform` is False, and that is the whole point.**
+        The stored `position` of a parented transform is already *local* to
+        its parent -- that is what being parented means. Re-linking with
+        `keep_world_transform=True`, the default, would read that local
+        value as a world coordinate and rewrite the local one to compensate,
+        so a turret stored at (10, 0) under a hull at (100, 200) would come
+        back at local (-90, -200) and the hierarchy would be correct about a
+        position that was never saved. `PrefabFactory._create_children`
+        parents with the same flag for the same reason.
+
+        Order within the pass does not matter: with no world transform to
+        preserve, linking is just a pointer and a child list append, so a
+        chain three deep re-links correctly whichever end is seen first.
+
+        Args:
+            manager: The entity manager holding every loaded entity.
+            links: Child entity id -> parent entity id.
+        """
+        for child_id, parent_id in links.items():
+            child = manager.get_entity(child_id)
+            parent = manager.get_entity(parent_id)
+            if child is None or parent is None:
+                logger.warning(
+                    f"Could not restore the spatial parent of '{child_id}': "
+                    f"no entity '{parent_id}' in the file. The entity is "
+                    f"loaded, unparented -- so its stored position, which is "
+                    f"local to that parent, is now being read as a world one."
+                )
+                continue
+            # `has_component` rather than a None check: `get_component`
+            # raises KeyError for a type that is not attached, so testing
+            # its result would have let a hand-written file -- or a
+            # component the registry declined to build -- abort the whole
+            # load instead of dropping one link.
+            if not (child.has_component(Transform) and parent.has_component(Transform)):
+                missing = parent_id if not parent.has_component(Transform) else child_id
+                logger.warning(
+                    f"Could not restore the spatial parent of '{child_id}': "
+                    f"'{missing}' has no Transform. The entity is loaded, "
+                    f"unparented."
+                )
+                continue
+            child_transform = child.get_component(Transform)
+            parent_transform = parent.get_component(Transform)
+            try:
+                set_parent(child_transform, parent_transform, False)
+            except ValueError as exc:
+                # A cycle. `set_parent` refuses it rather than building a
+                # hierarchy whose `world_*` reads recurse until the stack
+                # runs out, which is what a hand-edited file could ask for.
+                logger.warning(
+                    f"Could not restore the spatial parent of '{child_id}': "
+                    f"{exc} The entity is loaded, unparented."
+                )
 
     def _load_component(
         self, entity: Entity, comp_name: str, comp_raw_data: dict[str, Any]
@@ -427,12 +502,18 @@ class SceneSerializer:
             Its stored form.
         """
         if isinstance(component, Transform):
-            return {
+            data: dict[str, Any] = {
                 "position": {"x": component.position.x, "y": component.position.y},
                 "rotation": component.rotation,
                 "scale": {"x": component.scale.x, "y": component.scale.y},
                 "interpolate": component.interpolate,
             }
+            parent_id = self._transform_parent_id(component)
+            # Omitted when there is no parent, so a scene with no spatial
+            # hierarchy writes exactly the file it wrote before.
+            if parent_id is not None:
+                data["parent"] = parent_id
+            return data
 
         if dataclasses.is_dataclass(component) and not isinstance(component, type):
             result: dict[str, Any] = {}
@@ -453,6 +534,36 @@ class SceneSerializer:
             }
 
         return {}
+
+    def _transform_parent_id(self, component: Transform) -> str | None:
+        """Name `component`'s spatial parent by its owning entity's id.
+
+        A `Transform` points at its parent `Transform`, not at an entity, so
+        the link has to be turned into something a file can hold. Every
+        attached component knows its owner, which is what makes that
+        possible without a reverse index.
+
+        Args:
+            component: The child transform.
+
+        Returns:
+            The parent's entity id, or None when there is no parent -- or
+            when the parent is a `Transform` that belongs to no entity,
+            which is a link nothing can name.
+        """
+        parent = component.parent
+        if parent is None:
+            return None
+        owner = parent.entity
+        if owner is None:
+            logger.warning(
+                "A Transform is parented to one that belongs to no entity, so "
+                "the link cannot be written to the file and is dropped. A "
+                "bare Transform used as a pivot has no id to refer to; "
+                "attach it to an entity to make the hierarchy saveable."
+            )
+            return None
+        return owner.id
 
     def _serialize_value(self, value: Any) -> Any:
         """Convert a value to a JSON-serializable form.
