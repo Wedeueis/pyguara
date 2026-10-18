@@ -19,8 +19,8 @@ pytest.importorskip("imgui_bundle")
 from imgui_bundle import imgui  # noqa: E402
 
 from pyguara.di.container import DIContainer  # noqa: E402
-from pyguara.editor.layer import EditorLayer  # noqa: E402
-from pyguara.editor.theme import (  # noqa: E402
+from pyguara.studio.layer import EditorLayer  # noqa: E402
+from pyguara.studio.theme import (  # noqa: E402
     MAX_SCALE,
     MIN_SCALE,
     apply_theme,

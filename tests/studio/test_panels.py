@@ -20,11 +20,10 @@ from imgui_bundle import imgui  # noqa: E402
 
 from pyguara.common.components import Transform  # noqa: E402
 from pyguara.ecs.manager import EntityManager  # noqa: E402
-from pyguara.editor.panels.base import EditorPanel, PanelContext  # noqa: E402
-from pyguara.editor.selection import Selection  # noqa: E402
 from pyguara.studio.agent.journal import Actor  # noqa: E402
 from pyguara.studio.commands.entity import SetEnabled, SetField  # noqa: E402
 from pyguara.studio.ops.registry import OperationRegistry  # noqa: E402
+from pyguara.studio.panels.base import EditorPanel, PanelContext  # noqa: E402
 from pyguara.studio.panels.history import HistoryPanel  # noqa: E402
 from pyguara.studio.panels.journal import JournalPanel  # noqa: E402
 from pyguara.studio.panels.palette import (  # noqa: E402
@@ -32,6 +31,7 @@ from pyguara.studio.panels.palette import (  # noqa: E402
     CommandPalette,
 )
 from pyguara.studio.panels.schema import SchemaPanel  # noqa: E402
+from pyguara.studio.selection import Selection  # noqa: E402
 from pyguara.studio.session import ApprovalMode, StudioSession  # noqa: E402
 
 

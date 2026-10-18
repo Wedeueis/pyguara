@@ -27,9 +27,9 @@ from imgui_bundle import imgui  # noqa: E402
 from pyguara.common.components import Transform  # noqa: E402
 from pyguara.common.types import Vector2  # noqa: E402
 from pyguara.ecs.manager import EntityManager  # noqa: E402
-from pyguara.editor.panels.base import PanelContext  # noqa: E402
-from pyguara.editor.selection import Selection  # noqa: E402
 from pyguara.graphics.components.camera import Camera2D  # noqa: E402
+from pyguara.studio.panels.base import PanelContext  # noqa: E402
+from pyguara.studio.selection import Selection  # noqa: E402
 from pyguara.studio.session import StudioSession  # noqa: E402
 from pyguara.studio.viewport.gizmo import (  # noqa: E402
     AXIS_LENGTH,

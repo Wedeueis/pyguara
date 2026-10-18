@@ -41,12 +41,12 @@ from imgui_bundle import imgui
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
-from pyguara.editor.panels.base import PanelContext
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.log import get_logger
 from pyguara.studio.agent.journal import Actor
 from pyguara.studio.commands.base import CompositeCommand, EditCommand, EditError
 from pyguara.studio.commands.entity import SetField
+from pyguara.studio.panels.base import PanelContext
 from pyguara.studio.session import StudioSession
 from pyguara.studio.viewport.panel import ViewportOverlay, ViewportState
 from pyguara.studio.viewport.picking import screen_to_world, world_to_panel

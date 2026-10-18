@@ -26,9 +26,9 @@ import pytest
 
 from pyguara.application.application import Application, EditorInputSink
 from pyguara.application.bootstrap import create_headless_application
-from pyguara.editor.layer import EditorLayer
 from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.input import keys
+from pyguara.studio.layer import EditorLayer
 
 
 @pytest.fixture(autouse=True)

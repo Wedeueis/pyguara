@@ -25,14 +25,14 @@ pytest.importorskip("imgui_bundle")
 
 from imgui_bundle import imgui  # noqa: E402
 
-from pyguara.editor.panels.base import PanelContext  # noqa: E402
-from pyguara.editor.panels.hierarchy import (  # noqa: E402
+from pyguara.studio.panels.base import PanelContext  # noqa: E402
+from pyguara.studio.panels.hierarchy import (  # noqa: E402
     GROUP_THRESHOLD,
     HierarchyPanel,
     group_key,
     group_siblings,
 )
-from pyguara.editor.selection import Selection  # noqa: E402
+from pyguara.studio.selection import Selection  # noqa: E402
 
 
 @pytest.fixture

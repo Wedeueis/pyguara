@@ -24,12 +24,12 @@ import json
 
 from imgui_bundle import imgui
 
-from pyguara.editor.panels.base import EditorPanel, PanelContext
 from pyguara.studio.ops.registry import (
     OperationRegistry,
     OperationResult,
     RiskClass,
 )
+from pyguara.studio.panels.base import EditorPanel, PanelContext
 from pyguara.studio.session import StudioSession
 
 _RISK_COLOURS: dict[RiskClass, tuple[float, float, float, float]] = {

@@ -18,8 +18,8 @@ from pyguara.scene.manager import SceneManager
 
 pytest.importorskip("imgui_bundle")
 
-from pyguara.editor.layer import EditorLayer, default_panels  # noqa: E402
-from pyguara.editor.panels.base import EditorPanel, PanelContext  # noqa: E402
+from pyguara.studio.layer import EditorLayer, default_panels  # noqa: E402
+from pyguara.studio.panels.base import EditorPanel, PanelContext  # noqa: E402
 
 
 class RecordingPanel(EditorPanel):

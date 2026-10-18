@@ -37,8 +37,8 @@ from typing import Any
 
 from imgui_bundle import imgui
 
-from pyguara.editor.panels.base import EditorPanel, PanelContext
 from pyguara.log import get_logger
+from pyguara.studio.panels.base import EditorPanel, PanelContext
 
 logger = get_logger(__name__)
 

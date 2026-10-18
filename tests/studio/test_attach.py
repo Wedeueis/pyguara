@@ -53,9 +53,7 @@ class TestImgulIndependence:
 
         blocker = _Blocker()
         removed = [
-            name
-            for name in list(sys.modules)
-            if name.startswith(("pyguara.studio", "pyguara.editor"))
+            name for name in list(sys.modules) if name.startswith("pyguara.studio")
         ]
         saved = {name: sys.modules.pop(name) for name in removed}
         sys.meta_path.insert(0, blocker)
@@ -66,7 +64,7 @@ class TestImgulIndependence:
         finally:
             sys.meta_path.remove(blocker)
             for name in list(sys.modules):
-                if name.startswith(("pyguara.studio", "pyguara.editor")):
+                if name.startswith("pyguara.studio"):
                     del sys.modules[name]
             sys.modules.update(saved)
 

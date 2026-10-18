@@ -27,8 +27,8 @@ pytest.importorskip("imgui_bundle")
 
 from imgui_bundle import imgui  # noqa: E402
 
-from pyguara.editor.layer import DockLayout, EditorLayer  # noqa: E402
-from pyguara.editor.panels.base import EditorPanel, PanelContext  # noqa: E402
+from pyguara.studio.layer import DockLayout, EditorLayer  # noqa: E402
+from pyguara.studio.panels.base import EditorPanel, PanelContext  # noqa: E402
 
 
 class StubPanel(EditorPanel):

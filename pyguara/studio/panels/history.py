@@ -14,9 +14,9 @@ from __future__ import annotations
 
 from imgui_bundle import imgui
 
-from pyguara.editor.panels.base import EditorPanel, PanelContext
 from pyguara.log import get_logger
 from pyguara.studio.commands.base import EditError
+from pyguara.studio.panels.base import EditorPanel, PanelContext
 from pyguara.studio.session import StudioSession
 
 logger = get_logger(__name__)

@@ -19,7 +19,7 @@ import sys
 
 import pytest
 
-from pyguara.editor import availability
+from pyguara.studio import availability
 
 
 @pytest.mark.unit
@@ -53,9 +53,9 @@ class TestNoHiddenGLDependency:
                 "-c",
                 (
                     "import sys;"
-                    "import pyguara.editor;"
-                    "import pyguara.editor.renderer;"
-                    "import pyguara.editor.layer;"
+                    "import pyguara.studio;"
+                    "import pyguara.studio.renderer;"
+                    "import pyguara.studio.layer;"
                     "print('OpenGL' in sys.modules or "
                     "any(m.startswith('OpenGL.') for m in sys.modules))"
                 ),

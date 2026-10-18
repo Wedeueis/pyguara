@@ -18,9 +18,9 @@ pytest.importorskip("imgui_bundle")
 
 from imgui_bundle import imgui  # noqa: E402
 
-from pyguara.editor.layer import EditorLayer  # noqa: E402
-from pyguara.editor.titlebar import BUTTON_WIDTH, HEIGHT, TitleBar  # noqa: E402
 from pyguara.graphics.protocols import IWindowChrome  # noqa: E402
+from pyguara.studio.layer import EditorLayer  # noqa: E402
+from pyguara.studio.titlebar import BUTTON_WIDTH, HEIGHT, TitleBar  # noqa: E402
 
 WIDTH = 1280
 """Narrow enough to stay at a UI scale of 1.0, so the pixel positions the

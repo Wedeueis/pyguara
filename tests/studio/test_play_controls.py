@@ -19,12 +19,12 @@ pytest.importorskip("imgui_bundle")
 from imgui_bundle import imgui  # noqa: E402
 
 from pyguara.ecs.manager import EntityManager  # noqa: E402
-from pyguara.editor.panels.base import PanelContext  # noqa: E402
-from pyguara.editor.selection import Selection  # noqa: E402
+from pyguara.studio.panels.base import PanelContext  # noqa: E402
 from pyguara.studio.panels.play import (  # noqa: E402
     MAX_TIME_SCALE,
     PlayControlsPanel,
 )
+from pyguara.studio.selection import Selection  # noqa: E402
 
 
 class FakeApplication:

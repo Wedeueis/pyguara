@@ -1,4 +1,4 @@
-"""Putting Studio into a running application.
+"""Putting the editor layer, and Studio on top of it, into an application.
 
 ```python
 from pyguara.application.bootstrap import create_application
@@ -9,11 +9,27 @@ studio = attach_studio(app.container)
 app.run(MyScene("game", dispatcher))
 ```
 
-Opt-in, like `attach_editor` and for the same reason: a shipped game
-should not pay for an ImGui context and an operation registry it never
-shows. `attach_studio` builds on `attach_editor` rather than replacing
-it -- the context lifecycle, the input routing and the render pass are
-already right there, and Studio adds panels and a session to them.
+Two entry points, in one module because the second is the first plus a
+session. `attach_editor` installs the ImGui context, the input routing,
+the render pass and two panels over live engine state. `attach_studio`
+calls it and adds the operation registry, the journal, the command stack
+and the rest of the panels -- it builds on the editor layer rather than
+replacing it, because the context lifecycle is already right there.
+
+Both are opt-in, for the same reason: a shipped game should not pay for
+an ImGui context and an operation registry it never shows.
+
+**Nothing here imports Dear ImGui at module scope.** `pyguara/studio/
+__init__.py` imports this module and `pyguara.studio.ops` goes through
+that `__init__`, so a module-level ImGui import here would make the
+dependency-free JSON-lines transport need ImGui after all -- precisely
+the coupling the optional MCP extra was kept out of. It has happened
+once, when the default dock layout was first wired up, and
+`tests/studio/test_attach.py` now blocks the import and asserts the
+transport still loads. Everything ImGui-adjacent -- the layer, the
+renderer, the panels, and `availability`, which imports `imgui_bundle`
+to find out whether it can -- is imported inside the function that needs
+it.
 
 **The session is bound to a world, and the world changes.** Each scene
 owns its own `EntityManager`, so a session built at attach time would be
@@ -27,7 +43,7 @@ would be reverting commands into a world that never saw them applied.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pyguara.di.container import DIContainer
 from pyguara.ecs.manager import EntityManager
@@ -37,6 +53,12 @@ from pyguara.studio.agent.journal import Journal
 from pyguara.studio.ops.builtin import default_registry
 from pyguara.studio.ops.registry import OperationRegistry
 from pyguara.studio.session import ApprovalMode, StudioSession
+
+if TYPE_CHECKING:
+    # Type-checking only: `pyguara.studio.panels` imports Dear ImGui at
+    # module scope, and importing it here would undo the rule the module
+    # docstring states.
+    from pyguara.studio.panels.base import EditorPanel
 
 logger = get_logger(__name__)
 
@@ -59,12 +81,10 @@ Applied once. A developer who drags a panel elsewhere keeps it there;
 without any layout at all every window opens at the same default
 position, stacked on top of the others.
 
-Plain titles rather than a `DockLayout` so that **importing this module
-does not import Dear ImGui**. `pyguara/studio/__init__.py` imports this
-one, and `pyguara.studio.ops` goes through that `__init__`, so a module-
-level `from pyguara.editor.layer import DockLayout` here made the
-dependency-free JSON-lines transport need ImGui after all -- which is
-precisely the coupling the MCP extra was kept out of.
+Plain titles rather than a `DockLayout`, under the module docstring's
+rule: a module-level `from pyguara.studio.layer import DockLayout` here
+is what made the dependency-free JSON-lines transport need ImGui, and
+this constant is the one piece of the layout a caller reads without one.
 """
 
 
@@ -76,7 +96,7 @@ def default_layout() -> Any:
     Returns:
         The layout.
     """
-    from pyguara.editor.layer import DockLayout
+    from pyguara.studio.layer import DockLayout
 
     return DockLayout(
         left=DEFAULT_LAYOUT_REGIONS["left"],
@@ -296,11 +316,12 @@ class StudioAttachment:
             # reclaimed by the follow system, an edit outlived before it
             # could be seen. Press Play to run it.
             application.paused = True
-        # The base editor's Inspector writes straight onto the component.
-        # That is right for an editor with no session and wrong here: a
-        # field typed into it reached no history, appeared in no journal,
-        # and applied even in `plan` mode, which is supposed to change
-        # nothing. Studio's routes the same edit through `set_field`.
+        # `attach_editor` installed an Inspector with no attachment, so
+        # it writes straight onto the component -- right for a layer with
+        # no session and wrong here: a field typed into it reached no
+        # history, appeared in no journal, and applied even in `plan`
+        # mode, which is supposed to change nothing. Giving it the
+        # attachment routes the same edit through `set_field`.
         self._replace_inspector()
 
         for panel in panels:
@@ -314,13 +335,19 @@ class StudioAttachment:
         logger.info("Studio panels installed.")
 
     def _replace_inspector(self) -> None:
-        """Swap the base editor's Inspector for one that uses operations."""
-        from pyguara.studio.panels.inspector import StudioInspectorPanel
+        """Swap the layer's Inspector for one that writes through Studio.
+
+        Replaced rather than handed the attachment in place, so the
+        instance the layer draws is the one this built: `replace_panel`
+        puts it in the same slot of the draw order, which is what the
+        dock layout keeps a place for.
+        """
+        from pyguara.studio.panels.inspector import InspectorPanel
 
         for index, panel in enumerate(self._layer.panels):
             if panel.title != "Inspector":
                 continue
-            replacement = StudioInspectorPanel(self, visible=panel.visible)
+            replacement = InspectorPanel(attachment=self, visible=panel.visible)
             self._layer.replace_panel(index, replacement)
             return
 
@@ -683,6 +710,156 @@ class StudioAttachment:
             return get_component_registry()
 
 
+def attach_editor(
+    container: DIContainer,
+    *,
+    panels: list[EditorPanel] | None = None,
+) -> object | None:
+    """Add the ImGui editor layer to the container's render graph.
+
+    The layer on its own: an ImGui context, the input routing, the render
+    pass, and a Hierarchy and an Inspector over live engine state. No
+    session, no command stack, no operation registry -- `attach_studio`
+    adds those to this.
+
+    ModernGL-only by construction: it draws through the GL context the
+    render graph owns, and the Pygame backend has none -- its
+    `PygameRenderGraph` is a stub whose `ctx` is `None`, and the window it
+    opens is a software surface (`pygame_window.py` actively strips
+    `pygame.OPENGL` to keep it one). On that backend this returns `None`
+    rather than half-installing, and the `pyguara/tools` overlay remains
+    the dev surface there.
+
+    Args:
+        container: The engine container. Must already have a `RenderGraph`
+            registered, which `create_application()` does for the ModernGL
+            backend.
+        panels: Panels for the layer. Defaults to Hierarchy and Inspector.
+
+    The returned layer's teardown is owned by the pass that is installed
+    into the graph, so `RenderGraph.release()` -- which
+    `Application.shutdown()` calls -- releases the editor too. Releasing it
+    by hand as well is harmless.
+
+    Works under `create_application()` and `create_sandbox_application()`
+    alike: both draw through `Application`'s frame loop, which executes
+    every registered pass. (`SandboxApplication` briefly did not -- it
+    overrode `_render()` and ran no passes at all, so the editor attached
+    and was never drawn. It overrides `_render_overlays()` now.)
+
+    Returns:
+        The `EditorLayer`, registered in the container so game code can
+        reach it, or `None` when the editor cannot run here -- ImGui
+        missing, or a backend with no GL context. The reason is logged.
+    """
+    # Inside the function, with everything else ImGui-adjacent: importing
+    # `availability` imports `imgui_bundle` when it is installed, and this
+    # module is on the path `pyguara studio ops` takes. See the module
+    # docstring.
+    from pyguara.studio.availability import IMGUI_AVAILABLE, IMGUI_IMPORT_ERROR
+
+    if not IMGUI_AVAILABLE:
+        logger.warning(
+            "Editor not attached: Dear ImGui is not installed "
+            f"({IMGUI_IMPORT_ERROR}). Install the dev extra to enable it."
+        )
+        return None
+
+    from pyguara.graphics.pipeline.graph import RenderGraph
+    from pyguara.studio.imgui_pass import ImGuiPass
+    from pyguara.studio.layer import EditorLayer
+    from pyguara.studio.renderer import ModernGLImGuiRenderer
+
+    # Typed `object`: the container is declared to return a `RenderGraph`,
+    # but the Pygame backend registers its non-subclass stub under the same
+    # key, so the isinstance check below is a real runtime branch rather
+    # than the dead code the declared type would make it.
+    candidate: object
+    try:
+        # cast through `object` so the isinstance below stays a live branch:
+        # the container is *declared* to return a `RenderGraph`, and without
+        # this mypy calls the stub case dead code.
+        candidate = cast(object, container.get(RenderGraph))
+    except Exception as exc:
+        logger.warning(f"Editor not attached: no RenderGraph registered ({exc}).")
+        return None
+
+    # The same test `Application` uses to tell the real graph from Pygame's
+    # stub, which is registered under the same key but is not a subclass.
+    if not isinstance(candidate, RenderGraph):
+        logger.info(
+            "Editor not attached: this backend has no GL render graph "
+            f"({type(candidate).__name__}). The editor is ModernGL-only; "
+            "use the pyguara/tools overlay on the Pygame backend."
+        )
+        return None
+
+    # A real `RenderGraph` is constructed with a context and exposes it
+    # non-optionally, so there is nothing further to guard here.
+    ctx = candidate.ctx
+
+    # The graph's own dimensions, not `ctx.screen.size`: `ctx.screen` is
+    # `None` on a standalone (offscreen) context, which is what the GL
+    # tests and `tools/agent_view.py --gl` run on. The graph knows its size
+    # either way, and `graph.resize()` already forwards changes to every
+    # pass's `on_resize()`.
+    width = candidate.fbo_manager.width
+    height = candidate.fbo_manager.height
+    layer = EditorLayer(
+        container,
+        renderer_factory=lambda: ModernGLImGuiRenderer(ctx),
+        panels=panels,
+    )
+    # Appended, so it runs after `final` has blitted the scene to the
+    # screen and the editor lands on top of the finished frame.
+    candidate.add_pass(ImGuiPass(layer, width, height))
+    container.register_instance(EditorLayer, layer)
+    _install_title_bar(container, layer)
+
+    logger.info(f"Editor attached: {len(layer.panels)} panel(s) over ModernGL.")
+    return layer
+
+
+def _install_title_bar(container: DIContainer, layer: object) -> None:
+    """Give the editor its own title bar when the window has no frame.
+
+    Only when both halves are there: the window was opened borderless
+    (`display.borderless`), and the backend can actually minimise,
+    maximise and move it. A borderless window whose buttons do nothing is
+    worse than the operating system's own bar, so the absence of either
+    half leaves that bar alone.
+
+    Args:
+        container: The engine container.
+        layer: The `EditorLayer` to give the bar to.
+    """
+    try:
+        from pyguara.config.manager import ConfigManager
+        from pyguara.graphics.window import Window
+
+        display = container.get(ConfigManager).config.display
+        window = container.get(Window)
+    except Exception as exc:  # pragma: no cover - a hand-built container
+        logger.debug(f"No window to draw a title bar for: {exc}")
+        return
+
+    if not getattr(display, "borderless", False):
+        return
+
+    chrome = window.chrome
+    if chrome is None:
+        logger.info(
+            "The window is borderless but this backend offers no window "
+            "controls, so the editor cannot draw its own title bar."
+        )
+        return
+
+    from pyguara.studio.titlebar import TitleBar
+
+    layer.set_title_bar(TitleBar(display.title, chrome))  # type: ignore[attr-defined]
+    logger.info("Editor title bar installed (borderless window).")
+
+
 def attach_studio(
     container: DIContainer,
     *,
@@ -711,8 +888,6 @@ def attach_studio(
         is logged, matching `attach_editor`, which declines the same way
         rather than half-installing.
     """
-    from pyguara.editor.attach import attach_editor
-
     layer = attach_editor(container)
     if layer is None:
         logger.info(

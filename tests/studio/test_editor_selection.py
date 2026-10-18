@@ -7,7 +7,7 @@ for the panels that only ever want one entity.
 
 from __future__ import annotations
 
-from pyguara.editor.selection import Selection
+from pyguara.studio.selection import Selection
 
 
 class TestSingleSelection:

@@ -4,7 +4,7 @@ The pygame and ModernGL window backends both pump SDL via `pygame.event.get()`
 and call this to hand the rest of the engine `QuitEvent` / `KeyDownEvent` /
 `KeyUpEvent` / `MouseButtonEvent` / `MouseMotionEvent` / `MouseWheelEvent` /
 `TextInputEvent` / `WindowResizeEvent` instead of raw SDL structs -- so
-`application.py`, `InputManager`, `pyguara/tools/*`, `pyguara/editor/*` and
+`application.py`, `InputManager`, `pyguara/tools/*`, `pyguara/studio/*` and
 `sandbox.py` stop importing pygame (issue #9).
 """
 
