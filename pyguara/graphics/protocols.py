@@ -599,14 +599,33 @@ class UIRenderer(Protocol):
         ...
 
     def draw_texture(
-        self, texture: Any, rect: Rect, color: Color | None = None
+        self,
+        texture: Any,
+        rect: Rect,
+        color: Color | None = None,
+        source_rect: Rect | None = None,
     ) -> None:
-        """Draw an image texture.
+        """Draw an image texture, or one region of it, scaled into `rect`.
+
+        `source_rect` is what lets a widget draw one frame of an atlas.
+        Without it the only way to show part of a sheet was to hand this
+        method a surface someone had already cut -- while the world side
+        has carried `RenderCommand.source_rect` all along, so the same
+        sheet was addressable for a sprite and not for a HUD icon. The
+        nine-patch renderer is the first caller: nine slices of one
+        texture, each stretched differently.
+
+        The region is cut before the scale, so a sub-rect scales exactly
+        as a standalone texture of that size would. A region the texture
+        does not contain is clipped to the overlap rather than refused;
+        the implementations log it.
 
         Args:
             texture: The engine specific texture object (e.g. pygame.Surface)
             rect: Where to draw it
             color: Optional tint color
+            source_rect: The region of `texture` to draw, in texture
+                pixels. None draws all of it.
         """
         ...
 
