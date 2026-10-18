@@ -31,7 +31,7 @@ import pytest
 
 pytest.importorskip("imgui_bundle")
 
-from pyguara.editor.imgui_pass import ImGuiPass  # noqa: E402
+from pyguara.studio.imgui_pass import ImGuiPass  # noqa: E402
 
 WINDOW = (1990, 820)
 """A window whose shape is not the configured one, so there are bars."""

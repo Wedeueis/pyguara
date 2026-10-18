@@ -23,17 +23,17 @@ from imgui_bundle import imgui
 
 from pyguara.di.container import DIContainer
 from pyguara.ecs.manager import EntityManager
-from pyguara.editor.availability import require_imgui
-from pyguara.editor.input import feed_event, wants_keyboard, wants_mouse
-from pyguara.editor.panels.base import EditorPanel, PanelContext
-from pyguara.editor.panels.hierarchy import HierarchyPanel
-from pyguara.editor.panels.inspector import InspectorPanel
-from pyguara.editor.renderer import ModernGLImGuiRenderer
-from pyguara.editor.selection import Selection
-from pyguara.editor.theme import apply_theme, scale_for
-from pyguara.editor.titlebar import TitleBar
-from pyguara.editor.toasts import ToastStack
 from pyguara.log import get_logger
+from pyguara.studio.availability import require_imgui
+from pyguara.studio.input import feed_event, wants_keyboard, wants_mouse
+from pyguara.studio.panels.base import EditorPanel, PanelContext
+from pyguara.studio.panels.hierarchy import HierarchyPanel
+from pyguara.studio.panels.inspector import InspectorPanel
+from pyguara.studio.renderer import ModernGLImGuiRenderer
+from pyguara.studio.selection import Selection
+from pyguara.studio.theme import apply_theme, scale_for
+from pyguara.studio.titlebar import TitleBar
+from pyguara.studio.toasts import ToastStack
 
 logger = get_logger(__name__)
 

@@ -51,8 +51,8 @@ class EditorInputSink(Protocol):
     """Something that may consume an input event before the game sees it.
 
     Declared here, structurally, rather than importing `EditorLayer`:
-    `pyguara/editor` is an optional dev surface that needs Dear ImGui, and
-    the core runtime must import cleanly without it. `Protocol` over `ABC`
+    `pyguara/studio`'s editor layer is an optional dev surface that needs
+    Dear ImGui, and the core runtime must import cleanly without it. `Protocol` over `ABC`
     for the usual reason in this codebase -- the editor does not have to
     know this type exists to satisfy it.
     """
@@ -199,7 +199,7 @@ class Application:
         if not self._editor_layer_checked:
             self._editor_layer_checked = True
             try:
-                from pyguara.editor.layer import EditorLayer
+                from pyguara.studio.layer import EditorLayer
 
                 self._editor_layer_cache = cast(
                     "EditorInputSink | None", self._container.get(EditorLayer)
@@ -216,7 +216,7 @@ class Application:
 
         `create_application()` builds the container itself, so without a
         public accessor anything that needs to resolve or register a
-        service afterwards -- `pyguara.editor.attach_editor()`, a game's
+        service afterwards -- `pyguara.studio.attach_editor()`, a game's
         own systems -- has to reach for `app._container`.
 
         Returns:

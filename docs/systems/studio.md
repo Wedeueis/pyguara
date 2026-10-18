@@ -213,16 +213,24 @@ every tick and a pixel comparison would say nothing.
 
 ### Everything goes through an operation, including the Inspector
 
-The base editor's Inspector writes straight onto the component, which is
-right for an editor with no session behind it. In Studio it was a second
-way to change the world: a field typed into it reached no history,
-appeared in no journal, and applied even in `plan` mode, which is supposed
-to change nothing.
+`attach_editor` installs an `InspectorPanel` with no attachment, and one
+with no attachment writes straight onto the component -- right for a layer
+with no session behind it. In Studio that was a second way to change the
+world: a field typed into it reached no history, appeared in no journal,
+and applied even in `plan` mode, which is supposed to change nothing.
 
-`StudioInspectorPanel` overrides the one method that writes, so a person
-typing a value calls the same `set_field` an agent calls. One seam, one
-history, one record -- which is the premise the whole design rests on, and
-it had a hole in it exactly where most editing happens.
+So `attach_studio` installs an `InspectorPanel` that *has* the attachment,
+and that one sends every accepted field through `set_field` -- the same
+operation an agent calls. One seam, one history, one record, which is the
+premise the whole design rests on, and it had a hole in it exactly where
+most editing happens.
+
+This was a `StudioInspectorPanel` subclass while the editor layer was a
+separate package: a class whose entire body overrode one method across a
+package boundary. The boundary is gone and so is the subclass. It is now
+one class, and where an edit goes is a constructor argument -- which is
+the honest shape, because a direct write is not a lesser version of the
+operation path, it is what an editor with no history can do.
 
 ### The camera the gizmo trusts
 

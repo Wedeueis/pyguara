@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from pyguara.ecs.manager import EntityManager
-from pyguara.editor.selection import Selection
 from pyguara.log import get_logger
+from pyguara.studio.selection import Selection
 
 logger = get_logger(__name__)
 
@@ -70,7 +70,7 @@ class EditorPanel(ABC):
         if self.toasts is None:
             logger.info(f"{self.title}: {message}")
             return
-        from pyguara.editor.toasts import Level
+        from pyguara.studio.toasts import Level
 
         self.toasts.push(message, Level(level))
 

@@ -18,8 +18,8 @@ from pyguara.log import get_logger
 if TYPE_CHECKING:
     import moderngl
 
-    from pyguara.editor.layer import EditorLayer
     from pyguara.graphics.pipeline.graph import RenderGraph
+    from pyguara.studio.layer import EditorLayer
 
 logger = get_logger(__name__)
 

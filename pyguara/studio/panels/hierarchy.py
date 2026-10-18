@@ -33,7 +33,7 @@ from __future__ import annotations
 from imgui_bundle import imgui
 
 from pyguara.ecs.manager import EntityManager
-from pyguara.editor.panels.base import EditorPanel, PanelContext
+from pyguara.studio.panels.base import EditorPanel, PanelContext
 
 # A tree rooted deeper than this is almost certainly a cycle (`set_parent`
 # rejects the ones it can see, but an id whose parent was reparented

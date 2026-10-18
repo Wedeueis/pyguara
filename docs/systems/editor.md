@@ -12,9 +12,11 @@ editor, animation editor, agentic authoring harness) is tracked separately as
 >
 > A **second**, working ImGui layer now exists beside them --
 > [the ImGui editor layer](#the-imgui-editor-layer) -- drawing through the
-> engine's own `moderngl` context instead of PyOpenGL. The two are
-> independent: attaching the editor changes nothing about the overlay, and
-> the overlay remains the only dev surface on the Pygame backend.
+> engine's own `moderngl` context instead of PyOpenGL. It lives in
+> `pyguara.studio`, with the authoring application built on it; there is no
+> `pyguara/editor` package any more. The two surfaces are independent:
+> attaching the editor layer changes nothing about the overlay, and the
+> overlay remains the only dev surface on the Pygame backend.
 
 ## Enabling the overlay
 
@@ -148,17 +150,31 @@ world in that window is writing into an orphan no scene will ever see. Return
 
 ## The ImGui editor layer
 
-A second dev surface, `pyguara.editor`: Dear ImGui panels drawn as a render
+A second dev surface, `pyguara.studio`: Dear ImGui panels drawn as a render
 pass over the finished frame. It is **ModernGL-only** and **opt-in**.
 
 ```python
 from pyguara.application.bootstrap import create_application
-from pyguara.editor import attach_editor
+from pyguara.studio import attach_editor
 
 app = create_application()
 attach_editor(app.container)
 app.run(MyScene("game", app._event_dispatcher))
 ```
+
+`attach_editor` gives you the layer and nothing else: a context, the input
+routing, the render pass, and a Hierarchy and an Inspector over live engine
+state. [PyGuara Studio](studio.md) is this plus a session -- an operation
+registry, a command stack, an audit journal and the rest of the panels --
+and `attach_studio` calls `attach_editor` to get it. Ask for the layer when
+you want to look at the world, and for Studio when you want to change it
+and keep a record.
+
+The two used to be separate packages, `pyguara/editor` and
+`pyguara/studio`, with ten imports and a panel subclass crossing between
+them. They are one package now. What *is* a boundary is the `pyguara.tools`
+overlay above: it draws through `UIRenderer`, needs no ImGui, and works on
+the Pygame backend, which has no GL context for this layer to draw into.
 
 `attach_editor` returns the `EditorLayer`, and registers it in the container
 so game code can reach it. It returns `None` -- logging why -- when the
@@ -187,12 +203,21 @@ the dev surface.
 
 Those backends import `OpenGL.GL`. An undeclared PyOpenGL dependency is
 exactly what made the *first* editor dead code, so the renderer here
-(`pyguara.editor.renderer.ModernGLImGuiRenderer`) is written against
+(`pyguara.studio.renderer.ModernGLImGuiRenderer`) is written against
 `moderngl` -- already a hard dependency of the engine -- and shares the
 context the renderer is already using rather than standing up a second GL
-stack. `pyguara.editor.availability.IMGUI_AVAILABLE` records whether ImGui
+stack. `pyguara.studio.availability.IMGUI_AVAILABLE` records whether ImGui
 imported, and a test asserts it is `True`, so the editor cannot quietly
 switch itself off again.
+
+ImGui itself stays optional, and the thing that keeps it so is an import
+rule rather than a flag: nothing the agent transport loads --
+`pyguara.studio`, `pyguara.studio.ops.*`, `pyguara.studio.session`,
+`pyguara.studio.attach` -- may import Dear ImGui at module scope, so
+`pyguara studio ops` runs on an install without it. Now that the layer and
+Studio share a package that is one unguarded import away at all times, and
+`tests/studio/test_attach.py` asserts it in a fresh interpreter: not that
+the transport still works without ImGui, but that it never asked for it.
 
 ### Panels
 
@@ -209,10 +234,20 @@ read-only rather than assigned to, and every accepted edit ends with
 `EntityManager.notify_component_changed()` so anything mirroring the
 component -- physics bodies, render batches, the spatial index -- is told.
 
+**Where an accepted edit goes depends on who attached the panel.** Under
+`attach_editor` it is the direct write above, which is all a layer with no
+history can honestly do. Under `attach_studio` the panel is given the
+attachment, and every accepted field becomes the same `set_field`
+operation an agent calls -- so it lands on the same undo stack, in the same
+journal, and under the same approval mode. That used to be a
+`StudioInspectorPanel` subclass in the other package, overriding the one
+method that writes; with both in `pyguara.studio` it is one class and a
+constructor argument.
+
 ### Custom panels
 
 ```python
-from pyguara.editor import EditorPanel, PanelContext
+from pyguara.studio.panels.base import EditorPanel, PanelContext
 
 
 class EntityCount(EditorPanel):

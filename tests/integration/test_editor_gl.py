@@ -25,11 +25,11 @@ pytest.importorskip("imgui_bundle")
 
 from imgui_bundle import imgui  # noqa: E402
 
-from pyguara.editor.attach import attach_editor  # noqa: E402
-from pyguara.editor.imgui_pass import PASS_NAME, ImGuiPass  # noqa: E402
-from pyguara.editor.layer import EditorLayer  # noqa: E402
-from pyguara.editor.renderer import ModernGLImGuiRenderer  # noqa: E402
 from pyguara.graphics.pipeline.graph import RenderGraph  # noqa: E402
+from pyguara.studio.attach import attach_editor  # noqa: E402
+from pyguara.studio.imgui_pass import PASS_NAME, ImGuiPass  # noqa: E402
+from pyguara.studio.layer import EditorLayer  # noqa: E402
+from pyguara.studio.renderer import ModernGLImGuiRenderer  # noqa: E402
 
 _SIZE = (320, 240)
 

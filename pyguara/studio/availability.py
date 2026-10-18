@@ -15,10 +15,15 @@ Two things stop that recurring, and both matter more than the flag itself:
    frame. The draw data is rasterised by `ModernGLImGuiRenderer` through
    the engine's own `moderngl` context -- already a hard dependency -- so
    there is no second, undeclared GL stack to go missing.
-2. **A test asserts this flag is `True`.** `tests/test_editor_availability.py`
-   fails if a dev install cannot import ImGui, so the editor cannot quietly
-   switch itself off again. A flag nothing asserts on is how the last one
-   hid.
+2. **A test asserts this flag is `True`.**
+   `tests/studio/test_editor_availability.py` fails if a dev install
+   cannot import ImGui, so the editor cannot quietly switch itself off
+   again. A flag nothing asserts on is how the last one hid.
+
+Importing this module imports `imgui_bundle` when it is installed, which
+is the one thing to know before importing it somewhere new: it is not a
+cheap probe. Everything the agent transport loads keeps it inside a
+function -- see `pyguara/studio/attach.py`.
 """
 
 from __future__ import annotations

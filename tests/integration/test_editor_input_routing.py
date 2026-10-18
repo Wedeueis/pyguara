@@ -10,7 +10,7 @@ Tested against `Application._process_input` with a fake window, rather
 than through a real ImGui layer, because what is being asserted is the
 *routing*: that an attached sink is consulted, that a consumed event stops
 there, and that an unconsumed one carries on to the `InputManager`.
-`tests/test_editor_input.py` covers the translation itself.
+`tests/studio/test_editor_input.py` covers the translation itself.
 """
 
 from __future__ import annotations
@@ -26,9 +26,9 @@ import pytest
 
 from pyguara.application.application import Application, EditorInputSink
 from pyguara.application.bootstrap import create_headless_application
-from pyguara.editor.layer import EditorLayer
 from pyguara.events.input import KeyDownEvent, MouseButtonEvent
 from pyguara.input import keys
+from pyguara.studio.layer import EditorLayer
 
 
 @pytest.fixture(autouse=True)

@@ -13,7 +13,6 @@ from typing import Any
 
 import pytest
 
-from pyguara.editor import input as editor_input
 from pyguara.events.input import (
     KeyDownEvent,
     KeyUpEvent,
@@ -23,6 +22,7 @@ from pyguara.events.input import (
     TextInputEvent,
 )
 from pyguara.input import keys
+from pyguara.studio import input as editor_input
 
 imgui_bundle = pytest.importorskip("imgui_bundle")
 imgui = imgui_bundle.imgui

@@ -34,10 +34,10 @@ from typing import Any
 from imgui_bundle import imgui
 
 from pyguara.common.types import Rect, Vector2
-from pyguara.editor.panels.base import EditorPanel, PanelContext
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.viewport import Viewport
 from pyguara.log import get_logger
+from pyguara.studio.panels.base import EditorPanel, PanelContext
 from pyguara.studio.viewport.picking import (
     Pick,
     iter_pickable,

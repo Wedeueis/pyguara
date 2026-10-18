@@ -29,7 +29,7 @@ lossy summary of them.
   - `pyguara/ui/theme.py`, `pyguara/ui/theme_presets.py` — the theme model and its six presets
   - `pyguara/ui/components/*.py` — the component inventory and every fixed pixel dimension
   - `pyguara/ui/layout.py` — `BoxContainer`
-  - `pyguara/editor/layer.py`, `pyguara/editor/panels/*.py` — the editor
+  - `pyguara/studio/layer.py`, `pyguara/studio/panels/*.py` — the editor
   - `pyguara/tools/*.py` — the developer tool overlays
   - `pyguara/common/palette.py` — `BasicColors`, `DebugColors`
   - `pyguara/graphics/ninepatch.py` — scalable UI frame metrics
@@ -326,7 +326,7 @@ source files it was built from.
 
 | Kit | Fidelity |
 | --- | --- |
-| `editor/` | **Recreation.** Read from `pyguara/editor/` and `pyguara/tools/`. Hierarchy, viewport, Inspector, Assets, Resource Inspector, real F-key overlays, real menu items. Restyled into the Cerrado palette per the brief; layout, names and copy unchanged. |
+| `editor/` | **Recreation.** Read from `pyguara/editor/` (now `pyguara/studio/`) and `pyguara/tools/`. Hierarchy, viewport, Inspector, Assets, Resource Inspector, real F-key overlays, real menu items. Restyled into the Cerrado palette per the brief; layout, names and copy unchanged. |
 | `game/` | **Composition.** Engine primitives + the provided art. Title → HUD → Pause → Options. The button plates and title lockup are literal; the engine ships no game code, so the screens themselves are new. |
 | `site/` | **New work.** No website exists in the source. |
 | `docs/` | **New work chrome, real content.** Sidebar mirrors the engine's real packages; the code sample and presets table are verbatim from `theme_presets.py`. |

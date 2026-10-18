@@ -27,10 +27,10 @@ import pytest
 from pyguara.common.types import Color, Vector2
 from pyguara.ecs.component import BaseComponent
 from pyguara.ecs.manager import EntityManager
-from pyguara.editor.panels.base import PanelContext
-from pyguara.editor.panels.hierarchy import HierarchyPanel
-from pyguara.editor.panels.inspector import InspectorPanel
-from pyguara.editor.selection import Selection
+from pyguara.studio.panels.base import PanelContext
+from pyguara.studio.panels.hierarchy import HierarchyPanel
+from pyguara.studio.panels.inspector import InspectorPanel
+from pyguara.studio.selection import Selection
 
 imgui_bundle = pytest.importorskip("imgui_bundle")
 imgui = imgui_bundle.imgui
@@ -459,3 +459,217 @@ class TestInspectorPanel:
     ) -> None:
         selection.select("loner")
         _draw(InspectorPanel(), PanelContext(entity_manager=world, selection=selection))
+
+
+@dataclass
+class _Result:
+    """What a fake operation registry returns."""
+
+    ok: bool = True
+    error: str | None = None
+
+
+class _Operations:
+    """An operation registry that records rather than applies."""
+
+    def __init__(self, result: _Result | None = None) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self._result = result if result is not None else _Result()
+
+    def invoke(
+        self, session: Any, name: str, payload: dict[str, Any], *, actor: Any
+    ) -> _Result:
+        self.calls.append((name, payload))
+        self.actor = actor
+        return self._result
+
+
+_A_SESSION = object()
+"""Stands in for a `StudioSession`. The panel only tests it for None."""
+
+
+class _Attachment:
+    """Enough of a `StudioAttachment` for the panel to write through."""
+
+    def __init__(self, *, session: Any = _A_SESSION, result: _Result | None = None):
+        self.session = session
+        self.operations = _Operations(result)
+
+
+class _Toasts:
+    """Collects what a panel says on screen."""
+
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def push(self, message: str, level: Any) -> None:
+        self.messages.append(message)
+
+
+@pytest.mark.unit
+class TestWhereAnAcceptedEditGoes:
+    """The one branch the merge of the two Inspectors introduced.
+
+    There used to be two classes: the editor layer's `InspectorPanel`,
+    which wrote straight onto the component, and Studio's subclass, which
+    overrode the write to go through `set_field`. One class with an
+    optional attachment replaces them, so the choice is now a runtime
+    branch rather than a type -- and a branch is worth a test where a
+    subclass was self-evident.
+
+    The direct-write half is covered by `TestInspectorPanel` above, every
+    test in which constructs `InspectorPanel()` with no attachment. These
+    cover the other half, and the thing that must never happen: a direct
+    write *while* a session exists, which is the second mutation seam
+    Studio's whole design exists to not have.
+    """
+
+    def test_an_edit_becomes_a_set_field_operation(
+        self,
+        imgui_ctx: Any,
+        world: EntityManager,
+        selection: Selection,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        entity = world.get_entity("root")
+        assert entity is not None
+        entity.add_component(Spec())
+        selection.select("root")
+
+        attachment = _Attachment()
+        monkeypatch.setattr(imgui, "collapsing_header", lambda *a, **k: True)
+        monkeypatch.setattr(imgui, "drag_float", lambda *a, **k: (True, 7.0))
+
+        _draw(
+            InspectorPanel(attachment=attachment),
+            PanelContext(entity_manager=world, selection=selection),
+            frames=1,
+        )
+
+        assert attachment.operations.calls == [
+            (
+                "set_field",
+                {
+                    "entity_id": "root",
+                    "component": "Spec",
+                    "field": "speed",
+                    "value": 7.0,
+                },
+            )
+        ]
+
+    def test_the_component_is_not_written_directly(
+        self,
+        imgui_ctx: Any,
+        world: EntityManager,
+        selection: Selection,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The operation is the only writer. A panel that both invoked it
+        *and* assigned would apply an edit `plan` mode refused, and would
+        apply a refused one twice."""
+        entity = world.get_entity("root")
+        assert entity is not None
+        entity.add_component(Spec())
+        selection.select("root")
+
+        changed: list[str] = []
+        world.subscribe_component_changed(Spec, lambda e, _c: changed.append(e.id))
+        monkeypatch.setattr(imgui, "collapsing_header", lambda *a, **k: True)
+        monkeypatch.setattr(imgui, "drag_float", lambda *a, **k: (True, 7.0))
+
+        _draw(
+            InspectorPanel(attachment=_Attachment()),
+            PanelContext(entity_manager=world, selection=selection),
+            frames=1,
+        )
+
+        assert entity.get_component(Spec).speed == 1.5
+        assert changed == []
+
+    def test_a_vector2_crosses_as_the_encoded_shape(
+        self,
+        imgui_ctx: Any,
+        world: EntityManager,
+        selection: Selection,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Through the same encoder the operation surface uses, so a
+        `Vector2` arrives as the object an agent would have sent rather
+        than as a Python instance the schema does not describe."""
+        entity = world.get_entity("root")
+        assert entity is not None
+        entity.add_component(Spec())
+        selection.select("root")
+
+        attachment = _Attachment()
+        monkeypatch.setattr(imgui, "collapsing_header", lambda *a, **k: True)
+        monkeypatch.setattr(imgui, "drag_float2", lambda *a, **k: (True, [4.0, 5.0]))
+
+        _draw(
+            InspectorPanel(attachment=attachment),
+            PanelContext(entity_manager=world, selection=selection),
+            frames=1,
+        )
+
+        (name, payload), *rest = attachment.operations.calls
+        assert (name, rest) == ("set_field", [])
+        assert payload["field"] == "position"
+        assert payload["value"] == {"x": 4.0, "y": 5.0}
+        assert not isinstance(payload["value"], Vector2)
+
+    def test_a_refused_edit_is_reported_on_screen(
+        self,
+        imgui_ctx: Any,
+        world: EntityManager,
+        selection: Selection,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A panel that accepts a value, reports nothing and changes
+        nothing is what "the controls do not seem to have any effect"
+        looks like from the outside."""
+        entity = world.get_entity("root")
+        assert entity is not None
+        entity.add_component(Spec())
+        selection.select("root")
+
+        panel = InspectorPanel(
+            attachment=_Attachment(result=_Result(ok=False, error="refused"))
+        )
+        toasts = _Toasts()
+        panel.toasts = toasts
+        monkeypatch.setattr(imgui, "collapsing_header", lambda *a, **k: True)
+        monkeypatch.setattr(imgui, "drag_float", lambda *a, **k: (True, 7.0))
+
+        _draw(panel, PanelContext(entity_manager=world, selection=selection), frames=1)
+
+        assert toasts.messages == ["root.Spec.speed: refused"]
+
+    def test_no_session_yet_drops_the_edit_rather_than_writing(
+        self,
+        imgui_ctx: Any,
+        world: EntityManager,
+        selection: Selection,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`attach_studio` runs before `app.run()`, so there is a window
+        in which the panel is installed and no world is open yet. Falling
+        back to the direct write there would mean the one edit made in
+        that window is the one edit with no history."""
+        entity = world.get_entity("root")
+        assert entity is not None
+        entity.add_component(Spec())
+        selection.select("root")
+
+        attachment = _Attachment(session=None)
+        monkeypatch.setattr(imgui, "collapsing_header", lambda *a, **k: True)
+        monkeypatch.setattr(imgui, "drag_float", lambda *a, **k: (True, 7.0))
+
+        _draw(
+            InspectorPanel(attachment=attachment),
+            PanelContext(entity_manager=world, selection=selection),
+            frames=1,
+        )
+
+        assert attachment.operations.calls == []
+        assert entity.get_component(Spec).speed == 1.5

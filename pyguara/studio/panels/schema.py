@@ -15,9 +15,9 @@ from __future__ import annotations
 
 from imgui_bundle import imgui
 
-from pyguara.editor.panels.base import EditorPanel, PanelContext
 from pyguara.prefabs.registry import ComponentRegistry
 from pyguara.studio.model.schema import ComponentSchema, describe_registry
+from pyguara.studio.panels.base import EditorPanel, PanelContext
 
 _DERIVED_COLOUR = (0.6, 0.6, 0.6, 1.0)
 _READONLY_COLOUR = (0.85, 0.75, 0.55, 1.0)
