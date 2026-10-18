@@ -130,7 +130,13 @@ This is the contract; MCP is a transport over it. See
 
 The generated instructions say this, but it bears repeating:
 
-1. `project_overview` — scenes, prefabs, components, assets.
+1. `project_overview` — scenes, prefabs, components, assets, and which
+   **native store** is in force. That last one is not a project fact but
+   a machine one, and it is here because it changes results: the same
+   project, same seed, simulates differently on a machine that built the
+   extension and one that did not. If a flock or a flow field behaves
+   differently than a colleague describes, read this first. See
+   `docs/adr/0004-the-native-boundary.md`, Decision 4.
 2. `scene_summary` — counts for the open scene. `scene_tree` is the full
    read and is large.
 3. `component_schema` before setting a field on a type it has not used.

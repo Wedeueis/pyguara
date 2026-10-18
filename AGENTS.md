@@ -508,7 +508,10 @@ PYGUARA_NO_NATIVE=1 uv run pytest    # force the Python path
 reported in the boot log. `required` fails at *startup* without the
 extension, which is what a game depending on native performance should
 ship. `pyguara.native.describe()` says which store is in force and where
-it came from.
+it came from, `pyguara.native.status()` returns the same facts as fields,
+and Studio's `project_overview` reports it -- so an agent or an author
+who attached to a running session, and never saw the boot line, can still
+find out.
 
 It is engine-wide because a store picked silently from whether a `.so`
 happens to be on disk means the same game, with the same code and seed,
