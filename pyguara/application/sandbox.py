@@ -1,9 +1,17 @@
-"""
-Sandbox application module.
+"""An `Application` with the runtime developer overlay already installed.
 
-This module provides a specialized Application subclass that comes pre-loaded
-with the developer tool suite (Inspector, Debugger, Profiler, etc.).
-It is intended for use during development and testing phases.
+The overlay is `pyguara/tools`: frame timing, the event stream, collision
+wireframes and the shortcut table, drawn on the engine's own `UIRenderer`
+so they work on every backend. It is a *diagnostic* surface.
+
+**It is not the authoring surface, and does not try to be.** Selecting an
+entity, editing its components, dragging a transform handle, editing the
+config and browsing resources were registered here too, on F2/F5/F9/F6/F7.
+They are gone: `pyguara.studio` does all of that with an undo stack, an
+audit journal and a scrolling, dockable surface, and keeping a second,
+weaker copy meant two ways to change the world, only one of which kept a
+record. `attach_studio(app.container)` is the authoring answer, on the
+ModernGL backend; this is what a running game gets on any backend.
 """
 
 from pyguara.application.application import Application
@@ -11,24 +19,19 @@ from pyguara.di.container import DIContainer
 from pyguara.events.lifecycle import QuitEvent
 from pyguara.events.window import WindowResizeEvent
 from pyguara.input import keys
-from pyguara.tools.assets_browser import AssetsTool
-from pyguara.tools.config_inspector import ConfigInspector
 from pyguara.tools.debugger import PhysicsDebugger
 from pyguara.tools.event_monitor import EventMonitor
-from pyguara.tools.gizmos import TransformGizmo
-from pyguara.tools.hierarchy import HierarchyTool
-from pyguara.tools.inspector import EntityInspector
 from pyguara.tools.manager import ToolManager
 from pyguara.tools.performance import PerformanceMonitor
 from pyguara.tools.shortcuts_panel import ShortcutsPanel
 
 
 class SandboxApplication(Application):
-    """
-    An extended Application that includes developer tools and overlays.
+    """An `Application` that runs the diagnostic overlay above the frame.
 
-    This class injects the ToolManager into the main loop, allowing
-    runtime inspection, debugging, and manipulation of the game state.
+    Installs a `ToolManager` into the frame loop and gives it the event
+    stream before the game sees it, so a tool can take a key the game
+    also binds.
     """
 
     def __init__(self, container: DIContainer) -> None:
@@ -56,47 +59,25 @@ class SandboxApplication(Application):
         # map instead of hard-coding a copy that drifts.
         self._container.register_instance(ToolManager, self._tool_manager)
 
-        # 1. Performance Monitor (F1) - FPS and Stats
-        perf_monitor = PerformanceMonitor(self._container)
-        self._tool_manager.register_tool(perf_monitor, keys.F1)
+        # The keys keep the numbers they have always had, with F2, F5,
+        # F6, F7 and F9 now unbound rather than renumbered: those were the
+        # inspector, the hierarchy, the config editor, the assets browser
+        # and the gizmo, and a developer with the old mapping in their
+        # fingers should find nothing there rather than something else.
+        # `ShortcutsPanel` reads the live map, so the help overlay is
+        # correct either way.
 
-        # 2. Hierarchy (F5) - entity list + selection. Built before the
-        #    inspector and gizmo, which both follow its selection.
-        hierarchy = HierarchyTool(self._container)
-        self._tool_manager.register_tool(hierarchy, keys.F5)
+        # F1 - frame timing and counts.
+        self._tool_manager.register_tool(PerformanceMonitor(self._container), keys.F1)
 
-        # 3. Entity Inspector (F2) - inspects whatever the Hierarchy selects.
-        inspector = EntityInspector(
-            self._container, selection_provider=lambda: hierarchy.selected_entity
-        )
-        self._tool_manager.register_tool(inspector, keys.F2)
+        # F3 - a rolling log of recent engine events.
+        self._tool_manager.register_tool(EventMonitor(self._container), keys.F3)
 
-        # 3b. Transform Gizmo (F9) - visual handles for the selected entity.
-        #     Q/W/E switch translate/rotate/scale. Follows the Hierarchy.
-        gizmo = TransformGizmo(
-            self._container, selection_provider=lambda: hierarchy.selected_entity
-        )
-        self._tool_manager.register_tool(gizmo, keys.F9)
+        # F4 - collision shape wireframes.
+        self._tool_manager.register_tool(PhysicsDebugger(self._container), keys.F4)
 
-        # 4. Event Monitor (F3) - Log Viewer
-        event_mon = EventMonitor(self._container)
-        self._tool_manager.register_tool(event_mon, keys.F3)
-
-        # 5. Physics Debugger (F4) - Collision Wireframes
-        debugger = PhysicsDebugger(self._container)
-        self._tool_manager.register_tool(debugger, keys.F4)
-
-        # 6. Config Inspector (F6) - Live GameConfig Editor
-        config_inspector = ConfigInspector(self._container)
-        self._tool_manager.register_tool(config_inspector, keys.F6)
-
-        # 7. Assets Browser (F7) - resource list + spawn from data
-        assets = AssetsTool(self._container)
-        self._tool_manager.register_tool(assets, keys.F7)
-
-        # 8. Shortcuts Panel (F8) - Help Overlay
-        shortcuts = ShortcutsPanel(self._container)
-        self._tool_manager.register_tool(shortcuts, keys.F8)
+        # F8 - the help overlay, built from the map above.
+        self._tool_manager.register_tool(ShortcutsPanel(self._container), keys.F8)
 
         # Enable global visibility by default in Sandbox mode
         self._tool_manager.toggle_global_visibility()

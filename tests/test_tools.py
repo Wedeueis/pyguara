@@ -588,3 +588,96 @@ class TestEventMonitorTeardown:
         # Nothing observes the log now, but the point is no exception and the
         # handler is detached -- assert via a fresh monitor being the only one.
         assert manager.get_tool("event_monitor") is None
+
+
+@pytest.mark.unit
+class TestTheOverlayDiagnosesAndDoesNotAuthor:
+    """What `pyguara/tools` is for, pinned as a list rather than a claim.
+
+    The overlay used to carry a hierarchy, an entity inspector, a
+    transform gizmo, a config editor and an assets browser, drawn with
+    the same `UIRenderer` primitives as the diagnostics. Three of those
+    were a second, weaker copy of a Studio panel -- a second way to
+    change the world, and the one that kept no record of having done so.
+    They are gone, and the two that had no Studio counterpart went with
+    them (issue #330), because all five were built on a widget layer
+    that could not scroll and stepped numbers by a hard-coded 1.0.
+
+    Nothing stops them coming back one import at a time, which is what
+    this asserts against. A new *diagnostic* tool is expected to fail the
+    first test here and be added to the list; a new editing one should
+    make someone ask whether it belongs in Studio.
+    """
+
+    def test_the_sandbox_registers_exactly_the_diagnostic_tools(self) -> None:
+        """Read from the live `ToolManager` rather than from the source,
+        so this is the registration a running game actually has."""
+        from pyguara.application.bootstrap import create_sandbox_application
+
+        app = create_sandbox_application()
+        try:
+            manager = app._container.get(ToolManager)
+            assert [
+                (keys.key_name(code).upper(), name)
+                for code, name in manager.iter_shortcuts()
+            ] == [
+                ("F1", "performance_monitor"),
+                ("F3", "event_monitor"),
+                ("F4", "physics_debugger"),
+                ("F8", "shortcuts_panel"),
+            ]
+        finally:
+            app.shutdown()
+
+    @pytest.mark.parametrize(
+        "module",
+        [
+            "assets_browser",
+            "config_inspector",
+            "gizmos",
+            "hierarchy",
+            "inspector",
+            "tweakable",
+        ],
+    )
+    def test_the_retired_editing_modules_are_gone(self, module: str) -> None:
+        """Asserted per module, so a failure names which one came back."""
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(f"pyguara.tools.{module}")
+
+    def test_the_package_exports_nothing_that_edits(self) -> None:
+        import pyguara.tools
+
+        assert set(pyguara.tools.__all__) == {
+            "EventMonitor",
+            "PerformanceMonitor",
+            "PhysicsDebugger",
+            "ShortcutsPanel",
+            "Tool",
+            "ToolManager",
+        }
+
+    def test_the_help_overlay_lists_what_is_registered(
+        self, container: DIContainer
+    ) -> None:
+        """What a developer reads in-game, which is a step further than
+        the test above: the panel builds its table from the map rather
+        than from a copy, and a sabotage that empties the table is not
+        caught by asserting the map alone -- that was checked.
+        """
+        from pyguara.tools.debugger import PhysicsDebugger
+        from pyguara.tools.performance import PerformanceMonitor
+        from pyguara.tools.shortcuts_panel import ShortcutsPanel
+
+        manager = ToolManager(container)
+        container.register_instance(ToolManager, manager)
+        manager.register_tool(PerformanceMonitor(container), keys.F1)
+        manager.register_tool(PhysicsDebugger(container), keys.F4)
+
+        assert ShortcutsPanel(container)._toggle_rows() == [
+            ("F12", "Toggle ALL Tools"),
+            ("F1", "Performance Monitor"),
+            ("F4", "Physics Debugger"),
+        ]
