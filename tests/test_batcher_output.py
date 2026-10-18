@@ -6,8 +6,9 @@ it was the largest single Python cost in the engine, and almost all of it
 was work it threw away. A rewrite like that is only safe if "the batches
 are identical" is something a test can say, so this says it first.
 
-Four properties carry it, and the third is the one a careless rewrite
-breaks:
+Five properties carry it, and the last two are the ones sabotage had to
+find -- every careless rewrite this file was tried against passed the
+first three.
 
 1. **Destinations are the camera transform, exactly.** `world * zoom +
    offset`, not approximately -- the batcher is the only place the engine
@@ -26,6 +27,11 @@ breaks:
 4. **Batches break exactly at a texture or material change**, and nowhere
    else -- a tint or a rotation mid-batch must not split the draw call,
    which is the whole reason the columns exist.
+5. **A flag is on when, and only when, some command in that batch needs
+   it.** Properties 2 and 3 both describe a column *once its flag is on*,
+   so neither notices a command whose data is dropped because it never
+   turned the flag on -- a sprite scaled but not rotated, or white but
+   fading. It draws as though nobody had asked, and nothing complains.
 
 `tests/test_batching_enhanced.py` holds the worked examples with
 hand-written expectations; this holds the invariants over randomised

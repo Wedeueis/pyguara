@@ -506,6 +506,7 @@ candidate:
 | sparks, 1000 streaks | 5.865 | 0.339 | — | 17.3x | landed |
 | flocking, 1000 agents | 16.555 | 1.849 | — | **9.0x** | landed, 9.0x (priced 15.4x) |
 | sparks, 1000 dots | 4.077 | 0.321 | — | 12.7x | landed |
+| render batcher, 20000 sprites | 44.423 | 1.347 | 3.671 | **8.9x** | deferred |
 | projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
 
 As a share of a 16.7 ms frame, `T_py` alone is 499% for a 96x96 flow-field
@@ -522,6 +523,30 @@ and unpack, while a real crossing also pays PyO3's conversion of a
 15,000-float list, the tuples it allocates coming back, and the per-tick ECS
 prologue that both stores share. Both errors are optimistic, so a price is a
 threshold test and the achieved figure should be expected lower.
+
+**The render-batcher row is the one where the algorithm moved the price.**
+Priced against the batcher as it was, its `T_py` was 78.8 ms and the ceiling
+**12.2x**. Fixing four pieces of per-command waste in Python took `T_py` to
+39.2 ms, and the ceiling with it to **7.4–8.9x** — still over the 5x threshold,
+but no longer over the bar ADR 0004 set for this item, which was to beat the
+13–20x `ShapeBatch` already gets out of ordinary Python lists. Decision 6 says
+to ask whether the work is *necessary* before asking whether it is *fast*, and
+this is the first candidate where answering in that order changed the verdict
+rather than just the reason.
+
+Two things about that row's `T_cross` are worth carrying to the next candidate:
+
+- **One crossing per sprite is the cheap shape.** 20000 individual pushes cost
+  2.3 ms; one call taking the whole frame as ten lists costs 1.47 ms, but
+  building those lists in Python first costs 6.36 ms, so the batched version is
+  7.8 ms against 6.5 ms. RFC-0003 states "one crossing per system per frame" as
+  a design law; here it is the more expensive of the two, and the reason is that
+  a Python list is not free to produce and not free to extract.
+- **Scalars cross almost free; containers do not.** A three-argument
+  `NativeSpatialHash.insert` is 0.092 µs a call and an eleven-argument probe
+  push is 0.114 µs, so argument count barely registers. A seventeen-argument
+  `NativeParticlePool.emit` is 0.405 µs — and that is not the arguments either,
+  it is the three Python lists among them, each extracted into a `Vec<f32>`.
 
 **What the flow-field row looked like before it was built, and why the
 difference matters.** Priced in advance its `T_cross` was the wall-mask
@@ -684,20 +709,56 @@ These are the portable figures, and the surprise is where the time goes.
 
 ### `Batcher.create_batches` — milliseconds
 
-| Sprites | One texture | Transformed | Tinted |
-| ---: | ---: | ---: | ---: |
-| 1000 | 2.25 | 2.23 | 2.50 |
-| 5000 | 11.88 | 11.86 | 13.73 |
-| 20000 | 49.39 | 48.99 | 53.50 |
+| Sprites | Case | Before | After | |
+| ---: | --- | ---: | ---: | ---: |
+| 1000 | one texture | 2.22 | 0.32 | **6.99x** |
+| 1000 | transformed | 2.10 | 0.32 | 6.64x |
+| 1000 | tinted | 2.25 | 0.33 | 6.75x |
+| 1000 | 10 textures | 3.65 | 1.54 | 2.36x |
+| 5000 | one texture | 11.86 | 1.73 | 6.85x |
+| 5000 | transformed | 11.56 | 1.97 | 5.88x |
+| 5000 | 10 textures | 19.47 | 8.66 | 2.25x |
+| 20000 | one texture | 54.94 | 10.98 | **5.00x** |
+| 20000 | transformed | 54.00 | 13.85 | 3.90x |
+| 20000 | tinted | 55.48 | 12.44 | 4.46x |
+| 20000 | 10 textures | 103.88 | 62.40 | 1.66x |
 
-**The CPU batcher is the bottleneck at scale, not the GPU.** At 20000 sprites it
-costs 53.8 ms — more than three times the entire GL path for the same batch. This
-had never been measured: the pre-existing benchmark ran 1000 commands and
-asserted nothing about time.
+**The CPU batcher was the bottleneck at scale, not the GPU** — 54.9 ms at 20000
+sprites, more than four times the entire GL path for the same batch — **and
+almost none of it was the grouping.** The "after" column is the same loop with
+three pieces of waste removed, producing batches that are identical field by
+field:
 
-Texture switching, at a fixed 8000 commands: 21.8 ms with one texture, 31.6 ms
-with ten, 32.2 ms with fifty. Batch breaks cost about 50%, and almost all of
-that is paid going from one texture to a handful.
+| What it was doing | What it costs |
+| --- | ---: |
+| `(world * zoom) + offset` with `Vector2` arithmetic | **2.8–3.9x** |
+| collecting rotations, scales, colours and source rects for every command, then discarding all four if the batch's flag stayed false | ~20% |
+| testing the tint through `Color.__eq__`, which builds two tuples per command | ~25% |
+| reaching the `material_id` property when neither command has a material | ~5% |
+
+The first one is the finding worth carrying elsewhere. `Vector2` subclasses
+`pymunk.Vec2d`, so each intermediate is a real object allocated and dropped
+inside the loop; doing the same two float operations on the components is
+bit-exact and three to four times faster on its own. **The cost was never the
+loop.**
+
+The second row explains a measurement that used to look backwards: the tinted
+case was *slower* than the untinted one, because an untinted frame paid the
+comparison on every command and never the append. It is now the other way round.
+
+What this does not help is the many-texture case — 1.66x at 20000 across ten
+textures. With a batch break on nearly every command the cost moves into
+`RenderBatch` construction, which none of the four changes touch. Texture
+switching at a fixed 8000 commands: 21.8 ms with one texture, 31.6 ms with ten,
+32.2 ms with fifty, so batch breaks cost about 50% and almost all of it is paid
+going from one texture to a handful.
+
+Only the first row has a test. `test_the_screen_transform_is_not_done_with
+_vectors` times the batcher against a copy of the old loop in the same process,
+asserted at 2x against a measured 5x. The other three are each ~5–25%, which on
+a shared runner is noise, so they are argued in the class docstring instead —
+reverting any of them leaves the suite green, and the test says so rather than
+implying coverage it does not have.
 
 ### `RenderQueue.sort` — milliseconds
 
@@ -710,6 +771,53 @@ Linear and cheap. The per-command lambda and tuple allocation in the sort key
 are real, but at 8000 commands they cost under 3 ms, so **no action is
 warranted** — recorded here so the question does not get re-opened from first
 principles.
+
+### The whole CPU frame — milliseconds at 20000 sprites
+
+The number that matters for deciding anything, because a native render batcher
+would replace all four stages at once and quoting one of them would be the
+mistake ADR 0004 Decision 7 names.
+
+| Stage | Before | After |
+| --- | ---: | ---: |
+| `RenderSystem.submit` — build a command per renderable, push it | 18.90 | 18.90 |
+| `RenderQueue.sort` | 2.91 | 2.91 |
+| `Batcher.create_batches` | 47.74 | **8.16** |
+| `pack_sprite_instances` | 9.25 | 9.25 |
+| **total** | **78.80** | **39.22** |
+
+**2.01x on the frame**, with the batcher's share falling from 61% to 21%. What
+is left is dominated by `submit`, which is now 48% of it: a `RenderCommand` is a
+`slots=True` dataclass with nine fields, and building 20000 of them costs about
+0.95 µs each against the 0.21 µs of attribute reads that feed them.
+
+#### Two pieces of headroom, recorded rather than taken
+
+**The instance pack is list-shaped, and the shape is most of the cost.** The
+pack spends its time turning Python lists of tuples into arrays, and `numpy`
+is much faster at a flat list:
+
+| Converting 20000 rows | Time |
+| --- | ---: |
+| `asarray(list of 2-tuples)` | 3.74 |
+| `asarray(flat list).reshape(-1, 2)` | 1.10 |
+| `frombuffer(array('f', flat))` | 0.64 |
+| `asarray(list of 4 int tuples)` | 6.24 |
+| `asarray(flat ints).reshape(-1, 4)` | 3.28 |
+
+The whole pack measures 13.33 ms with the lists as `RenderBatch` carries them
+and **6.16 ms with every column arriving flat — 2.2x.** Not taken, because it
+means changing `RenderBatch.destinations` from `list[tuple[float, float]]` to a
+flat list, and `len(batch.destinations)` is how every backend and several tests
+get the sprite count. That is a protocol change across three renderers, not a
+tweak, and it wants its own workstream.
+
+**Batch-break cost is `RenderBatch` construction.** The many-texture rows above
+are allocation-bound: 20000 commands across ten textures build roughly 20000
+dataclasses with five lists each. A batcher that reused batch objects across
+frames, or that carried runs as `(start, count)` into shared columns, would
+attack that — and it is the one part of this path a native implementation would
+not obviously help with either, since the batches have to come back to Python.
 
 ### Visibility culling headroom
 

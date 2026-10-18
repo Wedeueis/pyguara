@@ -27,10 +27,11 @@ class Batcher:
 
     **This loop is the engine's largest single Python cost at scale**, so
     what it does *not* do matters as much as what it does. At 20,000
-    sprites it used to take 73 ms -- more than four frames -- and almost
-    none of that was the grouping. Three things were paid per command and
-    thrown away, and removing them is 4.4x to 5.8x at 20,000 sprites and
-    6.8x to 7.3x at 1,000, for batches that are identical:
+    sprites it used to take 54.9 ms -- more than three frames -- and
+    almost none of that was the grouping. Four things were paid per
+    command and thrown away, and removing them is 3.9x to 5.0x at 20,000
+    sprites and 6.6x to 7.0x at 1,000, for batches that are identical
+    field by field. `docs/guides/performance.md` has the table.
 
     **The screen transform is four float operations, not two vectors.**
     `(world_position * zoom) + offset` allocates a `Vector2` for the
