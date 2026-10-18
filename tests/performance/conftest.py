@@ -97,7 +97,11 @@ def assert_scales_no_worse_than(
 
 
 def build_flock(
-    count: int, *, spread: float, seed: int = 1234
+    count: int,
+    *,
+    spread: float,
+    seed: int = 1234,
+    accelerate: bool | None = None,
 ) -> tuple[EntityManager, FlockingSystem]:
     """Build a world of `count` flocking agents and a system to tick it.
 
@@ -108,6 +112,10 @@ def build_flock(
             what the spatial hash is sensitive to -- see
             `uniform_spread_for`.
         seed: Scatter seed, so a run is reproducible.
+        accelerate: Which store to tick with. None defers to the
+            engine-wide setting, which is what a sweep reporting "what
+            this machine does" wants; a guard pinning one store's
+            behaviour should say which.
 
     Returns:
         The populated manager and a `FlockingSystem` over it.
@@ -127,7 +135,7 @@ def build_flock(
                 seek_weight=0.0,
             )
         )
-    return manager, FlockingSystem(manager)
+    return manager, FlockingSystem(manager, accelerate=accelerate)
 
 
 def uniform_spread_for(

@@ -5,6 +5,8 @@ tests cover the surface the decision (ticket 05) called for, since no
 dedicated test file existed for `common/types.py` before this ticket.
 """
 
+import math
+
 import pytest
 
 from pyguara.common.types import Color, Rect, Vector2
@@ -234,6 +236,60 @@ class TestVector2Geometry:
     def test_to_tuple_and_to_int_tuple(self) -> None:
         assert Vector2(1.7, -2.7).to_tuple() == (1.7, -2.7)
         assert Vector2(1.7, -2.7).to_int_tuple() == (1, -2)
+
+
+class TestVector2LengthIsSpelledExactly:
+    """`length` is `sqrt(x * x + y * y)`, and the spelling is the contract.
+
+    `Vector2` overrides `pymunk.Vec2d.length`, which spells it
+    `sqrt(x**2 + y**2)`. That is not a style preference. `x**2` goes
+    through the platform's `pow`, which glibc does not promise to round
+    correctly, so it disagrees with `x * x` for about 0.08% of inputs --
+    and `math.hypot`, which is a different algorithm again, disagrees
+    with both.
+
+    Three spellings, three answers, all within an ulp. None is more
+    accurate: over 200k random vectors the `pow` form is closer 34 times
+    and the multiplication form 36. So the reason to fix one is that
+    `normalized()` divides by it, everything derived from a heading
+    inherits it, and a native implementation has to reproduce it
+    bit-for-bit -- see `docs/adr/0004-the-native-boundary.md`,
+    Decision 5. A length that depends on which libm is underneath is one
+    no other implementation can match.
+
+    The vectors below are chosen so that all three spellings differ, so
+    this test fails if the override is reverted *or* rewritten as
+    `hypot`. A test on `Vector2(3, 4)` would catch neither.
+    """
+
+    DIVERGENT = [
+        (263.9070523968903, -295.2001492494054),
+        (-322.47398508156977, -214.1419708693524),
+        (-183.46675567371472, 451.31334388456185),
+    ]
+
+    @pytest.mark.parametrize(("x", "y"), DIVERGENT)
+    def test_the_length_is_the_multiplication_spelling(
+        self, x: float, y: float
+    ) -> None:
+        assert Vector2(x, y).length == math.sqrt(x * x + y * y)
+
+    @pytest.mark.parametrize(("x", "y"), DIVERGENT)
+    def test_and_differs_from_the_other_two_spellings(self, x: float, y: float) -> None:
+        """Guards the guard: these inputs have to stay divergent.
+
+        If a future Python or libm made all three agree, the test above
+        would still pass while testing nothing. This one goes red
+        instead, so the divergent values can be replaced.
+        """
+        assert Vector2(x, y).length != math.sqrt(x**2 + y**2)
+        assert Vector2(x, y).length != math.hypot(x, y)
+
+    def test_normalized_divides_by_that_same_length(self) -> None:
+        """`normalized()` is `self / length`, so it inherits the spelling."""
+        for x, y in self.DIVERGENT:
+            length = math.sqrt(x * x + y * y)
+            assert Vector2(x, y).normalized() == Vector2(x / length, y / length)
 
 
 class TestVector2Rotation:

@@ -48,18 +48,67 @@ its position, so motion stays smooth and only the decision rate drops to 60/N Hz
 | 2500 | 44.7 | 26.2 | 19.8 | 17.7 | — |
 | 3000 | 53.5 | 32.0 | 24.9 | 21.1 | 177.6 |
 
-**Defensible scale: roughly 1000 fully-simulated boids at 60 Hz, or 2000 with
-steering at 20 Hz** (`groups=3`). Before the optimisation pass it was about 300.
+**Defensible scale in Python: roughly 1000 fully-simulated boids at 60 Hz, or
+2000 with steering at 20 Hz** (`groups=3`). Before the optimisation pass it was
+about 300.
 
-**3000 fully-simulated boids at 60 Hz is not reachable**, and staggering does
-not get there — at `groups=4` it is still 21 ms. Staggering does not scale as
-1/N either, because a share of every tick cannot be staggered: the spatial hash
-is rebuilt, components are resolved, and every agent integrates, whatever group
-it is in. That floor is what stops `groups=8` being interesting.
+**3000 fully-simulated boids at 60 Hz is not reachable in Python**, and
+staggering does not get there — at `groups=4` it is still 21 ms. Staggering does
+not scale as 1/N either, because a share of every tick cannot be staggered: the
+spatial hash is rebuilt, components are resolved, and every agent integrates,
+whatever group it is in. That floor is what stops `groups=8` being interesting.
 
 Clumped density costs more, and is not a pathological case — it is a horde
 converging on a player. At 3000 agents: 161.9 ms clumped against 53.5 uniform,
 down from 664.1 and 177.6 respectively.
+
+#### Ported. 16 ms to 1.9 ms
+
+With the extension built, the same ticks:
+
+| Agents | g=1 | g=2 | g=3 | g=4 | Python g=1 | |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1000 | **1.86** | 1.68 | 1.63 | 1.61 | 16.0 | 8.6x |
+| 1500 | **2.79** | 2.54 | 2.60 | 2.54 | 24.9 | 8.9x |
+| 2000 | **3.94** | 3.57 | 3.44 | 3.36 | 34.3 | 8.7x |
+| 2500 | **5.03** | 4.42 | 4.34 | 4.31 | 44.7 | 8.9x |
+| 3000 | **6.21** | 5.41 | 5.34 | 5.36 | 53.5 | 8.6x |
+
+**Defensible scale natively: 3000 fully-simulated boids at 60 Hz**, at 37% of a
+frame, with no staggering at all. 1000 agents go from 96% of a frame to 11%.
+
+Three things in that table are worth more than the headline.
+
+**Staggering has become nearly pointless.** 1000 agents at `groups=4` saves
+0.25 ms against `groups=1`, where in Python it saved 9.8 ms. What `groups` skips
+is the steering decision, and steering is no longer what a tick costs — the
+crossing and the component resolution are, and every agent pays those whatever
+group it is in. The floor that stopped `groups=8` being interesting in Python is
+now most of the tick. A game on the native store should measure before reaching
+for it, and probably not reach for it.
+
+**Density is where the port pays most**, which is the case it was built for:
+
+| 3000 agents | Python | native | |
+| --- | ---: | ---: | ---: |
+| uniform | 52.8 | 6.32 | 8.4x |
+| clumped | 156.9 | 8.28 | **19.0x** |
+
+Clumping costs Python 3.0x and the native store 1.3x. What density multiplies is
+the per-neighbour arithmetic, which is exactly what moved; the crossing is
+unchanged because the same number of agents cross either way. So the speedup is
+8x in the easy case and 19x in the hard one, and the hard one is a horde
+converging on the player.
+
+**The remaining cost is almost all boundary.** At 1000 agents the 1.86 ms splits
+as 0.31 ms resolving entities and components (17%, paid by both stores), 0.29 ms
+packing 15 floats per agent (16%), ~0.54 ms of native solve (29%), and the rest
+write-back — 2000 `Vector2` constructions, which is why `_tick_natively` builds
+them through `tuple.__new__` rather than `Vector2(x, y)`: 1.8x cheaper for an
+identical object, worth 15% of the tick. Unlike the flow field, none of this can
+be kept native between ticks, because a flock is not opaque — every agent is an
+ECS entity whose position other systems read. That is the whole reason this
+port prices at 9x where the field prices at 57x.
 
 Two things matter more than the headline number.
 
@@ -382,13 +431,24 @@ candidate:
 | flow field, 96x96 | 83.247 | 1.479 | — | **56.3x** | landed |
 | particles, 1000 | 1.942 | 0.104 | — | 18.7x | landed |
 | sparks, 1000 streaks | 5.865 | 0.339 | — | 17.3x | landed |
-| flocking, 1000 agents | 17.206 | 1.118 | — | **15.4x** | not built |
+| flocking, 1000 agents | 16.555 | 1.849 | — | **9.0x** | landed, 9.0x (priced 15.4x) |
 | sparks, 1000 dots | 4.077 | 0.321 | — | 12.7x | landed |
 | projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
 
 As a share of a 16.7 ms frame, `T_py` alone is 499% for a 96x96 flow-field
-recompute, 103% for 1000 flocking agents, 35% for 1000 streaked sparks and
+recompute, 99% for 1000 flocking agents, 35% for 1000 streaked sparks and
 18% for 1000 projectiles.
+
+**The two landed gameplay rows miss their prices in opposite directions**, and
+the pair is more instructive than either. The flow field priced at 161x and
+achieved 57x, because `T_cross` models the handoff and not the native work
+behind it. Flocking priced at 15.4x and achieved 9.0x with the opposite cause:
+its native solve is only 0.5 ms of a 1.85 ms tick, and what was underestimated
+is the crossing itself — `T_cross` was measured as the Python loops that pack
+and unpack, while a real crossing also pays PyO3's conversion of a
+15,000-float list, the tuples it allocates coming back, and the per-tick ECS
+prologue that both stores share. Both errors are optimistic, so a price is a
+threshold test and the achieved figure should be expected lower.
 
 **What the flow-field row looked like before it was built, and why the
 difference matters.** Priced in advance its `T_cross` was the wall-mask
@@ -479,7 +539,8 @@ margin is this size. Nothing outside `FlowFieldService` reads an individual
 cell -- `vector_at` and `cost_at` are the only ways in -- so the cost map
 and the descent field both stay native and there is no download. ADR 0004
 calls this opacity, and it is the difference between this row and
-flocking's, which has to hand every agent's position back every tick.
+flocking's, which has to hand every agent's position back every tick --
+measured, 57x against 9x.
 
 `vector_at` got cheaper too, by **5.7x** (3.27 us -> 0.575 us), and the
 boundary had to be picked for it to. A crossing that returned the descent

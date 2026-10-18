@@ -32,6 +32,28 @@ def _run(system: FlockingSystem, frames: int = 120, dt: float = 1.0 / 60.0) -> N
         system.update(dt)
 
 
+# `False` is the Python sweep, `True` the native one; see `_system`.
+STORES = [
+    pytest.param(False, id="python"),
+    pytest.param(True, id="native"),
+]
+
+
+def _system(
+    manager: EntityManager, accelerate: bool, **kwargs: object
+) -> FlockingSystem:
+    """A system over `manager`, skipping an absent extension.
+
+    Every system-level test below runs against both stores. The pure
+    `flock_force` tests do not: it is one function with one
+    implementation, and the native transcription of it is compared in
+    `tests/test_native_flocking_parity.py` instead.
+    """
+    if accelerate and not FlockingSystem(EntityManager(), accelerate=None).accelerated:
+        pytest.skip("native extension not built; `cargo build --release`")
+    return FlockingSystem(manager, accelerate=accelerate, **kwargs)  # type: ignore[arg-type]
+
+
 # ========== SteeringBehavior.cohesion ==========
 
 
@@ -102,9 +124,10 @@ class TestSeparation:
 # ========== FlockingSystem ==========
 
 
+@pytest.mark.parametrize("accelerate", STORES)
 class TestFlockingSystemStability:
     def test_flock_converges_toward_a_shared_seek_target_without_scattering(
-        self,
+        self, accelerate: bool
     ) -> None:
         em = EntityManager()
         target = Vector2(500, 0)
@@ -119,7 +142,7 @@ class TestFlockingSystemStability:
             )
             for i in range(8)
         ]
-        system = FlockingSystem(em)
+        system = _system(em, accelerate)
         _run(system, frames=300)
 
         positions = [e.get_component(Transform).position for e in entities]
@@ -130,14 +153,14 @@ class TestFlockingSystemStability:
         spread = max(p.x for p in positions) - min(p.x for p in positions)
         assert spread < 150
 
-    def test_flock_does_not_jitter_once_settled(self) -> None:
+    def test_flock_does_not_jitter_once_settled(self, accelerate: bool) -> None:
         em = EntityManager()
         target = Vector2(300, 0)
         entities = [
             _flock_entity(em, Vector2(i * 15, 0), seek_target=target, max_speed=120.0)
             for i in range(6)
         ]
-        system = FlockingSystem(em)
+        system = _system(em, accelerate)
         _run(system, frames=600)  # let it settle near the target
 
         # Sample velocity magnitude over the next 60 frames: should not be
@@ -151,21 +174,23 @@ class TestFlockingSystemStability:
             )
         assert max(max_speed_samples) < 200.0
 
-    def test_close_agents_separate_instead_of_overlapping(self) -> None:
+    def test_close_agents_separate_instead_of_overlapping(
+        self, accelerate: bool
+    ) -> None:
         em = EntityManager()
         e1 = _flock_entity(em, Vector2(0, 0), separation_radius=40.0, seek_weight=0.0)
         e2 = _flock_entity(em, Vector2(5, 0), separation_radius=40.0, seek_weight=0.0)
-        system = FlockingSystem(em)
+        system = _system(em, accelerate)
         _run(system, frames=60)
 
         p1 = e1.get_component(Transform).position
         p2 = e2.get_component(Transform).position
         assert (p1 - p2).length > 5.0
 
-    def test_disabled_agent_is_not_moved(self) -> None:
+    def test_disabled_agent_is_not_moved(self, accelerate: bool) -> None:
         em = EntityManager()
         e = _flock_entity(em, Vector2(0, 0), seek_target=Vector2(500, 0), enabled=False)
-        system = FlockingSystem(em)
+        system = _system(em, accelerate)
         _run(system, frames=60)
         assert e.get_component(Transform).position == Vector2(0, 0)
 
@@ -304,6 +329,7 @@ class TestFusedForceMatchesTheSeparateBehaviours:
         self._assert_matches(Vector2(0, 0), agent, neighbors)
 
 
+@pytest.mark.parametrize("accelerate", STORES)
 class TestStaggeredSteering:
     """`groups` spreads steering across ticks without stopping motion.
 
@@ -351,39 +377,41 @@ class TestStaggeredSteering:
             for entity, previous in zip(entities, before, strict=True)
         )
 
-    def test_the_default_steers_every_agent_every_tick(self) -> None:
+    def test_the_default_steers_every_agent_every_tick(self, accelerate: bool) -> None:
         manager = EntityManager()
         entities = self._flock(manager, 4)
         before = [e.get_component(FlockingAgent).velocity for e in entities]
 
-        FlockingSystem(manager).update(1 / 60)
+        _system(manager, accelerate).update(1 / 60)
 
         assert self._steered_count(entities, before) == 4
 
-    def test_every_agent_still_moves_on_a_tick_it_does_not_steer(self) -> None:
+    def test_every_agent_still_moves_on_a_tick_it_does_not_steer(
+        self, accelerate: bool
+    ) -> None:
         """The property that makes staggering invisible."""
         manager = EntityManager()
         entities = self._flock(manager, 4)
         before = [e.get_component(Transform).position for e in entities]
 
-        FlockingSystem(manager, groups=4).update(1 / 60)
+        _system(manager, accelerate, groups=4).update(1 / 60)
 
         after = [e.get_component(Transform).position for e in entities]
         assert all(a != b for a, b in zip(after, before, strict=True))
 
-    def test_only_one_group_steers_per_tick(self) -> None:
+    def test_only_one_group_steers_per_tick(self, accelerate: bool) -> None:
         manager = EntityManager()
         entities = self._flock(manager, 4)
         before = [e.get_component(FlockingAgent).velocity for e in entities]
 
-        FlockingSystem(manager, groups=4).update(1 / 60)
+        _system(manager, accelerate, groups=4).update(1 / 60)
 
         assert self._steered_count(entities, before) == 1
 
-    def test_every_agent_steers_within_one_full_round(self) -> None:
+    def test_every_agent_steers_within_one_full_round(self, accelerate: bool) -> None:
         manager = EntityManager()
         entities = self._flock(manager, 4)
-        system = FlockingSystem(manager, groups=4)
+        system = _system(manager, accelerate, groups=4)
         before = [e.get_component(FlockingAgent).velocity for e in entities]
 
         for _ in range(4):
@@ -392,22 +420,72 @@ class TestStaggeredSteering:
         assert self._steered_count(entities, before) == 4
 
     @pytest.mark.parametrize("groups", [0, -3])
-    def test_a_nonsense_group_count_is_clamped_to_one(self, groups: int) -> None:
+    def test_a_nonsense_group_count_is_clamped_to_one(
+        self, groups: int, accelerate: bool
+    ) -> None:
         """Zero would make `slot % groups` raise; negatives are meaningless."""
         manager = EntityManager()
         entities = self._flock(manager, 4)
         before = [e.get_component(FlockingAgent).velocity for e in entities]
 
-        FlockingSystem(manager, groups=groups).update(1 / 60)
+        _system(manager, accelerate, groups=groups).update(1 / 60)
 
         assert self._steered_count(entities, before) == 4
 
-    def test_a_disabled_agent_neither_steers_nor_moves(self) -> None:
+    def test_a_disabled_agent_neither_steers_nor_moves(self, accelerate: bool) -> None:
         manager = EntityManager()
         entities = self._flock(manager, 3)
         entities[0].get_component(FlockingAgent).enabled = False
         before = entities[0].get_component(Transform).position
 
-        FlockingSystem(manager, groups=2).update(1 / 60)
+        _system(manager, accelerate, groups=2).update(1 / 60)
 
         assert entities[0].get_component(Transform).position == before
+
+
+class TestTheStoreIsOneEngineWideChoice:
+    """`accelerate=` overrides the switch, and that is all it is for.
+
+    The same contract the pools, the flow field and the spark batch have,
+    and the same reason: the parity suite needs both stores side by side
+    in one process, so there has to be a per-object override -- and it is
+    not a second place to configure the engine.
+    `PerformanceConfig.native_acceleration` is. See
+    `docs/adr/0004-the-native-boundary.md`, Decision 4.
+    """
+
+    def test_the_default_defers_to_the_engine_wide_setting(self) -> None:
+        """Fails rather than skips when the loader breaks.
+
+        Deliberately not guarded by a skip. Every other native test in
+        this file skips when the extension is absent, which means a
+        broken loader -- the failure mode `pyguara/native.py` documents,
+        where a wrong path finds no library and everything quietly falls
+        back -- would show up as a green suite. This one notices.
+        """
+        from pyguara import native
+
+        system = FlockingSystem(EntityManager())
+
+        assert system.accelerated is native.in_use()
+
+    def test_forcing_the_python_store_always_works(self) -> None:
+        """No toolchain needed, which is the point of keeping both."""
+        assert FlockingSystem(EntityManager(), accelerate=False).accelerated is False
+
+    def test_demanding_a_missing_extension_raises_rather_than_falling_back(
+        self,
+    ) -> None:
+        """`accelerate=True` is a demand, not a preference.
+
+        Silently falling back is what `None` is for. A caller that said
+        True wants to know, because the alternative is discovering it
+        from a frame time.
+        """
+        from pyguara import native
+
+        if native.in_use():
+            pytest.skip("the extension is built, so the demand is satisfiable")
+
+        with pytest.raises(RuntimeError, match="not available"):
+            FlockingSystem(EntityManager(), accelerate=True)
