@@ -74,11 +74,11 @@ class PygameBackend:
     def draw_texture(
         self,
         texture: Texture,
-        position: Vector2,
+        destination: Vector2,
         rotation: float = 0.0,
         scale: Vector2 = Vector2(1, 1),
     ) -> None:
-        """Draw a single texture immediately, centred on `position`.
+        """Draw a single texture immediately, centred on `destination`.
 
         Honours `rotation` and `scale`, and treats a negative scale on
         either axis as a flip -- `IRenderer.draw_texture`'s contract, and
@@ -122,7 +122,7 @@ class PygameBackend:
         # what a caller means, and the GL path already centres -- see its
         # own `draw_text`, which shifts by half the glyph run to undo it.
         self._screen.blit(
-            surf, surf.get_rect(center=(int(position.x), int(position.y)))
+            surf, surf.get_rect(center=(int(destination.x), int(destination.y)))
         )
 
     def render_batch(self, batch: RenderBatch) -> None:
