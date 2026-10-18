@@ -65,16 +65,18 @@ class Batcher:
     copied or deserialised material carries the id it was given, and
     `test_two_materials_with_the_same_id_stay_in_one_batch` pins that.
 
+    There used to be a fifth thing: a `_static_batches` dict, described in
+    this docstring as "static batch caching for pre-computed, reusable
+    batches", which **nothing in the engine or the tests ever wrote to**.
+    It cost a `list()` and a list concatenation per frame to prepend
+    nothing. If pre-computed static batches are wanted, they want
+    designing against a caller that has one; an always-empty dict was not
+    a head start on that.
+
     `tests/test_batcher_output.py` is the oracle for all of it, and
     `tests/visual/` records the ordered backend call stream a frame
     produces -- a changed snapshot there is a changed frame.
     """
-
-    def __init__(self) -> None:
-        """Initialize the batcher with static batch cache."""
-        # Cache for static sprite batches (pre-computed, reused every frame)
-        self._static_batches: dict[int, RenderBatch] = {}
-        self._static_batch_keys: list[int] = []
 
     def create_batches(
         self, sorted_commands: list[RenderCommand], camera: Camera2D, viewport: Viewport
@@ -100,7 +102,7 @@ class Batcher:
             One batch per run of compatible commands, in command order.
         """
         if not sorted_commands:
-            return list(self._static_batches.values())
+            return []
 
         batches: list[RenderBatch] = []
 
@@ -235,5 +237,4 @@ class Batcher:
                 )
             )
 
-        # Prepend static batches (rendered first, cached)
-        return list(self._static_batches.values()) + batches
+        return batches
