@@ -532,3 +532,41 @@ class TestTheWrapIsCached:
         label.render(renderer)
 
         assert len(label.lines) < narrow
+
+
+class _VariableHeightRenderer(_MeasuringRenderer):
+    """A measurer whose reported height depends on the string.
+
+    No shipped backend does this -- both answer `pygame.font.Font.size`,
+    whose height is constant at a given size -- but `UIRenderer` promises
+    nothing about it, and a FreeType-backed measurer would return the ink
+    extent. A label whose lines advanced by different amounts depending
+    on their accents is a bug nobody would think to look for, so the
+    uniform step is a contract rather than an accident of the backend.
+    """
+
+    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
+        width, height = super().get_text_size(text, size)
+        return (width, height + 10 * sum(1 for c in text if c.isupper()))
+
+
+class TestTheLineStepIsAPropertyOfTheFont:
+    """Not of the line, so lines are evenly spaced whatever they contain."""
+
+    def test_lines_are_evenly_spaced_regardless_of_content(self) -> None:
+        renderer = _VariableHeightRenderer()
+        label = Label("AAA\naaa\nAAA", Vector2(0, 0))
+
+        label.render(renderer)
+
+        ys = [y for _, _, y in renderer.texts]
+        steps = {b - a for a, b in zip(ys, ys[1:], strict=False)}
+        assert steps == {_MeasuringRenderer.LINE_HEIGHT}
+
+    def test_the_height_does_not_inflate_with_the_content(self) -> None:
+        renderer = _VariableHeightRenderer()
+        label = Label("ABCDEF", Vector2(0, 0))
+
+        label.render(renderer)
+
+        assert label.rect.height == _MeasuringRenderer.LINE_HEIGHT

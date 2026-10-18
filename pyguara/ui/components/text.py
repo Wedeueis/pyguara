@@ -97,10 +97,17 @@ class Label(Widget):
             )
             self._wrap_key = key
 
-        # Measured from the empty string, which gives the font's own line
-        # height rather than the height of whichever glyphs this line
-        # happens to contain -- so a line of "aaa" and a line of "ÀÉÇ"
-        # advance by the same amount, and a blank line advances at all.
+        # Measured from the empty string, so the step between lines is a
+        # property of the font rather than of whichever glyphs a line
+        # happens to contain. Both shipped backends answer `font.size`,
+        # whose height is constant at a given size -- "aaa", "ÀÉÇ" and
+        # "" all measure 18 at size 16 -- so this is defensive rather
+        # than currently load-bearing. It is still the right call: the
+        # protocol promises nothing about the height, a FreeType-backed
+        # measurer would return the ink extent, and a label whose lines
+        # advanced by different amounts depending on their accents is a
+        # bug nobody would look for. `tests/test_ui_components.py` pins
+        # it with a renderer that does vary.
         self._line_height = renderer.get_text_size("", self.font_size)[1]
         if self._auto_size:
             self.rect.width = max(
