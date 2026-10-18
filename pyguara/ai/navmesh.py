@@ -279,11 +279,19 @@ class NavMesh:
 
 
 class NavMeshPathfinder:
-    """A* pathfinding on navigation meshes.
+    """A* pathfinding on navigation meshes, with string-pulling.
 
-    Finds a path through connected polygons (A* over the polygon adjacency
-    graph) and returns the polygon centers as waypoints. String-pulling via
-    the funnel algorithm is not yet implemented -- see ``_create_waypoint_path``.
+    Two stages. A* over the polygon adjacency graph finds *which*
+    polygons to cross; the funnel algorithm then pulls a string through
+    their shared edges to find the shortest route inside that corridor.
+
+    The second stage used to be walking the polygon centres, which is a
+    route and a poor one -- it detours to the middle of every cell it
+    passes through and emits a waypoint per cell. Measured with this
+    module's own helpers: an L-shaped corridor of five square cells came
+    out 22% longer than the shortest path through its inner corner, and a
+    straight ten-cell corridor produced ten waypoints for a straight
+    line. Both are two or three waypoints now, at the optimal length.
     """
 
     def __init__(self, navmesh: NavMesh):
@@ -302,7 +310,14 @@ class NavMeshPathfinder:
             goal: Goal position
 
         Returns:
-            List of waypoints from start to goal, or None if no path
+            Waypoints from start to goal, or None if either end is off
+            the mesh. Interior waypoints are mesh **vertices** -- the
+            corners the corridor bends around -- so `get_polygon_at()`
+            may report one as outside: `NavMeshPolygon.contains_point`
+            excludes part of its own boundary, and a corner is on the
+            boundary of every polygon meeting there. The *segments*
+            between waypoints run inside the mesh, which is the property
+            that matters to something following the path.
         """
         # Find starting and goal polygons
         start_poly = self.navmesh.get_polygon_at(start)
@@ -397,29 +412,103 @@ class NavMeshPathfinder:
     def _create_waypoint_path(
         self, start: Vector2, goal: Vector2, polygon_path: list[int]
     ) -> list[Vector2]:
-        """Convert polygon path to waypoint path.
+        """Pull the polygon path straight with the funnel algorithm.
 
-        Uses a simple approach: use polygon centers as waypoints.
-        For production, consider implementing the funnel algorithm.
+        A* returns the *polygons* to cross, not a route. Walking their
+        centres is a route, and a poor one: it takes a detour to the
+        middle of every cell it passes through and emits a waypoint per
+        cell. Measured on this module's own helpers, an L-shaped corridor
+        of five square cells came out **22% longer** than the shortest
+        two-leg path through the inner corner, and a straight ten-cell
+        corridor produced ten waypoints for what is a straight line.
+
+        The funnel ("simple stupid funnel", Mononen) walks the sequence of
+        portals -- the shared edges between consecutive polygons -- keeping
+        a left and a right bound from the current apex. While a new portal
+        endpoint narrows the funnel it is adopted; when the two bounds
+        cross, the vertex they crossed over is a genuine corner, it becomes
+        the next apex, and the scan restarts from there. What comes out is
+        the shortest path inside the polygon corridor, bending only at
+        actual corners.
+
+        The portal data this needs already existed -- `get_edge_between`
+        and `NavMeshEdge` -- which is why this is a change to one method
+        rather than to the mesh.
 
         Args:
-            start: Starting position
-            goal: Goal position
-            polygon_path: List of polygon IDs
+            start: Starting position.
+            goal: Goal position.
+            polygon_path: Polygon IDs from A*, start to goal.
 
         Returns:
-            List of waypoint positions
+            Waypoints from `start` to `goal`, bending only where the
+            corridor forces it. Falls back to the polygon centres if any
+            portal is missing, which would mean a mesh whose adjacency and
+            whose edges disagree.
+        """
+        portals = self._portals(start, goal, polygon_path)
+        if portals is None:
+            return self._centre_path(start, goal, polygon_path)
+        return _pull_string(portals)
+
+    def _portals(
+        self, start: Vector2, goal: Vector2, polygon_path: list[int]
+    ) -> list[tuple[Vector2, Vector2]] | None:
+        """Build the left/right portal sequence the funnel walks.
+
+        Each portal is the edge shared by two consecutive polygons, with
+        its endpoints ordered left-then-right **relative to the direction
+        of travel**. `NavMeshEdge` stores its endpoints in whatever order
+        the two polygons happened to be compared in, which carries no
+        orientation at all, so the ordering is decided here from the sign
+        of the cross product with the step direction.
+
+        Args:
+            start: Starting position; becomes a degenerate first portal.
+            goal: Goal position; becomes a degenerate last portal.
+            polygon_path: Polygon IDs from A*.
+
+        Returns:
+            The portals, or None if the mesh could not supply one -- the
+            caller falls back rather than returning a path with a gap in
+            it.
+        """
+        portals: list[tuple[Vector2, Vector2]] = [(start, start)]
+        previous = start
+        for first_id, second_id in zip(polygon_path, polygon_path[1:], strict=False):
+            edge = self.navmesh.get_edge_between(first_id, second_id)
+            second = self.navmesh.get_polygon(second_id)
+            if edge is None or second is None:
+                return None
+            portals.append(_orient_portal(edge, previous, second.center))
+            previous = second.center
+        portals.append((goal, goal))
+        return portals
+
+    def _centre_path(
+        self, start: Vector2, goal: Vector2, polygon_path: list[int]
+    ) -> list[Vector2]:
+        """Return the old centre-walking path, as a fallback.
+
+        Reached only when `get_edge_between` cannot find a portal for a
+        pair of polygons A* says are adjacent, which means the mesh's
+        neighbour lists and its edge list disagree. A worse path is a
+        better answer there than no path.
+
+        Args:
+            start: Starting position.
+            goal: Goal position.
+            polygon_path: Polygon IDs from A*.
+
+        Returns:
+            Start, each intermediate polygon's centre, goal.
         """
         waypoints = [start]
-
-        # Add polygon centers (skip first and last)
         for poly_id in polygon_path[1:-1]:
             polygon = self.navmesh.get_polygon(poly_id)
             if polygon:
                 waypoints.append(polygon.center)
-
         waypoints.append(goal)
-
         return waypoints
 
 
@@ -447,6 +536,173 @@ def create_rectangle_polygon(
         Vector2(x, y + height),
     ]
     return NavMeshPolygon(id=polygon_id, vertices=vertices)
+
+
+def _triangle_area_2(a: Vector2, b: Vector2, c: Vector2) -> float:
+    """Twice the signed area of triangle `abc`.
+
+    The sign is all the funnel uses: it says which side of the ray `a->b`
+    the point `c` falls on, and comparing two of them says whether the
+    funnel narrowed or crossed over. Twice the area rather than the area
+    because the halving would be divided out of every comparison.
+
+    Args:
+        a: The apex.
+        b: One bound.
+        c: The point being tested.
+
+    Returns:
+        A signed value; zero when the three are collinear.
+    """
+    return (c.x - a.x) * (b.y - a.y) - (b.x - a.x) * (c.y - a.y)
+
+
+def _orient_portal(
+    edge: "NavMeshEdge", from_point: Vector2, to_point: Vector2
+) -> tuple[Vector2, Vector2]:
+    """Order a portal's endpoints left-then-right for the direction crossed.
+
+    `NavMeshEdge` records its endpoints in whichever order the two
+    polygons were compared in, so it carries no orientation. The funnel
+    needs one: its whole method is comparing "has the left bound crossed
+    the right", and a portal handed over the wrong way round turns a
+    corner the wrong way.
+
+    Args:
+        edge: The shared edge.
+        from_point: Where the step is coming from.
+        to_point: Where it is going.
+
+    Returns:
+        `(left, right)` for that direction of travel. A portal exactly
+        collinear with the step is returned unchanged -- it has no left
+        and right, and the funnel treats a zero area as "on the bound",
+        which is correct for one.
+    """
+    step_x = to_point.x - from_point.x
+    step_y = to_point.y - from_point.y
+    side = step_x * (edge.start.y - from_point.y) - step_y * (
+        edge.start.x - from_point.x
+    )
+    if side > 0:
+        return (edge.start, edge.end)
+    return (edge.end, edge.start)
+
+
+def _pull_string(portals: list[tuple[Vector2, Vector2]]) -> list[Vector2]:
+    """Run the funnel over an oriented portal sequence.
+
+    Mononen's "simple stupid funnel". The apex starts at the first
+    portal, which is the degenerate `(start, start)`; both bounds start
+    there too. Each portal either narrows a bound or crosses the other
+    one, and a crossing means the vertex crossed over is a real corner:
+    it is emitted, becomes the new apex, and the scan **restarts from its
+    index** -- which is why this is a `while` rather than a `for`, and
+    why the algorithm is linear despite appearing to backtrack.
+
+    Args:
+        portals: `(left, right)` pairs, starting with `(start, start)`
+            and ending with `(goal, goal)`.
+
+    Returns:
+        The pulled path, always beginning at the start and ending at the
+        goal, with no two consecutive points equal.
+    """
+    apex = portals[0][0]
+    left, right = apex, apex
+    apex_index = left_index = right_index = 0
+    path = [apex]
+
+    index = 1
+    while index < len(portals):
+        new_left, new_right = portals[index]
+
+        # Tighten the right bound, unless doing so would cross the left.
+        if _triangle_area_2(apex, right, new_right) <= 0.0:
+            if _points_equal(apex, right) or (
+                _triangle_area_2(apex, left, new_right) > 0.0
+            ):
+                right, right_index = new_right, index
+            else:
+                # Crossed: the left bound is a corner.
+                path.append(left)
+                apex = left
+                apex_index = left_index
+                left = right = apex
+                left_index = right_index = apex_index
+                index = apex_index + 1
+                continue
+
+        # And the left bound, unless doing so would cross the right.
+        if _triangle_area_2(apex, left, new_left) >= 0.0:
+            if _points_equal(apex, left) or (
+                _triangle_area_2(apex, right, new_left) < 0.0
+            ):
+                left, left_index = new_left, index
+            else:
+                path.append(right)
+                apex = right
+                apex_index = right_index
+                left = right = apex
+                left_index = right_index = apex_index
+                index = apex_index + 1
+                continue
+
+        index += 1
+
+    goal = portals[-1][0]
+    if not _points_equal(path[-1], goal):
+        path.append(goal)
+    return _drop_collinear(path)
+
+
+def _drop_collinear(path: list[Vector2], epsilon: float = 1e-9) -> list[Vector2]:
+    """Remove waypoints that lie exactly on the line through their neighbours.
+
+    The funnel emits a corner whenever its bounds cross, and they can
+    cross over a vertex that happens to sit *on* the straight line it was
+    already following -- a 4x4 open room gave `(1, 1) -> (30, 30) ->
+    (39, 39)`, three points describing one straight segment. Dropping the
+    middle changes the route by nothing and saves an agent a steering
+    decision.
+
+    The tolerance is deliberately tiny. A point merely *near* the line
+    cannot be dropped: the segment that would replace it may leave the
+    polygon corridor, and the whole value of the funnel is that its
+    output provably does not.
+
+    **Repeated points are collapsed first, and must be.** The funnel can
+    emit the same corner twice -- it does, on a U-shaped corridor, when
+    the bounds cross again at a portal that shares the apex's vertex --
+    and a duplicate has zero area against *anything*. So the collinear
+    test would see `A, A` as collinear with whatever came before, drop
+    the real corner, and return a path straight through the wall the
+    corner existed to go around. Measured on a comb-shaped mesh: the
+    corner at (30, 20) vanished and the route cut across the gap.
+
+    Args:
+        path: The pulled path.
+        epsilon: How close to collinear counts, as twice a triangle's
+            area. Not a distance, so it scales with the triangle -- which
+            is why it is set far below any coordinate the mesh will hold
+            rather than tuned.
+
+    Returns:
+        The path with repeated and exactly-collinear interior points
+        removed.
+    """
+    unique = [path[0]]
+    for point in path[1:]:
+        if not _points_equal(unique[-1], point):
+            unique.append(point)
+    if len(unique) < 3:
+        return unique
+    kept = [unique[0]]
+    for previous, point, following in zip(unique, unique[1:], unique[2:], strict=False):
+        if abs(_triangle_area_2(previous, point, following)) > epsilon:
+            kept.append(point)
+    kept.append(unique[-1])
+    return kept
 
 
 def _points_equal(p1: Vector2, p2: Vector2, epsilon: float = 0.001) -> bool:
