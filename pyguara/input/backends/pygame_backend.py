@@ -89,3 +89,43 @@ class PygameInputBackend:
     def get_joystick(self, device_index: int) -> IJoystick:
         """Get a joystick handle by device index."""
         return PygameJoystick(device_index)
+
+
+class PygameClipboard:
+    """The desktop clipboard, via SDL.
+
+    Implements `pyguara.ui.clipboard.Clipboard`. It lives in an input
+    backend rather than in `pyguara/ui` because the clipboard belongs to
+    the windowing system, and that is the layer allowed to import pygame.
+
+    **Every call is guarded.** `pygame.scrap` needs a display, so it
+    raises under a headless run, and `get_text()` returns None for an
+    empty clipboard or one holding an image. A text field is not a place
+    to surface either of those: a paste that cannot happen should insert
+    nothing.
+    """
+
+    def get_text(self) -> str:
+        """Return the desktop clipboard's text.
+
+        Returns:
+            The text, or `""` when there is none, the clipboard holds
+            something that is not text, or there is no display.
+        """
+        try:
+            text = pygame.scrap.get_text()
+        except (pygame.error, AttributeError):
+            return ""
+        return text or ""
+
+    def set_text(self, text: str) -> None:
+        """Put `text` on the desktop clipboard.
+
+        Args:
+            text: The text to copy. Failures are swallowed: a copy that
+                the platform refuses should not take down a text field.
+        """
+        try:
+            pygame.scrap.put_text(text)
+        except (pygame.error, AttributeError):
+            return

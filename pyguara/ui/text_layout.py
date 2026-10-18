@@ -24,7 +24,7 @@ two agree.
 
 from collections.abc import Callable
 
-__all__ = ["split_oversized_word", "wrap_text"]
+__all__ = ["caret_index_at", "split_oversized_word", "wrap_text"]
 
 MeasureWidth = Callable[[str], int]
 """Returns the pixel width a string would be drawn at."""
@@ -130,3 +130,39 @@ def _wrap_paragraph(paragraph: str, width: int, measure: MeasureWidth) -> list[s
 
     lines.append(current)
     return lines
+
+
+def caret_index_at(text: str, offset: int, measure: MeasureWidth) -> int:
+    """Return the caret index nearest `offset` pixels into `text`.
+
+    A caret sits *between* characters, so the answer is a boundary, not a
+    character. Anywhere in the left half of a glyph puts the caret before
+    it and anywhere in the right half puts it after, which is what every
+    text field does and what makes a click at the end of a word land
+    after the word rather than inside it.
+
+    Linear in the length of the text, measuring each prefix. Bisection
+    would be asymptotically better and is wrong here: in a proportional
+    font with kerning, prefix widths are not guaranteed to behave the way
+    a bisection needs, and a text field holds a line rather than a
+    document.
+
+    Args:
+        text: The string the caret is being placed in.
+        offset: Pixels from the start of the text. Values outside the
+            text clamp to the ends rather than being an error -- a drag
+            that leaves the widget is an ordinary thing to do.
+        measure: Measures a prefix's pixel width.
+
+    Returns:
+        An index in `0..len(text)`.
+    """
+    if offset <= 0 or not text:
+        return 0
+    previous = 0
+    for index in range(1, len(text) + 1):
+        current = measure(text[:index])
+        if offset < (previous + current) / 2:
+            return index - 1
+        previous = current
+    return len(text)

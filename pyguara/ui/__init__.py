@@ -1,6 +1,6 @@
 """Standard UI Components and Theming."""
 
-from pyguara.ui.base import Scrollable, TextInsertable
+from pyguara.ui.base import KeyboardEditable, Scrollable, TextInsertable
 from pyguara.ui.builder import UIBuilder, UIBuilderError
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.canvas import Canvas
@@ -51,6 +51,7 @@ __all__ = [
     "GridContainer",
     "ScrollContainer",
     # Optional widget capabilities, tested with isinstance
+    "KeyboardEditable",
     "Scrollable",
     "TextInsertable",
     # Declarative construction (opt-in sugar over add_child())
