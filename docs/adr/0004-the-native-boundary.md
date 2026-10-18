@@ -62,12 +62,24 @@ writing:
 | flocking, 1000 agents | 16.555 | 1.849 | — | **9.0x** | landed, 9.0x (priced 15.4x) |
 | sparks, 1000 dots | 4.077 | 0.321 | — | 12.7x | landed, 12.7x |
 | spatial index, 1000 keys | 7.453 | 0.439 | — | **17.0x** | landed, 17.0x |
+| render batcher, 20000 sprites | 44.423 | 1.347 | 3.671 | **8.9x** | deferred (12.2x before Decision 6) |
 | projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
 
 The spatial index is the one row that is **not a subsystem**, and reading
 it as one would be a mistake: its 17x is what the *index* costs, while
 what its consumers feel is 1.3x to 4.3x. Decision 7 is about that gap and
 about why a primitive is still admitted on its own figure.
+
+The render batcher is the one row whose **`T_py` moved under it**. It
+priced at 12.2x against the batcher as it was, and at 8.9x once four
+pieces of per-command waste were removed from the Python
+implementation -- same boundary, same crossing, half the numerator.
+Decision 6 is about that, and it is the only row here where asking the
+algorithmic question first changed the verdict rather than the reasoning
+behind it. Its `T_cross` is also the only one measured as a **lower**
+bound: it is priced from the three-argument `NativeSpatialHash.insert`,
+where a sprite push needs eleven, which is why the item below quotes a
+range.
 
 **The landed rows do not prove the formula**; for built work `T_cross` is
 measured directly, so the ceiling and the achieved speedup are the same
@@ -434,6 +446,48 @@ reversed, the port would have shipped and the demo would still be
 recomputing an unchanged field sixty times a second — at 1.6 ms instead of
 5 ms, which is precisely the kind of win that stops anyone looking.
 
+### The second case, and the first where the order changed the verdict
+
+The flow-field case corrected the *reason* for a port. The render batcher
+cancelled one.
+
+`Batcher.create_batches` was the largest single Python cost in the engine:
+**54.9 ms for a 20,000-sprite frame**, three and a half frames, and the
+whole of item 4 below rested on it. Almost none of it was the grouping.
+Four things were paid per command and thrown away:
+
+| | |
+| --- | ---: |
+| `(world * zoom) + offset` through `Vector2` arithmetic | **2.8–3.9x** |
+| collecting rotation, scale, colour and source rect for every command, then discarding all four if the batch's flag stayed false | ~20% |
+| testing the tint through `Color.__eq__`, which builds two tuples per command | ~25% |
+| reaching the `material_id` property when neither command has a material | ~5% |
+
+Removing all four is **5.0x at 20,000 sprites and 7.0x at 1,000**, for
+batches identical field by field, in Python, in one file. The first row is
+the one to carry away: `Vector2` subclasses `pymunk.Vec2d`, so each
+intermediate is a real allocation inside the loop, and doing the same two
+float operations on the components is bit-exact and three to four times
+faster on its own. **The cost was never the loop, and the language was
+never the problem.**
+
+What that did to the port is the point of taking the questions in this
+order. Priced against the batcher as it was, item 4's ceiling was
+**12.2x**. Priced against the batcher as it now is, it is **7.4–8.9x** —
+over the 5x threshold, and under the bar this ADR itself set for the item,
+which was to beat the 13–20x `ShapeBatch` gets out of ordinary Python
+lists. Nothing about the boundary changed. The denominator stayed where it
+was and the numerator halved.
+
+**Had the order been reversed**, the port would have shipped, it would
+have been reported as a 6x win on the engine's worst Python path, and the
+4x sitting in plain sight in `batch.py` would have gone with it --
+invisible, because a native implementation has no reason to reproduce a
+Python implementation's waste and no way to tell you it did not. That is
+the strongest form of the argument for this decision: porting first does
+not merely delay the algorithmic fix, it **destroys the evidence that one
+was available**.
+
 ## Decision 7 — A shared primitive is priced on itself, and Amdahl decides what a consumer feels
 
 This decision exists because **Decision 3 got one wrong, and the way it
@@ -639,9 +693,49 @@ is almost its reverse:
    something: an alternating insert/query loop is quadratic against
    Python's linear, 0.13x at 4000 keys. No consumer does that; the cost is
    bounded by a test and `accelerate=False` is the remedy.
-4. **Marco 2's buffer handoff** — still unprototyped, and now with a bar to
-   beat: `ShapeBatch` gets 13-20x out of ordinary Python lists, so the
-   zero-copy claim has to be worth more than that.
+4. **Marco 2's buffer handoff — PRICED AND DEFERRED at 7.4-8.9x**, and the
+   price is this low *because* Decision 6 went first. The candidate is the
+   whole CPU frame, not the batcher alone: `submit`, `sort`,
+   `create_batches` and `pack_sprite_instances` are one unit, since a
+   native batcher replaces all four. That was 78.8 ms at 20,000 sprites
+   for a ceiling of 12.2x. Removing four pieces of per-command waste from
+   the Python batcher took it to 39.2 ms and the ceiling to 7.4-8.9x --
+   over the 5x threshold, under this item's own bar of beating
+   `ShapeBatch`'s 13-20x.
+
+   **Deferred rather than declined**, and the distinction is the honest
+   one: nothing here says a native batcher would not work, only that it
+   is now worth less than it looked and that cheaper things are in front
+   of it. Three numbers say what they are. `submit` is 48% of what is
+   left, and it is `RenderCommand` construction -- 20,000 `slots=True`
+   dataclasses at ~0.95 us each, against 0.21 us of attribute reads
+   feeding them. The instance pack is another 24%, and **2.2x of it is
+   available in Python** by handing `numpy` flat lists instead of lists of
+   tuples; that one is a `RenderBatch` protocol change across three
+   renderers, so it wants its own workstream rather than a line here. And
+   the many-texture case -- 1.66x where one texture got 5.0x -- is
+   `RenderBatch` construction, which is the one part of this path a native
+   implementation would not obviously help, because the batches have to
+   come back to Python either way.
+
+   Two things the pricing established that outlive the verdict. **One
+   crossing per sprite is the cheap shape**: 20,000 individual pushes cost
+   2.3 ms, while one call taking the frame as ten lists costs 1.47 ms but
+   needs 6.36 ms of Python to build them. RFC-0003 states "one crossing
+   per system per frame" as a design law, and here it is the more
+   expensive of the two. And **scalars cross almost free while containers
+   do not**: 0.092 us for a three-argument call, 0.114 us for an
+   eleven-argument one, 0.405 us for a seventeen-argument one whose real
+   cost is the three Python lists among them. Argument count barely
+   registers; marshalling a list does.
+
+   What would reopen it: a design where the native side *owns* sprite
+   state and the ECS writes into it on change, so a frame with few moving
+   sprites crosses almost nothing. That is a different boundary from the
+   one priced here -- it needs `notify_component_changed` plumbing and it
+   runs into Decision 3, since a sprite is an ECS entity that game code
+   reads. It has not been priced, and this item should not be read as
+   having priced it.
 5. **Projectiles alone — declined** at 2.0x, with the ratio recorded here
    so the decision is re-checkable rather than re-arguable.
 6. **Marco 1's maths half — still dropped**, for the reasons in ADR 0003:

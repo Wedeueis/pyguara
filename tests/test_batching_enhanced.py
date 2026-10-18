@@ -299,16 +299,20 @@ def test_multiple_textures_create_separate_batches():
     assert len(batches[2].destinations) == 1
 
 
-def test_empty_command_list_returns_static_batches_only():
-    """Empty commands should return only static batches."""
+def test_empty_command_list_returns_no_batches():
+    """A frame that submitted nothing produces nothing to draw.
+
+    This used to be `..._returns_static_batches_only`, from when
+    `create_batches` prepended a `_static_batches` dict that nothing ever
+    populated. The dict is gone; the assertion it made is the same.
+    """
     batcher = Batcher()
     camera = Camera2D(800, 600)
     viewport = Viewport.create_fullscreen(800, 600)
 
     batches = batcher.create_batches([], camera, viewport)
 
-    # Should return empty list (no static batches registered)
-    assert len(batches) == 0
+    assert batches == []
 
 
 @pytest.mark.parametrize(

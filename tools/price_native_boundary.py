@@ -57,6 +57,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
+
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
@@ -73,7 +75,16 @@ from pyguara.common.spatial import SpatialHash  # noqa: E402
 from pyguara.common.types import Color, Vector2  # noqa: E402
 from pyguara.ecs.manager import EntityManager  # noqa: E402
 from pyguara.events.dispatcher import EventDispatcher  # noqa: E402
+from pyguara.graphics.backends.moderngl.instancing import (  # noqa: E402
+    INSTANCE_FLOATS,
+    pack_sprite_instances,
+)
+from pyguara.graphics.components.camera import Camera2D  # noqa: E402
 from pyguara.graphics.components.particles import ParticleSystem  # noqa: E402
+from pyguara.graphics.components.sprite import Sprite  # noqa: E402
+from pyguara.graphics.pipeline.batch import Batcher  # noqa: E402
+from pyguara.graphics.pipeline.render_system import RenderSystem  # noqa: E402
+from pyguara.graphics.pipeline.viewport import Viewport  # noqa: E402
 from pyguara.graphics.types import ShapeBatch  # noqa: E402
 from pyguara.graphics.vfx.sparks import Sparks  # noqa: E402
 from pyguara.kits.action_combat import Health, Hurtbox  # noqa: E402
@@ -505,6 +516,148 @@ def price_spatial_index(count: int) -> Row | None:
     )
 
 
+def price_render_batcher(sprites: int) -> Row | None:
+    """Item 4, Marco 2's buffer handoff, priced after Decision 6.
+
+    The whole CPU-side frame, because a native batcher replaces all four
+    of its stages at once: `RenderSystem.submit` building a command per
+    renderable, `RenderQueue.sort`, `Batcher.create_batches`, and
+    `pack_sprite_instances` filling the instance array. Pricing the
+    batcher alone would be the error Decision 7 names.
+
+    **`T_pinned` is the attribute reads**, and nothing else moves them.
+    Each command's data lives on a Python object -- a `Sprite`, or an
+    entity's `Transform` -- and a native command buffer still has to read
+    `position`, `rotation`, `scale`, `color`, `layer` and `sort_group` off
+    it in Python before it can push anything. Measured directly, by
+    running the same loop and building a tuple instead of crossing.
+
+    **`T_cross` is one crossing per sprite**, and that is the *cheap*
+    shape. Passing the whole frame in one call instead needs Python to
+    materialise a list per column first, measured at 6.36 ms against the
+    1.47 ms the single call saves -- so the "one crossing per system per
+    frame" rule RFC-0003 states as a design law is, here, the more
+    expensive of the two.
+
+    It is priced from `NativeSpatialHash.insert`, the only per-element
+    crossing the engine ships: three arguments into the same SoA shape a
+    command buffer would use, plus a CPython dict store a push would not
+    do. Measured at 0.092 us a call, against 0.114 us for a throwaway
+    eleven-argument probe push -- so this term is **good to about 25%,
+    and low**, which puts the real ceiling nearer 7.4x than the 8.8x
+    printed here.
+
+    The bracket worth knowing is the other end: `NativeParticlePool.emit`
+    takes *seventeen* arguments and costs 0.405 us a call. That is not
+    what argument count does -- three of them are Python lists, and
+    extracting each into a `Vec<f32>` is an allocation. Scalars are
+    nearly free to cross; containers are not, which is the same finding
+    as the paragraph above arrived at from the other direction.
+
+    Returns None without the extension, since the crossing term needs it.
+    """
+    native = native_module()
+    if native is None:
+        return None
+
+    texture = _FakeTexture()
+    pool = [
+        Sprite(
+            texture=texture,  # type: ignore[arg-type]
+            position=Vector2(index * 0.5, index * 0.5),
+            rotation=index * 1.0,
+            scale=Vector2(1.0 + index * 0.001, 1.0),
+            color=Color(255, index % 256, 128, 255),
+        )
+        for index in range(sprites)
+    ]
+    system = RenderSystem(_Sink())  # type: ignore[arg-type]
+    camera = Camera2D(1280, 720)
+    viewport = Viewport.create_fullscreen(1280, 720)
+    batcher = Batcher()
+    instances = np.zeros((sprites, INSTANCE_FLOATS), dtype="f4")
+
+    def submit_all() -> None:
+        system._queue.clear()
+        for sprite in pool:
+            system.submit(sprite)
+
+    submit_all()
+    commands = list(system._queue.commands)
+
+    def sort_only() -> None:
+        system._queue._commands = list(commands)
+        system._queue.sort()
+
+    sort_only()
+    sorted_commands = list(system._queue.commands)
+    batches = batcher.create_batches(sorted_commands, camera, viewport)
+
+    def batch_only() -> None:
+        batcher.create_batches(sorted_commands, camera, viewport)
+
+    def pack_only() -> None:
+        for batch in batches:
+            pack_sprite_instances(batch, instances)
+
+    python_ms = (
+        measure(submit_all)
+        + measure(sort_only)
+        + measure(batch_only)
+        + measure(pack_only)
+    )
+
+    # Pinned: reading the fields off each Python object, which happens in
+    # either language.
+    def read_only() -> None:
+        for sprite in pool:
+            position = sprite.position
+            scale = sprite.scale
+            colour = sprite.color
+            # Bound to a dummy rather than left as an expression
+            # statement: the work is the attribute reads, and a tuple of
+            # them is the cheapest way to force every one.
+            _ = (
+                position.x,
+                position.y,
+                sprite.rotation,
+                scale.x,
+                scale.y,
+                colour.r,
+                colour.g,
+                colour.b,
+                colour.a,
+                sprite.layer,
+                sprite.sort_group,
+            )
+
+    pinned_ms = measure(read_only)
+
+    # Crossing: one push per sprite. Priced from the index's `insert`,
+    # with its own Python-side loop subtracted so only the call remains.
+    index = native.NativeSpatialHash(64.0)
+    keys = list(range(sprites))
+    points = [(float(i), float(i) * 1.5) for i in range(sprites)]
+
+    def insert_all() -> None:
+        for key, point in zip(keys, points, strict=True):
+            index.insert(key, point, 0xFFFFFFFF)
+
+    def insert_loop_only() -> None:
+        for key, point in zip(keys, points, strict=True):
+            _ = (key, point)
+
+    cross_ms = measure(insert_all) - measure(insert_loop_only)
+
+    return Row(
+        f"render batcher, {sprites} sprites",
+        python_ms,
+        cross_ms,
+        pinned_ms,
+        "DEFERRED; ceiling is an upper bound",
+    )
+
+
 def main() -> int:
     """Price every candidate and print the table.
 
@@ -519,6 +672,7 @@ def main() -> int:
         price_flocking(1000),
         price_projectiles(1000),
         price_spatial_index(1000),
+        price_render_batcher(20000),
     ]
 
     header = (
