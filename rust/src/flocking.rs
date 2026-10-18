@@ -56,19 +56,11 @@
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+use crate::grid::{check_query_span, Grid};
+
 /// Floats per agent in the uploaded row, as `FlockingSystem._pack` writes
 /// it: `x, y, vx, vy` then the eleven tuning values.
 const STRIDE: usize = 15;
-
-/// Largest cell span one radius query may cover.
-///
-/// A sanity bound on `neighbor_radius / cell_size`, not a tuning knob.
-/// The default pairing is 80 over 64, which spans three cells per axis;
-/// this allows a thousand. Python has no equivalent limit and does not
-/// need one -- it simply takes proportionally longer, and a
-/// `cell_size=0.001` typo becomes a hang rather than an error. Failing
-/// loudly is the better of the two.
-const MAX_QUERY_CELLS: u64 = 1 << 20;
 
 /// One agent's tuning, read straight out of the uploaded row.
 #[derive(Clone, Copy, Default)]
@@ -112,160 +104,6 @@ fn scaled_to(x: f64, y: f64, len: f64, target: f64) -> (f64, f64) {
         // What `Vec2d.normalized()` returns for a zero vector; scaling it
         // leaves it zero.
         (0.0, 0.0)
-    }
-}
-
-/// A uniform grid over this tick's snapshot positions.
-///
-/// Rebuilt every tick, like the `SpatialHash` it mirrors, and for the same
-/// reason: the sweep visits every agent anyway, so a rebuild is free
-/// against the alternative of an index that can hold a stale entry.
-///
-/// Cells are bucketed by a hash rather than stored in a map, and the
-/// buckets are a flat CSR pair filled by counting sort, so a tick
-/// allocates nothing after the first. **Hash collisions cannot affect the
-/// result**, which is what makes that safe: two distinct cells landing in
-/// one bucket only means a query sees agents from a cell it did not ask
-/// about, and every candidate is then confirmed against an exact squared
-/// distance. An agent within `radius` of the centre necessarily lies in
-/// the queried cell range, so the extras can only ever *fail* that test.
-/// The one thing collisions could break is double-counting, if two cells
-/// in a single query's range shared a bucket -- hence the visit stamps.
-#[derive(Default)]
-struct Grid {
-    cell_size: f64,
-    /// `buckets - 1`, so a hash becomes an index with one `&`.
-    mask: usize,
-    /// Which bucket each agent's cell hashes to.
-    bucket_of: Vec<usize>,
-    /// CSR row starts, `buckets + 1` long.
-    offsets: Vec<u32>,
-    /// A copy of `offsets`, advanced while scattering.
-    cursor: Vec<u32>,
-    /// Agent slots, grouped by bucket.
-    items: Vec<u32>,
-    /// Per-bucket stamp of the query that last visited it.
-    visited: Vec<u32>,
-    stamp: u32,
-}
-
-impl Grid {
-    /// The cell a world coordinate falls in, as `SpatialHash._cell_of`.
-    #[inline]
-    fn cell_of(&self, value: f64) -> i64 {
-        (value / self.cell_size).floor() as i64
-    }
-
-    /// Scatter a cell's coordinates across the bucket range.
-    ///
-    /// Two odd multipliers and a xor-fold, which is enough for integer
-    /// cell coordinates: they arrive in a dense band, and the fold is what
-    /// stops the mask throwing away all the mixing.
-    #[inline]
-    fn bucket(&self, cx: i64, cy: i64) -> usize {
-        let hash = (cx as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
-            ^ (cy as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F);
-        ((hash ^ (hash >> 29)) as usize) & self.mask
-    }
-
-    /// Index this tick's snapshot positions.
-    fn build(&mut self, snap_x: &[f64], snap_y: &[f64], cell_size: f64) {
-        let count = snap_x.len();
-        self.cell_size = cell_size;
-
-        let buckets = (count * 2).next_power_of_two().max(16);
-        self.mask = buckets - 1;
-
-        self.bucket_of.clear();
-        self.bucket_of.reserve(count);
-        for slot in 0..count {
-            let cx = self.cell_of(snap_x[slot]);
-            let cy = self.cell_of(snap_y[slot]);
-            self.bucket_of.push(self.bucket(cx, cy));
-        }
-
-        // Counting sort into CSR. `offsets[b + 1]` counts first, then the
-        // prefix sum turns it into the end of bucket `b`.
-        self.offsets.clear();
-        self.offsets.resize(buckets + 1, 0);
-        for &bucket in &self.bucket_of {
-            self.offsets[bucket + 1] += 1;
-        }
-        for index in 0..buckets {
-            self.offsets[index + 1] += self.offsets[index];
-        }
-
-        self.items.clear();
-        self.items.resize(count, 0);
-        self.cursor.clear();
-        self.cursor.extend_from_slice(&self.offsets[..buckets]);
-        // Slots land in increasing order within a bucket. Nothing depends
-        // on that -- the neighbour order cannot be made to match Python's
-        // anyway -- but it does make a native tick reproducible against
-        // itself, which replay comparisons rely on.
-        for (slot, &bucket) in self.bucket_of.iter().enumerate() {
-            let at = self.cursor[bucket] as usize;
-            self.items[at] = slot as u32;
-            self.cursor[bucket] += 1;
-        }
-
-        self.visited.clear();
-        self.visited.resize(buckets, 0);
-        self.stamp = 0;
-    }
-
-    /// Collect every agent within `radius` of a centre, as
-    /// `SpatialHash.query_radius` would -- the centre's own slot included.
-    ///
-    /// The cell range comes straight from `centre +/- radius` and the
-    /// distance test is squared, exactly as there.
-    fn neighbours(
-        &mut self,
-        centre_x: f64,
-        centre_y: f64,
-        radius: f64,
-        snap_x: &[f64],
-        snap_y: &[f64],
-        out: &mut Vec<u32>,
-    ) {
-        out.clear();
-
-        let min_cx = self.cell_of(centre_x - radius);
-        let max_cx = self.cell_of(centre_x + radius);
-        let min_cy = self.cell_of(centre_y - radius);
-        let max_cy = self.cell_of(centre_y + radius);
-
-        self.stamp = match self.stamp.checked_add(1) {
-            Some(next) => next,
-            None => {
-                // Once in several billion queries. Clearing is cheaper
-                // than carrying a wider counter for it.
-                self.visited.iter_mut().for_each(|slot| *slot = 0);
-                1
-            }
-        };
-        let stamp = self.stamp;
-
-        let radius_sq = radius * radius;
-        for cx in min_cx..=max_cx {
-            for cy in min_cy..=max_cy {
-                let bucket = self.bucket(cx, cy);
-                if self.visited[bucket] == stamp {
-                    continue;
-                }
-                self.visited[bucket] = stamp;
-                let from = self.offsets[bucket] as usize;
-                let to = self.offsets[bucket + 1] as usize;
-                for &slot in &self.items[from..to] {
-                    let index = slot as usize;
-                    let offset_x = snap_x[index] - centre_x;
-                    let offset_y = snap_y[index] - centre_y;
-                    if offset_x * offset_x + offset_y * offset_y <= radius_sq {
-                        out.push(slot);
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -626,14 +464,7 @@ impl NativeFlockingSolver {
             .iter()
             .map(|agent| agent.neighbor_radius)
             .fold(0.0f64, f64::max);
-        let span = (2.0 * widest / cell_size).floor() + 2.0;
-        if !span.is_finite() || span * span > MAX_QUERY_CELLS as f64 {
-            return Err(PyValueError::new_err(format!(
-                "a neighbor_radius of {widest} over a cell_size of {cell_size} spans \
-                 roughly {span} cells per axis, past the {MAX_QUERY_CELLS}-cell limit \
-                 for one query. Raise cell_size, or lower the radius."
-            )));
-        }
+        check_query_span(widest, cell_size)?;
 
         self.counts.clear();
         self.counts.resize(count, 0);

@@ -159,19 +159,27 @@ def uniform_spread_for(
     return cell * (count / per_cell) ** 0.5
 
 
-def build_hash(count: int, *, spread: float, seed: int = 99) -> SpatialHash[int]:
+def build_hash(
+    count: int, *, spread: float, seed: int = 99, accelerate: bool | None = False
+) -> SpatialHash[int]:
     """Build a `SpatialHash` holding `count` keys scattered over `spread`.
 
     Args:
         count: How many keys.
         spread: Width and height of the square to scatter over.
         seed: Scatter seed.
+        accelerate: Which store to build. Defaults to **False**, not to
+            the engine-wide setting, because the complexity guards above
+            are about the Python index's own asymptotics and would
+            otherwise measure whichever store a contributor happens to
+            have built. The native store has its own guards, which pass
+            True.
 
     Returns:
         The populated hash, keyed by index.
     """
     rng = RandomStream(seed)
-    index: SpatialHash[int] = SpatialHash()
+    index: SpatialHash[int] = SpatialHash(accelerate=accelerate)
     for key in range(count):
         index.insert(key, Vector2(rng.uniform(0.0, spread), rng.uniform(0.0, spread)))
     return index

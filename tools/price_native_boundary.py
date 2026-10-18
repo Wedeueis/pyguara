@@ -79,6 +79,7 @@ from pyguara.graphics.vfx.sparks import Sparks  # noqa: E402
 from pyguara.kits.action_combat import Health, Hurtbox  # noqa: E402
 from pyguara.kits.projectiles.projectile import Projectile  # noqa: E402
 from pyguara.kits.projectiles.system import ProjectileSystem  # noqa: E402
+from pyguara.native import native_module  # noqa: E402
 
 DT = 1.0 / 60.0
 LIFE = 1e6  # outlive the measurement
@@ -250,10 +251,22 @@ def price_sparks(live: int, streak: bool) -> Row | None:
 
 
 def price_projectiles(live: int) -> Row:
-    """Declined. The hit check is pinned and the pool is not opaque."""
+    """Declined. The hit check is pinned and the pool is not opaque.
+
+    Re-priced once `SpatialHash` grew a native store, because the old
+    version of this row counted the whole hit check as pinned and named
+    "the spatial query" as part of it. The broad-phase is no longer
+    pinned -- but the ECS lookups and component checks that follow it
+    are, and they are the bulk. Measured end to end, an accelerated index
+    moves `ProjectileSystem.update` 2.82 ms -> 2.12 ms at 1000 live, or
+    1.33x, which does not come close to rescuing the decline. Pinned here
+    with `accelerate=False` so the row prices the same thing it always
+    did, and the figure above is reported in `docs/guides/performance.md`
+    instead.
+    """
     manager = EntityManager()
     dispatcher = EventDispatcher()
-    index: SpatialHash[str] = SpatialHash()
+    index: SpatialHash[str] = SpatialHash(accelerate=False)
     for i in range(200):
         entity = manager.create_entity(f"target_{i}")
         entity.add_component(Hurtbox(team="enemy"))
@@ -286,7 +299,10 @@ def price_projectiles(live: int) -> Row:
     full = measure(lambda: system.update(DT))
     integrate = measure(integrate_only)
     render = measure(lambda: system.render(sink, camera))  # type: ignore[arg-type]
-    pinned = full - integrate  # the spatial query, the ECS, apply_damage
+    # The ECS lookups, the component checks and `apply_damage`. The
+    # broad-phase inside this is no longer pinned -- a native index does
+    # it -- but it is a small part of the whole: see the docstring.
+    pinned = full - integrate
 
     # Not opaque: `get_active()` is public and `games/protocolo_bandeira`
     # reads `.position`/`.velocity` off it every frame, so a native pool
@@ -442,6 +458,53 @@ def price_flow_field(side: int) -> Row:
     )
 
 
+def price_spatial_index(count: int) -> Row | None:
+    """Landed, and the row that is a shared primitive rather than a system.
+
+    Every other row prices a subsystem, so `T_py` is a tick of it and the
+    ceiling is what a game would feel. This one prices the *index* five
+    subsystems share, which makes the number mean something narrower: it
+    is what the index costs, not what any consumer saves. The consumers
+    save between 1.33x and 4.2x, because in each of them the broad-phase
+    was only ever a fraction of the tick -- `docs/guides/performance.md`
+    has the table, and the gap between 9x here and 1.33x there is the
+    most useful thing this row records.
+
+    `T_cross` is the Python list of keys each query hands back, which is
+    the term ADR 0004 originally declined this port on. Measured, it is
+    4-6% of the Python broad-phase it replaces, and it stays that fraction
+    as density rises, because both sides scale with the candidate count
+    and Python's per-candidate cost is about twenty times the crossing's.
+    """
+    if native_module() is None:
+        return None
+
+    spread = math.sqrt(count) * 64.0
+    keys = [f"entity-{index:08d}" for index in range(count)]
+    points = [
+        Vector2((index * spread / count) % spread, (index * 7.3) % spread)
+        for index in range(count)
+    ]
+
+    def tick(accelerate: bool) -> None:
+        index: SpatialHash[str] = SpatialHash(accelerate=accelerate)
+        for key, point in zip(keys, points, strict=True):
+            index.insert(key, point)
+        for point in points:
+            index.query_radius(point, 80.0)
+
+    python_ms = measure(lambda: tick(False), iterations=8)
+    native_ms = measure(lambda: tick(True), iterations=8)
+
+    return Row(
+        f"spatial index, {count} keys",
+        python_ms,
+        native_ms,
+        0.0,
+        f"LANDED, achieved {python_ms / native_ms:.1f}x",
+    )
+
+
 def main() -> int:
     """Price every candidate and print the table.
 
@@ -455,6 +518,7 @@ def main() -> int:
         price_flow_field(96),
         price_flocking(1000),
         price_projectiles(1000),
+        price_spatial_index(1000),
     ]
 
     header = (

@@ -484,7 +484,8 @@ Working rules, which the operations themselves enforce:
 
 ## The optional native extension
 
-Four subsystems have a native implementation beside the Python one:
+Four subsystems and one shared primitive have a native implementation
+beside the Python one:
 
 | | native gain | |
 | --- | ---: | --- |
@@ -492,6 +493,25 @@ Four subsystems have a native implementation beside the Python one:
 | `ParticleSystem` | 15-20x | whole frame, update plus render pack |
 | `Sparks` | 13-24x | whole frame, via `ShapeBatch` |
 | `FlockingSystem` | 8-19x | whole tick, 1000 agents 16 ms -> 1.9 ms |
+| `SpatialHash` | 17x | the index; **1.3-4.3x** for its consumers |
+
+**Read the `SpatialHash` row carefully** -- it is the one entry that is a
+primitive rather than a subsystem, and the two numbers mean different
+things. The index itself goes 7.5 ms to 0.44 ms at 1000 keys. What its
+consumers feel is much less, because in each of them the broad-phase was
+only ever a fraction of the tick: 1.87x for `TopDownSystem`'s actor
+separation at 1000 clumped actors (which is still 104% of a frame down to
+56%, the row that justifies the port) and 1.32x for `ProjectileSystem`,
+which stays declined as a port of its own. `docs/guides/performance.md`
+has the whole table and ADR 0004 Decision 7 has why a primitive is priced
+differently.
+
+`SpatialHash` is also the first native store that is **worse** than
+Python at something. It rebuilds its grid on the first query after any
+write, which is free for the pattern every consumer has -- sync the index,
+then sweep it -- and quadratic for a caller that alternates `insert` and a
+query: 0.13x the Python speed over 4000 keys. Nothing in the engine does
+that; `accelerate=False` is the answer for a game that does.
 
 It is **optional**: the pure-Python implementations are kept and used
 whenever the extension is absent, so `uv sync` and `pip install pyguara`
@@ -530,13 +550,25 @@ section was placed there and silently deleted on the next regeneration.
 The price of keeping two implementations is that they must agree, which is
 paid by `tests/test_native_particle_parity.py`,
 `tests/test_native_spark_parity.py`,
-`tests/test_native_flow_field_parity.py` and
-`tests/test_native_flocking_parity.py` running the same operations
+`tests/test_native_flow_field_parity.py`,
+`tests/test_native_flocking_parity.py` and
+`tests/test_native_spatial_hash_parity.py` running the same operations
 against both, plus real-GL pixel comparisons in
 `tests/integration/test_moderngl_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles, sparks, pathfinding or flocking.
+on anything touching particles, sparks, pathfinding, flocking or spatial
+queries.
+
+**Adding a native store to an existing class changes the meaning of every
+test that constructs it**, which `SpatialHash` demonstrated the hard way:
+the moment it defaulted to `auto`, the Python reference inside
+`tests/test_native_flocking_parity.py` became native and that suite's
+first tier compared the native grid with itself -- it passed all 69 tests
+with the grid's distance test deliberately broken. So a reference, a
+complexity guard and a subsystem's own `accelerate=False` path must each
+pin the Python store *explicitly*, and a unit suite for a two-store class
+should be parametrised over both. See ADR 0004 Decision 7.
 
 **How closely they have to agree depends on what the subsystem is for.**
 The pools compare with a tolerance, because they hold f32 where Python
@@ -556,6 +588,17 @@ more than one flockmate, because a tolerance loose enough to admit the
 ordering (6.4e-13) can never catch a transcription slip (one ulp). If
 you touch `rust/src/flocking.rs`, read that file's module docstring
 first. See `docs/adr/0004-the-native-boundary.md`, Decision 5.
+
+`SpatialHash` is **bit-exact** on membership, for the flow field's
+reason: an index decides which enemy a magnet pulls and who is a
+flockmate, and `query_radius` confirms every candidate against an exact
+squared distance, so being in range is a property of the positions alone.
+Exactly one thing diverges, and it is the result's **order** -- Python
+yields from a `set`, so for the string keys the engine uses
+`PYTHONHASHSEED` randomises it per process and the Python store is not
+reproducible against itself. Every comparison in its parity suite sorts,
+and a caller wanting a particular one of several results must pick it by
+distance or by id rather than taking the first.
 
 The flow field is also where to look for how a native boundary should be
 shaped: nothing outside `FlowFieldService` reads a cell, so the cost map
