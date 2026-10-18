@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import pytest
 
+import pyguara.ai.flocking_system as flocking_module
 from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem
 from pyguara.common.components import Transform
 from pyguara.common.random import RandomStream
@@ -221,6 +222,61 @@ def _assert_close(
             assert abs(expected - actual) <= TOLERANCE * scale, (
                 f"slot {slot}, component {index}: {expected!r} vs {actual!r}"
             )
+
+
+class TestThePythonPathIsPythonAllTheWayDown:
+    """`accelerate=False` has to mean it in what the system builds too.
+
+    `FlockingSystem`'s Python path constructs its own `SpatialHash` every
+    tick. That hash grew a native store, so unless the system passes
+    `accelerate=False` down, `FlockingSystem(accelerate=False)` indexes
+    natively -- which is not the Python path, measures 9.8 ms where the
+    Python tick is 16.4 ms, and puts native code inside the reference
+    `_python_counts` builds for this very file.
+
+    It happened, and nothing caught it: of 23 sabotages run against this
+    increment, removing that one argument was the only survivor. This is
+    the test that was missing.
+    """
+
+    def test_the_index_the_python_path_builds_is_python(self) -> None:
+        """Spy on the construction, because the hash is a local."""
+        constructed: list[SpatialHash[int]] = []
+        original = flocking_module.SpatialHash
+
+        def recording(*args: object, **kwargs: object) -> SpatialHash[int]:
+            index = original(*args, **kwargs)  # type: ignore[arg-type]
+            constructed.append(index)
+            return index
+
+        manager, agents, transforms = _world(
+            [
+                (Vector2(0.0, 0.0), Vector2(1.0, 0.0)),
+                (Vector2(10.0, 0.0), Vector2(0.0, 0.0)),
+            ]
+        )
+        system = FlockingSystem(manager, accelerate=False)
+        flocking_module.SpatialHash = recording  # type: ignore[assignment]
+        try:
+            system.update(DT)
+        finally:
+            flocking_module.SpatialHash = original  # type: ignore[assignment]
+
+        assert constructed, "the Python path built no index at all"
+        assert all(not index.accelerated for index in constructed), (
+            "FlockingSystem(accelerate=False) built a native index. The "
+            "Python path has to be Python all the way down -- see this "
+            "class's docstring."
+        )
+
+    def test_the_spy_would_notice_a_native_index(self) -> None:
+        """Guards the guard: the assertion above can actually fail.
+
+        If `accelerated` ever stopped reporting the truth, the test above
+        would pass against a native index and prove nothing.
+        """
+        assert SpatialHash[int](accelerate=True).accelerated is True
+        assert SpatialHash[int](accelerate=False).accelerated is False
 
 
 class TestTheNeighbourhoodsAgreeExactly:
