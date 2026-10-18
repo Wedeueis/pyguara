@@ -1,11 +1,11 @@
 //! The uniform grid every native spatial consumer shares.
 //!
-//! One implementation, used by the flocking solver over a tick's
-//! snapshot positions, and extracted here so the next native consumer of
-//! a spatial query shares it rather than growing a second one. That is
-//! why its vocabulary is positions and slots rather than keys: it indexes
-//! two parallel coordinate arrays and hands back indices into them.
-//! Whatever a slot *means* belongs to the caller.
+//! One implementation, used by the flocking solver over a tick's snapshot
+//! positions and by `NativeSpatialHash` over a persistent key set. It was
+//! written for the first and extracted for the second, which is why its
+//! vocabulary is positions and slots rather than keys: it indexes two
+//! parallel coordinate arrays and hands back indices into them. Whatever
+//! a slot *means* belongs to the caller.
 //!
 //! It mirrors `pyguara/common/spatial.py` deliberately and exactly:
 //! `cell_of` is that module's `_cell_of`, and `neighbours` is
@@ -14,7 +14,7 @@
 //! confirmed rather than assumed. Parity with the Python index is a
 //! tested property, so a change here is a change to both stores.
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyOverflowError, PyValueError};
 use pyo3::prelude::*;
 
 /// Largest cell span one radius query may cover.
@@ -26,6 +26,47 @@ use pyo3::prelude::*;
 /// becomes a hang rather than an error. Failing loudly is the better of
 /// the two.
 pub(crate) const MAX_QUERY_CELLS: u64 = 1 << 20;
+
+/// Largest cell index the grid can represent faithfully.
+///
+/// `cell_of` casts a float cell to `i64`, and Rust saturates that cast
+/// rather than wrapping -- so two positions far enough apart would both
+/// land on `i64::MAX` and share a cell. The exact-distance test keeps
+/// `query_radius` correct regardless, but `query_point` has no distance
+/// test to fall back on, so it would start reporting keys from the other
+/// side of the world. Python has no equivalent limit, and the divergence
+/// begins past 9.2e18 cells -- about 5.9e20 world units at the default
+/// cell size, which is 40 orders of magnitude outside any game's
+/// coordinates. Rejecting it is still better than diverging silently.
+pub(crate) const MAX_CELL_INDEX: f64 = 9.223_372_036_854_776e18;
+
+/// Reject a position the grid cannot index as Python's `_cell_of` would.
+///
+/// Matches `math.floor`'s own failures by exception type, which is what
+/// the parity suite pins: `ValueError` for NaN, `OverflowError` for an
+/// infinity. The out-of-range case has no Python counterpart and says so.
+pub(crate) fn check_position(x: f64, y: f64, cell_size: f64) -> PyResult<()> {
+    for value in [x, y] {
+        if value.is_nan() {
+            return Err(PyValueError::new_err(
+                "cannot convert float NaN to integer",
+            ));
+        }
+        if value.is_infinite() {
+            return Err(PyOverflowError::new_err(
+                "cannot convert float infinity to integer",
+            ));
+        }
+        if (value / cell_size).abs() >= MAX_CELL_INDEX {
+            return Err(PyValueError::new_err(format!(
+                "a coordinate of {value} over a cell_size of {cell_size} is past \
+                 cell {MAX_CELL_INDEX:e}, beyond which the native index cannot tell \
+                 two cells apart. The Python index has no such limit."
+            )));
+        }
+    }
+    Ok(())
+}
 
 /// Reject a radius/cell-size pairing whose query would span absurdly many
 /// cells, naming the configuration rather than arriving as a timeout.
@@ -46,7 +87,10 @@ pub(crate) fn check_query_span(widest_radius: f64, cell_size: f64) -> PyResult<(
 /// Rebuilt wholesale rather than maintained, like the `SpatialHash` it
 /// mirrors and for the same reason: a caller that sweeps every slot
 /// anyway gets the rebuild for free, against the alternative of an index
-/// that can hold a stale entry.
+/// that can hold a stale entry. `NativeSpatialHash` takes the same trade
+/// one step further -- it rebuilds on the first query after any write,
+/// so a caller that inserts everything and then queries everything pays
+/// for exactly one.
 ///
 /// Cells are bucketed by a hash rather than stored in a map, and the
 /// buckets are a flat CSR pair filled by counting sort, so a rebuild
@@ -105,7 +149,14 @@ impl Grid {
     }
 
     /// Index `count` positions, discarding any previous contents.
-
+    ///
+    /// A non-finite coordinate is tolerated here rather than rejected,
+    /// although `check_position` rejects one on the way in: a removed
+    /// key's slot is parked at NaN, and a NaN cast to `i64` saturates to
+    /// 0, so such a slot lands in cell (0, 0)'s bucket. It cannot be
+    /// returned by a query -- its mask is zeroed, and every NaN distance
+    /// comparison is false anyway -- so the only cost is a slightly
+    /// fuller bucket.
     pub(crate) fn build(&mut self, snap_x: &[f64], snap_y: &[f64], cell_size: f64) {
         let count = snap_x.len();
         self.cell_size = cell_size;
@@ -165,6 +216,42 @@ impl Grid {
             }
         };
         self.stamp
+    }
+
+    /// Every slot in the cells spanning a cell range, unfiltered.
+    ///
+    /// `SpatialHash._candidates`, and the same warning applies in
+    /// reverse: this yields slots from *at least* the cells asked for,
+    /// because a bucket may hold more than one cell. A caller that does
+    /// not go on to confirm a position -- as `neighbours` does with its
+    /// distance test -- must confirm the cell itself.
+    pub(crate) fn cells_in_range(
+        &mut self,
+        min_cx: i64,
+        max_cx: i64,
+        min_cy: i64,
+        max_cy: i64,
+        out: &mut Vec<u32>,
+    ) {
+        out.clear();
+        let stamp = self.next_stamp();
+        for cx in min_cx..=max_cx {
+            for cy in min_cy..=max_cy {
+                let bucket = self.bucket(cx, cy);
+                if self.visited[bucket] == stamp {
+                    continue;
+                }
+                self.visited[bucket] = stamp;
+                let from = self.offsets[bucket] as usize;
+                let to = self.offsets[bucket + 1] as usize;
+                out.extend_from_slice(&self.items[from..to]);
+            }
+        }
+    }
+
+    /// Every slot in the bucket one cell hashes to, unfiltered.
+    pub(crate) fn visit_bucket(&mut self, cx: i64, cy: i64, out: &mut Vec<u32>) {
+        self.cells_in_range(cx, cx, cy, cy, out);
     }
 
     /// Collect every slot within `radius` of a centre, as

@@ -242,8 +242,15 @@ class TestTheNeighbourhoodsAgreeExactly:
         Rebuilt here from `SpatialHash` directly rather than instrumented
         out of the system, so the comparison is against the Python
         implementation's own definition of a neighbourhood.
+
+        `accelerate=False` is what makes that true, and it is load-bearing
+        rather than tidy: `SpatialHash` grew a native store of its own, so
+        an unpinned one here would compare the native grid against itself
+        and this file's first tier would assert nothing.
         """
-        spatial_hash: SpatialHash[int] = SpatialHash(cell_size=cell_size)
+        spatial_hash: SpatialHash[int] = SpatialHash(
+            cell_size=cell_size, accelerate=False
+        )
         for slot, transform in enumerate(transforms):
             spatial_hash.insert(slot, transform.position)
         return [

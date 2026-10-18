@@ -51,6 +51,7 @@ mod flowfield;
 mod grid;
 mod particles;
 mod sparks;
+mod spatialhash;
 
 /// An RGBA tint as the renderer wants it.
 pub type Rgba = (u8, u8, u8, u8);
@@ -62,5 +63,6 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<flowfield::NativeFlowField>()?;
     module.add_class::<particles::NativeParticlePool>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
+    module.add_class::<spatialhash::NativeSpatialHash>()?;
     Ok(())
 }
