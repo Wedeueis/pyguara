@@ -13,7 +13,7 @@
 //! 16-22x measured over k = 17 to 32.
 //!
 //! What makes that work is holding the keys rather than rebuilding them:
-//! `keys` stores the `PyObject` the caller inserted, so returning a
+//! `keys` stores the `Py<PyAny>` the caller inserted, so returning a
 //! candidate is a reference count, not a string allocation. Returning
 //! `Vec<String>` would have made the ADR's original objection true.
 //!
@@ -48,10 +48,12 @@ const FULL_MASK: u32 = 0xFFFF_FFFF;
 
 /// A uniform-grid spatial index over caller-chosen Python keys.
 ///
-/// Mirrors `pyguara.common.spatial.SpatialHash` method for method. The
-/// Python class stays the default and this one is reached through
-/// `accelerate=`/`PerformanceConfig.native_acceleration`, like every
-/// other native store.
+/// Mirrors `pyguara.common.spatial.SpatialHash` method for method, and
+/// is reached only through it -- a caller writes `SpatialHash(...)` and
+/// `accelerate=`/`PerformanceConfig.native_acceleration` decides which
+/// store answers, like every other native store. Under the default
+/// `auto` that is *this* one whenever the extension is built; the Python
+/// implementation is the fallback rather than the default.
 #[pyclass]
 pub struct NativeSpatialHash {
     cell_size: f64,
