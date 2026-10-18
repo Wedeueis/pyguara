@@ -56,6 +56,24 @@ def _prose(obj: object) -> str:
     return re.sub(r"\s+", " ", inspect.getdoc(obj) or "").lower()
 
 
+# The ADR is called `0005-fixed-and-variable-step-naming.md`, which
+# contains both of the words the content assertions below look for. So a
+# docstring that said nothing at all but cited the ADR passed them --
+# found by sabotage: stripping "fixed" out of `System.update`'s prose
+# left every test green, because the filename in the citation still
+# matched. Content and citation have to be checked against different
+# text, or the citation vacuously satisfies the content.
+_CITATION = re.compile(r"adr 0005|`?docs/adr/[0-9a-z-]+\.md`?")
+
+# Markdown emphasis, so "**fixed** step" matches "fixed step".
+_EMPHASIS = re.compile(r"[*`]")
+
+
+def _claims(obj: object) -> str:
+    """The docstring's own prose, with any ADR citation removed."""
+    return _EMPHASIS.sub("", _CITATION.sub(" ", _prose(obj)))
+
+
 class TestEveryUpdateDocstringNamesItsStep:
     """`update` is ambiguous in a name, so it cannot be ambiguous in prose."""
 
@@ -63,8 +81,8 @@ class TestEveryUpdateDocstringNamesItsStep:
         "protocol", PROTOCOLS_WITH_UPDATE, ids=lambda p: p.__name__
     )
     def test_update_says_it_is_the_fixed_step(self, protocol: type) -> None:
-        doc = _prose(protocol.update)
-        assert "fixed" in doc, (
+        doc = _claims(protocol.update)
+        assert "fixed step" in doc, (
             f"{protocol.__name__}.update is the fixed step and its docstring "
             f"does not say so. A reader cannot tell from the name, because "
             f"`Scene.update` is the variable one.\n\n{doc}"
@@ -79,7 +97,7 @@ class TestEveryUpdateDocstringNamesItsStep:
         A reader who has just written `Scene.update` and is now writing
         `System.update` needs telling that the two mean opposite things.
         """
-        doc = _prose(protocol.update)
+        doc = _claims(protocol.update)
         assert "scene.update" in doc, (
             f"{protocol.__name__}.update should name `Scene.update` as the "
             f"opposite channel -- that collision is the documented hazard, "
@@ -93,8 +111,8 @@ class TestEveryUpdateDocstringNamesItsStep:
         since the last rendered frame" and left the reader to infer the
         rest.
         """
-        doc = _prose(VariableStepSystem.variable_update)
-        assert "variable" in doc
+        doc = _claims(VariableStepSystem.variable_update)
+        assert "variable step" in doc
 
 
 class TestTheDecisionIsRecorded:
