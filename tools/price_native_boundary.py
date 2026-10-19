@@ -64,11 +64,12 @@ _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT))
 
 from pyguara.ai.flocking_system import FlockingAgent, FlockingSystem  # noqa: E402
+from pyguara.ai.pathfinding.astar import AStarPathfinder  # noqa: E402
 from pyguara.ai.pathfinding.flow_field import dijkstra_map, flow_field  # noqa: E402
 from pyguara.ai.pathfinding.flow_field_service import (  # noqa: E402
     FlowFieldService,
 )
-from pyguara.ai.pathfinding.grid import GridGraph  # noqa: E402
+from pyguara.ai.pathfinding.grid import GridGraph, OctileDistance  # noqa: E402
 from pyguara.common.components import Transform  # noqa: E402
 from pyguara.common.random import RandomStream  # noqa: E402
 from pyguara.common.spatial import SpatialHash  # noqa: E402
@@ -88,6 +89,7 @@ from pyguara.graphics.pipeline.viewport import Viewport  # noqa: E402
 from pyguara.graphics.types import ShapeBatch  # noqa: E402
 from pyguara.graphics.vfx.sparks import Sparks  # noqa: E402
 from pyguara.kits.action_combat import Health, Hurtbox  # noqa: E402
+from pyguara.kits.procgen import AdjacencyRule, generate_wfc  # noqa: E402
 from pyguara.kits.projectiles.projectile import Projectile  # noqa: E402
 from pyguara.kits.projectiles.system import ProjectileSystem  # noqa: E402
 from pyguara.native import native_module  # noqa: E402
@@ -658,6 +660,129 @@ def price_render_batcher(sprites: int) -> Row | None:
     )
 
 
+# ---- per-call candidates --------------------------------------------
+#
+# Every row above prices a per-tick subsystem, which is what the ratio
+# rule was written for: `T_py` is a tick, and the ceiling says how much
+# of a frame a port gives back. The two below are not ticks. A* is paid
+# per query and WFC once per generated level, so their ceilings are real
+# but answer a different question -- and for both of them the quantity
+# matters more than the ratio. ADR 0004's threshold is a judgement about
+# maintaining a second implementation forever, and a large multiple of a
+# small one-off is not worth one.
+
+
+def price_wfc(side: int) -> Row:
+    """Measured at last, and the candidate Decision 6 dissolved.
+
+    RFC-0003 listed procgen beside pathfinding as its best-value claim,
+    and ADR 0004 recorded that nobody had measured it. Measured, a 64x64
+    generation was **3.5 seconds**, of which 95% was choosing the next
+    cell to collapse by listing every undecided cell and sorting it --
+    once per collapse, so quadratic in the cell count. With an entropy
+    heap the same grid is 27 ms.
+
+    So this row prices what is left, and what is left is the algorithm
+    rather than the overhead. `T_pinned` is the one part a port cannot
+    remove: `generate_wfc` returns `dict[Cell, S]`, so every cell becomes
+    a Python dict entry under a tuple key whatever language filled it in.
+    """
+    states = ["water", "sand", "grass", "rock"]
+    adjacent = {
+        "water": ["water", "sand"],
+        "sand": ["water", "sand", "grass"],
+        "grass": ["sand", "grass", "rock"],
+        "rock": ["grass", "rock"],
+    }
+    dirs = ((1, 0), (-1, 0), (0, 1), (0, -1))
+    rules = [
+        AdjacencyRule(from_state=a, to_state=b, direction=d)
+        for a, allowed in adjacent.items()
+        for b in allowed
+        for d in dirs
+    ]
+
+    python_ms = measure(
+        lambda: generate_wfc(side, side, states, rules, RandomStream(5)), iterations=5
+    )
+
+    index = {state: n for n, state in enumerate(states)}
+    cells = [(x, y) for x in range(side) for y in range(side)]
+
+    def marshal() -> list[int]:
+        """What crosses: the rules in, a flat state index per cell out."""
+        return [
+            n
+            for rule in rules
+            for n in (
+                index[rule.from_state],
+                index[rule.to_state],
+                rule.direction[0],
+                rule.direction[1],
+            )
+        ]
+
+    collapsed = [0] * (side * side)
+
+    def rebuild() -> dict[tuple[int, int], str]:
+        """The promised return type, which no port can hand back cheaper."""
+        return {cell: states[collapsed[cell[1] * side + cell[0]]] for cell in cells}
+
+    return Row(
+        f"wfc, {side}x{side}",
+        python_ms,
+        measure(marshal, iterations=5),
+        measure(rebuild, iterations=5),
+        "per generated level, not per tick -- see ADR 0004 Track R item 1",
+    )
+
+
+def price_astar(side: int) -> Row:
+    """Per query, and the case it is expensive in is already served.
+
+    `T_py` is one corner-to-corner query on a scattered-wall grid, the
+    worst a grid of this size affords. `T_cross` assumes the flow field's
+    shape -- the grid lives natively and only the endpoints and the
+    resulting path cross -- which is the cheapest boundary available and
+    therefore the most favourable ceiling this candidate can be given.
+
+    What the number does not say is that a native A* could only serve
+    `GridGraph`. `AStarPathfinder` solves any `Graph[Node]`, and its
+    inner loop is three Python callbacks per neighbour: `get_neighbors`
+    is 55% of a query and `cost` another 19%. Those are the port, and
+    they are exactly what cannot cross for a caller-supplied graph.
+    """
+    rng = RandomStream(7)
+    graph = GridGraph(side, side, allow_diagonal=True)
+    for y in range(side):
+        for x in range(side):
+            if rng.random() < 0.12:
+                graph.walls.add((x, y))
+    graph.walls.discard((0, 0))
+    graph.walls.discard((side - 1, side - 1))
+
+    solver, heuristic = AStarPathfinder(), OctileDistance()
+    goal = (side - 1, side - 1)
+    python_ms = measure(
+        lambda: solver.find_path(graph, (0, 0), goal, heuristic), iterations=5
+    )
+
+    path = solver.find_path(graph, (0, 0), goal, heuristic) or []
+    flat = [coordinate for cell in path for coordinate in cell]
+
+    def marshal() -> list[tuple[int, int]]:
+        """Endpoints in, the path back out as cells."""
+        return [(flat[n], flat[n + 1]) for n in range(0, len(flat), 2)]
+
+    return Row(
+        f"a*, {side}x{side} corner to corner",
+        python_ms,
+        measure(marshal, iterations=5),
+        0.0,
+        f"per query ({len(path)} cells); the horde case belongs to the flow field",
+    )
+
+
 def main() -> int:
     """Price every candidate and print the table.
 
@@ -694,6 +819,19 @@ def main() -> int:
         if row is None:
             continue
         print(f"  {row.name:26} {row.python_ms / FRAME_BUDGET_MS:6.0%}")
+
+    print(
+        "\nPer-call candidates. These are NOT per-tick, so the ceiling answers"
+        "\n'how much faster could this call be' and not 'how much of a frame"
+        "\nwould a port give back'. Read each note before quoting a number."
+    )
+    print(header)
+    print("-" * (len(header) + 12))
+    for row in (price_wfc(64), price_astar(96)):
+        print(
+            f"{row.name:26} {row.python_ms:8.3f}m {row.cross_ms:8.3f}m "
+            f"{row.pinned_ms:8.3f}m {row.ceiling:8.1f}x  {row.note}"
+        )
     return 0
 
 
