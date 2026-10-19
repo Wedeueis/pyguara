@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from pyguara.common.components import ResourceLink, Tag, Transform
+from pyguara.common.components import ResourceLink, Tag, Transform, set_parent
 from pyguara.common.modifiers import ModifiableValue, Modifier, ModifierType
 from pyguara.common.types import Vector2
 from pyguara.ecs.component import BaseComponent
@@ -895,3 +895,288 @@ class TestModifiableValue:
         loaded = reloaded.entity_manager.get_entity("hero").get_component(Stats)
         assert isinstance(loaded.strength, ModifiableValue)
         assert loaded.strength.base == 10.0
+
+
+class TestSpatialTransformParenting:
+    """`Transform` parenting round-trips, which it used not to.
+
+    The engine has **two** kinds of parent and only one of them survived a
+    save. `ChildOf` is ownership and cascades on destroy; `Transform`
+    parenting is spatial, and it is what makes a child's stored position
+    *local*. So losing it does not merely flatten a hierarchy -- it
+    silently moves everything, because the local coordinate comes back as
+    a world one. A turret stored at (10, 0) under a hull at (100, 200)
+    reloaded as a root at world (10, 0), 190 pixels from where it was
+    saved.
+    """
+
+    def _hull_and_turret(self, scene: MockScene) -> tuple[Transform, Transform]:
+        """A two-level rig: a turret at local (10, 0) on a hull at (100, 200)."""
+        manager = scene.entity_manager
+        hull = Transform(position=Vector2(100, 200))
+        turret = Transform(position=Vector2(10, 0))
+        manager.create_entity("hull").add_component(hull)
+        manager.create_entity("turret").add_component(turret)
+        set_parent(turret, hull, keep_world_transform=False)
+        return hull, turret
+
+    def _reload(
+        self, serializer: SceneSerializer, scene: MockScene, key: str
+    ) -> MockScene:
+        assert serializer.save_scene(scene, key)
+        loaded = MockScene("loaded", EventDispatcher())
+        assert serializer.load_scene(loaded, key)
+        return loaded
+
+    def _transform(self, scene: MockScene, entity_id: str) -> Transform:
+        entity = scene.entity_manager.get_entity(entity_id)
+        assert entity is not None
+        return entity.get_component(Transform)
+
+    def test_the_link_survives_in_both_directions(
+        self, fidelity_serializer: SceneSerializer, scene: MockScene
+    ) -> None:
+        self._hull_and_turret(scene)
+        loaded = self._reload(fidelity_serializer, scene, "rig")
+
+        hull = self._transform(loaded, "hull")
+        turret = self._transform(loaded, "turret")
+        assert turret.parent is hull
+        assert turret in hull.children
+
+    def test_the_local_position_is_not_rewritten_on_the_way_back(
+        self, fidelity_serializer: SceneSerializer, scene: MockScene
+    ) -> None:
+        """The defect this workstream is actually about.
+
+        Both numbers are asserted deliberately. A restore that re-linked
+        with `keep_world_transform=True` -- the default -- would read the
+        stored *local* (10, 0) as a world coordinate and rewrite the local
+        one to (-90, -200) to compensate: the hierarchy would be correct
+        about a position that was never saved, and only the local number
+        shows it.
+        """
+        self._hull_and_turret(scene)
+        loaded = self._reload(fidelity_serializer, scene, "rig")
+
+        turret = self._transform(loaded, "turret")
+        assert turret.position == Vector2(10, 0)
+        assert turret.world_position == Vector2(110, 200)
+
+    def test_a_child_stored_before_its_parent_still_links(
+        self, fidelity_serializer: SceneSerializer, scene: MockScene
+    ) -> None:
+        """Nothing orders a scene file's entities parents-first."""
+        manager = scene.entity_manager
+        parent = Transform(position=Vector2(50, 50))
+        child = Transform(position=Vector2(5, 0))
+        # "a_child" sorts before "z_parent", so it is written first.
+        manager.create_entity("z_parent").add_component(parent)
+        manager.create_entity("a_child").add_component(child)
+        set_parent(child, parent, keep_world_transform=False)
+
+        loaded = self._reload(fidelity_serializer, scene, "order")
+        assert self._transform(loaded, "a_child").parent is self._transform(
+            loaded, "z_parent"
+        )
+
+    def test_a_three_deep_chain_relinks(
+        self, fidelity_serializer: SceneSerializer, scene: MockScene
+    ) -> None:
+        """Depth is where a restore that preserved world values would drift.
+
+        Each level contributes its own offset, so the leaf's world position
+        is the sum of three and a single mis-applied level is visible in it.
+        """
+        manager = scene.entity_manager
+        root = Transform(position=Vector2(100, 0))
+        mid = Transform(position=Vector2(10, 0))
+        leaf = Transform(position=Vector2(1, 0))
+        for eid, transform in (("root", root), ("mid", mid), ("leaf", leaf)):
+            manager.create_entity(eid).add_component(transform)
+        set_parent(mid, root, keep_world_transform=False)
+        set_parent(leaf, mid, keep_world_transform=False)
+
+        loaded = self._reload(fidelity_serializer, scene, "chain")
+        assert self._transform(loaded, "leaf").world_position == Vector2(111, 0)
+        assert self._transform(loaded, "leaf").position == Vector2(1, 0)
+
+    def test_the_two_kinds_of_parent_are_independent(
+        self, fidelity_serializer: SceneSerializer, scene: MockScene
+    ) -> None:
+        """Ownership and spatial parenting need not agree, and both survive.
+
+        A camera rig owned by the scene root but spatially following the
+        player is the ordinary case for them pointing at different things.
+        """
+        manager = scene.entity_manager
+        owner = Transform()
+        follower = Transform(position=Vector2(0, -20))
+        target = Transform(position=Vector2(300, 400))
+        for eid, transform in (
+            ("owner", owner),
+            ("follower", follower),
+            ("target", target),
+        ):
+            manager.create_entity(eid).add_component(transform)
+        manager.set_parent("follower", "owner")
+        set_parent(follower, target, keep_world_transform=False)
+
+        loaded = self._reload(fidelity_serializer, scene, "both")
+        assert loaded.entity_manager.parent_of("follower") == "owner"
+        assert self._transform(loaded, "follower").parent is self._transform(
+            loaded, "target"
+        )
+        assert self._transform(loaded, "follower").world_position == Vector2(300, 380)
+
+    def test_an_unparented_transform_writes_no_parent_key(
+        self, fidelity_serializer: SceneSerializer, scene: MockScene
+    ) -> None:
+        """So every scene file without a spatial hierarchy is unchanged.
+
+        The key is omitted rather than written as null, which keeps an
+        existing save byte-identical and keeps the diff of one that gains a
+        hierarchy down to the entities that actually have one.
+        """
+        scene.entity_manager.create_entity("lone").add_component(Transform())
+
+        assert fidelity_serializer.save_scene(scene, "flat")
+        stored = fidelity_serializer.persistence.load_data("flat")
+        assert "parent" not in stored["entities"][0]["components"]["Transform"]
+
+    def test_a_dangling_spatial_parent_loads_the_child_unparented(
+        self,
+        fidelity_serializer: SceneSerializer,
+        persistence_manager: PersistenceManager,
+    ) -> None:
+        """A hand-edited or partially-exported file must still load."""
+        persistence_manager.save_data(
+            "dangling",
+            {
+                "name": "s",
+                "entities": [
+                    {
+                        "id": "orphan",
+                        "tags": [],
+                        "enabled": True,
+                        "components": {
+                            "Transform": {
+                                "position": {"x": 1, "y": 2},
+                                "parent": "gone",
+                            }
+                        },
+                    }
+                ],
+            },
+        )
+
+        loaded = MockScene("loaded", EventDispatcher())
+        assert fidelity_serializer.load_scene(loaded, "dangling")
+        assert self._transform(loaded, "orphan").parent is None
+
+    def test_a_parent_without_a_transform_loads_the_child_unparented(
+        self,
+        fidelity_serializer: SceneSerializer,
+        persistence_manager: PersistenceManager,
+    ) -> None:
+        """`get_component` raises for a type that is not attached.
+
+        So a file naming a parent that exists but carries no `Transform`
+        would have aborted the whole load rather than dropping one link,
+        had the restore tested the component for None.
+        """
+        persistence_manager.save_data(
+            "no_transform",
+            {
+                "name": "s",
+                "entities": [
+                    {"id": "bare", "tags": [], "enabled": True, "components": {}},
+                    {
+                        "id": "child",
+                        "tags": [],
+                        "enabled": True,
+                        "components": {
+                            "Transform": {
+                                "position": {"x": 1, "y": 2},
+                                "parent": "bare",
+                            }
+                        },
+                    },
+                ],
+            },
+        )
+
+        loaded = MockScene("loaded", EventDispatcher())
+        assert fidelity_serializer.load_scene(loaded, "no_transform")
+        assert self._transform(loaded, "child").parent is None
+        assert loaded.entity_manager.get_entity("bare") is not None
+
+    def test_a_cycle_in_the_file_is_refused_rather_than_built(
+        self,
+        fidelity_serializer: SceneSerializer,
+        persistence_manager: PersistenceManager,
+    ) -> None:
+        """A cycle has no world transform; every `world_*` read would recurse.
+
+        `set_parent` refuses it, and the restore has to survive that
+        refusal: one of the two links is dropped and the load succeeds.
+        """
+        persistence_manager.save_data(
+            "cycle",
+            {
+                "name": "s",
+                "entities": [
+                    {
+                        "id": "a",
+                        "tags": [],
+                        "enabled": True,
+                        "components": {
+                            "Transform": {"position": {"x": 1, "y": 0}, "parent": "b"}
+                        },
+                    },
+                    {
+                        "id": "b",
+                        "tags": [],
+                        "enabled": True,
+                        "components": {
+                            "Transform": {"position": {"x": 2, "y": 0}, "parent": "a"}
+                        },
+                    },
+                ],
+            },
+        )
+
+        loaded = MockScene("loaded", EventDispatcher())
+        assert fidelity_serializer.load_scene(loaded, "cycle")
+        a = self._transform(loaded, "a")
+        b = self._transform(loaded, "b")
+        # Exactly one link survived, so the chain terminates.
+        assert (a.parent is None) != (b.parent is None)
+        # And reading through it does not recurse.
+        assert a.world_position is not None
+        assert b.world_position is not None
+
+    def test_a_parent_belonging_to_no_entity_is_dropped_with_a_warning(
+        self,
+        fidelity_serializer: SceneSerializer,
+        scene: MockScene,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A bare `Transform` used as a pivot has no id to refer to.
+
+        Nothing in the engine does this, but the API permits it --
+        `set_parent` takes a `Transform`, not an entity -- so the save side
+        has to answer for it rather than raising `AttributeError` on
+        `None.id` halfway through writing a file.
+        """
+        manager = scene.entity_manager
+        pivot = Transform(position=Vector2(7, 7))  # attached to nothing
+        child = Transform(position=Vector2(1, 1))
+        manager.create_entity("child").add_component(child)
+        set_parent(child, pivot, keep_world_transform=False)
+
+        with caplog.at_level("WARNING"):
+            assert fidelity_serializer.save_scene(scene, "pivot")
+        stored = fidelity_serializer.persistence.load_data("pivot")
+        assert "parent" not in stored["entities"][0]["components"]["Transform"]
+        assert "belongs to no entity" in caplog.text
