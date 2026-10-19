@@ -324,8 +324,16 @@ def _decode_base64(data_el: ElementTree.Element, layer_name: str) -> list[int]:
             f"layer '{layer_name}' decoded to {len(payload)} bytes, which is "
             f"not a whole number of 32-bit tile ids"
         )
-    # Little-endian unsigned, which is what the format specifies -- signed
-    # would turn every flipped tile into a negative number.
+    # Little-endian, which the format specifies and which a big-endian
+    # reader gets visibly wrong -- tile 1 comes back as 16777216.
+    #
+    # `I` rather than `i` matches the spec but is not load-bearing:
+    # `GID_FLAG_MASK` is applied to the result, and Python's `&` on a
+    # negative uses two's complement with infinite sign extension, so a
+    # flipped tile masks to the same id read either way. Sabotage
+    # confirmed it -- swapping them changes nothing. Kept unsigned
+    # because that is what the value *is* before masking, and a reader
+    # debugging a raw gid should see 2147483649 rather than -2147483647.
     return list(struct.unpack(f"<{len(payload) // 4}I", payload))
 
 
