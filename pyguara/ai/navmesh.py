@@ -600,6 +600,16 @@ def _pull_string(portals: list[tuple[Vector2, Vector2]]) -> list[Vector2]:
     index** -- which is why this is a `while` rather than a `for`, and
     why the algorithm is linear despite appearing to backtrack.
 
+    **Why the restart cannot spin.** A crossing is only possible once the
+    bound being crossed has been tightened since the last restart, and a
+    bound can only be tightened at a portal *after* the apex -- so
+    `left_index`/`right_index` is always strictly greater than
+    `apex_index` when a crossing fires, and the apex therefore advances
+    every time. Remove either tightening branch and that stops holding:
+    the apex sticks, `index` resets to the same place forever, and the
+    function never returns. Both are sabotage-tested, and both show up
+    as the suite timing out rather than as an assertion.
+
     Args:
         portals: `(left, right)` pairs, starting with `(start, start)`
             and ending with `(goal, goal)`.
