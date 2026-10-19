@@ -1,9 +1,14 @@
 """Tests for scene transition system."""
 
+import math
 from unittest.mock import Mock
+
+import pytest
 
 from pyguara.common.types import Color
 from pyguara.scene.transitions import (
+    DEFAULT_WIPE_SEGMENTS,
+    CircularWipeTransition,
     EasingFunction,
     FadeTransition,
     SlideTransition,
@@ -12,6 +17,8 @@ from pyguara.scene.transitions import (
     TransitionState,
     WipeTransition,
     apply_easing,
+    circular_cover_points,
+    fully_revealed_radius,
 )
 
 
@@ -464,3 +471,356 @@ class TestTransitionUsagePatterns:
         # TransitionManager should not be involved
 
         assert not manager.is_transitioning()
+
+
+class TestTheCircularWipeGeometry:
+    """The cover outline, asserted without a renderer.
+
+    `circular_cover_points` is one self-touching outline -- round the
+    window, in along a seam, round the circle the other way, back out -- so
+    the interesting properties are about winding and about the two clamps
+    at either end of the radius range.
+    """
+
+    def test_a_full_radius_covers_nothing(self) -> None:
+        points = circular_cover_points(
+            640, 360, fully_revealed_radius(1280, 720), 1280, 720
+        )
+        assert points == []
+
+    def test_a_radius_past_full_also_covers_nothing(self) -> None:
+        """Clamped, not extrapolated into a polygon turned inside out."""
+        points = circular_cover_points(640, 360, 10_000, 1280, 720)
+        assert points == []
+
+    def test_a_zero_radius_is_the_plain_window_rectangle(self) -> None:
+        """No hole means no seam, so the degenerate ring is not drawn at all."""
+        points = circular_cover_points(640, 360, 0.0, 1280, 720)
+        assert points == [(0, 0), (1280, 0), (1280, 720), (0, 720)]
+
+    def test_a_negative_radius_is_treated_as_zero(self) -> None:
+        assert circular_cover_points(640, 360, -5.0, 1280, 720) == (
+            circular_cover_points(640, 360, 0.0, 1280, 720)
+        )
+
+    @staticmethod
+    def _split(points: list[tuple[int, int]]):
+        """Return (seam, outer rectangle, ring) from one cover outline."""
+        seam = points[0]
+        seam_second = len(points) - 1 - points[::-1].index(seam)
+        return seam, points[1:seam_second], points[seam_second + 1 : -1]
+
+    def test_the_outline_closes_the_seam_on_both_sides(self) -> None:
+        """The seam point appears twice, which is what cancels its edges.
+
+        One traversal would leave the outline open and the fill would run
+        out through the gap.
+        """
+        points = circular_cover_points(640, 360, 100.0, 1280, 720)
+        assert points.count(points[0]) == 2
+
+    def test_the_seam_begins_outside_the_hole(self) -> None:
+        """It runs along the circle's centre line, from outside it.
+
+        When the seam crossed the hole -- which it did, because the ring
+        began at whichever vertex the construction produced first, on the
+        *right* of the circle -- a scanline fill left a dotted line of
+        cover colour across the revealed scene.
+        """
+        points = circular_cover_points(640, 360, 100.0, 1280, 720)
+        seam, _, ring = self._split(points)
+        assert seam[1] == 360, "the seam is on the circle's centre line"
+        assert seam[0] < 640 - 100, "and starts beyond the circle's left edge"
+        assert ring[0] == min(ring, key=lambda point: point[0]), (
+            "so the ring must begin at its own leftmost vertex"
+        )
+
+    def test_the_ring_closes_on_itself(self) -> None:
+        points = circular_cover_points(640, 360, 100.0, 1280, 720)
+        _, _, ring = self._split(points)
+        assert points[-1] == ring[0]
+
+    def test_the_outer_loop_contains_the_circle(self) -> None:
+        """Otherwise the cover is not an annulus and the fill misbehaves.
+
+        For most of a wipe the circle is *larger* than the window -- at
+        1280x720 it starts at radius 735 against a half-height of 360 --
+        so an outer loop equal to the window is crossed by it, and the
+        fill left a 42-pixel band of cover colour across the top of the
+        revealed scene.
+        """
+        radius = 700.0
+        points = circular_cover_points(640, 360, radius, 1280, 720)
+        _, rect, _ = self._split(points)
+        xs = [x for x, _ in rect]
+        ys = [y for _, y in rect]
+        assert min(xs) < 640 - radius
+        assert max(xs) > 640 + radius
+        assert min(ys) < 360 - radius
+        assert max(ys) > 360 + radius
+        # And it still covers the window, or the corners would go unpainted.
+        assert min(xs) <= 0 and min(ys) <= 0
+        assert max(xs) >= 1280 and max(ys) >= 720
+
+    def test_the_ring_winds_against_the_rectangle(self) -> None:
+        """Opposite winding is what makes the hole a hole.
+
+        Both loops wound the same way would fill as one solid region with
+        a scanline fill, and the circle would simply not appear.
+        """
+        points = circular_cover_points(640, 360, 200.0, 1280, 720)
+        _, rect, ring = self._split(points)
+
+        def signed_area(loop: list[tuple[int, int]]) -> float:
+            total = 0.0
+            for (x0, y0), (x1, y1) in zip(loop, loop[1:] + loop[:1], strict=True):
+                total += x0 * y1 - x1 * y0
+            return total / 2.0
+
+        assert signed_area(rect) * signed_area(ring) < 0
+
+    def test_the_segment_count_is_honoured(self) -> None:
+        few = circular_cover_points(640, 360, 100.0, 1280, 720, segments=8)
+        many = circular_cover_points(640, 360, 100.0, 1280, 720, segments=128)
+        assert len(many) - len(few) == 120
+
+    def test_fewer_than_three_segments_is_clamped(self) -> None:
+        """Two sides is not a polygon; a caller asking for one gets a triangle."""
+        assert len(circular_cover_points(640, 360, 100.0, 1280, 720, segments=1)) == (
+            len(circular_cover_points(640, 360, 100.0, 1280, 720, segments=3))
+        )
+
+    def test_the_full_radius_clears_the_corners_not_just_the_edge_midpoints(
+        self,
+    ) -> None:
+        """Why the maximum is not the half-diagonal.
+
+        An inscribed polygon touches its circle only at the vertices, so a
+        64-gon at exactly the half-diagonal falls *inside* the window
+        corners and leaves four slivers covered -- 2131 pixels of a
+        1280x720 window, at the one moment the effect should be invisible.
+        """
+        half_diagonal = math.hypot(640, 360)
+        assert fully_revealed_radius(1280, 720) > half_diagonal
+        # And the excess is exactly the apothem correction.
+        assert fully_revealed_radius(1280, 720) == pytest.approx(
+            half_diagonal / math.cos(math.pi / DEFAULT_WIPE_SEGMENTS)
+        )
+
+
+class TestTheCircularWipeRevealedRadius:
+    """What the effect is doing at a given moment, as one number."""
+
+    def _at(self, progress: float, state: TransitionState | None = None):
+        transition = CircularWipeTransition(TransitionConfig(duration=1.0))
+        transition.start()
+        transition.progress = progress
+        if state is not None:
+            transition.state = state
+        return transition
+
+    def test_it_starts_fully_revealed(self) -> None:
+        transition = self._at(0.0)
+        assert transition.revealed_radius(1280, 720) == pytest.approx(
+            fully_revealed_radius(1280, 720)
+        )
+
+    def test_it_is_fully_covered_at_the_midpoint(self) -> None:
+        transition = self._at(0.5)
+        assert transition.revealed_radius(1280, 720) == pytest.approx(0.0)
+
+    def test_it_is_fully_revealed_again_at_the_end(self) -> None:
+        """The second phase reopens over the new scene."""
+        transition = self._at(1.0, TransitionState.TRANSITIONING_IN)
+        assert transition.revealed_radius(1280, 720) == pytest.approx(
+            fully_revealed_radius(1280, 720)
+        )
+
+    def test_the_radius_shrinks_monotonically_through_the_first_phase(self) -> None:
+        radii = [
+            self._at(p).revealed_radius(1280, 720)
+            for p in (0.0, 0.1, 0.2, 0.3, 0.4, 0.5)
+        ]
+        assert radii == sorted(radii, reverse=True)
+
+
+class TestTheCircularWipeActuallyDrawsACircle:
+    """Real pixels, because the defect was invisible to everything else.
+
+    The class promised "expands a circle from center" and drew a
+    full-screen fade behind a `# TODO: Proper circular mask rendering`. Not
+    approximately a fade: its output was **byte-identical** to
+    `FadeTransition`'s at the same progress, which is what the first test
+    here pins. Nothing covered this class before, which is how a stub
+    stayed shipped and exported.
+    """
+
+    WIDTH = 320
+    HEIGHT = 240
+    SCENE = (0, 200, 0)
+
+    def _frame(self, progress, state=None, alpha=255, transition=None, size=None):
+        import pygame
+
+        from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+
+        pygame.init()
+        width, height = size or (self.WIDTH, self.HEIGHT)
+        surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        surface.fill((*self.SCENE, 255))
+        if transition is None:
+            transition = CircularWipeTransition(
+                TransitionConfig(duration=1.0, color=Color(0, 0, 0, alpha))
+            )
+        transition.start()
+        transition.progress = progress
+        if state is not None:
+            transition.state = state
+        transition.render(Mock(), PygameUIRenderer(surface), width, height)
+        return surface
+
+    def _revealed(self, surface) -> int:
+        return sum(
+            1
+            for y in range(self.HEIGHT)
+            for x in range(self.WIDTH)
+            if surface.get_at((x, y))[:3] == self.SCENE
+        )
+
+    def test_it_is_not_a_fade(self) -> None:
+        """The regression guard. These two used to be the same bytes."""
+        import pygame
+
+        circular = self._frame(0.25)
+        fade = self._frame(
+            0.25, transition=FadeTransition(TransitionConfig(duration=1.0))
+        )
+        assert pygame.image.tobytes(circular, "RGBA") != pygame.image.tobytes(
+            fade, "RGBA"
+        )
+
+    def test_mid_transition_shows_a_revealed_region_not_a_uniform_tint(self) -> None:
+        surface = self._frame(0.25)
+        centre = surface.get_at((self.WIDTH // 2, self.HEIGHT // 2))[:3]
+        corner = surface.get_at((1, 1))[:3]
+        assert centre == self.SCENE
+        assert corner == (0, 0, 0)
+
+    def test_the_revealed_region_is_round(self) -> None:
+        """Sampled just inside and just outside the radius, all the way round.
+
+        A square or diamond revealed region would pass the centre/corner
+        test above; this is what says it is a circle.
+        """
+        transition = CircularWipeTransition(TransitionConfig(duration=1.0))
+        surface = self._frame(0.25, transition=transition)
+        radius = transition.revealed_radius(self.WIDTH, self.HEIGHT)
+        cx, cy = self.WIDTH / 2, self.HEIGHT / 2
+
+        for step in range(24):
+            angle = 2 * math.pi * step / 24
+            dx, dy = math.cos(angle), math.sin(angle)
+            inside = (
+                int(cx + dx * (radius - 4)),
+                int(cy + dy * (radius - 4)),
+            )
+            outside = (
+                int(cx + dx * (radius + 4)),
+                int(cy + dy * (radius + 4)),
+            )
+            if not (0 <= outside[0] < self.WIDTH and 0 <= outside[1] < self.HEIGHT):
+                continue
+            assert surface.get_at(inside)[:3] == self.SCENE, f"angle {step}"
+            assert surface.get_at(outside)[:3] == (0, 0, 0), f"angle {step}"
+
+    def test_the_start_of_the_transition_covers_nothing(self) -> None:
+        """The artefact that `fully_revealed_radius` exists to remove.
+
+        With the maximum set to the half-diagonal, the approximating
+        polygon's edges fall inside the window corners and four slivers
+        stay dark at the one moment the effect should be invisible.
+        """
+        assert self._revealed(self._frame(0.0)) == self.WIDTH * self.HEIGHT
+
+    def test_the_end_of_the_transition_covers_nothing(self) -> None:
+        surface = self._frame(1.0, TransitionState.TRANSITIONING_IN)
+        assert self._revealed(surface) == self.WIDTH * self.HEIGHT
+
+    def test_the_midpoint_covers_everything(self) -> None:
+        assert self._revealed(self._frame(0.5)) == 0
+
+    def test_the_revealed_area_matches_the_circle(self) -> None:
+        """Area, not just a few samples: a wrong radius passes point tests."""
+        transition = CircularWipeTransition(TransitionConfig(duration=1.0))
+        surface = self._frame(0.25, transition=transition)
+        radius = transition.revealed_radius(self.WIDTH, self.HEIGHT)
+        assert self._revealed(surface) == pytest.approx(
+            math.pi * radius * radius, rel=0.02
+        )
+
+    def test_a_translucent_cover_is_blended_exactly_once(self) -> None:
+        """The reason the cover is one polygon rather than a fan of quads.
+
+        A fan of 68 quads between the arc and the window edge tiles the
+        same region, but `pygame.draw.polygon` fills boundary pixels, so
+        adjacent quads blend a translucent cover **twice** along every
+        shared edge -- measured as (0, 50, 0) spokes against (0, 100, 0) on
+        a 50%-black cover over green. One outline cannot do that, and this
+        asserts it: exactly two colours in the frame.
+        """
+        surface = self._frame(0.25, alpha=128)
+        colours = {
+            surface.get_at((x, y))[:3]
+            for y in range(0, self.HEIGHT, 3)
+            for x in range(0, self.WIDTH, 3)
+        }
+        assert colours == {self.SCENE, (0, 100, 0)}
+
+    @pytest.mark.parametrize("width,height", [(480, 270), (320, 240), (200, 400)])
+    @pytest.mark.parametrize("progress", [0.1, 0.2, 0.25, 0.3, 0.4])
+    def test_every_pixel_is_on_the_right_side_of_the_circle(
+        self, width: int, height: int, progress: float
+    ) -> None:
+        """The whole frame, both ways, at three aspect ratios.
+
+        **This is the test the earlier ones should have been.** Two real
+        defects got past a centre/corner check, a 24-point ring walk, a
+        distinct-colour count and an area assertion, and were found by
+        rendering the frame and looking at it:
+
+        - The outline's seam ran from the window's left edge to whichever
+          ring vertex the construction produced first -- on the *right* of
+          the circle -- so it crossed the hole. Its two traversals
+          coincide and ought to cancel, but a scanline fill counts a
+          vertex lying exactly on a row inconsistently, and the result was
+          a dotted line of cover colour across the revealed scene. Invisible
+          to a distinct-colour check, because the colour is one already in
+          the frame, and about 0.3% of the area, under the area tolerance.
+        - The outer loop was the window itself, so once the circle grew
+          past the window edges -- which it is, for most of a wipe -- the
+          cover stopped being an annulus and the fill left a 42-pixel band
+          of cover colour across the top of the revealed scene.
+
+        A pixel inside the polygon's apothem must show the scene and a
+        pixel outside the circumradius must not. The 2px margin is for
+        integer vertex rounding, which moves the drawn edge by up to half
+        a pixel either way.
+        """
+        transition = CircularWipeTransition(TransitionConfig(duration=1.0))
+        surface = self._frame(progress, transition=transition, size=(width, height))
+        radius = transition.revealed_radius(width, height)
+        apothem = radius * math.cos(math.pi / transition.segments)
+        cx, cy = width / 2, height / 2
+
+        covered_inside = 0
+        revealed_outside = 0
+        for y in range(height):
+            for x in range(width):
+                distance = math.hypot(x + 0.5 - cx, y + 0.5 - cy)
+                revealed = surface.get_at((x, y))[:3] == self.SCENE
+                if distance < apothem - 2 and not revealed:
+                    covered_inside += 1
+                elif distance > radius + 2 and revealed:
+                    revealed_outside += 1
+        assert covered_inside == 0
+        assert revealed_outside == 0
