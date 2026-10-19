@@ -22,9 +22,29 @@ import pygame  # noqa: E402
 
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem  # noqa: E402
 from pyguara.audio.manager import AudioManager  # noqa: E402
+from pyguara.audio.types import SoundHandle  # noqa: E402
 from pyguara.resources.types import AudioClip  # noqa: E402
 
 _SAMPLE_RATE = 44100
+
+
+def _channel_of(system: PygameAudioSystem, sound: SoundHandle) -> pygame.mixer.Channel:
+    """The mixer channel a handle's sound landed on.
+
+    Reads the backend's own tracking table on purpose. These are
+    *backend* tests: what they pin is mixer-level behaviour -- loudness
+    on the channel rather than the shared Sound, a recycled channel's
+    stale pan -- and `SoundHandle` deliberately hides the channel number
+    from the protocol. There is nowhere else to get it, and inventing a
+    public accessor so a test need not ask would be worse.
+    """
+    return pygame.mixer.Channel(_channel_id_of(system, sound))
+
+
+def _channel_id_of(system: PygameAudioSystem, sound: SoundHandle) -> int:
+    """The mixer channel number a handle's sound landed on."""
+    return system._playing_sounds[sound].channel_id
+
 
 # ========== Fixtures ==========
 
@@ -120,32 +140,38 @@ def test_music_volume_control(audio_system: PygameAudioSystem, mock_music: Any) 
 # ========== SFX Playback Tests ==========
 
 
-def test_play_sfx_plays_on_the_channel_it_returns(
+def test_play_sfx_handle_names_the_channel_carrying_our_sound(
     audio_system: PygameAudioSystem, audio_clip: AudioClip
 ) -> None:
-    """The returned id names the channel actually carrying our sound.
+    """The returned handle resolves to the channel actually playing it.
 
     Regression: the backend called ``Channel.get_id()`` (does not exist on
     pygame-ce), so every real ``play_sfx`` raised, was swallowed, and returned
     ``None`` while the sound played on untracked.
     """
-    channel_id = audio_system.play_sfx(audio_clip, volume=0.8)
+    sound = audio_system.play_sfx(audio_clip, volume=0.8)
 
-    assert channel_id is not None
-    assert isinstance(channel_id, int)
-    pg = pygame.mixer.Channel(channel_id)
+    assert sound is not None
+    assert isinstance(sound, SoundHandle)
+    pg = _channel_of(audio_system, sound)
     assert pg.get_busy()
     assert pg.get_sound() is audio_clip.native_handle
 
 
-def test_play_sfx_channel_id_zero_is_valid(
+def test_a_handle_is_never_falsy(
     audio_system: PygameAudioSystem, audio_clip: AudioClip
 ) -> None:
-    """Channel 0 is a real channel; it must come back as 0, not be treated
-    as falsy/absent."""
-    channel_id = audio_system.play_sfx(audio_clip)
-    assert channel_id == 0
-    assert audio_system.is_channel_active(0)
+    """`if handle:` cannot mistake a real sound for an absent one.
+
+    The channel-int API had this trap: channel 0 is a real channel and a
+    falsy int, so `if channel_id:` dropped it. A handle is an object, so
+    the trap is structurally gone -- pinned here because the fix is the
+    representation rather than any code that could drift back.
+    """
+    sound = audio_system.play_sfx(audio_clip)
+    assert sound is not None
+    assert bool(sound) is True
+    assert bool(SoundHandle(0)) is True
 
 
 def test_play_sfx_loops_forever_when_requested(
@@ -155,10 +181,10 @@ def test_play_sfx_loops_forever_when_requested(
     import time
 
     clip = _make_clip(seconds=0.05)
-    channel_id = audio_system.play_sfx(clip, loops=-1)
-    assert channel_id is not None
+    sound = audio_system.play_sfx(clip, loops=-1)
+    assert sound is not None
     time.sleep(0.2)
-    assert pygame.mixer.Channel(channel_id).get_busy()
+    assert _channel_of(audio_system, sound).get_busy()
 
 
 def test_play_sfx_centred_volume_is_set_on_the_channel_not_the_sound(
@@ -173,11 +199,11 @@ def test_play_sfx_centred_volume_is_set_on_the_channel_not_the_sound(
     audio_system.set_master_volume(0.5)
     audio_system.set_sfx_volume(0.8)
 
-    channel_id = audio_system.play_sfx(audio_clip, volume=0.6)
-    assert channel_id is not None
+    sound = audio_system.play_sfx(audio_clip, volume=0.6)
+    assert sound is not None
 
     expected = 0.6 * 0.8 * 0.5
-    assert pygame.mixer.Channel(channel_id).get_volume() == pytest.approx(
+    assert _channel_of(audio_system, sound).get_volume() == pytest.approx(
         expected, abs=0.02
     )
     # D2: the ResourceManager-cached Sound must never have its volume touched.
@@ -194,10 +220,10 @@ def test_play_sfx_applies_audiometa_volume_db_as_per_asset_gain(
     clip = _make_clip("quiet.wav")
     clip.import_meta = AudioMeta(volume_db=-6.0)  # ~0.501x
 
-    channel_id = audio_system.play_sfx(clip, volume=1.0)
-    assert channel_id is not None
+    sound = audio_system.play_sfx(clip, volume=1.0)
+    assert sound is not None
 
-    assert pygame.mixer.Channel(channel_id).get_volume() == pytest.approx(
+    assert _channel_of(audio_system, sound).get_volume() == pytest.approx(
         0.501, abs=0.02
     )
     # The shared Sound is still untouched (D2 from the audio audit).
@@ -240,7 +266,7 @@ def test_concurrent_plays_of_one_clip_do_not_share_volume(
 
     # The near play is centred, so its channel volume is observable and must
     # still be full despite the quieter far play that followed.
-    assert pygame.mixer.Channel(near).get_volume() == pytest.approx(1.0, abs=0.02)
+    assert _channel_of(audio_system, near).get_volume() == pytest.approx(1.0, abs=0.02)
     # And the clip's Sound was never used as the volume knob.
     assert clip.native_handle.get_volume() == pytest.approx(1.0)
 
@@ -270,22 +296,24 @@ def test_recycled_channel_does_not_inherit_previous_pan(
         pygame.mixer.Channel(0).stop()
 
         centred = one_channel.play_sfx(_make_clip("mid.wav", 0.5), volume=0.5)
-        assert centred == 0
+        assert centred is not None
+        assert _channel_id_of(one_channel, centred) == 0
         assert pygame.mixer.Channel(0).get_volume() == pytest.approx(0.5, abs=0.02)
     finally:
         pygame.mixer.stop()
 
 
-def test_stop_sfx_stops_and_forgets_the_channel(
+def test_stop_sfx_stops_and_forgets_the_sound(
     audio_system: PygameAudioSystem, audio_clip: AudioClip
 ) -> None:
-    channel_id = audio_system.play_sfx(audio_clip)
-    assert channel_id is not None
-    assert audio_system.is_channel_active(channel_id)
+    sound = audio_system.play_sfx(audio_clip)
+    assert sound is not None
+    assert audio_system.is_sound_active(sound)
+    channel = _channel_of(audio_system, sound)
 
-    audio_system.stop_sfx(channel_id)
-    assert not pygame.mixer.Channel(channel_id).get_busy()
-    assert not audio_system.is_channel_active(channel_id)
+    audio_system.stop_sfx(sound)
+    assert not channel.get_busy()
+    assert not audio_system.is_sound_active(sound)
 
 
 def test_invalid_clip_returns_none(audio_system: PygameAudioSystem) -> None:
@@ -314,73 +342,99 @@ def test_pause_resume_sfx(audio_system: PygameAudioSystem) -> None:
     unpause.assert_called_once()
 
 
-# ========== is_channel_active ==========
+# ========== is_sound_active ==========
 
 
-def test_is_channel_active_false_for_unknown_channel(
+def test_is_sound_active_false_for_unknown_handle(
     audio_system: PygameAudioSystem,
 ) -> None:
-    assert audio_system.is_channel_active(5) is False
+    assert audio_system.is_sound_active(SoundHandle(999_999)) is False
 
 
-def test_is_channel_active_false_once_sound_finishes(
+def test_is_sound_active_false_once_sound_finishes(
     audio_system: PygameAudioSystem,
 ) -> None:
     import time
 
-    channel_id = audio_system.play_sfx(_make_clip(seconds=0.05))
-    assert channel_id is not None
-    assert audio_system.is_channel_active(channel_id)
+    sound = audio_system.play_sfx(_make_clip(seconds=0.05))
+    assert sound is not None
+    assert audio_system.is_sound_active(sound)
 
     time.sleep(0.25)
-    assert audio_system.is_channel_active(channel_id) is False
+    assert audio_system.is_sound_active(sound) is False
 
 
-def test_is_channel_active_false_when_channel_reused_by_other_sound(
+def test_is_sound_active_false_when_channel_reused_by_other_sound(
     audio_system: PygameAudioSystem,
 ) -> None:
     one = PygameAudioSystem(num_channels=1)
     try:
         first = one.play_sfx(_make_clip("first.wav", 2.0))
-        assert first == 0
+        assert first is not None
         pygame.mixer.Channel(0).stop()
         # Something unrelated grabs channel 0 directly.
         pygame.mixer.Channel(0).play(_make_clip("other.wav", 2.0).native_handle)
-        assert one.is_channel_active(0) is False
+        assert one.is_sound_active(first) is False
     finally:
         pygame.mixer.stop()
 
 
-# ========== set_channel_mix ==========
+def test_stop_sfx_on_a_recycled_channel_does_not_stop_the_new_sound(
+    audio_system: PygameAudioSystem,
+) -> None:
+    """The hazard the handle exists to remove.
+
+    With a channel int, a caller holding a stale id and calling
+    `stop_sfx(0)` stopped whatever had taken channel 0 over. A stale
+    handle resolves to nothing, so the new sound keeps playing.
+    """
+    one = PygameAudioSystem(num_channels=1)
+    try:
+        stale = one.play_sfx(_make_clip("first.wav", 2.0))
+        assert stale is not None
+        pygame.mixer.Channel(0).stop()
+        one.is_sound_active(stale)  # reaps the finished sound
+
+        fresh = one.play_sfx(_make_clip("second.wav", 2.0))
+        assert fresh is not None and fresh != stale
+
+        one.stop_sfx(stale)
+        assert one.is_sound_active(fresh) is True
+    finally:
+        pygame.mixer.stop()
 
 
-def test_set_channel_mix_updates_channel_volume(
+# ========== set_sound_mix ==========
+
+
+def test_set_sound_mix_updates_channel_volume(
     audio_system: PygameAudioSystem, audio_clip: AudioClip
 ) -> None:
-    channel_id = audio_system.play_sfx(audio_clip, volume=1.0)
-    assert channel_id is not None
+    sound = audio_system.play_sfx(audio_clip, volume=1.0)
+    assert sound is not None
 
-    audio_system.set_channel_mix(channel_id, attenuation=0.4, pan=0.0)
-    assert pygame.mixer.Channel(channel_id).get_volume() == pytest.approx(0.4, abs=0.02)
+    channel = _channel_of(audio_system, sound)
+    audio_system.set_sound_mix(sound, attenuation=0.4, pan=0.0)
+    assert channel.get_volume() == pytest.approx(0.4, abs=0.02)
 
 
-def test_set_channel_mix_ignores_finished_channel(
+def test_set_sound_mix_ignores_finished_sound(
     audio_system: PygameAudioSystem,
 ) -> None:
     import time
 
-    channel_id = audio_system.play_sfx(_make_clip(seconds=0.05), volume=1.0)
-    assert channel_id is not None
+    sound = audio_system.play_sfx(_make_clip(seconds=0.05), volume=1.0)
+    assert sound is not None
     time.sleep(0.25)
     # Must not raise, must not resurrect volume on a dead channel.
-    audio_system.set_channel_mix(channel_id, attenuation=0.4, pan=0.0)
-    assert audio_system.is_channel_active(channel_id) is False
+    audio_system.set_sound_mix(sound, attenuation=0.4, pan=0.0)
+    assert audio_system.is_sound_active(sound) is False
 
 
-def test_set_channel_mix_ignores_unknown_channel(
+def test_set_sound_mix_ignores_unknown_handle(
     audio_system: PygameAudioSystem,
 ) -> None:
-    audio_system.set_channel_mix(99, attenuation=0.5, pan=0.5)  # no raise
+    audio_system.set_sound_mix(SoundHandle(999_999), 0.5, 0.5)  # no raise
 
 
 # ========== shutdown ==========
@@ -492,18 +546,20 @@ def test_audio_manager_cleanup_stops_music_and_clears_tracking(
 def test_audio_manager_play_sfx_clip(
     audio_manager: AudioManager, audio_clip: AudioClip
 ) -> None:
-    channel_id = audio_manager.play_sfx_clip(audio_clip, volume=0.8)
-    assert channel_id is not None
-    assert pygame.mixer.Channel(channel_id).get_sound() is audio_clip.native_handle
+    sound = audio_manager.play_sfx_clip(audio_clip, volume=0.8)
+    assert sound is not None
+    channel = _channel_of(audio_manager._audio_system, sound)  # type: ignore[arg-type]
+    assert channel.get_sound() is audio_clip.native_handle
 
 
 def test_audio_manager_stop_sfx(
     audio_manager: AudioManager, audio_clip: AudioClip
 ) -> None:
-    channel_id = audio_manager.play_sfx_clip(audio_clip, loops=-1)
-    assert channel_id is not None
-    audio_manager.stop_sfx(channel_id)
-    assert not pygame.mixer.Channel(channel_id).get_busy()
+    sound = audio_manager.play_sfx_clip(audio_clip, loops=-1)
+    assert sound is not None
+    channel = _channel_of(audio_manager._audio_system, sound)  # type: ignore[arg-type]
+    audio_manager.stop_sfx(sound)
+    assert not channel.get_busy()
 
 
 # ========== Integration ==========
@@ -517,9 +573,9 @@ def test_full_audio_workflow(
     audio_manager.set_music_volume(0.5)
 
     audio_manager.play_music("music/bgm.ogg", loop=True)
-    channel = audio_manager.play_sfx_clip(audio_clip, volume=1.0)
-    assert channel is not None
-    assert pygame.mixer.Channel(channel).get_busy()
+    sound = audio_manager.play_sfx_clip(audio_clip, volume=1.0)
+    assert sound is not None
+    assert _channel_of(audio_manager._audio_system, sound).get_busy()  # type: ignore[arg-type]
 
     audio_manager.pause_music()
     audio_manager.pause_all_sfx()

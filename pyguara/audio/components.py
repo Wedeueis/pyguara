@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from pyguara.audio.types import AudioPriority
+from pyguara.audio.types import AudioPriority, SoundHandle
 from pyguara.ecs.component import StrictComponent
 
 if TYPE_CHECKING:
@@ -26,6 +26,10 @@ class AudioSource(StrictComponent):
     Attributes:
         clip_path: Path to the audio clip to play.
         volume: Base volume level (0.0 to 1.0).
+        pitch: Playback rate multiplier; 1.0 is the clip's own rate. Any
+            other value needs `AudioCapability.PITCH` from the backend, and
+            raises `UnsupportedAudioCapability` without it -- loudly, on the
+            tick the source starts, rather than playing at the wrong speed.
         spatial: Whether to use spatial audio (position-based).
         loop: Whether to loop the sound.
         auto_play: Whether to automatically play when component is added.
@@ -36,6 +40,7 @@ class AudioSource(StrictComponent):
 
     clip_path: str = ""
     volume: float = 1.0
+    pitch: float = 1.0
     spatial: bool = True
     loop: bool = False
     auto_play: bool = False
@@ -44,7 +49,7 @@ class AudioSource(StrictComponent):
     play_on_awake: bool = False  # Alias for auto_play
 
     # Runtime state (not serialized)
-    _channel_id: int | None = field(default=None, repr=False, compare=False)
+    _handle: SoundHandle | None = field(default=None, repr=False, compare=False)
     _is_playing: bool = field(default=False, repr=False, compare=False)
     _stop_requested: bool = field(default=False, repr=False, compare=False)
     # Latches once auto_play has fired, so a one-shot sound that ends is not
@@ -64,9 +69,9 @@ class AudioSource(StrictComponent):
         return self._is_playing
 
     @property
-    def channel_id(self) -> int | None:
-        """Get the current channel ID if playing."""
-        return self._channel_id
+    def handle(self) -> SoundHandle | None:
+        """Get the handle of the sound this source started, if any."""
+        return self._handle
 
     def on_detach(self) -> None:
         """Request stop when removed from entity.

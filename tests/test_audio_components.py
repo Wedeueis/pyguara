@@ -13,7 +13,7 @@ from pyguara.audio.components import (
     play,
     stop,
 )
-from pyguara.audio.types import AudioPriority, SpatialAudioConfig
+from pyguara.audio.types import AudioPriority, SoundHandle, SpatialAudioConfig
 from pyguara.common.components import Transform
 from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
@@ -33,7 +33,7 @@ class TestAudioSource:
         assert source.auto_play is False
         assert source.priority == AudioPriority.NORMAL
         assert source.max_distance == 1000.0
-        assert source._channel_id is None
+        assert source._handle is None
         assert source._is_playing is False
         assert source._stop_requested is False
 
@@ -93,13 +93,13 @@ class TestAudioSource:
         source._is_playing = True
         assert source.is_playing is True
 
-    def test_channel_id_property(self):
-        """Test channel_id property."""
+    def test_handle_property(self):
+        """Test handle property."""
         source = AudioSource()
-        assert source.channel_id is None
+        assert source.handle is None
 
-        source._channel_id = 5
-        assert source.channel_id == 5
+        source._handle = SoundHandle(5)
+        assert source.handle == SoundHandle(5)
 
     def test_on_detach_requests_stop(self):
         """Test that on_detach requests stop."""
@@ -171,14 +171,14 @@ class TestAudioSourceSystem:
     def audio_system(self):
         """Create a mock audio system.
 
-        `is_channel_active` defaults to True: unless a test says otherwise the
+        `is_sound_active` defaults to True: unless a test says otherwise the
         sound is treated as still playing, so the frame-by-frame reconcile in
         AudioSourceSystem is a no-op.
         """
         mock = MagicMock()
-        mock.play_sfx.return_value = 1  # Return channel ID
-        mock.play_sfx_at_position.return_value = 2
-        mock.is_channel_active.return_value = True
+        mock.play_sfx.return_value = SoundHandle(1)
+        mock.play_sfx_at_position.return_value = SoundHandle(2)
+        mock.is_sound_active.return_value = True
         return mock
 
     @pytest.fixture
@@ -277,7 +277,7 @@ class TestAudioSourceSystem:
         play(source)
         system.update(0.016)
 
-        assert source._channel_id is not None
+        assert source._handle is not None
         audio_system.play_sfx.assert_called()
 
     def test_stop_source_request(
@@ -292,12 +292,12 @@ class TestAudioSourceSystem:
         play(source)
         system.update(0.016)
 
-        channel_id = source._channel_id
+        handle = source._handle
         stop(source)
         system.update(0.016)
 
-        audio_system.stop_sfx.assert_called_with(channel_id)
-        assert source._channel_id is None
+        audio_system.stop_sfx.assert_called_with(handle)
+        assert source._handle is None
         assert source._is_playing is False
 
     def test_spatial_audio_playback(
@@ -318,20 +318,20 @@ class TestAudioSourceSystem:
         self, entity_manager, audio_system, resource_manager, system
     ):
         """A playing spatial source pushes attenuation/pan updates via
-        set_channel_mix as it (or the listener) moves, using its real channel."""
+        set_sound_mix as it (or the listener) moves, using its own handle."""
         entity = entity_manager.create_entity()
         entity.add_component(Transform(position=Vector2(50, 100)))
         source = AudioSource(clip_path="sounds/sfx.wav", spatial=True)
         entity.add_component(source)
 
         play(source)
-        system.update(0.016)  # Starts playback, channel_id becomes 2.
+        system.update(0.016)  # Starts playback; the handle becomes SoundHandle(2).
         system.update(0.016)  # Source still playing: pushes a mix update.
 
-        assert source._channel_id == 2
-        audio_system.set_channel_mix.assert_called()
-        channel, attenuation, pan = audio_system.set_channel_mix.call_args[0]
-        assert channel == 2
+        assert source._handle == SoundHandle(2)
+        audio_system.set_sound_mix.assert_called()
+        sound, attenuation, pan = audio_system.set_sound_mix.call_args[0]
+        assert sound == SoundHandle(2)
         assert 0.0 <= attenuation <= 1.0
         assert -1.0 <= pan <= 1.0
 
@@ -339,7 +339,7 @@ class TestAudioSourceSystem:
         self, entity_manager, audio_system, resource_manager, system
     ):
         """A non-spatial source has no position to mix against, so it must
-        never call set_channel_mix."""
+        never call set_sound_mix."""
         entity = entity_manager.create_entity()
         entity.add_component(Transform(position=Vector2(0, 0)))
         source = AudioSource(clip_path="sounds/sfx.wav", spatial=False)
@@ -349,7 +349,7 @@ class TestAudioSourceSystem:
         system.update(0.016)
         system.update(0.016)
 
-        audio_system.set_channel_mix.assert_not_called()
+        audio_system.set_sound_mix.assert_not_called()
 
     def test_looping_source(
         self, entity_manager, audio_system, resource_manager, system
@@ -425,11 +425,11 @@ class TestAudioSourceSystem:
         play(source)
         system.update(0.016)
 
-        channel_id = source._channel_id
+        handle = source._handle
         system.cleanup()
 
-        audio_system.stop_sfx.assert_called_with(channel_id)
-        assert source._channel_id is None
+        audio_system.stop_sfx.assert_called_with(handle)
+        assert source._handle is None
 
     def test_missing_clip_logs_warning(
         self, entity_manager, audio_system, resource_manager, system
@@ -447,7 +447,7 @@ class TestAudioSourceSystem:
 
         # Should not crash, source should not be playing
         assert source._is_playing is False
-        assert source._channel_id is None
+        assert source._handle is None
 
     def test_clip_caching(self, entity_manager, audio_system, resource_manager, system):
         """Test that clips are cached."""
@@ -460,7 +460,7 @@ class TestAudioSourceSystem:
         system.update(0.016)
 
         # Reset source to play again
-        source._channel_id = None
+        source._handle = None
         play(source)
         system.update(0.016)
 
@@ -495,55 +495,55 @@ class TestAudioSourceSystem:
     def test_finished_oneshot_is_reconciled(
         self, entity_manager, audio_system, resource_manager, system
     ):
-        """When the backend reports the channel is no longer active, the
+        """When the backend reports the sound is no longer active, the
         source stops claiming it is playing (a one-shot ends with no
         callback, so nothing else clears this)."""
         _, source = self._play_started_source(entity_manager, system)
-        assert source._channel_id is not None and source.is_playing
+        assert source._handle is not None and source.is_playing
 
-        audio_system.is_channel_active.return_value = False
+        audio_system.is_sound_active.return_value = False
         system.update(0.016)
 
-        assert source._channel_id is None
+        assert source._handle is None
         assert source.is_playing is False
 
     def test_finished_oneshot_no_longer_mixes_the_dead_channel(
         self, entity_manager, audio_system, resource_manager, system
     ):
-        """A stale channel id must stop receiving spatial mix updates once
+        """A stale handle must stop receiving spatial mix updates once
         the sound has ended -- otherwise it rewrites whatever now owns it."""
         entity = entity_manager.create_entity()
         entity.add_component(Transform(position=Vector2(50, 0)))
         source = AudioSource(clip_path="s.wav", spatial=True)
         entity.add_component(source)
         play(source)
-        system.update(0.016)  # channel 2
+        system.update(0.016)  # SoundHandle(2)
         system.update(0.016)  # spatial mix pushed
-        assert audio_system.set_channel_mix.called
+        assert audio_system.set_sound_mix.called
 
-        audio_system.set_channel_mix.reset_mock()
-        audio_system.is_channel_active.return_value = False
+        audio_system.set_sound_mix.reset_mock()
+        audio_system.is_sound_active.return_value = False
         system.update(0.016)
         system.update(0.016)
 
-        audio_system.set_channel_mix.assert_not_called()
+        audio_system.set_sound_mix.assert_not_called()
 
     def test_finished_oneshot_can_be_replayed(
         self, entity_manager, audio_system, resource_manager, system
     ):
         """After a one-shot ends, calling play() again actually restarts it
-        (the channel id no longer sticks)."""
+        (the handle no longer sticks)."""
         _, source = self._play_started_source(entity_manager, system)
-        audio_system.is_channel_active.return_value = False
+        audio_system.is_sound_active.return_value = False
         system.update(0.016)  # reconcile -> cleared
 
-        audio_system.is_channel_active.return_value = True
+        audio_system.is_sound_active.return_value = True
         audio_system.play_sfx.reset_mock()
         play(source)
         system.update(0.016)
 
         audio_system.play_sfx.assert_called_once()
-        assert source._channel_id is not None
+        assert source._handle is not None
 
     def test_looping_source_is_not_reconciled_away(
         self, entity_manager, audio_system, resource_manager, system
@@ -552,7 +552,7 @@ class TestAudioSourceSystem:
         _, source = self._play_started_source(entity_manager, system, loop=True)
         for _ in range(5):
             system.update(0.016)
-        assert source._channel_id is not None
+        assert source._handle is not None
         assert source.is_playing
 
     # ---- auto_play latch (exposed by D8's fix) --------------------------
@@ -570,7 +570,7 @@ class TestAudioSourceSystem:
         system.update(0.016)
         assert audio_system.play_sfx.call_count == 1
 
-        audio_system.is_channel_active.return_value = False
+        audio_system.is_sound_active.return_value = False
         system.update(0.016)  # reconcile
         for _ in range(3):
             system.update(0.016)
@@ -593,12 +593,16 @@ class TestAudioSourceSystem:
 
         assert resource_manager.load.call_count == 1
 
-    def test_channel_id_zero_is_honoured(
+    def test_a_zero_token_handle_is_honoured(
         self, entity_manager, audio_system, resource_manager, system
     ):
-        """Channel id 0 is a real channel: an auto_play source already on
-        channel 0 is not treated as 'no channel' and re-triggered."""
-        audio_system.play_sfx.return_value = 0
+        """A handle is never 'no sound', whatever its token.
+
+        The channel-int API had this trap: channel 0 is real and falsy, so
+        an auto_play source already playing on it was re-triggered every
+        frame. Kept as a test because the shape of the bug -- a truthiness
+        test standing in for `is None` -- is easy to reintroduce."""
+        audio_system.play_sfx.return_value = SoundHandle(0)
         entity = entity_manager.create_entity()
         entity.add_component(Transform(position=Vector2(0, 0)))
         source = AudioSource(clip_path="s.wav", spatial=False, auto_play=True)
@@ -608,5 +612,5 @@ class TestAudioSourceSystem:
         system.update(0.016)
         system.update(0.016)
 
-        assert source._channel_id == 0
+        assert source._handle == SoundHandle(0)
         assert audio_system.play_sfx.call_count == 1

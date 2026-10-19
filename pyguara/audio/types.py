@@ -1,7 +1,8 @@
 """Audio system types and data structures."""
 
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum, Flag, auto
+from itertools import count
 
 from pyguara.common.types import Vector2
 
@@ -157,13 +158,83 @@ class SpatialAudioConfig:
         return max(-1.0, min(1.0, pan))
 
 
+class AudioCapability(Flag):
+    """What an audio backend can actually do.
+
+    Three of the protocol's features cannot be expressed by every mixer,
+    and the engine ships exactly one backend that expresses none of them.
+    Rather than let `IAudioSystem` advertise methods that quietly do
+    nothing, a backend declares what it supports here and raises
+    `UnsupportedAudioCapability` for the rest.
+
+    Every capability has a request that means "not asked for" --
+    `pitch=1.0`, `loop_start=None`, an empty effect list -- so a game
+    that uses none of them runs on any backend. One that uses them reads
+    `IAudioSystem.capabilities` to find out whether it can.
+
+    Attributes:
+        NONE: No optional capability. What `PygameAudioSystem` reports.
+        PITCH: Per-play playback-rate change (`pitch` on `play_sfx`).
+        LOOP_POINTS: Looping between two points inside a clip rather than
+            over the whole file.
+        BUS_EFFECTS: DSP attached to a bus (`set_bus_effects`).
+    """
+
+    NONE = 0
+    PITCH = auto()
+    LOOP_POINTS = auto()
+    BUS_EFFECTS = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class SoundHandle:
+    """An opaque reference to one playing sound.
+
+    `token` is minted by the audio system, means nothing to a caller, and
+    is never reused within a process -- which is the entire point. A
+    mixer channel number is recycled the instant its sound ends, so an
+    int held for a few frames can address a sound the holder never
+    started: `stop_sfx(7)` stops whatever is on channel 7 now. A handle
+    that has ended simply stops resolving, and the methods that take one
+    become no-ops.
+
+    Attributes:
+        token: Process-unique identifier. Treat it as opaque; its value
+            carries no information and may change meaning between
+            releases.
+    """
+
+    token: int
+
+
+# A process-wide counter, so a handle is unique across every audio system
+# in the process rather than merely within one. `count.__next__` is a
+# single C call, which makes it atomic under CPython -- sounds are started
+# from gameplay code on the main thread, but a loader thread firing a cue
+# must not be able to mint a duplicate.
+_next_token = count(1).__next__
+
+
+def new_sound_handle() -> SoundHandle:
+    """Mint a handle no other sound in this process will share.
+
+    Returns:
+        A fresh `SoundHandle`.
+    """
+    return SoundHandle(_next_token())
+
+
 @dataclass
 class PlayingSoundInfo:
     """Tracks information about a currently playing sound.
 
     Used for channel management, priority-based stealing, and spatial updates.
+
+    `handle` is the identity callers hold; `channel_id` is where the sound
+    happens to be playing, which the mixer owns and recycles.
     """
 
+    handle: SoundHandle
     channel_id: int
     clip_path: str
     priority: AudioPriority
@@ -244,3 +315,93 @@ class AudioBusManager:
     def get_bus_for_type(self, bus_type: AudioBusType) -> str:
         """Get bus name for a bus type enum."""
         return bus_type.name.lower()
+
+
+@dataclass(frozen=True, slots=True)
+class LowPassFilter:
+    """Attenuate everything above `cutoff_hz`.
+
+    The muffled-while-stunned and behind-a-wall effect.
+
+    Attributes:
+        cutoff_hz: Corner frequency in hertz. Above the audible range
+            means no audible effect.
+    """
+
+    cutoff_hz: float = 20_000.0
+
+    def __post_init__(self) -> None:
+        """Reject a cutoff no filter can realise.
+
+        Raises:
+            ValueError: If `cutoff_hz` is not positive.
+        """
+        if self.cutoff_hz <= 0.0:
+            raise ValueError(f"cutoff_hz must be > 0, got {self.cutoff_hz}")
+
+
+@dataclass(frozen=True, slots=True)
+class HighPassFilter:
+    """Attenuate everything below `cutoff_hz`.
+
+    Thins a bus out -- a radio voice, or keeping ambience out of the way
+    of the music's low end.
+
+    Attributes:
+        cutoff_hz: Corner frequency in hertz. Below the audible range
+            means no audible effect.
+    """
+
+    cutoff_hz: float = 20.0
+
+    def __post_init__(self) -> None:
+        """Reject a cutoff no filter can realise.
+
+        Raises:
+            ValueError: If `cutoff_hz` is not positive.
+        """
+        if self.cutoff_hz <= 0.0:
+            raise ValueError(f"cutoff_hz must be > 0, got {self.cutoff_hz}")
+
+
+@dataclass(frozen=True, slots=True)
+class Reverb:
+    """A room around everything on the bus.
+
+    The parameter set is Freeverb's, which is what the free DSP libraries
+    a second backend would reach for expose -- so a backend can implement
+    this without inventing a mapping.
+
+    Attributes:
+        room_size: 0.0 (a closet) to 1.0 (a cathedral).
+        damping: 0.0 (bright, tiled) to 1.0 (dead, carpeted).
+        wet: How much reverberated signal to mix in (0.0 to 1.0).
+        dry: How much of the original to keep (0.0 to 1.0).
+    """
+
+    room_size: float = 0.5
+    damping: float = 0.5
+    wet: float = 0.33
+    dry: float = 0.67
+
+    def __post_init__(self) -> None:
+        """Reject parameters outside the unit range.
+
+        Raises:
+            ValueError: If any parameter is outside 0.0 to 1.0.
+        """
+        for name in ("room_size", "damping", "wet", "dry"):
+            value: float = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be within 0.0..1.0, got {value}")
+
+
+AudioEffect = LowPassFilter | HighPassFilter | Reverb
+"""One DSP effect on a bus.
+
+A closed union rather than a protocol: an effect is a description a
+backend interprets, not behaviour it calls, and a backend has to match on
+the kind to configure its own DSP chain either way. Adding an effect is
+therefore a deliberate protocol change, which is what stops one backend
+inventing an effect the others cannot see.
+"""

@@ -8,6 +8,7 @@ import pygame
 import pytest
 
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.audio.types import SoundHandle
 from pyguara.resources.types import AudioClip
 
 # Ensure headless execution
@@ -63,7 +64,7 @@ class MockAudioClip(AudioClip):
 
 
 def test_play_sfx_real_sound(audio_system: PygameAudioSystem) -> None:
-    """Audio system plays a real Sound on a real channel and tracks its id.
+    """Audio system plays a real Sound on a real channel and tracks it.
 
     Uses a real ``pygame.mixer.Sound`` -- ``Channel.play`` rejects anything
     else, which is how the ``Channel.get_id()``/``Channel.id`` regression hid
@@ -73,12 +74,13 @@ def test_play_sfx_real_sound(audio_system: PygameAudioSystem) -> None:
     sound = pygame.mixer.Sound(buffer=b"\x00\x00\x00\x00" * frames)
     clip = MockAudioClip("dummy.wav", sound)
 
-    channel_id = audio_system.play_sfx(clip)
+    handle = audio_system.play_sfx(clip)
 
-    assert channel_id is not None
-    assert isinstance(channel_id, int)
+    assert handle is not None
+    assert isinstance(handle, SoundHandle)
+    channel_id = audio_system._playing_sounds[handle].channel_id
     assert pygame.mixer.Channel(channel_id).get_sound() is sound
-    assert audio_system.is_channel_active(channel_id)
+    assert audio_system.is_sound_active(handle)
 
 
 def test_play_sfx_invalid(audio_system: PygameAudioSystem) -> None:
@@ -86,8 +88,7 @@ def test_play_sfx_invalid(audio_system: PygameAudioSystem) -> None:
     # Clip with no native handle (or handle missing methods)
     clip = MockAudioClip("broken.wav", None)
 
-    channel_id = audio_system.play_sfx(clip)
-    assert channel_id is None
+    assert audio_system.play_sfx(clip) is None
 
 
 def test_music_controls(audio_system: PygameAudioSystem) -> None:

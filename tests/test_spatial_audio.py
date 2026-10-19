@@ -8,6 +8,7 @@ from pyguara.audio.types import (
     AudioBusType,
     AudioPriority,
     PlayingSoundInfo,
+    SoundHandle,
     SpatialAudioConfig,
 )
 from pyguara.common.types import Vector2
@@ -392,12 +393,14 @@ class TestPlayingSoundInfo:
     def test_playing_sound_info_creation(self) -> None:
         """PlayingSoundInfo can be created."""
         info = PlayingSoundInfo(
+            handle=SoundHandle(7),
             channel_id=0,
             clip_path="sounds/test.wav",
             priority=AudioPriority.NORMAL,
             bus=AudioBusType.SFX,
             base_volume=0.8,
         )
+        assert info.handle == SoundHandle(7)
         assert info.channel_id == 0
         assert info.clip_path == "sounds/test.wav"
         assert info.priority == AudioPriority.NORMAL
@@ -410,6 +413,7 @@ class TestPlayingSoundInfo:
         """PlayingSoundInfo for spatial sound."""
         pos = Vector2(100, 200)
         info = PlayingSoundInfo(
+            handle=SoundHandle(8),
             channel_id=1,
             clip_path="sounds/explosion.wav",
             priority=AudioPriority.HIGH,
