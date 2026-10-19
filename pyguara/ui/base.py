@@ -42,6 +42,43 @@ class TextInsertable(Protocol):
 
 
 @runtime_checkable
+class KeyboardEditable(Protocol):
+    """A widget that needs the modifier keys held with a keypress.
+
+    An optional capability tested with `isinstance`, not a `modifiers`
+    parameter added to `UIElement.handle_event()` -- the same call
+    `TextInsertable` and `Scrollable` beside it make, for the same
+    reason: widening that signature would break every widget, in this
+    engine and in any game, that already implements the three-argument
+    form, and only an editable field has any use for modifiers.
+
+    The gap it fills is real rather than theoretical. `OnRawKeyEvent`
+    has carried `modifiers` all along and `UIManager` dropped it on the
+    way in, so no widget could tell Left from Shift+Left or C from
+    Ctrl+C. Caret selection and clipboard shortcuts were not merely
+    unimplemented; they were unreachable.
+
+    Only **presses** route here. A release still arrives as
+    `UIEventType.KEY_UP` through `handle_event`, because nothing that
+    edits text cares when a key comes back up and a second channel for
+    it would be two ways to hear the same thing.
+    """
+
+    def handle_key(self, key_code: int, modifiers: frozenset[int]) -> bool:
+        """Handle a key press, with the modifiers held at the time.
+
+        Args:
+            key_code: The physical key, as `pyguara.input.keys` spells it.
+            modifiers: Key codes of the shift/ctrl/alt keys held.
+
+        Returns:
+            True if the key was consumed, which stops `UIManager` from
+            treating it as focus traversal.
+        """
+        ...
+
+
+@runtime_checkable
 class Scrollable(Protocol):
     """A widget that can scroll its own contents.
 

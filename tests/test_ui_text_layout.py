@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from pyguara.ui.text_layout import split_oversized_word, wrap_text
+from pyguara.ui.text_layout import (
+    caret_index_at,
+    split_oversized_word,
+    wrap_text,
+)
 
 
 def _ten_px_per_character(text: str) -> int:
@@ -128,3 +132,49 @@ class TestAMeasurerThatKnowsNothing:
 
     def test_explicit_newlines_still_split(self) -> None:
         assert wrap_text("a\nb", 10, self._always_zero) == ["a", "b"]
+
+
+class TestPlacingACaretFromAPixelOffset:
+    """A caret sits between characters, so the answer is a boundary."""
+
+    @pytest.mark.parametrize(
+        "offset,expected",
+        [
+            (-50, 0),
+            (0, 0),
+            (4, 0),
+            (6, 1),
+            (14, 1),
+            (16, 2),
+            (1000, 6),
+        ],
+    )
+    def test_the_nearest_boundary_wins(self, offset: int, expected: int) -> None:
+        """Left half of a glyph puts the caret before it, right half after.
+
+        That is what every text field does, and it is what makes a click
+        at the end of a word land after the word rather than inside it.
+        """
+        assert caret_index_at("abcdef", offset, _ten_px_per_character) == expected
+
+    def test_exactly_on_a_midpoint_rounds_forwards(self) -> None:
+        """Arbitrary, but it has to be one or the other, and a click
+        landing on the same pixel twice must give the same answer."""
+        assert caret_index_at("abcdef", 25, _ten_px_per_character) == 3
+
+    def test_an_offset_past_the_text_clamps_to_the_end(self) -> None:
+        """A drag that leaves the widget is an ordinary thing to do."""
+        assert caret_index_at("abc", 9999, _ten_px_per_character) == 3
+
+    def test_empty_text_has_only_one_position(self) -> None:
+        assert caret_index_at("", 500, _ten_px_per_character) == 0
+
+    def test_a_measurer_that_knows_nothing_lands_at_the_end(self) -> None:
+        """The headless renderer measures everything as 0 wide.
+
+        Every prefix is then 0 px, the offset is past all of them, and
+        the caret goes to the end -- the same place `TextInput` puts it
+        when it has not been drawn yet and so has nothing to measure
+        with. Consistent, and the only answer available.
+        """
+        assert caret_index_at("abc", 50, lambda _text: 0) == 3

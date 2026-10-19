@@ -43,6 +43,8 @@ Z = 122
 TAB = 9
 BACKSPACE = 8
 DELETE = 127
+HOME = 1073741898
+END = 1073741901
 KP_ENTER = 1073741912  # Keypad Enter is different from Return
 
 # --- Modifiers (Left/Right distinction) ---

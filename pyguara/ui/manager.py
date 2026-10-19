@@ -8,7 +8,12 @@ from pyguara.graphics.protocols import UIRenderer
 from pyguara.input import keys
 from pyguara.input.events import OnMouseEvent, OnRawKeyEvent
 from pyguara.log import get_logger
-from pyguara.ui.base import Scrollable, TextInsertable, UIElement
+from pyguara.ui.base import (
+    KeyboardEditable,
+    Scrollable,
+    TextInsertable,
+    UIElement,
+)
 from pyguara.ui.types import UIEventType, UILayer
 
 logger = get_logger(__name__)
@@ -456,7 +461,17 @@ class UIManager:
         event_type = UIEventType.KEY_DOWN if event.is_down else UIEventType.KEY_UP
 
         consumed = False
-        if self._focused_element is not None:
+        # Widened to `object` first for the same reason `_on_text_input`
+        # does it: narrowing `UIElement` through a Protocol leaves mypy
+        # with an empty intersection and it calls the body unreachable.
+        focused: object = self._focused_element
+        if event.is_down and isinstance(focused, KeyboardEditable):
+            # A press goes to the richer channel instead, not as well as:
+            # one keypress should be handled once. `modifiers` has been on
+            # the event all along and was dropped here, which is why no
+            # widget could tell Left from Shift+Left.
+            consumed = focused.handle_key(event.key_code, frozenset(event.modifiers))
+        elif self._focused_element is not None:
             consumed = self._focused_element.handle_event(
                 event_type, Vector2(0, 0), event.key_code
             )
