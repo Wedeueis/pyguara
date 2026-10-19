@@ -2,15 +2,21 @@
 
 import contextlib
 import math
+from collections.abc import Sequence
 
 import pygame
 
+from pyguara.audio.audio_system import require_capability, resolve_loop_points
 from pyguara.audio.types import (
     AudioBusManager,
     AudioBusType,
+    AudioCapability,
+    AudioEffect,
     AudioPriority,
     PlayingSoundInfo,
+    SoundHandle,
     SpatialAudioConfig,
+    new_sound_handle,
 )
 from pyguara.common.types import Vector2
 from pyguara.log import get_logger
@@ -28,6 +34,14 @@ class PygameAudioSystem:
     - Audio bus hierarchy (Master -> SFX/Music/Voice)
     - Priority-based channel management
     - Full volume control at bus and global levels
+
+    **It reports `AudioCapability.NONE`.** `pygame.mixer` resamples a clip
+    once at load time and plays it back at the mixer's own rate, so there
+    is no per-play pitch control to expose; `Channel.play` takes a loop
+    count and no loop points; and a channel's only processing is a
+    left/right gain pair, so there is nowhere for a bus effect to go.
+    Each of those is declined by raising rather than ignored -- see
+    `AudioCapability`.
     """
 
     def __init__(
@@ -64,16 +78,27 @@ class PygameAudioSystem:
         self._spatial_config = SpatialAudioConfig()
         self._listener_position = Vector2(0, 0)
 
-        # Channel tracking for priority management. `_channel_sounds` mirrors
-        # `_playing_sounds` with the concrete Sound started on each channel, so
-        # a recycled channel id can be told apart from the sound it used to
-        # carry (see `is_channel_active`).
-        self._playing_sounds: dict[int, PlayingSoundInfo] = {}
-        self._channel_sounds: dict[int, pygame.mixer.Sound] = {}
+        # Sound tracking for priority management, keyed by the handle the
+        # caller holds. `_handle_sounds` mirrors `_playing_sounds` with the
+        # concrete Sound started for each handle, so a recycled channel can
+        # be told apart from the sound it used to carry (see
+        # `is_sound_active`).
+        self._playing_sounds: dict[SoundHandle, PlayingSoundInfo] = {}
+        self._handle_sounds: dict[SoundHandle, pygame.mixer.Sound] = {}
         self._shut_down = False
+
+        # Clip paths already warned about for loop points this backend
+        # cannot honour, so a looping sound warns once rather than on
+        # every play.
+        self._warned_loop_points: set[str] = set()
 
         # Apply initial music volume
         pygame.mixer.music.set_volume(self._get_effective_music_volume())
+
+    @property
+    def capabilities(self) -> AudioCapability:
+        """Report that none of the optional capabilities are available."""
+        return AudioCapability.NONE
 
     # ========== Spatial Audio ==========
 
@@ -84,8 +109,12 @@ class PygameAudioSystem:
         loops: int = 0,
         priority: AudioPriority = AudioPriority.NORMAL,
         bus: AudioBusType = AudioBusType.SFX,
-    ) -> int | None:
+        pitch: float = 1.0,
+        loop_start: float | None = None,
+        loop_end: float | None = None,
+    ) -> SoundHandle | None:
         """Play a sound effect with priority and bus routing."""
+        self._decline_unsupported(clip, loops, pitch, loop_start, loop_end)
         return self._play_sound(
             clip=clip,
             volume=volume,
@@ -94,6 +123,59 @@ class PygameAudioSystem:
             bus=bus,
             position=None,
         )
+
+    def _decline_unsupported(
+        self,
+        clip: AudioClip,
+        loops: int,
+        pitch: float,
+        loop_start: float | None,
+        loop_end: float | None,
+    ) -> None:
+        """Refuse the parts of a play request this mixer cannot honour.
+
+        Called before anything else a play does -- in particular before
+        the spatial path's out-of-earshot shortcut, so whether a bad
+        request is reported does not depend on how far away the listener
+        happens to be standing.
+
+        Loop points asked for in an argument raise; the same points read
+        from a clip's `.meta` sidecar warn once and the clip loops whole,
+        which is `resolve_loop_points`'s distinction and the reason it
+        reports who asked. Neither fires for a one-shot: `loops=0` ignores
+        loop points on every backend, so ignoring them here says nothing
+        untrue. A malformed range is still rejected.
+
+        Args:
+            clip: The clip about to play.
+            loops: The requested loop count; 0 makes loop points moot.
+            pitch: The requested playback rate.
+            loop_start: Explicit loop start, if any.
+            loop_end: Explicit loop end, if any.
+
+        Raises:
+            UnsupportedAudioCapability: For a pitch other than 1.0, or
+                for loop points passed as arguments.
+            ValueError: If the loop range is negative or inverted.
+        """
+        if pitch != 1.0:
+            require_capability(self, AudioCapability.PITCH)
+
+        # Called for its validation even when `loops` is 0, so an inverted
+        # range is reported rather than quietly dropped.
+        start, _end, explicit = resolve_loop_points(clip, loop_start, loop_end)
+        if start is None or loops == 0:
+            return
+        if explicit:
+            require_capability(self, AudioCapability.LOOP_POINTS)
+        elif clip.path not in self._warned_loop_points:
+            self._warned_loop_points.add(clip.path)
+            logger.warning(
+                "'%s' declares loop points its backend cannot honour "
+                "(%s does not support LOOP_POINTS); looping the whole clip",
+                clip.path,
+                type(self).__name__,
+            )
 
     def play_sfx_at_position(
         self,
@@ -104,8 +186,13 @@ class PygameAudioSystem:
         loops: int = 0,
         priority: AudioPriority = AudioPriority.NORMAL,
         bus: AudioBusType = AudioBusType.SFX,
-    ) -> int | None:
+        pitch: float = 1.0,
+        loop_start: float | None = None,
+        loop_end: float | None = None,
+    ) -> SoundHandle | None:
         """Play a sound effect with spatial positioning."""
+        self._decline_unsupported(clip, loops, pitch, loop_start, loop_end)
+
         # Calculate distance-based attenuation
         distance = math.sqrt(
             (source_pos.x - listener_pos.x) ** 2 + (source_pos.y - listener_pos.y) ** 2
@@ -122,7 +209,7 @@ class PygameAudioSystem:
         # Play with calculated volume
         spatial_volume = volume * attenuation
 
-        channel_id = self._play_sound(
+        return self._play_sound(
             clip=clip,
             volume=spatial_volume,
             loops=loops,
@@ -131,8 +218,6 @@ class PygameAudioSystem:
             position=source_pos,
             pan=pan,
         )
-
-        return channel_id
 
     def _play_sound(
         self,
@@ -143,7 +228,7 @@ class PygameAudioSystem:
         bus: AudioBusType,
         position: Vector2 | None,
         pan: float = 0.0,
-    ) -> int | None:
+    ) -> SoundHandle | None:
         """Play a sound with all available options."""
         native_sound = clip.native_handle
 
@@ -185,7 +270,9 @@ class PygameAudioSystem:
             return None
 
         # Track playing sound
-        self._playing_sounds[channel_id] = PlayingSoundInfo(
+        handle = new_sound_handle()
+        self._playing_sounds[handle] = PlayingSoundInfo(
+            handle=handle,
             channel_id=channel_id,
             clip_path=clip.path,
             priority=priority,
@@ -194,9 +281,9 @@ class PygameAudioSystem:
             position=position,
             is_spatial=position is not None,
         )
-        self._channel_sounds[channel_id] = native_sound
+        self._handle_sounds[handle] = native_sound
 
-        return channel_id
+        return handle
 
     def _get_available_channel(
         self, priority: AudioPriority
@@ -215,45 +302,45 @@ class PygameAudioSystem:
         """Steal a channel from a lower priority sound."""
         # Find the lowest priority sound that's lower than our priority
         lowest_priority = priority.value
-        lowest_channel_id: int | None = None
-        finished_channels: list[int] = []
+        lowest: PlayingSoundInfo | None = None
+        finished: list[PlayingSoundInfo] = []
 
-        for channel_id, info in self._playing_sounds.items():
+        for info in self._playing_sounds.values():
             # Check if channel is still playing
             try:
-                channel = pygame.mixer.Channel(channel_id)
+                channel = pygame.mixer.Channel(info.channel_id)
                 if not channel.get_busy():
                     # Channel finished, mark for cleanup
-                    finished_channels.append(channel_id)
+                    finished.append(info)
                     continue
             except pygame.error:
-                finished_channels.append(channel_id)
+                finished.append(info)
                 continue
 
             # Check priority for stealing
             if info.priority.value < lowest_priority:
                 lowest_priority = info.priority.value
-                lowest_channel_id = channel_id
+                lowest = info
 
-        # Clean up finished channels
-        for channel_id in finished_channels:
-            self._forget_channel(channel_id)
+        # Clean up finished sounds
+        for info in finished:
+            self._forget(info.handle)
 
         # Return a finished channel if available
-        if finished_channels:
+        if finished:
             try:
-                return pygame.mixer.Channel(finished_channels[0])
+                return pygame.mixer.Channel(finished[0].channel_id)
             except pygame.error:
                 pass
 
         # Steal if we found a lower priority sound
-        if lowest_channel_id is not None:
+        if lowest is not None:
             try:
-                channel = pygame.mixer.Channel(lowest_channel_id)
+                channel = pygame.mixer.Channel(lowest.channel_id)
                 channel.stop()
-                self._forget_channel(lowest_channel_id)
+                self._forget(lowest.handle)
                 logger.debug(
-                    "Stole channel %d from lower priority sound", lowest_channel_id
+                    "Stole channel %d from lower priority sound", lowest.channel_id
                 )
                 return channel
             except pygame.error:
@@ -294,32 +381,33 @@ class PygameAudioSystem:
             left, right = cls._channel_stereo(volume, pan)
             channel.set_volume(left, right)
 
-    def _forget_channel(self, channel_id: int) -> None:
-        """Drop all tracking for a channel that is no longer ours."""
-        self._playing_sounds.pop(channel_id, None)
-        self._channel_sounds.pop(channel_id, None)
+    def _forget(self, sound: SoundHandle) -> None:
+        """Drop all tracking for a sound that is no longer ours."""
+        self._playing_sounds.pop(sound, None)
+        self._handle_sounds.pop(sound, None)
 
-    def is_channel_active(self, channel: int) -> bool:
-        """Return True only while the sound this system started is still playing.
+    def is_sound_active(self, sound: SoundHandle) -> bool:
+        """Return True only while the sound this handle refers to is playing.
 
         Reaps the tracking tables as a side effect when the sound has ended or
-        the channel has been recycled by an unrelated one.
+        its channel has been recycled by an unrelated one.
         """
-        expected = self._channel_sounds.get(channel)
-        if expected is not None:
+        expected = self._handle_sounds.get(sound)
+        info = self._playing_sounds.get(sound)
+        if expected is not None and info is not None:
             try:
-                pg_channel = pygame.mixer.Channel(channel)
+                pg_channel = pygame.mixer.Channel(info.channel_id)
                 if pg_channel.get_busy() and pg_channel.get_sound() is expected:
                     return True
             except pygame.error:
                 pass
-        self._forget_channel(channel)
+        self._forget(sound)
         return False
 
-    def set_channel_mix(self, channel: int, attenuation: float, pan: float) -> None:
-        """Update volume attenuation and stereo pan for an already-playing channel."""
-        info = self._playing_sounds.get(channel)
-        if info is None or not self.is_channel_active(channel):
+    def set_sound_mix(self, sound: SoundHandle, attenuation: float, pan: float) -> None:
+        """Update volume attenuation and stereo pan for an already-playing sound."""
+        info = self._playing_sounds.get(sound)
+        if info is None or not self.is_sound_active(sound):
             return
 
         bus_name = self._bus_manager.get_bus_for_type(info.bus)
@@ -329,16 +417,24 @@ class PygameAudioSystem:
 
         with contextlib.suppress(pygame.error):
             self._set_channel_volume(
-                pygame.mixer.Channel(channel), effective_volume, pan
+                pygame.mixer.Channel(info.channel_id), effective_volume, pan
             )
 
     # ========== Basic SFX Control ==========
 
-    def stop_sfx(self, channel: int) -> None:
-        """Stop a specific sound effect channel."""
+    def stop_sfx(self, sound: SoundHandle) -> None:
+        """Stop one playing sound.
+
+        A handle this system never issued, or one whose sound has already
+        ended, is a no-op -- and, unlike a channel number, cannot stop
+        whatever is playing there now.
+        """
+        info = self._playing_sounds.get(sound)
+        if info is None:
+            return
         with contextlib.suppress(pygame.error):
-            pygame.mixer.Channel(channel).stop()
-        self._forget_channel(channel)
+            pygame.mixer.Channel(info.channel_id).stop()
+        self._forget(sound)
 
     def pause_sfx(self) -> None:
         """Pause all sound effects."""
@@ -443,6 +539,23 @@ class PygameAudioSystem:
         bus_obj = self._bus_manager.get_bus(bus_name)
         return bus_obj.muted if bus_obj else False
 
+    def set_bus_effects(
+        self, bus: AudioBusType, effects: Sequence[AudioEffect]
+    ) -> None:
+        """Decline a DSP chain; accept clearing one.
+
+        A `pygame.mixer` channel's only processing is its left/right gain
+        pair, so there is nowhere to put a filter. The chain is not stored
+        either: holding one this backend will never apply would make
+        `get_bus_effects` report an effect that is not being heard.
+        """
+        if effects:
+            require_capability(self, AudioCapability.BUS_EFFECTS)
+
+    def get_bus_effects(self, bus: AudioBusType) -> tuple[AudioEffect, ...]:
+        """Return an empty chain; this backend cannot hold one."""
+        return ()
+
     # ========== Listener Management ==========
 
     def set_listener_position(self, position: Vector2) -> None:
@@ -466,9 +579,9 @@ class PygameAudioSystem:
     # ========== Channel Cleanup ==========
 
     def cleanup_finished_channels(self) -> None:
-        """Remove tracking for channels that have finished playing."""
-        for channel_id in list(self._playing_sounds):
-            self.is_channel_active(channel_id)  # reaps as a side effect
+        """Remove tracking for sounds that have finished playing."""
+        for handle in list(self._playing_sounds):
+            self.is_sound_active(handle)  # reaps as a side effect
 
     def shutdown(self) -> None:
         """Stop all audio and release the mixer device. Idempotent."""
@@ -482,7 +595,7 @@ class PygameAudioSystem:
         except pygame.error:
             logger.debug("pygame.mixer already torn down", exc_info=True)
         self._playing_sounds.clear()
-        self._channel_sounds.clear()
+        self._handle_sounds.clear()
 
     def get_active_sound_count(self) -> int:
         """Get number of currently playing sounds."""

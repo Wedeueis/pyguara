@@ -8,16 +8,28 @@ Provides:
 """
 
 from pyguara.audio.audio_source_system import AudioSourceSystem
-from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.audio_system import (
+    IAudioSystem,
+    require_capability,
+    resolve_loop_points,
+)
 from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
+from pyguara.audio.exceptions import AudioError, UnsupportedAudioCapability
 from pyguara.audio.manager import AudioManager
 from pyguara.audio.types import (
     AudioBus,
     AudioBusManager,
     AudioBusType,
+    AudioCapability,
+    AudioEffect,
     AudioPriority,
+    HighPassFilter,
+    LowPassFilter,
     PlayingSoundInfo,
+    Reverb,
+    SoundHandle,
     SpatialAudioConfig,
+    new_sound_handle,
 )
 
 __all__ = [
@@ -25,6 +37,8 @@ __all__ = [
     "IAudioSystem",
     "AudioManager",
     "AudioSourceSystem",
+    "require_capability",
+    "resolve_loop_points",
     # Components
     "AudioSource",
     "AudioListener",
@@ -36,4 +50,15 @@ __all__ = [
     "AudioPriority",
     "PlayingSoundInfo",
     "SpatialAudioConfig",
+    # Capabilities, handles and bus DSP
+    "AudioCapability",
+    "SoundHandle",
+    "new_sound_handle",
+    "AudioEffect",
+    "LowPassFilter",
+    "HighPassFilter",
+    "Reverb",
+    # Errors
+    "AudioError",
+    "UnsupportedAudioCapability",
 ]

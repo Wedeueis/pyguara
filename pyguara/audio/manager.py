@@ -1,6 +1,7 @@
 """High-level Audio Manager for game audio management."""
 
 from pyguara.audio.audio_system import IAudioSystem
+from pyguara.audio.types import AudioCapability, SoundHandle
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.log import get_logger
 from pyguara.resources.manager import ResourceManager
@@ -51,9 +52,32 @@ class AudioManager:
         # Current music track
         self._current_music: str | None = None
 
+    # ========== Capabilities ==========
+
+    @property
+    def capabilities(self) -> AudioCapability:
+        """What the backend underneath can do beyond plain playback.
+
+        Read this before asking for `pitch` or loop points if the game
+        should degrade rather than fail: on a backend without them, those
+        arguments raise `UnsupportedAudioCapability`.
+
+        Returns:
+            The flags the backend honours.
+        """
+        return self._audio_system.capabilities
+
     # ========== SFX Methods ==========
 
-    def play_sfx(self, path: str, volume: float = 1.0, loops: int = 0) -> int | None:
+    def play_sfx(
+        self,
+        path: str,
+        volume: float = 1.0,
+        loops: int = 0,
+        pitch: float = 1.0,
+        loop_start: float | None = None,
+        loop_end: float | None = None,
+    ) -> SoundHandle | None:
         """
         Play a sound effect by path.
 
@@ -63,18 +87,41 @@ class AudioManager:
             path: Path to the sound file.
             volume: Playback volume (0.0 to 1.0).
             loops: Number of times to loop (-1 for infinite).
+            pitch: Playback rate multiplier; needs `AudioCapability.PITCH`
+                for any value other than 1.0.
+            loop_start: Seconds into the clip a loop returns to; needs
+                `AudioCapability.LOOP_POINTS`.
+            loop_end: Seconds into the clip a loop restarts from.
 
         Returns:
-            Channel ID if successful, None otherwise.
+            A handle for the playing sound, or None if the clip could not
+            be loaded or no channel was free.
+
+        Raises:
+            UnsupportedAudioCapability: If `pitch` or the loop points ask
+                for something the backend cannot do.
         """
         clip = self._get_clip(path)
         if clip:
-            return self._audio_system.play_sfx(clip, volume, loops)
+            return self._audio_system.play_sfx(
+                clip,
+                volume,
+                loops,
+                pitch=pitch,
+                loop_start=loop_start,
+                loop_end=loop_end,
+            )
         return None
 
     def play_sfx_clip(
-        self, clip: AudioClip, volume: float = 1.0, loops: int = 0
-    ) -> int | None:
+        self,
+        clip: AudioClip,
+        volume: float = 1.0,
+        loops: int = 0,
+        pitch: float = 1.0,
+        loop_start: float | None = None,
+        loop_end: float | None = None,
+    ) -> SoundHandle | None:
         """
         Play a pre-loaded sound effect clip.
 
@@ -82,20 +129,34 @@ class AudioManager:
             clip: The audio clip to play.
             volume: Playback volume (0.0 to 1.0).
             loops: Number of times to loop (-1 for infinite).
+            pitch: Playback rate multiplier; see `play_sfx`.
+            loop_start: Seconds into the clip a loop returns to.
+            loop_end: Seconds into the clip a loop restarts from.
 
         Returns:
-            Channel ID if successful, None otherwise.
-        """
-        return self._audio_system.play_sfx(clip, volume, loops)
+            A handle for the playing sound, or None if no channel was free.
 
-    def stop_sfx(self, channel: int) -> None:
+        Raises:
+            UnsupportedAudioCapability: If `pitch` or the loop points ask
+                for something the backend cannot do.
         """
-        Stop a specific sound effect channel.
+        return self._audio_system.play_sfx(
+            clip,
+            volume,
+            loops,
+            pitch=pitch,
+            loop_start=loop_start,
+            loop_end=loop_end,
+        )
+
+    def stop_sfx(self, sound: SoundHandle) -> None:
+        """
+        Stop one playing sound effect.
 
         Args:
-            channel: The channel ID returned by play_sfx.
+            sound: The handle returned by play_sfx.
         """
-        self._audio_system.stop_sfx(channel)
+        self._audio_system.stop_sfx(sound)
 
     def pause_all_sfx(self) -> None:
         """Pause all currently playing sound effects."""

@@ -105,18 +105,16 @@ class AudioSourceSystem:
             if not source:
                 continue
 
-            # Reconcile against reality first. A one-shot sound finishes with
-            # no callback and channel ids get recycled, so without this
-            # `is_playing` stays True forever, the stale id keeps receiving
-            # spatial mix updates meant for whatever now owns that channel,
-            # and the source can never be replayed. A looping sound stays
-            # active until it is explicitly stopped.
+            # Reconcile against reality first. A one-shot sound finishes
+            # with no callback, so without this `is_playing` stays True
+            # forever and the source can never be replayed. A looping sound
+            # stays active until it is explicitly stopped.
             if (
-                source._channel_id is not None
+                source._handle is not None
                 and not source._stop_requested
-                and not self._audio_system.is_channel_active(source._channel_id)
+                and not self._audio_system.is_sound_active(source._handle)
             ):
-                source._channel_id = None
+                source._handle = None
                 source._is_playing = False
 
             # Handle stop requests
@@ -127,20 +125,16 @@ class AudioSourceSystem:
             # Auto-play fires exactly once, the first frame the source is
             # eligible; `_auto_played` latches so an ended one-shot is not
             # immediately restarted here.
-            if (
-                source.auto_play
-                and not source._auto_played
-                and source._channel_id is None
-            ):
+            if source.auto_play and not source._auto_played and source._handle is None:
                 source._auto_played = True
                 play(source)
 
             # Handle play requests
-            if source._is_playing and source._channel_id is None:
+            if source._is_playing and source._handle is None:
                 self._play_source(source, entity)
 
             # Update spatial position for playing sources
-            if source._channel_id is not None and source.spatial:
+            if source._handle is not None and source.spatial:
                 transform = entity.get_component(Transform)
                 if transform:
                     self._update_spatial_position(source, transform.position)
@@ -202,27 +196,30 @@ class AudioSourceSystem:
         if source.spatial:
             transform = entity.get_component(Transform)
             if transform:
-                source._channel_id = self._audio_system.play_sfx_at_position(
+                source._handle = self._audio_system.play_sfx_at_position(
                     clip,
                     transform.position,
                     self._listener_position,
                     volume=source.volume,
                     loops=loops,
                     priority=source.priority,
+                    pitch=source.pitch,
                 )
             else:
-                source._channel_id = self._audio_system.play_sfx(
+                source._handle = self._audio_system.play_sfx(
                     clip,
                     volume=source.volume,
                     loops=loops,
                     priority=source.priority,
+                    pitch=source.pitch,
                 )
         else:
-            source._channel_id = self._audio_system.play_sfx(
+            source._handle = self._audio_system.play_sfx(
                 clip,
                 volume=source.volume,
                 loops=loops,
                 priority=source.priority,
+                pitch=source.pitch,
             )
 
         logger.debug(f"Started audio source: {source.clip_path}")
@@ -233,11 +230,11 @@ class AudioSourceSystem:
         Args:
             source: The AudioSource component to stop.
         """
-        if source._channel_id is not None:
-            self._audio_system.stop_sfx(source._channel_id)
+        if source._handle is not None:
+            self._audio_system.stop_sfx(source._handle)
             logger.debug(f"Stopped audio source: {source.clip_path}")
 
-        source._channel_id = None
+        source._handle = None
         source._is_playing = False
         source._stop_requested = False
 
@@ -248,8 +245,8 @@ class AudioSourceSystem:
             source: The AudioSource component.
             position: Current world position.
         """
-        channel_id = source._channel_id
-        if channel_id is None:
+        handle = source._handle
+        if handle is None:
             return
 
         # Calculate attenuation and panning
@@ -257,7 +254,7 @@ class AudioSourceSystem:
         attenuation = self._spatial_config.calculate_attenuation(distance)
         pan = self._spatial_config.calculate_pan(position, self._listener_position)
 
-        self._audio_system.set_channel_mix(channel_id, attenuation, pan)
+        self._audio_system.set_sound_mix(handle, attenuation, pan)
 
     def _get_clip(self, path: str) -> AudioClip | None:
         """Get or load an audio clip.
@@ -288,7 +285,7 @@ class AudioSourceSystem:
         """Stop all playing audio sources."""
         for entity in self._entity_manager.get_entities_with(AudioSource):
             source = entity.get_component(AudioSource)
-            if source and source._channel_id is not None:
+            if source and source._handle is not None:
                 self._stop_source(source)
 
         self._clip_cache.clear()
