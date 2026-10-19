@@ -296,6 +296,7 @@ class TestTileFlipFlags:
 _OBJECT_MAP = _SIMPLE_MAP.replace(
     "</map>",
     """ <objectgroup id="2" name="spawns">
+  <properties><property name="layer_kind" value="gameplay"/></properties>
   <object id="1" name="player_start" type="PlayerSpawn" x="32" y="48">
    <point/>
   </object>
@@ -445,6 +446,23 @@ class TestObjectGroupsAreNoLongerDropped:
         exit_object = tilemap.object_layers["spawns"].by_name("exit")
         assert exit_object is not None
         assert exit_object.center == (80.0, 28.0)
+
+    def test_an_object_layer_carries_its_own_properties(self, tmp_path: Path) -> None:
+        """Tiled lets an author annotate the layer, not just the objects
+        in it -- which is how a whole group gets marked editor-only."""
+        tilemap = load_tmx(_write(tmp_path, _OBJECT_MAP))
+
+        assert tilemap.object_layers["spawns"].properties == {"layer_kind": "gameplay"}
+
+    def test_an_object_layer_can_be_hidden(self, tmp_path: Path) -> None:
+        hidden = _OBJECT_MAP.replace(
+            '<objectgroup id="2" name="spawns">',
+            '<objectgroup id="2" name="spawns" visible="0">',
+        )
+
+        tilemap = load_tmx(_write(tmp_path, hidden))
+
+        assert tilemap.object_layers["spawns"].visible is False
 
     def test_a_map_with_no_objects_has_an_empty_mapping(self, tmp_path: Path) -> None:
         """Not None, so a caller can iterate without checking."""
