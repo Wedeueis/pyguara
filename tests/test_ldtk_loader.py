@@ -448,3 +448,50 @@ class TestGridSize:
 
         with pytest.raises(ValueError, match="no layers with a grid size"):
             load_ldtk(_write(tmp_path, project))
+
+
+class TestLayerOrder:
+    """LDtk stores layers front-to-back; everything else here is back-to-front.
+
+    `Tilemap.layers` is an insertion-ordered dict, so whatever walks it
+    to draw a map draws in that order. Keeping LDtk's own order would
+    put the foreground underneath the ground on every LDtk map and on no
+    Tiled one -- the kind of difference that looks like a renderer bug.
+    """
+
+    def _two_layer_project(self) -> dict[str, Any]:
+        return _project(
+            levels=[
+                {
+                    "identifier": "L",
+                    # LDtk's own order: the topmost layer first.
+                    "layerInstances": [
+                        _tiles_layer(__identifier="Foreground"),
+                        _tiles_layer(__identifier="Ground"),
+                    ],
+                }
+            ]
+        )
+
+    def test_tile_layers_come_out_bottom_to_top(self, tmp_path: Path) -> None:
+        maps = load_ldtk(_write(tmp_path, self._two_layer_project()))
+
+        assert list(maps["L"].layers) == ["Ground", "Foreground"]
+
+    def test_object_layers_follow_the_same_order(self, tmp_path: Path) -> None:
+        project = _project(
+            levels=[
+                {
+                    "identifier": "L",
+                    "layerInstances": [
+                        _entities_layer(__identifier="Above"),
+                        _tiles_layer(),
+                        _entities_layer(__identifier="Below"),
+                    ],
+                }
+            ]
+        )
+
+        maps = load_ldtk(_write(tmp_path, project))
+
+        assert list(maps["L"].object_layers) == ["Below", "Above"]
