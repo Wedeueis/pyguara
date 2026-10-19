@@ -8,9 +8,9 @@ Game code never touches pygame's mixer directly.
 
 1. **`IAudioSystem`** (`pyguara.audio.audio_system`) — the backend contract:
    music streaming, one-shot and looping SFX, spatial placement, buses,
-   per-channel mix updates. `PygameAudioSystem` is the shipped
-   implementation; it is registered as a singleton by the application
-   bootstrap.
+   per-sound mix updates, and the optional capabilities below.
+   `PygameAudioSystem` is the shipped implementation; it is registered as a
+   singleton by the application bootstrap.
 2. **`AudioManager`** (`pyguara.audio.manager`) — a convenience wrapper over
    `IAudioSystem` that loads clips by path through the `ResourceManager`,
    tracks the current music track, and forwards volume calls. Also a
@@ -24,8 +24,54 @@ from pyguara.audio import AudioManager
 
 audio = container.get(AudioManager)
 audio.play_music("music/theme.ogg", loop=True)
-channel = audio.play_sfx("sfx/jump.wav", volume=0.8)
+sound = audio.play_sfx("sfx/jump.wav", volume=0.8)
 ```
+
+## Optional capabilities
+
+Three features cannot be expressed by every mixer, and the one backend that
+ships expresses **none** of them: per-play **pitch**, **loop points** inside
+a clip, and **DSP on a bus**. Each is declared through `AudioCapability` and
+declined by **raising** `UnsupportedAudioCapability`, so a request a backend
+cannot honour fails where it was made.
+
+```python
+from pyguara.audio import AudioCapability
+
+if AudioCapability.PITCH in audio.capabilities:
+    audio.play_sfx("sfx/hit.wav", pitch=random.uniform(0.9, 1.1))
+else:
+    audio.play_sfx("sfx/hit.wav")
+```
+
+Every capability has a request that means *not asked for* — `pitch=1.0`,
+`loop_start=None`, an empty effect list — so code that uses none of them runs
+on any backend. A no-op that accepted `pitch=1.2` and played at the original
+speed would report success for a sound that is wrong, with nothing for the
+caller to check; this is the same reasoning that made `ShapeType.SEGMENT`
+raise instead of returning `None`.
+
+| Capability | What it adds | `PygameAudioSystem` |
+| --- | --- | --- |
+| `PITCH` | `pitch=` on either `play_sfx` | no — the mixer resamples at load and plays at its own rate |
+| `LOOP_POINTS` | `loop_start=` / `loop_end=` | no — `Channel.play` takes a loop *count* and nothing else |
+| `BUS_EFFECTS` | `set_bus_effects(bus, [...])` | no — a channel's only processing is a left/right gain pair |
+
+**Loop points from a `.meta` sidecar warn instead of raising.** `AudioMeta`
+carries `loop_start` / `loop_end`, and those are the asset describing itself
+rather than a call site asking for something. An incapable backend logs once
+per clip and loops the whole file: refusing would let one line of metadata
+silence a sound that worked before anybody wrote it. An explicit argument
+still raises. A malformed range (negative, or inverted) raises `ValueError`
+on every backend, before the capability is consulted — the same bad input
+should read the same way everywhere.
+
+Bus effects are a settled seam, not a shipped feature: `LowPassFilter`,
+`HighPassFilter` and `Reverb` are descriptions a backend interprets, applied
+in list order. Nothing implements them yet, which is why asking for one
+raises and `get_bus_effects` reports `()` rather than the chain you handed
+it — holding a chain that will never be applied would describe an effect
+nobody can hear.
 
 ## Music
 
@@ -37,16 +83,22 @@ and `is_music_playing` control it; `get_current_music()` returns the path
 Music volume follows the `music` bus and the `master` bus: changing either
 re-applies immediately to the playing stream.
 
-## Sound effects and channels
+## Sound effects and handles
 
-`play_sfx(clip, volume, loops, priority, bus)` plays a clip on a mixer
-**channel** and returns that channel's id, or `None` if the clip is invalid
+`play_sfx(clip, volume, loops, priority, bus, pitch, loop_start, loop_end)`
+plays a clip and returns a **`SoundHandle`**, or `None` if the clip is invalid
 or every channel is busy with an equal-or-higher priority sound.
 
+- **A handle is opaque.** Its `token` is minted per play, never reused in a
+  process, and means nothing to a caller. `stop_sfx`, `is_sound_active` and
+  `set_sound_mix` all take one; a handle whose sound has ended resolves to
+  nothing, so they become no-ops rather than acting on a stranger.
+- **That is the point.** A mixer channel number is recycled the instant its
+  sound ends, so `stop_sfx(7)` on a channel int held for a few frames stopped
+  whatever had taken channel 7 over. Channel `0` was also falsy, so
+  `if channel_id:` dropped a real sound.
 - **`loops`**: `0` plays once, `-1` loops forever, `n` repeats `n` extra
   times.
-- **The returned id can be `0`.** Channel 0 is a real channel — test the
-  result against `None`, never for truthiness.
 - **`priority`** (`AudioPriority.LOW`…`CRITICAL`): when no channel is free, a
   new sound steals the channel of the lowest-priority sound *below* its own
   priority. Same-or-higher priority sounds are never interrupted.
@@ -58,11 +110,10 @@ object — the `ResourceManager` hands every concurrent play of one clip the
 ### One-shot lifecycle
 
 A one-shot sound finishes on its own with no callback. `IAudioSystem`
-exposes `is_channel_active(channel)`, which is `True` only while the exact
-sound this system started on that channel is still playing — it returns
-`False` once the sound has ended *or* the channel has been recycled by an
-unrelated sound. `AudioSourceSystem` calls it every frame to reconcile
-`AudioSource` state; you rarely call it directly.
+exposes `is_sound_active(handle)`, which is `True` only while that exact
+sound is still playing — it returns `False` once the sound has ended *or* its
+channel has been recycled by an unrelated sound. `AudioSourceSystem` calls it
+every frame to reconcile `AudioSource` state; you rarely call it directly.
 
 ## Spatial audio
 
@@ -112,6 +163,9 @@ audio_system.set_bus_volume(AudioBusType.SFX, 0.5)
 audio_system.set_bus_muted(AudioBusType.MASTER, True)
 ```
 
+Buses are volume-only on the shipped backend. `set_bus_effects` is the seam
+for DSP; see **Optional capabilities**.
+
 `set_master_volume` / `set_sfx_volume` / `set_music_volume` are shorthands
 for the `master` / `sfx` / `music` buses.
 
@@ -127,6 +181,11 @@ for the `master` / `sfx` / `music` buses.
 `PygameAudioSystem` wraps `pygame.mixer` (pygame-ce). It allocates 32
 channels by default. `shutdown()` stops all audio and releases the device;
 it is idempotent and is called from `Application.shutdown()`.
+
+It reports `AudioCapability.NONE`, and the three things it cannot do are the
+reason a second backend is wanted rather than a longer feature list on this
+one — see [#72](https://github.com/Wedeueis/pyguara/issues/72), whose P1
+"sound variation" needs `PITCH`.
 
 For headless use (tests, CI) set `SDL_AUDIODRIVER=dummy` before the mixer
 initialises — playback then advances in real time but produces no sound.
