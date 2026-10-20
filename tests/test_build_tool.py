@@ -2,12 +2,15 @@
 
 import sys
 
+import pytest
 from click.testing import CliRunner
+from PIL import Image
 
 from pyguara import native
 from pyguara.cli.build import (
     _build_pyinstaller_args,
     _find_assets_folder,
+    _icon_for_host,
     _path_separator,
     build,
 )
@@ -98,6 +101,74 @@ def test_build_pyinstaller_args(tmp_path):
     # invisible to PyInstaller *and* silent when missing: a game frozen
     # without it runs the pure-Python stores and is only slower.
     assert native._MODULE_NAME in args
+
+
+class TestTheHostIcon:
+    """PyInstaller converts nothing, and cannot cross-compile.
+
+    So the icon must already be in the host's format, and the host cases
+    worth testing are the two this suite never runs on -- `platform=` is
+    there for exactly that. Windows *fails the build* on a `.png`, which
+    is the one that would otherwise be found by a Windows contributor
+    rather than by CI.
+    """
+
+    @pytest.fixture
+    def logo(self, tmp_path):
+        path = tmp_path / "logo.png"
+        Image.new("RGBA", (512, 512), (10, 120, 200, 255)).save(path)
+        return path
+
+    @pytest.mark.parametrize(
+        ("platform", "suffix"),
+        [("win32", ".ico"), ("darwin", ".icns"), ("linux", ".png")],
+    )
+    def test_a_png_becomes_what_the_host_needs(self, logo, tmp_path, platform, suffix):
+        converted = _icon_for_host(logo, tmp_path / "work", platform=platform)
+
+        assert converted.suffix == suffix
+        assert converted.is_file()
+
+    def test_an_icon_already_in_the_right_format_is_untouched(self, logo, tmp_path):
+        """No copy, no conversion, and no work directory created."""
+        workdir = tmp_path / "work"
+
+        assert _icon_for_host(logo, workdir, platform="linux") == logo
+        assert not workdir.exists()
+
+    def test_the_converted_icon_lands_in_the_work_directory(self, logo, tmp_path):
+        """Build scratch, not the shipped bundle."""
+        workdir = tmp_path / "work"
+
+        converted = _icon_for_host(logo, workdir, platform="win32")
+
+        assert converted.parent == workdir
+
+
+def test_the_macos_bundle_identifier_is_passed_through(tmp_path):
+    """Not host-gated on purpose: PyInstaller ignores it off macOS.
+
+    Gating it would mean a spec file generated on Linux differed from the
+    one generated on macOS for the same command, which is a difference
+    nobody would look for.
+    """
+    args = _build_pyinstaller_args(
+        entry_point=tmp_path / "main.py",
+        output_dir=tmp_path / "dist",
+        name=None,
+        onefile=False,
+        windowed=True,
+        icon=None,
+        assets_dirs=[],
+        extra_data=[],
+        hidden_imports=[],
+        clean=False,
+        debug=False,
+        bundle_id="com.studio.mygame",
+    )
+
+    assert "--osx-bundle-identifier" in args
+    assert "com.studio.mygame" in args
 
 
 def test_cli_build_dry_run(tmp_path):
