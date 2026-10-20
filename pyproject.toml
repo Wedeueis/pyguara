@@ -1,9 +1,16 @@
 [build-system]
-# Pinned <1.28: hatchling 1.28 emits `Metadata-Version: 2.5`, which the
-# released `twine`/`pkginfo` (6.2.0 / 1.12.x) reject, breaking `twine upload`
-# in the release workflow. Lift once twine ships 2.5 support.
-requires = ["hatchling>=1.27,<1.28"]
-build-backend = "hatchling.build"
+# maturin, because the compiled accelerator now ships *inside* the wheel
+# instead of being built by hand. The cost is that a source build needs a
+# Rust toolchain where none was needed before; the wheels exist so almost
+# nobody performs one. See
+# `docs/adr/0006-shipping-the-native-extension.md`.
+#
+# This replaces a hatchling pin that worked around `Metadata-Version: 2.5`
+# being rejected by released `twine`/`pkginfo`. maturin 1.15 emits 2.4 and
+# `twine check` passes on its wheel, so the workaround retires with the
+# backend rather than being carried over.
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "pyguara"
@@ -58,6 +65,12 @@ dev = [
     "build>=0.10.0",
     "twine>=4.0.0",
 
+    # The build backend, here as well as in `[build-system] requires` so
+    # `maturin develop` is on PATH for a contributor rebuilding the
+    # extension in place. `uv sync` gets it either way, through the
+    # isolated build environment, but cannot run it.
+    "maturin>=1.9,<2.0",
+
     # The editor layer and Studio (pyguara/studio): Dear ImGui panels over
     # the ModernGL context. A dev extra, not a runtime dependency -- a
     # shipped game never attaches either, and the agent transport runs
@@ -110,25 +123,45 @@ build = [
 [project.scripts]
 pyguara = "pyguara.cli:main"
 
-[tool.hatch.build]
-include = [
-    "pyguara/**/*.py",
-    "pyguara/**/*.json",
-    "pyguara/**/*.md",
-    "pyguara/**/*.vert",
-    "pyguara/**/*.frag",
-]
-exclude = [
-    "**/__pycache__",
-    "**/*.pyc",
-    ".git",
-    ".pytest_cache",
-    "build/",
-    "dist/"
-]
+[tool.maturin]
+# A mixed python/rust project requires the extension to live *under* the
+# Python package, so the module is `pyguara.pyguara_core_rs` rather than a
+# top-level `pyguara_core_rs`. It keeps one spelling for one artifact --
+# the crate, the cargo library, the `#[pymodule]` and the importable module
+# are all `pyguara_core_rs` -- which is why the name stutters rather than
+# being shortened to `pyguara._core`. `pyguara/native.py` imports it by
+# this dotted name and falls back to `target/` for a bare `cargo build`.
+module-name = "pyguara.pyguara_core_rs"
+python-source = "."
 
-[tool.hatch.version]
-path = "pyguara/__init__.py"
+# maturin's sdist is the whole checkout by default: assets, demos, docs,
+# tests and two agent scratch directories, 1156 files where hatchling
+# shipped 404. Everything a source build needs is what survives this list
+# -- `pyguara/`, `rust/`, `Cargo.toml`, `Cargo.lock`, `pyproject.toml`,
+# the readme, the licence and the changelog.
+exclude = [
+    ".claude/**",
+    ".cursor/**",
+    ".github/**",
+    ".pre-commit-config.yaml",
+    ".python-version",
+    ".scratch/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "Makefile",
+    "REFACTOR_STATE.md",
+    "assets/**",
+    "config/**",
+    "docs/**",
+    "games/**",
+    "main.py",
+    "mkdocs.yml",
+    "project/**",
+    "tests/**",
+    "tools/**",
+    "uv.lock",
+]
 
 # Testing Configuration
 [tool.pytest.ini_options]

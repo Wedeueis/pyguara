@@ -1,14 +1,16 @@
-"""Optional native acceleration, and how the engine decides to use it.
+"""Native acceleration, and how the engine decides to use it.
 
-Track R moves parts of the engine into a compiled extension. This is the
-seam that makes it *optional*: the module is used when it is present and
-the pure-Python implementation runs when it is not, so `uv sync` and
-`pip install pyguara` keep working with no Rust toolchain and the engine
-stays installable as pure Python.
+Track R moves parts of the engine into a compiled extension. The wheel
+ships it, so an installed PyGuara runs native by default -- but this is
+still the seam that makes it *absent-tolerant*: the module is used when it
+is present and the pure-Python implementation runs when it is not, which
+is what `PYGUARA_NO_NATIVE=1`, a platform with no wheel and
+`native_acceleration = "off"` all rely on.
 
 It lives at the top of the package rather than under `graphics/` because
 it is no longer a graphics concern -- `ParticleSystem` and `Sparks` were
-merely first. It deliberately imports nothing from `pyguara`, so it can be
+merely first. It deliberately imports nothing from `pyguara` but the
+compiled extension itself, which imports nothing back, so it can be
 consulted from anywhere, including from modules loaded before the engine
 is bootstrapped.
 
@@ -16,14 +18,18 @@ The cost of that choice is two implementations to keep in agreement, which
 is paid by running the same tests against both -- see
 `tests/test_native_particle_parity.py`.
 
-Building it:
+Building it, in a checkout:
 
-    cargo build --release
+    uv sync        # maturin is the build backend, so this compiles it
+    make native    # rebuild in place after editing Rust
 
-The crate is deliberately not wired into `pyproject.toml`'s build-system.
-A note for whoever does wire it up: `maturin build` reads the project name
-from `pyproject.toml` and emits a wheel called `pyguara-<version>`, which
-would overwrite the real package. Set `module-name` first.
+`cargo build --release` also works and is what `_candidate_paths` finds,
+but it is now the *second* place looked at. An install wins over it, so a
+bare `cargo build` after `uv sync` leaves the older installed library in
+force and the new code silently unused -- rebuild with `make native`,
+which is `maturin develop --release`; plain `maturin develop` builds a
+*debug* extension that is slower than the Python it replaces.
+See `docs/adr/0006-shipping-the-native-extension.md`.
 """
 
 from __future__ import annotations
@@ -36,6 +42,13 @@ from pathlib import Path
 from typing import Any
 
 _ENV_DISABLE = "PYGUARA_NO_NATIVE"
+
+# The importable name of the extension. A mixed python/rust wheel requires
+# the module to sit under the Python package, so it is dotted rather than
+# top-level -- see `[tool.maturin]` in `pyproject.toml`. Spelled once here
+# because it is also what the error messages quote and what the `target/`
+# fallback registers in `sys.modules`.
+_MODULE_NAME = "pyguara.pyguara_core_rs"
 
 
 class NativeAcceleration(Enum):
@@ -90,7 +103,16 @@ def _repository_root() -> Path:
 
 
 def _candidate_paths() -> list[Path]:
-    """Where the compiled library might be, most-installed first."""
+    """Where the compiled library might be, most-installed first.
+
+    Only `cargo build` leaves a library at these paths. A maturin build
+    *relocates* cargo's artifact to `target/maturin/`, so `target/release`
+    is empty afterwards -- which is correct rather than a gap, because a
+    maturin build either installed the extension (`maturin develop`, where
+    the import above answers) or produced a wheel (`maturin build`, where
+    nothing in the checkout should answer). `cargo build --release`
+    re-creates it.
+    """
     root = _repository_root()
     return [
         root / "target" / "release" / "libpyguara_core_rs.so",
@@ -151,9 +173,10 @@ def configure(mode: NativeAcceleration) -> NativeAcceleration:
         searched = "\n  ".join(str(path) for path in _candidate_paths())
         raise RuntimeError(
             f"native_acceleration is 'required' but the extension is not "
-            f"available. Build it with `cargo build --release`, or "
+            f"available. An installed PyGuara ships it; in a checkout, "
+            f"build it with `uv sync` or `make native`, or "
             f"configure 'auto' to fall back to Python. Looked for an "
-            f"importable `pyguara_core_rs`, then:\n  {searched}"
+            f"importable `{_MODULE_NAME}`, then:\n  {searched}"
         )
     return _effective_mode()
 
@@ -263,10 +286,11 @@ def native_module() -> Any | None:
     decided it is running pure Python should not pay a filesystem probe per
     `ParticleSystem` constructed.
 
-    Tried in two ways. An installed `pyguara_core_rs` on `sys.path` wins,
-    which is what a packaged build would provide. Failing that, a library
-    built in place by `cargo build` is loaded from `target/`, which is what
-    a contributor gets without a packaging step.
+    Tried in two ways. An installed `pyguara.pyguara_core_rs` wins, which
+    is what the wheel provides and what `uv sync` builds in a checkout.
+    Failing that, a library built in place by `cargo build` is loaded from
+    `target/`, which is what a contributor gets who ran cargo and nothing
+    else.
 
     Returns None whenever the resolved mode is `OFF`, which includes
     `PYGUARA_NO_NATIVE=1` -- the first thing to try when a bug might be
@@ -283,24 +307,31 @@ def native_module() -> Any | None:
     if _effective_mode() is NativeAcceleration.OFF:
         return None
 
-    try:  # a packaged install
-        import pyguara_core_rs  # type: ignore[import-not-found]
+    # `import_module` rather than `from pyguara import pyguara_core_rs`,
+    # because a successful import sets the submodule as an *attribute* of
+    # the package: the `from` form would then answer from that attribute
+    # and never consult `sys.modules`, which is exactly what the absence
+    # tests patch. `import_module` checks `sys.modules` first and raises
+    # on a None entry there.
+    try:  # the wheel's extension, or one `uv sync` built
+        installed = importlib.import_module(_MODULE_NAME)
+    except ImportError:
+        installed = None
 
-        _module = pyguara_core_rs
+    if installed is not None:
+        _module = installed
         # Its own `__file__` rather than "installed", because this branch
         # also catches a library *this* module put in `sys.modules` on an
         # earlier lookup, and reporting that as an install is misleading
         # to the one person who ever reads it -- someone debugging which
         # store is running.
-        _source = getattr(pyguara_core_rs, "__file__", None) or "pyguara_core_rs"
+        _source = getattr(installed, "__file__", None) or _MODULE_NAME
         return _module
-    except ImportError:
-        pass
 
     for library in _candidate_paths():  # a local `cargo build`
         if not library.exists():
             continue
-        spec = importlib.util.spec_from_file_location("pyguara_core_rs", library)
+        spec = importlib.util.spec_from_file_location(_MODULE_NAME, library)
         if spec is None or spec.loader is None:
             continue
         module = importlib.util.module_from_spec(spec)
@@ -308,7 +339,7 @@ def native_module() -> Any | None:
             spec.loader.exec_module(module)
         except Exception:  # noqa: BLE001 - a stale or mismatched build
             continue
-        sys.modules.setdefault("pyguara_core_rs", module)
+        sys.modules.setdefault(_MODULE_NAME, module)
         _module = module
         _source = str(library)
         return _module
