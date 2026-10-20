@@ -4,6 +4,7 @@ import sys
 
 from click.testing import CliRunner
 
+from pyguara import native
 from pyguara.cli.build import (
     _build_pyinstaller_args,
     _find_assets_folder,
@@ -92,6 +93,11 @@ def test_build_pyinstaller_args(tmp_path):
     # Check extra data and hidden imports
     assert any("extra_src:extra_dst" in arg for arg in args)
     assert any("some_hidden" in arg for arg in args)
+
+    # And the native extension, which is the one hidden import that is
+    # invisible to PyInstaller *and* silent when missing: a game frozen
+    # without it runs the pure-Python stores and is only slower.
+    assert native._MODULE_NAME in args
 
 
 def test_cli_build_dry_run(tmp_path):
