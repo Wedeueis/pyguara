@@ -1,0 +1,108 @@
+name: Wheels
+
+# Called, never triggered on its own: `ci.yml` runs it on every pull
+# request and `release.yml` runs it on a tag, so what a release publishes
+# comes out of the same job that verified it on the branch.
+#
+# The engine's wheel is no longer pure Python. `pyproject.toml` builds the
+# Rust accelerator through maturin and ships it inside the wheel, which is
+# what makes native the default store rather than something a developer
+# builds by hand -- so there is now one wheel per platform instead of one
+# `py3-none-any` for all of them. `abi3-py312` keeps that to one wheel per
+# *platform* rather than one per platform and interpreter: the wheel built
+# against 3.12 imports and runs native under 3.13.
+# See `docs/adr/0006-shipping-the-native-extension.md`.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    name: wheel (${{ matrix.platform.name }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      # One platform's toolchain failing says nothing about the others,
+      # and knowing which of them work is the whole point of the matrix.
+      fail-fast: false
+      matrix:
+        # Deliberately not built, so the omissions are decisions:
+        # Windows x86 and arm64, and Linux armv7/s390x/ppc64le, because
+        # `pygame-ce` and `pymunk` ship no wheels there -- a PyGuara wheel
+        # for a platform the engine cannot install on is a trap. And no
+        # free-threaded (3.14t) build: `abi3` and free-threading do not
+        # combine, so it would need a wheel per interpreter, and the
+        # dependencies have no 3.14t wheels either.
+        platform:
+          - { name: linux-x86_64, runner: ubuntu-22.04, target: x86_64 }
+          - { name: linux-aarch64, runner: ubuntu-22.04, target: aarch64 }
+          - { name: macos-x86_64, runner: macos-15-intel, target: x86_64 }
+          - { name: macos-aarch64, runner: macos-latest, target: aarch64 }
+          - { name: windows-x64, runner: windows-latest, target: x64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          # `auto` builds in the oldest manylinux image the crate's
+          # symbols allow, which is what a shipped game needs: SteamOS, a
+          # current Ubuntu and a five-year-old distribution then all take
+          # the same wheel. Ignored on macOS and Windows.
+          manylinux: auto
+          args: --release --out dist
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      # A wheel that quietly shipped without the extension would install,
+      # import, run every demo and be slower -- the silent failure this
+      # whole subsystem is built to avoid. Inspecting the archive works
+      # for the cross-compiled rows too, which cannot run their own wheel.
+      - name: Assert the wheel carries the extension
+        shell: bash
+        run: |
+          python -c "
+          import glob, zipfile
+          wheels = glob.glob('dist/*.whl')
+          assert wheels, 'no wheel was built'
+          for wheel in wheels:
+              names = zipfile.ZipFile(wheel).namelist()
+              compiled = [n for n in names if n.endswith(('.so', '.pyd', '.dylib'))]
+              assert compiled, wheel + ' contains no compiled extension'
+              print(wheel, '->', compiled)
+          "
+
+      - name: Upload the wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.name }}
+          path: dist/*.whl
+
+  sdist:
+    name: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Built here rather than beside a wheel so it is built once, and
+      # because it is the artifact for every platform the matrix above
+      # leaves out -- those installs compile the crate themselves and do
+      # need a Rust toolchain, which is the cost of shipping the
+      # extension in the wheel at all.
+      - name: Build the sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - name: Upload the sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist/*.tar.gz
