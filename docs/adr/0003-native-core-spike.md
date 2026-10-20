@@ -1,5 +1,12 @@
 # ADR 0003: RFC-0003's native Rust core — what Marco 0 found
 
+> **Packaging superseded by
+> [ADR 0006](0006-shipping-the-native-extension.md).** The crate is now
+> wired into `pyproject.toml` through maturin and the extension ships
+> inside the wheel, so "not wired in, built standalone" below records how
+> the spike was run rather than how the engine is built. 0006 also does
+> what the `maturin build` warning below asks for: `module-name` is set.
+>
 > **Generalised by [ADR 0004](0004-the-native-boundary.md).** This
 > document measured the first milestone and recommended an order.
 > ADR 0004 replaces that order with a test a candidate can be put

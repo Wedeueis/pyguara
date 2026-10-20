@@ -27,6 +27,11 @@ is one engine-wide choice rather than a per-subsystem one.
 
 from __future__ import annotations
 
+import importlib.util
+import sys
+import tomllib
+from pathlib import Path
+
 import pytest
 
 from pyguara import native
@@ -69,6 +74,46 @@ class TestTheSearchPath:
             f"the derived root {native._repository_root()} is not a PyGuara "
             f"checkout, so the library search below cannot find anything "
             f"and every native test will skip rather than fail"
+        )
+
+    def test_the_module_name_matches_the_one_maturin_installs(self) -> None:
+        """Two files spell this name, and a mismatch is silent.
+
+        `pyproject.toml` decides where maturin puts the extension inside
+        the wheel and `native.py` decides what to import. Change one and
+        the import fails, the `target/` library answers instead, every
+        test here still passes in a checkout -- and an installed PyGuara,
+        which has no `target/`, runs pure Python while reporting nothing
+        wrong. The whole file exists because that failure is quiet.
+        """
+        config = tomllib.loads(
+            (native._repository_root() / "pyproject.toml").read_text()
+        )
+
+        assert config["tool"]["maturin"]["module-name"] == native._MODULE_NAME
+
+    def test_an_installed_extension_wins_over_a_cargo_build(self) -> None:
+        """Which matters because the two can disagree.
+
+        `uv sync` installs the extension into the package; a later
+        `cargo build --release` writes a *different*, newer library under
+        `target/` that is then never loaded. Asserting the order here is
+        what makes that documented rather than discovered -- the fix is
+        `maturin develop`, not another `cargo build`.
+        """
+        if importlib.util.find_spec(native._MODULE_NAME) is None:
+            pytest.skip("nothing installed; only a cargo build could answer")
+        from_cargo = [path for path in native._candidate_paths() if path.exists()]
+        if not from_cargo:
+            pytest.skip("no cargo build present to lose the race")
+
+        native.reset_for_tests()
+        source = native.status()["source"]
+
+        assert source is not None
+        assert Path(source) not in from_cargo, (
+            f"{source} is the `target/` library, but an installed "
+            f"extension exists and should have won"
         )
 
     def test_a_library_on_disk_is_actually_loaded(self) -> None:
@@ -132,7 +177,7 @@ class TestTheMode:
     ) -> None:
         """The whole point of resolving at bootstrap rather than lazily."""
         monkeypatch.setattr(native, "_candidate_paths", list)
-        monkeypatch.setitem(__import__("sys").modules, "pyguara_core_rs", None)
+        monkeypatch.setitem(sys.modules, native._MODULE_NAME, None)
         native.reset_for_tests()
 
         with pytest.raises(RuntimeError, match="not available"):

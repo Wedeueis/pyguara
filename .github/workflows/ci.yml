@@ -23,6 +23,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      # maturin is the build backend, so `uv sync` compiles the crate --
+      # every job that installs the project needs a toolchain now, and the
+      # cache is what keeps that from costing a minute each time.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
       - name: Install Dependencies
         run: make install
 
@@ -36,9 +44,17 @@ jobs:
         run: make type-check
 
   tests:
-    name: Tests & Coverage
+    name: Tests & Coverage (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.13 as well as 3.12 because the wheel is `abi3-py312`: one
+        # build is claimed to run on both, and a claim nothing exercises
+        # is how this repository has been bitten before. Coverage is
+        # gated on 3.12 only, below, so the threshold is one number.
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -50,7 +66,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
 
       # Mesa's software rasteriser plus EGL, so
       # `moderngl.create_standalone_context()` works with no display. Without
@@ -66,6 +87,21 @@ jobs:
       - name: Install Dependencies
         run: make install
 
+      # The same argument as PYGUARA_REQUIRE_GL, for the other half of the
+      # engine that skips itself into a green suite. Before maturin was the
+      # build backend this pipeline never compiled the crate, so every
+      # parity suite -- particles, sparks, the flow field, flocking, the
+      # spatial hash -- skipped on every pull request, and the five Track R
+      # merges were verified by nothing. `required` is the engine's own
+      # mechanism for refusing to run Python by accident.
+      - name: Assert the accelerator is present
+        run: |
+          uv run python -c "
+          from pyguara.native import NativeAcceleration, configure, describe
+          configure(NativeAcceleration.REQUIRED)
+          print(describe())
+          "
+
       - name: Run Unit Tests
         run: make test-unit
 
@@ -77,13 +113,56 @@ jobs:
 
       # This runs coverage and fails if <85% (as defined in Makefile)
       - name: Check Coverage
+        if: matrix.python-version == '3.12'
         run: make coverage-check
 
       - name: Upload Coverage XML
+        if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional: if you use Codecov
           file: ./coverage.xml
+
+  python-fallback:
+    name: Python store (no accelerator)
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Dependencies
+        run: make install
+
+      # Now that the wheel ships the extension, native is what everybody
+      # runs and the pure-Python implementations are the code at risk of
+      # rotting unnoticed. They are not dead code: `PYGUARA_NO_NATIVE=1`
+      # is the first thing to try when a bug might be the accelerator's,
+      # `native_acceleration = "off"` is a supported setting, and a
+      # platform the wheel matrix does not cover falls back to them.
+      - name: Run Unit Tests with the accelerator disabled
+        run: make test-unit
+        env:
+          PYGUARA_NO_NATIVE: "1"
+
+  wheels:
+    name: Wheels
+    needs: quality
+    uses: ./.github/workflows/wheels.yml
 
   build-check:
     name: Build Verification
@@ -97,6 +176,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Verify Build
         run: make build

@@ -4,6 +4,12 @@ Status: **Accepted**. Supersedes RFC-0003's module-by-module sequencing
 (`project/backlog/active/rust_core.md`) and extends ADR 0003, which
 measured the first milestone without generalising from it.
 
+Decision 4 below is unchanged, but its *premise* has narrowed:
+[ADR 0006](0006-shipping-the-native-extension.md) ships the extension
+inside the wheel, so "a machine that built the extension and one that did
+not" is now a rare condition rather than the normal one. The switch, and
+its obligation to be observable, stand exactly as written.
+
 ## Context
 
 RFC-0003 proposed moving parts of the engine into a Rust extension and

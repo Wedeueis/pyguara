@@ -1,13 +1,22 @@
-# Spike crate for RFC-0003's Marco 3. Deliberately NOT wired into
-# `pyproject.toml`'s build-system: this builds as a standalone wheel so
-# `uv sync` keeps working for anyone who does not have a Rust toolchain,
-# and the repository stays buildable while the milestone is still a
-# question. See `docs/adr/0003-native-core-spike.md`.
+# The engine's native accelerator. `pyproject.toml` builds it through
+# maturin, so `uv sync`, `uv build` and `pip install` from source all
+# compile this crate and the extension ships inside the wheel -- which is
+# what makes native the default store rather than something a developer
+# builds by hand. See `docs/adr/0003-native-core-spike.md` for why it is
+# an accelerator rather than a rewrite, `0004` for the boundary, and
+# `0006` for shipping it.
+#
+# `version` is the crate's own and is not the wheel's: maturin takes that
+# from `[project] version` in `pyproject.toml`, so an engine release does
+# not have to bump this. The crate is not published to crates.io.
 [package]
 name = "pyguara_core_rs"
 version = "0.1.0"
 edition = "2024"
 publish = false
+description = "Native acceleration for the PyGuara game engine"
+license = "MIT"
+repository = "https://github.com/Wedeueis/pyguara"
 
 [lib]
 name = "pyguara_core_rs"

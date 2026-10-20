@@ -19,6 +19,7 @@ from pathlib import Path
 import click
 
 from pyguara.log import get_logger
+from pyguara.native import _MODULE_NAME
 
 logger = get_logger(__name__)
 
@@ -104,6 +105,14 @@ def _build_pyinstaller_args(
 
     # Hidden imports for PyGuara dependencies
     default_hidden_imports = [
+        # The native accelerator, which PyInstaller cannot find by itself:
+        # `pyguara.native` imports it through `importlib.import_module`, so
+        # static analysis sees no import at all and a frozen game would
+        # ship without it -- installing, importing, running every scene,
+        # and merely being slower, with a 1000-agent flock back to 16 ms a
+        # tick. Taken from `native.py`'s own constant rather than spelled
+        # again, because a third spelling is a third thing to keep in step.
+        _MODULE_NAME,
         "pygame",
         "pygame.locals",
         "pymunk",

@@ -1,6 +1,6 @@
 # Makefile for Pyguara
 
-.PHONY: help install test test-unit test-integration test-performance perf-guard benchmark coverage coverage-check lint format format-check type-check clean clean-all docs-build docs-serve run version ci pre-commit-install build
+.PHONY: help install native test test-unit test-integration test-performance perf-guard benchmark coverage coverage-check lint format format-check type-check clean clean-all docs-build docs-serve run version ci pre-commit-install build
 
 # --- Default ---
 help:  ## Show this help message
@@ -10,6 +10,15 @@ help:  ## Show this help message
 # --- Installation ---
 install:  ## Install ALL dependencies (core, dev, docs, benchmark)
 	uv sync --all-extras
+
+# `--release` is not optional. `maturin develop` defaults to a debug
+# build, which is slower than the Python implementations it is supposed to
+# replace and fails every guard in `tests/performance/`. `uv sync` already
+# builds a release extension; this is for rebuilding after editing Rust,
+# because an installed library outranks anything a bare `cargo build`
+# leaves in `target/`.
+native:  ## Rebuild the native extension in place (release profile)
+	uv run maturin develop --release
 
 pre-commit-install: ## Install git hooks
 	uv run pre-commit install
