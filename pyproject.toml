@@ -129,7 +129,7 @@ pyguara = "pyguara.cli:main"
 # top-level `pyguara_core_rs`. It keeps one spelling for one artifact --
 # the crate, the cargo library, the `#[pymodule]` and the importable module
 # are all `pyguara_core_rs` -- which is why the name stutters rather than
-# being shortened to `pyguara._core`. `pyguara/native.py` imports it by
+# being shortened to a private `_core`. `pyguara/native.py` imports it by
 # this dotted name and falls back to `target/` for a bare `cargo build`.
 module-name = "pyguara.pyguara_core_rs"
 python-source = "."

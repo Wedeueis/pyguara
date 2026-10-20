@@ -41,7 +41,8 @@ requires the module to live under the Python package, so the importable
 name is `pyguara.pyguara_core_rs` rather than a top-level
 `pyguara_core_rs`. The crate, the cargo library, the `#[pymodule]` and the
 module keep one spelling -- which is why the name stutters rather than
-being shortened to `pyguara._core`. `pyproject.toml` and `native.py` both
+being shortened to a private `_core` under the package.
+`pyproject.toml` and `native.py` both
 have to agree on it, so
 `test_the_module_name_matches_the_one_maturin_installs` reads the former
 and asserts the latter: a mismatch would make the import fail, the
