@@ -669,6 +669,116 @@ sub-pixel over a lifetime; the parity tests bound that rather than ignoring
 it.
 
 
+### Procedural generation -- Wave Function Collapse
+
+`generate_wfc` over a four-state terrain palette (water-sand-grass-rock,
+each touching its neighbours in the chain), 4-directional adjacency:
+
+| Grid | Cells | scan and sort | entropy heap | |
+| --- | ---: | ---: | ---: | ---: |
+| 16x16 | 256 | 11.37 | **1.38** | 8.2x |
+| 24x24 | 576 | 68.37 | 3.34 | 20.5x |
+| 32x32 | 1024 | 213.28 | **6.12** | 34.8x |
+| 48x48 | 2304 | 1063.98 | 14.76 | 72.1x |
+| 64x64 | 4096 | 3494.79 | **27.22** | 128.4x |
+
+The multiple grows with the grid because what changed is the complexity
+class, not a constant. Per 4x the cells:
+
+| | 16 -> 32 | 32 -> 64 | what that is |
+| --- | ---: | ---: | --- |
+| scan and sort | 18.8x | 16.4x | quadratic |
+| entropy heap | 4.4x | 4.4x | near-linear |
+
+**The algorithm was 95% overhead, and none of it was the algorithm.**
+WFC repeatedly collapses the lowest-entropy undecided cell, and finding
+that cell was done by listing every undecided cell and sorting it -- once
+per collapse. At 48x48 that is 2221 collapses over 2304 cells: 0.709 s in
+`list.sort`, 2.57 million calls to the sort key, and **7.69 million calls
+to `len`**, against 0.014 s in `propagate`, which is the constraint
+propagation the algorithm is actually made of.
+
+It now keeps a heap keyed on `(entropy, row-major position)`, lazily
+invalidated: narrowing a cell pushes a fresh entry rather than rewriting
+the old one, and an entry is live only while its recorded entropy still
+matches its cell. Sound because possibilities only shrink, so a
+superseded entry is always larger than the live one and sorts behind it.
+After the change `propagate` is the largest line in the profile, which is
+what it should have been all along.
+
+**Output is unchanged, bit for bit.** The selection order decides which
+cell collapses next, so a plausible-but-different structure still yields
+a valid grid obeying every rule -- a different one, from the same seed.
+Ten shapes are pinned by digest in `tests/test_kits_procgen_wfc.py`,
+including the RNG's end state, because a reordering could land the same
+grid while leaving the stream elsewhere.
+
+#### What this did to the native case
+
+Procgen was listed beside pathfinding as RFC-0003's best-value claim, and
+ADR 0004 recorded that nobody had measured it. Measured and then fixed,
+the candidate is gone:
+
+| | `T_py` | `T_cross` | `T_pinned` | ceiling |
+| --- | ---: | ---: | ---: | ---: |
+| wfc, 64x64 | 25.640 | 0.006 | 0.373 | 67.7x |
+
+67.7x looks like an easy yes and is a no, for two reasons the ratio alone
+does not carry. It is **once per generated level**, so 67.7x of 25 ms
+saves 25 ms when a floor is created -- against a second implementation to
+maintain forever. And `T_pinned` is **98% of the floor**: `generate_wfc`
+returns `dict[Cell, S]`, so every cell becomes a Python dict entry under
+a tuple key whoever filled it in.
+
+Before the fix the same row read 3.5 seconds, where a port would have
+looked unavoidable. This is the third row where ADR 0004's Decision 6 --
+the algorithmic question before the boundary -- changed the verdict and
+not merely the reasoning.
+
+
+### A* -- what one query costs
+
+`AStarPathfinder.find_path` corner to corner over a `GridGraph`, 12%
+walls scattered, 8-directional with corner-cutting refused:
+
+| Grid | Cells | ms / query | path | share of a frame |
+| --- | ---: | ---: | ---: | ---: |
+| 32x32 | 1024 | 2.50 | 41 cells | 15% |
+| 64x64 | 4096 | 8.72 | 78 cells | 52% |
+| 96x96 | 9216 | **20.16** | 114 cells | **121%** |
+
+So a single repath across a 96x96 floor is longer than a frame, and 51
+agents each repathing to their own target on that grid is **305 ms**.
+That is the number to design against: a game that repaths on a timer,
+staggered, is fine; one that repaths a crowd on an event is not.
+
+Where it goes is the graph, not the search. Per query at 96x96:
+`get_neighbors` is **55%**, `cost` **19%**, the heuristic 6%, and the
+heap operations are rounding error.
+
+**Not a native candidate, and the ratio is not why.** `T_cross` for a
+flow-field-shaped boundary -- the grid native, endpoints and path across
+-- is 0.005 ms, which prices the ceiling at 4250x. That figure is
+evidence that the boundary is not the problem and nothing more: the
+formula divides by a crossing that has gone to zero, so it stops
+describing anything a port would achieve. See ADR 0004, Decision 1.
+
+Two things decide it instead. The expensive case here -- many agents
+converging on one goal -- is **already native and already O(1) per
+agent**: that is what the flow field is, at 1.6 ms for a whole 96x96
+field against 20 ms for one A* query. And `AStarPathfinder` solves any
+`Graph[Node]`, while a native implementation could only serve
+`GridGraph`; its 74% in `get_neighbors` and `cost` is precisely the part
+that cannot cross for a caller-supplied graph. A port would be a second
+solver, not this one made faster.
+
+**`GridGraph.get_neighbors` itself is a real Python target** -- it is
+also the Python flow field's hot path -- but its yield order is
+replicated bit-exactly by `rust/src/flowfield.rs` and pinned by
+`tests/test_native_flow_field_parity.py`, so it is its own careful piece
+of work rather than a line in this one.
+
+
 ### `ParticleSystem` / `Sparks` update -- milliseconds per frame
 
 All three self-contained pools -- particles, sparks and projectiles --

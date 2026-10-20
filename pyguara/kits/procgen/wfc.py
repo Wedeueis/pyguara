@@ -6,10 +6,25 @@ kind, a biome id, anything hashable), and adjacency is expressed as plain
 means. `dungeon.py`'s BSP recipe is the roguelike-room flavor of its
 sibling algorithm; a WFC-driven tile palette (cave walls, biome blending)
 is this algorithm's own recipe, left to the caller to build.
+
+**Which cell collapses next is chosen through a heap**, not by scanning.
+That is a performance property worth stating in the module that depends
+on it: the obvious implementation lists every undecided cell and sorts it
+once per collapse, which is quadratic in the cell count and was 95% of a
+48x48 generation -- 3.5 seconds for a 64x64 grid against 27 ms now.
+`_attempt` carries the invariant that makes the heap sound.
+
+The selection order is also **observable through the seed**: it decides
+which cell is collapsed, so it decides which draw from `rng` lands where.
+A change to it that still produces valid grids will produce *different*
+ones from the same seed, which is a breaking change to every world
+already generated. `tests/test_kits_procgen_wfc.py` pins ten shapes by
+digest for that reason.
 """
 
 from __future__ import annotations
 
+import heapq
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
@@ -152,6 +167,37 @@ def _attempt(
 ) -> dict[Cell, S]:
     possible: dict[Cell, set[S]] = {cell: set(state_set) for cell in cells}
 
+    # Row-major position, which is the tie-break when several cells share
+    # the lowest entropy. Precomputed because it is read once per heap
+    # entry and never changes.
+    position = {cell: cell[1] * width + cell[0] for cell in cells}
+
+    # Undecided cells ordered by `(entropy, position)`, which is the cell
+    # a caller's seed is entitled to see collapsed next.
+    #
+    # Lazily invalidated: narrowing a cell pushes a fresh entry rather
+    # than finding and rewriting the old one, and an entry is live only
+    # while its recorded entropy still matches its cell. That is sound
+    # because possibilities only ever shrink, so a superseded entry is
+    # always *larger* than the live one and sorts behind it -- and each
+    # push for a cell is strictly smaller than the last, so no cell ever
+    # has two live entries at once.
+    #
+    # **Only undecided cells are ever pushed**, which is what lets one
+    # comparison at the pop recognise every entry that has gone stale. If
+    # a cell narrowed straight to a single state could hold an entry,
+    # that entry would still match its cell and be collapsed again --
+    # drawing from `rng` for a choice of one and moving the stream.
+    #
+    # `position` is unique per cell, so the `Cell` in the tuple is never
+    # compared; see `AStarPathfinder`'s counter for the same requirement.
+    frontier = (
+        [(len(state_set), position[cell], cell) for cell in cells]
+        if len(state_set) > 1
+        else []
+    )
+    heapq.heapify(frontier)
+
     def propagate(start: Cell) -> None:
         stack = [start]
         while stack:
@@ -174,6 +220,8 @@ def _attempt(
                 if not after:
                     raise _Contradiction
                 possible[neighbor] = after
+                if len(after) > 1:
+                    heapq.heappush(frontier, (len(after), position[neighbor], neighbor))
                 stack.append(neighbor)
 
     for cell, state in pinned.items():
@@ -182,13 +230,15 @@ def _attempt(
         possible[cell] = {state}
         propagate(cell)
 
-    while True:
-        undecided = [cell for cell in cells if len(possible[cell]) > 1]
-        if not undecided:
-            break
-        undecided.sort(key=lambda c: (len(possible[c]), c[1] * width + c[0]))
-        target = undecided[0]
-        ordered_states = sorted(possible[target], key=lambda s: state_order[s])
+    while frontier:
+        entropy, _, target = heapq.heappop(frontier)
+        remaining = possible[target]
+        if len(remaining) != entropy:
+            # Narrowed or decided since this entry was pushed, so it is
+            # not the cell to collapse now. The cell's own live entry is
+            # further down the heap, or it needs no entry at all.
+            continue
+        ordered_states = sorted(remaining, key=lambda s: state_order[s])
         choices = [
             (state, 1.0 if weights is None else weights.get(state, 1.0))
             for state in ordered_states

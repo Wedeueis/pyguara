@@ -65,6 +65,13 @@ writing:
 | render batcher, 20000 sprites | 44.423 | 1.347 | 3.671 | **8.9x** | deferred (12.2x before Decision 6) |
 | projectiles, 1000 | 3.041 | 0.339 | 1.143 | **2.1x** | declined |
 
+Two further candidates are priced **per call rather than per tick**, so
+they sit in their own table in `tools/price_native_boundary.py` and must
+not be read beside the rows above: `wfc, 64x64` at 67.7x (once per
+generated level) and `a*, 96x96` at 4250x (per query). Both are declined;
+Track R item 1 has why, and the 4250x is discussed below as a limit of
+this formula rather than a result.
+
 The spatial index is the one row that is **not a subsystem**, and reading
 it as one would be a mistake: its 17x is what the *index* costs, while
 what its consumers feel is 1.3x to 4.3x. Decision 7 is about that gap and
@@ -115,10 +122,33 @@ when the handoff is trivial, and by the conversions and the shared
 prologue when the handoff is not. Both corrections point the same way,
 which at least makes the formula optimistic rather than unreliable.
 
+**And the formula degenerates when `T_cross` goes to zero**, which A*
+demonstrated. Priced against a flow-field-shaped boundary — the grid
+native, endpoints and path across — its crossing is 0.005 ms against
+20.8 ms of Python, for a ceiling of **4250x**. That number is not a
+forecast or even an estimate; it is the formula dividing by nothing and
+reporting that the boundary is not this candidate's problem. Read any
+ceiling far above 100x as exactly that statement and nothing more, then
+go and find the reason the candidate is or is not worth porting
+somewhere else. For A* the reason was that its expensive case already
+has a native implementation under a different name.
+
+So the formula has three recorded failure modes, all optimistic: it omits
+the native work (flow field, 161x priced against 56x achieved), it
+underestimates a non-trivial crossing's conversions and shared prologue
+(flocking, 15.4x against 9.0x), and it stops meaning anything when the
+crossing is trivial (A*, 4250x). It is a filter for "is this far above
+5x", not a predictor, and the candidates it *rejects* are the ones it
+answers cleanly.
+
 **The threshold is 5x**, and it is a judgement about maintenance rather
 than about speed: a native implementation is a second implementation
 *forever*, and the cost of keeping two in agreement does not scale down
-with the size of the win. Below 5x, say no and record the number.
+with the size of the win. Below 5x, say no and record the number. Above
+it, the ratio has bought the candidate a decision rather than made one
+— WFC clears 5x by thirteen times over and is declined anyway, because
+a multiple of a cost paid once per level does not pay for a second
+implementation.
 
 ## Decision 2 — Port a boundary, not a function
 
@@ -407,6 +437,17 @@ Three rules on top, each earned the hard way this quarter:
 
 ## Decision 6 — Algorithm before boundary
 
+> **Scoreboard, added after WFC.** This decision has now changed a
+> verdict twice and the reasoning once. The render batcher priced at
+> 12.2x and then 8.9x once four pieces of per-command waste came out of
+> the Python implementation — same boundary, half the numerator. WFC
+> priced at an implied hundreds of x and then at 67.7x on a cost small
+> enough to decline, once its quadratic cell selection was replaced: 3.5
+> s to 27 ms at 64x64. And the flow field's guard did not change its
+> verdict but corrected what the port was *for*, from throughput to the
+> worst case. Two of the three candidates where the question was asked
+> properly stopped being candidates.
+
 Measure whether the work is *necessary* before measuring whether it is
 *fast*. A native port that preserves redundant work ships redundant work,
 only faster.
@@ -640,11 +681,41 @@ is almost its reverse:
    handoff, which is a property of those candidates rather than of the
    formula.
 
-   **`AStarPathfinder` and the WFC generator are not ported**, and this
-   item should not be read as covering them. Neither has a measurement,
-   and A* is a per-query cost rather than a per-frame one, so it does not
-   obviously have a ratio worth computing — which is the point: measure
-   it before claiming it. The flow field is what the 161x was about.
+   **`AStarPathfinder` and the WFC generator are now measured, and both
+   are declined** — this item never covered them, and the measurements
+   say why it should not have. The flow field is what the 161x was about.
+
+   **WFC was the larger surprise, and Decision 6 dissolved it.** A 64x64
+   generation measured **3.5 seconds**, which looks like the strongest
+   remaining case in the engine. 95% of it was choosing which cell to
+   collapse next: every undecided cell listed and sorted, once per
+   collapse, so quadratic in the cell count — 7.69 million `len` calls
+   at 48x48 against 0.014 s in the constraint propagation the algorithm
+   consists of. With a lazily-invalidated entropy heap the same grid is
+   **27 ms**, output identical bit for bit including the RNG's end state.
+   What remains prices at 67.7x and is still a **no**: it is once per
+   generated level, and `T_pinned` is 98% of the floor because
+   `generate_wfc` returns `dict[Cell, S]`, so every cell is a Python
+   dict entry under a tuple key whoever filled it in. 67.7x of 25 ms,
+   once per floor, against a second implementation maintained forever.
+
+   **A* is declined for reasons the ratio does not carry.** One
+   corner-to-corner query on a 96x96 grid is **20.2 ms** — 121% of a
+   frame — and 51 agents repathing to their own targets is 305 ms, so
+   the cost is real. But the expensive case, many agents converging on
+   one goal, is *already* native and already O(1) per agent: that is what
+   the flow field is. And `AStarPathfinder` solves any `Graph[Node]`
+   while a native one could only serve `GridGraph` — `get_neighbors` is
+   55% of a query and `cost` another 19%, which is exactly the part that
+   cannot cross for a caller-supplied graph. A port would be a second
+   solver, not this one made faster, which is Decision 2 read in the
+   other direction.
+
+   One target does survive, for Python: **`GridGraph.get_neighbors`**,
+   which is A*'s 55% and the Python flow field's hot path too. Its yield
+   order is replicated bit-exactly in `rust/src/flowfield.rs` and pinned
+   by `tests/test_native_flow_field_parity.py`, so it is its own piece of
+   work rather than a line in anybody else's.
 2. **Flocking — BUILT.** Priced at 15.4x at 1000 agents, which was 99%
    of a frame, and achieved **9.0x** — 16.6 ms down to 1.85 ms, or 11% of
    a frame. The first port of something that is *not* opaque: every agent
