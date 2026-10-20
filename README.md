@@ -49,6 +49,17 @@ Most Python game libraries (like Pygame) give you a window and a loop, leaving y
 
 PyGuara requires **Python 3.12** or higher.
 
+```bash
+pip install pyguara
+```
+
+The wheel carries the engine's native accelerator, so pathfinding,
+flocking, particles and the spatial index run compiled without a Rust
+toolchain anywhere in sight. Working on the engine itself is the case that
+needs one: maturin is the build backend, so a **checkout** compiles the
+crate and wants stable Rust (`rustup`) installed. See
+[ADR 0006](docs/adr/0006-shipping-the-native-extension.md).
+
 ### Using `uv` (Recommended)
 
 ```bash

@@ -383,10 +383,14 @@ Bisecting the walk would be faster and would reintroduce tunnelling.
 
 ### The native particle pool -- milliseconds per frame
 
-`ParticleSystem` can be backed by a native structure-of-arrays pool
-(`cargo build --release`; see `pyguara/native.py`). The
-Python pool is kept and used whenever the extension is absent, so this is an
-accelerator rather than a requirement.
+`ParticleSystem` can be backed by a native structure-of-arrays pool. The
+wheel ships the extension and `uv sync` builds it in a checkout (see
+`pyguara/native.py` and
+`docs/adr/0006-shipping-the-native-extension.md`), so these are the
+numbers an installed PyGuara gets. The Python pool is kept and used
+whenever the extension is absent -- `PYGUARA_NO_NATIVE=1`,
+`native_acceleration = "off"`, or a platform the wheel matrix does not
+cover -- so this is still an accelerator rather than a requirement.
 
 Both paths, the same seeded burst, min of 5 rounds:
 
