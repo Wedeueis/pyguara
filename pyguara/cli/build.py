@@ -34,6 +34,53 @@ def _check_pyinstaller() -> bool:
         return False
 
 
+# PyInstaller converts nothing and cannot cross-compile, so an icon has to
+# already be in the format the *host* toolchain wants: Windows refuses
+# anything but `.ico`, macOS wants `.icns` for the bundle, and Linux has no
+# icon resource in the binary at all -- the `.png` is for the `.desktop`
+# entry beside it.
+_ICON_SUFFIX_BY_PLATFORM = {"win32": ".ico", "darwin": ".icns"}
+_ICON_KIND_BY_PLATFORM = {"win32": "windows", "darwin": "macos"}
+
+
+def _icon_suffix_for(platform: str) -> str:
+    """Return the icon extension PyInstaller needs on `platform`."""
+    return _ICON_SUFFIX_BY_PLATFORM.get(platform, ".png")
+
+
+def _icon_for_host(icon: Path, workdir: Path, *, platform: str | None = None) -> Path:
+    """Return `icon` in the format this host needs, converting if it is not.
+
+    A project has one `logo.png`, and on Windows that is simply not a
+    buildable icon -- PyInstaller fails rather than converting. Doing it
+    here means `pyguara build --icon logo.png` works on all three hosts
+    from the same source image, which is the whole point of
+    `pyguara dist icons` being available as a library function.
+
+    Args:
+        icon: The source image, in any format Pillow reads.
+        workdir: Where a converted icon is written. PyInstaller's own
+            work directory, so it lands with the other build scratch
+            rather than in the shipped bundle.
+        platform: `sys.platform` to target. Defaults to the running one;
+            passed explicitly by the tests, since the interesting cases
+            are the hosts the suite does not run on.
+
+    Returns:
+        The icon to hand PyInstaller -- `icon` itself when it already
+        has the right extension.
+    """
+    target = platform if platform is not None else sys.platform
+    if icon.suffix.lower() == _icon_suffix_for(target):
+        return icon
+
+    from pyguara.cli.dist import write_icons
+
+    converted = write_icons(icon, workdir)[_ICON_KIND_BY_PLATFORM.get(target, "linux")]
+    logger.info("converted %s to %s for this host", icon, converted)
+    return converted
+
+
 def _find_assets_folder(project_path: Path) -> Path | None:
     """Find the assets folder relative to the project."""
     candidates = ["assets", "Assets", "resources", "Resources", "data", "Data"]
@@ -59,6 +106,7 @@ def _build_pyinstaller_args(
     hidden_imports: list[str],
     clean: bool,
     debug: bool,
+    bundle_id: str | None = None,
 ) -> list[str]:
     """Build the PyInstaller command arguments."""
     # Invoke via the running interpreter rather than a bare ``pyinstaller``
@@ -91,6 +139,12 @@ def _build_pyinstaller_args(
     # Icon
     if icon and icon.exists():
         args.extend(["--icon", str(icon)])
+
+    # macOS bundle identifier. Not host-gated: PyInstaller ignores it when
+    # it is not building a `.app`, and gating it here would mean a spec
+    # file generated on Linux quietly differed from the one on macOS.
+    if bundle_id:
+        args.extend(["--osx-bundle-identifier", bundle_id])
 
     # Assets directories
     for assets_dir in assets_dirs:
@@ -216,6 +270,12 @@ def _path_separator() -> str:
     help="Enable PyInstaller debug mode",
 )
 @click.option(
+    "--bundle-id",
+    type=str,
+    default=None,
+    help="macOS bundle identifier, e.g. com.studio.mygame",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
@@ -233,6 +293,7 @@ def build(
     hidden_imports: tuple[str, ...],
     clean: bool,
     debug: bool,
+    bundle_id: str | None,
     dry_run: bool,
 ) -> None:  # noqa: D301  (\b is Click's no-wrap marker; r""" would defeat it)
     """Build a standalone executable from a PyGuara game.
@@ -245,8 +306,8 @@ def build(
       pyguara build main.py
       # Custom output and name
       pyguara build main.py --output builds/ --name MyGame
-      # Single file with icon
-      pyguara build main.py --onefile --icon assets/icon.ico
+      # Single file with icon, in any format Pillow reads
+      pyguara build main.py --onefile --icon assets/logo.png
       # Include multiple asset directories
       pyguara build main.py -a assets/ -a levels/
     """
@@ -254,7 +315,7 @@ def build(
     entry_point = entry_point.resolve().absolute()
     output = output.resolve().absolute()
     if icon:
-        icon = icon.resolve().absolute()
+        icon = _icon_for_host(icon.resolve().absolute(), output / "build" / "icons")
 
     # Auto-detect assets folder if none specified
     assets_list = list(assets_dirs)
@@ -282,6 +343,7 @@ def build(
         hidden_imports=list(hidden_imports),
         clean=clean,
         debug=debug,
+        bundle_id=bundle_id,
     )
 
     if dry_run:

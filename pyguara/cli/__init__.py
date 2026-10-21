@@ -6,6 +6,7 @@ standalone executables.
 Usage:
     pyguara --help
     pyguara build --help
+    pyguara dist --help
     pyguara atlas --help
 """
 
@@ -17,6 +18,7 @@ import click
 # module. Keep the submodules reachable by dotted path.
 from pyguara.cli.atlas_generator import atlas as atlas_command
 from pyguara.cli.build import build as build_command
+from pyguara.cli.dist import dist as dist_command
 from pyguara.cli.studio import studio as studio_command
 
 __all__ = ["main"]
@@ -30,6 +32,7 @@ def main() -> None:
 
 
 main.add_command(build_command)
+main.add_command(dist_command)
 main.add_command(atlas_command)
 main.add_command(studio_command)
 
