@@ -183,6 +183,9 @@ Thumbs.db
 # Frames written by tools/agent_view.py
 .agent-view/
 
+# Captures written by tools/audio_capture.py
+.agent-audio/
+
 # PyGuara Studio's own state -- the panel arrangement it remembers between
 # runs. A tool's state, not the project's.
 .pyguara/
