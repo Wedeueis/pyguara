@@ -96,6 +96,28 @@ appears on screen -- those have already diverged here, when vsync silently
 promoted the display to an OpenGL surface that never presented software blits.
 Read `docs/guides/agent-visual-inspection.md` before reporting on either.
 
+### Hearing what the engine plays (for agents)
+
+The same problem one sense over: an agent cannot listen to a speaker.
+`tools/audio_capture.py` opens the mixer on SDL's `disk` driver, which
+writes the mixed output to a file instead of handing it to a device, and
+reports what came out:
+
+```bash
+uv run python tools/audio_capture.py --asset games/quintal_cerrado/assets/audio/seed.wav --wav
+uv run python tools/audio_capture.py --seam --laps 5 --stall 0.35
+```
+
+A capture proves the **output path** works -- the clip decoded, the bus
+volumes applied, and something other than silence reached the far end. It
+cannot hear an ALSA underrun or a muted system mixer, exactly as a frame
+capture cannot see a blank window. A wholly silent capture is flagged, for
+the reason a flat frame is.
+
+`--seam` measures whether a queued loop joins with no gap and no dropped
+sample, which is the assumption W28b's staging rests on and what
+`tests/integration/test_audio_output.py` pins.
+
 ## Branching and Pull Requests
 
 **Every independent branch is cut from `main`.** Not from another feature
