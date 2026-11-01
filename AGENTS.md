@@ -686,8 +686,8 @@ it ships in the wheel and what that costs.
 
 `pyguara.net` is opt-in: a single-player game imports none of it, and it imports
 fine with no extension. It is a backend, not a store, so `PYGUARA_NO_NATIVE=1`
-does not turn it off. Only the transport and session exist; replication and
-prediction are later phases of `project/backlog/active/network_multiplayer.md`.
+does not turn it off. The transport, session and replication exist; prediction and
+the rest are later phases of `project/backlog/active/network_multiplayer.md`.
 
 **Everything decoded from the network is untrusted, and that includes messages
 from an invited player.** The Rust core authenticates packets and survives hostile
@@ -710,6 +710,11 @@ broken for both reasons.
 ```bash
 uv run python tools/net_probe.py simulate --latency-ms 50 --loss 0.02
 ```
+
+**Capture `net_horde` after changing replication:** `tools/agent_view.py net_horde`
+draws the host and client side by side over a simulated bad network, with the state
+hash counts on screen. Its first capture found a desync that 121 passing tests had
+missed, because they all spawned entities after joining rather than before.
 
 A simulated network proves the logic, the way `agent_view` proves the render path.
 It cannot show how a real connection behaves, or whether playing over one feels

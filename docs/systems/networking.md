@@ -1,8 +1,9 @@
 # Networking
 
-`pyguara.net` connects one hosting player's game to the players who join it. This is
-the transport and the session: moving messages, and deciding who may play. **Replication
-and prediction do not exist yet**, so a game using this today sends its own messages.
+`pyguara.net` connects one hosting player's game to the players who join it: the transport
+and session move messages and decide who may play, and replication keeps every client's world
+matching the host's. **Prediction does not exist yet**, so a client's own character still moves
+only when the host's snapshot says so.
 
 It is opt-in. A single-player game imports none of it, and importing it needs no native
 extension: only starting a session does.
@@ -70,6 +71,66 @@ each decode alone.
 `send` returns `False` rather than raising when a message is not accepted: no such peer, or
 over the channel's limit. On a reliable channel that means a backlog, and the largest single
 message is half the channel's limit: about 512 KiB on `EVENTS` and 8 MiB on `LEVEL`.
+
+## Replication
+
+The host simulates. Clients draw what they receive, about 100 ms behind, so there is always a
+newer snapshot to interpolate toward.
+
+```python
+schema = ReplicationSchema()   # the same on host and client, in the same order
+schema.register(Transform, position=QuantisedVector(step=0.25), rotation=Angle())
+schema.register(Health, current=UInt16(), max_health=UInt16())
+
+# Host
+replication = ReplicationHost(entity_manager, schema, session.send)
+app.add_step_hook(HostDriver(app, session, replication))
+enemy.add_component(Replicated("enemy"))             # everyone sees it
+drop.add_component(Replicated("drop", owner=slot))   # only that player does
+
+# Client: a name from the network can only choose among these
+replication = ReplicationClient(entity_manager, schema, {"enemy": make_enemy, "drop": make_drop})
+app.add_step_hook(ClientDriver(session, replication, on_event=handle_game_message))
+```
+
+Run nothing that simulates on a client: no AI, flocking or spawning. To see all of this running:
+
+```bash
+uv run python games/net_horde/main.py                      # both sides, one window
+uv run python games/net_horde/main.py --host               # one window
+uv run python games/net_horde/main.py --join "pyguara://"  # the other
+```
+
+Things that will catch you out:
+
+- **Field range.** A 16-bit `QuantisedVector` at step 0.25 reaches about 8000 units from the
+  origin. Use `wide=True` for more. A value that doesn't fit saturates, and is counted in
+  `ReplicationHost.saturated()`.
+- **A reliable message of your own** must start with a byte below `FIRST_RESERVED_KIND`, 0xE0.
+- **Per-player drops on the host's own screen.** The host's world holds everyone's, so its
+  renderer and effects must filter by `Replicated.owner`. A client's world never holds anyone
+  else's, since they are never sent.
+- **Teleports.** A jump over `snap_distance`, 256 units by default, is drawn at once rather than
+  as motion. Shorter ones slide.
+- **A component needs to exist on the client's entity**, from its spawner, or its state is ignored.
+- **Pass `digest_every=` while developing.** The host then sends a hash of the state, and
+  `ReplicationClient.digests_mismatched` above 0 is a real desync.
+
+### What it costs
+
+Measured with `tools/net_phase0.py`, on a horde of real components with three clients, per frame
+at 60 Hz with 20 Hz snapshots. Reproducible, but not from a shipping game.
+
+| Entities | Host | Client | Per client, at 20 Hz |
+| ---: | ---: | ---: | ---: |
+| 200 | 0.22 ms | 0.82 ms | 0.35 Mbit/s |
+| 500 | 0.55 ms | 2.7 ms | 0.88 Mbit/s |
+| 1,000 | 1.13 ms | 6.0 ms | 1.77 Mbit/s |
+
+A client spends more than the host because it decodes and interpolates, but it isn't running the
+simulation. **Python's garbage collector is the remaining hitch**: a full collection took up to 23
+ms, which makes the worst frame about 20 ms where it would otherwise be about 4. That run held four
+worlds in one process, so a real client should be smaller, but measure it in a real game.
 
 ## Everything from the network is untrusted
 
