@@ -12,11 +12,12 @@ and which entity manager to put it in -- none of which belongs in a
 module whose other half is a grid of integers. `pyguara/tilemap` imports
 nothing from `prefabs`, `physics` or `ecs`, and keeping it that way is
 what lets `load_tmx` be tested with no world at all. The spawning half is
-tracked separately.
+`pyguara.tilemap.spawning`, which is deliberately not imported from here.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -83,11 +84,25 @@ class MapObject:
 
     @property
     def center(self) -> tuple[float, float]:
-        """The centre of the object's bounding box, in map pixels.
+        """The centre of the object's box as Tiled draws it, in map pixels.
 
-        A point object has no extent, so its centre is its position.
+        A point object has no extent, so its centre is its position. Two things
+        make this more than half the size: a tile object's `(x, y)` is its
+        **bottom** left, where everything else's is its top left, and Tiled
+        rotates about that same corner, not the middle.
         """
-        return (self.x + self.width / 2.0, self.y + self.height / 2.0)
+        half_height = self.height / 2.0
+        local_x = self.width / 2.0
+        local_y = -half_height if self.shape is ObjectShape.TILE else half_height
+        if not self.rotation:
+            return (self.x + local_x, self.y + local_y)
+        # Clockwise on screen, because y grows downwards.
+        angle = math.radians(self.rotation)
+        cos, sin = math.cos(angle), math.sin(angle)
+        return (
+            self.x + local_x * cos - local_y * sin,
+            self.y + local_x * sin + local_y * cos,
+        )
 
     def absolute_points(self) -> tuple[tuple[float, float], ...]:
         """Return `points` translated into map coordinates.

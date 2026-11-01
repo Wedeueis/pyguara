@@ -159,6 +159,34 @@ class PrefabFactory:
 
         return self.create(prefab, entity_id, overrides, source_path=prefab_path)
 
+    def resolve_components(self, prefab: PrefabData) -> dict[str, dict[str, Any]]:
+        """Return a prefab's component data with its `extends` chain applied.
+
+        For a caller deciding what to override, which has to see what the
+        prefab inherits as well as what it states.
+
+        Args:
+            prefab: The prefab to resolve.
+
+        Returns:
+            A copy of the merged component data, by component name.
+
+        Raises:
+            ValueError: If the `extends` chain contains a cycle.
+        """
+        return self._resolve_inheritance(prefab)
+
+    def knows_component(self, name: str) -> bool:
+        """Return whether `create` could build a component of this name.
+
+        Args:
+            name: The registered component name.
+
+        Returns:
+            True if it is registered. `create` skips one that is not.
+        """
+        return self._registry.has(name)
+
     def _resolve_inheritance(
         self,
         prefab: PrefabData,
