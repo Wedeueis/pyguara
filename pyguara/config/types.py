@@ -66,6 +66,23 @@ class WindowConfig:
     backend: RenderingBackend = RenderingBackend.PYGAME
 
 
+class AudioBackend(Enum):
+    """Available audio backends.
+
+    Deliberately no `AUTO`: it would give the same game a different set of
+    capabilities on a machine without the extension, which is what
+    `IAudioSystem.capabilities` exists to make impossible to miss.
+
+    PYGAME: `pygame.mixer` as it comes. Reports no optional capability.
+
+    NATIVE: Decodes and resamples in Rust, adding pitch and loop points. Fails
+        at startup if the extension cannot be imported.
+    """
+
+    PYGAME = "pygame"
+    NATIVE = "native"
+
+
 @dataclass
 class AudioConfig:
     """Audio configuration."""
@@ -74,6 +91,7 @@ class AudioConfig:
     sfx_volume: float = 0.8
     music_volume: float = 0.6
     muted: bool = False
+    backend: AudioBackend = AudioBackend.PYGAME
 
 
 @dataclass

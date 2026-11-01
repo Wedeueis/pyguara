@@ -27,11 +27,55 @@ audio.play_music("music/theme.ogg", loop=True)
 sound = audio.play_sfx("sfx/jump.wav", volume=0.8)
 ```
 
+## Choosing a backend
+
+`AudioConfig.backend` is `pygame`, the default, or `native`; the environment
+variable is `PYGUARA_AUDIO_BACKEND`. There is deliberately no `auto`, because it
+would give the same game different capabilities on different machines, and
+`native` fails at startup if the extension cannot be imported.
+
+**It is not governed by `native_acceleration` or `PYGUARA_NO_NATIVE`.** Those
+switch between two implementations of the same thing, and nothing in Python can
+stand in for this one. So `PYGUARA_NO_NATIVE=1` does not mean "no native code
+runs" any more: to rule out the audio, set `PYGUARA_AUDIO_BACKEND=pygame`. See
+ADR 0004, Decision 4.
+
+`NativeAudioSystem` decodes with `symphonia` and resamples in Rust, then hands
+the buffers to `pygame.mixer`, so spatial audio, buses and channel stealing are
+the same code as the default backend:
+
+- **Pitch is resampling, so it changes duration.** 2.0 is an octave up and half
+  as long, which is what SFX variation wants. The range is 0.25 to 4.0, and
+  outside it raises `ValueError`.
+- **Pitches are rendered to the nearest 1%**, and the buffers are cached with a
+  32 MB budget (`cache_bytes=`), least recently used first. A variation range of
+  a few percent is a handful of buffers.
+- **Resampling is linear**, so a large upward pitch aliases. Inaudible at a few
+  percent, and not meant for wide pitch sweeps.
+- **Loop points need `update()` once a frame**, which `Application` does. A
+  loop is an intro plus segments queued on the channel, and `Channel.queue`
+  holds one, so a segment is always at least a second of whole laps. A frame
+  stall shorter than that leaves no trace.
+- **It also reads `.flac`**, which the default backend's loader does not.
+- **A clip must come through `NativeSoundLoader`**, which bootstrap registers
+  for this backend. A clip from another loader raises `TypeError` for pitch or
+  loop points.
+
+| Measured, 44.1 kHz stereo | |
+| --- | ---: |
+| Render one pitch, first play | **0.79 ms per second of audio** |
+| Any later play at that pitch | 0.5 us |
+| A clip in memory | 176 KB per second, once |
+
+`symphonia` is **MPL-2.0**: file-level copyleft, fine to link unmodified from an
+MIT engine, but the wheel distributes it.
+
 ## Optional capabilities
 
-Three features cannot be expressed by every mixer, and the one backend that
-ships expresses **none** of them: per-play **pitch**, **loop points** inside
-a clip, and **DSP on a bus**. Each is declared through `AudioCapability` and
+Three features cannot be expressed by every mixer: per-play **pitch**, **loop
+points** inside a clip, and **DSP on a bus**. `PygameAudioSystem`, the default,
+expresses none of them; `NativeAudioSystem` expresses the first two. Each is
+declared through `AudioCapability` and
 declined by **raising** `UnsupportedAudioCapability`, so a request a backend
 cannot honour fails where it was made.
 
@@ -51,11 +95,11 @@ speed would report success for a sound that is wrong, with nothing for the
 caller to check; this is the same reasoning that made `ShapeType.SEGMENT`
 raise instead of returning `None`.
 
-| Capability | What it adds | `PygameAudioSystem` |
-| --- | --- | --- |
-| `PITCH` | `pitch=` on either `play_sfx` | no — the mixer resamples at load and plays at its own rate |
-| `LOOP_POINTS` | `loop_start=` / `loop_end=` | no — `Channel.play` takes a loop *count* and nothing else |
-| `BUS_EFFECTS` | `set_bus_effects(bus, [...])` | no — a channel's only processing is a left/right gain pair |
+| Capability | What it adds | `PygameAudioSystem` | `NativeAudioSystem` |
+| --- | --- | --- | --- |
+| `PITCH` | `pitch=` on either `play_sfx` | no — the mixer resamples at load and plays at its own rate | yes |
+| `LOOP_POINTS` | `loop_start=` / `loop_end=` | no — `Channel.play` takes a loop *count* and nothing else | yes |
+| `BUS_EFFECTS` | `set_bus_effects(bus, [...])` | no — a channel's only processing is a left/right gain pair | no — needs the device, see below |
 
 **Loop points from a `.meta` sidecar warn instead of raising.** `AudioMeta`
 carries `loop_start` / `loop_end`, and those are the asset describing itself

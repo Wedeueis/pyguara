@@ -80,7 +80,9 @@ in for.
 stay. They are not dead code:
 
 - `PYGUARA_NO_NATIVE=1` is the first thing to try when a bug might be the
-  accelerator's, and what the parity suites use.
+  accelerator's, and what the parity suites use. It does not reach the native
+  audio backend, which has no Python counterpart:
+  `PYGUARA_AUDIO_BACKEND=pygame` is the equivalent there (ADR 0004, Decision 4).
 - `native_acceleration = "off"` is a supported setting, and `SpatialHash`
   has a documented access pattern where Python is **faster** (ADR 0004,
   Decision 7).

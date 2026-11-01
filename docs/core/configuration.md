@@ -311,6 +311,7 @@ launch scripts and CI jobs set them:
 | --- | --- |
 | `PYGUARA_LOG_LEVEL` | `debug.log_level` — a name, e.g. `DEBUG` |
 | `PYGUARA_BACKEND` | `display.backend` — `pygame` or `moderngl` |
+| `PYGUARA_AUDIO_BACKEND` | `audio.backend` — `pygame` or `native` |
 | `PYGUARA_WINDOW_WIDTH` | `display.screen_width` |
 | `PYGUARA_WINDOW_HEIGHT` | `display.screen_height` |
 

@@ -133,6 +133,14 @@ class IAudioSystem(Protocol):
         """
         ...
 
+    def update(self) -> None:
+        """Advance whatever needs attention between plays. Called once a frame.
+
+        A backend that queues audio ahead, as loop points do, tops the queue up
+        here. Most have nothing to do.
+        """
+        ...
+
     def stop_sfx(self, sound: SoundHandle) -> None:
         """
         Stop one playing sound.

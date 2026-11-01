@@ -794,6 +794,8 @@ class Application:
         # Update coroutines (scripted sequences)
         self._coroutine_manager.update(dt)
 
+        self._audio_system.update()
+
         # Variable-rate scene update (animations, camera, etc.)
         self._scene_manager.update(dt)
 

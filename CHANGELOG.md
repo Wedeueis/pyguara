@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **A second audio backend, with pitch and loop points** (W28b, #357). `AudioConfig.backend = "native"` (or `PYGUARA_AUDIO_BACKEND=native`) selects `NativeAudioSystem`, which decodes with `symphonia` and resamples in Rust, then plays through the existing `pygame.mixer` output, so it reports `PITCH | LOOP_POINTS` and still declines `BUS_EFFECTS`. **The default stays `pygame`.** Pitch is resampling, so it changes duration, and it is quantised to 1% with a 32 MB cache: a first play costs 0.79 ms per second of audio and a later one 0.5 us. **`PYGUARA_NO_NATIVE=1` no longer means "no native code runs"**: ADR 0004 Decision 4 is amended so that switch governs stores rather than backends, and `PYGUARA_AUDIO_BACKEND=pygame` is the equivalent for audio. `IAudioSystem` gains `update()`, called once a frame. Wheels now distribute `symphonia`, which is MPL-2.0.
+
 ## [0.6.0] - 2026-11-01
 
 The audit remediation tracked in #305, reconciled with the Rust core RFC. Three things to know before upgrading: **a source build now needs a Rust toolchain**, because the wheel ships the native accelerator (an install from a wheel does not); **a playing sound is a `SoundHandle`, not a channel number**; and **`pyguara.editor` is now part of `pyguara.studio`**. Every breaking change is marked below.

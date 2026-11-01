@@ -10,7 +10,7 @@ from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.manager import AudioManager
 from pyguara.config.manager import ConfigManager
-from pyguara.config.types import GameConfig, RenderingBackend
+from pyguara.config.types import AudioBackend, GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
@@ -32,6 +32,7 @@ from pyguara.physics.collision_system import CollisionSystem
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.prefabs.loader import PrefabCache, PrefabLoader
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
+from pyguara.resources.loader import IResourceLoader
 from pyguara.resources.loaders.blob_loader import BlobLoader, TextLoader
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
@@ -446,7 +447,20 @@ def _setup_container(
     container.register_instance(CoroutineManager, coroutine_manager)
 
     # 6. Audio System
-    audio_system = PygameAudioSystem()
+    # By `AudioConfig.backend`, not `native_acceleration`: see ADR 0004,
+    # Decision 4. Imported here because only this path may need the extension.
+    native_audio = config_manager.config.audio.backend is AudioBackend.NATIVE
+    audio_system: IAudioSystem
+    sound_loader: IResourceLoader
+    if native_audio:
+        from pyguara.audio.backends.native.loaders import NativeSoundLoader
+        from pyguara.audio.backends.native.native_audio import NativeAudioSystem
+
+        audio_system = NativeAudioSystem()
+        sound_loader = NativeSoundLoader()
+    else:
+        audio_system = PygameAudioSystem()
+        sound_loader = PygameSoundLoader()
     container.register_instance(IAudioSystem, audio_system)  # type: ignore[type-abstract]
     container.register_singleton(AudioManager, AudioManager)
 
@@ -457,7 +471,7 @@ def _setup_container(
     # a backend, which is why they can be registered for every one.
     res_manager.register_loader(TextLoader())
     res_manager.register_loader(BlobLoader())
-    res_manager.register_loader(PygameSoundLoader())  # Register audio loader
+    res_manager.register_loader(sound_loader)
 
     # Register appropriate texture loader based on backend. Headless registers
     # none: nothing exercises image loading under it today, and the real
