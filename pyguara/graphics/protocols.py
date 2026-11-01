@@ -621,7 +621,10 @@ class UIRenderer(Protocol):
         the implementations log it.
 
         Args:
-            texture: The engine specific texture object (e.g. pygame.Surface)
+            texture: A `resources.Texture`, as `ResourceManager.load` returns,
+                or a backend surface. Anything else draws nothing and logs
+                once. On ModernGL the first draw of a texture reads it back
+                from the GPU, which is one slow draw per texture.
             rect: Where to draw it
             color: Optional tint color
             source_rect: The region of `texture` to draw, in texture

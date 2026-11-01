@@ -370,3 +370,38 @@ def test_both_spark_stores_rasterise_the_same_frame(gl_ctx: Any, streak: bool) -
         f"the two stores rasterised different frames (max channel difference "
         f"{difference.max()})"
     )
+
+
+def test_a_ui_draws_a_gpu_texture_the_right_way_up(gl_ctx: Any, tmp_path: Any) -> None:
+    """The real round trip: file to GPU to the UI's surface (#363).
+
+    The texture has to come back with its top row first and its channels in
+    order, or a read-back UI would be upside down or have red and blue swapped.
+    """
+    import pygame
+
+    from pyguara.common.types import Rect
+    from pyguara.graphics.backends.moderngl.loaders import GLTextureLoader
+    from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
+
+    pygame.init()
+    pygame.display.set_mode((1, 1))
+    red, blue = (255, 0, 0, 255), (0, 0, 255, 255)
+    source = pygame.Surface((4, 6), pygame.SRCALPHA)
+    source.fill(red, pygame.Rect(0, 0, 4, 3))
+    source.fill(blue, pygame.Rect(0, 3, 4, 3))
+    path = tmp_path / "plate.png"
+    pygame.image.save(source, str(path))
+    texture = GLTextureLoader(gl_ctx).load(str(path))
+
+    target = pygame.Surface((4, 6), pygame.SRCALPHA)
+    renderer = GLUIRenderer.__new__(GLUIRenderer)
+    renderer._surface = target  # type: ignore[attr-defined]
+    renderer._dirty = False  # type: ignore[attr-defined]
+
+    renderer.draw_texture(texture, Rect(0, 0, 4, 6))
+
+    assert tuple(target.get_at((1, 1))) == red
+    assert tuple(target.get_at((1, 4))) == blue
+    assert renderer._dirty  # type: ignore[attr-defined]
+    texture.release()

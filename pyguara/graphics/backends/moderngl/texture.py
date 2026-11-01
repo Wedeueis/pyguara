@@ -1,5 +1,7 @@
 """ModernGL texture implementation."""
 
+import pygame
+
 import moderngl
 from pyguara.resources.types import Texture
 
@@ -32,6 +34,7 @@ class GLTexture(Texture):
         self._width = tex_width
         self._height = tex_height
         self._released = False
+        self._surface: pygame.Surface | None = None
 
     @property
     def width(self) -> int:
@@ -51,6 +54,34 @@ class GLTexture(Texture):
         """
         return self._texture
 
+    @property
+    def size_bytes(self) -> int:
+        """Estimated memory, including the CPU copy if a UI asked for one."""
+        copies = 1 if self._surface is None else 2
+        return super().size_bytes * copies
+
+    def read_surface(self) -> pygame.Surface:
+        """Return the texture's pixels as a surface a UI renderer can blit.
+
+        Every UI backend rasterises on the CPU, so a UI cannot sample a texture
+        that lives on the GPU. Read back on first use and kept, so a texture the
+        UI never touches costs nothing and one it does costs one slow draw
+        rather than one per frame. Must run on the thread owning the context,
+        which a UI draw does.
+
+        Rows come back in the order they went up, which is top-down: see
+        `GLTextureLoader.load_with_meta`.
+
+        Returns:
+            An RGBA surface the size of the texture.
+        """
+        if self._surface is None:
+            data = self._texture.read(alignment=1)
+            self._surface = pygame.image.frombytes(
+                data, (self._width, self._height), "RGBA"
+            )
+        return self._surface
+
     def release(self) -> None:
         """Release the GPU texture, freeing its VRAM.
 
@@ -63,6 +94,7 @@ class GLTexture(Texture):
         if self._released:
             return
         self._released = True
+        self._surface = None
         if self._texture is not None:
             self._texture.release()
 

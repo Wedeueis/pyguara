@@ -20,7 +20,7 @@ from pyguara.graphics.backends.surface_blending import (
     blit_blended_polygon,
     blit_blended_rect,
 )
-from pyguara.graphics.backends.surface_texture import blit_texture
+from pyguara.graphics.backends.surface_texture import as_surface, blit_texture
 from pyguara.log import get_logger
 
 # Shader source for UI overlay
@@ -260,12 +260,13 @@ class GLUIRenderer:
         something actually landed on it, so a draw that fell entirely
         outside its texture does not cost this backend a full re-upload.
         """
-        if not isinstance(texture, pygame.Surface):
+        surface = as_surface(texture)
+        if surface is None:
             return
 
         if blit_texture(
             self._surface,
-            texture,
+            surface,
             rect,
             self._to_pygame_color(color)[0:3] if color else None,
             source_rect,

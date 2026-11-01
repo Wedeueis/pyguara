@@ -18,6 +18,8 @@ halves answering the same way.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pygame
 
 from pyguara.common.types import Rect
@@ -28,6 +30,49 @@ logger = get_logger(__name__)
 RGB = tuple[int, int, int]
 
 _warned_out_of_bounds = False
+_warned_unusable: set[str] = set()
+
+
+def as_surface(texture: Any) -> pygame.Surface | None:
+    """Return the surface a UI renderer can blit for `texture`.
+
+    A UI draws onto a CPU surface on every backend, so it can only draw from
+    one. A bare surface passes straight through, and a `resources.Texture`, which
+    is what `ResourceManager.load` hands back, is unwrapped by asking it:
+    `PygameTexture` already holds a surface, and `GLTexture.read_surface()` reads
+    its pixels back from the GPU the first time and keeps them.
+
+    Anything else draws nothing, **and says so once**. This used to be a silent
+    `return`, so a widget handed the wrong thing was an empty rectangle with no
+    clue why.
+
+    Args:
+        texture: A surface, a `resources.Texture`, or something unusable.
+
+    Returns:
+        The surface, or None if `texture` cannot provide one.
+    """
+    if isinstance(texture, pygame.Surface):
+        return texture
+
+    handle = getattr(texture, "native_handle", None)
+    if isinstance(handle, pygame.Surface):
+        return handle
+
+    read_surface = getattr(texture, "read_surface", None)
+    if callable(read_surface):
+        surface: pygame.Surface = read_surface()
+        return surface
+
+    kind = type(texture).__name__
+    if kind not in _warned_unusable:
+        _warned_unusable.add(kind)
+        logger.warning(
+            "A UI renderer cannot draw a %s: it needs a pygame.Surface or a "
+            "resources.Texture. Drawing nothing.",
+            kind,
+        )
+    return None
 
 
 def blit_texture(

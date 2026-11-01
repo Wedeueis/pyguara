@@ -12,7 +12,7 @@ from pyguara.graphics.backends.surface_blending import (
     blit_blended_polygon,
     blit_blended_rect,
 )
-from pyguara.graphics.backends.surface_texture import blit_texture
+from pyguara.graphics.backends.surface_texture import as_surface, blit_texture
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -131,12 +131,13 @@ class PygameUIRenderer:
         identical, and a source region that worked on one backend and not
         the other would be worse than none at all.
         """
-        if not isinstance(texture, pygame.Surface):
+        surface = as_surface(texture)
+        if surface is None:
             return
 
         blit_texture(
             self._surface,
-            texture,
+            surface,
             rect,
             self._to_pygame_color(color)[0:3] if color else None,
             source_rect,
