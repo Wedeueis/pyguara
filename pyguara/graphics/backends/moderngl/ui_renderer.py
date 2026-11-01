@@ -278,6 +278,17 @@ class GLUIRenderer:
         txt_size = font.size(text)
         return (txt_size[0], txt_size[1])
 
+    def get_line_height(self, size: int) -> int:
+        """Return the font's own line advance, leading included.
+
+        Args:
+            size: The font size.
+
+        Returns:
+            The step between consecutive baselines, in pixels.
+        """
+        return int(self._get_font(size).get_linesize())
+
     def push_clip(self, rect: Rect) -> None:
         """Restrict drawing to `rect`, intersected with any active clip.
 

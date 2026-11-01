@@ -633,6 +633,20 @@ class UIRenderer(Protocol):
         """Calculate dimensions of text."""
         ...
 
+    def get_line_height(self, size: int) -> int:
+        """Return the step between the baselines of consecutive lines.
+
+        Not the same as `get_text_size`'s height, which is how tall one line
+        is: this adds the leading the font itself asks for.
+
+        Args:
+            size: The font size.
+
+        Returns:
+            The line advance in pixels.
+        """
+        ...
+
     def push_clip(self, rect: Rect) -> None:
         """Restrict subsequent drawing to `rect`, in screen coordinates.
 
