@@ -1,0 +1,34 @@
+<!-- @dsCard group="Components" viewport="700x260" name="Inputs — Checkbox, Slider, TextInput" subtitle="Options screens and editor inspector fields" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Inputs<\/title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"><\/script>
+<script src="../../_ds_bundle.js"><\/script>
+<style>html,body{margin:0}body{background:var(--surface-page);color:var(--text-body);font-family:var(--font-body);padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:16px}.col{display:flex;flex-direction:column;gap:10px}.cap{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}<\/style><\/head><body><div id="root"><\/div>
+<script type="text/babel">
+const { Checkbox, Slider, TextInput, Label } = window.PyguaraDesignSystem_ca79d7;
+const Card = () => {
+  const [a,setA]=React.useState(true), [b,setB]=React.useState(false);
+  const [v,setV]=React.useState(0.65), [w,setW]=React.useState(0.3);
+  const [t,setT]=React.useState('guara_player'), [u,setU]=React.useState('');
+  return (<div className="col" style={{gap:16}}>
+    <div><div className="cap">Checkbox — 20px box, 10px mark<\/div><div className="row" style={{marginTop:8,gap:24}}>
+      <Checkbox label="Fullscreen" checked={a} onChange={setA} />
+      <Checkbox label="V-Sync" checked={b} onChange={setB} />
+      <Checkbox label="Show colliders" checked disabled />
+    <\/div><\/div>
+    <div><div className="cap">Slider — 2px track, round knob<\/div><div className="row" style={{marginTop:8,gap:24}}>
+      <Slider value={v} onChange={setV} showValue />
+      <Slider value={w} onChange={setW} step={0.1} width={110} showValue />
+      <Slider value={0.5} disabled width={80} />
+    <\/div><\/div>
+    <div><div className="cap">TextInput — 200×30, active border<\/div><div className="row" style={{marginTop:8,gap:16}}>
+      <TextInput value={t} onChange={setT} />
+      <TextInput value={u} onChange={setU} placeholder="entity tag" active />
+      <TextInput value="res://levels/roca_01.json" mono width={230} disabled />
+    <\/div><\/div>
+  <\/div>);
+};
+ReactDOM.createRoot(document.getElementById('root')).render(<Card />);
+<\/script><\/body><\/html>

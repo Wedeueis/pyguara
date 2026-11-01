@@ -1,0 +1,2501 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Pyguara Design System - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pyguara-design-system" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Pyguara Design System
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#sources-this-system-was-built-from" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sources this system was built from
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#content-fundamentals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Content fundamentals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#visual-foundations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visual foundations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Visual foundations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#colour" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Colour
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Type
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#spacing-and-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spacing and layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backgrounds-and-imagery" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backgrounds and imagery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#borders-corners-depth" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Borders, corners, depth
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cards-and-panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cards and panels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#states" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        States
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#motion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Motion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#transparency-and-blur" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transparency and blur
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#iconography" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Iconography
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Index
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#caveats-please-read" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Caveats — please read
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="pyguara-design-system">Pyguara Design System</h1>
+<p>A design system for <strong>Pyguara</strong> — an open-source, data-driven 2D game engine written in Python on
+top of pygame and pymunk — and for <strong>Guará &amp; Falcão: A Platformer Adventure</strong>, the pixel-art
+platformer built with it.</p>
+<p>Two products, one visual language:</p>
+<table>
+<thead>
+<tr>
+<th>Product</th>
+<th>What it is</th>
+<th>Surface</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Pyguara Engine</strong></td>
+<td>ECS, data-driven, event-driven 2D engine. Ships a DI container, physics, scene serialization, hot reload, an ImGui editor and an F-key developer tool suite.</td>
+<td><code>ui_kits/editor/</code>, <code>ui_kits/docs/</code></td>
+</tr>
+<tr>
+<td><strong>Guará &amp; Falcão</strong></td>
+<td>A platformer set in the Brazilian Cerrado. A maned wolf (<em>lobo-guará</em>) runs; a falcon rides on his back. Beneath the tableland, old machinery is still turning — greened over, repaired, kept alive.</td>
+<td><code>ui_kits/game/</code>, <code>ui_kits/site/</code>, <code>ui_kits/store/</code></td>
+</tr>
+</tbody>
+</table>
+<p>The engine is generic and knows nothing about the game. The game supplies the warmth; the engine
+supplies the structure. Both halves show up in the palette — Cerrado ochres and Guará red against
+sage and colonial green.</p>
+<hr />
+<h2 id="sources-this-system-was-built-from">Sources this system was built from</h2>
+<p>Read these directly if you have access — they are the ground truth, and this document is a
+lossy summary of them.</p>
+<ul>
+<li><strong>Codebase</strong> — the <code>pyguara</code> Python package, attached as a local folder. Everything in
+  <code>tokens/</code> and <code>components/</code> was lifted from it, chiefly:</li>
+<li><code>pyguara/ui/types.py</code> — <code>ColorScheme</code>, <code>SpacingScheme</code>, <code>FontScheme</code>, <code>BorderScheme</code>,
+    <code>ShadowScheme</code>, <code>UIElementState</code>, <code>UIAnchor</code>, <code>LayoutDirection</code>, <code>LayoutAlignment</code>, <code>UIEventType</code></li>
+<li><code>pyguara/ui/theme.py</code>, <code>pyguara/ui/theme_presets.py</code> — the theme model and its six presets</li>
+<li><code>pyguara/ui/components/*.py</code> — the component inventory and every fixed pixel dimension</li>
+<li><code>pyguara/ui/layout.py</code> — <code>BoxContainer</code></li>
+<li><code>pyguara/studio/layer.py</code>, <code>pyguara/studio/panels/*.py</code> — the editor</li>
+<li><code>pyguara/tools/*.py</code> — the developer tool overlays</li>
+<li><code>pyguara/common/palette.py</code> — <code>BasicColors</code>, <code>DebugColors</code></li>
+<li><code>pyguara/graphics/ninepatch.py</code> — scalable UI frame metrics</li>
+<li><strong>GitHub repository</strong> — <a href="https://github.com/Wedeueis/pyguara">https://github.com/Wedeueis/pyguara</a>. The user named this repo as the
+  source. It was <strong>not</strong> read over the network (GitHub was not connected in this session); the
+  attached local folder was read instead. Explore the repository yourself to do a better job of
+  building designs against this product — the Python source is far richer than this summary.</li>
+<li><strong>Art (current)</strong> — <code>uploads/Gemini_Generated_Image_5sk5055sk5055sk5.png</code>, the solarpunk key art:
+  amber sky, carved Art Nouveau sign lockup, Guará with pack and Falcão riding, solar leaf panels,
+  water spouts and basins, plank platforms, fruit, floating soil. <strong>This is the ground truth for
+  colour and style</strong> and it supersedes the earlier sheet. Cropped into <code>assets/art/</code>.</li>
+<li><strong>Art (superseded)</strong> — <code>uploads/pyguara_platformer_spritesheet.jpg</code>, the earlier pixel sheet with
+  oxidised-metal menu plates and gears. Only <code>keycaps.png</code> is still used from it; the rest of
+  <code>assets/sprites/</code> is legacy and should not be used in new work.</li>
+<li><code>uploads/pyguara_mascot.png</code> (the flat mascot mark).</li>
+</ul>
+<p>No Figma file, no slide deck and no marketing material were provided.</p>
+<hr />
+<h2 id="content-fundamentals">Content fundamentals</h2>
+<p>The engine's own voice is the only written voice the sources contain, and it is unusually
+consistent — every module has a docstring and every docstring follows the same shape.</p>
+<p><strong>Voice: a précis, then the mechanism.</strong> One declarative sentence saying what the thing is, then
+how it behaves. No preamble, no benefit claims.</p>
+<blockquote>
+<p><code>"""Visualizes progress 0.0 to 1.0."""</code>
+<code>"""Clickable button with state styling."""</code>
+<code>"""Horizontal bar typically at the top of a screen. Combines a Panel background with a horizontal layout."""</code>
+<code>"""A generic container for custom drawing. Useful for mini-maps, model previews, or custom graphs."""</code></p>
+</blockquote>
+<p><strong>Rules observed in the source:</strong></p>
+<ul>
+<li><strong>Sentence case throughout.</strong> Headings, labels, docstrings. The only uppercase is in constants
+  (<code>DARK</code>, <code>COLLIDER_ACTIVE</code>) and in pixel-art UI, where Silkscreen and Press Start 2P read better
+  in caps — so buttons render <code>PLAY</code>, <code>OPTIONS</code>, <code>QUIT</code> while their source text is <code>"Play"</code>.</li>
+<li><strong>Second person for instructions, none for descriptions.</strong> <code>"Retrieve the current active theme."</code>
+  describes; <code>"To customize, clone and modify"</code> instructs. First person never appears.</li>
+<li><strong>Imperative mood for actions.</strong> <code>Save to Source Asset</code>, <code>Spawn into Scene</code>, <code>Save to Disk</code>,
+  <code>Press F8 to Close</code>. Never <em>"Click here to…"</em>.</li>
+<li><strong>No emoji anywhere.</strong> Not in code, comments, panel titles or labels. Do not introduce them.</li>
+<li><strong>No exclamation marks.</strong> The engine never raises its voice; neither should product copy.</li>
+<li><strong>Numbers are exact and typed.</strong> <code>0.0 to 1.0</code>, <code>12 / 16 / 24 / 32</code>, <code>mass: 12.0</code>. Floats keep
+  their decimal. Never <em>"about"</em>, never rounded for tidiness.</li>
+<li><strong>Uncertainty is stated, not hidden.</strong> The source says
+  <code>"This tool is not complete"</code>, <code>"Manual editing not supported for this type."</code>,
+  <code>"# In a real engine, you might blend colors here."</code> Copy the honesty: an empty or unfinished
+  state says so plainly.</li>
+<li><strong>Names are Portuguese, prose is English.</strong> <code>guará</code>, <code>falcão</code>, <code>roça</code>, <code>cerrado</code>, <code>coletáveis</code>
+  keep their diacritics and are never translated or italicised. Surrounding sentences are English
+  (the user chose English for this system). Entity ids and tags are <code>snake_case</code> ASCII:
+  <code>guara_player</code>, <code>roca_platform_03</code>, <code>fruit_pickup_07</code>.</li>
+<li><strong>Game copy is terse and physical.</strong> Describe what the player's body does, not how they will
+  feel. <em>"Guará cannot double-jump. Momentum is the whole puzzle."</em> — not <em>"an exhilarating
+  journey of discovery"</em>.</li>
+<li><strong>Developer-facing copy stays un-branded.</strong> The F-key panel says <code>Developer Tools</code>,
+  <code>Performance Monitor</code>, <code>Physics Debugger</code>. Tools are named for what they do.</li>
+</ul>
+<p><strong>Vibe:</strong> late light on the tableland, and something still working in it. Warm, dry, worn-in,
+tended. The register is <strong>sober optimism</strong> — closer to the <em>Dear Alice</em> world (labour, growth,
+craft, no irony) than to either apocalyptic grey or slogan-bright activism. Ornament, where it
+appears, is <strong>Art Nouveau in its logic</strong>: the curve follows the structure it grows on, and never
+decorates for its own sake. Nothing here is a ruin, and nothing here is a utopia poster. Precise
+without being cold. It should read like something made by one person who cares about frame timing.</p>
+<hr />
+<h2 id="visual-foundations">Visual foundations</h2>
+<h3 id="colour">Colour</h3>
+<p>Warm-dominant, and deliberately <strong>grey-free</strong> — the light ramp is the art's amber sky and cream
+haze (<code>--sand-100</code> … <code>--rock-600</code>), so even "neutral" surfaces are warm. Two cool families
+exist and are rationed: Falcão slate blues for informational states, and sage / colonial green
+(<code>--sage-100</code> … <code>--colonial-700</code>) for structure, chrome and menu plates. Green here reads as
+cultivation and upkeep, never as corrosion — there is no rust or metal family in the system. Sky blue is the only bright cool colour and appears almost exclusively as
+world background, never as UI chrome.</p>
+<ul>
+<li><strong>Primary</strong> is Guará pelt orange <code>#e2621f</code> — one primary action per screen.</li>
+<li><strong>Roxo is the dark theme's ground.</strong> Cerrado Dusk is tinted with ipê-roxo purple
+  (<code>--roxo-300</code> … <code>--roxo-900</code>), not neutral brown — dusk here is the hour after the amber one.
+  <code>--accent-roxo</code> and <code>--selected-tint</code> carry it into UI; <code>--state-info</code> is roxo, not slate.</li>
+<li><strong>The sky is amber, not blue.</strong> <code>--sky-300/400/500</code> are late light. The only cool-bright family
+  is water and leaf-glass (<code>--water-300</code> … <code>--glass-500</code>) — spouts, basins, solar panels, numerics.</li>
+<li><strong>Secondary</strong> is ochre <code>#c98a3c</code> — supporting actions, fills, focus.</li>
+<li><strong>Outlines are never pure black.</strong> Pixel art uses <code>--ink-900</code> <code>#181818</code> through <code>--ink-600</code>.</li>
+<li><strong>Debug colours are the exception and stay garish</strong> — pure green, magenta, cyan, straight from
+  <code>pyguara/common/palette.py</code>. They are meant to be unmistakable, not pretty. Never re-tint them.</li>
+</ul>
+<p>Two themes: <strong>Cerrado Dusk</strong> (<code>:root</code>, default — the editor opens here; roxo-tinted ground) and
+<strong>Cerrado Day</strong> (<code>[data-theme="light"]</code> — docs and light editor; the amber hour). A third scope,
+<code>[data-theme="game"]</code>, is the in-world HUD and is always dark because it sits over a bright sky.
+Separately, <code>[data-engine-theme="dark|light|high-contrast|cyberpunk|forest|retro"]</code> reproduces the
+six themes that ship inside the engine, transcribed exactly.</p>
+<h3 id="type">Type</h3>
+<p>Four families, each with one job. <strong>All four are substitutions</strong> — see the caveat at the end.</p>
+<table>
+<thead>
+<tr>
+<th>Token</th>
+<th>Family</th>
+<th>Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--font-display</code></td>
+<td>Press Start 2P</td>
+<td>Short titles only. Never a run of text.</td>
+</tr>
+<tr>
+<td><code>--font-pixel</code></td>
+<td>Silkscreen</td>
+<td>Every button, label, HUD string, panel title.</td>
+</tr>
+<tr>
+<td><code>--font-body</code></td>
+<td>Pixelify Sans</td>
+<td>Prose on docs, site and store.</td>
+</tr>
+<tr>
+<td><code>--font-mono</code></td>
+<td>JetBrains Mono</td>
+<td>Code, resource paths, ids, numeric readouts.</td>
+</tr>
+</tbody>
+</table>
+<p>The engine ships exactly four sizes — 12 / 16 / 24 / 32 — and they are load-bearing: the runtime
+draws at those sizes, so HUD and editor text must match. A wider scale
+(<code>--fs-100</code> … <code>--fs-900</code>) exists only for the web surfaces, where the engine's four-step ladder is
+too coarse for prose. Body prose runs 18px / 1.6 at a 60–68ch measure with <code>text-wrap: pretty</code>.</p>
+<h3 id="spacing-and-layout">Spacing and layout</h3>
+<p>The engine's <code>SpacingScheme</code> defaults — padding 8, margin 4, gap 8 — are the origin of the 4px
+scale in <code>tokens/spacing.css</code>. This is <strong>not</strong> an 8pt grid; 12 and 20 are real steps.</p>
+<p>Component geometry is fixed by the Python source and must be copied exactly, never snapped:
+Button 120×40, Checkbox box 20 with a 10px mark, Slider 150×20 with an r8 knob, TextInput 200×30
+with 5px text padding, ProgressBar 200×20, NavBar height 50 with gap 10, <code>BoxContainer</code> spacing 5,
+world tile 32×32.</p>
+<p>The engine has <strong>no grid and no flex-grow model</strong> — <code>BoxContainer</code> stacks children linearly and
+unconditionally centres them on the cross axis. Nest containers instead of reaching for a grid.
+Editor panels are fixed-width rails around a fluid viewport; HUD elements are absolutely
+positioned to screen corners.</p>
+<h3 id="backgrounds-and-imagery">Backgrounds and imagery</h3>
+<p>Full-bleed raster pixel art, always. The parallax Cerrado plate — sky gradient, blue distance
+mesas, tableland, foreground trees — is the backdrop for every game screen and the site hero.
+No gradients as decoration, no generated textures, no illustration drawn in CSS or SVG. Where a
+screen needs depth, a dark scrim (<code>--surface-scrim</code>) or a vertical
+<code>rgba(27,21,18,.55) → rgba(27,21,18,.9)</code> protection gradient sits between the art and the text —
+never a blurred capsule, and never alpha-reduced type.</p>
+<p>Imagery is <strong>warm, high-chroma, heavy-outlined, no grain</strong>. The current art in <code>assets/art/</code> is
+smooth cartoon-vector work with thick ink outlines — it renders with <code>image-rendering: auto</code> and
+scales freely. <code>image-rendering: pixelated</code> and whole-multiple scaling now apply <strong>only</strong> to the
+legacy <code>assets/sprites/</code> crops (in practice: <code>keycaps.png</code>).</p>
+<h3 id="borders-corners-depth">Borders, corners, depth</h3>
+<ul>
+<li><strong>Radius is 0 almost everywhere in UI</strong>, even though the art is full of Art Nouveau curves. The
+  curve lives in the illustration and in carved wood — the chrome stays square, which is what keeps
+  the ornament from turning decorative. The engine's dark preset
+  is radius 0; only its light preset uses 4, and <code>--radius-2</code> exists for that light-theme case.
+  The single round thing in the system is the Slider knob, because the engine calls <code>draw_circle</code>.</li>
+<li>Border widths are 1 (hairline, inside panels), 2 (framed panels and all buttons — the Python
+  Button always draws a 2px border) and 3 (chunky, dialogs and high-contrast).</li>
+<li><strong>Depth is bevel, not blur.</strong> <code>--shadow-bevel</code> puts a light inset on the top edge and a dark
+  inset on the bottom — the pressed-plate look from the sprite sheet. Drop shadows are hard
+  offsets with <strong>zero blur</strong> (<code>--shadow-stamp</code> 2px, <code>--shadow-stamp-lg</code> 4px), matching the engine's
+  retro preset (offset 4/4, blur 0). Blur appears only in <code>--surface-overlay</code> backdrop filters on
+  web surfaces.</li>
+</ul>
+<h3 id="cards-and-panels">Cards and panels</h3>
+<p>A card is a <code>Panel</code>: flat ochre-dark fill, 1px or 2px <code>--edge-strong</code> border, square corners, no
+outer shadow unless it floats above content (then <code>--shadow-stamp</code>). Optional <code>bevel</code> for the
+in-world look. Panel headers are a 26px bar in <code>--surface-raised</code> with a 12px pixel-font title and
+a bottom hairline — lifted straight from the editor's ImGui windows.</p>
+<h3 id="states">States</h3>
+<p>Taken from <code>UIElementState</code> and the Python <code>Button.render</code>:</p>
+<ul>
+<li><strong>Hover</strong> — the fill <em>changes colour</em>, it does not lighten or fade. The engine swaps
+  <code>primary</code> → <code>secondary</code>. Overlays exist (<code>--theme-hover-overlay</code>, white at 12% dark / black at
+  8% light) for ghost surfaces only. 120ms.</li>
+<li><strong>Press</strong> — a darker fill, a 1px downward translate, and the bevel collapses to a bottom inset.
+  No scale transform. 60ms.</li>
+<li><strong>Focused</strong> — the <em>border</em> switches to secondary; a <code>--shadow-glow-focus</code> ring for keyboard and
+  gamepad navigation. This is a distinct engine state, not a synonym for hover.</li>
+<li><strong>Disabled</strong> — fill drops to <code>--action-disabled</code>, text to <code>--text-on-disabled</code>, bevel off.
+  The engine's <code>Widget.get_state_color</code> halves each channel; the tokens encode the result.</li>
+<li><strong>Selected</strong> (hierarchy rows, gallery thumbs) — a secondary-coloured border plus the hover
+  overlay, never a filled highlight bar.</li>
+</ul>
+<h3 id="motion">Motion</h3>
+<p>Short, stepped and few. Sprite animation runs at 12 fps (<code>--anim-sprite-fps</code>) — every frame is
+hand-drawn, nothing is tweened. UI transitions: 60ms press, 120ms hover, 200ms panels, 320ms
+overlays, 500ms scene fades. Default curve is <code>--ease-out-quad</code>; <code>--ease-out-back</code> overshoots for
+pickups and rewards; <code>--ease-steps</code> (<code>steps(4,end)</code>) is for anything that should read as a sprite
+tick rather than a slide. The engine ships a real easing library
+(<code>pyguara/animation/easing.py</code>) and a tween system — prefer naming a curve over inventing one.
+Nothing bounces. Nothing loops in UI chrome.</p>
+<h3 id="transparency-and-blur">Transparency and blur</h3>
+<p>Used sparingly and for one of three reasons: <strong>legibility</strong> (HUD panels at
+<code>rgba(27,21,18,.82)</code> so the world stays visible), <strong>modality</strong> (<code>--surface-scrim</code> behind pause and
+options), or <strong>sticky chrome</strong> (<code>--surface-overlay</code> + a 6px backdrop blur on web headers only).
+Never on text, never on borders, never decoratively. Debug overlays are semi-transparent by
+design so you can see the game behind them.</p>
+<hr />
+<h2 id="iconography">Iconography</h2>
+<p><strong>There is no icon font, no icon component and no SVG icon set in the source — and none has been
+invented here.</strong> The sprite sheet <em>is</em> the icon library. Icons are game sprites, copied into
+<code>assets/sprites/</code> and rendered through <code>Image</code>:</p>
+<ul>
+<li><strong>Collectibles</strong> — <code>items-collectibles.png</code> (green and gold Cerrado fruit) stand in for currency,
+  score and reward.</li>
+<li><strong>Mechanism</strong> — <code>prop-solar-leaf-panel.png</code> (and <code>prop-water-basin.png</code>) mark systems, settings
+  and power. Solar and water, tended — no gears, no rust.</li>
+<li><strong>Input prompts</strong> — <code>keycaps.png</code> (arrow keys, <code>A</code>, <code>+</code>) is the only "UI glyph" set that exists.
+  Use it for control hints instead of drawing key icons.</li>
+<li><strong>Characters</strong> — <code>hero-guara.png</code> and <code>sprite-falcao.png</code> act as avatars in HUD and cards.</li>
+<li><strong>Menu plates</strong> — there is no plate art in the current key art; the CSS <code>wood</code> and <code>sage</code> Button
+  variants stand in for it, carrying the art's oiled-wood and colonial-green fills.</li>
+</ul>
+<p>Where a small affordance is genuinely needed and no sprite exists, the source's own solution is a
+<strong>unicode geometric character</strong> in the pixel font, and that is what the components use:
+<code>▸ ▾</code> for collapsing headers (matching ImGui's tree nodes), <code>▪ ▫</code> for tagged vs untagged entities,
+<code>×</code> to close, <code>✓</code> for enabled tools, <code>←</code> <code>→</code> for pager links. No emoji. No line-icon library.</p>
+<p><strong>If you need an icon that does not exist:</strong> ask for the sprite. Do not link Lucide, Heroicons or
+any line-icon set — a 1.5px-stroke vector icon is visually incompatible with 12fps pixel art and
+would be the most obvious wrong note in the whole system.</p>
+<hr />
+<h2 id="index">Index</h2>
+<p><strong>Root</strong></p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>readme.md</code></td>
+<td>This document — the design guide and manifest.</td>
+</tr>
+<tr>
+<td><code>SKILL.md</code></td>
+<td>Agent Skill front matter, for use in Claude Code.</td>
+</tr>
+<tr>
+<td><code>styles.css</code></td>
+<td>The only stylesheet consumers link. <code>@import</code> lines only.</td>
+</tr>
+<tr>
+<td><code>thumbnail.html</code></td>
+<td>Homepage tile for this design system.</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>tokens/</code></strong> — <code>fonts.css</code>, <code>palette.css</code> (raw brand ramps + engine debug colours),
+<code>typography.css</code>, <code>spacing.css</code>, <code>borders.css</code>, <code>shadows.css</code>, <code>motion.css</code>,
+<code>semantic.css</code> (the aliases product code should use, plus the light and game scopes),
+<code>engine-themes.css</code> (the six engine presets, verbatim).</p>
+<p><strong><code>components/</code></strong> — 11 primitives, matching the engine's inventory one-for-one.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Group</th>
+<th>Mirrors</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Panel</code></td>
+<td><code>core/</code></td>
+<td><code>ui/components/panel.py</code></td>
+</tr>
+<tr>
+<td><code>Label</code></td>
+<td><code>core/</code></td>
+<td><code>ui/components/text.py</code></td>
+</tr>
+<tr>
+<td><code>Image</code></td>
+<td><code>core/</code></td>
+<td><code>ui/components/image.py</code></td>
+</tr>
+<tr>
+<td><code>Canvas</code></td>
+<td><code>core/</code></td>
+<td><code>ui/components/canvas.py</code></td>
+</tr>
+<tr>
+<td><code>Button</code></td>
+<td><code>forms/</code></td>
+<td><code>ui/components/button.py</code></td>
+</tr>
+<tr>
+<td><code>Checkbox</code></td>
+<td><code>forms/</code></td>
+<td><code>ui/components/checkbox.py</code></td>
+</tr>
+<tr>
+<td><code>Slider</code></td>
+<td><code>forms/</code></td>
+<td><code>ui/components/slider.py</code></td>
+</tr>
+<tr>
+<td><code>TextInput</code></td>
+<td><code>forms/</code></td>
+<td><code>ui/components/text_input.py</code></td>
+</tr>
+<tr>
+<td><code>ProgressBar</code></td>
+<td><code>feedback/</code></td>
+<td><code>ui/components/progress_bar.py</code></td>
+</tr>
+<tr>
+<td><code>NavBar</code></td>
+<td><code>navigation/</code></td>
+<td><code>ui/components/navbar.py</code></td>
+</tr>
+<tr>
+<td><code>BoxContainer</code></td>
+<td><code>layout/</code></td>
+<td><code>ui/layout.py</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each has a sibling <code>.d.ts</code> (props contract) and <code>.prompt.md</code> (what &amp; when, plus a usage example).</p>
+<p><strong>Consuming these components in a Babel page — one required precaution.</strong> Babel standalone
+downlevels top-level <code>const</code> to <code>var</code>, so <code>const { Image, Canvas } = window.PyguaraDesignSystem_…</code>
+assigns <code>window.Image</code>, clobbering the native <code>Image</code> constructor and breaking <code>new Image()</code>
+page-wide (html-to-image, PNG/PDF/PPTX export, any lazy-loader). <strong>Always alias those two:</strong>
+<code>const { Image: DSImage, Canvas: DSCanvas, … } = window.PyguaraDesignSystem_…</code> — every kit and card
+in this project does. The component names in the <code>.prompt.md</code> examples are the export names, not
+the local bindings.</p>
+<p><strong>Not built, deliberately:</strong> <code>Widget</code> (<code>ui/components/widget.py</code>) is an abstract base class that
+resolves theme colours by state — it renders nothing, so it has no React counterpart. Its
+behaviour is encoded in the state tokens and in every component's disabled/hover handling instead.</p>
+<p><strong>Intentional additions</strong> — three, each with a reason:</p>
+<ol>
+<li><code>Button</code> variants <code>wood</code>, <code>sage</code> and <code>ghost</code>. The Python <code>Button</code> has one look. The source
+   <em>art</em> has wood and painted menu plates — <code>sage</code> recolours the plate into colonial green — and
+   the editor needs a chrome-free toolbar button.</li>
+<li><code>Panel</code>'s <code>bevel</code> prop, and the bevel/stamp shadow tokens. Derived from
+   <code>graphics/ninepatch.py</code> plus the plate art. The Python <code>Panel</code> draws a flat rect, and
+   <code>NinePatchPanel</code> is the textured one.</li>
+<li>The Cerrado Dusk / Cerrado Day theme pair in <code>semantic.css</code>. None of the engine's six presets
+   is an earthy brand theme, and the brief asked for one in both polarities. The engine's presets
+   are preserved untouched in <code>engine-themes.css</code>.</li>
+</ol>
+<p><strong><code>guidelines/</code></strong> — 29 specimen cards feeding the Design System tab, grouped
+<strong>Brand</strong> (logo, characters, world, props, icons, direction), <strong>Colors</strong> (nine brand ramps — Guará,
+Cerrado, wood &amp; ink, vegetation &amp; amber sky, verdant, roxo, water, falcão, debug — plus both
+semantic themes and text levels), <strong>Type</strong> (display, pixel, body, mono),
+<strong>Spacing</strong> (scale, engine geometry, borders, shadows, motion) and <strong>Engine</strong> (theme presets,
+developer shortcuts).</p>
+<p><strong><code>ui_kits/</code></strong> — five surfaces. Each has an <code>index.html</code>, its JSX, and a <code>README.md</code> naming the
+source files it was built from.</p>
+<table>
+<thead>
+<tr>
+<th>Kit</th>
+<th>Fidelity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>editor/</code></td>
+<td><strong>Recreation.</strong> Read from <code>pyguara/editor/</code> (now <code>pyguara/studio/</code>) and <code>pyguara/tools/</code>. Hierarchy, viewport, Inspector, Assets, Resource Inspector, real F-key overlays, real menu items. Restyled into the Cerrado palette per the brief; layout, names and copy unchanged.</td>
+</tr>
+<tr>
+<td><code>game/</code></td>
+<td><strong>Composition.</strong> Engine primitives + the provided art. Title → HUD → Pause → Options. The button plates and title lockup are literal; the engine ships no game code, so the screens themselves are new.</td>
+</tr>
+<tr>
+<td><code>site/</code></td>
+<td><strong>New work.</strong> No website exists in the source.</td>
+</tr>
+<tr>
+<td><code>docs/</code></td>
+<td><strong>New work chrome, real content.</strong> Sidebar mirrors the engine's real packages; the code sample and presets table are verbatim from <code>theme_presets.py</code>.</td>
+</tr>
+<tr>
+<td><code>store/</code></td>
+<td><strong>New work.</strong> A generic product-page layout — deliberately not any specific storefront's chrome.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Backgrounds are windows cut from the one illustration, never recomposited.</strong> Two 16:9 crops:
+<code>scene-window-grove.png</code> (grove, plank platform, water, Guará running — no wordmark) backs
+gameplay, the editor viewport and the site hero; <code>scene-window-sign.png</code> (the carved lockup, no characters) is
+there for surfaces that want the sign baked into the background. Title screens use the grove window
+plus the transparent <code>logo-pyguara-lockup.png</code> on top — the two largest type layers must never
+share a frame, which is what happens if you back a menu with the sign window. Use a crop, <strong>not</strong> <code>object-position</code> — the full art's aspect is within 7% of 16:9,
+so panning has no range and every focus value shows the same frame. Because each window already
+contains its subjects, <strong>never overlay the lockup or a character sprite on a window that shows
+one</strong> — pick the other window instead. Erasing subjects out of a plate was tried, and looked
+exactly like what it was.</p>
+<p><strong><code>assets/</code></strong> — <code>art/</code> (crops from the current key art: scene plate, sign lockup, fox mark,
+Guará, Falcão, collectibles, solar leaf panel, water basin, mushroom canopy, floating island,
+trees, plank platform), <code>mascot-pyguara.png</code>, and the legacy <code>sprites/</code> folder.</p>
+<hr />
+<h2 id="caveats-please-read">Caveats — please read</h2>
+<ol>
+<li><strong>Fonts are substituted.</strong> The source art uses hand-drawn pixel lettering; there are no font
+   files anywhere in the repository. Press Start 2P, Silkscreen, Pixelify Sans and JetBrains Mono
+   are the closest Google Fonts matches. <strong>Please send the real font files</strong> if the game has them,
+   and I will swap them in with proper <code>@font-face</code> rules.</li>
+<li><strong>There is still no logo file.</strong> <code>logo-pyguara-lockup.png</code> and <code>badge-pyguara-mark.png</code> are
+   crops from the key-art PNG — lossless, but rectangular and without transparency. A vector or
+   cut-out lockup would improve every surface immediately. The lockup also reads
+   "PYGUARA / SOLAR ENGINE / ENGINE" — the duplicated word is in the source art and needs a fix
+   there, not here.</li>
+<li><strong>Palette hexes are sampled from the key art.</strong> The source PNG is lossless, so these are exact
+   pixel values — but they are sampled from one illustration, not an authored palette. If the game
+   has a palette file (<code>.gpl</code>, <code>.hex</code>, or a <code>Resources</code>-loaded artistic palette as
+   <code>common/palette.py</code> suggests), that should replace <code>tokens/palette.css</code>.</li>
+<li><strong>Site, docs and store kits are proposals, not recreations.</strong> Nothing in the source defines
+   them. Their layout and copy are mine and should be reviewed as new design work.</li>
+<li><strong>GitHub was never connected.</strong> Everything came from the attached local folder. If the
+   repository has branches, assets or docs the folder lacks, they were not seen.</li>
+</ol>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

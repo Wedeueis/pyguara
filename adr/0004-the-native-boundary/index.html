@@ -1,0 +1,3056 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>ADR 0004: The native boundary — what earns a Rust implementation, and how the engine picks one - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adr-0004-the-native-boundary-what-earns-a-rust-implementation-and-how-the-engine-picks-one" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              ADR 0004: The native boundary — what earns a Rust implementation, and how the engine picks one
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-1-the-ratio-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 1 — The ratio rule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-2-port-a-boundary-not-a-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 2 — Port a boundary, not a function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-3-opacity-decides-whether-the-line-can-move" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 3 — Opacity decides whether the line can move
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision 3 — Opacity decides whether the line can move">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-remedies-when-opacity-is-the-problem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The remedies, when opacity is the problem
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-4-one-engine-wide-switch-and-it-is-observable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 4 — One engine-wide switch, and it is observable
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision 4 — One engine-wide switch, and it is observable">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-engine-does-and-does-not-promise" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the engine does and does not promise
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-5-the-parity-obligation-in-three-tiers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 5 — The parity obligation, in three tiers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-6-algorithm-before-boundary" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 6 — Algorithm before boundary
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision 6 — Algorithm before boundary">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-second-case-and-the-first-where-the-order-changed-the-verdict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The second case, and the first where the order changed the verdict
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#decision-7-a-shared-primitive-is-priced-on-itself-and-amdahl-decides-what-a-consumer-feels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Decision 7 — A shared primitive is priced on itself, and Amdahl decides what a consumer feels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Decision 7 — A shared primitive is priced on itself, and Amdahl decides what a consumer feels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-it-delivered-and-the-number-that-matters-more" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What it delivered, and the number that matters more
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#where-decision-3-was-right-after-all" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where Decision 3 was right after all
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-cost-stated" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The cost, stated
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#two-findings-about-the-parity-discipline-itself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two findings about the parity discipline itself
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#consequences-track-r-re-sequenced-by-measured-ceiling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequences — Track R, re-sequenced by measured ceiling
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#alternatives-considered" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Alternatives considered
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="adr-0004-the-native-boundary-what-earns-a-rust-implementation-and-how-the-engine-picks-one">ADR 0004: The native boundary — what earns a Rust implementation, and how the engine picks one</h1>
+<p>Status: <strong>Accepted</strong>. Supersedes RFC-0003's module-by-module sequencing
+(<code>project/backlog/active/rust_core.md</code>) and extends ADR 0003, which
+measured the first milestone without generalising from it.</p>
+<p>Decision 4 below is unchanged, but its <em>premise</em> has narrowed:
+<a href="../0006-shipping-the-native-extension/">ADR 0006</a> ships the extension
+inside the wheel, so "a machine that built the extension and one that did
+not" is now a rare condition rather than the normal one. The switch, and
+its obligation to be observable, stand exactly as written.</p>
+<h2 id="context">Context</h2>
+<p>RFC-0003 proposed moving parts of the engine into a Rust extension and
+organised the work <strong>by module</strong>: a maths milestone, a render-batcher
+milestone, a pools milestone, a pathfinding-and-procgen milestone. ADR 0003
+gated that behind a spike, corrected its figures, and recommended a
+narrower order.</p>
+<p>Two increments have since landed and three more have been measured. What
+they show is that "which module" is the wrong question. Every one of these
+milestones was decided by something the RFC does not mention: <strong>where the
+boundary between Python and Rust can be drawn, and how much data has to
+cross it per tick.</strong></p>
+<p>Three times now, the same module has been worth anywhere from 1.4x to 25x
+depending only on where that line was put:</p>
+<ul>
+<li><strong>Particles.</strong> <code>update</code> was 84% of the frame, so porting it looked
+  obviously right. It caps at ~6x, because the remaining 16% becomes the
+  whole cost. Moving the boundary out to include the render pack gave
+  <strong>18-20x</strong>.</li>
+<li><strong>Sparks.</strong> The same port, reasoned the same way, caps at <strong>1.4-1.8x</strong> --
+  because a spark is a primitive, not a sprite, so 55-73% of its frame is
+  <code>draw_circle</code>/<code>draw_line</code> call overhead rather than arithmetic. Moving
+  the boundary out needed a type that did not exist (<code>ShapeBatch</code>), and
+  then gave <strong>16-25x</strong>.</li>
+<li><strong><code>dijkstra_map</code>.</strong> A native port of the function as written would be
+  <em>slower</em> than Python, because it takes a <code>Graph</code> protocol and calls
+  <code>get_neighbors</code> and <code>cost</code> per node. The native unit has to be the grid,
+  not the graph.</li>
+</ul>
+<p>So this ADR replaces "which modules do we port" with a test that can be
+applied to a candidate before any Rust is written, and a decision about how
+the engine chooses between the two implementations once both exist.</p>
+<h2 id="decision-1-the-ratio-rule">Decision 1 — The ratio rule</h2>
+<p>A subsystem earns a native implementation on the strength of</p>
+<pre><code>ceiling = T_py / (T_cross + T_pinned)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>term</th>
+<th>what it is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>T_py</code></td>
+<td>what the candidate's per-tick work costs in Python today</td>
+</tr>
+<tr>
+<td><code>T_cross</code></td>
+<td>what getting data in and results out costs <strong>per tick</strong>, measured in Python, because that is where it is paid</td>
+</tr>
+<tr>
+<td><code>T_pinned</code></td>
+<td>Python work that cannot move at all: the ECS, the event dispatcher, resource handles, caller-supplied callbacks</td>
+</tr>
+</tbody>
+</table>
+<p><code>tools/price_native_boundary.py</code> computes this for every candidate. As of
+writing:</p>
+<table>
+<thead>
+<tr>
+<th>Candidate</th>
+<th style="text-align: right;"><code>T_py</code></th>
+<th style="text-align: right;"><code>T_cross</code></th>
+<th style="text-align: right;"><code>T_pinned</code></th>
+<th style="text-align: right;">ceiling</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>flow field, 96x96</td>
+<td style="text-align: right;">83.247</td>
+<td style="text-align: right;">1.479</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;"><strong>56.3x</strong></td>
+<td>landed, 56.3x (priced 161x)</td>
+</tr>
+<tr>
+<td>particles, 1000</td>
+<td style="text-align: right;">1.942</td>
+<td style="text-align: right;">0.104</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">18.7x</td>
+<td>landed, 18.7x</td>
+</tr>
+<tr>
+<td>sparks, 1000 streaks</td>
+<td style="text-align: right;">5.865</td>
+<td style="text-align: right;">0.339</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">17.3x</td>
+<td>landed, 17.3x</td>
+</tr>
+<tr>
+<td>flocking, 1000 agents</td>
+<td style="text-align: right;">16.555</td>
+<td style="text-align: right;">1.849</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;"><strong>9.0x</strong></td>
+<td>landed, 9.0x (priced 15.4x)</td>
+</tr>
+<tr>
+<td>sparks, 1000 dots</td>
+<td style="text-align: right;">4.077</td>
+<td style="text-align: right;">0.321</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">12.7x</td>
+<td>landed, 12.7x</td>
+</tr>
+<tr>
+<td>spatial index, 1000 keys</td>
+<td style="text-align: right;">7.453</td>
+<td style="text-align: right;">0.439</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;"><strong>17.0x</strong></td>
+<td>landed, 17.0x</td>
+</tr>
+<tr>
+<td>render batcher, 20000 sprites</td>
+<td style="text-align: right;">44.423</td>
+<td style="text-align: right;">1.347</td>
+<td style="text-align: right;">3.671</td>
+<td style="text-align: right;"><strong>8.9x</strong></td>
+<td>deferred (12.2x before Decision 6)</td>
+</tr>
+<tr>
+<td>projectiles, 1000</td>
+<td style="text-align: right;">3.041</td>
+<td style="text-align: right;">0.339</td>
+<td style="text-align: right;">1.143</td>
+<td style="text-align: right;"><strong>2.1x</strong></td>
+<td>declined</td>
+</tr>
+</tbody>
+</table>
+<p>Two further candidates are priced <strong>per call rather than per tick</strong>, so
+they sit in their own table in <code>tools/price_native_boundary.py</code> and must
+not be read beside the rows above: <code>wfc, 64x64</code> at 67.7x (once per
+generated level) and <code>a*, 96x96</code> at 4250x (per query). Both are declined;
+Track R item 1 has why, and the 4250x is discussed below as a limit of
+this formula rather than a result.</p>
+<p>The spatial index is the one row that is <strong>not a subsystem</strong>, and reading
+it as one would be a mistake: its 17x is what the <em>index</em> costs, while
+what its consumers feel is 1.3x to 4.3x. Decision 7 is about that gap and
+about why a primitive is still admitted on its own figure.</p>
+<p>The render batcher is the one row whose <strong><code>T_py</code> moved under it</strong>. It
+priced at 12.2x against the batcher as it was, and at 8.9x once four
+pieces of per-command waste were removed from the Python
+implementation -- same boundary, same crossing, half the numerator.
+Decision 6 is about that, and it is the only row here where asking the
+algorithmic question first changed the verdict rather than the reasoning
+behind it. Its <code>T_cross</code> is also the only one measured as a <strong>lower</strong>
+bound: it is priced from the three-argument <code>NativeSpatialHash.insert</code>,
+where a sprite push needs eleven, which is why the item below quotes a
+range.</p>
+<p><strong>The landed rows do not prove the formula</strong>; for built work <code>T_cross</code> is
+measured directly, so the ceiling and the achieved speedup are the same
+number by construction. The formula was tested the only way it can be, in
+advance: it predicted ~6x for porting particles' <code>update</code> alone and
+1.4-1.8x for sparks' alone, which is why both milestones were scoped wider,
+and it predicted 13-20x for a batched spark handoff against an achieved
+16.6-24.4x. Both predictions preceded the Rust.</p>
+<p><strong>And the flow field is where the word "ceiling" earned its keep.</strong> It
+priced at 161x, with <code>T_cross</code> as the 0.522 ms wall-mask upload against
+84 ms of Python, and it achieved 56x. The formula was not wrong about the
+boundary — almost nothing is paid there — it simply does not model the
+native work behind it, and the native sweep costs 1.3 ms. So read a
+number from this table as the answer to "is this far above 5x", which is
+the decision it exists for, and not as a forecast.</p>
+<p><strong>Flocking then overshot for the opposite reason, which is the more
+useful lesson.</strong> It priced at 15.4x and achieved 9.0x, and here the
+native work is <em>not</em> the explanation — the solve is 0.5 ms of a 1.85 ms
+tick. The crossing itself was underestimated, by 65%, because
+<code>T_cross</code> was measured as the Python loops that pack and unpack and a
+real crossing is more than those loops: PyO3's own conversion of a
+15,000-float list into a <code>Vec&lt;f64&gt;</code>, the result tuples it allocates
+coming back, and the per-tick ECS prologue — resolving entities and
+components — which is 0.31 ms and is paid whichever store runs. At 17 ms
+that prologue was 2% and invisible; at 1.85 ms it is 17%.</p>
+<p>So the two calibration rows fail in different directions and neither is
+the formula being wrong. Price a candidate, check it clears 5x by a wide
+margin, and expect the achieved figure to be <em>lower</em>: by the native work
+when the handoff is trivial, and by the conversions and the shared
+prologue when the handoff is not. Both corrections point the same way,
+which at least makes the formula optimistic rather than unreliable.</p>
+<p><strong>And the formula degenerates when <code>T_cross</code> goes to zero</strong>, which A<em>
+demonstrated. Priced against a flow-field-shaped boundary — the grid
+native, endpoints and path across — its crossing is 0.005 ms against
+20.8 ms of Python, for a ceiling of </em><em>4250x</em><em>. That number is not a
+forecast or even an estimate; it is the formula dividing by nothing and
+reporting that the boundary is not this candidate's problem. Read any
+ceiling far above 100x as exactly that statement and nothing more, then
+go and find the reason the candidate is or is not worth porting
+somewhere else. For A</em> the reason was that its expensive case already
+has a native implementation under a different name.</p>
+<p>So the formula has three recorded failure modes, all optimistic: it omits
+the native work (flow field, 161x priced against 56x achieved), it
+underestimates a non-trivial crossing's conversions and shared prologue
+(flocking, 15.4x against 9.0x), and it stops meaning anything when the
+crossing is trivial (A<em>, 4250x). It is a filter for "is this far above
+5x", not a predictor, and the candidates it </em>rejects* are the ones it
+answers cleanly.</p>
+<p><strong>The threshold is 5x</strong>, and it is a judgement about maintenance rather
+than about speed: a native implementation is a second implementation
+<em>forever</em>, and the cost of keeping two in agreement does not scale down
+with the size of the win. Below 5x, say no and record the number. Above
+it, the ratio has bought the candidate a decision rather than made one
+— WFC clears 5x by thirteen times over and is declined anyway, because
+a multiple of a cost paid once per level does not pay for a second
+implementation.</p>
+<h2 id="decision-2-port-a-boundary-not-a-function">Decision 2 — Port a boundary, not a function</h2>
+<p>A candidate is not "a function to rewrite in Rust". It is <strong>a line to draw
+around some work</strong>, and the line should sit where the least data crosses
+it. Choosing the line is the design work; the Rust is the easy part.</p>
+<p>Corollaries, each of which has already bitten:</p>
+<ul>
+<li><strong>If the unit that makes the boundary cheap does not exist, creating it
+  is part of the job.</strong> <code>ShapeBatch</code> and <code>ShapeBatchRenderer</code> exist because
+  sparks needed a renderer that could accept a thousand primitives in one
+  call. Without them the milestone was 1.4x.</li>
+<li><strong>A generic interface at the boundary is a per-element Python callback.</strong>
+  <code>dijkstra_map(graph, goals)</code> is good Python design and the wrong native
+  boundary: <code>Graph</code> is a protocol, so each node expansion would call back
+  into the interpreter. The native unit is <code>(width, height, blocked,
+  weights, goals)</code>.</li>
+<li><strong>Prefer a boundary that answers questions over one that returns state.</strong>
+  A native flow field that hands back <code>dict[Node, Node]</code> pays 1.4-4.9 ms
+  per recompute materialising it. One that <em>keeps</em> the field and answers
+  <code>vector_at</code> pays 0.6 us per query and nothing per recompute.</li>
+</ul>
+<h2 id="decision-3-opacity-decides-whether-the-line-can-move">Decision 3 — Opacity decides whether the line can move</h2>
+<p>A subsystem is <strong>opaque</strong> when nothing outside it reads an individual
+element. Opacity is what let the particle and spark boundaries move
+outward; its absence is what pins projectiles.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>opaque?</th>
+<th>why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ParticleSystem</code></td>
+<td>yes</td>
+<td>nothing holds a <code>Particle</code>; the output is per-texture batches</td>
+</tr>
+<tr>
+<td><code>Sparks</code></td>
+<td>yes</td>
+<td>nothing holds a <code>_Spark</code>; the output is per-kind batches</td>
+</tr>
+<tr>
+<td>flow field</td>
+<td>yes, <strong>built</strong></td>
+<td><code>vector_at</code>/<code>cost_at</code> are the only readers, and they ask rather than fetch; the field never returns to Python</td>
+</tr>
+<tr>
+<td><code>FlockingSystem</code></td>
+<td><strong>no</strong></td>
+<td>agents are ECS entities; <code>Transform</code> and <code>FlockingAgent</code> are read by rendering, the spatial index and AI — built anyway, at 9.0x against the field's 56.7x, which is what non-opacity costs</td>
+</tr>
+<tr>
+<td><code>ProjectileSystem</code></td>
+<td><strong>no</strong></td>
+<td><code>get_active()</code> is public, and <code>games/protocolo_bandeira</code> reads <code>.position</code>/<code>.velocity</code> off every projectile, every frame</td>
+</tr>
+</tbody>
+</table>
+<p>Non-opaque does not mean "no". It means the boundary is pinned at the
+element level, and the ratio rule then decides on <strong>density</strong>: how much
+native work there is per element against the handful of Python values that
+must cross back for it.</p>
+<ul>
+<li><strong>Flocking passes anyway.</strong> Roughly a hundred operations per agent per
+  tick — a radius query plus three accumulators over its neighbours — for
+  two <code>Vector2</code>s written back. The boundary is 6-7% of the tick.</li>
+<li><strong>Projectiles fail.</strong> Six operations per projectile for the same two
+  <code>Vector2</code>s. A native pool removes 2.37 ms of integration per 1000 and
+  pays 0.35 ms back on the sync, with the 1.15 ms hit check pinned
+  regardless. Net 2.0x. The hit check's <em>broad-phase</em> has since been
+  unpinned by Decision 7's native index, and it moved the whole subsystem
+  1.32x — so the decline now stands on a measurement rather than an
+  estimate.</li>
+</ul>
+<p>That is the useful form of the rule: <strong>native work per element must greatly
+exceed the Python values that have to cross back for it.</strong> Particles and
+sparks win on opacity, flocking wins on density, projectiles win on
+neither.</p>
+<h3 id="the-remedies-when-opacity-is-the-problem">The remedies, when opacity is the problem</h3>
+<p>In order of preference:</p>
+<ol>
+<li><strong>Make the consumer batch-aware.</strong> What <code>ShapeBatch</code> did for the
+   renderer. Best outcome: the boundary moves and the Python side gets
+   simpler too.</li>
+<li><strong>Move the consumer inside the line.</strong> Sometimes right, and the
+   example this originally gave was not: it said a native <code>SpatialHash</code>
+   was the wrong shape because it "returns <code>list[K]</code> of Python keys per
+   query", where a native hit broad-phase would return only the pairs
+   that collided. Measured, that crossing is 4% of the Python broad-phase
+   it replaces, and the index landed at 17x as a Python-facing store —
+   see <strong>Decision 7</strong>, which also explains why the instinct that it would
+   not rescue projectiles was right for an entirely different reason.
+   Keep the remedy; distrust the argument. A crossing that scales with
+   <code>k</code> is only expensive if the work it replaces does not.</li>
+<li><strong>Accept the pinned boundary</strong> if density still passes — flocking.</li>
+<li><strong>Decline, and record the ratio</strong> — projectiles.</li>
+</ol>
+<h2 id="decision-4-one-engine-wide-switch-and-it-is-observable">Decision 4 — One engine-wide switch, and it is observable</h2>
+<p>Today <code>pyguara/graphics/components/_native.py</code> resolves the store silently,
+per instance, from whether a compiled library happens to be on disk. That
+was defensible while the only subsystems involved were cosmetic. It stops
+being defensible the moment a gameplay system is native, because <strong>the same
+game, same code, same seed, diverges between a machine that built the
+extension and one that did not.</strong></p>
+<p>The choice therefore moves out of the subsystems:</p>
+<ul>
+<li><strong>One resolution, once, at bootstrap</strong>, from one configuration value with
+  three states: <code>off</code> (never native), <code>auto</code> (native where available), and
+  <code>required</code> (native, and fail loudly at startup if it is missing).</li>
+<li><strong>No subsystem decides for itself.</strong> The per-instance <code>accelerate=</code>
+  argument stays, because the parity tests need to construct both stores
+  side by side, but its default becomes "whatever the engine resolved"
+  rather than "whatever is on disk".</li>
+<li><strong>The resolved value is observable</strong> — reportable by the engine and
+  visible in Studio — because a silent choice that changes behaviour is the
+  thing being fixed.</li>
+<li><strong>It is recorded wherever reproduction is promised.</strong> A replay stores the
+  store it was recorded under, and playback under a different one is
+  refused rather than quietly divergent. <code>ReplayRecorder.FORMAT_VERSION</code>
+  has to move for this, as it did for W11's <code>controller_id</code>.</li>
+</ul>
+<p><strong>Amended by W28b: this switch governs stores, not backends.</strong> A store is a
+faster implementation of something Python also does, so turning it off changes
+speed and nothing else. The native audio backend (#357) has no Python
+counterpart: <code>pygame.mixer</code> cannot pitch-shift. Hanging it off this switch would
+make <code>play_sfx(pitch=1.2)</code> start raising because somebody set a debugging
+variable, which is a gameplay change from a debug switch. So it is selected by
+<code>AudioConfig.backend</code>, the way <code>DisplayConfig.backend</code> selects a renderer, it is
+imported through <code>native.require_extension()</code> rather than <code>native_module()</code>, and
+<strong><code>PYGUARA_NO_NATIVE=1</code> no longer means "no native code runs"</strong>. To isolate a bug
+in the audio, <code>PYGUARA_AUDIO_BACKEND=pygame</code> is the equivalent. There is no
+<code>auto</code>, for this Decision's own reason: it would vary a game's capabilities by
+machine.</p>
+<p><strong>Implementation status: built.</strong> <code>pyguara/native.py</code> resolves the store
+once at bootstrap from <code>PerformanceConfig.native_acceleration</code>, reports
+it through <code>describe()</code> in the boot log, and raises at startup under
+<code>required</code> with no extension. <code>ReplayMetadata.native_store</code> records which
+store produced a recording, and <code>Application.load_replay</code> refuses a
+cross-store playback unless asked to allow it. A replay from before the
+field reads as unknown rather than as <code>python</code>, because there is no way
+to know what it ran under and refusing every existing recording would
+guard against a divergence nobody can confirm happened.</p>
+<h3 id="what-the-engine-does-and-does-not-promise">What the engine does and does not promise</h3>
+<ul>
+<li><strong>Promised: each store is deterministic given the same iteration
+  order.</strong> The native solvers are sequential by default; any <code>rayon</code>
+  parallelism is opt-in per call and documented as giving up this
+  guarantee.</li>
+</ul>
+<p>That wording is a correction. This bullet used to read "same store,
+  same seed, same inputs, same result", and <strong>the engine does not keep
+  that promise</strong> — neither store does. <code>EntityManager.create_entity</code>
+  assigns <code>uuid4</code> ids and <code>get_entities_with_cached</code> iterates a set of
+  them, so the order a system visits its entities differs between
+  processes. For most systems that is invisible. For a Gauss-Seidel one
+  it is the simulation: <code>FlockingSystem</code> has agents steering by the
+  already-moved positions of those ahead of them, so who goes first
+  decides the outcome. Three runs of one seeded flock give three
+  different states.</p>
+<p>Found while building the flocking parity suite, from a probe that
+  compared two worlds built from the same seed and could not match them
+  slot for slot. It is pre-existing, it predates every native store, and
+  both stores inherit it identically — the native one is handed its
+  agents in whatever order Python resolved them. Tracked as issue #324,
+  where the fix is noted as a <em>behaviour</em> change rather than a bug fix,
+  because the sweep order it would pin is currently arbitrary and every
+  existing flock settles the way it does because of it.</p>
+<p><strong>The consequence for Decision 4's last bullet is worth stating
+  plainly.</strong> A replay records the store it was made under and refuses a
+  cross-store playback, which is necessary and is not sufficient: a
+  replay of anything containing a flock does not reproduce under the
+  <em>same</em> store either. The guard is still right — it removes one of two
+  causes, and the one a player could trip by installing a wheel — but
+  "replays reproduce" is not something this engine can claim for
+  flocking games until #324 is resolved.
+- <strong>Not promised: the two stores agree bit for bit.</strong> They cannot, and the
+  reason is worth recording because it is not a thing better engineering
+  fixes. <code>SpatialHash</code> buckets keys in a Python <code>set</code>, and set iteration
+  order for realistic integer keys depends on insertion order and the probe
+  sequence:</p>
+<p><code>inserted [5, 1029, 77, 513, 9]  -&gt; query [513, 1029, 5, 9, 77]
+  inserted [1029, 5, 513, 77, 9]  -&gt; query [513, 5, 1029, 9, 77]</code></p>
+<p>Neighbours therefore reach a force accumulation in an order no Rust can
+  reproduce without reimplementing CPython's set probing. Floating-point
+  addition is not associative, so the sums differ in their last bits, and a
+  flock is chaotic enough to turn that into visible divergence over time.</p>
+<p>This is the whole reason Decision 4 exists. For particles it would be
+  cosmetic; for a flock of enemies it is gameplay.</p>
+<h2 id="decision-5-the-parity-obligation-in-three-tiers">Decision 5 — The parity obligation, in three tiers</h2>
+<p>The price of two implementations is that they must agree. What the first
+two increments show is that agreement has to be checked at three different
+levels, because each tier catches what the others cannot:</p>
+<ol>
+<li><strong>State parity.</strong> The same operations against both stores produce the
+   same numbers, to a stated tolerance, with the tolerance's cause stated
+   (f32 against f64, summation order). If a tolerance ever has to be
+   loosened, that is a finding and not a maintenance chore.</li>
+</ol>
+<p><strong>The tolerance is a function of what the subsystem is for, and the
+   default is zero.</strong> A spark half a pixel to the left is a spark, so the
+   pools compare with a tolerance and say why. A flow field steers
+   enemies, so one cell whose descent neighbour differs is a pack that
+   goes the other way round a wall — there is no tolerance that means
+   anything, and the native field is therefore bit-exact and tested with
+   <code>==</code> on every cell. Exactness was not free, and it is worth knowing
+   what it cost, because the next candidate pays the same bill: f64
+   throughout rather than f32, <code>GridGraph.get_neighbors</code>' iteration order
+   replicated exactly because the descent pass's tie-break <em>is</em> that
+   order, and the rounded <code>1.414</code> kept over <code>SQRT_2</code> because agreeing
+   matters more than being accurate. What made it reachable at all is that
+   a Dijkstra cost map is order-independent given non-negative weights —
+   unlike a flock's force sums, which are not. So: ask whether exactness
+   is reachable before settling for a tolerance, and state which it is.</p>
+<p><strong>Flocking is the case where the answer was no, and working out why
+   changed what the tolerance is for.</strong> The first reason is the obvious
+   one: <code>SpatialHash._cells</code> is a <code>dict[Cell, set[int]]</code>, so a radius
+   query yields each cell's members in CPython set iteration order, and
+   <code>flock_force</code> sums over them. Different order, different last bit —
+   measured at 46% of agents and a worst relative difference of 6.4e-13.
+   Reproducing that order in Rust would mean reimplementing a CPython
+   internal and depending on it not changing.</p>
+<p>The second reason is sharper and was found by accident, while
+   debugging a parity probe that compared two worlds built from the same
+   seed. <strong>A seeded flock does not tick the same way twice in Python
+   either.</strong> <code>EntityManager</code> hands out random uuid4 ids and
+   <code>get_entities_with_cached</code> iterates a set of them, so the sweep
+   order — which <em>is</em> the Gauss-Seidel order, and therefore part of the
+   simulation — differs between processes. Three runs of one seeded
+   flock give three different states. So "bit-exact with Python" was
+   never an available contract here: there is no single Python answer to
+   be exact to. That is a pre-existing defect rather than anything the
+   port introduced — it is issue #324, and the fix is a behaviour change
+   rather than a bug fix, because the sweep order it would pin is
+   currently arbitrary — and it does not block the port — but it does mean the native store is <em>more</em> reproducible than
+   the Python one it mirrors, which is the opposite of what a tolerance
+   usually implies.</p>
+<p><strong>What the tolerance then has to be is: one permitted cause, stated,
+   with everything else pinned exactly.</strong> This is the rule the flocking
+   port adds, and the reason it matters is a measurement. A transcription
+   slip — writing <code>dx * (target / len)</code> for <code>(dx / len) * target</code>, which
+   is the same expression refactored — moves a result by about one ulp.
+   The ordering noise it is being compared against is 6.4e-13, three
+   orders of magnitude <em>larger</em>. <strong>No tolerance wide enough to admit the
+   ordering could ever catch such a slip</strong>, so a tolerance-only parity
+   suite does not test the arithmetic at all; it only tests that nothing
+   is grossly wrong. Confirmed by sabotage: that exact refactor passes
+   every tolerance test in the suite.</p>
+<p>The remedy is to find a regime where the permitted cause cannot
+   operate, and assert <code>==</code> there. For flocking that is constructed
+   geometry in which no agent has more than one flockmate, so the sum has
+   no order to differ in — and it has to be <em>constructed</em>, because
+   picking the one-neighbour agents out of a random flock leaks: a lone
+   agent reads its flockmate's live position, and that flockmate may
+   itself have been perturbed (measured: 47 of 48 agreed, and the one
+   exception had inherited a neighbour's divergence). In that regime the
+   whole tick is bit-exact through every branch — clamping, coincident
+   agents, seek, staggering, forty ticks — which is what makes the
+   tolerance on real flocks evidence of summation order rather than a
+   blanket amnesty.</p>
+<p>Two smaller findings from the same round, recorded so nobody re-derives
+   them. <strong>Getting <code>Vector2.length</code> exact required changing it</strong>: pymunk
+   spells it <code>sqrt(x**2 + y**2)</code>, <code>x**2</code> goes through the platform's
+   <code>pow</code>, and glibc's <code>pow</code> disagrees with <code>x * x</code> for 0.08% of inputs,
+   so the length — and everything <code>normalized()</code> divides by — was only as
+   portable as the libm underneath. It is now <code>sqrt(x * x + y * y)</code>,
+   which is also 1.6x faster and no less accurate (over 200k vectors the
+   two differ 70 times, with the <code>pow</code> form closer 34 and the
+   multiplication form 36). And <strong>several plausible-looking sabotages
+   turn out not to be differences at all</strong>: <code>&gt;</code> against <code>&gt;=</code> on any of
+   the three clamps is unobservable, because at the threshold the scale
+   factor is <code>max / sqrt(max * max)</code>, which is exactly 1.0; a flockmate
+   exactly on the separation radius contributes <code>(1 - d/r) * max_speed</code>,
+   which is exactly 0.0; and the <code>want_cohesion</code>-style flags are a pure
+   optimisation, because a term scaled by a zero weight is zero either
+   way. A sabotage that nothing catches is sometimes a complete suite
+   rather than a missing test, and the way to tell is to work out whether
+   the sabotage changed the answer at all.
+2. <strong>Consumer parity.</strong> The same calls reach the renderer, the ECS and the
+   dispatcher. This tier exists because the native spark path reaches the
+   renderer through <em>different methods</em> than the Python one.
+3. <strong>Output parity.</strong> The real downstream effect — actual pixels from a
+   real GL context, for anything that draws. Both increments needed this,
+   because <strong>no demo and no visual snapshot draws a particle or a spark</strong>:
+   the 11 Syrupy snapshots pass whatever those code paths do.</p>
+<p>Three rules on top, each earned the hard way this quarter:</p>
+<ul>
+<li><strong>Every parity test must be shown to fail.</strong> Sabotage the native side
+  deliberately and watch the right test go red. A reversed colour lerp
+  passed its test for a week because the test sampled the midpoint of a
+  symmetric fade.</li>
+<li><strong>Never use a <code>MagicMock</code> where the production path tests a protocol
+  structurally.</strong> A mock satisfies every <code>runtime_checkable</code> protocol, so a
+  mocked renderer silently takes the batched route and the per-primitive
+  assertions describe a path no longer taken.</li>
+<li><strong>Never use a <code>MagicMock</code> in a benchmark</strong> for an object the hot path
+  hashes or compares. It inflated one of these figures to a fictitious
+  325x.</li>
+</ul>
+<h2 id="decision-6-algorithm-before-boundary">Decision 6 — Algorithm before boundary</h2>
+<blockquote>
+<p><strong>Scoreboard, added after WFC.</strong> This decision has now changed a
+verdict twice and the reasoning once. The render batcher priced at
+12.2x and then 8.9x once four pieces of per-command waste came out of
+the Python implementation — same boundary, half the numerator. WFC
+priced at an implied hundreds of x and then at 67.7x on a cost small
+enough to decline, once its quadratic cell selection was replaced: 3.5
+s to 27 ms at 64x64. And the flow field's guard did not change its
+verdict but corrected what the port was <em>for</em>, from throughput to the
+worst case. Two of the three candidates where the question was asked
+properly stopped being candidates.</p>
+</blockquote>
+<p>Measure whether the work is <em>necessary</em> before measuring whether it is
+<em>fast</em>. A native port that preserves redundant work ships redundant work,
+only faster.</p>
+<p>The live example found while writing this: <code>games/vinagre_matilha</code>'s
+<code>FlankerAssignmentSystem.update</code> calls <code>FlowFieldService.recompute()</code>
+unconditionally, every fixed tick. On its 30x20 stage-1 grid that is
+<strong>5.0 ms, 30% of a 16.7 ms frame budget, 60 times a second</strong>.</p>
+<p>The goal is the jaguar's cell. <code>CELL_SIZE</code> is 32 px and the jaguar's
+<code>max_speed</code> is 158 px/s, so at a dead sprint it enters a new cell every
+0.2 s — once per <strong>12 fixed ticks</strong>. At least eleven of every twelve
+recomputes therefore produce the field that was already there, and a
+jaguar that is circling or winding up produces none at all.</p>
+<p>Porting the solver would make that 30% into 0.2% and leave the engine
+recomputing an unchanged field sixty times a second. Guarding the
+recompute comes first. Both are worth doing; the order is not optional.</p>
+<p><strong>Done, and it changed what the port is for.</strong> <code>FlowFieldService</code> now
+skips a recompute that would reproduce the field it holds, keyed on the
+goals and a content fingerprint of the graph -- 3114x on the unchanged
+path, and 30% of a frame down to 0.01%. What it does <em>not</em> touch is the
+cost of a recompute that genuinely has to happen: still 5 ms at 30x20 and
+<strong>85 ms at 96x96</strong>, which is five frames dropped the moment a goal moves.
+So the port is still wanted, for <strong>worst-case latency</strong> rather than for
+throughput. That is the whole value of taking the two questions in this
+order: answering the algorithmic one first did not cancel the boundary
+work, it corrected the reason for it.</p>
+<p><strong>Both are now done, and each is still doing its own job.</strong> The native
+sweep brings 96x96 to 1.6 ms, so the five-frame hitch is a tenth of a
+frame. The guard is not thereby redundant: 1.6 ms sixty times a second is
+10% of every frame for a field that did not change, so the guard is still
+what keeps a per-tick caller off the recompute path. Had the order been
+reversed, the port would have shipped and the demo would still be
+recomputing an unchanged field sixty times a second — at 1.6 ms instead of
+5 ms, which is precisely the kind of win that stops anyone looking.</p>
+<h3 id="the-second-case-and-the-first-where-the-order-changed-the-verdict">The second case, and the first where the order changed the verdict</h3>
+<p>The flow-field case corrected the <em>reason</em> for a port. The render batcher
+cancelled one.</p>
+<p><code>Batcher.create_batches</code> was the largest single Python cost in the engine:
+<strong>54.9 ms for a 20,000-sprite frame</strong>, three and a half frames, and the
+whole of item 4 below rested on it. Almost none of it was the grouping.
+Four things were paid per command and thrown away:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>(world * zoom) + offset</code> through <code>Vector2</code> arithmetic</td>
+<td style="text-align: right;"><strong>2.8–3.9x</strong></td>
+</tr>
+<tr>
+<td>collecting rotation, scale, colour and source rect for every command, then discarding all four if the batch's flag stayed false</td>
+<td style="text-align: right;">~20%</td>
+</tr>
+<tr>
+<td>testing the tint through <code>Color.__eq__</code>, which builds two tuples per command</td>
+<td style="text-align: right;">~25%</td>
+</tr>
+<tr>
+<td>reaching the <code>material_id</code> property when neither command has a material</td>
+<td style="text-align: right;">~5%</td>
+</tr>
+</tbody>
+</table>
+<p>Removing all four is <strong>5.0x at 20,000 sprites and 7.0x at 1,000</strong>, for
+batches identical field by field, in Python, in one file. The first row is
+the one to carry away: <code>Vector2</code> subclasses <code>pymunk.Vec2d</code>, so each
+intermediate is a real allocation inside the loop, and doing the same two
+float operations on the components is bit-exact and three to four times
+faster on its own. <strong>The cost was never the loop, and the language was
+never the problem.</strong></p>
+<p>What that did to the port is the point of taking the questions in this
+order. Priced against the batcher as it was, item 4's ceiling was
+<strong>12.2x</strong>. Priced against the batcher as it now is, it is <strong>7.4–8.9x</strong> —
+over the 5x threshold, and under the bar this ADR itself set for the item,
+which was to beat the 13–20x <code>ShapeBatch</code> gets out of ordinary Python
+lists. Nothing about the boundary changed. The denominator stayed where it
+was and the numerator halved.</p>
+<p><strong>Had the order been reversed</strong>, the port would have shipped, it would
+have been reported as a 6x win on the engine's worst Python path, and the
+4x sitting in plain sight in <code>batch.py</code> would have gone with it --
+invisible, because a native implementation has no reason to reproduce a
+Python implementation's waste and no way to tell you it did not. That is
+the strongest form of the argument for this decision: porting first does
+not merely delay the algorithmic fix, it <strong>destroys the evidence that one
+was available</strong>.</p>
+<h2 id="decision-7-a-shared-primitive-is-priced-on-itself-and-amdahl-decides-what-a-consumer-feels">Decision 7 — A shared primitive is priced on itself, and Amdahl decides what a consumer feels</h2>
+<p>This decision exists because <strong>Decision 3 got one wrong, and the way it
+was wrong is more useful than the correction.</strong></p>
+<p>Decision 3's remedy 2 said a native <code>SpatialHash</code> is "the wrong shape"
+because it "returns <code>list[K]</code> of Python keys per query", and Track R item
+3 was sequenced as native state for native consumers only. The reasoning
+is that a per-query crossing scales with how many candidates the query
+found. <strong>That is true and it does not matter</strong>, which the measurement
+settles:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python broad-phase, 1000 keys, one query each, k=17</td>
+<td style="text-align: right;">6.97 ms</td>
+</tr>
+<tr>
+<td>the <code>list[K]</code> crossing alone</td>
+<td style="text-align: right;">0.39 ms</td>
+</tr>
+<tr>
+<td>…as a share of what it replaces</td>
+<td style="text-align: right;"><strong>4%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The crossing scales with <code>k</code>. So does the Python broad-phase, at about
+twenty times the cost per candidate: Python pays a dict lookup, two
+subtractions and a multiply-add where the crossing pays an incref and a
+list append. <strong>The ratio is therefore roughly flat in density</strong> — 20.5x
+at k=17, 22.3x at k=32, and still 16.0x in the degenerate case where
+every key is everyone's neighbour. Decision 3 reasoned about one side of
+a ratio.</p>
+<p>Two things made it work that are worth copying. The index <strong>holds</strong> the
+<code>PyObject</code> the caller inserted, so returning a candidate is a reference
+count rather than a string allocation — returning <code>Vec&lt;String&gt;</code> would have
+made the original objection true. And <code>Vector2</code> is a <code>tuple</code> subclass, so
+a position crosses through PyO3's tuple fast path with no attribute
+access.</p>
+<h3 id="what-it-delivered-and-the-number-that-matters-more">What it delivered, and the number that matters more</h3>
+<p>The index itself: <strong>17x</strong> on a tick of re-sync-then-query at 1000 keys,
+insert 4.9x and queries 20.5x. Every consumer got it <strong>without changing a
+line</strong>, which is the argument for this shape over a per-consumer port.</p>
+<p>And then Amdahl:</p>
+<table>
+<thead>
+<tr>
+<th>consumer, unchanged</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native index</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TopDownSystem</code> separation, 1000 clumped</td>
+<td style="text-align: right;">17.3 ms</td>
+<td style="text-align: right;">9.25 ms</td>
+<td style="text-align: right;">1.87x</td>
+</tr>
+<tr>
+<td><code>TopDownSystem</code> separation, 1000 uniform</td>
+<td style="text-align: right;">2.82 ms</td>
+<td style="text-align: right;">0.83 ms</td>
+<td style="text-align: right;">3.42x</td>
+</tr>
+<tr>
+<td><code>TopDownSystem</code> separation, 200</td>
+<td style="text-align: right;">0.66 ms</td>
+<td style="text-align: right;">0.15 ms</td>
+<td style="text-align: right;">4.30x</td>
+</tr>
+<tr>
+<td><code>FlockingSystem</code>, Python steering, 1000</td>
+<td style="text-align: right;">16.4 ms</td>
+<td style="text-align: right;">9.8 ms</td>
+<td style="text-align: right;">1.67x</td>
+</tr>
+<tr>
+<td><code>SpatialIndexSystem.update</code>, 2000 tracked</td>
+<td style="text-align: right;">1.79 ms</td>
+<td style="text-align: right;">1.15 ms</td>
+<td style="text-align: right;">1.55x</td>
+</tr>
+<tr>
+<td><code>MagnetSystem.update</code>, 100 magnets</td>
+<td style="text-align: right;">1.69 ms</td>
+<td style="text-align: right;">1.19 ms</td>
+<td style="text-align: right;">1.43x</td>
+</tr>
+<tr>
+<td><code>ProjectileSystem.update</code>, 1000 live</td>
+<td style="text-align: right;">2.81 ms</td>
+<td style="text-align: right;">2.13 ms</td>
+<td style="text-align: right;">1.32x</td>
+</tr>
+</tbody>
+</table>
+<p><strong>A 17x primitive bought between 1.3x and 4.3x.</strong> The broad-phase was
+never most of any consumer's tick — what follows a query is an ECS lookup,
+a component fetch and some arithmetic, all of it Python, all of it
+untouched. So:</p>
+<blockquote>
+<p><strong>Price a shared primitive on itself; price a subsystem end to end. Do
+not quote the first and mean the second.</strong></p>
+</blockquote>
+<p>The 5x threshold in Decision 1 is written for a subsystem. A primitive
+clears it on its own figure <em>and</em> pays its parity bill once for five
+consumers instead of once each, which is better leverage per unit of
+permanent maintenance than any previous port — the flow field's 56x
+serves one caller. That is the case for admitting it at 17x while its
+consumers see 1.3x, and it is a weaker case than any row above it.</p>
+<h3 id="where-decision-3-was-right-after-all">Where Decision 3 was right after all</h3>
+<p>"Projectiles then become a consequence of it" — item 3's second sentence —
+is <strong>false, measured at 1.32x.</strong> A first projection said 10.7x, by
+assuming the pinned 1.53 ms hit check would move native wholesale. Only
+its broad-phase did; the ECS lookups, the <code>Hurtbox</code>/<code>Health</code> checks and
+the team comparison stayed, and they are the bulk. Reaching 10x there
+needs a native pool that also filters by team natively, which puts
+gameplay data inside the index — a separate decision, not a consequence of
+this one. <strong>Projectiles stay declined</strong>, now at 1.32x with an accelerated
+index rather than an estimated 2.0x, which makes the decline firmer.</p>
+<h3 id="the-cost-stated">The cost, stated</h3>
+<p><strong>One access pattern is asymptotically slower than Python.</strong> The native
+grid rebuilds on the first query after any write — free for the pattern
+every consumer has (sync the whole index, then sweep it: one rebuild for
+<code>n</code> queries) and quadratic for a caller that <em>alternates</em> insert and
+query, where Python's incremental insert is O(1).</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">keys</th>
+<th style="text-align: right;">alternating, native against Python</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">250</td>
+<td style="text-align: right;">1.9x faster</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">0.52x</td>
+</tr>
+<tr>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;"><strong>0.13x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Nothing in the engine alternates and <code>accelerate=False</code> is the remedy, but
+this is the first native store that is <em>worse</em> at something rather than
+merely different, so it is written down here and bounded by a test rather
+than left to be discovered.</p>
+<h3 id="two-findings-about-the-parity-discipline-itself">Two findings about the parity discipline itself</h3>
+<p><strong>A store that becomes the default silently disarms its own references.</strong>
+<code>tests/test_native_flocking_parity.py</code> rebuilds a Python <code>SpatialHash</code> as
+the reference its first tier compares against. The moment <code>SpatialHash</code>
+had a native store and defaulted to <code>auto</code>, that reference became native
+and the tier compared the native grid with itself. Demonstrated: with the
+distance test sabotaged from <code>&lt;=</code> to <code>&lt;</code>, the unpinned suite passed all 69
+tests and the pinned one failed 2. The same applies to
+<code>tests/performance/conftest.py</code>'s <code>build_hash</code>, whose complexity guards
+would have measured whichever store the contributor happened to have
+built, and to <code>tests/test_common_spatial.py</code>, which would have gone on
+passing while testing only one store.</p>
+<blockquote>
+<p><strong>Adding a native store to an existing class changes the meaning of
+every test that constructs it.</strong> Pin every reference and every
+complexity guard to the Python store explicitly, and parametrise the
+unit suite over both.</p>
+</blockquote>
+<p><strong>And <code>accelerate=False</code> has to mean it all the way down.</strong>
+<code>FlockingSystem</code>'s Python path builds its own <code>SpatialHash</code>, with no
+<code>accelerate</code> argument — so <code>FlockingSystem(accelerate=False)</code> quietly
+indexed natively, and the "Python" flocking tick measured 9.8 ms instead
+of 16.4 ms. That silently restated Decision 1's flocking row from 9.0x to
+5.2x, and put native code inside a parity suite's Python reference. A
+subsystem that forces the Python path must force it in everything it
+constructs.</p>
+<h2 id="consequences-track-r-re-sequenced-by-measured-ceiling">Consequences — Track R, re-sequenced by measured ceiling</h2>
+<p>RFC-0003's order was maths, batcher, pools, pathfinding. The measured order
+is almost its reverse:</p>
+<ol>
+<li><strong>The flow field — BUILT.</strong> Priced at 161x at 96x96,
+   opaque, and already costing a shipped demo 30% of its frame. Preceded
+   by the Python guard from Decision 6. This is what ADR 0003's
+   recommendation 2 asked for and nobody had measured; measured, a 96x96
+   Python recompute is <strong>505% of a frame</strong>, which made it less an
+   optimisation than a feature that could not be used at interactive
+   rates. It is now <strong>1.6 ms, 46-53x</strong>, and bit-exact with the Python
+   sweep rather than merely close — the first native port where that was
+   required rather than nice, because a field steers gameplay. The field
+   stays native and only the query crosses, which is Decision 3's opacity
+   paying for itself.</li>
+</ol>
+<p><strong>It also calibrated Decision 1, and not entirely flatteringly.</strong> The
+   161x was a <em>ceiling</em> and the achieved figure is 56x, because <code>T_cross</code>
+   models the boundary and the native sweep costs 1.3 ms of its own. The
+   decision the number was computed for — is this far above 5x — was
+   right; a reader comparing prediction to outcome should take 161x as
+   "well above the threshold" and not as a forecast. The pools' forecasts
+   landed close because their native work was negligible beside their
+   handoff, which is a property of those candidates rather than of the
+   formula.</p>
+<p><strong><code>AStarPathfinder</code> and the WFC generator are now measured, and both
+   are declined</strong> — this item never covered them, and the measurements
+   say why it should not have. The flow field is what the 161x was about.</p>
+<p><strong>WFC was the larger surprise, and Decision 6 dissolved it.</strong> A 64x64
+   generation measured <strong>3.5 seconds</strong>, which looks like the strongest
+   remaining case in the engine. 95% of it was choosing which cell to
+   collapse next: every undecided cell listed and sorted, once per
+   collapse, so quadratic in the cell count — 7.69 million <code>len</code> calls
+   at 48x48 against 0.014 s in the constraint propagation the algorithm
+   consists of. With a lazily-invalidated entropy heap the same grid is
+   <strong>27 ms</strong>, output identical bit for bit including the RNG's end state.
+   What remains prices at 67.7x and is still a <strong>no</strong>: it is once per
+   generated level, and <code>T_pinned</code> is 98% of the floor because
+   <code>generate_wfc</code> returns <code>dict[Cell, S]</code>, so every cell is a Python
+   dict entry under a tuple key whoever filled it in. 67.7x of 25 ms,
+   once per floor, against a second implementation maintained forever.</p>
+<p><strong>A* is declined for reasons the ratio does not carry.</strong> One
+   corner-to-corner query on a 96x96 grid is <strong>20.2 ms</strong> — 121% of a
+   frame — and 51 agents repathing to their own targets is 305 ms, so
+   the cost is real. But the expensive case, many agents converging on
+   one goal, is <em>already</em> native and already O(1) per agent: that is what
+   the flow field is. And <code>AStarPathfinder</code> solves any <code>Graph[Node]</code>
+   while a native one could only serve <code>GridGraph</code> — <code>get_neighbors</code> is
+   55% of a query and <code>cost</code> another 19%, which is exactly the part that
+   cannot cross for a caller-supplied graph. A port would be a second
+   solver, not this one made faster, which is Decision 2 read in the
+   other direction.</p>
+<p>One target does survive, for Python: <strong><code>GridGraph.get_neighbors</code></strong>,
+   which is A<em>'s 55% and the Python flow field's hot path too. Its yield
+   order is replicated bit-exactly in <code>rust/src/flowfield.rs</code> and pinned
+   by <code>tests/test_native_flow_field_parity.py</code>, so it is its own piece of
+   work rather than a line in anybody else's. </em><em>Since done, in Python</em><em>:
+   a query is 13.6 ms and the Python field 52 ms at 96x96, which moves the
+   flow field's gain from 46-53x to 26-32x with the native column unchanged.
+2. </em><em>Flocking — BUILT.</em><em> Priced at 15.4x at 1000 agents, which was 99%
+   of a frame, and achieved </em><em>9.0x</em><em> — 16.6 ms down to 1.85 ms, or 11% of
+   a frame. The first port of something that is </em>not* opaque: every agent
+   is an ECS entity, so unlike the field, the whole flock crosses every
+   tick and the crossing is 63% of the native tick rather than a rounding
+   error. That is the price of non-opacity, measured, and it is the
+   difference between this row and the field's 56.7x.</p>
+<p>Where it pays best is the case it was really for. A flock converging
+   on the player makes every agent everyone's neighbour, so the tick goes
+   quadratic: at 2000 agents Python goes from 34 ms spread to 74 ms
+   clumped, while the native store goes from 3.9 ms to 4.6 ms. Clumping
+   costs Python 2.2x and the native store 1.26x, because what density
+   multiplies is the per-neighbour arithmetic and not the handoff. So the
+   advantage <em>grows</em> in the regime a horde actually creates, which the
+   uniform-density figure above understates.</p>
+<p><strong>Staggering is now largely redundant</strong>, which is worth saying because
+   it is a knob demos set. <code>groups</code> exists to spread steering across
+   ticks, and in Python it works: 3000 agents go from 50 ms to 20 ms at
+   <code>groups=4</code>. Natively the same change moves 6.2 ms to 5.2 ms, because
+   what it skips is the steering and what remains is the crossing and the
+   prologue. A game on the native store should reach for it only after
+   measuring.</p>
+<p>It is also the first port to need a <strong>tolerance</strong> rather than <code>==</code>,
+   with one permitted cause and the arithmetic pinned separately — see
+   Decision 5, which this increment rewrote.
+3. <strong><code>SpatialHash</code> — BUILT, and not in the shape this item specified.</strong>
+   It said "native state for native consumers only — never as a
+   Python-facing index returning <code>list[K]</code>", and the <code>list[K]</code> crossing
+   measures at <strong>4%</strong> of the Python broad-phase it replaces. So it landed
+   as a drop-in native store behind the same methods: <strong>17x</strong> on the
+   index, and every consumer — flocking, actor separation, magnet
+   pickups, projectile hits, two demos — got it without changing a line.
+   Decision 7 has the measurement, and what it cost to have been wrong.</p>
+<p><strong>What the consumers actually feel is 1.3x to 4.3x</strong>, because the
+   broad-phase was never most of anyone's tick. The best of them is the
+   case this is really for: <code>TopDownSystem</code>'s actor separation at 1000
+   clumped actors, 104% of a frame down to 56%. The worst is projectiles
+   at 1.32x, so this item's second sentence — "projectiles then become a
+   consequence of it" — is <strong>false</strong>, and they stay declined.</p>
+<p>It is also the first native store that is <em>worse</em> than Python at
+   something: an alternating insert/query loop is quadratic against
+   Python's linear, 0.13x at 4000 keys. No consumer does that; the cost is
+   bounded by a test and <code>accelerate=False</code> is the remedy.
+4. <strong>Marco 2's buffer handoff — PRICED AND DEFERRED at 7.4-8.9x</strong>, and the
+   price is this low <em>because</em> Decision 6 went first. The candidate is the
+   whole CPU frame, not the batcher alone: <code>submit</code>, <code>sort</code>,
+   <code>create_batches</code> and <code>pack_sprite_instances</code> are one unit, since a
+   native batcher replaces all four. That was 78.8 ms at 20,000 sprites
+   for a ceiling of 12.2x. Removing four pieces of per-command waste from
+   the Python batcher took it to 39.2 ms and the ceiling to 7.4-8.9x --
+   over the 5x threshold, under this item's own bar of beating
+   <code>ShapeBatch</code>'s 13-20x.</p>
+<p><strong>Deferred rather than declined</strong>, and the distinction is the honest
+   one: nothing here says a native batcher would not work, only that it
+   is now worth less than it looked and that cheaper things are in front
+   of it. Three numbers say what they are. <code>submit</code> is 48% of what is
+   left, and it is <code>RenderCommand</code> construction -- 20,000 <code>slots=True</code>
+   dataclasses at ~0.95 us each, against 0.21 us of attribute reads
+   feeding them. The instance pack is another 24%, and <strong>2.2x of it is
+   available in Python</strong> by handing <code>numpy</code> flat lists instead of lists of
+   tuples; that one is a <code>RenderBatch</code> protocol change across three
+   renderers, so it wants its own workstream rather than a line here. And
+   the many-texture case -- 1.66x where one texture got 5.0x -- is
+   <code>RenderBatch</code> construction, which is the one part of this path a native
+   implementation would not obviously help, because the batches have to
+   come back to Python either way.</p>
+<p>Two things the pricing established that outlive the verdict. <strong>One
+   crossing per sprite is the cheap shape</strong>: 20,000 individual pushes cost
+   2.3 ms, while one call taking the frame as ten lists costs 1.47 ms but
+   needs 6.36 ms of Python to build them. RFC-0003 states "one crossing
+   per system per frame" as a design law, and here it is the more
+   expensive of the two. And <strong>scalars cross almost free while containers
+   do not</strong>: 0.092 us for a three-argument call, 0.114 us for an
+   eleven-argument one, 0.405 us for a seventeen-argument one whose real
+   cost is the three Python lists among them. Argument count barely
+   registers; marshalling a list does.</p>
+<p>What would reopen it: a design where the native side <em>owns</em> sprite
+   state and the ECS writes into it on change, so a frame with few moving
+   sprites crosses almost nothing. That is a different boundary from the
+   one priced here -- it needs <code>notify_component_changed</code> plumbing and it
+   runs into Decision 3, since a sprite is an ECS entity that game code
+   reads. It has not been priced, and this item should not be read as
+   having priced it.
+5. <strong>Projectiles alone — declined</strong> at 2.0x, with the ratio recorded here
+   so the decision is re-checkable rather than re-arguable.
+6. <strong>Marco 1's maths half — still dropped</strong>, for the reasons in ADR 0003:
+   the hot <code>Vector2</code> traffic is all inside the systems above, and the code
+   outside them does 1-8 vector operations a frame.</p>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<p><strong>Port by module, as RFC-0003 proposed.</strong> Rejected: it was wrong three
+times out of three, in both directions. It would have shipped sparks at
+1.4x and skipped the flow field, which is the largest win in the engine by
+an order of magnitude.</p>
+<p><strong>Keep the per-subsystem <code>accelerate=</code> default.</strong> Rejected under Decision
+4: it makes gameplay depend on build state. The argument for it is
+consistency with the two landed pools, which is why those are being
+retrofitted onto the switch rather than left as the exception.</p>
+<p><strong>Require bit-exact cross-store parity.</strong> Rejected as unachievable, not
+merely expensive -- see Decision 4. Pursuing it would mean reimplementing
+CPython's set probing in Rust, and the thing it would buy is better bought
+by recording which store ran.</p>
+<p><strong>Make everything native and drop the Python implementations.</strong> Rejected:
+it forfeits <code>pip install pyguara</code> working without a Rust toolchain, which
+is the engine's main distribution advantage and the reason the extension
+was made optional in the first place.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

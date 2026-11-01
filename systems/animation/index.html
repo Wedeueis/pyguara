@@ -1,0 +1,2786 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../ai/intelligence/">
+      
+      
+        <link rel="next" href="../audio/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Animation - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#animation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Animation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tweening" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tweening
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tweening">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#endpoint-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoint types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delay-loops-yoyo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delay, loops, yoyo
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tweenmanager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TweenManager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#easing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Easing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tweening-entity-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tweening entity properties
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tweening entity properties">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-a-second-tween-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a second tween does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-scene-system-not-a-global-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a scene system, not a global manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timelines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timelines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sprite-animation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sprite animation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sprite animation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#playback-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Playback modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#playback-speed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Playback speed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#building-clips-from-a-sheet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building clips from a sheet
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-machine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State machine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#animationsystem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnimationSystem
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#directional-animation-kit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Directional animation (kit)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tweening" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tweening
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tweening">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#endpoint-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Endpoint types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delay-loops-yoyo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Delay, loops, yoyo
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tweenmanager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TweenManager
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#easing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Easing
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tweening-entity-properties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tweening entity properties
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tweening entity properties">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#paths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Paths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-a-second-tween-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a second tween does
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-a-scene-system-not-a-global-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why a scene system, not a global manager
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timelines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timelines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sprite-animation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sprite animation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sprite animation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#playback-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Playback modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#playback-speed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Playback speed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#building-clips-from-a-sheet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Building clips from a sheet
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#state-machine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        State machine
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#animationsystem" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnimationSystem
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#directional-animation-kit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Directional animation (kit)
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="animation">Animation</h1>
+<p>PyGuara's animation code comes in two independent halves:</p>
+<table>
+<thead>
+<tr>
+<th>Half</th>
+<th>Module</th>
+<th>Animates</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Tweening</strong></td>
+<td><code>pyguara.animation</code></td>
+<td>any number or sequence of numbers over time</td>
+</tr>
+<tr>
+<td><strong>Sprite animation</strong></td>
+<td><code>pyguara.graphics.components.animation</code></td>
+<td>a <code>Sprite</code>'s texture, frame by frame</td>
+</tr>
+</tbody>
+</table>
+<p>They share nothing but the name. Pick whichever fits; a project often uses both.</p>
+<hr />
+<h2 id="tweening">Tweening</h2>
+<p>A <code>Tween</code> interpolates a value from <code>start_value</code> to <code>end_value</code> over
+<code>duration</code> seconds, shaped by an easing function.</p>
+<pre><code class="language-python">from pyguara.animation import Tween, TweenManager, EasingType
+
+tween = Tween(
+    start_value=(0.0, 0.0),
+    end_value=(100.0, 50.0),
+    duration=1.0,
+    easing=EasingType.EASE_OUT_QUAD,
+)
+tween.start()
+
+# every frame:
+tween.update(dt)
+x, y = tween.current_value
+</code></pre>
+<h3 id="endpoint-types">Endpoint types</h3>
+<p>The two endpoints must have the <strong>same shape</strong>, and <code>current_value</code> comes back
+as <strong>the type that went in</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Endpoints</th>
+<th><code>current_value</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>two numbers</td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td>two <code>Vector2</code></td>
+<td><code>Vector2</code></td>
+</tr>
+<tr>
+<td>two <code>Color</code></td>
+<td><code>Color</code>, channels rounded and clamped</td>
+</tr>
+<tr>
+<td>two equal-length tuples</td>
+<td><code>tuple</code></td>
+</tr>
+<tr>
+<td>two equal-length lists</td>
+<td><code>list</code></td>
+</tr>
+</tbody>
+</table>
+<p>That the type survives matters because the usual destination is an attribute:
+writing a plain tuple to <code>transform.position</code> is a bug that surfaces as an
+<code>AttributeError</code> several frames later, nowhere near the tween.</p>
+<p><code>Color</code> tweening is first-class — hit-flash white, poison tint, corpse fade —
+and overshooting easings are safe, because <code>Color</code>'s own constructor clamps.</p>
+<p>A mismatched or unsupported endpoint raises <strong>at construction</strong>, not
+mid-playback: a tween is usually built a long way from where it is ticked, and
+a shape error reported at tick time names a frame rather than a call site.</p>
+<h3 id="lifecycle">Lifecycle</h3>
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>start()</code></td>
+<td>begin (or restart from the top)</td>
+</tr>
+<tr>
+<td><code>pause()</code> / <code>resume()</code></td>
+<td>freeze / unfreeze; <code>update()</code> still returns "alive"</td>
+</tr>
+<tr>
+<td><code>stop()</code></td>
+<td>reset to <code>IDLE</code>; <code>update()</code> becomes a no-op until <code>start()</code></td>
+</tr>
+<tr>
+<td><code>update(dt)</code></td>
+<td>advance; returns <code>False</code> once the tween has completed</td>
+</tr>
+</tbody>
+</table>
+<p>Read-only: <code>current_value</code>, <code>progress</code> (0&ndash;1), <code>is_playing</code>, <code>is_complete</code>.</p>
+<h3 id="delay-loops-yoyo">Delay, loops, yoyo</h3>
+<ul>
+<li><code>delay</code> &mdash; seconds to wait after <code>start()</code> before the first movement.
+  Applied once; loop repeats do not re-wait.</li>
+<li><code>loops</code> &mdash; <code>0</code> plays once, <code>-1</code> loops forever, <code>N</code> plays once and then
+  repeats <code>N</code> more times (<code>N + 1</code> playthroughs total).</li>
+<li><code>yoyo</code> &mdash; on each loop, swap the direction instead of snapping back to
+  the start, so the value ping-pongs.</li>
+<li><code>on_update(value)</code> fires every frame the tween moves; <code>on_complete()</code> fires
+  once, only at final completion (never on an intermediate loop, never on an
+  infinite loop).</li>
+</ul>
+<p>A single <code>update(dt)</code> whose <code>dt</code> spans several whole loops resolves <strong>one</strong>
+loop boundary and carries the remaining time forward, catching up over the
+next few frames rather than firing every boundary at once. Clamp <code>dt</code> upstream
+if a lag spike must not stutter a tween.</p>
+<h3 id="tweenmanager">TweenManager</h3>
+<p><code>TweenManager</code> owns a bag of tweens, ticks them, and drops each one when it
+completes.</p>
+<pre><code class="language-python">from pyguara.animation import Tween, TweenManager
+
+manager = TweenManager()
+manager.add(tween)   # returns the tween, for chaining
+tween.start()
+
+# in your system's update():
+manager.update(dt)
+</code></pre>
+<p><strong>Nothing in the engine updates a <code>TweenManager</code> for you</strong> &mdash; call
+<code>manager.update(dt)</code> from a system or scene you own. For tweening an <em>entity's</em>
+properties, reach for <a href="#tweening-entity-properties"><code>tween_property()</code></a>
+instead; that path is ticked for you. Two <code>Tween</code> instances are
+equal only when they are the <em>same</em> object, so a manager can hold many
+identically configured tweens (five enemies flashing white) without them
+aliasing each other. <code>pause_all()</code>, <code>resume_all()</code>, <code>stop_all()</code>, <code>clear()</code>,
+<code>tween_count</code> and <code>active_tweens</code> round out the surface. <code>stop_all()</code> also
+clears; a tween that is <code>add()</code>ed but never <code>start()</code>ed (or is <code>stop()</code>ped)
+stays in the bag until you <code>remove()</code> or <code>clear()</code> it.</p>
+<h3 id="easing">Easing</h3>
+<p><code>pyguara.animation.easing</code> provides <code>EasingType</code> and 31 functions across the
+usual families &mdash; quad, cubic, quart, quint, sine, expo, circ, elastic,
+back, bounce, each in in / out / in-out. Call one directly, or go through
+<code>ease(t, easing_type)</code>, which clamps <code>t</code> to <code>[0, 1]</code> first. Elastic and back
+deliberately overshoot outside <code>[0, 1]</code>; the rest stay within it.</p>
+<hr />
+<h2 id="tweening-entity-properties">Tweening entity properties</h2>
+<pre><code class="language-python">from pyguara.animation import tween_property
+
+tween_property(entity, &quot;transform.position&quot;, to=target,
+               duration=0.3, easing=EasingType.EASE_OUT_QUAD)
+</code></pre>
+<p>That is the whole of it. <code>TweenSystem</code> is registered on every scene's
+<code>SystemManager</code> (priority <strong>120</strong>), so the value is written every tick and the
+binding is dropped when it finishes.</p>
+<p>Before this, tweening one property was about forty lines per effect: hold a
+reference, own a <code>TweenManager</code>, tick it in a system you wrote, read
+<code>current_value</code>, write it back.</p>
+<h3 id="paths">Paths</h3>
+<p>The first segment names a component the way <code>entity.transform</code> does; the rest
+walk attributes from there.</p>
+<pre><code class="language-python">tween_property(entity, &quot;transform.position&quot;, to=Vector2(100, 0), duration=0.4)
+tween_property(entity, &quot;sprite.color&quot;, to=Color(255, 0, 0), duration=0.1)
+tween_property(entity, &quot;transform.rotation&quot;, to=3.14, duration=1.0)
+</code></pre>
+<p>The write <strong>replaces</strong> the final attribute rather than mutating it, which is
+the only approach that works for a value type: <code>Vector2</code> wraps an immutable
+<code>pymunk.Vec2d</code>, and <code>Color</code>'s channels are clamped on construction.</p>
+<p>A path that does not resolve raises <code>PropertyPathError</code> <strong>at the call</strong>, not
+later. A tween that quietly does nothing is worse to debug than one that
+refuses to start.</p>
+<h3 id="what-a-second-tween-does">What a second tween does</h3>
+<p>The start point is read from the property itself, so a call interrupting an
+earlier tween of the same path begins from wherever it had got to — which is
+what makes a knockback retargeted mid-flight look continuous rather than
+snapping back.</p>
+<p>By default a new tween <strong>replaces</strong> any tween already running on that exact
+path. Two tweens writing one property every frame is never what anyone wanted:
+the last writer wins and the result depends on binding order. Pass
+<code>replace=False</code> if you really mean both.</p>
+<pre><code class="language-python">stop_property(entity, &quot;transform.position&quot;)   # leaves the value where it got to
+stop_tweens(entity)                           # everything on this entity
+</code></pre>
+<h3 id="why-a-scene-system-not-a-global-manager">Why a scene system, not a global manager</h3>
+<p>An app-wide <code>TweenManager</code> outlives the scene whose entities it animates, and
+goes on writing to components of entities that no longer exist. That is the
+same leak #55 fixed for coroutines. A scene-owned system cannot have it: the
+scene's <code>SystemManager.cleanup()</code> takes the tweens with it.</p>
+<p>Priority 120 puts it <strong>first</strong> in the engine band, before steering, AI and the
+scene's own update — otherwise every reader is one frame behind the animation
+it can see on screen.</p>
+<h2 id="timelines">Timelines</h2>
+<p>Chaining through nested <code>on_complete</code> callbacks stops being readable past two
+steps, and cannot express "these two at once, then that one" at all. Combat
+juice is naturally a timeline.</p>
+<pre><code class="language-python">from pyguara.animation import Timeline
+
+(Timeline()
+    .then(wind_up)
+    .wait(0.05)
+    .call(spawn_hitbox)
+    .parallel(knockback, screen_shake)
+    .then(recover)
+    .start())
+</code></pre>
+<p>A <code>Timeline</code> ticks with the same <code>update(dt) -&gt; bool</code> contract a <code>Tween</code> has
+(the <code>Animatable</code> protocol), so a <code>TweenManager</code> holds either without knowing
+which, and <strong>a timeline can be a step inside another timeline</strong>.</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>then(animatable)</code></td>
+<td>Run it, then continue</td>
+</tr>
+<tr>
+<td><code>wait(seconds)</code></td>
+<td>Pause</td>
+</tr>
+<tr>
+<td><code>call(fn)</code></td>
+<td>Call it, in order with the steps around it</td>
+</tr>
+<tr>
+<td><code>parallel(*animatables)</code></td>
+<td>Run them together; finish with the slowest</td>
+</tr>
+</tbody>
+</table>
+<p><code>loops</code> follows <code>Tween.loops</code>: <code>0</code> once, <code>-1</code> forever, <code>N</code> extra repeats.
+<code>on_complete</code> fires once, after the last loop. <code>stop()</code> halts <strong>every</strong> step,
+so an interrupted parallel group does not leave its members running, and does
+not fire <code>on_complete</code>.</p>
+<p>Two timing rules:</p>
+<ul>
+<li><strong>Leftover time carries into the next step, in the same call.</strong> Five 1 ms
+  steps would otherwise take one frame each — 83 ms at 60 Hz for 5 ms of
+  animation.</li>
+<li><strong>A step that takes no time runs in the same call too</strong>, so
+  <code>then(tween).call(spawn_hitbox)</code> does not fire the callback a frame after the
+  tween it belongs to. At most one full pass over the steps happens per call,
+  so a looping timeline of nothing but callbacks misbehaves rather than hanging
+  the frame.</li>
+</ul>
+<p>An empty timeline is <strong>complete</strong>, not stuck: a game building one from a
+filtered list of effects should not hang when the filter matches nothing.</p>
+<h2 id="sprite-animation">Sprite animation</h2>
+<p>A <strong>clip</strong> is an ordered list of textures plus a frame rate. An <strong><code>Animator</code></strong>
+plays one clip at a time and writes the current frame onto a <code>Sprite</code>.</p>
+<p><code>Animator</code> is a data-only component &mdash; the clip table and the playback
+cursor &mdash; so the behaviour that moves that cursor is free functions
+beside it, the same split <code>Transform</code>/<code>set_parent</code> and <code>Health</code>/<code>apply_damage</code>
+use. Import them from the same module.</p>
+<pre><code class="language-python">from pyguara.graphics.components.animation import (
+    AnimationClip,
+    Animator,
+    add_clip,
+    play_clip,
+)
+
+animator = Animator(sprite)
+add_clip(animator, AnimationClip(&quot;run&quot;, run_frames, frame_rate=12.0, loop=True))
+add_clip(animator, AnimationClip(&quot;hit&quot;, hit_frames, frame_rate=20.0, loop=False))
+
+play_clip(animator, &quot;run&quot;)             # no-op if &quot;run&quot; is already playing
+play_clip(animator, &quot;run&quot;, force_reset=True)  # restart from frame 0
+</code></pre>
+<p><code>AnimationClip</code> rejects an empty frame list or a non-positive <code>frame_rate</code> at
+construction. <code>advance_animator(animator, dt)</code> catches up <strong>every</strong> whole frame
+the <code>dt</code> covers, so a lag spike or a host slower than the clip's <code>frame_rate</code>
+does not drop frames or drift behind. A non-looping clip stops on its last
+frame; <code>is_finished</code> then reports <code>True</code> (and <code>is_playing</code> <code>False</code>).
+<code>play_clip()</code> with an unknown clip name logs a warning and does nothing.</p>
+<h3 id="playback-modes">Playback modes</h3>
+<p><code>loop</code> could only say "start over" or "stop". <code>mode</code> says more:</p>
+<table>
+<thead>
+<tr>
+<th><code>PlaybackMode</code></th>
+<th>At the last frame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ONCE</code></td>
+<td>Stop there</td>
+</tr>
+<tr>
+<td><code>LOOP</code></td>
+<td>Back to frame 0</td>
+</tr>
+<tr>
+<td><code>PING_PONG</code></td>
+<td>Play backwards, then forwards again</td>
+</tr>
+<tr>
+<td><code>LOOP_TIMES</code></td>
+<td>Loop <code>loop_count</code> times, then stop</td>
+</tr>
+</tbody>
+</table>
+<p><code>PING_PONG</code> is what an idle bob or a breathing loop wants: the hard cut back to
+frame 0 is visible as a hitch. It walks frame by frame rather than computing
+the destination, so a lag spike still fires <strong>every</strong> frame event it crossed,
+including the turn at the far end.</p>
+<p><code>loop</code> remains the serialized form and <code>mode</code> is derived from it when nothing
+set one, so an existing clip or prefab file keeps working. Setting both
+inconsistently resolves in <code>mode</code>'s favour — it is the more specific statement.</p>
+<h3 id="playback-speed">Playback speed</h3>
+<pre><code class="language-python">animator.playback_speed = 2.0    # haste
+animator.playback_speed = 0.0    # hitstop
+</code></pre>
+<p>A multiplier over the clip's own <code>frame_rate</code>, so a haste or slow buff is one
+field rather than a faster copy of every clip. <strong>Zero holds the cursor without
+clearing <code>is_playing</code></strong>, which is what a hitstop wants: the animation resumes
+where it was instead of restarting. A negative speed holds too — running a clip
+backwards is <code>PING_PONG</code>'s business, and a negative multiplier is far more
+likely a sign flip in a buff calculation.</p>
+<h3 id="building-clips-from-a-sheet">Building clips from a sheet</h3>
+<pre><code class="language-python">sheet = SpriteSheet(&quot;assets/hero.png&quot;, texture_factory)
+walk = sheet.clip(&quot;walk_down&quot;, 32, 32, row=1, count=8, fps=12.0)
+</code></pre>
+<p><code>slice_grid()</code> returns a flat row-major list, so building a clip meant slicing
+<code>frames[8:16]</code> by hand — the one place a sheet's layout leaked into game code.
+A <strong>row</strong>, not an arbitrary span, because that is how sheets are laid out: one
+action per row. A row past the end, or a <code>count</code> larger than the row, raises:
+a clip quietly short of frames animates wrongly rather than visibly failing.</p>
+<p><code>frame_events</code> indices are relative to the <strong>clip</strong>, not to the sheet.</p>
+<h3 id="state-machine">State machine</h3>
+<p><code>AnimationStateMachine</code> sits on top of an <code>Animator</code>: one <strong>state</strong> per clip,
+with transitions between them.</p>
+<pre><code class="language-python">from pyguara.graphics.components.animation import (
+    AnimationState,
+    AnimationStateMachine,
+    AnimationTransition,
+    TransitionCondition,
+    add_state,
+    set_default_state,
+    transition_to,
+)
+
+fsm = AnimationStateMachine(sprite, animator)
+add_state(fsm, AnimationState(&quot;idle&quot;, idle_clip))
+add_state(
+    fsm,
+    AnimationState(
+        &quot;attack&quot;,
+        attack_clip,
+        transitions=[
+            AnimationTransition(
+                &quot;attack&quot;, &quot;idle&quot;, TransitionCondition.ANIMATION_END
+            )
+        ],
+        on_complete=lambda: print(&quot;attack done&quot;),
+    ),
+)
+set_default_state(fsm, &quot;idle&quot;)   # enters the state and starts its clip
+
+transition_to(fsm, &quot;attack&quot;)     # manual switch; returns False if already there
+</code></pre>
+<ul>
+<li><code>AnimationState</code> carries <code>on_enter</code>, <code>on_exit</code> and <code>on_complete</code> callbacks.
+  <code>on_complete</code> fires <strong>once</strong> when a non-looping clip finishes, not every
+  frame it then sits on its last frame; re-entering the state re-arms it.</li>
+<li><code>AnimationTransition.condition</code> is either <code>ANIMATION_END</code> (fires once the
+  state's clip finishes) or <code>IMMEDIATE</code> (fires on the tick after the state is
+  entered &mdash; useful for a one-shot intro that hands off to a loop).
+  <code>priority</code> breaks ties; the highest-priority eligible transition wins, and
+  at most one transition fires per update.</li>
+<li><code>current_state_name</code> reports where the machine is.</li>
+</ul>
+<h3 id="animationsystem">AnimationSystem</h3>
+<p><code>AnimationSystem</code> is registered automatically on every <code>Scene</code>'s
+<code>SystemManager</code> (priority 300) and ticked at the fixed timestep. Each tick it
+calls <code>advance_state_machine()</code> on every <code>AnimationStateMachine</code>, then
+<code>advance_animator()</code> on every standalone <code>Animator</code> whose entity does <strong>not</strong>
+also have a state machine (the machine drives its own animator). You do not
+call it, and you should not advance animators a second time from scene code.</p>
+<h2 id="directional-animation-kit">Directional animation (kit)</h2>
+<p>Every game this engine targets is top-down, and every top-down character has
+N actions × 4 or 8 facings. <code>pyguara.kits.topdown_movement</code> carries that:</p>
+<pre><code class="language-python">from pyguara.kits.topdown_movement import (
+    DirectionalAnimator, DirectionalClipSet, DirectionalAnimationSystem,
+)
+
+clips = DirectionalClipSet(actions=(&quot;idle&quot;, &quot;walk&quot;, &quot;attack&quot;), ways=8)
+for name in clips.every_clip_name():
+    add_clip(animator, sheet.clip(name, 32, 32, row=rows[name]))
+
+entity.add_component(DirectionalAnimator(clips, action=&quot;walk&quot;))
+scene.system_manager.register(DirectionalAnimationSystem(em), priority=500)
+</code></pre>
+<p>Names follow the usual convention (<code>"walk_down"</code>, <code>"attack_up_left"</code>), so a
+game lists only the exceptions in <code>overrides</code>. A <strong>4-way</strong> set maps a diagonal
+onto its <em>left/right</em> cardinal rather than up/down: a profile view reads as a
+three-quarter view far better than a back view does.</p>
+<p><code>facing_from_vector(v, ways=8)</code> is the piece everyone writes by hand, with the
+two details everyone gets wrong first:</p>
+<ul>
+<li><strong>Screen Y grows downward</strong>, so a negative Y is <em>up</em>.</li>
+<li><strong>A zero vector returns <code>None</code>, not a default.</strong> A stopped character must
+  keep facing where it last faced; snapping to <code>DOWN</code> on every halt is the
+  other classic bug — which is why <code>DirectionalAnimator.facing</code> is stored
+  rather than recomputed.</li>
+</ul>
+<p>The system reads velocity from <code>TopDownBody</code> when there is one, and otherwise
+from how far the <code>Transform</code> moved since the last tick, so a character driven
+by a tween, a pathfinder or a script still faces the right way. It asks for the
+clip every frame and relies on <code>play_clip()</code> ignoring a re-request for the clip
+already playing, so walking in a straight line does not restart the cycle sixty
+times a second.</p>
+<p>The <strong>action</strong> is the game's business; the system only ever changes the facing.</p>
+<p>A kit rather than core: 8-way facing is a genre's vocabulary, and nothing in
+<code>pyguara.graphics</code> should know what "down" means.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

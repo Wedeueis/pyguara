@@ -1,0 +1,2439 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../animation/">
+      
+      
+        <link rel="next" href="../cli/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Audio - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#audio-system" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Audio
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a backend
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optional-capabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional capabilities
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#music" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Music
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sound-effects-and-handles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sound effects and handles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sound effects and handles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-shot-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-shot lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spatial-audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial audio
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Spatial audio">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#spatialaudioconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SpatialAudioConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#buses-and-volume" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Buses and volume
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#choosing-a-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing a backend
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optional-capabilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional capabilities
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#music" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Music
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sound-effects-and-handles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sound effects and handles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sound effects and handles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-shot-lifecycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One-shot lifecycle
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#spatial-audio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Spatial audio
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Spatial audio">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#spatialaudioconfig" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SpatialAudioConfig
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#buses-and-volume" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Buses and volume
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backend-notes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backend notes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="audio-system">Audio System</h1>
+<p><code>pyguara.audio</code> plays music and sound effects, with optional <strong>spatial</strong>
+(position-aware) playback and a <strong>bus</strong> hierarchy for grouped volume control.
+Game code never touches pygame's mixer directly.</p>
+<h2 id="layers">Layers</h2>
+<ol>
+<li><strong><code>IAudioSystem</code></strong> (<code>pyguara.audio.audio_system</code>) — the backend contract:
+   music streaming, one-shot and looping SFX, spatial placement, buses,
+   per-sound mix updates, and the optional capabilities below.
+   <code>PygameAudioSystem</code> is the shipped implementation; it is registered as a
+   singleton by the application bootstrap.</li>
+<li><strong><code>AudioManager</code></strong> (<code>pyguara.audio.manager</code>) — a convenience wrapper over
+   <code>IAudioSystem</code> that loads clips by path through the <code>ResourceManager</code>,
+   tracks the current music track, and forwards volume calls. Also a
+   bootstrap singleton.</li>
+<li><strong><code>AudioSourceSystem</code></strong> (<code>pyguara.audio.audio_source_system</code>) — the ECS
+   system that drives <code>AudioSource</code> / <code>AudioEmitter</code> / <code>AudioListener</code>
+   components. A scene registers it automatically (priority 250).</li>
+</ol>
+<pre><code class="language-python">from pyguara.audio import AudioManager
+
+audio = container.get(AudioManager)
+audio.play_music(&quot;music/theme.ogg&quot;, loop=True)
+sound = audio.play_sfx(&quot;sfx/jump.wav&quot;, volume=0.8)
+</code></pre>
+<h2 id="choosing-a-backend">Choosing a backend</h2>
+<p><code>AudioConfig.backend</code> is <code>pygame</code>, the default, or <code>native</code>; the environment
+variable is <code>PYGUARA_AUDIO_BACKEND</code>. There is deliberately no <code>auto</code>, because it
+would give the same game different capabilities on different machines, and
+<code>native</code> fails at startup if the extension cannot be imported.</p>
+<p><strong>It is not governed by <code>native_acceleration</code> or <code>PYGUARA_NO_NATIVE</code>.</strong> Those
+switch between two implementations of the same thing, and nothing in Python can
+stand in for this one. So <code>PYGUARA_NO_NATIVE=1</code> does not mean "no native code
+runs" any more: to rule out the audio, set <code>PYGUARA_AUDIO_BACKEND=pygame</code>. See
+ADR 0004, Decision 4.</p>
+<p><code>NativeAudioSystem</code> decodes with <code>symphonia</code> and resamples in Rust, then hands
+the buffers to <code>pygame.mixer</code>, so spatial audio, buses and channel stealing are
+the same code as the default backend:</p>
+<ul>
+<li><strong>Pitch is resampling, so it changes duration.</strong> 2.0 is an octave up and half
+  as long, which is what SFX variation wants. The range is 0.25 to 4.0, and
+  outside it raises <code>ValueError</code>.</li>
+<li><strong>Pitches are rendered to the nearest 1%</strong>, and the buffers are cached with a
+  32 MB budget (<code>cache_bytes=</code>), least recently used first. A variation range of
+  a few percent is a handful of buffers.</li>
+<li><strong>Resampling is linear</strong>, so a large upward pitch aliases. Inaudible at a few
+  percent, and not meant for wide pitch sweeps.</li>
+<li><strong>Loop points need <code>update()</code> once a frame</strong>, which <code>Application</code> does. A
+  loop is an intro plus segments queued on the channel, and <code>Channel.queue</code>
+  holds one, so a segment is always at least a second of whole laps. A frame
+  stall shorter than that leaves no trace.</li>
+<li><strong>It also reads <code>.flac</code></strong>, which the default backend's loader does not.</li>
+<li><strong>A clip must come through <code>NativeSoundLoader</code></strong>, which bootstrap registers
+  for this backend. A clip from another loader raises <code>TypeError</code> for pitch or
+  loop points.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Measured, 44.1 kHz stereo</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Render one pitch, first play</td>
+<td style="text-align: right;"><strong>0.79 ms per second of audio</strong></td>
+</tr>
+<tr>
+<td>Any later play at that pitch</td>
+<td style="text-align: right;">0.5 us</td>
+</tr>
+<tr>
+<td>A clip in memory</td>
+<td style="text-align: right;">176 KB per second, once</td>
+</tr>
+</tbody>
+</table>
+<p><code>symphonia</code> is <strong>MPL-2.0</strong>: file-level copyleft, fine to link unmodified from an
+MIT engine, but the wheel distributes it.</p>
+<h2 id="optional-capabilities">Optional capabilities</h2>
+<p>Three features cannot be expressed by every mixer: per-play <strong>pitch</strong>, <strong>loop
+points</strong> inside a clip, and <strong>DSP on a bus</strong>. <code>PygameAudioSystem</code>, the default,
+expresses none of them; <code>NativeAudioSystem</code> expresses the first two. Each is
+declared through <code>AudioCapability</code> and
+declined by <strong>raising</strong> <code>UnsupportedAudioCapability</code>, so a request a backend
+cannot honour fails where it was made.</p>
+<pre><code class="language-python">from pyguara.audio import AudioCapability
+
+if AudioCapability.PITCH in audio.capabilities:
+    audio.play_sfx(&quot;sfx/hit.wav&quot;, pitch=random.uniform(0.9, 1.1))
+else:
+    audio.play_sfx(&quot;sfx/hit.wav&quot;)
+</code></pre>
+<p>Every capability has a request that means <em>not asked for</em> — <code>pitch=1.0</code>,
+<code>loop_start=None</code>, an empty effect list — so code that uses none of them runs
+on any backend. A no-op that accepted <code>pitch=1.2</code> and played at the original
+speed would report success for a sound that is wrong, with nothing for the
+caller to check; this is the same reasoning that made <code>ShapeType.SEGMENT</code>
+raise instead of returning <code>None</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>What it adds</th>
+<th><code>PygameAudioSystem</code></th>
+<th><code>NativeAudioSystem</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PITCH</code></td>
+<td><code>pitch=</code> on either <code>play_sfx</code></td>
+<td>no — the mixer resamples at load and plays at its own rate</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>LOOP_POINTS</code></td>
+<td><code>loop_start=</code> / <code>loop_end=</code></td>
+<td>no — <code>Channel.play</code> takes a loop <em>count</em> and nothing else</td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>BUS_EFFECTS</code></td>
+<td><code>set_bus_effects(bus, [...])</code></td>
+<td>no — a channel's only processing is a left/right gain pair</td>
+<td>no — needs the device, see below</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Loop points from a <code>.meta</code> sidecar warn instead of raising.</strong> <code>AudioMeta</code>
+carries <code>loop_start</code> / <code>loop_end</code>, and those are the asset describing itself
+rather than a call site asking for something. An incapable backend logs once
+per clip and loops the whole file: refusing would let one line of metadata
+silence a sound that worked before anybody wrote it. An explicit argument
+still raises. A malformed range (negative, or inverted) raises <code>ValueError</code>
+on every backend, before the capability is consulted — the same bad input
+should read the same way everywhere.</p>
+<p>Bus effects are a settled seam, not a shipped feature: <code>LowPassFilter</code>,
+<code>HighPassFilter</code> and <code>Reverb</code> are descriptions a backend interprets, applied
+in list order. Nothing implements them yet, which is why asking for one
+raises and <code>get_bus_effects</code> reports <code>()</code> rather than the chain you handed
+it — holding a chain that will never be applied would describe an effect
+nobody can hear.</p>
+<h2 id="music">Music</h2>
+<p><code>play_music(path, loop=True, fade_ms=1000)</code> streams one track at a time from
+disk (pygame's <code>mixer.music</code>). <code>stop_music</code>, <code>pause_music</code>, <code>resume_music</code>
+and <code>is_music_playing</code> control it; <code>get_current_music()</code> returns the path
+<code>AudioManager</code> last started, or <code>None</code>.</p>
+<p>Music volume follows the <code>music</code> bus and the <code>master</code> bus: changing either
+re-applies immediately to the playing stream.</p>
+<h2 id="sound-effects-and-handles">Sound effects and handles</h2>
+<p><code>play_sfx(clip, volume, loops, priority, bus, pitch, loop_start, loop_end)</code>
+plays a clip and returns a <strong><code>SoundHandle</code></strong>, or <code>None</code> if the clip is invalid
+or every channel is busy with an equal-or-higher priority sound.</p>
+<ul>
+<li><strong>A handle is opaque.</strong> Its <code>token</code> is minted per play, never reused in a
+  process, and means nothing to a caller. <code>stop_sfx</code>, <code>is_sound_active</code> and
+  <code>set_sound_mix</code> all take one; a handle whose sound has ended resolves to
+  nothing, so they become no-ops rather than acting on a stranger.</li>
+<li><strong>That is the point.</strong> A mixer channel number is recycled the instant its
+  sound ends, so <code>stop_sfx(7)</code> on a channel int held for a few frames stopped
+  whatever had taken channel 7 over. Channel <code>0</code> was also falsy, so
+  <code>if channel_id:</code> dropped a real sound.</li>
+<li><strong><code>loops</code></strong>: <code>0</code> plays once, <code>-1</code> loops forever, <code>n</code> repeats <code>n</code> extra
+  times.</li>
+<li><strong><code>priority</code></strong> (<code>AudioPriority.LOW</code>…<code>CRITICAL</code>): when no channel is free, a
+  new sound steals the channel of the lowest-priority sound <em>below</em> its own
+  priority. Same-or-higher priority sounds are never interrupted.</li>
+</ul>
+<p>Loudness and stereo pan are applied to the <strong>channel</strong>, never to the <code>Sound</code>
+object — the <code>ResourceManager</code> hands every concurrent play of one clip the
+<em>same</em> <code>Sound</code>, so setting its volume would bleed across all of them.</p>
+<h3 id="one-shot-lifecycle">One-shot lifecycle</h3>
+<p>A one-shot sound finishes on its own with no callback. <code>IAudioSystem</code>
+exposes <code>is_sound_active(handle)</code>, which is <code>True</code> only while that exact
+sound is still playing — it returns <code>False</code> once the sound has ended <em>or</em> its
+channel has been recycled by an unrelated sound. <code>AudioSourceSystem</code> calls it
+every frame to reconcile <code>AudioSource</code> state; you rarely call it directly.</p>
+<h2 id="spatial-audio">Spatial audio</h2>
+<p>Attach components to entities that also carry a <code>Transform</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AudioListener</code></td>
+<td>Marks the "ears" (usually the camera/player). One active listener per scene; its position drives every spatial calculation.</td>
+</tr>
+<tr>
+<td><code>AudioSource</code></td>
+<td>A persistent or looping sound that follows its entity. <code>spatial=True</code> (default) attenuates and pans it by distance to the listener, updated every frame while it plays.</td>
+</tr>
+<tr>
+<td><code>AudioEmitter</code></td>
+<td>A fire-and-forget one-shot at the entity's position. <code>remove_after_play=True</code> (default) drops the component once it has played.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">entity.add_component(Transform(position=Vector2(400, 300)))
+entity.add_component(AudioSource(clip_path=&quot;sfx/engine_loop.wav&quot;, loop=True))
+entity.get_component(AudioSource).play()   # or auto_play=True / play_on_awake=True
+</code></pre>
+<p><code>auto_play</code> fires <strong>once</strong>, when the source is first processed; a one-shot
+that ends is not restarted (use <code>loop=True</code> for that, or call <code>play()</code>
+again). <code>AudioSource.is_playing</code> reflects reality — it goes back to <code>False</code>
+when a non-looping sound ends.</p>
+<h3 id="spatialaudioconfig"><code>SpatialAudioConfig</code></h3>
+<p>Controls the distance model (<code>AudioSourceSystem.set_spatial_config</code>, or
+<code>PygameAudioSystem.set_spatial_config</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reference_distance</code></td>
+<td>Distance (world units) within which volume is 100%. Must be <code>&gt; 0</code>.</td>
+</tr>
+<tr>
+<td><code>max_distance</code></td>
+<td>Distance at which the sound is silent. Must be <code>&gt; reference_distance</code>.</td>
+</tr>
+<tr>
+<td><code>rolloff_factor</code></td>
+<td>How fast volume falls between the two (<code>1.0</code> ≈ realistic inverse-distance; <code>&lt; 1</code> slower). Must be <code>&gt;= 0</code>.</td>
+</tr>
+<tr>
+<td><code>pan_strength</code></td>
+<td>Stereo spread from horizontal offset (<code>0.0</code> mono … <code>1.0</code> full). Must be <code>&gt;= 0</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Out-of-range values raise <code>ValueError</code> at construction — an inverted or zero
+range is a divide-by-zero in the pan maths and a hard volume cliff in the
+attenuation maths, not a soft degradation.</p>
+<h2 id="buses-and-volume">Buses and volume</h2>
+<p>Four buses in a fixed hierarchy: <code>master</code> → <code>sfx</code> / <code>music</code> / <code>voice</code>
+(<code>AudioBusType</code>). Effective volume walks the chain
+(<code>bus.volume × … × master.volume</code>); a muted bus contributes <code>0</code>.</p>
+<pre><code class="language-python">audio_system.set_bus_volume(AudioBusType.SFX, 0.5)
+audio_system.set_bus_muted(AudioBusType.MASTER, True)
+</code></pre>
+<p>Buses are volume-only on the shipped backend. <code>set_bus_effects</code> is the seam
+for DSP; see <strong>Optional capabilities</strong>.</p>
+<p><code>set_master_volume</code> / <code>set_sfx_volume</code> / <code>set_music_volume</code> are shorthands
+for the <code>master</code> / <code>sfx</code> / <code>music</code> buses.</p>
+<p>!!! note "Known limitation"
+    A bus or master volume change re-applies to the music stream and to
+    spatial SFX (which are re-mixed every frame), but <strong>not</strong> to
+    already-playing <em>non-spatial</em> SFX — those keep the volume they were
+    started with until they end. Set bus volumes before triggering sounds,
+    or drive important sustained sounds through an <code>AudioSource</code>.</p>
+<h2 id="backend-notes">Backend notes</h2>
+<p><code>PygameAudioSystem</code> wraps <code>pygame.mixer</code> (pygame-ce). It allocates 32
+channels by default. <code>shutdown()</code> stops all audio and releases the device;
+it is idempotent and is called from <code>Application.shutdown()</code>.</p>
+<p>It reports <code>AudioCapability.NONE</code>, and the three things it cannot do are the
+reason a second backend is wanted rather than a longer feature list on this
+one — see <a href="https://github.com/Wedeueis/pyguara/issues/72">#72</a>, whose P1
+"sound variation" needs <code>PITCH</code>.</p>
+<p>For headless use (tests, CI) set <code>SDL_AUDIODRIVER=dummy</code> before the mixer
+initialises — playback then advances in real time but produces no sound.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

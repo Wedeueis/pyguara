@@ -1,0 +1,2480 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../dev/">
+      
+      
+        <link rel="next" href="../input/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Editor Tools - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#developer-tools" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Editor Tools
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enabling-the-overlay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enabling the overlay
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enabling the overlay">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-overlay-does-not-do-and-where-it-went" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the overlay does not do, and where it went
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authoring-as-opposed-to-diagnosing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authoring, as opposed to diagnosing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#writing-a-custom-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a custom tool
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-imgui-editor-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The ImGui editor layer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The ImGui editor layer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-moderngl-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why ModernGL-only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-not-imgui_bundlepython_backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why not imgui_bundle.python_backends
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Panels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom panels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#enabling-the-overlay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Enabling the overlay
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enabling the overlay">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-overlay-does-not-do-and-where-it-went" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the overlay does not do, and where it went
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#authoring-as-opposed-to-diagnosing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authoring, as opposed to diagnosing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#writing-a-custom-tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing a custom tool
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-imgui-editor-layer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The ImGui editor layer
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The ImGui editor layer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-moderngl-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why ModernGL-only
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-not-imgui_bundlepython_backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why not imgui_bundle.python_backends
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Panels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#custom-panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom panels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#input" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Input
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="developer-tools">Developer Tools</h1>
+<p>PyGuara ships an in-game <strong>developer overlay</strong> (<code>pyguara.tools</code>) drawn on the
+engine's own backend-agnostic <code>UIRenderer</code> -- no external GUI toolkit. It is a
+<em>debug and inspection</em> surface. A full scene-authoring application (level
+editor, animation editor, agentic authoring harness) is tracked separately as
+<a href="https://github.com/Wedeueis/pyguara/issues/53">#53</a>.</p>
+<blockquote>
+<p>An earlier Dear ImGui editor (<code>pyguara/editor</code>) was removed: its pygame
+integration hard-imports <code>OpenGL.GL</code>, PyOpenGL was never a dependency, so it
+had never executed. Its useful parts were rebuilt as the tools below.</p>
+<p>A <strong>second</strong>, working ImGui layer now exists beside them --
+<a href="#the-imgui-editor-layer">the ImGui editor layer</a> -- drawing through the
+engine's own <code>moderngl</code> context instead of PyOpenGL. It lives in
+<code>pyguara.studio</code>, with the authoring application built on it; there is no
+<code>pyguara/editor</code> package any more. The two surfaces are independent:
+attaching the editor layer changes nothing about the overlay, and the
+overlay remains the only dev surface on the Pygame backend.</p>
+</blockquote>
+<h2 id="enabling-the-overlay">Enabling the overlay</h2>
+<p><code>SandboxApplication</code> wires the overlay in automatically:</p>
+<pre><code class="language-python">from pyguara.application.bootstrap import create_sandbox_application
+
+app = create_sandbox_application()
+app.run(MyScene(&quot;main&quot;, app._event_dispatcher))
+</code></pre>
+<p>Press <strong>F12</strong> to toggle the whole overlay, then a function key per tool.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td><code>PerformanceMonitor</code></td>
+<td>FPS, frame timing, counts</td>
+</tr>
+<tr>
+<td>F3</td>
+<td><code>EventMonitor</code></td>
+<td>Rolling log of recent engine events</td>
+</tr>
+<tr>
+<td>F4</td>
+<td><code>PhysicsDebugger</code></td>
+<td>Collision shape wireframes</td>
+</tr>
+<tr>
+<td>F8</td>
+<td><code>ShortcutsPanel</code></td>
+<td>This table, in-game (read live from the <code>ToolManager</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><code>ShortcutsPanel</code> builds its table from <code>ToolManager.iter_shortcuts()</code> at
+render time, so it stays in step with whatever <code>SandboxApplication</code>
+registered rather than a hand-kept copy.</p>
+<h3 id="what-the-overlay-does-not-do-and-where-it-went">What the overlay does not do, and where it went</h3>
+<p><strong>F2, F5, F6, F7 and F9 are unbound</strong>, and the gaps are deliberate rather
+than a renumbering: a developer reaching for the old key finds nothing
+there instead of something else.</p>
+<table>
+<thead>
+<tr>
+<th>Was</th>
+<th>Does what</th>
+<th>Now</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F5 <code>HierarchyTool</code></td>
+<td>List entities, click to select</td>
+<td>Studio's <strong>Hierarchy</strong> panel</td>
+</tr>
+<tr>
+<td>F2 <code>EntityInspector</code></td>
+<td>Inspect and live-edit components</td>
+<td>Studio's <strong>Inspector</strong> panel</td>
+</tr>
+<tr>
+<td>F9 <code>TransformGizmo</code></td>
+<td>Translate/rotate/scale handles</td>
+<td>Studio's <strong>viewport gizmo</strong></td>
+</tr>
+<tr>
+<td>F6 <code>ConfigInspector</code></td>
+<td>Live-edit <code>GameConfig</code>, <code>S</code> to save</td>
+<td><strong>nothing yet</strong> — <a href="https://github.com/Wedeueis/pyguara/issues/330">#330</a></td>
+</tr>
+<tr>
+<td>F7 <code>AssetsTool</code></td>
+<td>Browse resources, spawn from a <code>DataResource</code></td>
+<td><strong>nothing yet</strong> — <a href="https://github.com/Wedeueis/pyguara/issues/330">#330</a></td>
+</tr>
+</tbody>
+</table>
+<p>The first three were duplicates, and the weaker of the two copies.
+Studio's gizmo is 814 lines against 353: it has drag state, handle
+hit-testing, axis locking, snapping and one undo entry per drag, where
+the overlay's drew arrows and read <code>Q</code>/<code>W</code>/<code>E</code>. Its Inspector routes an
+accepted edit through <code>set_field</code>, so the change lands on an undo stack
+and in an audit journal; the overlay's wrote straight onto the component.
+Keeping both meant two ways to change the world, only one of which kept a
+record.</p>
+<p><strong>The last two were not duplicates</strong>, and removing them removed
+capability. They went with the rest because they were built on the same
+widget layer, <code>pyguara/tools/tweakable.py</code>, and that layer is why none of
+these were good enough to keep: <strong>nothing in the overlay scrolls</strong> — a
+grep for <code>scroll</code> or <code>wheel</code> across the package returned nothing, so a
+list longer than its panel simply ran off the bottom — and its number
+editor stepped by a hard-coded <code>1.0</code> when you clicked the left or right
+half of a row, which cannot express a <code>0.5</code> damping value at all. #330
+records both for Studio, which has a scrolling dockable surface to put
+them on.</p>
+<blockquote>
+<p><strong>Screen-space only.</strong> <code>PhysicsDebugger</code> draws using <code>Transform.position</code>
+as a <em>screen</em> coordinate -- no camera transform. It lines up only with
+the camera at the origin at zoom 1. The world-to-screen unification
+(issue #23) is the fix.</p>
+</blockquote>
+<h2 id="authoring-as-opposed-to-diagnosing">Authoring, as opposed to diagnosing</h2>
+<p>The overlay reports; it does not author. Everything that <em>changes</em> the
+world now lives in <a href="../studio/">PyGuara Studio</a>, which is attached
+explicitly and is ModernGL-only:</p>
+<pre><code class="language-python">from pyguara.application.bootstrap import create_application
+from pyguara.studio import attach_studio
+
+app = create_application()
+attach_studio(app.container)
+app.run(MyScene(&quot;game&quot;, app._event_dispatcher))
+</code></pre>
+<p><strong>On the Pygame backend there is no authoring surface</strong>, and that is the
+honest statement of the trade. Studio and the editor layer need the GL
+context the render graph owns, and a Pygame window is a software surface
+with none. What that backend keeps is this overlay: frame timing, the
+event stream, collision wireframes and the shortcut table -- enough to
+debug a running game, not enough to build a scene in one.</p>
+<p>Scene save/load remains available programmatically through
+<code>SceneSerializer</code> (<code>save_scene</code> / <code>load_scene</code>), and <code>EntityManager.clear()</code>
+is the supported way to empty a world before reloading -- it fires
+<code>subscribe_entity_removed</code> callbacks and flushes cached queries.</p>
+<h2 id="writing-a-custom-tool">Writing a custom tool</h2>
+<p>Subclass <code>Tool</code> and register it. Draw with the <code>UIRenderer</code> primitives
+(<code>draw_rect</code>, <code>draw_line</code>, <code>draw_circle</code>, <code>draw_polygon</code>, <code>draw_text</code>,
+<code>draw_texture</code>) -- never a GUI library.</p>
+<pre><code class="language-python">from pyguara.tools.base import Tool
+from pyguara.graphics.protocols import UIRenderer
+from pyguara.common.types import Color, Rect, Vector2
+
+
+class SpawnCounter(Tool):
+    def __init__(self, container):
+        super().__init__(&quot;spawn_counter&quot;, container)
+        self._rect = Rect(20, 20, 200, 40)
+
+    def update(self, dt: float) -&gt; None:
+        pass
+
+    def render(self, renderer: UIRenderer) -&gt; None:
+        count = sum(1 for _ in self._entity_manager.get_all_entities())
+        renderer.draw_rect(self._rect, Color(0, 0, 0, 200), 0)
+        renderer.draw_text(
+            f&quot;Entities: {count}&quot;,
+            Vector2(self._rect.x + 8, self._rect.y + 10),
+            Color(255, 255, 255),
+            16,
+        )
+</code></pre>
+<pre><code class="language-python">import pygame
+
+app = create_sandbox_application()
+app._tool_manager.register_tool(SpawnCounter(app._container), pygame.K_F10)
+</code></pre>
+<p>Registering a name that is already taken <strong>replaces</strong> the old tool (its
+render-order slot and shortcut are dropped first). <code>ToolManager.unregister_tool(name)</code>
+removes a tool and calls its <code>Tool.on_removed()</code> hook -- override that to
+undo anything <code>__init__</code> acquired, such as an <code>EventDispatcher</code> subscription
+(<code>EventMonitor</code> does). <code>SandboxApplication.shutdown()</code> clears every tool this
+way before the engine tears down.</p>
+<p><code>Tool._entity_manager</code> resolves the active scene's <code>EntityManager</code> on every
+access. <strong>Before the first scene switch there is no world</strong>, so it returns a
+single throwaway empty manager -- fine to read, but a tool that <em>mutates</em> the
+world in that window is writing into an orphan no scene will ever see. Return
+<code>True</code> from <code>process_event</code> to stop an event reaching the game.</p>
+<h2 id="the-imgui-editor-layer">The ImGui editor layer</h2>
+<p>A second dev surface, <code>pyguara.studio</code>: Dear ImGui panels drawn as a render
+pass over the finished frame. It is <strong>ModernGL-only</strong> and <strong>opt-in</strong>.</p>
+<pre><code class="language-python">from pyguara.application.bootstrap import create_application
+from pyguara.studio import attach_editor
+
+app = create_application()
+attach_editor(app.container)
+app.run(MyScene(&quot;game&quot;, app._event_dispatcher))
+</code></pre>
+<p><code>attach_editor</code> gives you the layer and nothing else: a context, the input
+routing, the render pass, and a Hierarchy and an Inspector over live engine
+state. <a href="../studio/">PyGuara Studio</a> is this plus a session -- an operation
+registry, a command stack, an audit journal and the rest of the panels --
+and <code>attach_studio</code> calls <code>attach_editor</code> to get it. Ask for the layer when
+you want to look at the world, and for Studio when you want to change it
+and keep a record.</p>
+<p>The two used to be separate packages, <code>pyguara/editor</code> and
+<code>pyguara/studio</code>, with ten imports and a panel subclass crossing between
+them. They are one package now. What <em>is</em> a boundary is the <code>pyguara.tools</code>
+overlay above: it draws through <code>UIRenderer</code>, needs no ImGui, and works on
+the Pygame backend, which has no GL context for this layer to draw into.</p>
+<p><code>attach_editor</code> returns the <code>EditorLayer</code>, and registers it in the container
+so game code can reach it. It returns <code>None</code> -- logging why -- when the
+editor cannot run: ImGui is not installed, or the backend has no GL render
+graph. It does not half-install.</p>
+<p>It works on both <code>create_application()</code> and <code>create_sandbox_application()</code>,
+which draw a frame the same way. That was briefly not true:
+<code>SandboxApplication</code> used to override <code>_render()</code> wholesale and never
+executed a single render-graph pass, so the editor attached and was then
+never drawn -- and the sandbox also skipped lighting, compositing and
+post-processing on the ModernGL backend. It now overrides the
+<code>_render_overlays()</code> hook instead and inherits the frame loop, so an
+overlay adds itself without restating how a frame is drawn.</p>
+<h3 id="why-moderngl-only">Why ModernGL-only</h3>
+<p>The editor rasterises ImGui's draw data through the <code>moderngl.Context</code> the
+<code>RenderGraph</code> owns. The Pygame backend has none: its <code>PygameRenderGraph</code> is a
+stub whose <code>ctx</code> is <code>None</code>, and the window it opens is a software surface
+(<code>pygame_window.py</code> actively strips <code>pygame.OPENGL</code> to keep it one). On that
+backend <code>attach_editor</code> declines and the <code>pyguara.tools</code> overlay above stays
+the dev surface.</p>
+<h3 id="why-not-imgui_bundlepython_backends">Why not <code>imgui_bundle.python_backends</code></h3>
+<p>Those backends import <code>OpenGL.GL</code>. An undeclared PyOpenGL dependency is
+exactly what made the <em>first</em> editor dead code, so the renderer here
+(<code>pyguara.studio.renderer.ModernGLImGuiRenderer</code>) is written against
+<code>moderngl</code> -- already a hard dependency of the engine -- and shares the
+context the renderer is already using rather than standing up a second GL
+stack. <code>pyguara.studio.availability.IMGUI_AVAILABLE</code> records whether ImGui
+imported, and a test asserts it is <code>True</code>, so the editor cannot quietly
+switch itself off again.</p>
+<p>ImGui itself stays optional, and the thing that keeps it so is an import
+rule rather than a flag: nothing the agent transport loads --
+<code>pyguara.studio</code>, <code>pyguara.studio.ops.*</code>, <code>pyguara.studio.session</code>,
+<code>pyguara.studio.attach</code> -- may import Dear ImGui at module scope, so
+<code>pyguara studio ops</code> runs on an install without it. Now that the layer and
+Studio share a package that is one unguarded import away at all times, and
+<code>tests/studio/test_attach.py</code> asserts it in a fresh interpreter: not that
+the transport still works without ImGui, but that it never asked for it.</p>
+<h3 id="panels">Panels</h3>
+<table>
+<thead>
+<tr>
+<th>Panel</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HierarchyPanel</code></td>
+<td>The entity tree, over the ECS parent/child relation; click to select</td>
+</tr>
+<tr>
+<td><code>InspectorPanel</code></td>
+<td>The selected entity's components, with editable fields</td>
+</tr>
+</tbody>
+</table>
+<p>Both read <code>PanelContext</code>, which carries the active scene's <code>EntityManager</code>
+(or <code>None</code> when no scene is active yet) and the shared <code>Selection</code>. The
+inspector edits <code>bool</code>, <code>int</code>, <code>float</code>, <code>str</code>, <code>Vector2</code> and <code>Color</code> fields
+and draws anything else read-only. A <code>frozen=True</code> component is drawn
+read-only rather than assigned to, and every accepted edit ends with
+<code>EntityManager.notify_component_changed()</code> so anything mirroring the
+component -- physics bodies, render batches, the spatial index -- is told.</p>
+<p><strong>Where an accepted edit goes depends on who attached the panel.</strong> Under
+<code>attach_editor</code> it is the direct write above, which is all a layer with no
+history can honestly do. Under <code>attach_studio</code> the panel is given the
+attachment, and every accepted field becomes the same <code>set_field</code>
+operation an agent calls -- so it lands on the same undo stack, in the same
+journal, and under the same approval mode. That used to be a
+<code>StudioInspectorPanel</code> subclass in the other package, overriding the one
+method that writes; with both in <code>pyguara.studio</code> it is one class and a
+constructor argument.</p>
+<h3 id="custom-panels">Custom panels</h3>
+<pre><code class="language-python">from pyguara.studio.panels.base import EditorPanel, PanelContext
+
+
+class EntityCount(EditorPanel):
+    def __init__(self) -&gt; None:
+        super().__init__(&quot;Entity Count&quot;)
+
+    def draw(self, context: PanelContext) -&gt; None:
+        from imgui_bundle import imgui
+
+        imgui.begin(self.title)
+        if context.entity_manager is None:
+            imgui.text_disabled(&quot;No active scene.&quot;)
+        else:
+            total = sum(1 for _ in context.entity_manager.get_all_entities())
+            imgui.text(f&quot;Entities: {total}&quot;)
+        imgui.end()
+</code></pre>
+<pre><code class="language-python">layer = attach_editor(app.container, panels=[EntityCount()])
+</code></pre>
+<p><code>draw()</code> runs between <code>new_frame()</code> and <code>render()</code>, and only while the panel
+is visible. Pair every <code>begin()</code> with an <code>end()</code> unconditionally -- Dear
+ImGui owes an <code>End</code> even for a collapsed window.</p>
+<h3 id="input">Input</h3>
+<p><code>EditorLayer.process_event()</code> takes the engine's own events -- the editor
+never imports pygame -- and returns <code>True</code> when ImGui is using that kind of
+input, so the caller can stop the event reaching the game. Scroll and typing
+arrive as <code>MouseWheelEvent</code> and <code>TextInputEvent</code>, which the window backends
+translate from SDL alongside the existing key and mouse events.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

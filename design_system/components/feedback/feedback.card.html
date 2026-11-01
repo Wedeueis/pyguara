@@ -1,0 +1,20 @@
+<!-- @dsCard group="Components" viewport="700x200" name="ProgressBar" subtitle="Health, stamina and load meters at engine defaults" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>ProgressBar<\/title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"><\/script>
+<script src="../../_ds_bundle.js"><\/script>
+<style>html,body{margin:0}body{background:var(--surface-page);color:var(--text-body);font-family:var(--font-body);padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:16px}.col{display:flex;flex-direction:column;gap:10px}.cap{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}<\/style><\/head><body><div id="root"><\/div>
+<script type="text/babel">
+const { ProgressBar, Label } = window.PyguaraDesignSystem_ca79d7;
+const Row = ({t,...p}) => (<div className="row"><span style={{width:110}}><Label text={t} fontSize={12} color="var(--text-muted)" /><\/span><ProgressBar {...p} /><\/div>);
+const Card = () => (<div className="col" style={{gap:12}}>
+  <Row t="Health" value={0.72} fillColor="var(--state-danger)" label="72 / 100" />
+  <Row t="Stamina" value={0.4} fillColor="var(--state-warn)" label="40%" />
+  <Row t="Neutral" value={0.55} label="engine default" />
+  <Row t="Empty / Full" value={0} width={90} />
+  <Row t="Tall · 28px" value={0.9} height={28} fillColor="var(--state-ok)" />
+<\/div>);
+ReactDOM.createRoot(document.getElementById('root')).render(<Card />);
+<\/script><\/body><\/html>

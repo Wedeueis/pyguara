@@ -1,0 +1,2988 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../scripting/">
+      
+      
+        <link rel="next" href="../ui-builder/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Studio - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pyguara-studio" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Studio
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#trying-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trying it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-one-idea" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The one idea
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Panels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Panels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#finding-an-entity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding an entity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-view-is-yours-and-selection-reaches-what-is-behind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The view is yours, and selection reaches what is behind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edit-then-play" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edit, then play
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Edit, then play">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-an-edit-may-not-show" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why an edit may not show
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#everything-goes-through-an-operation-including-the-inspector" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Everything goes through an operation, including the Inspector
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-camera-the-gizmo-trusts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The camera the gizmo trusts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-arrangement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The arrangement
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-menus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The menus
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The window
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The window">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#who-the-window-belongs-to" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who the window belongs to
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewport
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gizmo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gizmo
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-operation-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The operation surface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The operation surface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#approval-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Approval modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-harness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The harness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#instruction-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instruction files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-deliberately-absent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is deliberately absent
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#trying-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trying it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-one-idea" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The one idea
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#panels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Panels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Panels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#finding-an-entity" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding an entity
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-view-is-yours-and-selection-reaches-what-is-behind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The view is yours, and selection reaches what is behind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#edit-then-play" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Edit, then play
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Edit, then play">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#why-an-edit-may-not-show" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why an edit may not show
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#everything-goes-through-an-operation-including-the-inspector" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Everything goes through an operation, including the Inspector
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-camera-the-gizmo-trusts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The camera the gizmo trusts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-arrangement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The arrangement
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-menus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The menus
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The window
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The window">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#who-the-window-belongs-to" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Who the window belongs to
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewport
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#gizmo" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gizmo
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-operation-surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The operation surface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The operation surface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#approval-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Approval modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-harness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The harness
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#instruction-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instruction files
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-deliberately-absent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is deliberately absent
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="pyguara-studio">PyGuara Studio</h1>
+<p>The companion authoring surface: a dockable editor over a running game,
+and the same operations exposed to a coding agent.</p>
+<p>Studio is <strong>opt-in</strong>. A shipped game never attaches it and pays nothing
+for it.</p>
+<pre><code class="language-python">from pyguara.application.bootstrap import create_application
+from pyguara.studio import attach_studio
+
+app = create_application()
+attach_studio(app.container)
+app.run(MyScene(&quot;game&quot;, dispatcher))
+</code></pre>
+<h2 id="trying-it">Trying it</h2>
+<p>Six demos already use the ModernGL backend, and <code>tools/studio_demo.py</code>
+opens any of them with Studio attached:</p>
+<pre><code class="language-bash">uv run python tools/studio_demo.py                       # guara_falcao
+uv run python tools/studio_demo.py tamandua_murundus
+uv run python tools/studio_demo.py guara_falcao --mode ask
+uv run python tools/studio_demo.py guara_falcao --borderless
+</code></pre>
+<p><code>main.py</code> and the remaining demos run on the Pygame backend, where Studio
+declines rather than half-installing.</p>
+<p><code>attach_studio</code> builds on <code>attach_editor</code>, so it is ModernGL-only for the
+same reason: it draws through the GL context the render graph owns, and
+the Pygame backend's window is a software surface with none. On that
+backend it declines and logs why, and <code>pyguara/tools</code> remains the dev
+surface there. See <a href="../editor/">Editor Tools</a>.</p>
+<h2 id="the-one-idea">The one idea</h2>
+<p>Every change to authored state becomes an <code>EditCommand</code> on a
+<code>CommandStack</code>, whoever asked for it — a panel, the command palette, or an
+agent.</p>
+<pre><code>  human UI      command palette      agent (MCP / JSON-lines)
+      |                |                        |
+      +----------------+------------------------+
+                       |
+                  ops registry
+                       |
+               EditCommand objects
+                       |
+               CommandStack --&gt; Journal
+                       |
+                 EntityManager
+</code></pre>
+<p>That single seam is why undo/redo, a reviewable audit journal, diffable
+agent edits and a deterministic edit-run-check loop are one mechanism
+rather than four. See <a href="../../adr/0001-one-mutation-seam-for-studio/">ADR 0001</a>.</p>
+<h2 id="panels">Panels</h2>
+<table>
+<thead>
+<tr>
+<th>Panel</th>
+<th>What it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Viewport</strong></td>
+<td>The rendered frame, with pan, zoom, a grid, selection, marquee and the transform gizmo over it</td>
+</tr>
+<tr>
+<td><strong>Hierarchy</strong></td>
+<td>The entity tree, with a filter and same-prefix grouping</td>
+</tr>
+<tr>
+<td><strong>Inspector</strong></td>
+<td>The selected entity's components, edited by reflection</td>
+</tr>
+<tr>
+<td><strong>Play</strong></td>
+<td>Pause, resume, single-step and slow the running game</td>
+</tr>
+<tr>
+<td><strong>History</strong></td>
+<td>Every edit, oldest first. Clicking a row rewinds to it</td>
+</tr>
+<tr>
+<td><strong>Journal</strong></td>
+<td>What was done and who asked, plus the approval queue</td>
+</tr>
+<tr>
+<td><strong>Components</strong></td>
+<td>Every registered component, its fields and its enum members</td>
+</tr>
+<tr>
+<td><strong>Commands</strong></td>
+<td>A person calling the operations an agent calls</td>
+</tr>
+</tbody>
+</table>
+<p>Panels open docked -- hierarchy left, inspector and components right,
+viewport centre, play on top, history/journal/commands tabbed below.</p>
+<h3 id="finding-an-entity">Finding an entity</h3>
+<p>An ECS scene has none of the pressure a Godot scene has to hang a level's
+tiles off a parent, so a generated level arrives as hundreds of flat
+siblings. The demo this was reported from put 252 rows in the Hierarchy
+panel, 232 of them tiles.</p>
+<p>Two answers, both from Godot's Scene dock:</p>
+<ul>
+<li><strong>A filter box.</strong> Typing narrows the list to what is being worked on.</li>
+<li><strong>Grouping.</strong> Runs of siblings sharing a name prefix -- everything up to
+  the first numeric segment, so <code>tile_0_0</code> through <code>tile_19_11</code> are all
+  <code>tile</code> -- fold into one row once there are four or more of them. 252
+  rows become twelve.</li>
+</ul>
+<p>The grouping is <strong>display only</strong>: no entity is named <code>tile</code>, nothing is
+reparented, and the row says so on hover. A row that looked like a parent
+and was not would be a worse lie than the long list it replaced.</p>
+<p>Selecting an entity anywhere else -- clicking in the viewport, an agent's
+operation -- scrolls the panel to it and opens the group holding it.</p>
+<p>The panel reads and selects; it does not edit. Every change goes through
+an operation, so it lands on one history and in one journal.</p>
+<h3 id="the-view-is-yours-and-selection-reaches-what-is-behind">The view is yours, and selection reaches what is behind</h3>
+<p><strong>Panning takes the camera.</strong> Studio shows the game's own framebuffer, so
+there is exactly one camera and panning has to move it -- and a game whose
+follow system writes it every tick wins. Measured: a pan put the camera at
+(-97, 178) and forty frames later the follow system had it at (204, 387),
+so the click that followed landed on whatever had moved under the cursor.
+That is what "the middle button broke selection" was.</p>
+<p>So the viewport <em>takes</em> the view, as Godot's and Unity's editor views are
+separate from the game's camera. The game keeps writing where it wants the
+camera; those writes are recorded and not displayed. The toolbar says
+which it is -- <em>Following the game</em>, or <em>Free view</em> with a <strong>Follow game</strong>
+button that hands it back, resuming wherever the game had got to rather
+than where the view was left.</p>
+<p><strong>Clicking again reaches what is behind.</strong> Picking returns everything
+under the point, front-most first, and clicking the same spot walks back
+through the stack -- the only way to select a background tile under a
+platform, and how Godot's editor reaches a node behind another one.
+Clicking somewhere else starts at the front again.</p>
+<p>Physics still contributes candidates, because a collider is a deliberate
+statement about an entity's extent where a sprite box is inferred from an
+image. It no longer <em>decides</em>: <code>point_query</code> orders by how deeply the
+point is enclosed, which has nothing to do with what is on top, and
+clicking the player used to hand back the platform it was standing on.</p>
+<p><strong>The HUD is not entities.</strong> It is <code>UIManager</code> widgets with their own
+tree, their own layers and their own hit testing, drawn over the frame; no
+amount of entity picking reaches it. A click that lands on one now says
+so, rather than silently clearing the selection, which is indistinguishable
+from a click that missed. Editing the game's runtime UI is not something
+Studio does.</p>
+<h2 id="edit-then-play">Edit, then play</h2>
+<p>The lifecycle every editor has, and the one Studio did not. <strong>Studio
+attaches in edit mode: the scene is loaded and nothing simulates.</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Edit</th>
+<th>Play</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The game</td>
+<td>stopped</td>
+<td>running</td>
+</tr>
+<tr>
+<td>Edits</td>
+<td>everything</td>
+<td>refused, naming Stop</td>
+</tr>
+<tr>
+<td>The scene</td>
+<td>is what you see</td>
+<td>is a copy, restored on Stop</td>
+</tr>
+</tbody>
+</table>
+<p>Press <strong>Play</strong> and Studio copies the whole world and lets the game run.
+Press <strong>Stop</strong> and that copy goes back, exactly as it was when Play was
+pressed. Pause and Step are about watching a running game, not editing
+one, and live inside Play.</p>
+<p>Three engines, one agreement: Godot runs the game in its own process,
+Unreal in its own world, Unity in the same world and discards the changes
+on Stop. <strong>The scene you edit and the game you run are not the same thing
+at the same time.</strong> Studio used to attach to a running game and edit it
+live -- Unity's case without the discard -- and that is where every
+confusing symptom came from: a gizmo drag overwritten by the controller on
+the next tick, a pan reclaimed by the follow system, an edit outlived
+before it could be seen.</p>
+<p>Editing is <strong>refused</strong> while playing rather than discarded. Unity allows
+it and throws it away, which everyone treats as a footgun; refusing costs
+nothing and the message says to press Stop.</p>
+<p><code>WorldSnapshot</code> is what makes Stop mean something. It does <strong>not</strong> go
+through <code>SceneSerializer</code>, which silently skips any component the registry
+does not know -- which is every component a game defines unless it
+registered them, and the stated reason there was no reset before. It
+copies the live components instead, the way the command stack already
+captures a subtree, so a component it has never heard of is copied exactly
+as well as one it has. Measured on <code>guara_falcao</code>: 252 entities, 14 ms
+each way, nothing lost.</p>
+<p>Two details that are easy to get wrong and are tested:</p>
+<ul>
+<li><strong>Copied, not referenced.</strong> Holding the live component means the game
+  mutates the very object the snapshot is meant to restore, and Stop puts
+  back exactly what play left behind.</li>
+<li><strong>Engine handles are cleared.</strong> A copied <code>RigidBody._body_handle</code> points
+  at a body the backend removed with the entity. Cleared, the physics
+  system builds a fresh one, which is what it already does for an entity
+  it has not seen.</li>
+</ul>
+<p><code>run_frames</code> is not Play. An agent stepping a stopped game frame by frame
+is editing, not playing, and its edits are allowed throughout -- which is
+the whole point of the edit/run/check loop.</p>
+<h3 id="why-an-edit-may-not-show">Why an edit may not show</h3>
+<p>Reported as "the controls over an entity's components do not seem to have
+any effect". Driving the whole loop and measuring it separates three
+things that look identical from the outside:</p>
+<table>
+<thead>
+<tr>
+<th>What happened</th>
+<th>How to tell</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The edit was <strong>refused</strong></td>
+<td>A toast says so, naming the correction. Before, it was a log line nobody saw</td>
+</tr>
+<tr>
+<td>The edit landed, and <strong>the game overwrote it</strong></td>
+<td>The Viewport says <em>Running</em> in amber. Whatever drives the entity -- a controller, a physics body, a follow system -- writes its transform again on the next tick. Pause and the edit stands</td>
+</tr>
+<tr>
+<td>The edit landed, and <strong>nothing draws from that component</strong></td>
+<td>The world changed and the frame did not. A game that draws by hand from its own data renders the same picture whatever the component says</td>
+</tr>
+</tbody>
+</table>
+<p>The third is not a Studio bug and cannot be fixed from here: a component
+is authored state, and only a game that renders from it will show a change
+to it. Every demo in <code>games/</code> draws by hand, so editing a <code>Sprite</code>'s
+colour changes the component and nothing else. Entities those demos <em>do</em>
+draw from their <code>Transform</code> -- the player, the tiles -- move when moved.</p>
+<p><code>the_edit_lifecycle_works</code> in <code>tests/studio/_attach_scenarios.py</code> drives
+the whole loop against a real demo with the game paused, and asserts the
+frame actually changed. Paused, because a running game changes the frame
+every tick and a pixel comparison would say nothing.</p>
+<h3 id="everything-goes-through-an-operation-including-the-inspector">Everything goes through an operation, including the Inspector</h3>
+<p><code>attach_editor</code> installs an <code>InspectorPanel</code> with no attachment, and one
+with no attachment writes straight onto the component -- right for a layer
+with no session behind it. In Studio that was a second way to change the
+world: a field typed into it reached no history, appeared in no journal,
+and applied even in <code>plan</code> mode, which is supposed to change nothing.</p>
+<p>So <code>attach_studio</code> installs an <code>InspectorPanel</code> that <em>has</em> the attachment,
+and that one sends every accepted field through <code>set_field</code> -- the same
+operation an agent calls. One seam, one history, one record, which is the
+premise the whole design rests on, and it had a hole in it exactly where
+most editing happens.</p>
+<p>This was a <code>StudioInspectorPanel</code> subclass while the editor layer was a
+separate package: a class whose entire body overrode one method across a
+package boundary. The boundary is gone and so is the subclass. It is now
+one class, and where an edit goes is a constructor argument -- which is
+the honest shape, because a direct write is not a lesser version of the
+operation path, it is what an editor with no history can do.</p>
+<h3 id="the-camera-the-gizmo-trusts">The camera the gizmo trusts</h3>
+<p><code>Scene.camera</code> is <strong>the camera the scene renders with</strong>, and everything
+that turns a world position into a screen one from outside the frame reads
+it: the Viewport panel, picking, and the transform gizmo.</p>
+<p>A scene that overrides <code>render()</code> and draws with a camera of its own has
+to assign it there. Nothing fails if it does not -- the frame looks right,
+because the scene is using the camera it meant to. Only the editor is
+wrong, and quietly: <code>guara_falcao</code> drew the gizmo hundreds of pixels from
+the entity it belonged to, over the game's own pause button.
+<code>tests/test_demo_bootstrap_conventions.py</code> now refuses a demo that builds
+a camera and never assigns it.</p>
+<h3 id="the-arrangement">The arrangement</h3>
+<p>Applied <strong>once</strong>, not on every resize, and then left to ImGui. Three
+consequences, all of them what a docking editor is expected to do:</p>
+<ul>
+<li>A splitter you drag stays dragged.</li>
+<li>Widening the window widens the <strong>viewport</strong>, not the side docks. They
+  keep the width they were given. Rebuilding the tree on each resize --
+  which is what this used to do -- forced them back to a percentage
+  instead, so on a 21:9 display the hierarchy took a third of the screen
+  and clipped its text anyway.</li>
+<li>The arrangement survives a restart. ImGui's own settings file carries
+  it, in <code>&lt;project&gt;/.pyguara/studio-layout.ini</code> -- a tool's state rather
+  than the project's, out of the way and easy to delete. <code>.gitignore</code>
+  carries it. The bare editor and every test write nothing: persistence is
+  opt-in through <code>EditorLayer.set_settings_file</code>, and Studio is what opts
+  in.</li>
+</ul>
+<p><em>View &gt; Reset Layout</em> is the one action that discards both a saved
+arrangement and whatever has been dragged since.</p>
+<h2 id="the-menus">The menus</h2>
+<p>Studio's menu bar is built over the <strong>operation registry</strong>, not over the
+editor's internals. An entry that changes the scene calls the same
+operation an agent calls over MCP or JSON lines, so a person choosing
+<em>Entity &gt; Create Empty</em> and an agent calling <code>create_entity</code> take one
+path, land in one history, and read the same way in the journal.</p>
+<table>
+<thead>
+<tr>
+<th>Menu</th>
+<th>What is in it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Scene</strong></td>
+<td>Save, Open, New, and Quit</td>
+</tr>
+<tr>
+<td><strong>Edit</strong></td>
+<td>Undo, Redo, Duplicate, Delete Entity, Deselect</td>
+</tr>
+<tr>
+<td><strong>Entity</strong></td>
+<td>Create Empty, Add Component, Enable/Disable</td>
+</tr>
+<tr>
+<td><strong>View</strong></td>
+<td>The panels, and Reset Layout</td>
+</tr>
+<tr>
+<td><strong>Run</strong></td>
+<td>Pause/Resume, Step, the time-scale presets</td>
+</tr>
+<tr>
+<td><strong>Agent</strong></td>
+<td>The approval mode, Approvals, Journal, and the commands that let an agent in</td>
+</tr>
+<tr>
+<td><strong>Help</strong></td>
+<td>The documentation link, and About</td>
+</tr>
+</tbody>
+</table>
+<p>The names follow Godot and Unity where they agree -- Scene is Godot's
+File, Entity is this engine's word for Godot's Node and Unity's
+GameObject -- because a menu bar is not the place to be original. <strong>Agent</strong>
+has no equivalent in either, and is the point of Studio.</p>
+<p>The same menus are drawn into the editor's own title bar when the window
+is borderless, and into ImGui's main menu bar when it is not. One list,
+two places, so the two can never disagree about what the editor offers.</p>
+<p><strong>What is greyed out is greyed out for a reason.</strong> <em>Save</em> and <em>Open</em> need
+a session that can reach the serializer, which one built by hand has no
+container for; the menu disables them rather than offering an action that
+fails. Nothing in the bar reaches around an operation to do its work, so
+there is no state a person can reach that an agent cannot.</p>
+<h2 id="the-window">The window</h2>
+<p>Two display flags decide what the operating system gives the editor, and
+both default off so a shipped game is unaffected:</p>
+<table>
+<thead>
+<tr>
+<th><code>display.</code></th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>resizable</code></td>
+<td>SDL reports resizes at all. Without it the window manager may still let the frame be maximised -- WSLg does -- while nothing in the engine is told, and the editor carries on drawing at the starting resolution into a corner of a much larger window</td>
+</tr>
+<tr>
+<td><code>borderless</code></td>
+<td>Removes the OS title bar, so the editor draws its own</td>
+</tr>
+</tbody>
+</table>
+<p><code>borderless</code> is what the grey Windows-classic frame around the editor was.
+With it set, <code>attach_editor</code> installs a <code>TitleBar</code>: the panel menu at the
+left, the window title centred, and minimise/maximise/close at the right,
+in the editor's own palette -- the arrangement Godot and VS Code use, and
+for the same reason. The icons are stroked onto the draw list rather than
+written as text, because ImGui's built-in font carries Basic Latin and
+nothing else.</p>
+<p>Set only where the backend offers window controls. <code>Window.chrome</code>
+answers that: it hands back the backend when it satisfies <code>IWindowChrome</code>
+and <code>None</code> otherwise, and the editor leaves the OS bar alone in the second
+case. A borderless window whose buttons do nothing is worse than the frame
+it replaced.</p>
+<p>Close goes through the window's event queue rather than destroying the
+window: the button is pressed from inside a frame that is still being
+drawn, and the application runs the same shutdown it runs for the OS's own
+button.</p>
+<p>Keep <code>resizable</code> on wherever <code>borderless</code> is: removing the frame removes
+the OS's resize edges with it.</p>
+<h3 id="who-the-window-belongs-to">Who the window belongs to</h3>
+<p><code>ctx.screen.viewport</code> means <strong>where the game's frame goes</strong>. With
+<code>keep_aspect</code> the render graph narrows it to the letterbox, so the game
+and its HUD land inside their own frame however the window is dragged.</p>
+<p>The editor is not the game: it owns the whole window, and its pass sets
+the window viewport for its own draw and puts the letterbox back
+afterwards -- back, because the game's UI composites after the graph runs
+and belongs inside the frame rather than on the bars.</p>
+<p>Getting that wrong is not subtle. Inheriting the letterbox squeezed every
+panel by the ratio between the two: on a 2000x876 window that is a
+horizontal scale of 0.73, which reads as compressed text and a round sun
+in the Viewport panel drawn as an ellipse taller than wide. An ultrawide
+display makes it worse -- at 21:9 more than a quarter of the window is
+bars.</p>
+<h3 id="viewport">Viewport</h3>
+<p><strong>Studio owns the screen.</strong> On attach it disables the final blit, so the
+game is not also drawn full-screen behind the panels, and redirects the
+game's UI compositing into the buffer the viewport shows -- so the HUD
+appears over the game, inside the viewport, instead of over the editor's
+panels. <code>release_screen()</code> puts all of it back.</p>
+<p>The frame is <strong>letterboxed</strong>, not stretched: a docked panel is almost
+never the render target's shape, and a stretched view means a sprite
+lined up in the editor is wrong everywhere else. Every coordinate mapping
+uses the drawn image's rectangle rather than the panel's, or a click
+would be offset by the width of the bars.</p>
+<p>Pan with the middle button or space-drag; zoom with the wheel, anchored on
+the cursor. Click to select, ctrl-click to add, drag to marquee. <code>Enclose</code>
+switches the marquee between selecting what it touches and only what it
+fully contains.</p>
+<p>Picking consults the physics engine first where there is one —
+<code>point_query</code> is written for exactly this and orders results
+most-deeply-enclosing first — and otherwise measures each sprite's real
+bounds from its texture, transform scale and offset. An entity with no
+sprite and no collider still gets a fixed box, so a spawn point or an
+empty used as a parent remains clickable.</p>
+<h3 id="gizmo">Gizmo</h3>
+<p><code>Q</code> translate, <code>W</code> rotate, <code>E</code> scale. Drag an arrow to constrain to an
+axis, the centre handle to move freely. <code>Snap</code> rounds to the grid step in
+absolute world space — snapping the delta would leave an entity that began
+off-grid off it forever. Rotation snaps in degrees, since a grid is a
+distance and means nothing to an angle. Escape cancels a drag, leaving
+neither a change nor a history entry.</p>
+<p><strong>One drag is one undo entry, spanning the whole drag.</strong> Components are
+written directly while dragging, for live feedback with no history churn;
+on release the starting values are restored and a single command is
+applied. The restore is not redundant: a command captures its inverse when
+applied, so one applied against a world already holding the final values
+would record "from final to final" and undo nothing.</p>
+<h2 id="the-operation-surface">The operation surface</h2>
+<p>Around twenty operations, reachable three ways. The registry is shared, so
+an operation cannot be available to one caller and missing from another.</p>
+<pre><code class="language-bash"># JSON lines on stdio -- no extra dependency.
+pyguara studio ops
+
+# Model Context Protocol -- needs the `studio` extra.
+pyguara studio mcp
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>Operations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Discovery</td>
+<td><code>list_operations</code>, <code>project_overview</code>, <code>list_components</code>, <code>component_schema</code></td>
+</tr>
+<tr>
+<td>Reading</td>
+<td><code>scene_summary</code>, <code>scene_tree</code>, <code>get_entity</code>, <code>find_entities</code></td>
+</tr>
+<tr>
+<td>Editing</td>
+<td><code>create_entity</code>, <code>destroy_entity</code>, <code>duplicate_entity</code>, <code>add_component</code>, <code>remove_component</code>, <code>set_field</code>, <code>set_parent</code>, <code>set_enabled</code>, <code>set_tags</code></td>
+</tr>
+<tr>
+<td>Running</td>
+<td><code>run_frames</code>, <code>capture_frame</code></td>
+</tr>
+<tr>
+<td>Session</td>
+<td><code>history</code>, <code>journal</code>, <code>approvals</code>, <code>scene</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>scene</code> carries four verbs behind an "operation" argument -- save, open,
+new and list -- as <code>history</code> does. The flat surface is budgeted, because
+a client's tool limit is spent on the verbs used every minute, and saving
+is not one of them.</p>
+<p>Two of those four clear the undo history, and say so: opening, because
+every command on the stack describes a world that no longer exists, and
+saving, because undoing past a save leaves the file and the world
+disagreeing with nothing on screen to show it. Emptying the scene does
+not -- it is a destroy of every root inside one transaction, so it stays
+a single undoable entry.</p>
+<p>Each declares a <strong>risk class</strong> — <code>read</code>, <code>edit</code>, <code>run</code> or <code>write_disk</code> —
+so a caller can express "read anything, ask before writing" without
+enumerating operations.</p>
+<p>Rarer work sits behind <code>history</code> and <code>approvals</code>, which take an
+<code>operation</code> argument, rather than becoming another dozen entries. A client
+has a limit on how many tools it will present, and an agent's accuracy
+falls as the list grows.</p>
+<h3 id="approval-modes">Approval modes</h3>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auto</code></td>
+<td>Apply the edit. The default for a person at the keyboard</td>
+</tr>
+<tr>
+<td><code>ask</code></td>
+<td>Queue it with the diff it <em>would</em> make, for someone to approve</td>
+</tr>
+<tr>
+<td><code>plan</code></td>
+<td>Describe it and change nothing</td>
+</tr>
+</tbody>
+</table>
+<p><code>plan</code> is not a prediction: the edit is applied, the diff captured, and
+the edit reverted, so the reported consequence is the real one. Destroying
+an entity names every id the ownership cascade would take with it.</p>
+<pre><code class="language-bash">pyguara studio ops --mode ask --journal .studio/journal.jsonl
+</code></pre>
+<h2 id="the-harness">The harness</h2>
+<p>A closed loop for an agent with no window: open a scene, edit it, run it,
+look at the frames, check what moved.</p>
+<pre><code class="language-python">from pyguara.studio.agent.harness import open_headless
+from games.guara_falcao.bootstrap import configure_game_container
+from games.guara_falcao.scenes import GameScene
+
+harness = open_headless(
+    GameScene,
+    container_factory=configure_game_container,
+    gl=True,
+)
+harness.step(30)
+capture = harness.capture(&quot;frame&quot;)
+print(capture.blank, capture.world_flat)
+</code></pre>
+<p><strong>"Headless" means no window, not the headless backend.</strong>
+<code>create_headless_application()</code> registers no texture loader, so any scene
+that loads an image dies before it finishes entering — and a real demo is
+almost entirely images. The harness boots the normal bootstrap under an
+SDL driver that needs no display. <code>gl=True</code> selects <code>offscreen</code>, which
+provides a real GL context; <code>dummy</code> has no OpenGL at all.</p>
+<p>Runs are deterministic: the harness installs <code>FixedClock</code> and seeds
+<code>RandomService</code> itself, so the same script twice produces the same frames.
+That is what makes "run it again and diff" an answer.</p>
+<p>A capture reports whether the composed frame <strong>and the world buffer behind
+it</strong> are a single flat colour. They are separate because a composed frame
+carries the UI, so a dead world render path still leaves a HUD on screen
+and the frame is never flat.</p>
+<p>!!! warning "What a capture proves"
+    It reads the buffer the renderer drew into, which proves the render
+    <em>path</em> works. It does <strong>not</strong> prove a window appears on screen. Those
+    have already diverged in this engine, when vsync silently promoted the
+    display to an OpenGL surface that never presented software blits — the
+    captures looked perfect and the real window was blank. See
+    <a href="../../guides/agent-visual-inspection/">Visual Inspection</a>.</p>
+<h2 id="instruction-files">Instruction files</h2>
+<p>Studio generates the files coding agents read, from the project itself.</p>
+<pre><code class="language-bash">pyguara studio instructions          # write them
+pyguara studio instructions --check  # fail if stale, for CI
+</code></pre>
+<p>It writes a canonical <code>AGENTS.md</code> and thin shims that import it:
+<code>CLAUDE.md</code>, <code>GEMINI.md</code> and <code>.cursor/rules/pyguara.mdc</code>. <strong>Generated
+regions are fenced, and nothing outside them is touched</strong> — an instruction
+file is mostly hand-written knowledge, and a generator that overwrites it
+is one nobody runs twice.</p>
+<p>See the <a href="../../guides/agent-integration/">agent integration guide</a>.</p>
+<h2 id="what-is-deliberately-absent">What is deliberately absent</h2>
+<ul>
+<li><strong>Reset-to-where-play-began.</strong> It would mean restoring the whole world,
+  and <code>SceneSerializer</code> skips any component the registry does not know —
+  which is every component a game defines unless it registered them. A
+  reset that quietly dropped the player's controller is worse than none.
+  Save before playing and load afterwards instead.</li>
+<li><strong>Generated argument forms in the palette.</strong> A form would be nicer for
+  scalars and hopeless for a nested dataclass. Arguments are JSON, which
+  is the shape the schema browser shows and the scene files use.</li>
+<li><strong>Prefab override editing and the animation timeline.</strong> Issues #51 and
+  #37 respectively; Studio consumes their data models rather than
+  defining them.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

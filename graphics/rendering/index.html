@@ -1,0 +1,3073 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../core/logging/">
+      
+      
+        <link rel="next" href="../../physics/simulation/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Rendering - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#rendering-pipeline" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Rendering
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#render-graph-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Render Graph Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Render Graph Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#render-passes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Render Passes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#framebuffer-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Framebuffer Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Pipeline
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#depth-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Depth ordering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Depth ordering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#y-sort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Y-sort
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sorting-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sorting groups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-material-sorts-last" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why material sorts last
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#material-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Material System
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2d-lighting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2D Lighting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2D Lighting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#light-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Light types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flicker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flicker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#daynight-cycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Day/night cycle
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#post-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Processing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Post-Processing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#feedback-primitives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feedback primitives
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Components
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#camera2d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera2D
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Camera2D">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#framing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Framing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lookahead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lookahead
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewport
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geometry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backends
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backends">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#graceful-degradation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Graceful Degradation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#render-graph-architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Render Graph Architecture
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Render Graph Architecture">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#render-passes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Render Passes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#framebuffer-management" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Framebuffer Management
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#core-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Pipeline
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#depth-ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Depth ordering
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Depth ordering">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#y-sort" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Y-sort
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sorting-groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sorting groups
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#why-material-sorts-last" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why material sorts last
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#material-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Material System
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2d-lighting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2D Lighting
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2D Lighting">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#light-types" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Light types
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flicker" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flicker
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#daynight-cycle" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Day/night cycle
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#post-processing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Post-Processing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Post-Processing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#feedback-primitives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Feedback primitives
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Components
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#camera2d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera2D
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Camera2D">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#framing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Framing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lookahead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Lookahead
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viewport" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Viewport
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geometry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backends
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Backends">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#graceful-degradation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Graceful Degradation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="rendering-pipeline">Rendering Pipeline</h1>
+<p>PyGuara employs a modern, backend-agnostic rendering architecture located in <code>pyguara.graphics</code>.</p>
+<h2 id="render-graph-architecture">Render Graph Architecture</h2>
+<p>The engine uses a multi-pass render graph for compositing:</p>
+<pre><code>World Pass → Light Pass → Composite Pass → Post-Process Pass → Final Pass → UI
+</code></pre>
+<h3 id="render-passes">Render Passes</h3>
+<table>
+<thead>
+<tr>
+<th>Pass</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>WorldPass</strong></td>
+<td>Renders sprites/geometry to a world framebuffer</td>
+</tr>
+<tr>
+<td><strong>LightPass</strong></td>
+<td>Renders dynamic lights with additive blending to a light map</td>
+</tr>
+<tr>
+<td><strong>CompositePass</strong></td>
+<td>Multiplies world × lightmap for the final lit scene</td>
+</tr>
+<tr>
+<td><strong>PostProcessPass</strong></td>
+<td>Applies screen-space effects (bloom, vignette)</td>
+</tr>
+<tr>
+<td><strong>FinalPass</strong></td>
+<td>Blits the composed result to the screen</td>
+</tr>
+</tbody>
+</table>
+<h3 id="framebuffer-management">Framebuffer Management</h3>
+<p>The <code>FramebufferManager</code> handles FBO lifecycle:
+- Automatic creation on first request
+- Resize handling when window dimensions change
+- Proper cleanup on shutdown</p>
+<h2 id="core-pipeline">Core Pipeline</h2>
+<p>The rendering process within each pass follows these stages:</p>
+<ol>
+<li><strong>Submission</strong>: Entities submit <code>Renderable</code> items to the <code>RenderSystem</code>.</li>
+<li><strong>Queueing</strong>: Items are stored in a <code>RenderQueue</code>.</li>
+<li><strong>Sorting</strong>: The queue is sorted by <strong>layer, sort group, depth, material</strong>
+    — in that order. See <a href="#depth-ordering">Depth ordering</a>.</li>
+<li><strong>Batching</strong>: The <code>Batcher</code> groups compatible draw calls (same material) into <code>RenderBatch</code> objects.</li>
+<li><strong>Execution</strong>: The backend (e.g., <code>ModernGLRenderer</code>) executes the batches.</li>
+</ol>
+<h2 id="depth-ordering">Depth ordering</h2>
+<p>Four keys, most significant first:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>layer</code></td>
+<td>The coarse band: background, world, entities, effects, UI, debug</td>
+</tr>
+<tr>
+<td><code>sort_group</code></td>
+<td>A cluster that must sort as one unit within its layer</td>
+</tr>
+<tr>
+<td>depth</td>
+<td><code>z_index</code>, or world Y when <code>y_sort</code> is on</td>
+</tr>
+<tr>
+<td>material</td>
+<td>Groups by shader <strong>among things already at equal depth</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="y-sort">Y-sort</h3>
+<pre><code class="language-python">sprite.y_sort = True
+sprite.sort_offset = 16.0      # half the sprite's height
+</code></pre>
+<p>The 2.5D rule: objects lower on the screen cover objects higher up, so a
+character walking down past a tree ends up in front of it with nobody
+maintaining a number. Anything that moves wants this; a hand-set <code>z_index</code>
+cannot track it.</p>
+<p><code>sort_offset</code> exists because an object's depth is its <strong>contact point with the
+ground</strong>, not its centre. Without it a tall tree whose centre sits above a
+short character's centre draws behind the character even while the character
+stands in front of its trunk.</p>
+<p>Depth comes from the position the sprite is <strong>submitted at</strong> — for an entity
+that is its <code>Transform</code> plus the sprite's own offset — not from
+<code>sprite.position</code> alone.</p>
+<h3 id="sorting-groups">Sorting groups</h3>
+<pre><code class="language-python">hero_sprite.sort_group = 1
+sword_sprite.sort_group = 1
+</code></pre>
+<p>A character and the sword they are holding must stay together relative to the
+scenery however their own depths compare. Both carry the group and sort as one
+unit; within the group they still sort by depth against each other.</p>
+<h3 id="why-material-sorts-last">Why material sorts last</h3>
+<p>Material used to be compared <em>before</em> depth, so two overlapping sprites with
+different materials drew in material order rather than depth order — y-sorting
+could not have worked at all in a scene with more than one material.</p>
+<p>Depth is a correctness constraint and batching is an optimisation, so depth
+wins. Material still breaks ties at equal depth, which is where the batching
+actually comes from: a tilemap row, a crowd of identical particles.</p>
+<h2 id="material-system">Material System</h2>
+<p>Materials combine shader, texture, and uniforms. A <code>Shader</code> wraps an
+already-compiled <code>moderngl.Program</code>; <code>ShaderCache</code> is what turns source into
+one, keyed by name so the same shader compiles once:</p>
+<pre><code class="language-python">from pyguara.graphics.materials import Material, ShaderCache
+
+cache = ShaderCache(ctx)
+grayscale_shader = cache.get_or_compile(&quot;grayscale&quot;, vert_src, frag_src)
+material = Material(
+    shader=grayscale_shader,
+    texture=my_texture,
+    uniforms={&quot;intensity&quot;: 0.8},
+)
+
+# Assign to sprite
+sprite.material = material
+</code></pre>
+<p>A material's <code>id</code> sorts the queue and breaks batches, and
+<code>ModernGLRenderer.render_batch()</code> then draws the batch through the material's
+program, feeding it the same projection the sprite path uses, the batch's
+texture on unit 0, and the material's own uniforms. Sprites without an
+explicit material sort together as material <code>0</code> and draw through the built-in
+sprite shader.</p>
+<p><strong>The instance layout is fixed</strong>, so a material's <em>vertex</em> shader has to
+consume it: <code>in_vert</code>, <code>in_uv</code> per vertex and <code>in_pos</code>, <code>in_rot</code>, <code>in_scale</code>,
+<code>in_size</code>, <code>in_color</code> per instance. For a fragment-only effect -- the common
+case -- reuse the default vertex stage:</p>
+<pre><code class="language-python">from pyguara.graphics.materials.defaults import DEFAULT_SPRITE_VERTEX
+
+shader = cache.get_or_compile(&quot;grayscale&quot;, DEFAULT_SPRITE_VERTEX, frag_src)
+</code></pre>
+<p>A vertex shader that consumes neither <code>in_vert</code> nor <code>in_pos</code> raises rather
+than drawing every sprite on top of each other. Attributes the GLSL linker
+drops because nothing downstream reads them -- <code>in_uv</code> and <code>in_color</code> in a
+fragment shader that ignores <code>v_uv</code>/<code>v_color</code> -- are fine and expected.</p>
+<p><strong>A material's own <code>texture</code> is a second sampler, not a replacement.</strong> Unit 0
+belongs to the batch's texture, which is what the sprites <em>are</em>; a material
+texture binds to unit 1 as <code>u_material_texture</code>, for a mask, a ramp or a noise
+field. A uniform the shader does not declare is ignored, matching
+<code>Shader.set_uniform</code> everywhere else.</p>
+<p>Materials are a ModernGL-backend feature: the Pygame backend ignores them, as
+the comparison table below records.</p>
+<h2 id="2d-lighting">2D Lighting</h2>
+<p>Dynamic lighting uses light components and a compositing pass:</p>
+<pre><code class="language-python">from pyguara.graphics.lighting import LightSource, AmbientLight
+
+# Point light
+entity.add_component(LightSource(
+    color=Color(255, 200, 100),
+    radius=150.0,
+    intensity=1.2,
+    falloff=2.0  # Quadratic falloff
+))
+
+# Global ambient
+ambient_entity.add_component(AmbientLight(
+    color=Color(30, 30, 50),
+    intensity=0.3
+))
+</code></pre>
+<p>The light pass renders all lights additively, then the composite pass multiplies world × lightmap.</p>
+<h3 id="light-types">Light types</h3>
+<p><code>LightType</code> picks the shape <code>light.frag</code> cuts:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Shape</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POINT</code></td>
+<td>Radial gradient from the centre, shaped by <code>falloff</code>. The default.</td>
+</tr>
+<tr>
+<td><code>DIRECTIONAL</code></td>
+<td>Parallel rays — the quad is lit evenly, with no distance falloff. <code>radius</code> bounds the area rather than shaping it, so a scene-wide sun is a directional light with a large radius.</td>
+</tr>
+<tr>
+<td><code>SPOT</code></td>
+<td>A <code>POINT</code> masked to a cone of <code>spot_angle</code> degrees (the <strong>full</strong> opening, so 60 reaches 30 either side) pointed along <code>spot_direction</code>.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">entity.add_component(LightSource(
+    light_type=LightType.SPOT,
+    radius=240.0,
+    spot_angle=50.0,      # full cone opening, degrees
+    spot_direction=90.0,  # clockwise from screen +x, so this points down
+))
+</code></pre>
+<p><strong>Angles run clockwise from screen +x</strong>, because screen Y points down —
+the same convention <code>IRenderer.draw_line</code> uses. The cosine of the
+half-angle is computed once per frame on the CPU and handed to the shader,
+which compares dot products rather than calling <code>cos</code> per fragment.</p>
+<h3 id="flicker">Flicker</h3>
+<p>Any light can gutter:</p>
+<pre><code class="language-python">entity.add_component(LightSource(
+    color=Color(255, 170, 90),
+    flicker_enabled=True,
+    flicker_speed=9.0,      # Hz
+    flicker_intensity=0.25, # bound, not a scale: stays within ±25% of intensity
+))
+</code></pre>
+<p><code>flicker_intensity</code> is a <strong>bound</strong>, not a scale — a light set to vary by 25%
+never drops below 75% of its configured intensity, and never below zero
+whatever the value. Two lights with the same settings do not flicker in
+lockstep: the starting phase is derived from the entity id, and from a
+checksum of it rather than <code>hash()</code>, so a replay reproduces the same
+flicker on a later run.</p>
+<p>Flicker resolves <strong>on the CPU</strong>, in <code>LightingSystem.update(dt)</code>, folded into
+the intensity the shader receives. That system already walks every light and
+already has <code>dt</code>, so this needs no time uniform and no extra instance
+attribute — and it stays testable without a GL context, which is the only
+kind of lighting test this repository can run everywhere.</p>
+<h3 id="daynight-cycle">Day/night cycle</h3>
+<p><code>AmbientCycle</code> drives an <code>AmbientLight</code> around a loop of keyframes, which is the
+mechanism under a day/night cycle. What the times of day are <em>called</em>, and
+whether a loop is a day at all, stays with the game:</p>
+<pre><code class="language-python">from pyguara.graphics.lighting import (
+    AmbientCycle,
+    AmbientCycleSystem,
+    LightKeyframe,
+)
+
+ambient_entity.add_component(AmbientLight())
+ambient_entity.add_component(AmbientCycle(
+    keyframes=[
+        LightKeyframe(0.00, Color(12, 14, 34), 0.18),   # midnight
+        LightKeyframe(0.25, Color(255, 174, 110), 0.65),  # dawn
+        LightKeyframe(0.50, Color(255, 250, 235), 1.00),  # noon
+        LightKeyframe(0.75, Color(120, 90, 140), 0.45),   # dusk
+    ],
+    duration=240.0,  # real seconds for one full loop
+))
+
+cycle_system = AmbientCycleSystem(entity_manager)   # scene-owned, ticked with dt
+</code></pre>
+<p>The loop is a <strong>ring</strong>: the last keyframe interpolates back round to the first
+through 1.0/0.0, so there is no need for a keyframe at both ends. Phases are
+wrapped, not clamped — <code>sample_cycle(keyframes, 1.25)</code> samples 0.25.</p>
+<p><code>AmbientCycle</code> requires an <code>AmbientLight</code> on the same entity, and is opt-in per
+entity: a scene that attaches no cycle behaves exactly as it did before. The
+<code>LightingSystem</code> needs no changes either — it re-reads <code>AmbientLight</code> from the
+ECS every tick regardless of what wrote it.</p>
+<p><strong>A cycle owns the <code>AmbientLight</code> on its entity</strong>, overwriting colour and
+intensity on every tick it plays. A transient flash — lightning, an explosion
+lighting the sky — is therefore either a <code>LightSource</code> (arguably what lightning
+is) or a <code>playing = False</code> for its duration. It is not a second writer setting
+<code>intensity</code> between ticks; that value does not survive the next one.</p>
+<p><code>sample_cycle(keyframes, phase)</code> is a plain function over plain data, so a game
+tinting its fog, its particles or its UI by the same phase calls it directly
+rather than reaching into the system.</p>
+<h2 id="post-processing">Post-Processing</h2>
+<p>Screen-space effects are chained via <code>PostProcessStack</code>:</p>
+<pre><code class="language-python">from pyguara.graphics.vfx import PostProcessStack, BloomEffect, VignetteEffect
+
+stack = PostProcessStack(ctx, width, height)
+stack.add_effect(BloomEffect(ctx, threshold=0.8, intensity=0.5))
+stack.add_effect(VignetteEffect(ctx, radius=0.7, softness=0.4))
+</code></pre>
+<p>Effects can be enabled/disabled at runtime via <code>effect.enabled = False</code>.</p>
+<p>Order matters, and is the caller's to choose. Bloom generally runs first, so it
+bleeds the scene's own hot colours rather than whatever a later effect drew over
+them; a vignette generally runs last, because it is a lens rather than a light.</p>
+<p>Shipped effects:</p>
+<table>
+<thead>
+<tr>
+<th>Effect</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BloomEffect</code></td>
+<td>Bleeds a halo out of anything past a brightness threshold.</td>
+</tr>
+<tr>
+<td><code>HeatHazeEffect</code></td>
+<td>Refracts the frame with rising hot air, with dust drifting through it. <code>gust()</code> kicks up a cloud that settles on its own.</td>
+</tr>
+<tr>
+<td><code>StormEffect</code></td>
+<td>Procedural rain, sheet lightning and forked bolts.</td>
+</tr>
+<tr>
+<td><code>VignetteEffect</code></td>
+<td>Darkens the edges of the frame.</td>
+</tr>
+</tbody>
+</table>
+<p>Each of these owns only how the effect <em>looks</em>. What the weather or the heat is
+<em>doing</em> stays with the caller — which is what lets a game tie a strike, a camera
+shake and a thunderclap to the same frame.</p>
+<h3 id="feedback-primitives">Feedback primitives</h3>
+<p><code>pyguara.graphics.vfx</code> also holds the two small pooled things a game reaches for
+when something is hit. Both are composed into a scene rather than resolved from
+DI, the same way <code>ParticleSystem</code> is:</p>
+<ul>
+<li><strong><code>Sparks</code></strong> — a bounded pool of coloured shape particles (<code>draw_circle</code> /
+  <code>draw_line</code>). <code>ParticleSystem</code> is the right tool when particles <em>are</em>
+  sprites; these are not. The two are separate because a spark has no texture
+  to bind and none worth authoring: the shape path batches each shape type into
+  one instanced draw call from a colour per primitive, with no texture in
+  sight.</li>
+<li><strong><code>Shaker</code></strong> — several overlapping <code>CameraShake</code> impulses summed into one
+  pixel offset, so a second impact adds to the first rather than cutting it
+  short. The result is a plain offset: a world-space scene adds it to the camera
+  position, a screen-space one adds it to what it draws.</li>
+</ul>
+<h2 id="components">Components</h2>
+<h3 id="camera2d">Camera2D</h3>
+<p>Handles Coordinate Transformation (World Space &lt;-&gt; Screen Space). Supports Zoom
+and Panning. There is one world-to-screen transform (<code>screen_offset</code>);
+<code>world_to_screen</code> / <code>screen_to_world</code> / <code>get_view_bounds</code> are conveniences
+built on it and take an optional <code>viewport</code> (defaulting to the camera's
+constructed size). Camera rotation is not supported — the render path does not
+rotate.</p>
+<p><code>position</code> is where the camera is; <code>view_position</code> is where it <em>looks</em> this
+frame, which is <code>position</code> plus the current shake. Every transform is expressed
+against <code>view_position</code>, so a shake moves the picture without moving the
+camera.</p>
+<h4 id="framing">Framing</h4>
+<pre><code class="language-python">camera.set_bounds(Rect(0, 0, level_w, level_h))   # never show past the wall
+</code></pre>
+<p>Clamped against <code>position</code>, every <code>update()</code>. A room <strong>smaller</strong> than the view
+centres on the room rather than picking an edge, which is the only choice that
+does not show more wall on one side than the other. The clamp is sized from the
+camera's fallback viewport, so a split-screen camera must declare its real size
+with <code>set_viewport_size()</code>.</p>
+<p>A shake at the wall still reads as a shake: suppressing it would turn an
+explosion next to one into a stutter, which is more visually wrong than a few
+pixels of overscan.</p>
+<pre><code class="language-python">camera.frame_targets([p1.position, p2.position], padding=120.0,
+                     min_zoom=0.5, max_zoom=2.0, smooth_time=0.15)
+</code></pre>
+<p>The co-op camera. Call it each frame; it centres the targets' bounding box and
+picks the zoom that fits, between <code>min_zoom</code> and <code>max_zoom</code>. <code>min_zoom</code> is how
+far out the camera is willing to go before it lets someone off screen;
+<code>max_zoom</code> stops a single target (a zero-size box) zooming to infinity.
+<code>adjust_zoom=False</code> centres without touching zoom.</p>
+<p>Framing and <code>follow()</code> are <strong>mutually exclusive</strong> — both decide <code>position</code>, so
+starting one cancels the other. <code>stop_framing()</code> ends framing in place.</p>
+<h4 id="lookahead">Lookahead</h4>
+<pre><code class="language-python">camera.follow(player.position, CameraFollowConstraints(
+    deadzone=Rect(-50, -50, 100, 100), smooth_time=0.15, lookahead=0.3,
+))
+</code></pre>
+<p>Leads the target by <code>lookahead</code> seconds of its own velocity, so the view shows
+more of what the player is about to hit than of what they have already passed.
+The camera <strong>measures that velocity itself</strong>, from how far the followed point
+moved since the last frame, so a caller already passing
+<code>player.transform.position</code> every frame passes nothing more. It is smoothed
+with the follow's own <code>smooth_time</code>, because a raw per-frame delta is noisy
+enough to visibly jitter the view.</p>
+<h3 id="viewport">Viewport</h3>
+<p>Defines the drawable region on the screen. Used for:
+- Split-screen multiplayer.
+- Minimaps.
+- Aspect ratio enforcement (Letterboxing).</p>
+<h3 id="geometry">Geometry</h3>
+<p>Procedural shapes (<code>Box</code>, <code>Circle</code>) that lazy-generate their textures. This allows them to be batched alongside standard sprites.</p>
+<h2 id="backends">Backends</h2>
+<p>The engine uses the <code>IRenderer</code> protocol, allowing for different implementations:</p>
+<ul>
+<li><strong>ModernGLRenderer</strong> (Recommended): GPU-accelerated OpenGL 3.3+ with hardware instancing. Supports all advanced features (lighting, post-processing).</li>
+<li><strong>PygameBackend</strong>: CPU-based <code>pygame-ce</code> rendering. Uses stub implementations for advanced features (renders fully lit, no post-processing).</li>
+<li><strong>HeadlessBackend</strong>: Discards draw calls. Useful for CI/CD and server-side simulation.</li>
+</ul>
+<h3 id="graceful-degradation">Graceful Degradation</h3>
+<p>When using Pygame backend, advanced graphics features gracefully degrade:</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>ModernGL</th>
+<th>Pygame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sprite rendering</td>
+<td>Hardware instanced</td>
+<td>Software blitting</td>
+</tr>
+<tr>
+<td>Per-sprite tint</td>
+<td>Per-instance vertex attribute</td>
+<td><code>BLEND_RGBA_MULT</code> per sprite</td>
+</tr>
+<tr>
+<td>Lighting</td>
+<td>Dynamic light maps</td>
+<td>Fully lit (no shadows)</td>
+</tr>
+<tr>
+<td>Post-processing</td>
+<td>Bloom, vignette, etc.</td>
+<td>Pass-through (no effects)</td>
+</tr>
+<tr>
+<td>Materials</td>
+<td>Custom shaders</td>
+<td>Default only</td>
+</tr>
+</tbody>
+</table>
+<p>Game code using these features runs unchanged on Pygame - stubs accept the API calls but skip the GPU operations.</p>
+<hr />
+<h1 id="ui-system">UI System</h1>
+<p>The UI system (<code>pyguara.ui</code>) is immediate-mode friendly but retains state via an Object-Oriented widget tree.</p>
+<h2 id="architecture">Architecture</h2>
+<ul>
+<li><strong>UIManager</strong>: Routes input events (<code>OnMouseEvent</code>) to widgets, and runs a
+  layout pass over every root before rendering -- applying <code>LayoutConstraints</code>
+  and container stacking -- re-run on window resize or <code>invalidate_layout()</code>.</li>
+<li><strong>UIElement</strong>: Base class for all widgets (<code>Button</code>, <code>Panel</code>, <code>Label</code>).</li>
+<li><strong>Layouts</strong>: <code>LayoutConstraints</code> position/size an element against its parent
+  (anchor, margin, percentage); <code>BoxContainer</code> stacks children
+  vertically/horizontally with alignment, <code>GridContainer</code> wraps them into N
+  columns, and <code>ScrollContainer</code> clips and scrolls contents larger than their
+  window.</li>
+<li><strong>Theme</strong>: a global <code>UITheme</code> (<code>get_theme()</code>/<code>set_theme()</code>) controls colors
+  and spacing; elements read it live, so a swap re-skins existing widgets.</li>
+</ul>
+<h2 id="keyboard-focus">Keyboard focus</h2>
+<p><code>UIManager</code> keeps a focus ring, so a menu is reachable without a mouse:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Moves</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Tab</code> / <code>Down</code> / <code>Right</code></td>
+<td>Focus forward, wrapping at the end</td>
+</tr>
+<tr>
+<td><code>Shift+Tab</code> / <code>Up</code> / <code>Left</code></td>
+<td>Focus back, wrapping at the start</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-python">element.focusable = True          # Button/Checkbox/Slider/TextInput: already True
+manager.focus_next()              # or focus_previous()
+manager.focus_ring()              # every focusable element, in order
+</code></pre>
+<p><strong>Order is the element tree, depth-first</strong>, in the order roots were added and
+children were parented — the order a reader's eye takes through a declared
+layout, with no geometry involved. A hidden or disabled element is skipped
+along with its whole subtree, so a collapsed panel's contents aren't reachable
+by Tab just because they still exist.</p>
+<p><strong>Traversal is the fallback, not the first move.</strong> The focused element sees the
+key first and Tab or an arrow only moves focus if it didn't consume it — which
+is what lets a text input keep its arrow keys for the caret while the same keys
+traverse a row of buttons.</p>
+<p><code>focusable</code> is off by default: a container, a label or a decorative panel is
+not a stop on the ring, and opting in is a smaller thing to get right than
+opting every layout box out.</p>
+<h2 id="grids">Grids</h2>
+<pre><code class="language-python">grid = GridContainer(Vector2(20, 20), Vector2(300, 300), columns=5,
+                     spacing=4, row_height=48)
+</code></pre>
+<p>Children flow left to right and wrap, so adding one never means rewriting the
+layout. Column width is uniform — the content width split <code>columns</code> ways minus
+spacing — because that is what a slot grid means. Row height is the tallest
+child in that row, or <code>row_height</code> for square cells regardless of content.</p>
+<p><code>STRETCH</code> (the default) fills each cell, which is what an inventory or an
+ability bar wants; any other alignment keeps each child's measured size and
+centres it in its cell. A container placed in a cell lays out against that
+cell.</p>
+<h2 id="scrolling-and-clipping">Scrolling and clipping</h2>
+<pre><code class="language-python">log = ScrollContainer(Vector2(20, 20), Vector2(300, 200), scroll_speed=30.0)
+log.add_child(message_list)
+log.scroll_to_end()
+</code></pre>
+<p><code>UIRenderer</code> grew a clip stack for this:</p>
+<pre><code class="language-python">renderer.push_clip(rect)    # intersects with any active clip
+renderer.pop_clip()
+</code></pre>
+<p><strong>Nesting intersects rather than replaces.</strong> That is the only behaviour that
+lets a scroll container live inside another one — an inventory inside a
+scrolling sidebar must not draw outside the sidebar just because its own
+viewport is larger. An empty intersection clips everything away, which is
+correct: none of the inner element is on screen.</p>
+<p>Pair every push with a pop, in a <code>finally</code> if the widget can raise. A leaked
+clip is dropped at <code>present()</code> with a one-time warning, so one unbalanced push
+truncates a single frame rather than every frame after it.</p>
+<h3 id="what-the-viewport-does">What the viewport does</h3>
+<ul>
+<li><strong>It places its own children</strong>, like <code>BoxContainer</code> does, stacking them along
+  the scroll axis and stretching them across it. That is what makes the layout
+  idempotent: an element without constraints keeps its own <code>rect</code>, so a
+  viewport that merely translated what it found would translate it <em>again</em> next
+  frame and walk the contents off screen. Put a <code>BoxContainer</code> or
+  <code>GridContainer</code> inside for spacing or columns.</li>
+<li><strong>It shifts children during layout, not during render.</strong> Translating at draw
+  time leaves every <code>rect</code> unscrolled, so a click lands on whatever used to be
+  under the cursor — the fifth inventory slot selecting the second. Moving the
+  rects means the click, the hover and the pixels all agree.</li>
+<li><strong>The offset re-clamps every layout.</strong> A filtered inventory or a cleared log
+  leaves the offset past an end that no longer exists, and a blank viewport the
+  player cannot scroll back from.</li>
+</ul>
+<h3 id="wheel-routing">Wheel routing</h3>
+<p><code>ScrollContainer</code> implements the <code>Scrollable</code> capability protocol, tested with
+<code>isinstance</code> — the same shape as <code>TextInsertable</code>, and for the same reason:
+only a viewport has any use for a scroll delta, and widening
+<code>handle_event()</code> would break every widget that implements the three-argument
+form.</p>
+<p><code>UIManager</code> hit-tests the cursor and walks <strong>up</strong> from whatever is under it to
+the nearest <code>Scrollable</code>, so the wheel over a button inside a list still
+scrolls the list. A <code>Scrollable</code> already at its end returns <code>False</code> and the
+walk continues, so the page behind a list that cannot scroll still does.
+Routing follows the pointer, not focus: a focused text field across the screen
+is not what the player is pointing at.</p>
+<h2 id="layout-invalidation">Layout invalidation</h2>
+<p>The manager re-runs layout when it is dirty. Three things mark it dirty on
+their own:</p>
+<pre><code class="language-python">label.set_text(&quot;10&quot;)        # a label sizes itself from its content
+element.visible = False     # siblings after it move up
+container.add_child(widget)
+</code></pre>
+<p><code>visible</code> is a property for exactly that reason. A plain attribute meant
+<code>element.visible = False</code> silently left a gap until something else happened to
+invalidate. <code>UIManager.invalidate_layout()</code> remains for anything the manager
+cannot see.</p>
+<h2 id="integration">Integration</h2>
+<p>The UI is rendered via the <code>UIRenderer</code> protocol, allowing it to sit on top of the main game render pass.</p>
+<h2 id="measured-ceiling">Measured ceiling</h2>
+<p>The render path has been benchmarked; the figures live in
+<a href="../../guides/performance/">Measured Limits</a>. Two results are worth knowing
+before optimising anything here:</p>
+<ul>
+<li><strong>At scale the bottleneck is the CPU, not the GPU.</strong> A 20,000-sprite batch
+  costs about 16 ms end to end on the ModernGL backend, and four fifths of that
+  is the Python loop that packs the instance array. The pack's share grows with
+  sprite count -- 42% at 1,000, 81% at 20,000.</li>
+<li><strong><code>Batcher.create_batches</code> costs more than the draw does</strong> — roughly 53 ms
+  for the same 20,000 sprites, more than three times the GL path. Texture
+  switching adds about 50% on top.</li>
+</ul>
+<p><code>RenderQueue.sort</code> is linear and cheap (2.9 ms at 8,000 commands), so its
+per-command lambda is not worth chasing. There is no visibility culling; the
+page records what that costs so the trade can be argued from a number.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,22 @@
+<!-- @dsCard group="Components" viewport="700x230" name="NavBar" subtitle="Top chrome — editor menu bar and site header" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>NavBar<\/title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"><\/script>
+<script src="../../_ds_bundle.js"><\/script>
+<style>html,body{margin:0}body{background:var(--surface-page);color:var(--text-body);font-family:var(--font-body);padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:16px}.col{display:flex;flex-direction:column;gap:10px}.cap{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}<\/style><\/head><body><div id="root"><\/div>
+<script type="text/babel">
+const { NavBar, Button, Image: DSImage, Label } = window.PyguaraDesignSystem_ca79d7;
+const Card = () => (<div className="col" style={{gap:14}}>
+  <div><div className="cap">Editor menu bar<\/div>
+    <NavBar height={40} spacing={4} style={{marginTop:6}} brand={<DSImage src="../../assets/art/badge-pyguara-mark.png" height={28} />}>
+      <Button text="File" variant="ghost" size="small" /><Button text="View" variant="ghost" size="small" /><Button text="Tools" variant="ghost" size="small" />
+    <\/NavBar><\/div>
+  <div><div className="cap">Site header · align END<\/div>
+    <NavBar spacing={10} align="STRETCH" style={{marginTop:6}} brand={<Label text="GUARÁ & FALCÃO" font="display" fontSize={12} />}>
+      <div className="row" style={{gap:10}}><Button text="Docs" variant="ghost" size="small" /><Button text="Wishlist" variant="primary" size="small" /><\/div>
+    <\/NavBar><\/div>
+<\/div>);
+ReactDOM.createRoot(document.getElementById('root')).render(<Card />);
+<\/script><\/body><\/html>

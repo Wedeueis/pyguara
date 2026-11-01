@@ -1,0 +1,5142 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../agent-integration/">
+      
+      
+        <link rel="next" href="../../core/architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Measured Limits - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#measured-limits" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Measured Limits
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-read-these-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to read these numbers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#crowd-simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crowd simulation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Crowd simulation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#flockingsystemupdate-milliseconds-per-tick" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlockingSystem.update — milliseconds per tick
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="FlockingSystem.update — milliseconds per tick">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ported-16-ms-to-19-ms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ported. 16 ms to 1.9 ms
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#spatialhash" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SpatialHash
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SpatialHash">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ported-75-ms-to-044-ms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ported. 7.5 ms to 0.44 ms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-a-consumer-gets-which-is-much-less" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a consumer gets, which is much less
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-regime-where-python-wins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The regime where Python wins
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entitypool-draining-a-full-pool-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EntityPool — draining a full pool, milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#filtering-disabled-entities-out-of-a-query" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filtering disabled entities out of a query
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Components
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-entity-slot-and-why-it-is-initialised-per-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The entity slot, and why it is initialised per class
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#character-movement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Character movement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Character movement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-swept-charactermover-probe-milliseconds-per-fixed-tick" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The swept CharacterMover probe -- milliseconds per fixed tick
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#object-pools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Object pools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Object pools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-native-particle-pool-milliseconds-per-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The native particle pool -- milliseconds per frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-native-spark-pool-milliseconds-per-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The native spark pool -- milliseconds per frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pricing-a-native-port-before-writing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pricing a native port before writing it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flow-fields-the-number-nobody-had-measured" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flow fields -- the number nobody had measured
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Flow fields -- the number nobody had measured">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ported-85-ms-to-16-ms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ported. 85 ms to 1.6 ms
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#procedural-generation-wave-function-collapse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Procedural generation -- Wave Function Collapse
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Procedural generation -- Wave Function Collapse">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-this-did-to-the-native-case" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this did to the native case
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-what-one-query-costs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A* -- what one query costs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#particlesystem-sparks-update-milliseconds-per-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ParticleSystem / Sparks update -- milliseconds per frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendering-cpu-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering, CPU side
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rendering, CPU side">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#batchercreate_batches-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Batcher.create_batches — milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#renderqueuesort-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RenderQueue.sort — milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-whole-cpu-frame-milliseconds-at-20000-sprites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The whole CPU frame — milliseconds at 20000 sprites
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The whole CPU frame — milliseconds at 20000 sprites">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#two-pieces-of-headroom-recorded-rather-than-taken" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two pieces of headroom, recorded rather than taken
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visibility-culling-headroom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visibility culling headroom
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendering-gl-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering, GL side
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rendering, GL side">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#instanced-sprite-draw-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instanced sprite draw — milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#draw_text-milliseconds-per-frame-20-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        draw_text — milliseconds per frame, 20 strings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-ui-overlay-milliseconds-per-frame-and-why-the-hud-does-not-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The UI overlay — milliseconds per frame, and why the HUD does not matter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#instance-layout-width" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instance layout width
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-loading-and-the-gil" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource loading, and the GIL
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-test-suite-guarantees" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the test suite guarantees
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../adr/0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-read-these-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to read these numbers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#crowd-simulation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Crowd simulation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Crowd simulation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#flockingsystemupdate-milliseconds-per-tick" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FlockingSystem.update — milliseconds per tick
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="FlockingSystem.update — milliseconds per tick">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ported-16-ms-to-19-ms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ported. 16 ms to 1.9 ms
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#spatialhash" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SpatialHash
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SpatialHash">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ported-75-ms-to-044-ms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ported. 7.5 ms to 0.44 ms
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-a-consumer-gets-which-is-much-less" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a consumer gets, which is much less
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-regime-where-python-wins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The regime where Python wins
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#entitypool-draining-a-full-pool-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EntityPool — draining a full pool, milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#filtering-disabled-entities-out-of-a-query" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filtering disabled entities out of a query
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#components" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Components
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Components">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-entity-slot-and-why-it-is-initialised-per-class" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The entity slot, and why it is initialised per class
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#character-movement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Character movement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Character movement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-swept-charactermover-probe-milliseconds-per-fixed-tick" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The swept CharacterMover probe -- milliseconds per fixed tick
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#object-pools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Object pools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Object pools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-native-particle-pool-milliseconds-per-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The native particle pool -- milliseconds per frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-native-spark-pool-milliseconds-per-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The native spark pool -- milliseconds per frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pricing-a-native-port-before-writing-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pricing a native port before writing it
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#flow-fields-the-number-nobody-had-measured" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flow fields -- the number nobody had measured
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Flow fields -- the number nobody had measured">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ported-85-ms-to-16-ms" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ported. 85 ms to 1.6 ms
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#procedural-generation-wave-function-collapse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Procedural generation -- Wave Function Collapse
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Procedural generation -- Wave Function Collapse">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-this-did-to-the-native-case" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this did to the native case
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-what-one-query-costs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A* -- what one query costs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#particlesystem-sparks-update-milliseconds-per-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ParticleSystem / Sparks update -- milliseconds per frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendering-cpu-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering, CPU side
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rendering, CPU side">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#batchercreate_batches-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Batcher.create_batches — milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#renderqueuesort-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        RenderQueue.sort — milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-whole-cpu-frame-milliseconds-at-20000-sprites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The whole CPU frame — milliseconds at 20000 sprites
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The whole CPU frame — milliseconds at 20000 sprites">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#two-pieces-of-headroom-recorded-rather-than-taken" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two pieces of headroom, recorded rather than taken
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visibility-culling-headroom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visibility culling headroom
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rendering-gl-side" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rendering, GL side
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Rendering, GL side">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#instanced-sprite-draw-milliseconds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instanced sprite draw — milliseconds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#draw_text-milliseconds-per-frame-20-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        draw_text — milliseconds per frame, 20 strings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-ui-overlay-milliseconds-per-frame-and-why-the-hud-does-not-matter" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The UI overlay — milliseconds per frame, and why the HUD does not matter
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#instance-layout-width" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Instance layout width
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resource-loading-and-the-gil" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resource loading, and the GIL
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-test-suite-guarantees" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the test suite guarantees
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="measured-limits">Measured limits</h1>
+<p>Every number on this page came out of <code>tests/performance/</code>. Nothing here is
+estimated, and nothing here is a target — these are the figures the engine
+actually produced on a real machine, reproduced with:</p>
+<pre><code class="language-bash">make benchmark          # the full sweep; prints every table below
+make test-performance   # the cheap guards only
+</code></pre>
+<p>If you are about to claim the engine can handle <em>N</em> of something, this is the
+page to check first, and the page to update afterwards.</p>
+<h2 id="how-to-read-these-numbers">How to read these numbers</h2>
+<p><strong>A 60 Hz frame is 16.7 ms.</strong> That is the whole budget — every system, plus
+rendering, plus whatever the game itself does. A subsystem that takes 16 ms is
+not "fast enough", it has eaten the frame.</p>
+<p><strong>CPU-side numbers are portable; GPU-side numbers are not.</strong> The sorting,
+batching, flocking, spatial and pooling figures are pure Python and will scale
+with a machine's single-core speed in a predictable way. The GL figures depend
+entirely on the driver underneath — a real NVIDIA driver, Mesa over D3D12 (what
+was used here), and llvmpipe on a CI runner differ by orders of magnitude. When
+quoting an engine limit, quote a CPU-side number.</p>
+<p><strong>Measured on:</strong> WSL2 · Mesa 23.2.1 over D3D12 · NVIDIA RTX 3050 · CPython 3.12
+· 2026-09-12. Figures are the <em>minimum</em> of several rounds, not the mean: a slow
+round means something else on the machine got the CPU, and averaging that in
+measures the neighbours instead of the code.</p>
+<hr />
+<h2 id="crowd-simulation">Crowd simulation</h2>
+<h3 id="flockingsystemupdate-milliseconds-per-tick"><code>FlockingSystem.update</code> — milliseconds per tick</h3>
+<p>Steering can be spread across ticks with <code>FlockingSystem(..., groups=N)</code>: one
+group re-decides its heading each tick while <strong>every</strong> agent still integrates
+its position, so motion stays smooth and only the decision rate drops to 60/N Hz.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Agents</th>
+<th style="text-align: right;">g=1</th>
+<th style="text-align: right;">g=2</th>
+<th style="text-align: right;">g=3</th>
+<th style="text-align: right;">g=4</th>
+<th style="text-align: right;">g=1, before</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">16.0</td>
+<td style="text-align: right;">9.6</td>
+<td style="text-align: right;">7.4</td>
+<td style="text-align: right;">6.2</td>
+<td style="text-align: right;">53.7</td>
+</tr>
+<tr>
+<td style="text-align: right;">1500</td>
+<td style="text-align: right;">24.9</td>
+<td style="text-align: right;">14.8</td>
+<td style="text-align: right;">11.4</td>
+<td style="text-align: right;">9.7</td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td style="text-align: right;">2000</td>
+<td style="text-align: right;">34.3</td>
+<td style="text-align: right;">20.5</td>
+<td style="text-align: right;">15.6</td>
+<td style="text-align: right;">13.2</td>
+<td style="text-align: right;">112.3</td>
+</tr>
+<tr>
+<td style="text-align: right;">2500</td>
+<td style="text-align: right;">44.7</td>
+<td style="text-align: right;">26.2</td>
+<td style="text-align: right;">19.8</td>
+<td style="text-align: right;">17.7</td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td style="text-align: right;">3000</td>
+<td style="text-align: right;">53.5</td>
+<td style="text-align: right;">32.0</td>
+<td style="text-align: right;">24.9</td>
+<td style="text-align: right;">21.1</td>
+<td style="text-align: right;">177.6</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Defensible scale in Python: roughly 1000 fully-simulated boids at 60 Hz, or
+2000 with steering at 20 Hz</strong> (<code>groups=3</code>). Before the optimisation pass it was
+about 300.</p>
+<p><strong>3000 fully-simulated boids at 60 Hz is not reachable in Python</strong>, and
+staggering does not get there — at <code>groups=4</code> it is still 21 ms. Staggering does
+not scale as 1/N either, because a share of every tick cannot be staggered: the
+spatial hash is rebuilt, components are resolved, and every agent integrates,
+whatever group it is in. That floor is what stops <code>groups=8</code> being interesting.</p>
+<p>Clumped density costs more, and is not a pathological case — it is a horde
+converging on a player. At 3000 agents: 161.9 ms clumped against 53.5 uniform,
+down from 664.1 and 177.6 respectively.</p>
+<h4 id="ported-16-ms-to-19-ms">Ported. 16 ms to 1.9 ms</h4>
+<p>With the extension built, the same ticks:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Agents</th>
+<th style="text-align: right;">g=1</th>
+<th style="text-align: right;">g=2</th>
+<th style="text-align: right;">g=3</th>
+<th style="text-align: right;">g=4</th>
+<th style="text-align: right;">Python g=1</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;"><strong>1.86</strong></td>
+<td style="text-align: right;">1.68</td>
+<td style="text-align: right;">1.63</td>
+<td style="text-align: right;">1.61</td>
+<td style="text-align: right;">16.0</td>
+<td style="text-align: right;">8.6x</td>
+</tr>
+<tr>
+<td style="text-align: right;">1500</td>
+<td style="text-align: right;"><strong>2.79</strong></td>
+<td style="text-align: right;">2.54</td>
+<td style="text-align: right;">2.60</td>
+<td style="text-align: right;">2.54</td>
+<td style="text-align: right;">24.9</td>
+<td style="text-align: right;">8.9x</td>
+</tr>
+<tr>
+<td style="text-align: right;">2000</td>
+<td style="text-align: right;"><strong>3.94</strong></td>
+<td style="text-align: right;">3.57</td>
+<td style="text-align: right;">3.44</td>
+<td style="text-align: right;">3.36</td>
+<td style="text-align: right;">34.3</td>
+<td style="text-align: right;">8.7x</td>
+</tr>
+<tr>
+<td style="text-align: right;">2500</td>
+<td style="text-align: right;"><strong>5.03</strong></td>
+<td style="text-align: right;">4.42</td>
+<td style="text-align: right;">4.34</td>
+<td style="text-align: right;">4.31</td>
+<td style="text-align: right;">44.7</td>
+<td style="text-align: right;">8.9x</td>
+</tr>
+<tr>
+<td style="text-align: right;">3000</td>
+<td style="text-align: right;"><strong>6.21</strong></td>
+<td style="text-align: right;">5.41</td>
+<td style="text-align: right;">5.34</td>
+<td style="text-align: right;">5.36</td>
+<td style="text-align: right;">53.5</td>
+<td style="text-align: right;">8.6x</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Defensible scale natively: 3000 fully-simulated boids at 60 Hz</strong>, at 37% of a
+frame, with no staggering at all. 1000 agents go from 96% of a frame to 11%.</p>
+<p>Three things in that table are worth more than the headline.</p>
+<p><strong>Staggering has become nearly pointless.</strong> 1000 agents at <code>groups=4</code> saves
+0.25 ms against <code>groups=1</code>, where in Python it saved 9.8 ms. What <code>groups</code> skips
+is the steering decision, and steering is no longer what a tick costs — the
+crossing and the component resolution are, and every agent pays those whatever
+group it is in. The floor that stopped <code>groups=8</code> being interesting in Python is
+now most of the tick. A game on the native store should measure before reaching
+for it, and probably not reach for it.</p>
+<p><strong>Density is where the port pays most</strong>, which is the case it was built for:</p>
+<table>
+<thead>
+<tr>
+<th>3000 agents</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uniform</td>
+<td style="text-align: right;">52.8</td>
+<td style="text-align: right;">6.32</td>
+<td style="text-align: right;">8.4x</td>
+</tr>
+<tr>
+<td>clumped</td>
+<td style="text-align: right;">156.9</td>
+<td style="text-align: right;">8.28</td>
+<td style="text-align: right;"><strong>19.0x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Clumping costs Python 3.0x and the native store 1.3x. What density multiplies is
+the per-neighbour arithmetic, which is exactly what moved; the crossing is
+unchanged because the same number of agents cross either way. So the speedup is
+8x in the easy case and 19x in the hard one, and the hard one is a horde
+converging on the player.</p>
+<p><strong>The remaining cost is almost all boundary.</strong> At 1000 agents the 1.86 ms splits
+as 0.31 ms resolving entities and components (17%, paid by both stores), 0.29 ms
+packing 15 floats per agent (16%), ~0.54 ms of native solve (29%), and the rest
+write-back — 2000 <code>Vector2</code> constructions, which is why <code>_tick_natively</code> builds
+them through <code>tuple.__new__</code> rather than <code>Vector2(x, y)</code>: 1.8x cheaper for an
+identical object, worth 15% of the tick. Unlike the flow field, none of this can
+be kept native between ticks, because a flock is not opaque — every agent is an
+ECS entity whose position other systems read. That is the whole reason this
+port prices at 9x where the field prices at 57x.</p>
+<p>Two things matter more than the headline number.</p>
+<p>First, a flocking tick is O(n·k) — n agents each visiting k neighbours — so
+<strong>density is an independent variable</strong>. The uniform figures hold agents-per-cell
+constant as n grows, isolating the n term; the clumped ones pack everything into
+a fixed area, so k grows with n too.</p>
+<p>Second, the cost was never the spatial hash. Rebuilding it for 3000 agents takes
+3.1 ms, and the full per-tick rebuild <code>FlockingSystem</code> does is defended in its
+docstring on correctness grounds — an incrementally maintained hash can
+accumulate a stale entry for a despawned entity. The measurement supports
+keeping it. Where the time actually went, in the order the optimisation pass
+found it: <code>Vector2</code> arithmetic in the inner loop (the largest, and the one
+nobody predicts), then per-neighbour entity and component re-lookup, then
+iterating the neighbour list once per steering behaviour.</p>
+<h3 id="spatialhash"><code>SpatialHash</code></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Keys</th>
+<th style="text-align: right;">Rebuild (ms)</th>
+<th style="text-align: right;">Query (µs/query)</th>
+<th style="text-align: right;">Query, before</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">1.08</td>
+<td style="text-align: right;">5.0</td>
+<td style="text-align: right;">11.0</td>
+</tr>
+<tr>
+<td style="text-align: right;">3000</td>
+<td style="text-align: right;">3.08</td>
+<td style="text-align: right;">5.2</td>
+<td style="text-align: right;">11.2</td>
+</tr>
+<tr>
+<td style="text-align: right;">10000</td>
+<td style="text-align: right;">11.73</td>
+<td style="text-align: right;">5.1</td>
+<td style="text-align: right;">10.8</td>
+</tr>
+</tbody>
+</table>
+<p>Rebuild is linear. Query cost is <strong>flat in the number of keys held</strong>, which is
+the property that makes it an index rather than a list — a query's cost depends
+on how many candidates it returns, not on how much is stored. The constant
+halved when <code>_candidates</code> stopped allocating a set per query to deduplicate keys
+that cannot be duplicated: <code>insert</code> discards a key from its old cell before
+adding it to the new one, so a key lives in exactly one cell.</p>
+<h4 id="ported-75-ms-to-044-ms">Ported. 7.5 ms to 0.44 ms</h4>
+<p>A tick of the index is what <code>SpatialIndexSystem</code> and its consumers do
+together: re-insert every tracked key, then query once per key. At 1000
+keys that is 7.45 ms in Python — 45% of a frame for the <em>index alone</em>,
+before a single consumer has done anything with the results.</p>
+<table>
+<thead>
+<tr>
+<th>1000 keys, per tick</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>insert all</td>
+<td style="text-align: right;">0.480</td>
+<td style="text-align: right;">0.099</td>
+<td style="text-align: right;">4.9x</td>
+</tr>
+<tr>
+<td>query all (k=17)</td>
+<td style="text-align: right;">6.973</td>
+<td style="text-align: right;">0.340</td>
+<td style="text-align: right;"><strong>20.5x</strong></td>
+</tr>
+<tr>
+<td>both</td>
+<td style="text-align: right;">7.453</td>
+<td style="text-align: right;">0.439</td>
+<td style="text-align: right;"><strong>17.0x</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>The ratio barely moves with density</strong>, which is the whole reason this
+port exists in the shape it does. ADR 0004 had ruled out a Python-facing
+native index because each query hands back a Python list whose length
+grows with the candidate count. It does — and so does the Python
+broad-phase it replaces, about twenty times more expensively per
+candidate, so the two scale together:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">k</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>radius 64</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: right;">6.97</td>
+<td style="text-align: right;">0.34</td>
+<td style="text-align: right;">20.5x</td>
+</tr>
+<tr>
+<td>radius 128</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">11.75</td>
+<td style="text-align: right;">0.53</td>
+<td style="text-align: right;">22.3x</td>
+</tr>
+<tr>
+<td>every key coincident</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">210.5</td>
+<td style="text-align: right;">13.2</td>
+<td style="text-align: right;">16.0x</td>
+</tr>
+</tbody>
+</table>
+<h4 id="what-a-consumer-gets-which-is-much-less">What a consumer gets, which is much less</h4>
+<p>Nothing below changed a line of its own code; the index under it changed.
+This is Amdahl, and it is the most useful number in this section:</p>
+<table>
+<thead>
+<tr>
+<th>consumer</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native index</th>
+<th style="text-align: right;"></th>
+<th>of a frame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TopDownSystem</code> separation, 1000 clumped</td>
+<td style="text-align: right;">17.30</td>
+<td style="text-align: right;">9.25</td>
+<td style="text-align: right;">1.87x</td>
+<td>104% → 56%</td>
+</tr>
+<tr>
+<td><code>TopDownSystem</code> separation, 1000 uniform</td>
+<td style="text-align: right;">2.82</td>
+<td style="text-align: right;">0.83</td>
+<td style="text-align: right;">3.42x</td>
+<td>17% → 5%</td>
+</tr>
+<tr>
+<td><code>TopDownSystem</code> separation, 200 actors</td>
+<td style="text-align: right;">0.66</td>
+<td style="text-align: right;">0.15</td>
+<td style="text-align: right;">4.30x</td>
+<td>4.0% → 0.9%</td>
+</tr>
+<tr>
+<td><code>FlockingSystem</code>, Python steering, 1000</td>
+<td style="text-align: right;">16.37</td>
+<td style="text-align: right;">9.8</td>
+<td style="text-align: right;">1.67x</td>
+<td>98% → 59%</td>
+</tr>
+<tr>
+<td><code>SpatialIndexSystem.update</code>, 10000 tracked</td>
+<td style="text-align: right;">13.17</td>
+<td style="text-align: right;">9.73</td>
+<td style="text-align: right;">1.35x</td>
+<td>79% → 58%</td>
+</tr>
+<tr>
+<td><code>SpatialIndexSystem.update</code>, 2000 tracked</td>
+<td style="text-align: right;">1.79</td>
+<td style="text-align: right;">1.15</td>
+<td style="text-align: right;">1.55x</td>
+<td>11% → 7%</td>
+</tr>
+<tr>
+<td><code>MagnetSystem.update</code>, 100 magnets</td>
+<td style="text-align: right;">1.69</td>
+<td style="text-align: right;">1.19</td>
+<td style="text-align: right;">1.43x</td>
+<td>10% → 7%</td>
+</tr>
+<tr>
+<td><code>ProjectileSystem.update</code>, 1000 live</td>
+<td style="text-align: right;">2.81</td>
+<td style="text-align: right;">2.13</td>
+<td style="text-align: right;">1.32x</td>
+<td>17% → 13%</td>
+</tr>
+</tbody>
+</table>
+<p>A 17x primitive bought 1.3-4.3x, because the broad-phase was never most
+of anyone's tick: what follows a query is an ECS lookup, a component
+fetch and arithmetic, all of it Python and all of it untouched. The row
+that justifies the port is <code>TopDownSystem</code> at crowd scale — a dropped
+frame becoming half a frame — and the row that does not is projectiles,
+which stay declined.</p>
+<p>The flocking row is a measurement rather than a configuration: the Python
+steering path now pins its own index to <code>accelerate=False</code>, because a
+"Python path" that indexes natively is not one, and because a parity
+suite's Python reference has to be Python all the way down.</p>
+<h4 id="the-regime-where-python-wins">The regime where Python wins</h4>
+<p>The native grid rebuilds on the first query after any write. Every
+consumer syncs the whole index and then sweeps it, so one rebuild serves
+<code>n</code> queries and the rebuild is free. A caller that <strong>alternates</strong> insert
+and query pays one rebuild per query — O(n²) against Python's O(n):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">keys</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">250</td>
+<td style="text-align: right;">1.29</td>
+<td style="text-align: right;">0.69</td>
+<td style="text-align: right;">1.9x faster</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">4.81</td>
+<td style="text-align: right;">9.21</td>
+<td style="text-align: right;">0.52x</td>
+</tr>
+<tr>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">18.51</td>
+<td style="text-align: right;">139.77</td>
+<td style="text-align: right;"><strong>0.13x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Nothing in the engine does this, and <code>accelerate=False</code> is the answer for
+a game that does. It is the first native store that is <em>worse</em> than
+Python at something, so
+<code>test_alternating_writes_and_queries_stays_within_its_known_penalty</code>
+bounds it rather than leaving it to be discovered.</p>
+<h3 id="entitypool-draining-a-full-pool-milliseconds"><code>EntityPool</code> — draining a full pool, milliseconds</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Pool size</th>
+<th style="text-align: right;">Newest-first</th>
+<th style="text-align: right;">Oldest-first</th>
+<th style="text-align: right;">Newest-first, before the fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">500</td>
+<td style="text-align: right;">0.10</td>
+<td style="text-align: right;">0.10</td>
+<td style="text-align: right;">2.26</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">0.19</td>
+<td style="text-align: right;">0.19</td>
+<td style="text-align: right;">8.67</td>
+</tr>
+<tr>
+<td style="text-align: right;">2000</td>
+<td style="text-align: right;">0.39</td>
+<td style="text-align: right;">0.40</td>
+<td style="text-align: right;">33.62</td>
+</tr>
+<tr>
+<td style="text-align: right;">3000</td>
+<td style="text-align: right;">0.59</td>
+<td style="text-align: right;">0.61</td>
+<td style="text-align: right;">74.18</td>
+</tr>
+</tbody>
+</table>
+<p>Linear, and <strong>independent of release order</strong> — the two columns agree to within
+noise at every size.</p>
+<p>They did not always. When the active set was a list, <code>release()</code> did an <code>in</code>
+scan followed by a <code>list.remove()</code>, both linear from index 0, so cost depended
+entirely on the order entities came back. Oldest-first found its match at index
+0 and removed it with a C-level memmove — fast, and an accident. Newest-first
+scanned the whole list every time, which made draining a pool quadratic in its
+size: 74 ms at 3000, four and a half frames, from a structure whose entire
+purpose is high-frequency spawn and despawn.</p>
+<p>The active set is now a dict keyed on entity id. At 3000 entities that is <strong>55×
+faster</strong> in the worst order, and faster than the old <em>best</em> order too, since a
+dict insert beats a list memmove. <code>test_pool_churn_is_linear</code> measures
+newest-first specifically, because it was the order that fell over.</p>
+<h3 id="filtering-disabled-entities-out-of-a-query">Filtering disabled entities out of a query</h3>
+<p><code>get_entities_with</code>, <code>get_entities_with_cached</code>, <code>get_components</code> and
+<code>get_components_with_entity</code> all have to drop entities parked by
+<code>set_entity_enabled(False)</code>. The obvious advice -- "stop testing membership per
+entity in Python, do one set difference in C" -- was measured and <strong>is wrong
+here</strong>. 10,000 entities, each with <code>Transform</code> and <code>Tag</code>, min of 5 rounds,
+milliseconds:</p>
+<table>
+<thead>
+<tr>
+<th>query</th>
+<th>disabled</th>
+<th>per-entity test</th>
+<th><code>ids - disabled</code></th>
+<th><code>filterfalse</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_entities_with(Transform)</code></td>
+<td>0</td>
+<td>1.37</td>
+<td>1.21</td>
+<td><strong>1.19</strong></td>
+</tr>
+<tr>
+<td><code>get_entities_with(Transform, Tag)</code></td>
+<td>0</td>
+<td>2.06</td>
+<td>1.87</td>
+<td><strong>1.69</strong></td>
+</tr>
+<tr>
+<td><code>get_components(Transform)</code></td>
+<td>0</td>
+<td>9.03</td>
+<td>8.37</td>
+<td><strong>6.89</strong></td>
+</tr>
+<tr>
+<td><code>get_entities_with(Transform)</code></td>
+<td>1,000</td>
+<td><strong>1.48</strong></td>
+<td>1.42</td>
+<td>1.57–1.76</td>
+</tr>
+<tr>
+<td><code>get_entities_with(Transform, Tag)</code></td>
+<td>1,000</td>
+<td><strong>2.05</strong></td>
+<td>2.41</td>
+<td>2.04</td>
+</tr>
+<tr>
+<td><code>get_components(Transform)</code></td>
+<td>1,000</td>
+<td>7.97</td>
+<td>7.34</td>
+<td><strong>7.36</strong></td>
+</tr>
+<tr>
+<td><code>get_entities_with(Transform)</code></td>
+<td>5,000</td>
+<td>1.09</td>
+<td>1.10</td>
+<td><strong>1.00</strong></td>
+</tr>
+<tr>
+<td><code>get_entities_with(Transform, Tag)</code></td>
+<td>5,000</td>
+<td><strong>1.49</strong></td>
+<td>1.96</td>
+<td>1.51</td>
+</tr>
+<tr>
+<td><code>get_components(Transform)</code></td>
+<td>5,000</td>
+<td>4.17</td>
+<td>3.73</td>
+<td><strong>3.19</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The eager difference loses badly exactly where the filter does any work: with
+5,000 disabled, <code>get_entities_with(Transform, Tag)</code> went from 1.49 ms to
+1.96 ms, <strong>32% slower</strong>. Building a new 5,000-entry set costs more than 10,000
+membership tests that allocate nothing — and a multi-type query has already
+paid to build its intersection, so this is a second full set per call.</p>
+<p><code>itertools.filterfalse</code> over a bound <code>set.__contains__</code> wins instead: the
+per-item work runs in C without materialising anything. Two further reasons it
+is the right shape, beyond the numbers:</p>
+<ul>
+<li>It is <strong>lazy, like the code it replaced</strong>. The old loop consulted the live
+  <code>_disabled</code> set as it went, so disabling an entity mid-iteration took effect;
+  an eager difference snapshots instead. Same semantics, not just same results.</li>
+<li>It cannot corrupt the index. For a single-type query <code>_matching_entity_ids</code>
+  returns the <strong>live component index</strong>, so <code>ids -= disabled</code> would delete those
+  entities from the index permanently — they would stop matching every later
+  query, re-enabled or not. <code>TestFilteringDisabledLeavesTheIndexIntact</code> in
+  <code>tests/test_ecs_dormancy.py</code> fails if anyone writes it that way.</li>
+</ul>
+<p>Most of the remaining win is simply <strong>not filtering when nothing is disabled</strong>,
+which is the common case for any game that does not pool: the old code paid a
+membership test per entity regardless. Where a moderate number are disabled the
+three strategies are within noise of each other, and that cell moved around by
+±20% between rounds — read the 0-disabled column as the real result.</p>
+<hr />
+<h2 id="components">Components</h2>
+<h3 id="the-entity-slot-and-why-it-is-initialised-per-class">The <code>entity</code> slot, and why it is initialised per class</h3>
+<p><code>BaseComponent.__slots__</code> declares <code>entity</code>, but almost every component is a
+<code>@dataclass</code> whose generated <code>__init__</code> never chains to the base -- so the slot
+stays unset and reading <code>entity</code> before <code>on_attach</code> raises <code>AttributeError</code>.
+Around 35 modules work around this with a <code>__post_init__</code> that calls the base
+<code>__init__</code> by name. Four components had simply forgotten to.</p>
+<p>Fixing it once on the base class looks obviously right and is not. Both central
+options were implemented and measured, against the same tree, min of 7 rounds:</p>
+<p><strong>Construction, nanoseconds</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>baseline</th>
+<th><code>__new__</code> on base</th>
+<th><code>__getattr__</code> on base</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Bare()</code> (no fields)</td>
+<td>196</td>
+<td>383</td>
+<td>195</td>
+</tr>
+<tr>
+<td><code>Transform()</code></td>
+<td>1,116</td>
+<td>1,357</td>
+<td>1,190</td>
+</tr>
+<tr>
+<td><code>Transform(position=…)</code></td>
+<td>1,254</td>
+<td>1,619</td>
+<td>1,304</td>
+</tr>
+<tr>
+<td><code>Health()</code> (dataclass)</td>
+<td>322</td>
+<td>408</td>
+<td>212</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Attribute reads, nanoseconds</strong> — what a system does thousands of times a frame</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>baseline</th>
+<th><code>__getattr__</code> on base</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tag.name</code></td>
+<td>32.2</td>
+<td>41.0 (+27%)</td>
+</tr>
+<tr>
+<td><code>transform.entity</code></td>
+<td>32.3</td>
+<td>41.2 (+28%)</td>
+</tr>
+<tr>
+<td><code>transform.position</code> (property)</td>
+<td>52.7</td>
+<td>100.2 (<strong>+90%</strong>)</td>
+</tr>
+<tr>
+<td><code>transform.world_position</code> (cached)</td>
+<td>84.9</td>
+<td>131.1 (+54%)</td>
+</tr>
+</tbody>
+</table>
+<p><code>__new__</code> costs ~190 ns on every component ever constructed, and deleting the 35
+redundant <code>__post_init__</code> calls only buys ~95 ns of that back.</p>
+<p><code>__getattr__</code> is free to construct -- and that is the trap. Defining it anywhere
+in a class's MRO takes CPython off the <code>PyObject_GenericGetAttr</code> fast path for
+every instance of that class, so <em>successful</em> attribute access gets slower
+whether or not the hook ever fires. A property read nearly doubles. Components
+are the most-read objects in the engine, so this trades a one-time cost at
+construction for a permanent tax on every frame: much the worse deal, and
+invisible unless you measure reads rather than construction.</p>
+<p>So the slot is still initialised per class, and the guard against forgetting is
+<code>tests/test_component_entity_slot.py</code>, which finds every <code>BaseComponent</code>
+subclass by reflection and fails naming the class and the line to add. A test
+costs nothing at runtime.</p>
+<hr />
+<h2 id="character-movement">Character movement</h2>
+<h3 id="the-swept-charactermover-probe-milliseconds-per-fixed-tick">The swept <code>CharacterMover</code> probe -- milliseconds per fixed tick</h3>
+<p><code>CharacterMover</code> moves an entity one <strong>whole pixel</strong> at a time along each
+axis and tests every step. That is deliberate: it is the guarantee that stops
+a fast mover tunnelling through a wall, and the module docstring says so. Each
+step calls <code>overlap_box</code>, and <code>PymunkEngine._probe_shape</code> answers it by
+constructing a fresh kinematic <code>pymunk.Body</code> <strong>and</strong> a fresh <code>pymunk.Poly</code> on
+the CFFI heap -- it is a <code>@staticmethod</code>, so there is nowhere to cache them.</p>
+<p>The cost therefore grows with how <strong>fast</strong> things move, not how many there
+are. Characters running at 240 px/s on a floor, 60 ticks per measurement:</p>
+<table>
+<thead>
+<tr>
+<th>Movers</th>
+<th>ms / tick</th>
+<th>Probes / tick</th>
+<th>CFFI objects / tick</th>
+<th>CFFI objects / simulated second</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0.12</td>
+<td>4.0</td>
+<td>8.0</td>
+<td>478</td>
+</tr>
+<tr>
+<td>10</td>
+<td>1.12</td>
+<td>39.8</td>
+<td>79.7</td>
+<td>4,780</td>
+</tr>
+<tr>
+<td>50</td>
+<td><strong>6.07</strong></td>
+<td>209.4</td>
+<td>418.7</td>
+<td><strong>25,124</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Fifty movers spend <strong>over a third of a 16.7 ms frame</strong> on movement alone,
+before anything is drawn. The allocation figures are counted rather than
+sampled: <code>_probe_shape</code> allocates exactly two CFFI objects per call, so the
+count is the probe count doubled.</p>
+<p>For reference, the audit that raised this estimated "18,000+ CFFI
+allocations/second" without saying under what conditions. The shape of the
+claim is right; the number lands between 10 and 50 movers at this speed, and
+is now pinned to a scenario rather than asserted.</p>
+<p><strong>Measured and deliberately not fixed.</strong> RFC-0003's Marco 4 moves the whole
+sweep into Rust against static AABBs, removing the CFFI path rather than
+optimising it -- so a Python-side fix (a cached probe body, or routing
+<code>overlap_box</code> through the <code>space.bb_query</code> that <code>region_query</code> already uses)
+would be thrown away. These numbers are that milestone's acceptance
+criterion. If RFC-0003 is declined, they are the justification for doing the
+Python fix after all.</p>
+<p>What must <em>not</em> change in either language: every pixel is still tested.
+Bisecting the walk would be faster and would reintroduce tunnelling.</p>
+<hr />
+<h2 id="object-pools">Object pools</h2>
+<h3 id="the-native-particle-pool-milliseconds-per-frame">The native particle pool -- milliseconds per frame</h3>
+<p><code>ParticleSystem</code> can be backed by a native structure-of-arrays pool. The
+wheel ships the extension and <code>uv sync</code> builds it in a checkout (see
+<code>pyguara/native.py</code> and
+<code>docs/adr/0006-shipping-the-native-extension.md</code>), so these are the
+numbers an installed PyGuara gets. The Python pool is kept and used
+whenever the extension is absent -- <code>PYGUARA_NO_NATIVE=1</code>,
+<code>native_acceleration = "off"</code>, or a platform the wheel matrix does not
+cover -- so this is still an accelerator rather than a requirement.</p>
+<p>Both paths, the same seeded burst, min of 5 rounds:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Live</th>
+<th>Path</th>
+<th style="text-align: right;"><code>update</code></th>
+<th style="text-align: right;"><code>render</code></th>
+<th style="text-align: right;">Frame</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td>Python</td>
+<td style="text-align: right;">2.132</td>
+<td style="text-align: right;">0.442</td>
+<td style="text-align: right;">2.574</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.006</td>
+<td style="text-align: right;">0.119</td>
+<td style="text-align: right;"><strong>0.126</strong></td>
+<td style="text-align: right;"><strong>20.5x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000</td>
+<td>Python</td>
+<td style="text-align: right;">6.517</td>
+<td style="text-align: right;">1.326</td>
+<td style="text-align: right;">7.843</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.025</td>
+<td style="text-align: right;">0.511</td>
+<td style="text-align: right;"><strong>0.537</strong></td>
+<td style="text-align: right;"><strong>14.6x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The arithmetic alone is ~268x (2.13 ms -&gt; 0.006 ms), but <code>update</code> is only
+84% of the frame, so porting it by itself would have capped out near 6x.
+Packing for render natively -- the world-to-screen transform, the colour
+lerp and the per-texture grouping -- is what turns that into 15-20x.</p>
+<p><strong>What is left is the Python lists.</strong> Inside the native path, <code>render</code> is now
+94% of the frame (0.119 ms of 0.126 ms), and almost all of that is building
+<code>list[tuple[float, float]]</code> for <code>RenderBatch</code>. Handing over a buffer instead
+needs the renderer to accept one, which is RFC-0003's Marco 2. That is still
+the next increment there, and this table is its baseline.</p>
+<p><strong>The table above is the conservative case.</strong> It emits an untinted burst. A
+burst with a colour animation -- which fire, smoke and every fading effect
+sets -- is far worse in Python and no worse natively, because
+<code>_particle_color</code> builds two <code>Color</code> objects and lerps them per particle
+where the native pool lerps four bytes:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Live</th>
+<th>Burst</th>
+<th style="text-align: right;">Python frame</th>
+<th style="text-align: right;">native frame</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td>plain</td>
+<td style="text-align: right;">1.941</td>
+<td style="text-align: right;">0.105</td>
+<td style="text-align: right;">18.5x</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td><strong>fading</strong></td>
+<td style="text-align: right;">7.643</td>
+<td style="text-align: right;">0.132</td>
+<td style="text-align: right;"><strong>57.8x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000</td>
+<td>plain</td>
+<td style="text-align: right;">8.335</td>
+<td style="text-align: right;">0.484</td>
+<td style="text-align: right;">17.2x</td>
+</tr>
+<tr>
+<td style="text-align: right;">4000</td>
+<td><strong>fading</strong></td>
+<td style="text-align: right;">31.260</td>
+<td style="text-align: right;">0.568</td>
+<td style="text-align: right;"><strong>55.0x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Read the other way, that is a finding about the <em>Python</em> path: 1000 fading
+particles spend 6.0 ms of a 7.6 ms frame on colour, and lerping the four
+channels as integers instead of through <code>Color</code> would reclaim most of it.
+Deliberately not done -- see "Deliberately not doing" in the remediation
+plan -- but it is the cheapest unclaimed win left in <code>particles.py</code>.</p>
+<h3 id="the-native-spark-pool-milliseconds-per-frame">The native spark pool -- milliseconds per frame</h3>
+<p><code>Sparks</code> can be backed by the same way (<code>accelerate=</code>, <code>PYGUARA_NO_NATIVE=1</code>),
+and the shape of its win is different enough to be worth its own table.</p>
+<p>A spark is one primitive, so the Python pool makes one <code>draw_circle</code> or
+<code>draw_line</code> call per live spark. That makes <strong>render the frame</strong>, where for
+particles it was the arithmetic:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;"><code>update</code></th>
+<th style="text-align: right;"><code>render</code></th>
+<th style="text-align: right;">render's share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1000 particles, plain</td>
+<td style="text-align: right;">1.574</td>
+<td style="text-align: right;">0.367</td>
+<td style="text-align: right;">19%</td>
+</tr>
+<tr>
+<td>1000 sparks, dots</td>
+<td style="text-align: right;">2.063</td>
+<td style="text-align: right;">2.759</td>
+<td style="text-align: right;">57%</td>
+</tr>
+<tr>
+<td>1000 sparks, streaks</td>
+<td style="text-align: right;">2.009</td>
+<td style="text-align: right;">5.360</td>
+<td style="text-align: right;">73%</td>
+</tr>
+</tbody>
+</table>
+<p>So porting only <code>update</code> would have capped sparks at 1.4-1.8x however fast
+the arithmetic got. The render half needs the primitives handed over in one
+call, which is what <code>ShapeBatch</code> and <code>ShapeBatchRenderer</code> exist for -- and
+measuring the alternatives is what chose that shape:</p>
+<table>
+<thead>
+<tr>
+<th>Render candidate</th>
+<th style="text-align: right;">1000 dots</th>
+<th style="text-align: right;">1000 streaks</th>
+<th style="text-align: right;">frame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python, per primitive</td>
+<td style="text-align: right;">2.525</td>
+<td style="text-align: right;">5.165</td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td>native rows + <code>ShapeBatch</code></td>
+<td style="text-align: right;"><strong>0.329</strong></td>
+<td style="text-align: right;"><strong>0.349</strong></td>
+<td style="text-align: right;"><strong>13-20x</strong></td>
+</tr>
+<tr>
+<td>native params + draw calls</td>
+<td style="text-align: right;">2.318</td>
+<td style="text-align: right;">3.096</td>
+<td style="text-align: right;">1.9-2.3x</td>
+</tr>
+<tr>
+<td>native params + NumPy pack</td>
+<td style="text-align: right;">1.288</td>
+<td style="text-align: right;">1.217</td>
+<td style="text-align: right;">3.4-5.8x</td>
+</tr>
+</tbody>
+</table>
+<p>Packing the instance rows natively wins by 4-10x over handing back draw-call
+parameters, because anything that then walks the sparks in Python gives the
+saving straight back. That is why <code>ShapeBatch.instances</code> carries packed rows
+in the layout <code>graphics/types.py</code> documents rather than semantic arrays.</p>
+<p>End to end, both stores, min of 5 rounds:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Live</th>
+<th>Path</th>
+<th style="text-align: right;"><code>update</code></th>
+<th style="text-align: right;"><code>render</code></th>
+<th style="text-align: right;">Frame</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000 dots</td>
+<td>Python</td>
+<td style="text-align: right;">2.063</td>
+<td style="text-align: right;">2.759</td>
+<td style="text-align: right;">4.822</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000 dots</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.003</td>
+<td style="text-align: right;">0.287</td>
+<td style="text-align: right;"><strong>0.290</strong></td>
+<td style="text-align: right;"><strong>16.6x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000 streaks</td>
+<td>Python</td>
+<td style="text-align: right;">2.009</td>
+<td style="text-align: right;">5.360</td>
+<td style="text-align: right;">7.368</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000 streaks</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.003</td>
+<td style="text-align: right;">0.299</td>
+<td style="text-align: right;"><strong>0.302</strong></td>
+<td style="text-align: right;"><strong>24.4x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000 dots</td>
+<td>Python</td>
+<td style="text-align: right;">8.077</td>
+<td style="text-align: right;">11.012</td>
+<td style="text-align: right;">19.089</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000 dots</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.011</td>
+<td style="text-align: right;">1.161</td>
+<td style="text-align: right;"><strong>1.172</strong></td>
+<td style="text-align: right;"><strong>16.3x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000 streaks</td>
+<td>Python</td>
+<td style="text-align: right;">8.085</td>
+<td style="text-align: right;">21.937</td>
+<td style="text-align: right;">30.021</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000 streaks</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.011</td>
+<td style="text-align: right;">1.269</td>
+<td style="text-align: right;"><strong>1.280</strong></td>
+<td style="text-align: right;"><strong>23.5x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A streak costs the Python pool twice what a dot does and costs the native
+pool the same, which is the clearest statement of what moved: the geometry a
+capsule needs is arithmetic, and arithmetic is no longer the frame.</p>
+<p><strong>Only the ModernGL world renderer takes the batch.</strong> Any other renderer gets
+one call per spark, as before, keeping the native arithmetic and about 1.9x.
+That is deliberate: a software backend would be looping internally anyway, so
+claiming the capability would buy nothing and hide that fact.</p>
+<p>Reproduce both tables with <code>uv run python tools/bench_native_pool.py</code>.</p>
+<h3 id="pricing-a-native-port-before-writing-it">Pricing a native port before writing it</h3>
+<p><code>docs/adr/0004-the-native-boundary.md</code> turns the two tables above into a
+test a candidate can be put through in advance:</p>
+<pre><code>ceiling = T_py / (T_cross + T_pinned)
+</code></pre>
+<p>where <code>T_cross</code> is what getting data in and results out costs per tick,
+measured in Python because that is where it is paid, and <code>T_pinned</code> is work
+that cannot move at all -- the ECS, the event dispatcher, resource handles.</p>
+<p><code>uv run python tools/price_native_boundary.py</code> computes it for every
+candidate:</p>
+<table>
+<thead>
+<tr>
+<th>Candidate</th>
+<th style="text-align: right;"><code>T_py</code></th>
+<th style="text-align: right;"><code>T_cross</code></th>
+<th style="text-align: right;"><code>T_pinned</code></th>
+<th style="text-align: right;">ceiling</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>flow field, 96x96</td>
+<td style="text-align: right;">83.247</td>
+<td style="text-align: right;">1.479</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;"><strong>56.3x</strong></td>
+<td>landed</td>
+</tr>
+<tr>
+<td>particles, 1000</td>
+<td style="text-align: right;">1.942</td>
+<td style="text-align: right;">0.104</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">18.7x</td>
+<td>landed</td>
+</tr>
+<tr>
+<td>sparks, 1000 streaks</td>
+<td style="text-align: right;">5.865</td>
+<td style="text-align: right;">0.339</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">17.3x</td>
+<td>landed</td>
+</tr>
+<tr>
+<td>flocking, 1000 agents</td>
+<td style="text-align: right;">16.555</td>
+<td style="text-align: right;">1.849</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;"><strong>9.0x</strong></td>
+<td>landed, 9.0x (priced 15.4x)</td>
+</tr>
+<tr>
+<td>sparks, 1000 dots</td>
+<td style="text-align: right;">4.077</td>
+<td style="text-align: right;">0.321</td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">12.7x</td>
+<td>landed</td>
+</tr>
+<tr>
+<td>render batcher, 20000 sprites</td>
+<td style="text-align: right;">44.423</td>
+<td style="text-align: right;">1.347</td>
+<td style="text-align: right;">3.671</td>
+<td style="text-align: right;"><strong>8.9x</strong></td>
+<td>deferred</td>
+</tr>
+<tr>
+<td>projectiles, 1000</td>
+<td style="text-align: right;">3.041</td>
+<td style="text-align: right;">0.339</td>
+<td style="text-align: right;">1.143</td>
+<td style="text-align: right;"><strong>2.1x</strong></td>
+<td>declined</td>
+</tr>
+</tbody>
+</table>
+<p>As a share of a 16.7 ms frame, <code>T_py</code> alone is 499% for a 96x96 flow-field
+recompute, 99% for 1000 flocking agents, 35% for 1000 streaked sparks and
+18% for 1000 projectiles.</p>
+<p><strong>The two landed gameplay rows miss their prices in opposite directions</strong>, and
+the pair is more instructive than either. The flow field priced at 161x and
+achieved 57x, because <code>T_cross</code> models the handoff and not the native work
+behind it. Flocking priced at 15.4x and achieved 9.0x with the opposite cause:
+its native solve is only 0.5 ms of a 1.85 ms tick, and what was underestimated
+is the crossing itself — <code>T_cross</code> was measured as the Python loops that pack
+and unpack, while a real crossing also pays PyO3's conversion of a
+15,000-float list, the tuples it allocates coming back, and the per-tick ECS
+prologue that both stores share. Both errors are optimistic, so a price is a
+threshold test and the achieved figure should be expected lower.</p>
+<p><strong>The render-batcher row is the one where the algorithm moved the price.</strong>
+Priced against the batcher as it was, its <code>T_py</code> was 78.8 ms and the ceiling
+<strong>12.2x</strong>. Fixing four pieces of per-command waste in Python took <code>T_py</code> to
+39.2 ms, and the ceiling with it to <strong>7.4–8.9x</strong> — still over the 5x threshold,
+but no longer over the bar ADR 0004 set for this item, which was to beat the
+13–20x <code>ShapeBatch</code> already gets out of ordinary Python lists. Decision 6 says
+to ask whether the work is <em>necessary</em> before asking whether it is <em>fast</em>, and
+this is the first candidate where answering in that order changed the verdict
+rather than just the reason.</p>
+<p>Two things about that row's <code>T_cross</code> are worth carrying to the next candidate:</p>
+<ul>
+<li><strong>One crossing per sprite is the cheap shape.</strong> 20000 individual pushes cost
+  2.3 ms; one call taking the whole frame as ten lists costs 1.47 ms, but
+  building those lists in Python first costs 6.36 ms, so the batched version is
+  7.8 ms against 6.5 ms. RFC-0003 states "one crossing per system per frame" as
+  a design law; here it is the more expensive of the two, and the reason is that
+  a Python list is not free to produce and not free to extract.</li>
+<li><strong>Scalars cross almost free; containers do not.</strong> A three-argument
+  <code>NativeSpatialHash.insert</code> is 0.092 µs a call and an eleven-argument probe
+  push is 0.114 µs, so argument count barely registers. A seventeen-argument
+  <code>NativeParticlePool.emit</code> is 0.405 µs — and that is not the arguments either,
+  it is the three Python lists among them, each extracted into a <code>Vec&lt;f32&gt;</code>.</li>
+</ul>
+<p><strong>What the flow-field row looked like before it was built, and why the
+difference matters.</strong> Priced in advance its <code>T_cross</code> was the wall-mask
+upload alone -- 0.522 ms against 84.139 ms -- for a ceiling of <strong>161x</strong>.
+Built, it achieves <strong>56x</strong>. Nothing about the prediction was wrong: the
+upload really is almost free, and the formula models the <em>boundary</em>, not
+the native work behind it. The native sweep costs 1.3 ms, and for the
+first time among these candidates that, rather than the handoff, is the
+limit. The pools' predictions landed close because their native work was
+genuinely negligible beside their handoff; that is a property of those
+candidates, not of the arithmetic. A ceiling of 161x means "far above the
+5x threshold", which is the decision it was computed for, and it does not
+mean "expect 161x".</p>
+<h3 id="flow-fields-the-number-nobody-had-measured">Flow fields -- the number nobody had measured</h3>
+<p><code>dijkstra_map</code> + <code>flow_field</code> over a <code>GridGraph</code>, 12% walls, 8-directional:</p>
+<table>
+<thead>
+<tr>
+<th>Grid</th>
+<th style="text-align: right;">Cells</th>
+<th style="text-align: right;"><code>dijkstra_map</code></th>
+<th style="text-align: right;"><code>flow_field</code></th>
+<th style="text-align: right;">recompute</th>
+<th style="text-align: right;">share of a frame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>30x20</td>
+<td style="text-align: right;">600</td>
+<td style="text-align: right;">2.911</td>
+<td style="text-align: right;">2.114</td>
+<td style="text-align: right;"><strong>5.024</strong></td>
+<td style="text-align: right;">30%</td>
+</tr>
+<tr>
+<td>48x48</td>
+<td style="text-align: right;">2304</td>
+<td style="text-align: right;">11.716</td>
+<td style="text-align: right;">8.548</td>
+<td style="text-align: right;">20.264</td>
+<td style="text-align: right;">122%</td>
+</tr>
+<tr>
+<td>96x96</td>
+<td style="text-align: right;">9216</td>
+<td style="text-align: right;">48.534</td>
+<td style="text-align: right;">35.225</td>
+<td style="text-align: right;"><strong>83.759</strong></td>
+<td style="text-align: right;">505%</td>
+</tr>
+<tr>
+<td>160x160</td>
+<td style="text-align: right;">25600</td>
+<td style="text-align: right;">139.231</td>
+<td style="text-align: right;">100.161</td>
+<td style="text-align: right;">239.392</td>
+<td style="text-align: right;">1436%</td>
+</tr>
+</tbody>
+</table>
+<p>A <code>vector_at</code> query against a computed field, by contrast, is <strong>0.6 us</strong>.
+So the field is cheap to <em>use</em> and, above about 2000 cells, cannot be
+recomputed at interactive rates at all.</p>
+<p>Two separate causes, and they want separate fixes:</p>
+<ul>
+<li><strong>The interface.</strong> <code>dijkstra_map(graph, goals)</code> takes a <code>Graph</code>
+  <strong>protocol</strong> and calls <code>get_neighbors</code> and <code>cost</code> per node expansion. For
+  8-directional movement with corner-cutting refused, one expansion is
+  roughly thirty interpreter operations. This is also why a native port
+  must take the grid rather than the graph -- see ADR 0004, Decision 2.</li>
+<li><strong>The cadence.</strong> <code>games/vinagre_matilha</code> recomputed <strong>every fixed tick</strong>,
+  60 times a second, on the 30x20 row above. Its goal is the jaguar's cell,
+  which at 158 px/s across 32 px cells changes once every 12 ticks at a
+  sprint -- so at least eleven of twelve recomputes reproduced the field
+  that was already there. <strong>Fixed</strong>, in the engine rather than the demo:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Grid</th>
+<th style="text-align: right;">cold recompute</th>
+<th style="text-align: right;">unchanged re-ask</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>30x20</td>
+<td style="text-align: right;">5.000 ms (30% of a frame)</td>
+<td style="text-align: right;"><strong>0.0016 ms</strong> (0.01%)</td>
+<td style="text-align: right;">3114x</td>
+</tr>
+<tr>
+<td>96x96</td>
+<td style="text-align: right;">85.859 ms (515%)</td>
+<td style="text-align: right;"><strong>0.0336 ms</strong> (0.20%)</td>
+<td style="text-align: right;">2557x</td>
+</tr>
+</tbody>
+</table>
+<p><code>FlowFieldService.recompute()</code> now skips work that would reproduce the
+  field it holds, keyed on the goals <strong>and a fingerprint of the graph</strong> --
+  by content, because a <code>GridGraph</code> is mutated at runtime and a key over
+  the goals alone would steer through a wall that had been opened.
+  Fingerprinting the walls and weights costs 0.03-0.06% of a recompute
+  (2.7 us against 5.0 ms at 30x20; 77 us against 241 ms at 160x160), so
+  soundness is free and there is no invalidation contract to forget.</p>
+<p><strong>What that does to the native port is worth stating, because it is not
+"never mind".</strong> The guard removes the <em>redundant</em> recomputes; a genuine one
+still costs what the table above says. On a 30x20 grid that is a 5 ms spike
+every fifth of a second, survivable. On 96x96 it is a single <strong>85 ms
+stall</strong> -- five frames dropped the moment a goal moves. So the port's
+justification moves from throughput to <strong>worst-case latency</strong>: it turns a
+five-frame hitch into a sub-millisecond one. ADR 0004's Decision 6 says to
+settle the algorithm before the boundary, and this is what that looks like
+in practice -- the guard did not remove the case for porting, it changed
+what the porting is for.</p>
+<h4 id="ported-85-ms-to-16-ms">Ported. 85 ms to 1.6 ms</h4>
+<p><code>FlowFieldService</code> is backed by the native sweep when the extension is
+built, measured end to end -- a fresh service per round, so the wall-mask
+upload is paid rather than skipped:</p>
+<table>
+<thead>
+<tr>
+<th>Grid</th>
+<th style="text-align: right;">Cells</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native</th>
+<th style="text-align: right;"></th>
+<th style="text-align: right;">share of a frame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>30x30</td>
+<td style="text-align: right;">900</td>
+<td style="text-align: right;">7.519</td>
+<td style="text-align: right;"><strong>0.162</strong></td>
+<td style="text-align: right;">46x</td>
+<td style="text-align: right;">45% -&gt; 1.0%</td>
+</tr>
+<tr>
+<td>64x64</td>
+<td style="text-align: right;">4096</td>
+<td style="text-align: right;">36.449</td>
+<td style="text-align: right;"><strong>0.739</strong></td>
+<td style="text-align: right;">49x</td>
+<td style="text-align: right;">219% -&gt; 4.4%</td>
+</tr>
+<tr>
+<td>96x96</td>
+<td style="text-align: right;">9216</td>
+<td style="text-align: right;">85.586</td>
+<td style="text-align: right;"><strong>1.629</strong></td>
+<td style="text-align: right;">53x</td>
+<td style="text-align: right;">513% -&gt; 9.8%</td>
+</tr>
+</tbody>
+</table>
+<p>The five-frame hitch is a tenth of a frame. Note what that does <em>not</em>
+change: the guard above is still what keeps a per-tick caller off the
+recompute path at all, because 1.6 ms sixty times a second is still 10% of
+every frame for a field that did not change.</p>
+<p><strong>The field never comes back to Python</strong>, and that is the whole reason the
+margin is this size. Nothing outside <code>FlowFieldService</code> reads an individual
+cell -- <code>vector_at</code> and <code>cost_at</code> are the only ways in -- so the cost map
+and the descent field both stay native and there is no download. ADR 0004
+calls this opacity, and it is the difference between this row and
+flocking's, which has to hand every agent's position back every tick --
+measured, 57x against 9x.</p>
+<p><strong>Those ratios are against a Python store that has since got faster.</strong>
+<code>GridGraph.get_neighbors</code> was inlined afterwards, which the native sweep
+does not use, so the numerator moved and the native column did not:</p>
+<table>
+<thead>
+<tr>
+<th>Grid</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">native</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32x32</td>
+<td style="text-align: right;">5.16</td>
+<td style="text-align: right;">0.195</td>
+<td style="text-align: right;">26x</td>
+</tr>
+<tr>
+<td>64x64</td>
+<td style="text-align: right;">22.48</td>
+<td style="text-align: right;">0.765</td>
+<td style="text-align: right;">29x</td>
+</tr>
+<tr>
+<td>96x96</td>
+<td style="text-align: right;"><strong>52.18</strong></td>
+<td style="text-align: right;"><strong>1.641</strong></td>
+<td style="text-align: right;"><strong>32x</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>vector_at</code> got cheaper too, by <strong>5.7x</strong> (3.27 us -&gt; 0.575 us), and the
+boundary had to be picked for it to. A crossing that returned the descent
+neighbour would have made the method <em>slower</em>: the lookup was never the
+cost. Four <code>Vector2</code> operations after it are 3.1 us of the 3.27, against
+0.044 us for a crossing. So the direction is computed natively and the
+whole method is one crossing.</p>
+<p><strong>Bit-exact, not close.</strong> The pools compare with a tolerance because they
+hold f32 and a spark half a pixel off is a spark. A flow field steers
+gameplay, so <code>tests/test_native_flow_field_parity.py</code> asserts equality on
+every cell of every grid it builds. Three things make that reachable: f64
+on both sides, <code>GridGraph.get_neighbors</code>' order replicated exactly
+(the descent pass takes the first strictly-cheaper neighbour, so the order
+<em>is</em> the tie-break), and the fact that a Dijkstra cost map is
+order-independent given non-negative weights.</p>
+<p>Reproduce with <code>uv run python tools/price_native_boundary.py</code>, or
+<code>uv run pytest tests/performance/test_perf_pathfinding.py -m slow</code> for the
+table.</p>
+<p><strong>Two things to know before trusting a re-measurement.</strong> Use a real texture
+object, not a <code>MagicMock</code>: the Python path hashes and compares the texture
+once per particle, which is cheap for a real object and pathological for a
+mock -- it inflated an early version of this table to a fictitious 325x.
+And the native pool stores f32 where Python uses f64, so positions drift
+sub-pixel over a lifetime; the parity tests bound that rather than ignoring
+it.</p>
+<h3 id="procedural-generation-wave-function-collapse">Procedural generation -- Wave Function Collapse</h3>
+<p><code>generate_wfc</code> over a four-state terrain palette (water-sand-grass-rock,
+each touching its neighbours in the chain), 4-directional adjacency:</p>
+<table>
+<thead>
+<tr>
+<th>Grid</th>
+<th style="text-align: right;">Cells</th>
+<th style="text-align: right;">scan and sort</th>
+<th style="text-align: right;">entropy heap</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>16x16</td>
+<td style="text-align: right;">256</td>
+<td style="text-align: right;">11.37</td>
+<td style="text-align: right;"><strong>1.38</strong></td>
+<td style="text-align: right;">8.2x</td>
+</tr>
+<tr>
+<td>24x24</td>
+<td style="text-align: right;">576</td>
+<td style="text-align: right;">68.37</td>
+<td style="text-align: right;">3.34</td>
+<td style="text-align: right;">20.5x</td>
+</tr>
+<tr>
+<td>32x32</td>
+<td style="text-align: right;">1024</td>
+<td style="text-align: right;">213.28</td>
+<td style="text-align: right;"><strong>6.12</strong></td>
+<td style="text-align: right;">34.8x</td>
+</tr>
+<tr>
+<td>48x48</td>
+<td style="text-align: right;">2304</td>
+<td style="text-align: right;">1063.98</td>
+<td style="text-align: right;">14.76</td>
+<td style="text-align: right;">72.1x</td>
+</tr>
+<tr>
+<td>64x64</td>
+<td style="text-align: right;">4096</td>
+<td style="text-align: right;">3494.79</td>
+<td style="text-align: right;"><strong>27.22</strong></td>
+<td style="text-align: right;">128.4x</td>
+</tr>
+</tbody>
+</table>
+<p>The multiple grows with the grid because what changed is the complexity
+class, not a constant. Per 4x the cells:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">16 -&gt; 32</th>
+<th style="text-align: right;">32 -&gt; 64</th>
+<th>what that is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>scan and sort</td>
+<td style="text-align: right;">18.8x</td>
+<td style="text-align: right;">16.4x</td>
+<td>quadratic</td>
+</tr>
+<tr>
+<td>entropy heap</td>
+<td style="text-align: right;">4.4x</td>
+<td style="text-align: right;">4.4x</td>
+<td>near-linear</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The algorithm was 95% overhead, and none of it was the algorithm.</strong>
+WFC repeatedly collapses the lowest-entropy undecided cell, and finding
+that cell was done by listing every undecided cell and sorting it -- once
+per collapse. At 48x48 that is 2221 collapses over 2304 cells: 0.709 s in
+<code>list.sort</code>, 2.57 million calls to the sort key, and <strong>7.69 million calls
+to <code>len</code></strong>, against 0.014 s in <code>propagate</code>, which is the constraint
+propagation the algorithm is actually made of.</p>
+<p>It now keeps a heap keyed on <code>(entropy, row-major position)</code>, lazily
+invalidated: narrowing a cell pushes a fresh entry rather than rewriting
+the old one, and an entry is live only while its recorded entropy still
+matches its cell. Sound because possibilities only shrink, so a
+superseded entry is always larger than the live one and sorts behind it.
+After the change <code>propagate</code> is the largest line in the profile, which is
+what it should have been all along.</p>
+<p><strong>Output is unchanged, bit for bit.</strong> The selection order decides which
+cell collapses next, so a plausible-but-different structure still yields
+a valid grid obeying every rule -- a different one, from the same seed.
+Ten shapes are pinned by digest in <code>tests/test_kits_procgen_wfc.py</code>,
+including the RNG's end state, because a reordering could land the same
+grid while leaving the stream elsewhere.</p>
+<h4 id="what-this-did-to-the-native-case">What this did to the native case</h4>
+<p>Procgen was listed beside pathfinding as RFC-0003's best-value claim, and
+ADR 0004 recorded that nobody had measured it. Measured and then fixed,
+the candidate is gone:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;"><code>T_py</code></th>
+<th style="text-align: right;"><code>T_cross</code></th>
+<th style="text-align: right;"><code>T_pinned</code></th>
+<th style="text-align: right;">ceiling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>wfc, 64x64</td>
+<td style="text-align: right;">25.640</td>
+<td style="text-align: right;">0.006</td>
+<td style="text-align: right;">0.373</td>
+<td style="text-align: right;">67.7x</td>
+</tr>
+</tbody>
+</table>
+<p>67.7x looks like an easy yes and is a no, for two reasons the ratio alone
+does not carry. It is <strong>once per generated level</strong>, so 67.7x of 25 ms
+saves 25 ms when a floor is created -- against a second implementation to
+maintain forever. And <code>T_pinned</code> is <strong>98% of the floor</strong>: <code>generate_wfc</code>
+returns <code>dict[Cell, S]</code>, so every cell becomes a Python dict entry under
+a tuple key whoever filled it in.</p>
+<p>Before the fix the same row read 3.5 seconds, where a port would have
+looked unavoidable. This is the third row where ADR 0004's Decision 6 --
+the algorithmic question before the boundary -- changed the verdict and
+not merely the reasoning.</p>
+<h3 id="a-what-one-query-costs">A* -- what one query costs</h3>
+<p><code>AStarPathfinder.find_path</code> corner to corner over a <code>GridGraph</code>, 12%
+walls scattered, 8-directional with corner-cutting refused:</p>
+<table>
+<thead>
+<tr>
+<th>Grid</th>
+<th style="text-align: right;">Cells</th>
+<th style="text-align: right;">ms / query</th>
+<th style="text-align: right;">path</th>
+<th style="text-align: right;">share of a frame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>32x32</td>
+<td style="text-align: right;">1024</td>
+<td style="text-align: right;">1.68</td>
+<td style="text-align: right;">41 cells</td>
+<td style="text-align: right;">10%</td>
+</tr>
+<tr>
+<td>64x64</td>
+<td style="text-align: right;">4096</td>
+<td style="text-align: right;">5.98</td>
+<td style="text-align: right;">78 cells</td>
+<td style="text-align: right;">36%</td>
+</tr>
+<tr>
+<td>96x96</td>
+<td style="text-align: right;">9216</td>
+<td style="text-align: right;"><strong>13.63</strong></td>
+<td style="text-align: right;">114 cells</td>
+<td style="text-align: right;"><strong>82%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>So a single repath across a 96x96 floor is most of a frame. That is the
+number to design against: a game that repaths on a timer, staggered, is
+fine; one that repaths a crowd on an event is not.</p>
+<p>Where it went was the graph, not the search: at 96x96 <code>get_neighbors</code> was
+<strong>55%</strong> of a 20.09 ms query, <code>cost</code> <strong>19%</strong>, the heuristic 6%, and the heap
+operations rounding error, with 51 agents each repathing to their own
+target at <strong>305 ms</strong>. Inlining <code>get_neighbors</code>' bounds and wall tests took
+a third off, with the yield order untouched because the native flow field
+replicates it bit-exactly. The figures in the next paragraph predate that.</p>
+<p><strong>Not a native candidate, and the ratio is not why.</strong> <code>T_cross</code> for a
+flow-field-shaped boundary -- the grid native, endpoints and path across
+-- is 0.005 ms, which prices the ceiling at 4250x. That figure is
+evidence that the boundary is not the problem and nothing more: the
+formula divides by a crossing that has gone to zero, so it stops
+describing anything a port would achieve. See ADR 0004, Decision 1.</p>
+<p>Two things decide it instead. The expensive case here -- many agents
+converging on one goal -- is <strong>already native and already O(1) per
+agent</strong>: that is what the flow field is, at 1.6 ms for a whole 96x96
+field against 20 ms for one A* query. And <code>AStarPathfinder</code> solves any
+<code>Graph[Node]</code>, while a native implementation could only serve
+<code>GridGraph</code>; its 74% in <code>get_neighbors</code> and <code>cost</code> is precisely the part
+that cannot cross for a caller-supplied graph. A port would be a second
+solver, not this one made faster.</p>
+<p><strong><code>GridGraph.get_neighbors</code> itself is a real Python target</strong> -- it is
+also the Python flow field's hot path -- but its yield order is
+replicated bit-exactly by <code>rust/src/flowfield.rs</code> and pinned by
+<code>tests/test_native_flow_field_parity.py</code>, so it is its own careful piece
+of work rather than a line in this one.</p>
+<h3 id="particlesystem-sparks-update-milliseconds-per-frame"><code>ParticleSystem</code> / <code>Sparks</code> update -- milliseconds per frame</h3>
+<p>All three self-contained pools -- particles, sparks and projectiles --
+pre-allocate their slots and hand them out, so they allocate nothing per
+frame. They do walk their <strong>whole capacity</strong> every frame, live slots and dead
+alike, and that reads like the thing to fix.</p>
+<p>Measured, it is not:</p>
+<table>
+<thead>
+<tr>
+<th>Pool</th>
+<th style="text-align: right;">Capacity</th>
+<th style="text-align: right;">Live</th>
+<th style="text-align: right;">ms / update</th>
+<th style="text-align: right;">us / slot</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0.024</td>
+<td style="text-align: right;">0.024</td>
+</tr>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">0.046</td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">2.196</td>
+<td style="text-align: right;">2.196</td>
+</tr>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0.104</td>
+<td style="text-align: right;">0.026</td>
+</tr>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;"><strong>9.020</strong></td>
+<td style="text-align: right;">2.255</td>
+</tr>
+<tr>
+<td>sparks</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0.011</td>
+<td style="text-align: right;">0.011</td>
+</tr>
+<tr>
+<td>sparks</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">2.849</td>
+<td style="text-align: right;">2.849</td>
+</tr>
+<tr>
+<td>sparks</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;"><strong>11.454</strong></td>
+<td style="text-align: right;">2.863</td>
+</tr>
+</tbody>
+</table>
+<p>A dead slot costs one boolean test: <strong>0.024 us</strong>. A live one costs <strong>2.2 us</strong>,
+ninety times as much. So an idle 1000-slot pool costs 0.024 ms -- nothing --
+and compacting the pool to skip dead slots would buy back exactly that.</p>
+<p><strong>The cost is the per-element arithmetic.</strong> 4000 live particles take 9 ms and
+4000 sparks 11.5 ms, over half a 16.7 ms frame for one pool. That is where a
+vectorised rewrite would have to win, and it is the opposite of where the
+"walks the whole capacity" reading points.</p>
+<p>Defensible scale on this machine: roughly <strong>1000 live particles at 60 Hz</strong>
+(2.2 ms) alongside everything else a frame does; 4000 is not reachable.</p>
+<hr />
+<h2 id="rendering-cpu-side">Rendering, CPU side</h2>
+<p>These are the portable figures, and the surprise is where the time goes.</p>
+<h3 id="batchercreate_batches-milliseconds"><code>Batcher.create_batches</code> — milliseconds</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Sprites</th>
+<th>Case</th>
+<th style="text-align: right;">Before</th>
+<th style="text-align: right;">After</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td>one texture</td>
+<td style="text-align: right;">2.22</td>
+<td style="text-align: right;">0.32</td>
+<td style="text-align: right;"><strong>6.99x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td>transformed</td>
+<td style="text-align: right;">2.10</td>
+<td style="text-align: right;">0.32</td>
+<td style="text-align: right;">6.64x</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td>tinted</td>
+<td style="text-align: right;">2.25</td>
+<td style="text-align: right;">0.33</td>
+<td style="text-align: right;">6.75x</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td>10 textures</td>
+<td style="text-align: right;">3.65</td>
+<td style="text-align: right;">1.54</td>
+<td style="text-align: right;">2.36x</td>
+</tr>
+<tr>
+<td style="text-align: right;">5000</td>
+<td>one texture</td>
+<td style="text-align: right;">11.86</td>
+<td style="text-align: right;">1.73</td>
+<td style="text-align: right;">6.85x</td>
+</tr>
+<tr>
+<td style="text-align: right;">5000</td>
+<td>transformed</td>
+<td style="text-align: right;">11.56</td>
+<td style="text-align: right;">1.97</td>
+<td style="text-align: right;">5.88x</td>
+</tr>
+<tr>
+<td style="text-align: right;">5000</td>
+<td>10 textures</td>
+<td style="text-align: right;">19.47</td>
+<td style="text-align: right;">8.66</td>
+<td style="text-align: right;">2.25x</td>
+</tr>
+<tr>
+<td style="text-align: right;">20000</td>
+<td>one texture</td>
+<td style="text-align: right;">54.94</td>
+<td style="text-align: right;">10.98</td>
+<td style="text-align: right;"><strong>5.00x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">20000</td>
+<td>transformed</td>
+<td style="text-align: right;">54.00</td>
+<td style="text-align: right;">13.85</td>
+<td style="text-align: right;">3.90x</td>
+</tr>
+<tr>
+<td style="text-align: right;">20000</td>
+<td>tinted</td>
+<td style="text-align: right;">55.48</td>
+<td style="text-align: right;">12.44</td>
+<td style="text-align: right;">4.46x</td>
+</tr>
+<tr>
+<td style="text-align: right;">20000</td>
+<td>10 textures</td>
+<td style="text-align: right;">103.88</td>
+<td style="text-align: right;">62.40</td>
+<td style="text-align: right;">1.66x</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The CPU batcher was the bottleneck at scale, not the GPU</strong> — 54.9 ms at 20000
+sprites, more than four times the entire GL path for the same batch — <strong>and
+almost none of it was the grouping.</strong> The "after" column is the same loop with
+three pieces of waste removed, producing batches that are identical field by
+field:</p>
+<table>
+<thead>
+<tr>
+<th>What it was doing</th>
+<th style="text-align: right;">What it costs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>(world * zoom) + offset</code> with <code>Vector2</code> arithmetic</td>
+<td style="text-align: right;"><strong>2.8–3.9x</strong></td>
+</tr>
+<tr>
+<td>collecting rotations, scales, colours and source rects for every command, then discarding all four if the batch's flag stayed false</td>
+<td style="text-align: right;">~20%</td>
+</tr>
+<tr>
+<td>testing the tint through <code>Color.__eq__</code>, which builds two tuples per command</td>
+<td style="text-align: right;">~25%</td>
+</tr>
+<tr>
+<td>reaching the <code>material_id</code> property when neither command has a material</td>
+<td style="text-align: right;">~5%</td>
+</tr>
+</tbody>
+</table>
+<p>The first one is the finding worth carrying elsewhere. <code>Vector2</code> subclasses
+<code>pymunk.Vec2d</code>, so each intermediate is a real object allocated and dropped
+inside the loop; doing the same two float operations on the components is
+bit-exact and three to four times faster on its own. <strong>The cost was never the
+loop.</strong></p>
+<p>The second row explains a measurement that used to look backwards: the tinted
+case was <em>slower</em> than the untinted one, because an untinted frame paid the
+comparison on every command and never the append. It is now the other way round.</p>
+<p>What this does not help is the many-texture case — 1.66x at 20000 across ten
+textures. With a batch break on nearly every command the cost moves into
+<code>RenderBatch</code> construction, which none of the four changes touch. Texture
+switching at a fixed 8000 commands: 21.8 ms with one texture, 31.6 ms with ten,
+32.2 ms with fifty, so batch breaks cost about 50% and almost all of it is paid
+going from one texture to a handful.</p>
+<p>Only the first row has a test. <code>test_the_screen_transform_is_not_done_with
+_vectors</code> times the batcher against a copy of the old loop in the same process,
+asserted at 2x against a measured 5x. The other three are each ~5–25%, which on
+a shared runner is noise, so they are argued in the class docstring instead —
+reverting any of them leaves the suite green, and the test says so rather than
+implying coverage it does not have.</p>
+<h3 id="renderqueuesort-milliseconds"><code>RenderQueue.sort</code> — milliseconds</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Commands</th>
+<th style="text-align: right;">Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">2000</td>
+<td style="text-align: right;">0.59</td>
+</tr>
+<tr>
+<td style="text-align: right;">8000</td>
+<td style="text-align: right;">2.87</td>
+</tr>
+</tbody>
+</table>
+<p>Linear and cheap. The per-command lambda and tuple allocation in the sort key
+are real, but at 8000 commands they cost under 3 ms, so <strong>no action is
+warranted</strong> — recorded here so the question does not get re-opened from first
+principles.</p>
+<h3 id="the-whole-cpu-frame-milliseconds-at-20000-sprites">The whole CPU frame — milliseconds at 20000 sprites</h3>
+<p>The number that matters for deciding anything, because a native render batcher
+would replace all four stages at once and quoting one of them would be the
+mistake ADR 0004 Decision 7 names.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th style="text-align: right;">Before</th>
+<th style="text-align: right;">After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RenderSystem.submit</code> — build a command per renderable, push it</td>
+<td style="text-align: right;">18.90</td>
+<td style="text-align: right;">18.90</td>
+</tr>
+<tr>
+<td><code>RenderQueue.sort</code></td>
+<td style="text-align: right;">2.91</td>
+<td style="text-align: right;">2.91</td>
+</tr>
+<tr>
+<td><code>Batcher.create_batches</code></td>
+<td style="text-align: right;">47.74</td>
+<td style="text-align: right;"><strong>8.16</strong></td>
+</tr>
+<tr>
+<td><code>pack_sprite_instances</code></td>
+<td style="text-align: right;">9.25</td>
+<td style="text-align: right;">9.25</td>
+</tr>
+<tr>
+<td><strong>total</strong></td>
+<td style="text-align: right;"><strong>78.80</strong></td>
+<td style="text-align: right;"><strong>39.22</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>2.01x on the frame</strong>, with the batcher's share falling from 61% to 21%. What
+is left is dominated by <code>submit</code>, which is now 48% of it: a <code>RenderCommand</code> is a
+<code>slots=True</code> dataclass with nine fields, and building 20000 of them costs about
+0.95 µs each against the 0.21 µs of attribute reads that feed them.</p>
+<h4 id="two-pieces-of-headroom-recorded-rather-than-taken">Two pieces of headroom, recorded rather than taken</h4>
+<p><strong>The instance pack is list-shaped, and the shape is most of the cost.</strong> The
+pack spends its time turning Python lists of tuples into arrays, and <code>numpy</code>
+is much faster at a flat list:</p>
+<table>
+<thead>
+<tr>
+<th>Converting 20000 rows</th>
+<th style="text-align: right;">Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>asarray(list of 2-tuples)</code></td>
+<td style="text-align: right;">3.74</td>
+</tr>
+<tr>
+<td><code>asarray(flat list).reshape(-1, 2)</code></td>
+<td style="text-align: right;">1.10</td>
+</tr>
+<tr>
+<td><code>frombuffer(array('f', flat))</code></td>
+<td style="text-align: right;">0.64</td>
+</tr>
+<tr>
+<td><code>asarray(list of 4 int tuples)</code></td>
+<td style="text-align: right;">6.24</td>
+</tr>
+<tr>
+<td><code>asarray(flat ints).reshape(-1, 4)</code></td>
+<td style="text-align: right;">3.28</td>
+</tr>
+</tbody>
+</table>
+<p>The whole pack measures 13.33 ms with the lists as <code>RenderBatch</code> carries them
+and <strong>6.16 ms with every column arriving flat — 2.2x.</strong> Not taken, because it
+means changing <code>RenderBatch.destinations</code> from <code>list[tuple[float, float]]</code> to a
+flat list, and <code>len(batch.destinations)</code> is how every backend and several tests
+get the sprite count. That is a protocol change across three renderers, not a
+tweak, and it wants its own workstream.</p>
+<p><strong>Batch-break cost is <code>RenderBatch</code> construction.</strong> The many-texture rows above
+are allocation-bound: 20000 commands across ten textures build roughly 20000
+dataclasses with five lists each. A batcher that reused batch objects across
+frames, or that carried runs as <code>(start, count)</code> into shared columns, would
+attack that — and it is the one part of this path a native implementation would
+not obviously help with either, since the batches have to come back to Python.</p>
+<h3 id="visibility-culling-headroom">Visibility culling headroom</h3>
+<p>Sorting and batching 8000 commands of which roughly a tenth are on screen costs
+<strong>25.2 ms</strong>. <code>RenderSystem</code> has no visibility rejection at all, so all of that
+is paid. This is the number a culling change would have to beat; it is recorded
+rather than acted on, because for a game where everything is on screen anyway
+culling buys nothing, and the trade only pays in a large scrolling world.</p>
+<hr />
+<h2 id="rendering-gl-side">Rendering, GL side</h2>
+<p>Machine-dependent — see the caveat at the top. Recorded because the <em>split</em>
+between Python and GPU work is itself informative.</p>
+<h3 id="instanced-sprite-draw-milliseconds">Instanced sprite draw — milliseconds</h3>
+<p>All on the transform path, so the pack column is genuinely a <em>component</em> of
+the end-to-end column rather than a figure from a different code path.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Sprites</th>
+<th style="text-align: right;">End-to-end</th>
+<th style="text-align: right;">…of which: instance pack</th>
+<th style="text-align: right;">Pack share</th>
+<th style="text-align: right;">Pack, as a row loop</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">1.86</td>
+<td style="text-align: right;">0.40</td>
+<td style="text-align: right;">21%</td>
+<td style="text-align: right;">0.85</td>
+</tr>
+<tr>
+<td style="text-align: right;">5000</td>
+<td style="text-align: right;">3.33</td>
+<td style="text-align: right;">1.99</td>
+<td style="text-align: right;">60%</td>
+<td style="text-align: right;">4.46</td>
+</tr>
+<tr>
+<td style="text-align: right;">20000</td>
+<td style="text-align: right;">11.62</td>
+<td style="text-align: right;">8.07</td>
+<td style="text-align: right;"><strong>69%</strong></td>
+<td style="text-align: right;">17.47</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The Python pack still dominates at scale, but it no longer runs a row at a
+time.</strong> The last column is the row loop the path used to run, measured at the
+same widths for comparison: filling the instance array with numpy column writes
+instead is about 2.2× faster at 20000, and that alone took the whole
+20,000-sprite draw from roughly 16 ms to 11.6 ms. The pack's <em>share</em> fell from
+four fifths to a bit over two thirds — it is still where the time is, so
+anything further done to this path should still be aimed at it, and the
+remaining cost is dominated by turning Python lists of tuples into arrays.</p>
+<h3 id="draw_text-milliseconds-per-frame-20-strings"><code>draw_text</code> — milliseconds per frame, 20 strings</h3>
+<p><code>draw_text</code> rasterises a string with <code>pygame.font</code> and uploads it as a GL
+texture. It used to release that texture at the end of the call, reasoning that
+"a fresh piece of text has nothing to reuse anyway" -- true of a string seen
+once, and wrong about what actually calls it. <code>FloatingText</code> redraws the same
+damage numbers every frame for the life of the entry, and the debug overlays
+redraw whole static panels, so the common case was twenty uploads and twenty
+frees per frame for pixels identical to the previous frame's.</p>
+<p>Real GL, standalone context, min of 5 rounds of 120 frames:</p>
+<table>
+<thead>
+<tr>
+<th>20 strings per frame</th>
+<th>released per call</th>
+<th>cached</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the same 20 strings each frame</td>
+<td>9.98</td>
+<td><strong>1.03</strong></td>
+</tr>
+<tr>
+<td>20 brand-new strings each frame</td>
+<td><strong>11.10</strong></td>
+<td>16.44</td>
+</tr>
+</tbody>
+</table>
+<p>The steady-state case is where the engine actually lives, and it gives back
+<strong>9 ms of a 16.7 ms frame</strong>.</p>
+<p>The second row is the honest cost, and it is not the bound's fault -- it
+measures the same at a limit of 32, 64, 128 and 256. Releasing inside the call
+meant the driver freed a block and immediately allocated one the same size, over
+and over, which an allocator handles about as well as it handles anything.
+Caching decouples the two: a miss allocates a new texture while freeing one from
+hundreds of frames ago, and the reuse is gone. So text that never repeats pays
+~45% more than it did.</p>
+<p>That is accepted rather than solved. Twenty entirely new strings every frame
+already cost 11 ms before this change -- two thirds of the frame -- so it was
+not a case anything could ship with, and the shape that <em>is</em> shipped is the
+first row. A string that changes every frame on its own (an FPS counter) is one
+miss, not twenty.</p>
+<p>Two limitations worth knowing: the cache is bounded by <strong>entry count, not
+bytes</strong>, so 256 long strings hold more than 256 short ones; and these textures
+are the renderer's own, outside <code>ResourceManager</code>, so they do not count towards
+its cache budget.</p>
+<h3 id="the-ui-overlay-milliseconds-per-frame-and-why-the-hud-does-not-matter">The UI overlay — milliseconds per frame, and why the HUD does not matter</h3>
+<p>The ModernGL UI renderer is a hybrid. Every widget is rasterised by pygame onto
+an offscreen surface, and <code>present()</code> uploads that whole surface as a texture
+and composites it as a fullscreen quad. So the cost of a UI frame is set by the
+<strong>window area</strong>, not by what the UI drew.</p>
+<p>That is not a figure of speech. One <code>draw_text</code> in the corner and a
+forty-nine-primitive HUD — panels, bars, an eight-slot item belt, a minimap,
+a six-line stat block — cost the same, because the rasterising is the part that
+scales with content and the rasterising is 3% of it:</p>
+<table>
+<thead>
+<tr>
+<th>1280x720</th>
+<th>one label</th>
+<th>a full HUD (49 primitives)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>rasterise the widgets</td>
+<td>0.006</td>
+<td>0.330</td>
+</tr>
+<tr>
+<td>everything else</td>
+<td>10.9</td>
+<td>9.8</td>
+</tr>
+</tbody>
+</table>
+<p>Real GL, standalone context, <code>pytest-benchmark</code> minimum. The machine is a
+3050 behind Mesa-on-D3D12, so the upload number is a driver number and will
+differ by an order of magnitude elsewhere; the CPU numbers below transfer.</p>
+<p><strong>Where the frame went, before and after:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Whole UI frame, ms</th>
+<th>1280x720</th>
+<th>1920x1080</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>before</td>
+<td>10.1</td>
+<td>26.7</td>
+</tr>
+<tr>
+<td>after</td>
+<td><strong>5.8</strong></td>
+<td><strong>12-14</strong></td>
+</tr>
+<tr>
+<td></td>
+<td><em>43% faster</em></td>
+<td><em>~50% faster</em></td>
+</tr>
+</tbody>
+</table>
+<p>The 1080p figure is a range because it is: repeated runs on this machine land
+between 11.6 and 13.8 ms, where the 720p one holds to within 5%. Reported as
+measured rather than as the prettiest run.</p>
+<p>Two full-surface CPU copies stood in front of the upload, and neither was
+buying anything:</p>
+<ul>
+<li><code>pygame.transform.flip</code>, to turn the surface upside down for OpenGL. The
+  quad's <code>v</code> coordinate now runs 1 at the bottom of the screen instead, so the
+  sampler does it for nothing.</li>
+<li><code>pygame.image.tobytes(surface, "RGBA")</code>, to normalise the surface's pixels.
+  A 32-bit pygame surface is already a contiguous block of B,G,R,A pixels with
+  no row padding, so <code>present()</code> hands GL the surface's own memory and sets the
+  texture's swizzle to <code>BGRA</code>. The texture unit reorders for free.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Measured alone, ms</th>
+<th>1280x720</th>
+<th>1920x1080</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>the two CPU copies</td>
+<td>3.4</td>
+<td>12.7</td>
+</tr>
+<tr>
+<td>the raw upload that remains</td>
+<td>5.8</td>
+<td>12.5</td>
+</tr>
+</tbody>
+</table>
+<p>The copies are the portable half — same cost on any machine with the same pixel
+count. The end-to-end saving (4.3 ms at 720p) is a little larger than the copies
+measured alone, because the old path also allocated a flipped <code>Surface</code> and a
+<code>bytes</code> object every frame.</p>
+<p><strong>What is left is the upload itself, and only instancing removes it.</strong> At 720p
+a UI frame still costs 5.8 ms whether it draws one label or a HUD — a third of
+a 16.7 ms budget, bought by an FPS counter. Drawing the primitives as instanced
+SDF shapes instead would make the cost proportional to the UI, but the shape
+shader (<code>shaders/shape.frag</code>) has no rounded-rect and no polygon SDF today,
+while <code>border_radius</code> has 30 live call sites in this repository. That is
+workstream W16 proper, tracked as
+<a href="https://github.com/Wedeueis/pyguara/issues/334">#334</a> rather than guessed at.
+It also carries a decision that is not an engineering one: pygame's rasteriser
+and an SDF shader disagree about antialiasing, rounded corners and line caps,
+so every shipped HUD would change slightly.</p>
+<h3 id="instance-layout-width">Instance layout width</h3>
+<p>Packing and uploading 20000 instances, at each width the layout has had:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Floats per instance</th>
+<th style="text-align: right;">Time</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">7 (position and transform only)</td>
+<td style="text-align: right;">9.29 ms</td>
+</tr>
+<tr>
+<td style="text-align: right;">11 (with a per-instance tint)</td>
+<td style="text-align: right;">9.72 ms</td>
+</tr>
+<tr>
+<td style="text-align: right;">15 (with an atlas UV rect)</td>
+<td style="text-align: right;">9.85 ms</td>
+</tr>
+</tbody>
+</table>
+<p><strong>A few percent per widening, and the steps are small enough that the 11→15 one
+lands inside run-to-run noise about as often as not</strong> — measured across repeats
+it ranged from 0.07 ms to 0.44 ms, against a standard deviation of roughly
+0.15–0.39 ms. The ordering is consistent; the size of each gap is not.</p>
+<p>That is why the GL sprite path carries both the tint and the UV rect
+unconditionally, rather than keeping extra shader programs for batches that
+want neither — a plain sprite broadcasts white into the four colour columns
+and <code>(0,0)</code>/<code>(1,1)</code> into the four UV columns, which is free once the pack is
+vectorised. A uniform would instead force a per-batch state change, which for
+the UV rect would defeat the entire purpose: an atlas exists so that sprites
+with <em>different</em> regions share one draw call.</p>
+<p>The bytes uploaded are 1.2 MB per frame at 20,000 sprites.</p>
+<hr />
+<h2 id="resource-loading-and-the-gil">Resource loading, and the GIL</h2>
+<p>What decides the shape of asynchronous loading here. <code>pygame-ce</code> decodes
+images in SDL with the GIL <strong>released</strong>; <code>json</code> parses with it <strong>held</strong>. So
+"load assets on a worker thread" is right for one and a pessimisation for
+the other, and the difference is measured rather than assumed.</p>
+<p>Per item, 24 items, 4 worker threads, CPython 3.12.10 (a standard GIL
+build -- <code>Py_GIL_DISABLED</code> is unset), 12 logical CPUs:</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th style="text-align: right;">Sequential</th>
+<th style="text-align: right;">4 threads</th>
+<th style="text-align: right;">Speed-up</th>
+<th>GIL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pygame.image.load</code>, 2356×1824 jpg</td>
+<td style="text-align: right;">30.87 ms</td>
+<td style="text-align: right;">10.58 ms</td>
+<td style="text-align: right;"><strong>2.92×</strong></td>
+<td>released</td>
+</tr>
+<tr>
+<td><code>pygame.image.load</code>, 1024×1024 png</td>
+<td style="text-align: right;">6.91 ms</td>
+<td style="text-align: right;">2.05 ms</td>
+<td style="text-align: right;"><strong>3.37×</strong></td>
+<td>released</td>
+</tr>
+<tr>
+<td>…plus <code>convert_alpha</code> + <code>tobytes</code></td>
+<td style="text-align: right;">15.12 ms</td>
+<td style="text-align: right;">7.93 ms</td>
+<td style="text-align: right;">1.91×</td>
+<td>mostly released</td>
+</tr>
+<tr>
+<td><code>json.loads</code>, ~4k entries</td>
+<td style="text-align: right;">4.64 ms</td>
+<td style="text-align: right;">6.51 ms</td>
+<td style="text-align: right;"><strong>0.71×</strong></td>
+<td>held</td>
+</tr>
+<tr>
+<td><code>open().read()</code>, 2.5 MB, page-cached</td>
+<td style="text-align: right;">0.17 ms</td>
+<td style="text-align: right;">0.84 ms</td>
+<td style="text-align: right;">0.20×</td>
+<td>n/a</td>
+</tr>
+</tbody>
+</table>
+<p>Three things follow.</p>
+<p><strong>One image decode can cost more than a frame.</strong> 30.87 ms for a 2356×1824
+jpg is nearly two 60 Hz frames, so a scene that loads a dozen textures on
+entry stalls for a third of a second. This is the cost asynchronous loading
+exists to move.</p>
+<p><strong>Threading pays for image decode and costs for JSON.</strong> 2.9–3.4× against
+0.71×: offloading a GIL-holding parse adds contention and returns nothing,
+so it finishes <em>slower</em> than doing it inline. A loader therefore opts in to
+threaded decode rather than getting it by default.</p>
+<p><strong><code>asyncio</code> is the wrong tool for this problem.</strong> It overlaps I/O <em>waits</em>,
+and there is no wait here worth overlapping -- reading 2.5 MB costs 0.17 ms
+while decoding it costs 30.87 ms. The expense is CPU, which an event loop
+cannot parallelise on a GIL build; it would also mean running an event loop
+inside a synchronous frame loop. A thread pool for the phases that release
+the GIL, plus a time-budgeted main-thread pump for everything else, is what
+the measurements support.</p>
+<p>The last row measures thread-pool overhead, not disk: 2.5 MB out of the
+page cache costs 0.17 ms, less than the ~0.7 ms it takes to hand the work
+to a pool. Quoted so nobody reads it as "file I/O does not parallelise".</p>
+<hr />
+<h2 id="what-the-test-suite-guarantees">What the test suite guarantees</h2>
+<p><code>tests/performance/</code> runs in two tiers, and they exist for different reasons.</p>
+<p><strong>Guards</strong> (<code>-m "performance and not slow"</code>, ~3 s) assert a <strong>complexity
+class</strong>, never a wall-clock time. Each measures the same operation at N and at a
+multiple of N in the same process, and asserts the ratio between them. That
+cancels machine speed out entirely, which is what makes them safe on a shared CI
+runner: a laptop, a loaded container and a CI box all agree that a linear
+algorithm costs roughly 4× for 4× the work, even while disagreeing about every
+absolute number involved. They catch a change of complexity class — the kind of
+regression that is invisible in review and fatal at scale — and deliberately do
+not catch a 2× constant-factor slowdown.</p>
+<p><strong>Sweeps</strong> (<code>-m "performance and slow"</code>) assert nothing. They are
+<code>pytest-benchmark</code> runs at sizes too large for CI, and their only job is to
+produce the tables above.</p>
+<p>Neither tier should ever run under coverage. Tracing every line costs more than
+the code being timed and turns every measurement into noise; both <code>make</code>
+targets pass <code>--no-cov</code>.</p>
+<p>A machine with no GL context skips the GL tier rather than failing it.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

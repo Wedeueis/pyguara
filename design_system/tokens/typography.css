@@ -1,0 +1,32 @@
+/* Type scale. The engine's FontScheme ships 4 sizes (12/16/24/32 px) and
+   those are load-bearing: HUD and editor text must match them exactly. */
+:root{
+--fs-small:12px;
+--fs-normal:16px;
+--fs-large:24px;
+--fs-title:32px;
+
+/* Web-surface scale (docs, site, store) — the engine scale is too coarse for prose */
+--fs-100:12px;
+--fs-200:14px;
+--fs-300:16px;
+--fs-400:18px;
+--fs-500:22px;
+--fs-600:28px;
+--fs-700:36px;
+--fs-800:48px;
+--fs-900:64px;
+
+--lh-tight:1.1; /* @kind other */
+--lh-snug:1.3; /* @kind other */
+--lh-body:1.6; /* @kind other */
+--lh-loose:1.75; /* @kind other */
+
+--ls-display:.02em; /* @kind other */
+--ls-pixel:.06em; /* @kind other */
+--ls-caps:.14em; /* @kind other */
+--ls-body:0; /* @kind other */
+
+--fw-regular:400; /* @kind other */
+--fw-bold:700; /* @kind other */
+}

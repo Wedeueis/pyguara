@@ -1,0 +1,2806 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>ADR 0003: RFC-0003's native Rust core — what Marco 0 found - PyGuara Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#adr-0003-rfc-0003s-native-rust-core-what-marco-0-found" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="PyGuara Documentation" class="md-header__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            PyGuara Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              ADR 0003: RFC-0003's native Rust core — what Marco 0 found
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="PyGuara Documentation" class="md-nav__button md-logo" aria-label="PyGuara Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    PyGuara Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/ONBOARDING/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Onboarding
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/zero_to_hero/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Zero to Hero Tutorial
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/Archictecture%20%26%20Style%20Guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Style
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/PROJECT_STRUCTURE/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Structure
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-visual-inspection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual Inspection (agents)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/agent-integration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agent Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/performance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Measured Limits
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Core
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/ecs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Entity Component System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/common-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Core Types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/events/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/dependency-injection/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependency Injection
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/scenes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scenes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/application/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Application & Lifecycle
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../core/logging/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Logging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Graphics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Graphics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../graphics/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Physics
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Physics
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../physics/queries/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spatial Queries
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    AI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ai/intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Systems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Systems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/animation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Animation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/audio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command-Line Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/dev/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dev Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Editor Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/input/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Input
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/persistence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Persistence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/prefabs/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prefabs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/replay/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Replay
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/scripting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scripting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-builder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Builder
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../systems/ui-design-system/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    UI Design System
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Decisions
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Decisions
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0001-one-mutation-seam-for-studio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    One mutation seam for Studio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../0002-studio-agent-transports/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Two transports for Studio's agent surface
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kits
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Kits
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../kits/progression/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Progression
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#context" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#finding-1-vector2-cannot-be-a-pyclass-while-pymunk-is-the-physics-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding 1 — Vector2 cannot be a #[pyclass] while pymunk is the physics backend
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Finding 1 — Vector2 cannot be a #[pyclass] while pymunk is the physics backend">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-that-costs-measured-and-smaller-than-it-first-looked" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What that costs — measured, and smaller than it first looked
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#measured-where-the-vector2-traffic-actually-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measured: where the Vector2 traffic actually is
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#and-yet-the-conclusion-does-not-change" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        And yet the conclusion does not change
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#consequence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Consequence
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#finding-2-the-today-column-was-not-measured-against-this-tree" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding 2 — the "today" column was not measured against this tree
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#finding-3-the-pools-cost-is-not-where-the-proposal-implies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding 3 — the pools' cost is not where the proposal implies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#finding-4-the-toolchain-cost-is-real-and-unpaid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding 4 — the toolchain cost is real and unpaid
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#finding-5-marco-3-prototyped-268-on-the-arithmetic-6-on-the-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Finding 5 — Marco 3 prototyped: 268× on the arithmetic, ~6× on the frame
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Finding 5 — Marco 3 prototyped: 268× on the arithmetic, ~6× on the frame">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-prototype-does-not-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the prototype does not do
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recommendation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recommendation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#marco-3-increment-2-sparks-where-the-render-half-is-the-frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Marco 3, increment 2 — sparks, where the render half is the frame
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Marco 3, increment 2 — sparks, where the render half is the frame">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#so-the-render-half-needed-a-batched-submission-and-its-shape-was-measured" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        So the render half needed a batched submission, and its shape was measured
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#end-to-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        End to end
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#two-bugs-this-increment-turned-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two bugs this increment turned up
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#and-one-finding-about-the-python-path" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        And one finding about the Python path
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#options-for-the-maths-rewrite" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Options for the maths rewrite
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-this-spike-produced" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What this spike produced
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="adr-0003-rfc-0003s-native-rust-core-what-marco-0-found">ADR 0003: RFC-0003's native Rust core — what Marco 0 found</h1>
+<blockquote>
+<p><strong>Packaging superseded by
+<a href="../0006-shipping-the-native-extension/">ADR 0006</a>.</strong> The crate is now
+wired into <code>pyproject.toml</code> through maturin and the extension ships
+inside the wheel, so "not wired in, built standalone" below records how
+the spike was run rather than how the engine is built. 0006 also does
+what the <code>maturin build</code> warning below asks for: <code>module-name</code> is set.</p>
+<p><strong>Generalised by <a href="../0004-the-native-boundary/">ADR 0004</a>.</strong> This
+document measured the first milestone and recommended an order.
+ADR 0004 replaces that order with a test a candidate can be put
+through before any Rust is written, after the sparks increment
+below showed the same reasoning giving answers between 1.4x and
+25x for the same module depending only on where the boundary was
+drawn. Read this for the measurements; read 0004 for the rule.</p>
+</blockquote>
+<ul>
+<li><strong>Status:</strong> proposed — the decision in "Recommendation" is the one being asked for</li>
+<li><strong>Date:</strong> 2026-10-16</li>
+<li><strong>Context:</strong> <code>project/backlog/active/rust_core.md</code> (RFC-0003), <a href="https://github.com/Wedeueis/pyguara/issues/305">issue #305</a></li>
+</ul>
+<h2 id="context">Context</h2>
+<p>RFC-0003 proposes moving the numeric, spatial and batching engines into a
+compiled Rust extension -- a new <code>_core_rs</code> module -- via PyO3 and maturin, keeping
+the ECS, DI container, event bus, kits, UI and Studio in Python. It is
+sequenced as four milestones: maths and <code>SpatialHash</code>, the render batcher,
+the object pools and flocking, then pathfinding, procgen and the character
+sweep.</p>
+<p>It was accepted into the plan as <strong>gated</strong>, not approved: this repository's
+norm is to measure before building, which is why issue #161 reads <em>DEFERRED
+by measurement, do not build yet</em>. Marco 0 is that gate — establish real
+baselines, run the pre-flight checks that could sink a milestone, and decide
+on the evidence rather than on the proposal's own numbers.</p>
+<p>This records what it found. <strong>No Rust was written</strong>, and the reason is
+finding 1.</p>
+<h2 id="finding-1-vector2-cannot-be-a-pyclass-while-pymunk-is-the-physics-backend">Finding 1 — <code>Vector2</code> cannot be a <code>#[pyclass]</code> while pymunk is the physics backend</h2>
+<p>This is the one that changes the plan.</p>
+<p>RFC-0003's Marco 1 reimplements <code>Vector2</code> as <code>#[pyclass(frozen, eq, hash)]</code>
+wrapping <code>glam::Vec2</code>, and states it stays <em>"compatível com desempacotamento
+de tuplo <code>(x, y)</code> para manter compatibilidade total com o Pymunk CFFI quando
+passado para <code>body.position = vec</code>"</em>.</p>
+<p>It does not. Measured against pymunk 7.2.0 with a class offering <code>__iter__</code>,
+<code>__len__</code> and <code>__getitem__</code> — everything a PyO3 pyclass can provide —
+<strong>9 of 10 pymunk entry points reject it</strong>:</p>
+<pre><code>TypeError: initializer for ctype 'struct cpVect' must be a list or tuple
+           or dict or struct-cdata, not RustLikeVector2
+</code></pre>
+<p><code>body.position</code>, <code>body.velocity</code>, <code>space.gravity</code>, <code>apply_impulse_at_local_point</code>,
+<code>apply_force_at_world_point</code>, <code>pymunk.Circle</code>'s offset, <code>pymunk.Poly</code>'s
+vertices, <code>point_query_nearest</code> and <code>segment_query_first</code> all refuse it. Only
+<code>pymunk.Transform(tx=…, ty=…)</code> works, because it takes floats.</p>
+<p>The reason today's <code>Vector2</code> works is in its MRO:</p>
+<pre><code>Vector2 -&gt; Vec2d -&gt; tuple -&gt; object
+</code></pre>
+<p><code>pymunk.Vec2d</code> <strong>is a tuple subclass</strong>, so our <code>Vector2</code> is literally a
+tuple and CFFI accepts it structurally. A PyO3 <code>#[pyclass]</code> cannot extend a
+variable-length built-in like <code>tuple</code>, so a Rust <code>Vector2</code> cannot be one.</p>
+<h3 id="what-that-costs-measured-and-smaller-than-it-first-looked">What that costs — measured, and smaller than it first looked</h3>
+<p>Converting at the boundary works: <code>body.position = (v.x, v.y)</code>, at <strong>+85 ns
+per crossing</strong> (608 ns → 694 ns), across 21 vector-passing call sites in
+<code>physics/backends/pymunk_impl.py</code> — the only file in the engine that touches
+pymunk.</p>
+<p>The first version of this ADR stopped there and recommended dropping the
+maths rewrite, reasoning that a conversion tax is the wrong direction for a
+change meant to remove overhead. <strong>That was asserted, not measured, and it
+was wrong.</strong> Counting the crossings a tick actually makes, by wrapping the
+CFFI-facing property accessors:</p>
+<table>
+<thead>
+<tr>
+<th>Scene</th>
+<th style="text-align: right;">Crossings / tick</th>
+<th style="text-align: right;">Tax at 85 ns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100 dynamic bodies</td>
+<td style="text-align: right;">200 (all reads)</td>
+<td style="text-align: right;">0.017 ms</td>
+</tr>
+<tr>
+<td>100 bodies + 20 movers</td>
+<td style="text-align: right;">280</td>
+<td style="text-align: right;"><strong>0.024 ms</strong></td>
+</tr>
+<tr>
+<td>50 movers</td>
+<td style="text-align: right;">211 (all writes)</td>
+<td style="text-align: right;">0.018 ms</td>
+</tr>
+</tbody>
+</table>
+<p>0.024 ms is <strong>0.14% of a 16.7 ms frame</strong>. The tax is noise.</p>
+<p>What is <em>not</em> noise is what <code>Vector2</code> costs today:</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th style="text-align: right;">ns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Vector2 + Vector2</code></td>
+<td style="text-align: right;">432</td>
+</tr>
+<tr>
+<td><code>Vector2 * float</code></td>
+<td style="text-align: right;"><strong>1,115</strong></td>
+</tr>
+<tr>
+<td><code>Vector2.normalize()</code></td>
+<td style="text-align: right;"><strong>1,847</strong></td>
+</tr>
+<tr>
+<td><code>Vector2.magnitude</code></td>
+<td style="text-align: right;">253</td>
+</tr>
+<tr>
+<td><code>Vector2(x, y)</code></td>
+<td style="text-align: right;">246</td>
+</tr>
+<tr>
+<td>scalar equivalent</td>
+<td style="text-align: right;">~67</td>
+</tr>
+</tbody>
+</table>
+<p>So the question is not the pymunk tax. It is whether enough game code does
+vector arithmetic for a faster <code>Vector2</code> to repay a rewrite — and there is a
+reason to doubt it: the RFC's own motivation notes that <code>flock_force</code> was
+already rewritten in scalar variables to escape this cost. If the hot loops
+have already hand-optimised <code>Vector2</code> away, what remains are API boundaries
+where 400 ns does not matter.</p>
+<h3 id="measured-where-the-vector2-traffic-actually-is">Measured: where the <code>Vector2</code> traffic actually is</h3>
+<p>Counted with <code>tools/count_vector_ops.py</code>, which wraps the operators and
+tallies them.</p>
+<p><strong>The Python code that runs every frame barely touches <code>Vector2</code>.</strong> Across
+every demo that runs without a GL context: <strong>1–8 operations per frame</strong>,
+0.0002–0.0022 ms. Those demos sit in menus and idle scenes, so this is a
+floor rather than a representative figure — but it is the floor for
+general game and engine code.</p>
+<p><strong>The hot systems are saturated with it.</strong> Per tick:</p>
+<table>
+<thead>
+<tr>
+<th>System</th>
+<th style="text-align: right;">Vector2 ops</th>
+<th style="text-align: right;">Implied ms</th>
+<th style="text-align: right;">Share of that system's measured cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Flocking, 500 agents</td>
+<td style="text-align: right;">5,502</td>
+<td style="text-align: right;">2.85</td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td>Flocking, 1000 agents</td>
+<td style="text-align: right;">11,000</td>
+<td style="text-align: right;">5.69</td>
+<td style="text-align: right;"><strong>36%</strong> of 16.0 ms</td>
+</tr>
+<tr>
+<td>Flocking, 2000 agents</td>
+<td style="text-align: right;">22,001</td>
+<td style="text-align: right;">11.38</td>
+<td style="text-align: right;"><strong>33%</strong> of 34.3 ms</td>
+</tr>
+<tr>
+<td>Particles, 1000 live</td>
+<td style="text-align: right;">4,000</td>
+<td style="text-align: right;">0.99</td>
+<td style="text-align: right;"><strong>45%</strong> of 2.20 ms</td>
+</tr>
+<tr>
+<td>Particles, 4000 live</td>
+<td style="text-align: right;">16,000</td>
+<td style="text-align: right;">3.94</td>
+<td style="text-align: right;"><strong>44%</strong> of 9.02 ms</td>
+</tr>
+<tr>
+<td>Sparks, 1000 live</td>
+<td style="text-align: right;">5,000</td>
+<td style="text-align: right;">2.29</td>
+<td style="text-align: right;"><strong>80%</strong> of 2.85 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Construction dominates — 6 <code>Vector2</code> objects per agent per tick in
+flocking, 4 per particle — not arithmetic.</p>
+<p>This <strong>refutes the doubt stated above</strong>. <code>flock_force</code> itself is scalar, but
+the system around it (reading and writing <code>transform.position</code>, integrating
+velocity) builds <code>Vector2</code> objects per element per tick. A third to four
+fifths of the hot systems' cost is this type.</p>
+<h3 id="and-yet-the-conclusion-does-not-change">And yet the conclusion does not change</h3>
+<p>A Rust <code>Vector2</code> would address that traffic — and <strong>Marco 3 removes it
+entirely</strong>. Rewriting the pools and the flocking solver as Rust SoA means
+positions and velocities live in native arrays; no Python <code>Vector2</code> is
+constructed per element at all. Optimising the type would be optimising
+traffic the next milestone deletes.</p>
+<p>So the two readings converge on the same answer for opposite reasons:</p>
+<ul>
+<li>If Marco 3 happens, a Rust <code>Vector2</code> is <strong>redundant</strong> — it speeds up what
+  Marco 3 removes, and what remains in Python does 1–8 ops a frame.</li>
+<li>If Marco 3 does <em>not</em> happen, a Rust <code>Vector2</code> becomes <strong>the cheapest
+  substantial win available</strong>: it would recover a large share of 33–80% of
+  the hot systems' cost without restructuring them, for one type's
+  compatibility risk.</li>
+</ul>
+<p>That is a real fork, and it is about Marco 3 rather than about the maths.</p>
+<h3 id="consequence">Consequence</h3>
+<p>The blocker is real but narrower than "drop the maths rewrite": <code>Vector2</code>
+cannot be a pyclass <em>and</em> keep structural pymunk compatibility, so Marco 1
+has to pick a boundary strategy. Four exist — see "Options for the maths
+rewrite".</p>
+<p>Note also that pymunk is not a thin layer to swap: 7 of the demos use
+<code>RigidBody</code> dynamics, and the backend implements joints, collision
+callbacks, raycasts and region queries on top of Chipmunk's solver.</p>
+<h2 id="finding-2-the-today-column-was-not-measured-against-this-tree">Finding 2 — the "today" column was not measured against this tree</h2>
+<table>
+<thead>
+<tr>
+<th>RFC's claim</th>
+<th>This repository</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Batching + packing 20,000 sprites: ~55.0 ms</td>
+<td><strong>49.4–53.5 ms</strong> — accurate</td>
+</tr>
+<tr>
+<td>Flocking, 2000 agents: ~18.5 ms</td>
+<td><strong>34.3 ms</strong> (documented); 1000 agents is 16.0 ms</td>
+</tr>
+<tr>
+<td>Update + pack 10,000 particles/projectiles: ~14.0 ms</td>
+<td><strong>~22.5 ms</strong> extrapolated from 9.02 ms at 4000</td>
+</tr>
+<tr>
+<td>Swept <code>CharacterMover</code>, 50 actors: ~3.2 ms</td>
+<td><strong>6.07 ms</strong> measured, 25,124 CFFI allocations/simulated second</td>
+</tr>
+<tr>
+<td>Flow field 100×100: ~9.5 ms; WFC 40×40: ~45.0 ms</td>
+<td><strong>unmeasured</strong> — no benchmark exists</td>
+</tr>
+</tbody>
+</table>
+<p>Three of the five understate the current cost by 1.6–1.9×. Note the
+direction: understating the baseline makes the claimed speedup <em>smaller</em>
+than reality, so the RFC's case is conservative rather than inflated. The
+figure it gets right is the one with an existing benchmark behind it.</p>
+<p>The two it quotes for pathfinding and procgen have no benchmark in the tree
+at all, and those are the modules it calls <em>"a melhor relação
+custo-benefício de toda a engine"</em> — so the best-justified milestone is the
+one resting entirely on unverified numbers.</p>
+<h2 id="finding-3-the-pools-cost-is-not-where-the-proposal-implies">Finding 3 — the pools' cost is not where the proposal implies</h2>
+<p>Marco 3 replaces the particle, spark and projectile pools with Rust SoA.
+Benchmarks added by this spike (<code>tests/performance/test_perf_pools.py</code>,
+figures in <code>docs/guides/performance.md</code>):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">Capacity</th>
+<th style="text-align: right;">Live</th>
+<th style="text-align: right;">ms / update</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0.024</td>
+</tr>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">2.196</td>
+</tr>
+<tr>
+<td>particles</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">9.020</td>
+</tr>
+<tr>
+<td>sparks</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">11.454</td>
+</tr>
+</tbody>
+</table>
+<p>A dead slot costs 0.024 µs; a live one 2.2 µs — ninety times as much. The
+"walks its whole capacity every frame" observation is true and nearly free,
+which also <strong>retires the active-prefix compaction</strong> this plan had queued as
+likely "most of the available win": it would recover 0.024 ms.</p>
+<p>This <em>strengthens</em> Marco 3. The cost is per-element arithmetic, which is
+exactly what SoA plus SIMD addresses.</p>
+<h2 id="finding-4-the-toolchain-cost-is-real-and-unpaid">Finding 4 — the toolchain cost is real and unpaid</h2>
+<p>There is no Rust toolchain on this machine: no <code>rustc</code>, <code>cargo</code>, <code>rustup</code> or
+<code>maturin</code>. That is not an obstacle to installing one; it is the concrete form
+of the cost the plan flagged — after Marco 1, <code>uv sync</code> no longer produces a
+working checkout. Every contributor needs a Rust toolchain and
+<code>maturin develop</code>, CI grows a build matrix, and an editable install stops
+being editable for half the engine.</p>
+<p>Two pins the RFC specifies could not be checked without a toolchain and
+should be before Marco 1 starts: it pairs <code>pyo3 = "0.23"</code> with Rust
+<strong>edition 2024</strong>, which requires Rust ≥ 1.85 — newer than that pyo3 line —
+and it assumes <code>abi3-py312</code> supports the <code>frozen</code>, <code>eq</code> and <code>hash</code> pyclass
+features it wants.</p>
+<h2 id="finding-5-marco-3-prototyped-268-on-the-arithmetic-6-on-the-frame">Finding 5 — Marco 3 prototyped: 268× on the arithmetic, ~6× on the frame</h2>
+<p>A Rust toolchain was installed (1.99.1, so edition 2024 is available — one of
+finding 4's open pins resolved) and one of Marco 3's three pools built as a
+structure-of-arrays <code>#[pyclass]</code>: <code>rust/src/pools.rs</code>, measured by
+<code>tools/bench_native_pool.py</code>.</p>
+<p>Scope is deliberately one pool, not three plus flocking. One real number
+decides the milestone; three would not decide it harder.</p>
+<p><strong>Parity first.</strong> Both pools seeded with identical state and ticked 60
+times agree to 0.000038 px — f32 rounding, nothing else. <code>ParticleSystem.emit</code>
+randomises speed over <code>[speed*0.5, speed*1.5]</code>, so the two cannot be seeded
+through their own emit paths and compared; the first attempt at this
+"disagreed" by 40 px for exactly that reason.</p>
+<p><strong>The arithmetic:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th style="text-align: right;">Python</th>
+<th style="text-align: right;">Rust</th>
+<th style="text-align: right;">Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1000 live / 1000 capacity</td>
+<td style="text-align: right;">1.63 ms</td>
+<td style="text-align: right;">0.006 ms</td>
+<td style="text-align: right;"><strong>268×</strong></td>
+</tr>
+<tr>
+<td>4000 live / 4000 capacity</td>
+<td style="text-align: right;">6.66 ms</td>
+<td style="text-align: right;">0.025 ms</td>
+<td style="text-align: right;"><strong>268×</strong></td>
+</tr>
+<tr>
+<td>0 live / 1000 capacity</td>
+<td style="text-align: right;">0.022 ms</td>
+<td style="text-align: right;">0.001 ms</td>
+<td style="text-align: right;">36×</td>
+</tr>
+</tbody>
+</table>
+<p>The RFC claimed ~45×. The measured figure is six times better than claimed —
+the first of its numbers to come out <em>in its favour</em>.</p>
+<p><strong>But the frame is not only arithmetic.</strong> <code>update</code> is 84% of the pool's cost
+and <code>render</code> the other 16% (0.442 ms of 2.73 ms at 1000 live; 1.85 ms of
+10.99 ms at 4000). So porting <code>update</code> alone is bounded by Amdahl:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Live</th>
+<th style="text-align: right;">Python frame</th>
+<th style="text-align: right;">With native update</th>
+<th style="text-align: right;">End to end</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">2.73 ms</td>
+<td style="text-align: right;">0.45 ms</td>
+<td style="text-align: right;"><strong>6.1×</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000</td>
+<td style="text-align: right;">10.99 ms</td>
+<td style="text-align: right;">1.87 ms</td>
+<td style="text-align: right;"><strong>5.9×</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>~6× end to end, and render becomes the bottleneck.</strong> Getting past that
+needs the RFC's <code>pack_for_render</code> writing <code>GpuSpriteInstance</code> buffers
+directly — which is untested here, and carries the same zero-copy
+buffer-protocol risk as Marco 2.</p>
+<h3 id="what-the-prototype-does-not-do">What the prototype does not do</h3>
+<p>Honest limits, because they are where the remaining design risk is:</p>
+<ul>
+<li><strong>No textures, colour interpolation or material.</strong> The real <code>Particle</code>
+  carries a <code>Texture</code> reference and <code>color_start</code>/<code>color_end</code>. Those are
+  Python objects; an SoA pool needs them indexed or kept Python-side, and
+  that interface is unexplored.</li>
+<li><strong>f32, where Python uses f64.</strong> Fine for particles (0.000038 px over 60
+  ticks) and a deliberate choice for memory and SIMD, but it is a
+  behaviour change, not a free one.</li>
+<li><strong>No render packing</strong>, per above — the thing that decides whether the
+  milestone is worth 6× or much more.</li>
+<li><strong>One pool of three.</strong> Sparks and projectiles have the same shape;
+  projectiles additionally query the spatial hash, which means either a
+  native hash too or a crossing per projectile.</li>
+</ul>
+<p>The crate is <strong>not wired into <code>pyproject.toml</code></strong>: it builds standalone via
+<code>cargo build --release</code>, so <code>uv sync</code> keeps working for anyone without a
+Rust toolchain and the repository stays buildable while this is still a
+question. Note that <code>maturin build</code> reads the project name from
+<code>pyproject.toml</code> and produces a wheel called <code>pyguara-0.5.0</code>, which would
+overwrite the real package — the benchmark loads the compiled library
+directly instead.</p>
+<h2 id="recommendation">Recommendation</h2>
+<p><strong>Narrow the RFC to its best-evidenced parts, and do not start with Marco 1.</strong></p>
+<ol>
+<li><strong>Drop Marco 1's maths half.</strong> Both halves of this are now measured, so
+   it is a decision rather than a bet. The hot systems spend 33–80% of their
+   time in <code>Vector2</code>; Marco 3 deletes that traffic by moving the data into
+   native arrays, and finding 5 shows it does so at 268x on the arithmetic.
+   The Python code that remains does 1–8 vector operations a frame. So the
+   maths rewrite optimises what Marco 3 removes, for a compatibility risk
+   (<code>Vector2</code> is a <code>tuple</code>; pymunk needs it to be) that buys nothing once
+   Marco 3 lands. <code>SpatialHash</code> is unaffected and can proceed.</li>
+<li><strong>Benchmark <code>dijkstra_map</code>, the flow field and WFC first.</strong> They are the
+   RFC's own best-value claim and the only numbers with nothing behind them.
+   A flow field is pure in, pure out — dimensions and seeds in, coordinates
+   out — so it is both the cheapest thing to measure and the cheapest thing
+   to port.
+   <em>Done, and it was the right place to look.</em> Measured, a 96x96 Python
+   recompute is 85 ms — 513% of a frame, so the feature could not be used
+   at interactive rates on a grid that size at all. Guarded first per ADR
+   0004's Decision 6, then ported: <strong>1.6 ms, 46-53x</strong>, bit-exact. WFC
+   remains unmeasured.</li>
+<li><strong>Then prototype exactly that one module</strong>, as Marco 0 intended, with the
+   toolchain pins verified.</li>
+<li><strong>Do Marco 3, and do its render packing in the same milestone.</strong> Finding
+   5 measured the pool: 268x on the arithmetic, six times better than the
+   RFC claimed. But <code>update</code> is only 84% of the pool's frame, so porting it
+   alone caps out at ~6x end to end and makes <code>render</code> the bottleneck. The
+   milestone is worth doing and worth scoping to include <code>pack_for_render</code>,
+   which is also where the remaining risk is -- textures and colour are
+   Python objects an SoA pool has nowhere to put, and the zero-copy buffer
+   claim is still untested.</li>
+<li><strong>Hold Marco 2</strong> (the render batcher) until the zero-copy buffer claim is
+   prototyped. It is the most invasive milestone and depends on the buffer
+   protocol working exactly as described.
+   <em>Amended after the sparks increment below:</em> a narrow slice of batched
+   submission came forward out of necessity, as <code>ShapeBatch</code> — Python lists
+   of packed rows, not a zero-copy buffer. The claim Marco 2 rests on is
+   still untested.</li>
+</ol>
+<h2 id="marco-3-increment-2-sparks-where-the-render-half-is-the-frame">Marco 3, increment 2 — sparks, where the render half <em>is</em> the frame</h2>
+<p>Recommendation 4 above said to port the pools' render packing as well as
+their arithmetic, on the evidence that <code>update</code> was 84% of a particle
+frame. Applied to <code>Sparks</code> that reasoning inverts, and the measurement is
+the only thing that showed it:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;"><code>update</code></th>
+<th style="text-align: right;"><code>render</code></th>
+<th style="text-align: right;">render's share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1000 particles</td>
+<td style="text-align: right;">1.574 ms</td>
+<td style="text-align: right;">0.367 ms</td>
+<td style="text-align: right;">19%</td>
+</tr>
+<tr>
+<td>1000 sparks, dots</td>
+<td style="text-align: right;">2.063 ms</td>
+<td style="text-align: right;">2.759 ms</td>
+<td style="text-align: right;">57%</td>
+</tr>
+<tr>
+<td>1000 sparks, streaks</td>
+<td style="text-align: right;">2.009 ms</td>
+<td style="text-align: right;">5.360 ms</td>
+<td style="text-align: right;"><strong>73%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The cause is structural rather than incidental. A particle is a sprite, so
+a thousand of them reach the renderer as <strong>one</strong> <code>RenderBatch</code> per texture.
+A spark is a primitive, so a thousand of them reach it as a thousand
+<code>draw_circle</code> or <code>draw_line</code> calls. Porting only the arithmetic would
+therefore have capped sparks at <strong>1.4-1.8x</strong> however fast the arithmetic
+became — a milestone not worth shipping.</p>
+<h3 id="so-the-render-half-needed-a-batched-submission-and-its-shape-was-measured">So the render half needed a batched submission, and its shape was measured</h3>
+<p>Four candidates, at 1000 live:</p>
+<table>
+<thead>
+<tr>
+<th>Candidate</th>
+<th style="text-align: right;">dots</th>
+<th style="text-align: right;">streaks</th>
+<th style="text-align: right;">frame speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python, per primitive (baseline)</td>
+<td style="text-align: right;">2.525 ms</td>
+<td style="text-align: right;">5.165 ms</td>
+<td style="text-align: right;">—</td>
+</tr>
+<tr>
+<td>native rows, handed over whole</td>
+<td style="text-align: right;"><strong>0.329 ms</strong></td>
+<td style="text-align: right;"><strong>0.349 ms</strong></td>
+<td style="text-align: right;"><strong>13-20x</strong></td>
+</tr>
+<tr>
+<td>native draw-call parameters, looped</td>
+<td style="text-align: right;">2.318 ms</td>
+<td style="text-align: right;">3.096 ms</td>
+<td style="text-align: right;">1.9-2.3x</td>
+</tr>
+<tr>
+<td>native draw-call parameters, NumPy pack</td>
+<td style="text-align: right;">1.288 ms</td>
+<td style="text-align: right;">1.217 ms</td>
+<td style="text-align: right;">3.4-5.8x</td>
+</tr>
+</tbody>
+</table>
+<p>The two "parameters" candidates are the ones that keep the instance layout
+private to the renderer, which is the cleaner layering. They lose by 4-10x,
+for the reason that keeps recurring in this ADR: anything that walks the
+elements in Python afterwards gives the saving straight back.</p>
+<p>So <code>ShapeBatch</code> carries <strong>packed rows</strong> in the eleven-float layout now
+documented in <code>pyguara/graphics/types.py</code>, and <code>ShapeBatchRenderer</code> is an
+optional capability that only the ModernGL world renderer satisfies —
+because it is the only backend where accepting one is a list <code>extend</code> of
+something it already holds. Every other renderer keeps the per-primitive
+path and the native arithmetic, which is the 1.9x that remains.</p>
+<p>That layout was already being built by <code>GLRenderer.draw_rect</code>,
+<code>draw_circle</code> and <code>draw_line</code> and read per instance by the shape shader.
+What changed is that it is now named and documented, because a layout that
+crosses a boundary undeclared is exactly how the texture-orientation
+convention drifted (W6).</p>
+<h3 id="end-to-end">End to end</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Live</th>
+<th>Path</th>
+<th style="text-align: right;"><code>update</code></th>
+<th style="text-align: right;"><code>render</code></th>
+<th style="text-align: right;">Frame</th>
+<th style="text-align: right;"></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1000 dots</td>
+<td>Python</td>
+<td style="text-align: right;">2.063</td>
+<td style="text-align: right;">2.759</td>
+<td style="text-align: right;">4.822</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000 dots</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.003</td>
+<td style="text-align: right;">0.287</td>
+<td style="text-align: right;"><strong>0.290</strong></td>
+<td style="text-align: right;"><strong>16.6x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000 streaks</td>
+<td>Python</td>
+<td style="text-align: right;">2.009</td>
+<td style="text-align: right;">5.360</td>
+<td style="text-align: right;">7.368</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">1000 streaks</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.003</td>
+<td style="text-align: right;">0.299</td>
+<td style="text-align: right;"><strong>0.302</strong></td>
+<td style="text-align: right;"><strong>24.4x</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000 streaks</td>
+<td>Python</td>
+<td style="text-align: right;">8.085</td>
+<td style="text-align: right;">21.937</td>
+<td style="text-align: right;">30.021</td>
+<td style="text-align: right;"></td>
+</tr>
+<tr>
+<td style="text-align: right;">4000 streaks</td>
+<td><strong>native</strong></td>
+<td style="text-align: right;">0.011</td>
+<td style="text-align: right;">1.269</td>
+<td style="text-align: right;"><strong>1.280</strong></td>
+<td style="text-align: right;"><strong>23.5x</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="two-bugs-this-increment-turned-up">Two bugs this increment turned up</h3>
+<p><strong>The native emission paths consumed the RNG stream differently from the
+Python ones.</strong> <code>ParticleSystem.emit</code> and <code>Sparks.burst</code> ask for a free slot
+<em>before</em> they draw, so a burst that overflows the pool consumes nothing for
+the elements it drops. Both <code>_emit_native</code> and a first draft of
+<code>_burst_native</code> drew <code>count</code> sets regardless, which left the two stores'
+streams at different positions after any overflowing burst — and then every
+<em>later</em> burst differed, while the burst that caused it looked correct. This
+was live in the merged particle pool. Both now clamp to the free slots, and
+<code>test_an_overflowing_burst_leaves_both_streams_in_step</code> in each parity file
+fails without the clamp.</p>
+<p><strong><code>tools/bench_native_pool.py</code> had been broken since the particle pool
+landed</strong>, raising <code>StopIteration</code>: it was written against the spike's pool
+API (<code>emit(count, x, y, ...)</code>, <code>position_at</code>) and hand-seeded a Python
+<code>Particle</code> that the accelerated default no longer creates. Rewritten to
+measure whole frames of both pools through the public API, with parity left
+to the parity tests — a benchmark that also claimed to prove correctness
+proved neither.</p>
+<h3 id="and-one-finding-about-the-python-path">And one finding about the <em>Python</em> path</h3>
+<p>The published particle table emits an untinted burst. A burst with a colour
+animation — fire, smoke, anything that fades — costs the Python path 6.0 ms
+of a 7.6 ms frame at 1000 live, because <code>_particle_color</code> constructs two
+<code>Color</code> objects and lerps them per particle. Natively it is unchanged, so
+the speedup there is <strong>55-58x</strong> rather than 18x. Read the other way, that is
+the cheapest unclaimed win left in <code>particles.py</code>, and it is in Python.
+Recorded, deliberately not taken: the remediation plan's "no interim Python
+optimisation that Rust would replace" still holds.</p>
+<h2 id="options-for-the-maths-rewrite">Options for the maths rewrite</h2>
+<p>Four, in increasing order of commitment. The pymunk tax (0.024 ms/tick)
+does not distinguish them; what does is how much the engine would gain from
+a faster <code>Vector2</code>, which is unmeasured.</p>
+<p><strong>A. Keep <code>Vector2</code> in Python; Rust uses <code>glam</code> internally.</strong> The Rust
+modules take and return floats, tuples or buffers. Nothing about
+<code>pathfinding.rs</code>, <code>procgen.rs</code> or the pools needs the Python-facing vector
+to be Rust. Zero compatibility risk, zero tax, and it forfeits the per-op
+win — which may be most of the win already gone, if the hot loops have
+hand-optimised <code>Vector2</code> away.</p>
+<p><strong>B. Rust <code>Vector2</code>, converting to tuples at the pymunk seam.</strong> The tax is
+0.024 ms/tick, confined to one file. The real compatibility surface is
+<strong>not</strong> pymunk: it is everything relying on <code>Vector2</code> being a <code>tuple</code> —
+unpacking (<code>x, y = v</code>), <code>tuple(v)</code>, equality against literal tuples, use as
+a dict key, indexing. The 10 <code>isinstance(..., Vector2)</code> sites are fine, a
+pyclass being a real type; the tuple-ness needs an audit this spike did not
+do. Gated on the frame-op measurement above.</p>
+<p><strong>C. Replace pymunk with a Rust physics crate</strong> (<code>rapier2d</code> the obvious
+candidate). Removes the CFFI boundary, lets <code>Vector2</code> be Rust natively, and
+makes Marco 4's sweep native in the same stroke. It is also a different
+proposal from the one on the table: a different solver changes game feel,
+and the backend's <code>one_way</code> platform behaviour, joints, collision callbacks
+and every physics test would be reimplemented against it. Seven demos use
+<code>RigidBody</code>, so this is not a corner of the engine. The honest version of
+this option is that it is a project, not a milestone.</p>
+<p><strong>D. A hand-written C-level type that genuinely subclasses <code>tuple</code>.</strong>
+CPython permits it — <code>Vec2d</code> is one — but PyO3's <code>#[pyclass]</code> cannot express
+it, so this means raw <code>pyo3::ffi</code> and a manually built <code>PyTypeObject</code>,
+giving up the memory safety that motivates using Rust at all. Named so it is
+considered-and-rejected rather than unexplored.</p>
+<p><strong>A.</strong> The measurements settle it rather than leaving it conditional: a
+frame does perform thousands of vector operations, all of them inside the
+systems Marco 3 rewrites — and Marco 3 is now measured working, at 268x on
+the pool arithmetic. Outside those systems a frame does 1–8 operations, so
+there is nothing left for a faster <code>Vector2</code> to speed up.</p>
+<p><strong>B only if Marco 3 is abandoned.</strong> Then that 33–80% stays in Python and a
+Rust <code>Vector2</code> recovers a large share of it without restructuring anything,
+subject to the tuple-compatibility audit above. Keep this on the shelf
+rather than in the plan.</p>
+<p><strong>C is a separate decision</strong> about the physics backend and should not be
+smuggled in as a consequence of a maths optimisation. <strong>D stays rejected.</strong></p>
+<h2 id="what-this-spike-produced">What this spike produced</h2>
+<ul>
+<li><code>tests/performance/test_perf_pools.py</code> — the pool baselines (Finding 3).</li>
+<li><code>tests/performance/test_perf_physics_probe.py</code> — the sweep baseline, added
+  as W8 ahead of this.</li>
+<li>Pool and probe figures in <code>docs/guides/performance.md</code>.</li>
+<li><code>tools/preflight_pymunk_vector.py</code> — finding 1, re-runnable against a
+  future pymunk rather than trusted from a document written against 7.2.0.</li>
+<li><code>tools/count_vector_ops.py</code> — the <code>Vector2</code> frame-traffic measurement that
+  decides Marco 1.</li>
+<li><code>Cargo.toml</code>, <code>rust/src/</code> — the Marco 3 pools, standalone so <code>uv sync</code>
+  still works without Rust: <code>particles.rs</code> and <code>sparks.rs</code>.</li>
+<li><code>tools/bench_native_pool.py</code> — Marco 3's numbers, for both pools and
+  whole frames rather than <code>update</code> alone.</li>
+<li><code>pyguara/graphics/types.py</code>'s <code>ShapeBatch</code> / <code>ShapeKind</code> and
+  <code>protocols.py</code>'s <code>ShapeBatchRenderer</code> — what the sparks increment needed
+  and the measurement above chose the shape of.</li>
+<li><code>rust/src/flowfield.rs</code> and <code>tests/performance/test_perf_pathfinding.py</code>
+  — recommendation 2's module, which turned out to be the engine's largest
+  margin and its first native port of something that is not cosmetic. Its
+  standard is <code>docs/adr/0004-the-native-boundary.md</code>, which this spike's
+  findings are what produced.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

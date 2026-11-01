@@ -1,0 +1,30 @@
+<!-- @dsCard group="Components" viewport="700x340" name="Core — Panel, Label, Image, Canvas" subtitle="Surfaces, type, sprites and drawing regions" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Core<\/title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"><\/script>
+<script src="../../_ds_bundle.js"><\/script>
+<style>html,body{margin:0}body{background:var(--surface-page);color:var(--text-body);font-family:var(--font-body);padding:16px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:16px}.col{display:flex;flex-direction:column;gap:10px}.cap{font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint)}a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}<\/style><\/head><body><div id="root"><\/div>
+<script type="text/babel">
+const { Panel, Label, Image: DSImage, Canvas: DSCanvas } = window.PyguaraDesignSystem_ca79d7;
+const Card = () => (<div className="col" style={{gap:16}}>
+  <div className="row" style={{alignItems:'stretch'}}>
+    <Panel bevel style={{flex:1}}><div className="cap">Panel · bevel<\/div>
+      <Label text="GUARÁ" font="display" fontSize={24} color="var(--action-secondary)" style={{marginTop:8}} />
+      <Label text="A platformer adventure" fontSize={12} color="var(--text-muted)" style={{marginTop:6}} />
+    <\/Panel>
+    <Panel borderWidth={2} color="var(--surface-raised)" style={{flex:1}}><div className="cap">Panel · 2px frame<\/div>
+      <div className="col" style={{marginTop:8,gap:4}}>
+        <Label text="Title 32" fontSize={32} /><Label text="Large 24" fontSize={24} /><Label text="Normal 16" fontSize={16} /><Label text="Small 12" fontSize={12} color="var(--text-muted)" />
+      <\/div>
+    <\/Panel>
+  <\/div>
+  <div className="row" style={{alignItems:'flex-end'}}>
+    <div className="col"><div className="cap">Image · pixelated<\/div><DSImage src="../../assets/art/hero-guara.png" height={92} /><\/div>
+    <div className="col"><div className="cap">Image · tint<\/div><DSImage src="../../assets/art/hero-guara.png" height={92} tint="var(--state-danger)" /><\/div>
+    <div className="col" style={{flex:1}}><div className="cap">Canvas · grid<\/div><DSCanvas height={92} grid /><\/div>
+  <\/div>
+<\/div>);
+ReactDOM.createRoot(document.getElementById('root')).render(<Card />);
+<\/script><\/body><\/html>

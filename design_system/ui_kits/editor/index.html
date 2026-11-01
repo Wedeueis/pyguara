@@ -1,0 +1,17 @@
+<!-- @dsCard group="Pyguara Engine Editor" viewport="1440x900" name="Editor — scene view" subtitle="Hierarchy, viewport, Inspector, Assets, dev-tool overlays · dark and light" -->
+<!-- @startingPoint section="Engine Editor" subtitle="Full editor shell with ECS inspector" viewport="1440x900" -->
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Pyguara Engine — Editor<\/title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"><\/script>
+<script src="../../_ds_bundle.js"><\/script>
+<script src="editor-data.js"><\/script>
+<style>html,body{margin:0;height:100%}body{overflow:hidden}a{color:var(--text-link)}a:hover{color:var(--text-link-hover)}button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--edge-strong)}::-webkit-scrollbar-track{background:var(--surface-inset)}<\/style>
+<\/head><body>
+<div id="root"><\/div>
+<script type="text/babel" src="EditorPanels.jsx"><\/script>
+<script type="text/babel" src="EditorOverlays.jsx"><\/script>
+<script type="text/babel" src="EditorShell.jsx"><\/script>
+<script type="text/babel">ReactDOM.createRoot(document.getElementById('root')).render(<window.EditorApp />);<\/script>
+<\/body><\/html>

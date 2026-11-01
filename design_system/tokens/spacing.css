@@ -1,0 +1,36 @@
+/* Engine SpacingScheme defaults are padding 8 / margin 4 / gap 8.
+   The 4px base scale below is derived from those, not from an 8pt grid. */
+:root{
+--space-0:0;
+--space-1:2px;
+--space-2:4px;
+--space-3:8px;
+--space-4:12px;
+--space-5:16px;
+--space-6:20px;
+--space-7:24px;
+--space-8:32px;
+--space-9:40px;
+--space-10:48px;
+--space-12:64px;
+--space-16:96px;
+
+/* Verbatim engine values */
+--ui-padding:8px;
+--ui-margin:4px;
+--ui-gap:8px;
+
+/* Fixed geometry from the component source */
+--size-button-w:120px;
+--size-button-h:40px;
+--size-checkbox:20px;
+--size-slider-w:150px;
+--size-slider-h:20px;
+--size-slider-knob:16px;
+--size-input-w:200px;
+--size-input-h:30px;
+--size-progress-w:200px;
+--size-progress-h:20px;
+--size-navbar-h:50px;
+--size-tile:32px;
+}
