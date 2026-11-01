@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Iterator
-from collections.abc import Set as AbstractSet
+from collections.abc import Callable, Collection, Iterable, Iterator
 from contextlib import contextmanager
 from itertools import filterfalse
 from typing import TypeVar, overload
@@ -52,7 +51,16 @@ class EntityManager:
         self._entities: dict[str, Entity] = {}
 
         # The inverted index: ComponentType -> Set[EntityID].
-        self._component_index: dict[type[Component], set[str]] = defaultdict(set)
+        #
+        # Each entry is a dict used as an ordered set, because **query order
+        # is part of the simulation**: a Gauss-Seidel system's result depends
+        # on who goes first, and a `set` of uuid4 strings iterates differently
+        # in every process. Insertion order makes the same sequence of
+        # operations produce the same order anywhere. It is also faster to
+        # read than the sets were; see `docs/guides/performance.md`.
+        self._component_index: dict[type[Component], dict[str, None]] = defaultdict(
+            dict
+        )
 
         self._query_cache: QueryCache = QueryCache(self)
 
@@ -63,8 +71,8 @@ class EntityManager:
         # Entities removed this frame: their id is already gone from
         # _entities (soft-dead), but their component-index entries linger
         # until flush_pending_removals() runs at the frame boundary. This is
-        # what makes single-type queries safe to alias the live index set
-        # directly -- the set is never mutated mid-frame.
+        # what makes single-type queries safe to alias the live index directly
+        # -- it is never mutated mid-frame.
         self._pending_index_cleanup: list[tuple[type[Component], str]] = []
 
         # Subscribers notified synchronously in remove_entity(), at the moment
@@ -98,7 +106,7 @@ class EntityManager:
         # and `_children` is the reverse index that makes a cascade O(its
         # own subtree) rather than a scan of the world.
         self._parent_of: dict[str, str] = {}
-        self._children: dict[str, set[str]] = defaultdict(set)
+        self._children: dict[str, dict[str, None]] = defaultdict(dict)
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -261,7 +269,7 @@ class EntityManager:
         for component_type, entity_id in self._pending_index_cleanup:
             index = self._component_index.get(component_type)
             if index is not None:
-                index.discard(entity_id)
+                index.pop(entity_id, None)
             self._query_cache.on_component_removed(entity_id, component_type)
 
         self._pending_index_cleanup.clear()
@@ -656,7 +664,7 @@ class EntityManager:
             parent_id: The owning entity.
         """
         self._parent_of[child_id] = parent_id
-        self._children[parent_id].add(child_id)
+        self._children[parent_id][child_id] = None
 
     def _unlink(self, child_id: str) -> None:
         """Drop whatever relation `child_id` had, if any.
@@ -669,7 +677,7 @@ class EntityManager:
             return
         siblings = self._children.get(previous)
         if siblings is not None:
-            siblings.discard(child_id)
+            siblings.pop(child_id, None)
             if not siblings:
                 del self._children[previous]
 
@@ -952,26 +960,24 @@ class EntityManager:
         component_types: tuple[type[Component], ...],
         without: tuple[type[Component], ...] = (),
         any_of: tuple[type[Component], ...] = (),
-    ) -> AbstractSet[str]:
-        """Resolve a query against the inverted index.
+    ) -> Collection[str]:
+        """Resolve a query against the inverted index, in a reproducible order.
 
-        Smallest index set first, so each intersection step scans as few ids as
-        possible.
+        Smallest index first, so each step scans as few ids as possible, and
+        the result keeps that index's insertion order. So the same sequence of
+        operations gives the same order in any process.
 
         For a single component type and no other terms the result is the live
-        index set itself, not a copy. That is safe only because index cleanup
-        is deferred to `flush_pending_removals()`, so the set cannot change
-        mid-frame; callers must still skip ids whose entity is already
-        soft-removed. Any additional term produces a new set, so the aliasing
-        never escapes into a result the caller could be surprised by.
+        index itself, not a copy. That is safe only because index cleanup is
+        deferred to `flush_pending_removals()`, so it cannot change mid-frame;
+        callers must still skip ids whose entity is already soft-removed. Any
+        additional term produces a new collection, built eagerly so that a
+        caller may add components while iterating a multi-term query, which
+        has always been allowed.
 
-        **A caller must therefore never mutate what this returns.** The
-        public queries filter disabled entities with `ids - self._disabled`,
-        which builds a new set; the in-place spellings (`-=`,
-        `difference_update`) would delete those ids from the component index
-        itself, and the entities would simply stop matching any query from
-        then on. The return type is `AbstractSet` to say so -- note it can
-        also be a `KeysView` or a `frozenset`, not only a `set`.
+        **A caller must therefore never mutate what this returns.** Doing so
+        could delete ids from the component index itself, and the entities
+        would simply stop matching any query from then on.
 
         Args:
             component_types: Classes an entity must all carry. May be empty
@@ -982,20 +988,22 @@ class EntityManager:
         Returns:
             The ids of entities satisfying every term, possibly empty.
         """
-        result: AbstractSet[str]
+        result: Collection[str]
 
         if component_types:
-            sets = []
+            indexes = []
             for component_type in component_types:
                 index = self._component_index.get(component_type)
                 if not index:
                     return _EMPTY_IDS
-                sets.append(index)
+                indexes.append(index)
 
-            sets.sort(key=len)
-            result = sets[0]
-            for other in sets[1:]:
-                result = result & other
+            # A stable sort, so a tie falls to the order the caller named the
+            # types in, which is itself reproducible.
+            indexes.sort(key=len)
+            result = indexes[0]
+            for other in indexes[1:]:
+                result = list(filter(other.__contains__, result))
         elif any_of:
             result = self._union_of(any_of)
         elif without:
@@ -1007,29 +1015,31 @@ class EntityManager:
             return _EMPTY_IDS
 
         if component_types and any_of:
-            result = result & self._union_of(any_of)
+            result = list(filter(self._union_of(any_of).__contains__, result))
 
         if without:
             excluded = self._union_of(without)
             if excluded:
-                result = result - excluded
+                result = list(filterfalse(excluded.__contains__, result))
 
         return result
 
-    def _union_of(self, component_types: tuple[type[Component], ...]) -> set[str]:
-        """Union the index sets for several component types.
+    def _union_of(
+        self, component_types: tuple[type[Component], ...]
+    ) -> dict[str, None]:
+        """Union the indexes for several component types, keeping their order.
 
         Args:
             component_types: The classes whose indexes to combine.
 
         Returns:
-            A new set of every id carrying at least one of them.
+            A new ordered set of every id carrying at least one of them.
         """
-        union: set[str] = set()
+        union: dict[str, None] = {}
         for component_type in component_types:
             index = self._component_index.get(component_type)
             if index:
-                union |= index
+                union.update(index)
         return union
 
     def _on_entity_component_added(
@@ -1041,7 +1051,7 @@ class EntityManager:
             entity_id: The id of the entity that gained the component.
             component_type: The component class that was attached.
         """
-        self._component_index[component_type].add(entity_id)
+        self._component_index[component_type][entity_id] = None
         self._query_cache.on_component_added(entity_id, component_type)
 
         entity = self._entities.get(entity_id)
@@ -1070,7 +1080,7 @@ class EntityManager:
         """
         index = self._component_index.get(component_type)
         if index is not None:
-            index.discard(entity_id)
+            index.pop(entity_id, None)
         self._query_cache.on_component_removed(entity_id, component_type)
 
         if component_type is ChildOf:

@@ -234,13 +234,11 @@ class FlockingSystem:
     crosses the boundary every tick and the crossing is 63% of a native
     tick. See `docs/adr/0004-the-native-boundary.md`, Decision 3.
 
-    **The sweep order is not reproducible across processes**, and that is
-    a property of the ECS rather than of this system or its native
-    store. `get_entities_with_cached` iterates a set of uuid4 ids, so the
-    slot order differs every run -- and because the sweep is
-    Gauss-Seidel, the order is part of the simulation. A seeded flock
-    therefore does not tick the same way twice. Issue #324; both stores
-    inherit it equally, and each is deterministic given its input.
+    **The sweep order is reproducible across processes**, because
+    `get_entities_with_cached` keeps insertion order. That matters because the
+    sweep is Gauss-Seidel, so the order is part of the simulation: a seeded
+    flock ticks the same way every run, on either store. It used to iterate a
+    set of uuid4 ids, and did not (#324).
 
     Example:
         >>> system_manager.register(FlockingSystem(entity_manager), priority=150)

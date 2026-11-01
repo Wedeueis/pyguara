@@ -684,8 +684,8 @@ def test_a_cached_query_hands_back_an_immutable_view() -> None:
 
     cached = manager._query_cache.get_cached(Position)
 
-    assert isinstance(cached, frozenset)
-    assert cached == {entity.id}
+    assert isinstance(cached, tuple)
+    assert cached == (entity.id,)
 
 
 def test_iterating_a_cached_query_survives_spawning_into_it() -> None:
@@ -717,8 +717,8 @@ def test_query_cache_distinguishes_registered_empty_from_unregistered() -> None:
     manager = EntityManager()
     manager.register_cached_query(Position)
 
-    # Registered, but nothing matches yet: empty frozenset, not None.
-    assert manager._query_cache.get_cached(Position) == frozenset()
+    # Registered, but nothing matches yet: empty, not None.
+    assert manager._query_cache.get_cached(Position) == ()
 
     # Never registered at all: None.
     assert manager._query_cache.get_cached(Health) is None
@@ -762,7 +762,7 @@ def test_query_cache_reports_correct_count_after_entity_removal() -> None:
         manager.remove_entity(e.id)
     manager.flush_pending_removals()
 
-    assert manager._query_cache.get_cached(Position) == frozenset()
+    assert manager._query_cache.get_cached(Position) == ()
     assert len(list(manager.get_entities_with_cached(Position))) == 0
 
 
@@ -1271,7 +1271,7 @@ class TestQueryCacheSnapshots:
         after = manager._query_cache.get_cached(Position)
 
         assert after is not before
-        assert after == frozenset()
+        assert after == ()
 
     def test_a_removal_that_changes_nothing_keeps_the_snapshot(self) -> None:
         """Dropping the snapshot on a no-op would rebuild it once per
@@ -1425,4 +1425,4 @@ class TestQueryOperators:
         narrowed = manager._matching_entity_ids((Position,), without=(Health,))
 
         assert narrowed is not manager._component_index[Position]
-        assert narrowed == {"plain"}
+        assert list(narrowed) == ["plain"]
