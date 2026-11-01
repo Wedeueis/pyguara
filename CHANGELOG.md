@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`RichLabel`, with inline bold, italic, colour and size** (#340), in BBCode-style markup: `[b]`, `[i]`, `[color=#rrggbb]`, `[size=N]`, and `[[` for a literal bracket. A malformed string raises `MarkupError` when it is set, and `escape_markup` is for anything a player typed. `UIRenderer.draw_text` and `get_text_size` gain keyword-only `bold` and `italic`, which a custom renderer needs in order to draw one.
+- **`spawn_objects` turns a map's objects into entities, through prefabs** (#345), from `pyguara.tilemap.spawning`. Every problem is listed with nothing spawned, a property named `Component.field` overrides that field, and a sized rectangle or a circle shapes the prefab's `Collider` or `TriggerVolume`.
+
+### Fixed
+- **A seeded simulation now reproduces** (#324). ECS queries iterated a `set` of uuid4 strings, so order differed per process, and a Gauss-Seidel system such as `FlockingSystem` simulated differently every run, which meant no replay containing a flock could reproduce. The component index, the query cache and `children_of` now keep insertion order, on either store and under any `PYTHONHASHSEED`. **Existing flocks will settle differently once**, since the order they had was arbitrary. Queries also got faster, up to 1.41x at 10,000 entities: see `docs/guides/performance.md`.
+- **A UI can draw what `ResourceManager` loads** (#363). Both UI renderers returned silently for anything but a raw `pygame.Surface`. A texture is now unwrapped, and on ModernGL the first UI draw reads it back from the GPU and keeps the copy, at 2.1 ms for 1024x1024. `NinePatchPanel.from_resources()` loads from `sprite.texture_path`, and anything a UI still cannot draw logs one warning.
+- **`MapObject.center` handles tile objects and rotation** (#345). A tile object's origin is its bottom left, and Tiled rotates about that corner, so a rotated or tile-stamped object's centre was wrong.
+
 ## [0.6.0] - 2026-11-01
 
 The audit remediation tracked in #305, reconciled with the Rust core RFC. Three things to know before upgrading: **a source build now needs a Rust toolchain**, because the wheel ships the native accelerator (an install from a wheel does not); **a playing sound is a `SoundHandle`, not a channel number**; and **`pyguara.editor` is now part of `pyguara.studio`**. Every breaking change is marked below.
