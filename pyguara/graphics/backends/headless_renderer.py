@@ -279,7 +279,14 @@ class HeadlessUIRenderer:
         ...
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        bold: bool = False,
+        italic: bool = False,
     ) -> None:
         """No-op: discard the draw call."""
         ...
@@ -294,7 +301,9 @@ class HeadlessUIRenderer:
         """No-op: discard the draw call."""
         ...
 
-    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
+    def get_text_size(
+        self, text: str, size: int, *, bold: bool = False, italic: bool = False
+    ) -> tuple[int, int]:
         """Return a zero size: no text is ever actually measured/rendered."""
         return (0, 0)
 

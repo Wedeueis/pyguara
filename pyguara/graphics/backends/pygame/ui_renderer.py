@@ -27,7 +27,7 @@ class PygameUIRenderer:
     def __init__(self, target_surface: pygame.Surface) -> None:
         """Initialize the renderer."""
         self._surface = target_surface
-        self._font_cache: dict[int, pygame.font.Font] = {}
+        self._font_cache: dict[tuple[int, bool, bool], pygame.font.Font] = {}
         self._clips = ClipStack()
         self._warned_about_clips = False
 
@@ -38,11 +38,14 @@ class PygameUIRenderer:
     # The previous turn's implementation was largely correct except for D205
     # I will reprint the full file to be safe and ensure consistency.
 
-    def _get_font(self, size: int) -> pygame.font.Font:
-        """Retrieve or create a font of the specific size."""
-        if size not in self._font_cache:
-            self._font_cache[size] = pygame.font.SysFont("arial", size)
-        return self._font_cache[size]
+    def _get_font(
+        self, size: int, bold: bool = False, italic: bool = False
+    ) -> pygame.font.Font:
+        """Retrieve or create a font of the specified size and style."""
+        key = (size, bold, italic)
+        if key not in self._font_cache:
+            self._font_cache[key] = pygame.font.SysFont("arial", size, bold, italic)
+        return self._font_cache[key]
 
     def _to_pygame_color(self, color: Color) -> tuple[int, int, int, int]:
         """Convert engine Color to Pygame tuple."""
@@ -104,13 +107,20 @@ class PygameUIRenderer:
             pygame.draw.polygon(self._surface, rgba, points, width)
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        bold: bool = False,
+        italic: bool = False,
     ) -> None:
         """Render text to the screen."""
         if not text:
             return
 
-        font = self._get_font(size)
+        font = self._get_font(size, bold, italic)
         rgba = self._to_pygame_color(color)
 
         texture = font.render(text, True, rgba)
@@ -142,9 +152,11 @@ class PygameUIRenderer:
             source_rect,
         )
 
-    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
+    def get_text_size(
+        self, text: str, size: int, *, bold: bool = False, italic: bool = False
+    ) -> tuple[int, int]:
         """Calculate the width/height of a string."""
-        font = self._get_font(size)
+        font = self._get_font(size, bold, italic)
         txt_size = font.size(text)
         return (txt_size[0], txt_size[1])
 

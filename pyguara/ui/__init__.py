@@ -10,6 +10,7 @@ from pyguara.ui.components.navbar import NavBar
 from pyguara.ui.components.nine_patch_panel import NinePatchPanel
 from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.progress_bar import ProgressBar
+from pyguara.ui.components.rich_label import RichLabel
 from pyguara.ui.components.slider import Slider
 from pyguara.ui.components.text import Label
 from pyguara.ui.components.text_input import TextInput
@@ -38,6 +39,7 @@ __all__ = [
     # Components
     "Widget",
     "Label",
+    "RichLabel",
     "Panel",
     "NinePatchPanel",
     "Button",
