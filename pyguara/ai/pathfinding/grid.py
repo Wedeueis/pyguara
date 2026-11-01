@@ -16,6 +16,10 @@ from pyguara.common.types import Vector2
 # GridNode is just an (x, y) tuple for efficiency
 GridNode = Cell
 
+# Spelled through `neighbors4`/`neighbors8` so the order has one source.
+_OFFSETS_4 = tuple(_neighbors4((0, 0)))
+_OFFSETS_8 = tuple(_neighbors8((0, 0)))
+
 
 class GridGraph:
     """A 2D grid graph supporting 4 or 8 directional movement."""
@@ -37,10 +41,6 @@ class GridGraph:
         """Check if node is not a wall."""
         return node not in self.walls
 
-    def _is_walkable(self, node: GridNode) -> bool:
-        """Check if a node is both in bounds and not a wall."""
-        return self.in_bounds(node) and self.is_passable(node)
-
     def get_neighbors(self, node: GridNode) -> Iterator[GridNode]:
         """Yield valid neighbors.
 
@@ -48,22 +48,32 @@ class GridGraph:
         flanking the diagonal must be walkable (in bounds and not a wall),
         matching the deleted `GridMap`'s behavior -- an out-of-bounds
         flanking cell blocks the diagonal too, not just an actual wall.
-        """
-        candidates = _neighbors8(node) if self.allow_diagonal else _neighbors4(node)
 
+        This is the largest Python cost in grid pathfinding, so it reads the
+        grid directly instead of calling `in_bounds` and `is_passable` up to
+        six times per candidate. The yield order is load-bearing:
+        `rust/src/flowfield.rs` replicates it bit-exactly.
+        """
+        offsets = _OFFSETS_8 if self.allow_diagonal else _OFFSETS_4
+        width, height, walls = self.width, self.height, self.walls
         x, y = node
-        for next_node in candidates:
-            dx, dy = next_node[0] - x, next_node[1] - y
-            if not (self.in_bounds(next_node) and self.is_passable(next_node)):
+        # A diagonal's flanks are (nx, y) and (x, ny), and nx and ny have been
+        # bounds-checked by then, so only the node's own axes remain.
+        node_in_bounds = 0 <= x < width and 0 <= y < height
+
+        for dx, dy in offsets:
+            nx, ny = x + dx, y + dy
+            if not (0 <= nx < width and 0 <= ny < height) or (nx, ny) in walls:
                 continue
 
-            if abs(dx) == 1 and abs(dy) == 1:
-                if not self._is_walkable((x + dx, y)) or not self._is_walkable(
-                    (x, y + dy)
-                ):
-                    continue
+            if (
+                dx
+                and dy
+                and (not node_in_bounds or (nx, y) in walls or (x, ny) in walls)
+            ):
+                continue
 
-            yield next_node
+            yield (nx, ny)
 
     def cost(self, from_node: GridNode, to_node: GridNode) -> float:
         """Calculate movement cost, 1.0 orthogonal, 1.414 diagonal."""

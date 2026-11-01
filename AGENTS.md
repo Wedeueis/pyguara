@@ -518,7 +518,7 @@ beside the Python one:
 
 | | native gain | |
 | --- | ---: | --- |
-| `FlowFieldService` | **46-53x** | 96x96 recompute, 85 ms -> 1.6 ms |
+| `FlowFieldService` | **26-32x** | 96x96 recompute, 52 ms -> 1.6 ms |
 | `ParticleSystem` | 15-20x | whole frame, update plus render pack |
 | `Sparks` | 13-24x | whole frame, via `ShapeBatch` |
 | `FlockingSystem` | 8-19x | whole tick, 1000 agents 16 ms -> 1.9 ms |
