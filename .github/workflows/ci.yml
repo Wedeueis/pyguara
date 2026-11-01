@@ -164,6 +164,55 @@ jobs:
     needs: quality
     uses: ./.github/workflows/wheels.yml
 
+
+  # Windows is the main platform for networked games, and every other test job
+  # here runs on Ubuntu, so without this the transport only ever compiles there.
+  # Sockets are where the platforms differ: an ICMP port-unreachable fails a
+  # later `recv_from`, and timers are coarser, which the socket thread relies on.
+  network-windows:
+    name: Network (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: uv sync --all-extras
+
+      - name: Run the network suites
+        run: >-
+          uv run pytest tests/test_net_transport.py tests/test_net_hostile.py
+          tests/test_net_session.py tests/integration/test_net_udp.py
+
+      # Reports, rather than asserts: on Linux this link reads about 7 ms, and
+      # coarse Windows timers would show here as a much higher figure.
+      - name: Measure a real socket on loopback
+        shell: bash
+        run: |
+          uv run python tools/net_probe.py host --port 7791 --seconds 8 --wait 60 > host.log 2>&1 &
+          for _ in $(seq 60); do
+            invite=$(grep -o 'pyguara://[^"]*' host.log || true)
+            [ -n "$invite" ] && break
+            sleep 1
+          done
+          uv run python tools/net_probe.py join "$invite" --seconds 8
+          wait
+          cat host.log
+
   build-check:
     name: Build Verification
     runs-on: ubuntu-latest
