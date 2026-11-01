@@ -33,6 +33,12 @@ pyo3 = { version = "0.26", features = ["extension-module", "abi3-py312"] }
 # an MIT engine, but the wheel does distribute it. MP3 is off by default and
 # on here because `resources/meta.py` advertises the extension.
 symphonia = { version = "0.5", features = ["mp3"] }
+# The network transport's reliability and its encrypted handshake. Pure Rust,
+# both MIT or Apache-2.0. Pinned exactly, because `rust/src/net/core.rs` guards
+# panics in these exact versions: re-run `tests/test_net_hostile.py` and re-read
+# the parsers before moving either. See `network_multiplayer.md`, section 3.
+renet = "=2.0.1"
+renetcode = "=2.0.0"
 
 [profile.release]
 lto = "fat"
