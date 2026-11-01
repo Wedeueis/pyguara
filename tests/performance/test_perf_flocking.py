@@ -20,6 +20,8 @@ bounds how badly that degrades, rather than pretending it does not.
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from pyguara.ai.flocking_system import FlockingSystem
@@ -44,6 +46,17 @@ def _flock(count: int, *, spread: float, accelerate: bool):
     if accelerate and not FlockingSystem(EntityManager()).accelerated:
         pytest.skip("native extension not built; `cargo build --release`")
     return build_flock(count, spread=spread, accelerate=accelerate)
+
+
+def _fastest_interleaved(*systems: FlockingSystem, rounds: int = 15) -> list[float]:
+    """Each system's fastest tick, taking turns so they share the same load."""
+    best = [float("inf")] * len(systems)
+    for _ in range(rounds):
+        for index, system in enumerate(systems):
+            start = time.perf_counter()
+            system.update(DT)
+            best[index] = min(best[index], time.perf_counter() - start)
+    return best
 
 
 @pytest.mark.performance
@@ -141,12 +154,17 @@ def test_the_native_store_is_the_one_that_survives_a_horde() -> None:
     advantage *grows* in exactly that regime, because what clumping
     multiplies is the per-neighbour arithmetic rather than the crossing.
 
-    Measured at 2000 agents: Python 34ms uniform against 74ms clumped,
-    2.2x; native 3.9ms against 4.6ms, 1.26x -- a ratio of 0.56. So this
-    asserts the native degradation is under 0.7 of the Python one: the
-    thing a horde actually needs, and not something the uniform-density
-    ratio above would ever show. The bound is a ratio of ratios from
-    four timings, so it is left loose on purpose.
+    Measured at 2000 agents: Python 2.2x clumped over uniform, native 1.2x
+    -- a ratio of 0.55. So this asserts the native degradation is under 0.8
+    of the Python one: the thing a horde actually needs, and not something
+    the uniform-density ratio above would ever show. A native store that
+    degraded no better than Python would sit at 1.0.
+
+    The four timings are interleaved because they are a ratio of ratios.
+    Measured one after another, each sits in its own slice of whatever else
+    the machine is doing: 8 runs against 24 busy processes spread 0.17-0.96,
+    and an idle machine reached 0.86. Interleaved, the same load spreads
+    0.43-0.72 and idle 0.52-0.61.
     """
     count = 2000
     uniform = uniform_spread_for(count)
@@ -156,14 +174,13 @@ def test_the_native_store_is_the_one_that_survives_a_horde() -> None:
     _, native_uniform = _flock(count, spread=uniform, accelerate=True)
     _, native_clumped = _flock(count, spread=1200.0, accelerate=True)
 
-    python_penalty = measure(lambda: python_clumped.update(DT)) / measure(
-        lambda: python_uniform.update(DT)
+    py_uniform, py_clumped, nat_uniform, nat_clumped = _fastest_interleaved(
+        python_uniform, python_clumped, native_uniform, native_clumped
     )
-    native_penalty = measure(lambda: native_clumped.update(DT)) / measure(
-        lambda: native_uniform.update(DT)
-    )
+    python_penalty = py_clumped / py_uniform
+    native_penalty = nat_clumped / nat_uniform
 
-    assert native_penalty < python_penalty * 0.7, (
+    assert native_penalty < python_penalty * 0.8, (
         f"clumping cost the native store {native_penalty:.2f}x against "
         f"Python's {python_penalty:.2f}x. The native store is supposed to "
         "degrade more gracefully with density, not less."
