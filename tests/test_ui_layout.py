@@ -80,6 +80,7 @@ def test_box_layout_measures_children_before_stacking():
 
     renderer = _renderer()
     renderer.get_text_size.side_effect = lambda text, size: (len(text) * 8, 20)
+    renderer.get_line_height.return_value = 20
 
     container.layout(SCREEN, renderer)
 

@@ -97,18 +97,14 @@ class Label(Widget):
             )
             self._wrap_key = key
 
-        # Measured from the empty string, so the step between lines is a
-        # property of the font rather than of whichever glyphs a line
-        # happens to contain. Both shipped backends answer `font.size`,
-        # whose height is constant at a given size -- "aaa", "ÀÉÇ" and
-        # "" all measure 18 at size 16 -- so this is defensive rather
-        # than currently load-bearing. It is still the right call: the
-        # protocol promises nothing about the height, a FreeType-backed
-        # measurer would return the ink extent, and a label whose lines
-        # advanced by different amounts depending on their accents is a
-        # bug nobody would look for. `tests/test_ui_components.py` pins
-        # it with a renderer that does vary.
-        self._line_height = renderer.get_text_size("", self.font_size)[1]
+        # The step is a property of the font rather than of whichever glyphs
+        # a line happens to contain, and it is the font's own advance rather
+        # than a line's height: the two differ by the leading the font asks
+        # for, and setting by height runs a block one pixel short per line.
+        self._line_height = renderer.get_line_height(self.font_size)
+        # The last line has no line after it, so it takes no leading -- which
+        # also leaves a one-line label exactly as tall as its text.
+        last_line = renderer.get_text_size("", self.font_size)[1]
         if self._auto_size:
             self.rect.width = max(
                 (
@@ -117,7 +113,7 @@ class Label(Widget):
                 ),
                 default=0,
             )
-        self.rect.height = self._line_height * len(self._lines)
+        self.rect.height = self._line_height * (len(self._lines) - 1) + last_line
 
     def render(self, renderer: UIRenderer) -> None:
         """Draw one line per wrapped line, each positioned by `align`.

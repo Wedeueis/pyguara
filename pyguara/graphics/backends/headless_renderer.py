@@ -298,6 +298,17 @@ class HeadlessUIRenderer:
         """Return a zero size: no text is ever actually measured/rendered."""
         return (0, 0)
 
+    def get_line_height(self, size: int) -> int:
+        """Return zero: no text is ever actually laid out.
+
+        Args:
+            size: The font size. Ignored.
+
+        Returns:
+            Always 0, matching `get_text_size`.
+        """
+        return 0
+
     def resize(self, width: int, height: int) -> None:
         """No-op: nothing is drawn, so there is no surface to re-make.
 

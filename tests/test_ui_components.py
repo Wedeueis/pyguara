@@ -1,9 +1,11 @@
 from typing import Any
 from unittest.mock import MagicMock
 
+import pygame
 import pytest
 
 from pyguara.common.types import Color, Vector2
+from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.canvas import Canvas
@@ -19,6 +21,7 @@ def mock_renderer() -> Any:
     r = MagicMock(spec=UIRenderer)
     # Mock get_text_size to return something valid
     r.get_text_size.return_value = (50, 20)
+    r.get_line_height.return_value = 20
     return r
 
 
@@ -333,6 +336,9 @@ class _MeasuringRenderer:
         self.measurements += 1
         return (len(text) * 10 * size // 16, self.LINE_HEIGHT * size // 16)
 
+    def get_line_height(self, size: int) -> int:
+        return self.LINE_HEIGHT * size // 16
+
     def draw_text(
         self, text: str, position: Vector2, color: Color, size: int = 16
     ) -> None:
@@ -548,6 +554,50 @@ class _VariableHeightRenderer(_MeasuringRenderer):
     def get_text_size(self, text: str, size: int) -> tuple[int, int]:
         width, height = super().get_text_size(text, size)
         return (width, height + 10 * sum(1 for c in text if c.isupper()))
+
+
+class _LeadedRenderer(_MeasuringRenderer):
+    """A font whose line advance exceeds its height, as real fonts' do."""
+
+    def get_line_height(self, size: int) -> int:
+        return self.LINE_HEIGHT + 3
+
+
+class TestLinesAdvanceByTheFontsOwnStep:
+    """Setting by height ran a block one pixel short per line (#341)."""
+
+    def test_the_lines_step_by_the_advance_not_the_height(self) -> None:
+        renderer = _LeadedRenderer()
+        label = Label("one\ntwo\nthree", Vector2(0, 10))
+
+        label.render(renderer)
+
+        assert [y for _, _, y in renderer.texts] == [10, 33, 56]
+        assert label.line_height == 23
+
+    def test_the_last_line_takes_no_leading(self) -> None:
+        renderer = _LeadedRenderer()
+        label = Label("one\ntwo\nthree", Vector2(0, 0))
+
+        label.render(renderer)
+
+        assert label.rect.height == 23 * 2 + 20
+
+    def test_a_single_line_is_as_tall_as_its_text(self) -> None:
+        renderer = _LeadedRenderer()
+        label = Label("one", Vector2(0, 0))
+
+        label.render(renderer)
+
+        assert label.rect.height == 20
+
+    def test_a_real_font_answers_with_its_linesize(self) -> None:
+        pygame.font.init()
+        renderer = PygameUIRenderer(pygame.Surface((8, 8)))
+
+        font = pygame.font.SysFont("arial", 16)
+
+        assert renderer.get_line_height(16) == font.get_linesize()
 
 
 class TestTheLineStepIsAPropertyOfTheFont:
