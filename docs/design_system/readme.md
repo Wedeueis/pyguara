@@ -309,7 +309,8 @@ behaviour is encoded in the state tokens and in every component's disabled/hover
    *art* has wood and painted menu plates — `sage` recolours the plate into colonial green — and
    the editor needs a chrome-free toolbar button.
 2. `Panel`'s `bevel` prop, and the bevel/stamp shadow tokens. Derived from
-   `graphics/ninepatch.py` plus the plate art; the Python `Panel` draws a flat rect.
+   `graphics/ninepatch.py` plus the plate art. The Python `Panel` draws a flat rect, and
+   `NinePatchPanel` is the textured one.
 3. The Cerrado Dusk / Cerrado Day theme pair in `semantic.css`. None of the engine's six presets
    is an earthy brand theme, and the brief asked for one in both polarities. The engine's presets
    are preserved untouched in `engine-themes.css`.

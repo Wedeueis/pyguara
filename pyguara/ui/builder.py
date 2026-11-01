@@ -40,13 +40,15 @@ from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, TypeVar
 
-from pyguara.common.types import Color, Vector2
+from pyguara.common.types import Color, Rect, Vector2
+from pyguara.graphics.ninepatch import NinePatchSprite
 from pyguara.ui.base import UIElement
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.canvas import Canvas
 from pyguara.ui.components.checkbox import Checkbox
 from pyguara.ui.components.image import Image
 from pyguara.ui.components.navbar import NavBar
+from pyguara.ui.components.nine_patch_panel import NinePatchPanel
 from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.progress_bar import ProgressBar
 from pyguara.ui.components.slider import Slider
@@ -361,6 +363,29 @@ class UIBuilder:
         """
         return self.nest(Panel(position, size, color=color, border_width=border_width))
 
+    def nine_patch_panel(
+        self,
+        texture: Any,
+        sprite: NinePatchSprite,
+        position: Vector2 = _ORIGIN,
+        size: Vector2 = _ORIGIN,
+        *,
+        color: Color | None = None,
+    ) -> _Nested[NinePatchPanel]:
+        """Open a `NinePatchPanel` as a container.
+
+        Args:
+            texture: The backend texture to slice.
+            sprite: The edges, and the region of `texture` if it is an atlas.
+            position: Top-left corner.
+            size: Width and height.
+            color: Tint, if any.
+
+        Returns:
+            A context manager yielding the `NinePatchPanel`.
+        """
+        return self.nest(NinePatchPanel(texture, sprite, position, size, color=color))
+
     def navbar(self, width: int, height: int = 50) -> _Nested[NavBar]:
         """Open a `NavBar`, a horizontal bar container.
 
@@ -581,6 +606,7 @@ class UIBuilder:
         size: Vector2 = _ORIGIN,
         *,
         color: Color | None = None,
+        source_rect: Rect | None = None,
     ) -> Image:
         """Add an image.
 
@@ -589,11 +615,12 @@ class UIBuilder:
             position: Top-left corner.
             size: Width and height.
             color: Tint, if any.
+            source_rect: The region of `texture` to draw. None draws all of it.
 
         Returns:
             The `Image`.
         """
-        return self.add(Image(texture, position, size, color=color))
+        return self.add(Image(texture, position, size, color, source_rect))
 
     # -- internals ----------------------------------------------------
 
