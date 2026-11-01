@@ -31,7 +31,7 @@ class TestQueryCacheRegistration:
 
         manager.register_cached_query(Transform, RigidBody)
 
-        assert manager._query_cache.get_cached(Transform, RigidBody) == frozenset()
+        assert manager._query_cache.get_cached(Transform, RigidBody) == ()
 
     def test_multiple_query_registration(self):
         """Distinct combinations are tracked independently."""

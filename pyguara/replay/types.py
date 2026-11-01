@@ -155,16 +155,10 @@ class ReplayMetadata:
 
             **Matching stores is necessary and not sufficient**, and an
             earlier version of this docstring implied otherwise by
-            calling the two "deterministic individually". Neither is:
-            `EntityManager` assigns `uuid4` ids and
-            `get_entities_with_cached` iterates a set of them, so the
-            order a system visits its entities differs between
-            processes -- and for a Gauss-Seidel system such as
-            `FlockingSystem`, that order *is* the simulation. A replay
-            of a scene containing a flock therefore does not reproduce
-            under the same store either. Issue #324. This field still
-            earns its keep: it removes the one divergence a player can
-            cause by installing a different wheel.
+            calling the two "deterministic individually". Each is, now
+            that ECS queries keep insertion order (#324), and this field
+            removes the one divergence a player can cause by installing a
+            different wheel.
     """
 
     version: int = 1

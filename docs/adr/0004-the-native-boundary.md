@@ -317,6 +317,16 @@ guard against a divergence nobody can confirm happened.
   causes, and the one a player could trip by installing a wheel — but
   "replays reproduce" is not something this engine can claim for
   flocking games until #324 is resolved.
+
+  **Resolved: #324 is fixed in the ECS.** The component index and the query
+  cache keep insertion order, so every query comes back the same way in any
+  process, and a seeded flock is now identical across processes and hash seeds
+  on each store. This did not need a sort: a dict used as an ordered set reads
+  faster than the sets it replaced. What is written above stays as the record of
+  what was found. Two limits remain. Existing flocks settle differently once,
+  since the order they had was arbitrary; and `SpatialHash` still yields string
+  keys in hash order on the Python store, so a caller wanting one of several
+  results must still pick by distance or id, as its docs say.
 - **Not promised: the two stores agree bit for bit.** They cannot, and the
   reason is worth recording because it is not a thing better engineering
   fixes. `SpatialHash` buckets keys in a Python `set`, and set iteration
@@ -387,7 +397,7 @@ levels, because each tier catches what the others cannot:
    rather than a bug fix, because the sweep order it would pin is
    currently arbitrary — and it does not block the port — but it does mean the native store is *more* reproducible than
    the Python one it mirrors, which is the opposite of what a tolerance
-   usually implies.
+   usually implies. (Since fixed; see #324 under Decision 4.)
 
    **What the tolerance then has to be is: one permitted cause, stated,
    with everything else pinned exactly.** This is the rule the flocking
