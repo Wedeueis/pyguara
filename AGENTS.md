@@ -681,3 +681,36 @@ Linux x86_64 and aarch64, macOS x86_64 and arm64, Windows x64 -- and
 See `docs/adr/0003-native-core-spike.md` for why this is an accelerator
 rather than a rewrite, and `0006-shipping-the-native-extension.md` for why
 it ships in the wheel and what that costs.
+
+## Networking
+
+`pyguara.net` is opt-in: a single-player game imports none of it, and it imports
+fine with no extension. It is a backend, not a store, so `PYGUARA_NO_NATIVE=1`
+does not turn it off. Only the transport and session exist; replication and
+prediction are later phases of `project/backlog/active/network_multiplayer.md`.
+
+**Everything decoded from the network is untrusted, and that includes messages
+from an invited player.** The Rust core authenticates packets and survives hostile
+ones, but it does not make a value sensible. A decoder bounds-checks lengths, ids
+and enums, rejects non-finite floats, and never raises into the frame loop. Never
+unpickle network data.
+
+**`renet` and `renetcode` are pinned exactly, because both can be crashed remotely
+as shipped**, and `rust/src/net/core.rs` guards the specific versions. Before moving
+either, re-read their parsers and run `tests/test_net_hostile.py`. ADR 0007 lists
+each problem and its guard.
+
+**Don't test a stall with `time.sleep` or a Python busy loop.** The first releases
+the GIL and the second offers it every 5 ms, so neither proves a thread is
+independent of Python. And watch round trip past the end of a stall: it only updates
+when an ack lands, so held-back acks leave it frozen at a good value. An earlier
+version of `tests/integration/test_net_udp.py` passed with the thread deliberately
+broken for both reasons.
+
+```bash
+uv run python tools/net_probe.py simulate --latency-ms 50 --loss 0.02
+```
+
+A simulated network proves the logic, the way `agent_view` proves the render path.
+It cannot show how a real connection behaves, or whether playing over one feels
+good. See `docs/guides/network-probe.md`.

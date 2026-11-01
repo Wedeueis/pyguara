@@ -19,6 +19,7 @@ nav:
       - Visual Inspection (agents): guides/agent-visual-inspection.md
       - Agent Integration: guides/agent-integration.md
       - Measured Limits: guides/performance.md
+      - Testing a Network Path: guides/network-probe.md
   - Core:
       - Architecture: core/architecture.md
       - Entity Component System: core/ecs.md
@@ -43,6 +44,7 @@ nav:
       - Dev Tools: systems/dev.md
       - Editor Tools: systems/editor.md
       - Input: systems/input.md
+      - Networking: systems/networking.md
       - Persistence: systems/persistence.md
       - Prefabs: systems/prefabs.md
       - Replay: systems/replay.md

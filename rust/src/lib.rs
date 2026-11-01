@@ -35,6 +35,7 @@
 //! **An audio backend's decoder and resampler** -- `audio`. The one thing
 //! here that is not an accelerator: nothing in Python does what it does, so
 //! it is chosen by `AudioConfig.backend` rather than by the switch below.
+//! `net`, the network transport, is the same kind of thing.
 //!
 //! The extension is **optional** throughout. The pure-Python
 //! implementations are kept and used whenever it is absent, so the engine
@@ -54,6 +55,7 @@ mod audio;
 mod flocking;
 mod flowfield;
 mod grid;
+mod net;
 mod particles;
 mod sparks;
 mod spatialhash;
@@ -69,6 +71,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<particles::NativeParticlePool>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
     module.add_class::<spatialhash::NativeSpatialHash>()?;
+    net::register(module)?;
     module.add_function(wrap_pyfunction!(audio::decode_audio, module)?)?;
     module.add_function(wrap_pyfunction!(audio::resample_pcm, module)?)?;
     Ok(())
