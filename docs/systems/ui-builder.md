@@ -124,3 +124,45 @@ meant, rather than quietly producing a tree nobody will see:
 - `mount()` with no manager anywhere
 - attaching an element that already has a parent, which would silently
   remove it from the tree it is already in
+
+## Rich text
+
+`RichLabel` draws inline styling, in BBCode-style markup:
+
+```python
+ui.rich_label(
+    "[b]Tamanduá[/b] takes [color=#e2621f]12 fire[/color] damage",
+    width=420,
+)
+```
+
+| Tag | Does |
+| --- | --- |
+| `[b]...[/b]` | Bold |
+| `[i]...[/i]` | Italic |
+| `[color=#rrggbb]...[/color]` | Colour, with an optional alpha pair |
+| `[size=24]...[/size]` | Font size |
+| `[[` | A literal `[` |
+
+Tags nest and must close in order. A string that does not parse raises
+`MarkupError` **when it is set**, rather than drawing its own tags at the player.
+
+**Anything a player typed goes through `escape_markup`.** Otherwise a name with a
+`[` in it raises, and one with `[size=500]` in it restyles the dialogue:
+
+```python
+from pyguara.ui.rich_text import escape_markup
+
+label.text = f"[b]{escape_markup(player_name)}[/b] joined"
+```
+
+It wraps by the same rules as `Label`. A word may span several styles, and a break
+keeps the style on both sides. A line is as tall as its largest run, and runs of
+different sizes share a bottom edge, which is close to a shared baseline but not
+exact, because a renderer reports a line's height and not a font's ascent.
+
+`Label` is unchanged and is the one to use for plain text. Every run in a
+`RichLabel` is its own text draw, so a line of five styles costs five.
+
+Bold and italic come from `UIRenderer.draw_text(..., bold=, italic=)`, so a custom
+renderer has to accept them. They use whatever faces the system's font provides.

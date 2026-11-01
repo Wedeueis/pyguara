@@ -593,7 +593,14 @@ class UIRenderer(Protocol):
         ...
 
     def draw_text(
-        self, text: str, position: Vector2, color: Color, size: int = 16
+        self,
+        text: str,
+        position: Vector2,
+        color: Color,
+        size: int = 16,
+        *,
+        bold: bool = False,
+        italic: bool = False,
     ) -> None:
         """Draw text string."""
         ...
@@ -632,8 +639,10 @@ class UIRenderer(Protocol):
         """
         ...
 
-    def get_text_size(self, text: str, size: int) -> tuple[int, int]:
-        """Calculate dimensions of text."""
+    def get_text_size(
+        self, text: str, size: int, *, bold: bool = False, italic: bool = False
+    ) -> tuple[int, int]:
+        """Calculate dimensions of text in a style."""
         ...
 
     def get_line_height(self, size: int) -> int:

@@ -51,6 +51,7 @@ from pyguara.ui.components.navbar import NavBar
 from pyguara.ui.components.nine_patch_panel import NinePatchPanel
 from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.progress_bar import ProgressBar
+from pyguara.ui.components.rich_label import RichLabel
 from pyguara.ui.components.slider import Slider
 from pyguara.ui.components.text import Label
 from pyguara.ui.components.text_input import TextInput
@@ -418,6 +419,33 @@ class UIBuilder:
         return self.nest(Canvas(position, size, bg_color=bg_color))
 
     # -- leaves -------------------------------------------------------
+
+    def rich_label(
+        self,
+        text: str,
+        position: Vector2 = _ORIGIN,
+        *,
+        font_size: int = 16,
+        color: Color | None = None,
+        width: float | None = None,
+        align: TextAlign = TextAlign.LEFT,
+    ) -> RichLabel:
+        """Add a label with inline styling; see `pyguara.ui.rich_text`.
+
+        Args:
+            text: The marked-up text.
+            position: Top-left corner.
+            font_size: Size for text that does not state its own.
+            color: Colour for text that does not state its own.
+            width: Width to wrap and align within.
+            align: Horizontal alignment inside `width`.
+
+        Returns:
+            The `RichLabel`.
+        """
+        return self.add(
+            RichLabel(text, position, font_size, color, width=width, align=align)
+        )
 
     def label(
         self,
