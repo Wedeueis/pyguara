@@ -259,6 +259,19 @@ The choice therefore moves out of the subsystems:
   refused rather than quietly divergent. `ReplayRecorder.FORMAT_VERSION`
   has to move for this, as it did for W11's `controller_id`.
 
+**Amended by W28b: this switch governs stores, not backends.** A store is a
+faster implementation of something Python also does, so turning it off changes
+speed and nothing else. The native audio backend (#357) has no Python
+counterpart: `pygame.mixer` cannot pitch-shift. Hanging it off this switch would
+make `play_sfx(pitch=1.2)` start raising because somebody set a debugging
+variable, which is a gameplay change from a debug switch. So it is selected by
+`AudioConfig.backend`, the way `DisplayConfig.backend` selects a renderer, it is
+imported through `native.require_extension()` rather than `native_module()`, and
+**`PYGUARA_NO_NATIVE=1` no longer means "no native code runs"**. To isolate a bug
+in the audio, `PYGUARA_AUDIO_BACKEND=pygame` is the equivalent. There is no
+`auto`, for this Decision's own reason: it would vary a game's capabilities by
+machine.
+
 **Implementation status: built.** `pyguara/native.py` resolves the store
 once at bootstrap from `PerformanceConfig.native_acceleration`, reports
 it through `describe()` in the boot log, and raises at startup under

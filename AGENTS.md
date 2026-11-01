@@ -560,6 +560,11 @@ make native                          # rebuild in place after editing Rust
 PYGUARA_NO_NATIVE=1 uv run pytest    # force the Python path
 ```
 
+**`PYGUARA_NO_NATIVE=1` does not reach audio.** `NativeAudioSystem` is a
+*backend* with no Python counterpart, chosen by `AudioConfig.backend`, and is not
+one of the stores above: to rule it out, set `PYGUARA_AUDIO_BACKEND=pygame`. See
+`docs/systems/audio.md` and ADR 0004, Decision 4.
+
 `make native` is `maturin develop --release`, and the `--release` matters:
 `maturin develop` alone produces a *debug* build, which is slower than the
 Python it replaces. A bare `cargo build --release` still works and is
