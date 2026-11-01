@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import math
 import os
+import struct
 import sys
 import time
 from dataclasses import dataclass
@@ -783,6 +784,74 @@ def price_astar(side: int) -> Row:
     )
 
 
+def price_snapshot_encode(count: int) -> Row:
+    """Encoding a network snapshot, with its component reads pinned.
+
+    Sits on the plan's Rust/Python line (`network_multiplayer.md`). The reads
+    cannot move: they are ECS access. Only the packing can, and it would have
+    to be handed the columns those reads produced.
+    """
+    manager = EntityManager()
+    rng = RandomStream(count)
+    for _ in range(count):
+        entity = manager.create_entity()
+        entity.add_component(
+            Transform(position=Vector2(rng.uniform(0, 900), rng.uniform(0, 900)))
+        )
+        entity.add_component(FlockingAgent())
+        entity.add_component(Health(current=30, max_health=30))
+    record = struct.Struct("<HhhhhH")
+    buffer = bytearray(record.size * count)
+
+    def read() -> list[tuple[int, float, float, float, float, int]]:
+        columns = []
+        for index, entity in enumerate(
+            manager.get_entities_with(Transform, FlockingAgent, Health)
+        ):
+            position = entity.get_component(Transform).position
+            velocity = entity.get_component(FlockingAgent).velocity
+            columns.append(
+                (
+                    index,
+                    position.x,
+                    position.y,
+                    velocity.x,
+                    velocity.y,
+                    entity.get_component(Health).current,
+                )
+            )
+        return columns
+
+    columns = read()
+
+    def pack() -> None:
+        offset = 0
+        for nid, x, y, vx, vy, hp in columns:
+            record.pack_into(
+                buffer,
+                offset,
+                nid,
+                int(x * 4) & 0x7FFF,
+                int(y * 4) & 0x7FFF,
+                int(vx * 8),
+                int(vy * 8),
+                int(hp),
+            )
+            offset += record.size
+
+    def marshal() -> None:
+        np.array(columns, dtype=np.float64).tobytes()
+
+    read_ms = measure(read)
+    return Row(
+        f"snapshot_encode ({count})",
+        read_ms + measure(pack),
+        measure(marshal),
+        read_ms,
+        "stays Python: the read is half of it and cannot move",
+    )
+
+
 def main() -> int:
     """Price every candidate and print the table.
 
@@ -798,6 +867,7 @@ def main() -> int:
         price_projectiles(1000),
         price_spatial_index(1000),
         price_render_batcher(20000),
+        price_snapshot_encode(500),
     ]
 
     header = (
