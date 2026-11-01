@@ -169,6 +169,11 @@ Rules:
 - A query is identified by the *set* of its types; argument order is irrelevant.
 - `register_cached_query()` backfills from the current world, so registering
   after entities already exist is fine.
+- **Query order is reproducible.** The same sequence of operations gives the
+  same order in any process, which is what lets a seeded simulation replay. A
+  query follows its smallest index in the order entities joined it, so removing
+  and re-adding a component moves an entity to the end. Rely on it being
+  reproducible, not on any particular order.
 - `get_entities_with_cached()` falls back to a full intersection only when the
   combination was never registered. A registered query that currently matches
   nothing correctly yields nothing.

@@ -239,6 +239,30 @@ faster** in the worst order, and faster than the old *best* order too, since a
 dict insert beats a list memmove. `test_pool_churn_is_linear` measures
 newest-first specifically, because it was the order that fell over.
 
+### Query order, and what it cost
+
+Queries keep insertion order, because a Gauss-Seidel system's result depends on
+who goes first and a `set` of uuid4 strings iterates differently in every
+process (#324). The index moved from `set` to a dict used as an ordered set.
+Sorting results instead was priced at **3-4x slower**, and was not needed: this
+is faster to read. Milliseconds, min of 60 rounds, each entity with two
+components and one in ten with a third:
+
+| 10,000 entities | set | ordered | |
+| --- | ---: | ---: | ---: |
+| One component | 1.069 | **0.816** | 1.31x |
+| Two components | 1.527 | **1.112** | 1.37x |
+| Narrow intersection | 0.138 | **0.126** | 1.10x |
+| `without` | 1.247 | **1.037** | 1.20x |
+| Cached query | 1.067 | **0.759** | 1.41x |
+| Spawn all of them | 72.76 | 73.01 | no change |
+
+At 1,000 entities reads gain up to 1.17x, and `without` is about 4% slower.
+A dict's add and remove are 28% slower in isolation, which does not surface
+above the rest of a spawn. **One cost remains**: iterating right after removing
+most of an index is about 2.5x slower, because a dict keeps its holes until it
+next grows. It takes a mass despawn with no spawns after it to see this.
+
 ### Filtering disabled entities out of a query
 
 `get_entities_with`, `get_entities_with_cached`, `get_components` and
