@@ -14,7 +14,7 @@ build-backend = "maturin"
 
 [project]
 name = "pyguara"
-version = "0.5.0"
+version = "0.6.0"
 description = "Python game engine featuring a event and data driven archictecture."
 readme = "README.md"
 requires-python = ">=3.12"
