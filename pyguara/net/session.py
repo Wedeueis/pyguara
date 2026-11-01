@@ -37,6 +37,10 @@ _HASH_BYTES = 32
 _MAX_VERSION_BYTES = 64
 _MAX_REFUSAL_BYTES = 1024
 
+# More than this before the host's answer means something is wrong: a reliable message
+# can't be dropped silently, so the session ends instead.
+_MAX_MESSAGES_BEFORE_WELCOME = 16_384
+
 _WELCOME = b"\x01"
 _REFUSED = b"\x02"
 
@@ -208,10 +212,18 @@ class Versions:
 
 @dataclass(frozen=True, slots=True)
 class PlayerJoined:
-    """On the host: a player was admitted."""
+    """On the host: a player was admitted.
+
+    Attributes:
+        peer: The connection's id. Random, and gone when the connection is.
+        versions: What the player is running.
+        slot: The player's seat in this game, from 1, since the host is 0. Use this
+            rather than `peer` for anything per player, such as a drop's owner.
+    """
 
     peer: int
     versions: Versions
+    slot: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -224,7 +236,13 @@ class PlayerLeft:
 
 @dataclass(frozen=True, slots=True)
 class Joined:
-    """On a client: the host admitted us."""
+    """On a client: the host admitted us.
+
+    Attributes:
+        slot: Our seat in this game. See `PlayerJoined`.
+    """
+
+    slot: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,12 +298,16 @@ class HostSession:
         """
         self._transport = transport
         self._versions = versions
-        self._players: set[int] = set()
+        self._players: dict[int, int] = {}
 
     @property
     def players(self) -> frozenset[int]:
         """The peers currently admitted."""
         return frozenset(self._players)
+
+    def slot_of(self, peer: int) -> int | None:
+        """Return an admitted peer's seat, or None if it has none."""
+        return self._players.get(peer)
 
     def send(self, peer: int, channel: Channel, data: bytes) -> bool:
         """Send to an admitted player.
@@ -323,7 +345,7 @@ class HostSession:
                     events.append(joined)
             elif isinstance(event, PeerDisconnected):
                 if event.peer in self._players:
-                    self._players.discard(event.peer)
+                    del self._players[event.peer]
                     events.append(PlayerLeft(event.peer, event.reason))
             elif isinstance(event, TransportFailed):
                 events.append(SessionFailed(event.reason))
@@ -338,9 +360,11 @@ class HostSession:
         if mismatch is not None:
             self._refuse(event.peer, mismatch)
             return None
-        self._players.add(event.peer)
-        self._transport.send(event.peer, Channel.CONTROL, _WELCOME)
-        return PlayerJoined(event.peer, theirs)
+        taken = set(self._players.values())
+        slot = next(s for s in range(1, len(taken) + 2) if s not in taken)
+        self._players[event.peer] = slot
+        self._transport.send(event.peer, Channel.CONTROL, _WELCOME + bytes([slot]))
+        return PlayerJoined(event.peer, theirs, slot)
 
     def _refuse(self, peer: int, reason: str) -> None:
         message = _REFUSED + reason.encode()[:_MAX_REFUSAL_BYTES]
@@ -365,6 +389,9 @@ class ClientSession:
         self._transport = transport
         self._joined = False
         self._ended = False
+        # Channels aren't ordered against each other, so a reliable message can overtake
+        # the welcome when the welcome's packet is lost. Dropping it would be permanent.
+        self._early: list[MessageDelivered] = []
 
     @property
     def joined(self) -> bool:
@@ -405,12 +432,23 @@ class ClientSession:
         if event.channel != Channel.CONTROL:
             if self._joined:
                 events.append(MessageReceived(event.peer, event.channel, event.data))
+            elif not self._ended:
+                self._early.append(event)
+                if len(self._early) > _MAX_MESSAGES_BEFORE_WELCOME:
+                    self._ended = True
+                    self._early.clear()
+                    events.append(SessionFailed("Too much data before being admitted."))
             return
-        if event.data == _WELCOME and not self._joined:
+        if len(event.data) == 2 and event.data[:1] == _WELCOME and not self._joined:
             self._joined = True
-            events.append(Joined())
+            events.append(Joined(event.data[1]))
+            events.extend(
+                MessageReceived(m.peer, m.channel, m.data) for m in self._early
+            )
+            self._early.clear()
         elif event.data[:1] == _REFUSED and not self._joined:
             self._ended = True
+            self._early.clear()
             raw = event.data[1 : 1 + _MAX_REFUSAL_BYTES]
             events.append(Refused(raw.decode("utf-8", errors="replace")))
 
