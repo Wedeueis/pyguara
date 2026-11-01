@@ -130,3 +130,43 @@ it if it is meant to be there.
 PyYAML is installed), and `.prefab` (format auto-detected). A file whose
 top-level value is not a mapping raises `ValueError`. If `name` is omitted the
 file stem is used.
+
+## Spawning from a map
+
+`spawn_objects` turns the objects on a Tiled or LDtk map into entities. The map
+says what an object's `type` is, and the game says which prefab that means:
+
+```python
+from pyguara.tilemap import load_tmx
+from pyguara.tilemap.spawning import spawn_objects
+
+level = load_tmx("levels/cave.tmx")
+spawned = spawn_objects(
+    level,
+    factory,
+    {"Bat": bat_prefab, "Door": door_prefab},
+    ignore_types={"CameraBounds"},  # read through `level.objects(...)` instead
+)
+for item in spawned:
+    item.entity, item.source  # the entity, and the MapObject it came from
+```
+
+It lives in its own module, not `pyguara.tilemap`, so reading a map never imports
+the ECS.
+
+| Rule | Why |
+| --- | --- |
+| **All or nothing.** Every object is checked first, and `MapSpawnError` lists every problem with nothing spawned | A mistake should not leave half a level in the world |
+| An object whose `type` has no prefab raises | A silently unspawned enemy is found by noticing a room is empty. Use `ignore_types` for what the game handles itself |
+| An object with no `type` is skipped | It names nothing |
+| `Transform` goes at the object's **centre** | A collider is centred on its transform. Tile objects, whose corner is the bottom left, and rotated objects are handled |
+| A sized rectangle or a circle shapes any `Collider` or `TriggerVolume` in the prefab | So a door is the size it was drawn |
+| A polygon or polyline on a prefab with a collider raises | `Collider.dimensions` cannot carry vertices, and a bounding box would collide where nothing is drawn |
+| Objects and layers hidden in the editor are skipped | `include_hidden=True` to spawn them |
+
+**Properties.** A custom property named `Component.field` overrides that field,
+and can go deeper (`Health.max = 30`, `Transform.scale.x = 2`). It beats the
+object's own shape, and a component or field that does not exist raises. Any
+other property is the game's own, on `item.source.properties`.
+
+`offset=` moves everything, for a room placed inside a larger world.
