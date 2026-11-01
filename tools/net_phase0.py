@@ -20,12 +20,14 @@ from __future__ import annotations
 import math
 import os
 import random
+import secrets
 import struct
 import sys
 import time
 import zlib
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -39,6 +41,22 @@ from pyguara.events.dispatcher import EventDispatcher  # noqa: E402
 from pyguara.kits.action_combat import Health  # noqa: E402
 from pyguara.kits.topdown_movement.body import TopDownBody  # noqa: E402
 from pyguara.kits.topdown_movement.system import TopDownSystem  # noqa: E402
+from pyguara.net import (  # noqa: E402
+    Angle,
+    Channel,
+    ClientSession,
+    HostSession,
+    MessageReceived,
+    PlayerJoined,
+    QuantisedVector,
+    Replicated,
+    ReplicationClient,
+    ReplicationHost,
+    ReplicationSchema,
+    SimulatedNetwork,
+    UInt16,
+    Versions,
+)
 from pyguara.physics.backends.pymunk_impl import PymunkEngine  # noqa: E402
 from pyguara.physics.character_mover import CharacterMover  # noqa: E402
 from pyguara.physics.components import Collider, RigidBody  # noqa: E402
@@ -405,11 +423,149 @@ def probe_replay() -> None:
         _replay_scenario(enemy)
 
 
+class _ProbeFrame:
+    """One frame of a host and its clients, timing the host and the first client."""
+
+    def __init__(
+        self,
+        network: SimulatedNetwork,
+        host_session: HostSession,
+        host: ReplicationHost,
+        flocking: FlockingSystem,
+        sessions: list[ClientSession],
+        clients: list[ReplicationClient],
+    ) -> None:
+        self._network = network
+        self._host_session = host_session
+        self._host = host
+        self._flocking = flocking
+        self._sessions = sessions
+        self._clients = clients
+        self._tick = 0
+
+    def _run_client(self, index: int) -> None:
+        client = self._clients[index]
+        for event in self._sessions[index].poll():
+            if isinstance(event, MessageReceived):
+                client.handle_message(event.channel, event.data)
+        client.update(DT)
+
+    def frame(self) -> tuple[float, float]:
+        self._network.advance(DT)
+        for event in self._host_session.poll():
+            if isinstance(event, PlayerJoined):
+                self._host.add_peer(event.peer, event.slot)
+        self._flocking.update(DT)
+        self._tick += 1
+        began = time.perf_counter()
+        self._host.step(self._tick)
+        sent = time.perf_counter() - began
+        began = time.perf_counter()
+        self._run_client(0)
+        applied = time.perf_counter() - began
+        for index in range(1, len(self._clients)):
+            self._run_client(index)
+        return sent, applied
+
+
+def _spawner_for(world: EntityManager) -> Callable[[], Any]:
+    def spawn() -> Any:
+        entity = world.create_entity()
+        entity.add_component(Transform())
+        entity.add_component(Health(current=1, max_health=1))
+        return entity
+
+    return spawn
+
+
+def _make_schema() -> ReplicationSchema:
+    built = ReplicationSchema()
+    built.register(Transform, position=QuantisedVector(step=0.25), rotation=Angle())
+    built.register(Health, current=UInt16())
+    return built
+
+
+def probe_replication() -> None:
+    """What the built replication costs per frame, with the real core underneath."""
+    print("\n== replication: built, 3 clients, real Rust core, no network loss ==")
+    print(
+        f"{'entities':>8} {'host send':>10} {'%frame':>7} {'client apply':>13} "
+        f"{'%frame':>7} {'bytes/client':>13} {'Mbit/s':>7}"
+    )
+    for count in (200, 500, 1000):
+        network = SimulatedNetwork(seed=count)
+        key = secrets.token_bytes(32)
+        host_transport = network.add_host(key)
+        address = network.address_of(host_transport)
+        versions = Versions("probe", "1")
+        host_session = HostSession(host_transport, versions)
+        manager, flocking = build_horde(count)
+        for entity in list(manager.get_entities_with(Transform)):
+            entity.add_component(Replicated("enemy"))
+
+        bytes_sent = [0]
+
+        def send(
+            peer: int,
+            channel: Channel,
+            data: bytes,
+            session: HostSession = host_session,
+            counter: list[int] = bytes_sent,
+        ) -> bool:
+            counter[0] += len(data)
+            return session.send(peer, channel, data)
+
+        host = ReplicationHost(manager, _make_schema(), send)
+        sessions = []
+        clients = []
+        worlds = []
+        for _ in range(3):
+            world = EntityManager()
+
+            client_transport = network.add_client(key, address, versions.encode())
+            sessions.append(ClientSession(client_transport))
+            clients.append(
+                ReplicationClient(world, _make_schema(), {"enemy": _spawner_for(world)})
+            )
+            worlds.append(world)
+
+        world_state = _ProbeFrame(
+            network, host_session, host, flocking, sessions, clients
+        )
+        for _ in range(240):
+            world_state.frame()
+        assert len(clients[0].entities()) == count
+
+        bytes_sent[0] = 0
+        frames = 300
+        sends: list[float] = []
+        applies: list[float] = []
+        for _ in range(frames):
+            sent, applied = world_state.frame()
+            sends.append(sent)
+            applies.append(applied)
+        # Per frame, averaged over the snapshot cadence: a snapshot is every third.
+        send_ms = sum(sends) / frames * 1000
+        apply_ms = sum(applies) / frames * 1000
+        snapshots = frames / 3
+        per_client = bytes_sent[0] / 3 / snapshots
+        print(
+            f"{count:8d} {send_ms:9.3f}m {send_ms / (1000 / 60):7.1%} "
+            f"{apply_ms:12.3f}m {apply_ms / (1000 / 60):7.1%} "
+            f"{per_client:13.0f} {per_client * 8 * 20 / 1e6:7.2f}"
+        )
+        print(
+            f"         worst frame: host {max(sends) * 1000:.2f} ms, "
+            f"client {max(applies) * 1000:.2f} ms"
+        )
+
+
 def main() -> int:
     """Run every probe."""
     probe_snapshot()
     probe_notify()
     probe_replay()
+    probe_replication()
     return 0
 
 

@@ -75,6 +75,11 @@ DEMOS: dict[str, tuple[str, str, str]] = {
         "games.ecs_mental_model.scenes",
         "ECSScene",
     ),
+    "net_horde": (
+        "games.net_horde.bootstrap",
+        "games.net_horde.scenes",
+        "SideBySideScene",
+    ),
     "guara_falcao": (
         "games.guara_falcao.bootstrap",
         "games.guara_falcao.scenes",

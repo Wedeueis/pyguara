@@ -10,6 +10,19 @@ sensible, so code above this package bounds-checks lengths, ids and enums itself
 See `docs/systems/networking.md`.
 """
 
+from pyguara.net.driver import ClientDriver, HostDriver
+from pyguara.net.replication import Replicated, ReplicationClient, ReplicationHost
+from pyguara.net.schema import (
+    Angle,
+    EnumField,
+    Flag,
+    Int32,
+    Quantised,
+    QuantisedVector,
+    ReplicationSchema,
+    UInt8,
+    UInt16,
+)
 from pyguara.net.session import (
     ClientSession,
     HostSession,
@@ -28,9 +41,15 @@ from pyguara.net.simulated import LinkConditions, SimulatedNetwork
 from pyguara.net.transport import Channel, LinkStats, Transport, UdpTransport
 
 __all__ = [
+    "Angle",
     "Channel",
+    "ClientDriver",
     "ClientSession",
+    "EnumField",
+    "Flag",
+    "HostDriver",
     "HostSession",
+    "Int32",
     "Invite",
     "Joined",
     "Left",
@@ -39,11 +58,19 @@ __all__ = [
     "MessageReceived",
     "PlayerJoined",
     "PlayerLeft",
+    "Quantised",
+    "QuantisedVector",
     "Refused",
+    "Replicated",
+    "ReplicationClient",
+    "ReplicationHost",
+    "ReplicationSchema",
     "SessionEvent",
     "SessionFailed",
     "SimulatedNetwork",
     "Transport",
+    "UInt16",
+    "UInt8",
     "UdpTransport",
     "Versions",
 ]
