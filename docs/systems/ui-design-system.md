@@ -59,9 +59,9 @@ rule serves both. `text_on_primary` is chosen by luminance, so a pale action
 colour gets dark text. Any role passed explicitly wins over the rule; an
 unknown role name raises rather than being silently dropped.
 
-`ColorScheme(...)` still works and still fills every role -- but it fills
-them from the *generic* defaults, so a themed palette built that way renders
-its buttons in another theme's colours. Prefer `derive()`.
+`ColorScheme(...)` derives by the same rule, so the two agree on any palette.
+`derive()` is the one to prefer, because it names the valid roles when it
+refuses a typo.
 
 ## Tokens
 

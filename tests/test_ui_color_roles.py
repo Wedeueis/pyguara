@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import pytest
 
-from pyguara.common.types import Color
-from pyguara.ui.theme import UITheme
+from pyguara.common.types import Color, Vector2
+from pyguara.ui.components.button import Button
+from pyguara.ui.theme import UITheme, get_theme, set_theme
 from pyguara.ui.theme_presets import Themes
 from pyguara.ui.types import ColorScheme
 
@@ -53,6 +54,48 @@ class TestDefaultsAndDerivation:
 
         assert scheme.primary == DARK["primary"]
         assert scheme.background == DARK["background"]
+
+
+class TestTheConstructorDerivesToo:
+    """`ColorScheme(primary=...)` used to keep steel-blue action roles (#335)."""
+
+    def test_it_agrees_with_derive(self) -> None:
+        assert ColorScheme(**LIGHT) == ColorScheme.derive(**LIGHT)
+
+    def test_a_role_named_outright_still_wins(self) -> None:
+        scheme = ColorScheme(primary=Color(9, 9, 9), action_primary=Color(1, 2, 3))
+
+        assert scheme.action_primary == Color(1, 2, 3)
+        assert scheme.action_primary_press == Color(9, 9, 9).lerp(Color.BLACK, 0.15)
+
+    def test_a_real_colour_equal_to_the_marker_is_kept(self) -> None:
+        """Transparent black is a legitimate role; only the marker derives."""
+        scheme = ColorScheme(edge=Color(0, 0, 0, 0))
+
+        assert scheme.edge == Color(0, 0, 0, 0)
+
+    def test_a_partial_json_theme_derives(self) -> None:
+        brown = {"r": 58, "g": 26, "b": 20, "a": 255}
+
+        theme = UITheme.from_dict({"name": "t", "colors": {"primary": brown}})
+
+        assert theme.colors.action_primary == Color(58, 26, 20)
+
+    def test_clone_keeps_a_stated_role(self) -> None:
+        theme = UITheme(colors=ColorScheme(edge=Color(1, 2, 3)))
+
+        assert theme.clone().colors.edge == Color(1, 2, 3)
+
+    def test_a_themed_button_draws_in_the_theme(self) -> None:
+        """The issue's own demand: nothing asserted the pixels' source."""
+        previous = get_theme()
+        set_theme(UITheme(colors=ColorScheme(primary=Color(58, 26, 20))))
+        try:
+            button = Button("Start", Vector2(0, 0), Vector2(100, 40))
+
+            assert button.fill_color() == Color(58, 26, 20)
+        finally:
+            set_theme(previous)
 
 
 class TestSurfacesLiftInEitherDirection:
