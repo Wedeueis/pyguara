@@ -1,7 +1,7 @@
 //! The engine's optional native half.
 //!
-//! Four kinds of thing live here, and the differences between them are the
-//! whole of `docs/adr/0004-the-native-boundary.md`:
+//! Five kinds of thing live here, and the differences between the first
+//! four are the whole of `docs/adr/0004-the-native-boundary.md`:
 //!
 //! **Structure-of-arrays pools** -- `particles` and `sparks`. Fixed
 //! capacity, flat numeric state, no Python object a game holds a reference
@@ -32,6 +32,10 @@
 //! store that is *worse* than Python at anything: an alternating
 //! insert/query loop rebuilds the grid per query, 0.13x over 4000 keys.
 //!
+//! **An audio backend's decoder and resampler** -- `audio`. The one thing
+//! here that is not an accelerator: nothing in Python does what it does, so
+//! it is chosen by `AudioConfig.backend` rather than by the switch below.
+//!
 //! The extension is **optional** throughout. The pure-Python
 //! implementations are kept and used whenever it is absent, so the engine
 //! installs and runs with no Rust toolchain; `pyguara/native.py` is the
@@ -46,6 +50,7 @@
 
 use pyo3::prelude::*;
 
+mod audio;
 mod flocking;
 mod flowfield;
 mod grid;
@@ -64,5 +69,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<particles::NativeParticlePool>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
     module.add_class::<spatialhash::NativeSpatialHash>()?;
+    module.add_function(wrap_pyfunction!(audio::decode_audio, module)?)?;
+    module.add_function(wrap_pyfunction!(audio::resample_pcm, module)?)?;
     Ok(())
 }

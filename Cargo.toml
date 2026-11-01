@@ -28,6 +28,11 @@ path = "rust/src/lib.rs"
 # newer than that pyo3 line. Resolved by using a current pyo3 instead; the
 # toolchain here is 1.99.
 pyo3 = { version = "0.26", features = ["extension-module", "abi3-py312"] }
+# The native audio backend's decoder. Pure Rust, so the wheel gains no system
+# dependency, and MPL-2.0: file-level copyleft, fine to link unmodified from
+# an MIT engine, but the wheel does distribute it. MP3 is off by default and
+# on here because `resources/meta.py` advertises the extension.
+symphonia = { version = "0.5", features = ["mp3"] }
 
 [profile.release]
 lto = "fat"

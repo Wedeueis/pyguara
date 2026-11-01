@@ -25,8 +25,9 @@ import math
 import os
 import struct
 import wave
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -40,9 +41,20 @@ from tools.audio_capture import (
     capture_tone_loop,
     compare_with_sine,
     read_capture,
+    use_disk_driver,
 )
 
 pytestmark = pytest.mark.integration
+
+
+def _has_extension() -> bool:
+    from pyguara import native
+
+    try:
+        native.require_extension("this test")
+    except RuntimeError:
+        return False
+    return True
 
 
 @pytest.fixture
@@ -153,3 +165,92 @@ def test_the_seam_check_catches_a_dropped_sample(tmp_path: Path) -> None:
 
     assert read_capture(path).interior_silence == [], "the splice left silence"
     assert not compare_with_sine(path, laps, segment_frames).contiguous
+
+
+def _write_seam_tone(path: Path, periods: int) -> Path:
+    """Write the phase-aligned tone, mono, for the engine's loader to read."""
+    frames = round(RATE / SEAM_FREQ * periods)
+    t = np.arange(frames) / RATE
+    tone = (SEAM_AMPLITUDE * np.sin(2 * math.pi * SEAM_FREQ * t)).astype(np.int16)
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(RATE)
+        out.writeframes(tone.tobytes())
+    return path
+
+
+def _capture_native(output: Path, play: Callable[[Any, Any], Any]) -> None:
+    """Run `play(system, clip)` on the native backend until it falls silent."""
+    use_disk_driver(output)
+    import pygame
+
+    from pyguara.audio.backends.native.native_audio import NativeAudioSystem
+
+    if pygame.mixer.get_init() is not None:
+        pygame.mixer.quit()
+    system = NativeAudioSystem(frequency=RATE)
+    handle = play(system, None)
+    while system.is_sound_active(handle):
+        system.update()
+        pygame.time.wait(5)
+    pygame.time.wait(60)
+    system.shutdown()
+
+
+@pytest.mark.skipif(not _has_extension(), reason="extension not built")
+class TestTheNativeBackendReachesTheOutput:
+    """Decode to speaker with no device, against the same detector as above."""
+
+    def test_a_loop_between_two_points_has_no_seam(
+        self, audio_env: None, tmp_path: Path
+    ) -> None:
+        """The region starts inside the clip, so one frame out is a jump."""
+        from pyguara.audio.backends.native.loaders import NativeSoundLoader
+
+        source = _write_seam_tone(tmp_path / "tone.wav", SEAM_PERIODS)
+        output = tmp_path / "loop.raw"
+        start_periods = SEAM_PERIODS // 4
+        lap_frames = round(RATE / SEAM_FREQ * (SEAM_PERIODS - start_periods))
+        duration = SEAM_PERIODS / SEAM_FREQ
+        laps = 3
+
+        def play(system: Any, _clip: Any) -> Any:
+            clip = NativeSoundLoader().load(str(source))
+            return system.play_sfx(
+                clip,
+                loops=laps,
+                loop_start=start_periods / SEAM_FREQ,
+                loop_end=duration,
+            )
+
+        _capture_native(output, play)
+
+        total_frames = round(RATE * duration) + lap_frames * laps
+        check = compare_with_sine(output, 1, total_frames)
+        capture = read_capture(output)
+        assert capture.interior_silence == []
+        assert check.max_delta <= 1, check.report()
+
+    def test_a_pitched_sound_comes_out_at_the_new_frequency(
+        self, audio_env: None, tmp_path: Path
+    ) -> None:
+        from pyguara.audio.backends.native.loaders import NativeSoundLoader
+
+        source = _write_seam_tone(tmp_path / "tone.wav", SEAM_PERIODS)
+        output = tmp_path / "pitched.raw"
+
+        def play(system: Any, _clip: Any) -> Any:
+            clip = NativeSoundLoader().load(str(source))
+            return system.play_sfx(clip, pitch=2.0)
+
+        _capture_native(output, play)
+
+        mono = np.frombuffer(output.read_bytes(), dtype="<i2")[::2].astype(float)
+        sounding = mono[np.flatnonzero(mono)[0] : np.flatnonzero(mono)[-1] + 1]
+        spectrum = np.abs(np.fft.rfft(sounding * np.hanning(len(sounding))))
+        peak = float(np.fft.rfftfreq(len(sounding), 1 / RATE)[int(np.argmax(spectrum))])
+        assert peak == pytest.approx(SEAM_FREQ * 2, abs=6)
+        assert len(sounding) == pytest.approx(
+            RATE / SEAM_FREQ * SEAM_PERIODS / 2, abs=4
+        )

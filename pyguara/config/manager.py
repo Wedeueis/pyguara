@@ -17,7 +17,7 @@ from pyguara.config.events import (
     OnConfigurationSaved,
 )
 from pyguara.config.sections import SectionRegistry
-from pyguara.config.types import GameConfig, RenderingBackend
+from pyguara.config.types import AudioBackend, GameConfig, RenderingBackend
 from pyguara.config.validation import (
     ConfigValidator,
     ValidationIssue,
@@ -683,6 +683,9 @@ class ConfigManager:
         )
         self._override_enum(
             "PYGUARA_BACKEND", self._config.display, "backend", RenderingBackend
+        )
+        self._override_enum(
+            "PYGUARA_AUDIO_BACKEND", self._config.audio, "backend", AudioBackend
         )
         self._override_int("PYGUARA_WINDOW_WIDTH", self._config.display, "screen_width")
         self._override_int(

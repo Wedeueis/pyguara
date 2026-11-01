@@ -347,6 +347,47 @@ def native_module() -> Any | None:
     return None
 
 
+def require_extension(needed_by: str) -> Any:
+    """Return the extension for code that has no Python implementation.
+
+    Not `native_module()`: that answers "which *store* is in force", and
+    returns None under `PYGUARA_NO_NATIVE=1`, a debugging switch. A backend
+    with nothing to fall back to is not a store and is not governed by it --
+    the same variable silently changing what a game can ask its audio for
+    would be a gameplay change from a debug switch. See ADR 0004, Decision 4.
+
+    Args:
+        needed_by: What wants it, for the error.
+
+    Returns:
+        The extension module.
+
+    Raises:
+        RuntimeError: If it cannot be imported.
+    """
+    try:
+        return importlib.import_module(_MODULE_NAME)
+    except ImportError:
+        pass
+    for library in _candidate_paths():
+        if not library.exists():
+            continue
+        spec = importlib.util.spec_from_file_location(_MODULE_NAME, library)
+        if spec is None or spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception:  # noqa: BLE001 - a stale or mismatched build
+            continue
+        sys.modules.setdefault(_MODULE_NAME, module)
+        return module
+    raise RuntimeError(
+        f"{needed_by} needs the native extension, and it cannot be imported. "
+        "An installed PyGuara ships it; in a checkout, run `make native`."
+    )
+
+
 def reset_lookup() -> None:
     """Forget the cached lookup, keeping the configured mode.
 

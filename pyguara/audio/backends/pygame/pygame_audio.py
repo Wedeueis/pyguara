@@ -122,6 +122,9 @@ class PygameAudioSystem:
             priority=priority,
             bus=bus,
             position=None,
+            pitch=pitch,
+            loop_start=loop_start,
+            loop_end=loop_end,
         )
 
     def _decline_unsupported(
@@ -217,6 +220,9 @@ class PygameAudioSystem:
             bus=bus,
             position=source_pos,
             pan=pan,
+            pitch=pitch,
+            loop_start=loop_start,
+            loop_end=loop_end,
         )
 
     def _play_sound(
@@ -228,9 +234,31 @@ class PygameAudioSystem:
         bus: AudioBusType,
         position: Vector2 | None,
         pan: float = 0.0,
+        pitch: float = 1.0,
+        loop_start: float | None = None,
+        loop_end: float | None = None,
+        sound: pygame.mixer.Sound | None = None,
     ) -> SoundHandle | None:
-        """Play a sound with all available options."""
-        native_sound = clip.native_handle
+        """Play a sound with all available options.
+
+        Args:
+            clip: The clip being played.
+            volume: Base volume before the bus and import gains.
+            loops: Times to loop, -1 for forever.
+            priority: Priority for channel stealing.
+            bus: The bus to route through.
+            position: World position, for a spatial sound.
+            pan: Stereo pan.
+            pitch: Already declined unless a subclass honours it.
+            loop_start: Already declined unless a subclass honours it.
+            loop_end: Already declined unless a subclass honours it.
+            sound: What to play in place of the clip's own sound, for a
+                subclass that has rendered a variant of it.
+
+        Returns:
+            A handle, or None if no channel was available.
+        """
+        native_sound = sound if sound is not None else clip.native_handle
 
         if not (hasattr(native_sound, "set_volume") and hasattr(native_sound, "play")):
             logger.error("Resource '%s' is not a valid Sound", clip.path)
@@ -596,6 +624,9 @@ class PygameAudioSystem:
             logger.debug("pygame.mixer already torn down", exc_info=True)
         self._playing_sounds.clear()
         self._handle_sounds.clear()
+
+    def update(self) -> None:
+        """Do nothing: this mixer needs no attention between plays."""
 
     def get_active_sound_count(self) -> int:
         """Get number of currently playing sounds."""
