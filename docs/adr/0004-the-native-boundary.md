@@ -721,7 +721,9 @@ is almost its reverse:
    which is A*'s 55% and the Python flow field's hot path too. Its yield
    order is replicated bit-exactly in `rust/src/flowfield.rs` and pinned
    by `tests/test_native_flow_field_parity.py`, so it is its own piece of
-   work rather than a line in anybody else's.
+   work rather than a line in anybody else's. **Since done, in Python**:
+   a query is 13.6 ms and the Python field 52 ms at 96x96, which moves the
+   flow field's gain from 46-53x to 26-32x with the native column unchanged.
 2. **Flocking — BUILT.** Priced at 15.4x at 1000 agents, which was 99%
    of a frame, and achieved **9.0x** — 16.6 ms down to 1.85 ms, or 11% of
    a frame. The first port of something that is *not* opaque: every agent

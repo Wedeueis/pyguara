@@ -644,6 +644,16 @@ calls this opacity, and it is the difference between this row and
 flocking's, which has to hand every agent's position back every tick --
 measured, 57x against 9x.
 
+**Those ratios are against a Python store that has since got faster.**
+`GridGraph.get_neighbors` was inlined afterwards, which the native sweep
+does not use, so the numerator moved and the native column did not:
+
+| Grid | Python | native | |
+| --- | ---: | ---: | ---: |
+| 32x32 | 5.16 | 0.195 | 26x |
+| 64x64 | 22.48 | 0.765 | 29x |
+| 96x96 | **52.18** | **1.641** | **32x** |
+
 `vector_at` got cheaper too, by **5.7x** (3.27 us -> 0.575 us), and the
 boundary had to be picked for it to. A crossing that returned the descent
 neighbour would have made the method *slower*: the lookup was never the
@@ -747,18 +757,20 @@ walls scattered, 8-directional with corner-cutting refused:
 
 | Grid | Cells | ms / query | path | share of a frame |
 | --- | ---: | ---: | ---: | ---: |
-| 32x32 | 1024 | 2.50 | 41 cells | 15% |
-| 64x64 | 4096 | 8.72 | 78 cells | 52% |
-| 96x96 | 9216 | **20.16** | 114 cells | **121%** |
+| 32x32 | 1024 | 1.68 | 41 cells | 10% |
+| 64x64 | 4096 | 5.98 | 78 cells | 36% |
+| 96x96 | 9216 | **13.63** | 114 cells | **82%** |
 
-So a single repath across a 96x96 floor is longer than a frame, and 51
-agents each repathing to their own target on that grid is **305 ms**.
-That is the number to design against: a game that repaths on a timer,
-staggered, is fine; one that repaths a crowd on an event is not.
+So a single repath across a 96x96 floor is most of a frame. That is the
+number to design against: a game that repaths on a timer, staggered, is
+fine; one that repaths a crowd on an event is not.
 
-Where it goes is the graph, not the search. Per query at 96x96:
-`get_neighbors` is **55%**, `cost` **19%**, the heuristic 6%, and the
-heap operations are rounding error.
+Where it went was the graph, not the search: at 96x96 `get_neighbors` was
+**55%** of a 20.09 ms query, `cost` **19%**, the heuristic 6%, and the heap
+operations rounding error, with 51 agents each repathing to their own
+target at **305 ms**. Inlining `get_neighbors`' bounds and wall tests took
+a third off, with the yield order untouched because the native flow field
+replicates it bit-exactly. The figures in the next paragraph predate that.
 
 **Not a native candidate, and the ratio is not why.** `T_cross` for a
 flow-field-shaped boundary -- the grid native, endpoints and path across
