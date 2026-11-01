@@ -1,5 +1,7 @@
 """Tests for the generic A* pathfinding package."""
 
+import random
+
 import pytest
 
 from pyguara.ai.pathfinding import (
@@ -13,6 +15,7 @@ from pyguara.ai.pathfinding import (
     smooth_path,
     world_to_grid_coords,
 )
+from pyguara.common.grid import neighbors4, neighbors8
 from pyguara.common.types import Vector2
 
 
@@ -693,3 +696,49 @@ class TestPathfindingIntegration:
 
         # Should reach goal
         assert current_pos == (9, 9)
+
+
+class TestGridNeighborsMatchTheirDefinition:
+    """`get_neighbors` is inlined for speed; this is what it was inlined from.
+
+    The native flow field replicates its yield order bit-exactly, so the
+    comparison is on the ordered list rather than the set, and it includes
+    out-of-bounds nodes, where the corner rule's flanks are off the grid.
+    """
+
+    @staticmethod
+    def _by_definition(grid: GridGraph, node: tuple[int, int]) -> list[tuple[int, int]]:
+        x, y = node
+        result = []
+        for cell in neighbors8(node) if grid.allow_diagonal else neighbors4(node):
+            if not (grid.in_bounds(cell) and grid.is_passable(cell)):
+                continue
+            dx, dy = cell[0] - x, cell[1] - y
+            if abs(dx) == 1 and abs(dy) == 1:
+                flanks = ((x + dx, y), (x, y + dy))
+                if not all(grid.in_bounds(f) and grid.is_passable(f) for f in flanks):
+                    continue
+            result.append(cell)
+        return result
+
+    @pytest.mark.parametrize("allow_diagonal", [True, False])
+    @pytest.mark.parametrize("seed", range(8))
+    def test_every_node_yields_the_same_ordered_list(
+        self, seed: int, allow_diagonal: bool
+    ) -> None:
+        rng = random.Random(seed)
+        width, height = rng.randint(1, 9), rng.randint(1, 9)
+        grid = GridGraph(width, height, allow_diagonal=allow_diagonal)
+        density = rng.choice((0.0, 0.2, 0.5))
+        grid.walls = {
+            (x, y)
+            for x in range(width)
+            for y in range(height)
+            if rng.random() < density
+        }
+
+        for x in range(-2, width + 2):
+            for y in range(-2, height + 2):
+                assert list(grid.get_neighbors((x, y))) == self._by_definition(
+                    grid, (x, y)
+                ), (x, y)
