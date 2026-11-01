@@ -39,6 +39,34 @@ shape that migrations apply to.
 `load_data` never raises for a bad file: a missing key, a truncated blob, a
 failed checksum, or a failed migration all log and return `None`.
 
+## Saving during play
+
+`save_data` serializes and fsyncs on the calling thread, so calling it from gameplay
+stalls a frame. `QuickSaver` does that work on a worker thread and writes only the
+newest value per key, at most once per `min_interval`:
+
+```python
+saver = QuickSaver(pm, min_interval=1.0)
+saver.request("character", character_as_plain_data())   # each time something changes
+saver.flush()                                           # at the end of a run
+saver.close()                                           # at shutdown
+```
+
+**Hand over a value you won't mutate.** It is serialized later on another thread, so a
+live object could be saved half-updated. A crash loses at most the last `min_interval`,
+and storage writes atomically, so it can't corrupt a save.
+
+| Save size | `save_data` on the main thread | `request` | Worst frame with quick saves |
+| ---: | ---: | ---: | ---: |
+| 4 KB | 4.2 ms | about 5 us | 1.5 ms |
+| 74 KB | 14.8 ms | about 4 us | 5.3 ms |
+| 1.5 MB | 356 ms | about 3 us | 6.6 ms |
+
+Worst frame is against 0.5 ms with no saves, writing as often as every 50 ms, in WSL2 on an
+SSD. Windows is unmeasured. The remaining stall is the GIL, since the JSON encoder holds it
+while serializing, so **keep quick-saved data small**, and prefer several small keys to one
+large one.
+
 ## On-disk format
 
 Each key is stored as **one file** — `saves/<key>.save` for the file
