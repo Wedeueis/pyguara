@@ -5,9 +5,7 @@ All themes can be customized by cloning and modifying specific properties.
 
 Each preset names only the base colours and lets `ColorScheme.derive()` fill
 the semantic roles -- surfaces, the text hierarchy, action states -- from
-them. Constructing `ColorScheme(...)` directly instead would leave every
-derived role at the *generic* default, so a magenta theme would render
-steel-blue buttons.
+them.
 
 Example:
     >>> from pyguara.ui.theme_presets import Themes
