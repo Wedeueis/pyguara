@@ -5,6 +5,7 @@ from pyguara.ui.components.canvas import Canvas
 from pyguara.ui.components.checkbox import Checkbox
 from pyguara.ui.components.image import Image
 from pyguara.ui.components.navbar import NavBar
+from pyguara.ui.components.nine_patch_panel import NinePatchPanel
 from pyguara.ui.components.panel import Panel
 from pyguara.ui.components.progress_bar import ProgressBar
 from pyguara.ui.components.slider import Slider
@@ -16,6 +17,7 @@ __all__ = [
     "Widget",
     "Label",
     "Panel",
+    "NinePatchPanel",
     "Button",
     "Image",
     "ProgressBar",
