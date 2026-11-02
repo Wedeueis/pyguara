@@ -367,9 +367,16 @@ replication.register(Health, current=UInt16(), maximum=UInt16())
 - **Deltas.** Each client acknowledges a snapshot, and the host encodes against that one,
   which keeps working through loss. Start with whole-entity state and measure, because
   delta logic adds bugs.
-- **Priority.** When a snapshot is over budget, send nearby and recently changed entities
-  first, per client. Skip interest management until a measurement asks for it: co-op
-  players are usually together, but the plan must allow them not to be.
+- **Over budget.** When a snapshot is over budget, each client rotates through the entities,
+  so every one is sent within a few snapshots. Strict nearest-first is ruled out: a far entity
+  might never update, which is a desync. When a real game goes over budget, move to priority
+  that builds up while an entity waits, which favours nearby entities and still gives every
+  one a turn. Skip interest management until a measurement asks for it: co-op players are
+  usually together, but the plan must allow them not to be.
+- **The budget doesn't know the host's upload.** It's a fixed 16 KB per client, so three guests
+  can reach 7.8 Mbit/s, and 1,000 entities already need 5.3. A slower upload saturates before
+  the budget applies, causing loss and lag rather than a lower update rate. Phase 5 adapts
+  sending to measured loss and round trip.
 
 **Don't drive replication from `notify_component_changed`.** Phase 0 confirmed the trap: over
 30 ticks, `FlockingSystem`, `TopDownSystem` and `PhysicsSystem` moved every entity and notified
@@ -495,11 +502,15 @@ With a host deciding everything, a client can't drift apart for long: the next s
 corrects it. These are the ways it can stay wrong, and each needs a rule and a test:
 
 - **A snapshot names an entity whose spawn hasn't arrived.** Channels aren't ordered against
-  each other. Hold such records until the spawn arrives, and never invent the entity.
+  each other. Never invent the entity. If the spawn is queued but not yet due, keep its records;
+  if it hasn't arrived, drop them, since the next snapshot repeats them.
 - **A despawn and a late snapshot cross.** Every event carries its tick; a record older than
   an entity's despawn tick is dropped, so a dead enemy can't reappear.
-- **Network ids get reused.** 16 bits wrap in a long session. Hold a freed id until every client
-  has acknowledged a snapshot newer than its despawn.
+- **Network ids get reused.** 16 bits wrap in a long session. Hold a freed id for 30 seconds of
+  ticks. This relies on timing rather than proof: a client more than 30 seconds behind but still
+  connected could apply a stale record to the new entity, until the next snapshot corrects it.
+  Per-client acknowledgements would close that gap, so add them if delta encoding is built,
+  since deltas need them anyway.
 - **A reliable event is applied before the snapshot it depends on.** Apply events at their tick
   on the interpolation timeline, not on arrival.
 - **Prediction disagrees for good.** Velocity must be a pure function of the command, and owner
@@ -570,7 +581,7 @@ screen shows a drop belonging to someone else.
 ### Phase 5: Robustness
 Lobby API, closing admission when a run starts (a late joiner is refused with a message saying
 so), character upload and validation, player leave, version refusal, level transfer, delta
-encoding if measurements call for it, debug overlay (ping, loss, bandwidth, correction
+encoding if measurements call for it, sending adapted to measured loss and round trip, debug overlay (ping, loss, bandwidth, correction
 size), scene-change barrier.
 **Done when:** a 4-player session survives a 30-minute soak over a real connection, a late
 joiner is refused, and one player leaving doesn't disturb the others.
@@ -669,7 +680,7 @@ the numbers, as the other tools do for frames and audio.
 | The crates build on all five wheel platforms | Inferred: no C in the dependency tree | Phase 1 |
 | 20 Hz and 100 ms of interpolation feels fine | Common practice, not tested here | Phase 3 |
 | A host can simulate, render and send at once | **Unknown.** #334's UI upload is already about 12 ms at 1080p | Phase 2 |
-| Home upload can carry 3 guests | Estimate from section 3: 2.9 Mbit/s plain, about 1.3 with deltas, at 500 entities | Phase 5 |
+| Home upload can carry 3 guests | Estimate from section 3: 2.9 Mbit/s plain, about 1.3 with deltas, at 500 entities. At 1,000 entities it's 5.3 plain. Real upload speeds are unmeasured until the second-machine probe | Phase 5 |
 | Clients can generate levels from a seed | Plausible since #324, untested across platforms; hence the hash and fallback | Phase 5 |
 | Character movement can be replayed alone | **Measured: yes**, bit-exact against walls, for top-down. Corrections near enemies are expected | How it feels: phase 3 |
 
@@ -702,7 +713,7 @@ Answered by the owner later the same day:
 | --- | --- | --- |
 | Which store | **Steam** | `SteamTransport` is the release path, and needs no relay of our own. Direct IP stays for development |
 | Can a dropped player return | **Not at first, but plan to add it** | See below |
-| What survives an abrupt end | **Guests keep what they earned**, saved as events arrive, without hurting performance | `QuickSaver` does this. Character events call `request`, and a run's end calls `flush` |
+| What survives an abrupt end | **Guests keep what they earned**, saved as events arrive, without hurting performance | `QuickSaver` does this. Character events call `request`, and a run's end calls `flush`. A game must not build a copy on every event, so add a form that takes a function, called on the main thread only when a write is due |
 | Reference games | **Ravenswatch and Heroes of Hammerwatch** | See below |
 | `Application.step` hooks | **Approved** | Phase 2 |
 | Design choices in `.claude/decision-log.md` | **Approved** | None |
