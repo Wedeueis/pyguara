@@ -11,6 +11,12 @@ See `docs/systems/networking.md`.
 """
 
 from pyguara.net.driver import ClientDriver, HostDriver
+from pyguara.net.prediction import (
+    CommandSchema,
+    PredictedBody,
+    PredictionClient,
+    PredictionHost,
+)
 from pyguara.net.replication import Replicated, ReplicationClient, ReplicationHost
 from pyguara.net.schema import (
     Angle,
@@ -45,6 +51,7 @@ __all__ = [
     "Channel",
     "ClientDriver",
     "ClientSession",
+    "CommandSchema",
     "EnumField",
     "Flag",
     "HostDriver",
@@ -59,6 +66,9 @@ __all__ = [
     "PlayerJoined",
     "PlayerLeft",
     "Quantised",
+    "PredictedBody",
+    "PredictionClient",
+    "PredictionHost",
     "QuantisedVector",
     "Refused",
     "Replicated",
