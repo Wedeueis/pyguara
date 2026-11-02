@@ -686,8 +686,9 @@ it ships in the wheel and what that costs.
 
 `pyguara.net` is opt-in: a single-player game imports none of it, and it imports
 fine with no extension. It is a backend, not a store, so `PYGUARA_NO_NATIVE=1`
-does not turn it off. The transport, session and replication exist; prediction and
-the rest are later phases of `project/backlog/active/network_multiplayer.md`.
+does not turn it off. The transport, session, replication and prediction exist;
+events and projectiles are later phases of
+`project/backlog/active/network_multiplayer.md`.
 
 **Everything decoded from the network is untrusted, and that includes messages
 from an invited player.** The Rust core authenticates packets and survives hostile
@@ -706,6 +707,11 @@ independent of Python. And watch round trip past the end of a stall: it only upd
 when an ack lands, so held-back acks leave it frozen at a good value. An earlier
 version of `tests/integration/test_net_udp.py` passed with the thread deliberately
 broken for both reasons.
+
+**A host never accepts a position from a client, only commands**, and one per tick
+however many arrive. `velocity_of` runs on untrusted commands on the host, so it has to
+limit what it returns. Velocity must be a pure function of the command, or a replay has
+nothing to re-run.
 
 ```bash
 uv run python tools/net_probe.py simulate --latency-ms 50 --loss 0.02

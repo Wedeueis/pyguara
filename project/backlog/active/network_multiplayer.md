@@ -320,9 +320,14 @@ on a real path in probe 4.
   session layer refuses with a reliable message saying both versions, then disconnects. A wrong
   key is silent too: the client times out, and the error must say to check the invite.
 
-**Ticks.** Commands carry the tick they apply to. The client estimates the host's tick
-from round-trip time and runs slightly ahead, so its commands arrive just in time. The
-host keeps a small per-player buffer, repeating the last command if one is late.
+**Ticks.** Commands carry the tick they apply to, and a state "at tick N" includes every
+command before N. The client runs ahead of the host by however much keeps commands arriving
+2 ticks early. The host measures that as it takes each command and reports the smallest value,
+which is more direct than estimating from round-trip time, since it's the one thing that
+matters and the two directions can differ. Each change starts a new epoch, which commands carry
+and the host echoes, so old measurements can't trigger a second correction. The host keeps a
+small per-player buffer, repeating the last command for 100 ms if one is late and then standing
+the character still.
 
 **Connection loss.** A silent peer times out after 10 seconds. If the host leaves, the session
 ends, and there's no migration. Whether a player who drops can return to the same run is an
@@ -456,9 +461,10 @@ a `meta` scope only the host writes, and a `character` scope on each machine.
 
 ### Prediction
 
-The client keeps a ring buffer of recent commands. On each snapshot it takes the host's
-position for its character at the last acknowledged tick, replays the newer commands from
-there, and compares. Small differences are smoothed over a few frames, and large ones snap.
+The client keeps its recent commands and predicted states. Each owner state from the host says
+what's true at a tick. If that's what the client predicted for that tick, nothing happens, so
+a player walking around walls replays nothing. Otherwise it goes back to the host's state and
+replays the newer commands. Small differences fade on screen, and large ones snap.
 
 **Replay works** (probe 3), which retires this plan's largest technical risk.
 `CharacterMover.move` only queries the space, so one character can re-run alone. Over 600 ticks
@@ -565,10 +571,18 @@ Network ids, schemas, spawn and despawn, snapshots, interpolation, frame hooks i
 **Done when:** a headless client's world converges to the host's after loss stops, and a
 visible demo runs with two windows on one machine.
 
+**Built (#378).** Convergence is tested. The demo runs headlessly, and the two windows are waiting
+on a person.
+
 ### Phase 3: Commands and prediction
 Remote players through the input layer, tick estimate, command buffer, prediction, reconciliation.
 **Done when:** at a simulated 100 ms and 2% loss, moving your own character feels immediate
 (a person must judge this), and the host and client agree on position afterwards.
+
+**Built, apart from the judgement.** Host and client end in exactly the same state, on the plan's
+network and at 20% loss, and the character moves on the tick of the input. Whether that feels
+immediate is the owner's call, using `games/net_horde`. Not built: predicting dashes and skills,
+which need a game to define them, and `kits/platformer_movement`, which has no adapter.
 
 **This is Reclaimer's M2.** Stop here and let real play shape the rest.
 
