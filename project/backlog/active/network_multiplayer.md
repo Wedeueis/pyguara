@@ -1,12 +1,13 @@
 # Networked multiplayer: engine plan
 
-**Status:** Phase 0 measured. Probe 4 needs two machines, and the owner deferred it until
-phase 1's `tools/net_probe.py` exists. No engine code exists yet. Written 2026-11-01, against `4ea2fa1`. Reproduce the Python numbers with
-`tools/net_phase0.py`.
+**Status:** Phases 0 and 1 are merged (#372, #373): the transport and session exist, and
+replication and prediction do not. Still open from those phases: probe 4, which needs two
+machines, and running the transport on Windows at all. Written 2026-11-01, against `4ea2fa1`.
+Reproduce the Python numbers with `tools/net_phase0.py`.
 
 **The requirement.** One player hosts a game from their own machine, and other players
 connect to it. The first user is Reclaimer, an online co-op action RPG with hordes and
-heavy projectile counts, for about 4 players.
+heavy projectile counts, for 4 players. Windows is the main platform and Linux the secondary.
 
 Keep to this repo's method: probe before fixing, measure before deciding, and treat the
 numbers here as weaker than whatever a later measurement says. This plan's biggest
@@ -26,6 +27,10 @@ claims are estimates, and section 11 says which.
 | 6 | Testing is built on an **in-process simulated network**, with seeded loss and lag, driving the real Rust core from Python | Recommended |
 | 7 | Co-op among friends: **the host is trusted**, and clients are validated but not policed | Recommended |
 | 8 | **Joining takes an invite**: a random 256-bit session key, shared as a string. No Unsecure mode, ever | Decided |
+| 9 | **4 players**, so a host and 3 guests | Decided |
+| 10 | **No joining mid-run.** Admission closes when a run starts | Decided |
+| 11 | **The host owns the town and meta progression; each player owns their character** | Decided |
+| 12 | **Every drop is independent for each player** | Decided |
 
 ### Why not lockstep
 
@@ -71,7 +76,8 @@ single-player game on an uncovered platform is unaffected.
 
 Dedicated servers (the design keeps them possible, since a headless host is the same
 code), public matchmaking, anti-cheat, host migration, cross-version play, and more
-than about 8 players.
+more than 4 players in Reclaimer. The transport allows up to 64, but nothing above it is
+designed or tested past 4.
 
 ---
 
@@ -180,6 +186,8 @@ profile, and none needs anything an attacker lacks:
 | One short datagram, too small for its MAC | **Anyone, before any authentication** | Panic, `renetcode` `crypto.rs:10` |
 | Two slices of one message with different `num_slices` | Any connected client. In Unsecure mode that is anyone; with invites, only someone invited | Panic, `renet` `slice_constructor.rs:41` |
 | One malformed packet to bare `renet` | Anyone, if `renet` is used without `renetcode` | Disconnects the peer, where section 5 requires a drop |
+| A lost first keepalive, while the host is sending (found in phase 1) | The network itself: 19 of 100 joins at 20% loss | The host admits a player whose client then times out |
+| A message the sender accepts but the receiver's slice accounting can't hold (found in phase 1) | Any large send | The receiver disconnects the peer |
 
 The fix does not need a fork, and it is checked:
 
@@ -194,6 +202,15 @@ The fix does not need a fork, and it is checked:
    test must pin that the release profile unwinds. Not yet built.
 4. **Small per-channel memory limits on client traffic.** `renet` checks its limit before
    allocating for a slice, so this bounds what a client can make the host allocate.
+5. **Neither end counts as connected until both know it.** A client sends a one-byte
+   confirmation until it hears a payload, and the host neither sends to a peer nor reports it
+   until it has heard one. Without this, one lost packet could fail a join that the host
+   believed had succeeded.
+6. **A reliable channel only fills half its limit**, since slice rounding can at most double
+   what the receiver charges.
+
+All six are built, and each was removed in turn to confirm a test fails without it. ADR 0007
+lists them with their guards.
 
 12M structure-aware packets at `renet`'s receive path found that slice panic and nothing else;
 with `num_slices` held constant, 0 panics. That is why hardening beats writing our own: the
@@ -284,7 +301,7 @@ on a real path in probe 4.
 | --- | --- | --- |
 | Commands | Client to host, each tick | Unreliable; each packet repeats the last few ticks, so one loss costs nothing |
 | Snapshot | Host to client, 20 Hz | Unreliable; the newest wins. `renet` may reorder these, so the message carries its tick and Python drops stale ones |
-| Events | Damage, deaths, drops, spawns, chat | Reliable and ordered |
+| Events | Damage, deaths, spawns, chat, and each player's own drops, sent to that player only | Reliable and ordered |
 | Level | Seed, room data, scene changes | Reliable and ordered, fragmented |
 
 **Handshake.** `renetcode`'s connect, challenge and response, in its secure mode:
@@ -307,9 +324,9 @@ on a real path in probe 4.
 from round-trip time and runs slightly ahead, so its commands arrive just in time. The
 host keeps a small per-player buffer, repeating the last command if one is late.
 
-**Connection loss.** A silent peer times out after about 10 seconds, and the host keeps a
-slot for reconnection for a time the game chooses. If the host leaves, the session ends.
-There's no migration.
+**Connection loss.** A silent peer times out after 10 seconds. If the host leaves, the session
+ends, and there's no migration. Whether a player who drops can return to the same run is an
+open question: see section 12.
 
 ### Security
 
@@ -377,7 +394,8 @@ clients work out the rest.
 | | Host | Client |
 | --- | --- | --- |
 | AI, flocking, flow field, spawning | Runs | Off |
-| Damage, health, loot, status effects | Runs | Display only |
+| Damage, health, status effects | Runs | Display only |
+| Drops | Rolls and tracks each player's separately | Sees and collects only its own |
 | Own character's movement | Runs | **Predicted** |
 | Other characters and enemies | Runs | Interpolated |
 | Bullets | Runs, decides hits | Simulated for display |
@@ -392,6 +410,42 @@ sessions.
 `NetRole` needs a way to mark a system as host-only, client-only or both. It should be
 done by which systems a scene registers per role, rather than by adding checks to
 `SystemManager`, which is core.
+
+### Drops are per player
+
+When something dies, the host rolls a separate drop for each player, and each player sees and
+collects only their own. Nobody can take another player's loot, and nothing about a drop needs
+agreeing between clients.
+
+- **Rolls:** one named `RandomService` stream per player slot, so one player's rolls never
+  shift another's.
+- **Player slots:** peer ids are random 63-bit numbers, so the session assigns each player a
+  slot, 0 to 3. Save data and masks use the slot.
+- **Collection needs no engine change.** `Magnet.mask` already filters by spatial-index bits.
+  Track each player's drops under their slot's bit and give their magnet only that bit.
+- **Replication needs per-peer visibility.** `Replicated` gains an owner, and a snapshot leaves
+  out what its client doesn't own. Other clients never learn these entities exist, which also
+  saves bandwidth, since drops stop being multiplied by players.
+- **The host's own screen is the trap.** Clients are filtered by what they receive, but the host
+  holds all four players' drops in one ECS, so its renderer would draw them all, and its audio
+  and particles would fire for them. Give a drop a `Sprite` on the host only if it is the host's
+  own, and scope the pickup effects the same way.
+
+### Who owns what
+
+| Data | Owner | Saved on | During a run |
+| --- | --- | --- | --- |
+| Town, meta progression | Host | Host's machine | Host only |
+| Character: stats, levels, gear | Its player | That player's machine | Host decides; the player's machine records what it is told |
+
+A character arrives from the guest's machine at the lobby, so **the host validates it like any
+other network data**: bounds-check every field, and reject what doesn't decode. A guest can edit
+their own save and join stronger than they earned. That fits decision 7, and stopping it would
+take server-side accounts.
+
+In a run the character is host-authoritative like everything else. The host sends XP, levels and
+items as reliable events, and the guest's machine saves them. `MultiScopePersistence` fits as is:
+a `meta` scope only the host writes, and a `character` scope on each machine.
 
 ### Prediction
 
@@ -509,15 +563,17 @@ Remote players through the input layer, tick estimate, command buffer, predictio
 
 ### Phase 4: Events and projectiles
 Reliable game events, projectile spawn events, role-based system registration.
-**Done when:** 200 bullets on screen use a bounded amount of bandwidth, and every client
-agrees on who died and what dropped.
+**Done when:** 200 bullets on screen use a bounded amount of bandwidth, every client agrees on
+who died, each player's drops match the host's record for that player, and no client or host
+screen shows a drop belonging to someone else.
 
 ### Phase 5: Robustness
-Lobby API, player join and leave, reconnection, version refusal, level transfer, delta
+Lobby API, closing admission when a run starts (a late joiner is refused with a message saying
+so), character upload and validation, player leave, version refusal, level transfer, delta
 encoding if measurements call for it, debug overlay (ping, loss, bandwidth, correction
 size), scene-change barrier.
-**Done when:** a 4-player session survives a 30-minute soak over a real connection, with
-one player leaving and returning.
+**Done when:** a 4-player session survives a 30-minute soak over a real connection, a late
+joiner is refused, and one player leaving doesn't disturb the others.
 
 ### Phase 6: Reaching players
 Section 8. **Done when:** a non-technical player can host from home without changing router settings.
@@ -546,9 +602,14 @@ the native crate is the likely home for it. **A Steamworks binding would be the 
 in the extension with a system-library dependency**, which ADR 0006 has so far avoided, so
 it may need to be optional or ship separately.
 
-**Open question for the owner:** is Steam the only release target? `pyguara dist` also
-targets itch.io, where Steam's relay isn't available. Supporting itch online would mean
-running your own relay, or accepting that some players can't host.
+**Open question for the owner:** is Steam the only store? See section 12. `pyguara dist` also
+targets itch.io, where Steam's relay isn't available. Supporting itch online would mean running
+your own relay, or accepting that some players can't host.
+
+**Windows is the main platform, which changes three things here.** Windows Firewall prompts on a
+game's first listening socket, so hosting needs to expect that prompt. Linux stays a real target,
+so a Steamworks binding has to build for both. And Windows' coarse timers may slow the socket
+thread's tick, which is unmeasured.
 
 Verify the Steam and NAT claims here against current documentation when this phase starts.
 They were written from general knowledge, not checked for this plan.
@@ -625,9 +686,25 @@ format isn't part of this plan).
 
 ## 12. Questions that change this plan
 
-The game plan's section 9 asks these too. They should be answered before phase 2.
+Answered by the owner on 2026-11-01:
 
-1. **Player count.** Designed for 4; bandwidth scales with it.
-2. **Joining mid-run?** Recommended no at first. Yes needs full world transfer in phase 5.
-3. **Whose progression is trusted?** Designed for "the host trusts its friends".
-4. **Release platforms.** Section 8; this decides the transport work.
+| Question | Answer | What it changes |
+| --- | --- | --- |
+| Player count | **4** | The designed case. 3 guests, as section 3 assumed |
+| Joining mid-run | **No** | Admission closes at run start. No full world transfer |
+| Whose progression | **Host: town and meta. Each player: their character** | Section 6, "Who owns what" |
+| Drops | **Independent per player** | Section 6, "Drops are per player" |
+| Operating systems | **Windows first, Linux second** | Windows must be tested, not only built |
+
+Still open:
+
+1. **Which store?** The answer above covers operating systems. Section 8's transport decision
+   turns on the store: Steam brings relay and encryption, and itch would need your own relay, or
+   accepting that some players can't host. Needed before phase 6.
+2. **Can a player who drops return to the same run?** Internet connections blip, and a run could
+   be long. "No joining mid-run" was recommended to avoid transferring a whole world, and a
+   returning player needs exactly that. Saying no means one dropped connection ends that player's
+   run. Needed before phase 5. Recommended: no at first, and revisit after real play.
+3. **What survives if a session ends abruptly?** If the host crashes mid-run, does a guest keep the
+   XP and items from that run? Saving each event as it arrives keeps them, and saving at run end
+   loses them, but stops a player quitting out of a bad run. Needed before phase 5.
