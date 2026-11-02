@@ -22,6 +22,7 @@ from pyguara.persistence.migration import (
     register_migration,
 )
 from pyguara.persistence.multi_scope import MultiScopePersistence, SaveProfile
+from pyguara.persistence.quick_save import QuickSaver
 from pyguara.persistence.storage import FileStorageBackend, user_data_path
 from pyguara.persistence.types import (
     BackupCapableStorage,
@@ -42,6 +43,7 @@ __all__ = [
     "MigrationRegistry",
     "MultiScopePersistence",
     "PersistenceManager",
+    "QuickSaver",
     "SaveMetadata",
     "SaveProfile",
     "SerializationFormat",
