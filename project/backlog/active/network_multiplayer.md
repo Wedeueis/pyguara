@@ -696,15 +696,35 @@ Answered by the owner on 2026-11-01:
 | Drops | **Independent per player** | Section 6, "Drops are per player" |
 | Operating systems | **Windows first, Linux second** | Windows must be tested, not only built |
 
-Still open:
+Answered by the owner later the same day:
 
-1. **Which store?** The answer above covers operating systems. Section 8's transport decision
-   turns on the store: Steam brings relay and encryption, and itch would need your own relay, or
-   accepting that some players can't host. Needed before phase 6.
-2. **Can a player who drops return to the same run?** Internet connections blip, and a run could
-   be long. "No joining mid-run" was recommended to avoid transferring a whole world, and a
-   returning player needs exactly that. Saying no means one dropped connection ends that player's
-   run. Needed before phase 5. Recommended: no at first, and revisit after real play.
-3. **What survives if a session ends abruptly?** If the host crashes mid-run, does a guest keep the
-   XP and items from that run? Saving each event as it arrives keeps them, and saving at run end
-   loses them, but stops a player quitting out of a bad run. Needed before phase 5.
+| Question | Answer | What it changes |
+| --- | --- | --- |
+| Which store | **Steam** | `SteamTransport` is the release path, and needs no relay of our own. Direct IP stays for development |
+| Can a dropped player return | **Not at first, but plan to add it** | See below |
+| What survives an abrupt end | **Guests keep what they earned**, saved as events arrive, without hurting performance | `QuickSaver` does this. Character events call `request`, and a run's end calls `flush` |
+| Reference games | **Ravenswatch and Heroes of Hammerwatch** | See below |
+| `Application.step` hooks | **Approved** | Phase 2 |
+| Design choices in `.claude/decision-log.md` | **Approved** | None |
+
+**Keep rejoining possible.** It isn't built now, but these keep the door open: replication has a
+`add_peer` that sends everything a newcomer needs, player slots outlive a connection, and character
+state doesn't live only in the connection. When it is added, a timed window fits better than an
+open door: Heroes of Hammerwatch players [asked for one](https://steamcommunity.com/app/677120/discussions/0/2650805212049309026).
+
+### What the reference games tell us
+
+Checked against what's public on 2026-11-01. **No source was found for either game's actual netcode**,
+so this plan doesn't claim to match it. What's usable:
+
+- **Heroes of Hammerwatch has this exact save model**: [town progress for the host only, and character
+  progress per player](https://www.co-optimus.com/game/4984/pc/heroes-of-hammerwatch.html).
+- **Its "Connection Lost" was [blamed on a map-loading race](https://steamcommunity.com/app/677120/discussions/0/1651043958629398058)**,
+  in an unofficial player report from 2018. So the scene-change barrier in phase 5 matters: nobody
+  plays on until every player has finished loading, and a slow loader must not time out.
+- **Ravenswatch players report [lobbies stuck on "wait", and "peer has left"](https://steamcommunity.com/app/2071280/discussions/0/3828663748262160134/?l=danish)**,
+  and it [moved connection handling to Epic Online Services](https://gonintendo.com/contents/30991-ravenswatch-dark-tales-update-trailer).
+  Both are reasons to treat lobby states as carefully as gameplay, and to always tell a player why
+  something failed. Phase 1's join-deadlock fix and refusal messages are that kind of work.
+- **Both support 4 players**, which matches this plan. Both are listed with drop-in, which this plan
+  deliberately doesn't do yet.
