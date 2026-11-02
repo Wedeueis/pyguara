@@ -226,3 +226,11 @@ These modules correspond to the "Tutorial Series Roadmap".
 * **Run:** `uv run python games/quintal_cerrado/main.py`
 * **Look at it headlessly:** `uv run python tools/agent_view.py quintal_cerrado`
 * **Spec:** [`project/demos/quintal_do_cerrado_PRD.md`](../project/demos/quintal_do_cerrado_PRD.md)
+
+## Networking
+
+### [net_horde](./net_horde) - Replication
+* **Goal:** See a client's world follow a host's, over a bad network.
+* **Key Concepts:** `ReplicationHost`, `ReplicationClient`, `Replicated`, per-player drops.
+* **Worth seeing:** with no arguments, both sides run side by side over a simulated 100 ms, 5% loss network, with their state hashes on screen. The blue squares are drops, and each player sees a different one.
+* **Run:** `uv run python games/net_horde/main.py`, or `--host` and `--join` for two windows.

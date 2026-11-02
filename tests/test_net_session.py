@@ -29,8 +29,8 @@ from pyguara.net import (
     Versions,
 )
 from pyguara.net import transport as transport_module
-from pyguara.net.session import SessionEvent
-from pyguara.net.transport import NET_PROTOCOL_VERSION, load_core
+from pyguara.net.session import SessionEvent, SessionFailed
+from pyguara.net.transport import NET_PROTOCOL_VERSION, MessageDelivered, load_core
 
 DT = 1 / 60
 VERSIONS = Versions("0.6.0", "1.0", b"h" * 32)
@@ -217,6 +217,124 @@ def test_a_wrong_key_times_out_and_the_message_says_to_check_the_invite() -> Non
     left = [e for e in heard if isinstance(e, Left)]
     assert len(left) == 1
     assert "invite" in left[0].reason
+
+
+def test_players_get_slots_from_one_and_a_freed_slot_is_reused() -> None:
+    network = SimulatedNetwork(seed=1)
+    key = secrets.token_bytes(32)
+    transport = network.add_host(key)
+    host = HostSession(transport, VERSIONS)
+    address = network.address_of(transport)
+    clients = [
+        ClientSession(network.add_client(key, address, VERSIONS.encode()))
+        for _ in range(3)
+    ]
+    heard: list[SessionEvent] = []
+    told: list[list[SessionEvent]] = [[], [], []]
+
+    def run_for(seconds: float) -> None:
+        for _ in range(round(seconds / DT)):
+            network.advance(DT)
+            heard.extend(host.poll())
+            for client, log in zip(clients, told, strict=True):
+                log.extend(client.poll())
+
+    run_for(2.0)
+    slots = [e.slot for e in heard if isinstance(e, PlayerJoined)]
+    assert sorted(slots) == [1, 2, 3]
+    assert sorted(e.slot for log in told for e in log if isinstance(e, Joined)) == [
+        1,
+        2,
+        3,
+    ]
+
+    leaver = next(e for e in heard if isinstance(e, PlayerJoined) and e.slot == 2)
+    host.kick(leaver.peer)
+    run_for(0.5)
+    assert host.slot_of(leaver.peer) is None
+    heard.clear()
+    clients.append(ClientSession(network.add_client(key, address, VERSIONS.encode())))
+    told.append([])
+    run_for(2.0)
+
+    assert [e.slot for e in heard if isinstance(e, PlayerJoined)] == [2]
+
+
+class ScriptedTransport:
+    """Delivers exactly what a test says, in the order it says."""
+
+    def __init__(self) -> None:
+        self.incoming: list[object] = []
+
+    def poll(self) -> list[object]:
+        events, self.incoming = self.incoming, []
+        return events
+
+    def send(self, peer: int, channel: Channel, data: bytes) -> bool:
+        return True
+
+    def disconnect(self, peer: int, flush: bool = False) -> None:
+        pass
+
+    def stats(self, peer: int) -> None:
+        return None
+
+    def close(self) -> None:
+        pass
+
+
+def test_reliable_messages_that_overtake_the_welcome_are_kept_in_order() -> None:
+    """Channels aren't ordered against each other, and a lost spawn is a lasting desync."""
+    transport = ScriptedTransport()
+    client = ClientSession(transport)  # type: ignore[arg-type]
+    transport.incoming = [
+        MessageDelivered(0, Channel.EVENTS, b"first"),
+        MessageDelivered(0, Channel.SNAPSHOT, b"second"),
+    ]
+    assert client.poll() == []
+
+    transport.incoming = [
+        MessageDelivered(0, Channel.EVENTS, b"third"),
+        MessageDelivered(0, Channel.CONTROL, b"\x01\x02"),
+        MessageDelivered(0, Channel.EVENTS, b"fourth"),
+    ]
+    heard = client.poll()
+
+    assert heard[0] == Joined(2)
+    assert [e.data for e in heard[1:] if isinstance(e, MessageReceived)] == [
+        b"first",
+        b"second",
+        b"third",
+        b"fourth",
+    ]
+
+
+def test_messages_that_overtook_a_refusal_are_never_delivered() -> None:
+    transport = ScriptedTransport()
+    client = ClientSession(transport)  # type: ignore[arg-type]
+    transport.incoming = [
+        MessageDelivered(0, Channel.EVENTS, b"early"),
+        MessageDelivered(0, Channel.CONTROL, b"\x02no"),
+        MessageDelivered(0, Channel.EVENTS, b"late"),
+    ]
+
+    heard = client.poll()
+
+    assert heard == [Refused("no")]
+
+
+def test_too_many_messages_before_a_welcome_end_the_session_rather_than_lose_one() -> (
+    None
+):
+    transport = ScriptedTransport()
+    client = ClientSession(transport)  # type: ignore[arg-type]
+    transport.incoming = [
+        MessageDelivered(0, Channel.EVENTS, b"x") for _ in range(20_000)
+    ]
+
+    heard = client.poll()
+
+    assert [type(e) for e in heard] == [SessionFailed]
 
 
 def test_invite_round_trips_including_ipv6_and_hides_its_key_from_repr() -> None:

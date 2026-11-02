@@ -70,6 +70,31 @@ class EditorInputSink(Protocol):
         ...
 
 
+class StepHook(Protocol):
+    """Something that needs a place in the frame, around the fixed updates.
+
+    For a subsystem that has to run outside any scene. Networking is the reason this
+    exists: received state must be applied before the simulation runs, and new state
+    sent after it, and neither belongs to whichever scene happens to be active.
+    """
+
+    def before_fixed_updates(self, frame_time: float) -> None:
+        """Run after input and queued events, before this frame's fixed updates.
+
+        Args:
+            frame_time: This frame's simulated seconds, after clamping and scaling.
+        """
+        ...
+
+    def after_fixed_updates(self, frame_time: float) -> None:
+        """Run after this frame's fixed updates, before `_update()` and rendering.
+
+        Args:
+            frame_time: This frame's simulated seconds, after clamping and scaling.
+        """
+        ...
+
+
 class Application:
     """The main runtime loop coordinator.
 
@@ -94,6 +119,8 @@ class Application:
         self._container = container
         self._is_running = False
         self._has_shut_down = False
+        self._step_hooks: list[StepHook] = []
+        self._fixed_tick = 0
         self._event_queue_time_budget_ms = event_queue_time_budget_ms
 
         # Resolve Core Dependencies
@@ -245,6 +272,32 @@ class Application:
         )
         self._asset_reload_watcher.start()
         self.logger.info("Asset hot-reload enabled")
+
+    @property
+    def fixed_tick(self) -> int:
+        """How many fixed updates have run. Network messages are stamped with it."""
+        return self._fixed_tick
+
+    def add_step_hook(self, hook: StepHook) -> None:
+        """Run `hook` around the fixed updates of every later frame.
+
+        Hooks run in the order they were added. An exception from one propagates,
+        like one from any other part of a frame. Adding a hook twice is a no-op.
+
+        Args:
+            hook: What to run.
+        """
+        if hook not in self._step_hooks:
+            self._step_hooks.append(hook)
+
+    def remove_step_hook(self, hook: StepHook) -> None:
+        """Stop running `hook`. Does nothing if it is not registered.
+
+        Args:
+            hook: What to stop running.
+        """
+        if hook in self._step_hooks:
+            self._step_hooks.remove(hook)
 
     def run(self, starting_scene: Scene) -> None:
         """Execute the main game loop with a fixed timestep, until the window closes.
@@ -408,10 +461,17 @@ class Application:
 
         self._accumulator += simulated_time
 
+        for hook in self._step_hooks:
+            hook.before_fixed_updates(simulated_time)
+
         while self._accumulator >= self._fixed_dt:
             # Fixed-rate update (physics, game logic)
             self._fixed_update(self._fixed_dt)
             self._accumulator -= self._fixed_dt
+            self._fixed_tick += 1
+
+        for hook in self._step_hooks:
+            hook.after_fixed_updates(simulated_time)
 
         # 5. Variable-rate update (UI, animations that should be smooth)
         self._update(simulated_time)

@@ -50,6 +50,7 @@ Neither is safe as shipped, and each of these was reproduced against the version
 | One malformed packet disconnects a peer in bare `renet` | Anyone, if `renet` were exposed | Only `renetcode`-authenticated bytes reach it |
 | A lost first keepalive deadlocks a join while traffic flows: the host admits a player whose client times out. 19 of 100 seeded joins at 20% loss | The network itself | The client confirms, and the host holds traffic and reports nothing until it does |
 | A message the sender accepts can overflow the receiver, which charges whole slices against the same limit and disconnects | Any large send | Reliable sends only fill half a channel's limit |
+| A reliable message overtakes the session's welcome, on another channel, and is dropped: a client could join and never see 200 existing enemies | Loss during a join | `ClientSession` holds early messages until it is admitted |
 
 These were not reported upstream, by the owner's decision. **So a new version of either
 crate needs its parsers re-read and `tests/test_net_hostile.py` re-run**, and a fix cannot
@@ -78,6 +79,18 @@ datagrams and messages, with no socket, thread or clock inside. A seeded in-proc
 can therefore drive the code that ships. The socket thread and Python share it through a
 `Mutex` held for microseconds, rather than through queues in each direction.
 
+**8. Snapshots are complete states, read directly from components.** No movement system calls
+`notify_component_changed`, so replication can't rely on it. A lost snapshot costs nothing, because
+the next one is whole, which gives a client convergence for free. Delta encoding stays out until a
+measurement asks for it: at 500 entities a client costs 0.88 Mbit/s.
+
+**9. Spawns and despawns run on the delayed timeline.** They are applied when the render clock
+reaches their tick, in order, so things appear and vanish in step with the motion around them. A
+spawn that has arrived but not been applied keeps its records.
+
+**10. Visibility is per player, decided by `Replicated.owner`.** A drop's entity is never sent to
+anyone but its owner, which saves bandwidth and leaves nothing to find in a hacked client.
+
 ## Consequences
 
 - Protocol changes need `make native`, and a stale build is easy to miss, so `pyguara.net`
@@ -88,5 +101,4 @@ can therefore drive the code that ships. The socket thread and Python share it t
   reliable echo takes 50-67 ms against a 7 ms link round trip, from polling once a frame and
   the socket thread's 8 ms tick at each end. Phase 3 should measure what that does to input,
   and the thread could flush a send at once if it matters.
-- Nothing above the transport exists yet: replication, prediction and the rest are later
-  phases of the plan.
+- Prediction and the rest are later phases of the plan.

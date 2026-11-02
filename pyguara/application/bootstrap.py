@@ -82,6 +82,17 @@ app.run(MyScene("game", app.container.get(EventDispatcher)))
 """
 
 
+def _sandbox_on(container: DIContainer) -> SandboxApplication:
+    """Build a sandbox that a scene finds through `container.get(Application)`.
+
+    Without this the container would build a second, plain `Application` for anything
+    asking for one, and whatever it registered there would never run.
+    """
+    application = SandboxApplication(container)
+    container.register_instance(Application, application)
+    return application
+
+
 def create_container(
     configure: Configure | None = None,
     register_sections: RegisterSections | None = None,
@@ -156,7 +167,7 @@ def create_sandbox_application(
     container = _setup_container(
         configure=configure, register_sections=register_sections
     )
-    return SandboxApplication(container)
+    return _sandbox_on(container)
 
 
 def create_headless_application(
@@ -180,7 +191,7 @@ def create_headless_application(
             one. See `RegisterSections`.
     """
     container = _setup_container(headless=True, register_sections=register_sections)
-    return Application(container)
+    return container.get(Application)
 
 
 def create_headless_sandbox_application(
@@ -195,7 +206,7 @@ def create_headless_sandbox_application(
             sections before the configuration loads. See `RegisterSections`.
     """
     container = _setup_container(headless=True, register_sections=register_sections)
-    return SandboxApplication(container)
+    return _sandbox_on(container)
 
 
 def _setup_container(
