@@ -1,8 +1,9 @@
 """Net Horde: the scenes.
 
 `SideBySideScene` needs nothing but a window: host and client run in one process over a
-simulated bad network, drawn next to each other. It's the quickest way to see what
-replication does, and what the agent tooling can capture.
+simulated bad network, drawn next to each other. It's the quickest way to feel what
+prediction does. The keys steer the client, on the right, and the host shows the same
+character arriving later.
 
 `HostScene` and `JoinScene` are the same thing over a real socket, for two windows.
 """
@@ -14,16 +15,29 @@ from typing import Any
 
 from games.net_horde.world import (
     BACKGROUND,
+    HOST_SLOT,
+    NO_MOVE,
     HordeSimulation,
+    Move,
     draw_world,
+    make_commands,
     make_schema,
+    make_solids,
     make_spawners,
+    velocity_of,
 )
 from pyguara.application.application import Application
+from pyguara.common.components import Transform
 from pyguara.common.types import Color, Vector2
+from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
+from pyguara.input.events import OnActionEvent
+from pyguara.input.keys import DOWN, LEFT, RIGHT, UP, A, D, S, W
+from pyguara.input.manager import InputManager
+from pyguara.input.types import ActionType, InputDevice
+from pyguara.kits.topdown_movement import TopDownPrediction
 from pyguara.net import (
     ClientDriver,
     ClientSession,
@@ -35,6 +49,8 @@ from pyguara.net import (
     LinkConditions,
     PlayerJoined,
     PlayerLeft,
+    PredictionClient,
+    PredictionHost,
     Refused,
     ReplicationClient,
     ReplicationHost,
@@ -47,22 +63,93 @@ from pyguara.scene.base import Scene
 
 VERSIONS = Versions("net_horde", "1")
 TEXT = Color(230, 230, 230)
-_HOST_SLOT = 0
 _LEFT = Vector2(10, 60)
 _RIGHT = Vector2(510, 60)
 _PRIORITY_HIGHEST = 0
 
 
-class SideBySideScene(Scene):
-    """A host and a client in one process, over a simulated 100 ms, 5% loss network."""
+_BINDINGS = (
+    ("net_up", (W, UP)),
+    ("net_down", (S, DOWN)),
+    ("net_left", (A, LEFT)),
+    ("net_right", (D, RIGHT)),
+)
 
-    def __init__(self, event_dispatcher: EventDispatcher) -> None:
+
+class HeldMove:
+    """Which way the movement keys are pushing right now."""
+
+    def __init__(self, scene: Scene) -> None:
+        """Bind the keys.
+
+        Args:
+            scene: Has the container and dispatcher, and must have entered.
+        """
+        self._held: dict[str, bool] = {}
+        inputs = scene.container.get(InputManager)
+        for action, keys in _BINDINGS:
+            inputs.register_action(action, ActionType.HOLD)
+            for key in keys:
+                inputs.bind_input(InputDevice.KEYBOARD, key, action)
+        scene.event_dispatcher.subscribe(OnActionEvent, self._on_action)
+
+    def _on_action(self, event: OnActionEvent) -> None:
+        self._held[event.action_name] = event.value > 0
+
+    def command(self) -> Move:
+        """Return the current command."""
+        held = self._held
+        return Move(
+            float(held.get("net_right", False)) - float(held.get("net_left", False)),
+            float(held.get("net_down", False)) - float(held.get("net_up", False)),
+        )
+
+
+def _prediction_status(prediction: PredictionClient[Move]) -> str:
+    """Say how prediction is doing, as numbers a person can watch while playing."""
+    return (
+        f"corrections {prediction.corrections}, "
+        f"last {prediction.last_correction:.1f}, "
+        f"largest {prediction.largest_correction:.1f}"
+    )
+
+
+class _PredictedPlayer:
+    """Everything a client needs to steer its own character."""
+
+    def __init__(self, session: ClientSession) -> None:
+        self.prediction = PredictionClient(make_commands(), NO_MOVE, session.send)
+        _, self._mover = make_solids()
+
+    def on_controlled(self, entity: Entity | None) -> None:
+        self.prediction.bind(
+            None
+            if entity is None
+            else TopDownPrediction(entity, self._mover, velocity_of)
+        )
+
+
+class SideBySideScene(Scene):
+    """A host and a client in one process, over a simulated bad network."""
+
+    def __init__(
+        self,
+        event_dispatcher: EventDispatcher,
+        latency: float = 0.05,
+        loss: float = 0.02,
+    ) -> None:
         """Create the scene.
 
         Args:
             event_dispatcher: The engine's dispatcher.
+            latency: Seconds each way. 0.05 is a 100 ms round trip.
+            loss: The share of packets lost.
         """
         super().__init__("SideBySideScene", event_dispatcher)
+        self._latency = latency
+        self._loss = loss
+        self._keys: HeldMove | None = None
+        self._player: _PredictedPlayer | None = None
         self._client_world = EntityManager()
         self._client_session: ClientSession | None = None
         self._host_session: HostSession | None = None
@@ -76,7 +163,10 @@ class SideBySideScene(Scene):
     def on_enter(self) -> None:
         """Start both sides."""
         self._network = SimulatedNetwork(
-            seed=1, conditions=LinkConditions(latency=0.05, jitter=0.02, loss=0.05)
+            seed=1,
+            conditions=LinkConditions(
+                latency=self._latency, jitter=self._latency / 5, loss=self._loss
+            ),
         )
         key = secrets.token_bytes(32)
         host_transport = self._network.add_host(key)
@@ -85,8 +175,11 @@ class SideBySideScene(Scene):
         )
         self._host_session = HostSession(host_transport, VERSIONS)
         self._client_session = ClientSession(client_transport)
-        self._simulation = HordeSimulation(self.entity_manager)
-        self._simulation.set_players([_HOST_SLOT])
+        prediction = PredictionHost(make_commands(), NO_MOVE, self._host_session.send)
+        self._simulation = HordeSimulation(self.entity_manager, prediction)
+        self._simulation.set_players([HOST_SLOT])
+        self._keys = HeldMove(self)
+        self._player = _PredictedPlayer(self._client_session)
         self._replication_host = ReplicationHost(
             self.entity_manager,
             make_schema(),
@@ -97,13 +190,15 @@ class SideBySideScene(Scene):
             self._client_world,
             make_schema(),
             make_spawners(self._client_world),  # type: ignore[arg-type]
+            predicted_components=(Transform,),
+            on_controlled=self._player.on_controlled,
         )
         app = self.container.get(Application)
 
         def on_host_event(event: object) -> None:
             if isinstance(event, PlayerJoined):
                 assert self._simulation is not None
-                self._simulation.set_players([_HOST_SLOT, event.slot])
+                self._simulation.set_players([HOST_SLOT, event.slot])
 
         def on_client_event(event: object) -> None:
             if isinstance(event, Joined):
@@ -111,9 +206,18 @@ class SideBySideScene(Scene):
 
         self._hooks = [
             _NetworkClock(self._network),
-            HostDriver(app, self._host_session, self._replication_host, on_host_event),
+            HostDriver(
+                app,
+                self._host_session,
+                self._replication_host,
+                on_host_event,
+                prediction,
+            ),
             ClientDriver(
-                self._client_session, self._replication_client, on_client_event
+                self._client_session,
+                self._replication_client,
+                on_client_event,
+                self._player.prediction,
             ),
         ]
         for hook in self._hooks:
@@ -126,9 +230,12 @@ class SideBySideScene(Scene):
             app.remove_step_hook(hook)
 
     def fixed_update(self, fixed_dt: float) -> None:
-        """Run the host's simulation."""
+        """Run the host's simulation, and the client's own character."""
         assert self._simulation is not None
-        self._simulation.fixed_update()
+        assert self._keys is not None and self._player is not None
+        tick = self.container.get(Application).fixed_tick
+        self._simulation.fixed_update(tick)
+        self._player.prediction.step(self._keys.command())
 
     def update(self, dt: float) -> None:
         """Nothing here: the hooks do the work."""
@@ -138,7 +245,7 @@ class SideBySideScene(Scene):
         client = self._replication_client
         assert client is not None and self._replication_host is not None
         world_renderer.clear(BACKGROUND)
-        host_drawn = draw_world(world_renderer, self.entity_manager, _LEFT, _HOST_SLOT)
+        host_drawn = draw_world(world_renderer, self.entity_manager, _LEFT, HOST_SLOT)
         client_drawn = draw_world(
             world_renderer, self._client_world, _RIGHT, self._my_slot
         )
@@ -151,16 +258,18 @@ class SideBySideScene(Scene):
             TEXT,
             22,
         )
+        assert self._player is not None
+        round_trip = round(self._latency * 2000)
         ui_renderer.draw_text(
-            "simulated 50 ms each way, 5% loss. Blue squares are per-player drops.",
+            f"WASD or arrows steer the right side. {round_trip} ms round trip, "
+            f"{self._loss:.0%} loss.",
             Vector2(_LEFT.x, 36),
             TEXT,
             16,
         )
         ui_renderer.draw_text(
-            f"state hashes: {client.digests_matched} matched, "
-            f"{client.digests_mismatched} mismatched, "
-            f"{client.digests_skipped} skipped",
+            f"{_prediction_status(self._player.prediction)}; "
+            f"state hashes {client.digests_mismatched} wrong",
             Vector2(_RIGHT.x, 36),
             TEXT,
             16,
@@ -201,6 +310,8 @@ class HostScene(Scene):
         self._slots: list[int] = []
         self._driver: HostDriver | None = None
         self._invite = ""
+        self._keys: HeldMove | None = None
+        self._prediction: PredictionHost[Move] | None = None
 
     def on_enter(self) -> None:
         """Start hosting."""
@@ -210,13 +321,17 @@ class HostScene(Scene):
         self._invite = str(Invite(self._public_host, port, key))
         print(f"Invite: {self._invite}", flush=True)
         self._session = HostSession(transport, VERSIONS)
-        self._simulation = HordeSimulation(self.entity_manager)
-        self._simulation.set_players([_HOST_SLOT])
+        self._prediction = PredictionHost(make_commands(), NO_MOVE, self._session.send)
+        self._simulation = HordeSimulation(self.entity_manager, self._prediction)
+        self._simulation.set_players([HOST_SLOT])
+        self._keys = HeldMove(self)
         replication = ReplicationHost(
             self.entity_manager, make_schema(), self._session.send, digest_every=4
         )
         app = self.container.get(Application)
-        self._driver = HostDriver(app, self._session, replication, self._on_event)
+        self._driver = HostDriver(
+            app, self._session, replication, self._on_event, self._prediction
+        )
         app.add_step_hook(self._driver)
 
     def _on_event(self, event: object) -> None:
@@ -230,7 +345,7 @@ class HostScene(Scene):
                 if self._session is not None
                 and slot in {self._session.slot_of(p) for p in self._session.players}
             ]
-        self._simulation.set_players([_HOST_SLOT, *self._slots])
+        self._simulation.set_players([HOST_SLOT, *self._slots])
 
     def on_exit(self) -> None:
         """Stop hosting."""
@@ -239,9 +354,10 @@ class HostScene(Scene):
         self._session.close()
 
     def fixed_update(self, fixed_dt: float) -> None:
-        """Run the simulation."""
-        assert self._simulation is not None
-        self._simulation.fixed_update()
+        """Run the simulation, with the host's own player on the keys."""
+        assert self._simulation is not None and self._keys is not None
+        tick = self.container.get(Application).fixed_tick
+        self._simulation.fixed_update(tick, self._keys.command())
 
     def update(self, dt: float) -> None:
         """Nothing here: the hook does the work."""
@@ -249,7 +365,7 @@ class HostScene(Scene):
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Draw the host's view, and how many have joined."""
         world_renderer.clear(BACKGROUND)
-        drawn = draw_world(world_renderer, self.entity_manager, _LEFT, _HOST_SLOT)
+        drawn = draw_world(world_renderer, self.entity_manager, _LEFT, HOST_SLOT)
         ui_renderer.draw_text(
             f"HOST  {drawn} drawn, {len(self._slots)} joined",
             Vector2(_LEFT.x, 10),
@@ -279,6 +395,8 @@ class JoinScene(Scene):
         self._transport: UdpTransport | None = None
         self._status = "Connecting..."
         self._slot = 0
+        self._keys: HeldMove | None = None
+        self._player: _PredictedPlayer | None = None
 
     def on_enter(self) -> None:
         """Start connecting."""
@@ -290,12 +408,18 @@ class JoinScene(Scene):
             VERSIONS.encode(),
         )
         self._session = ClientSession(self._transport)
+        self._keys = HeldMove(self)
+        self._player = _PredictedPlayer(self._session)
         self._replication = ReplicationClient(
             self.entity_manager,
             make_schema(),
             make_spawners(self.entity_manager),  # type: ignore[arg-type]
+            predicted_components=(Transform,),
+            on_controlled=self._player.on_controlled,
         )
-        self._driver = ClientDriver(self._session, self._replication, self._on_event)
+        self._driver = ClientDriver(
+            self._session, self._replication, self._on_event, self._player.prediction
+        )
         self.container.get(Application).add_step_hook(self._driver)
 
     def _on_event(self, event: object) -> None:
@@ -311,6 +435,11 @@ class JoinScene(Scene):
         self.container.get(Application).remove_step_hook(self._driver)
         self._session.close()
 
+    def fixed_update(self, fixed_dt: float) -> None:
+        """Run this player's own character."""
+        assert self._keys is not None and self._player is not None
+        self._player.prediction.step(self._keys.command())
+
     def update(self, dt: float) -> None:
         """Nothing here: the hook does the work."""
 
@@ -325,9 +454,10 @@ class JoinScene(Scene):
         stats = self._transport.stats(0)
         rtt = 0.0 if stats is None else stats.rtt * 1000
         client = self._replication
+        assert self._player is not None
         ui_renderer.draw_text(
-            f"rtt {rtt:.0f} ms, state hashes {client.digests_matched} matched, "
-            f"{client.digests_mismatched} mismatched",
+            f"rtt {rtt:.0f} ms, {_prediction_status(self._player.prediction)}; "
+            f"state hashes {client.digests_mismatched} wrong",
             Vector2(_LEFT.x, 36),
             TEXT,
             16,
