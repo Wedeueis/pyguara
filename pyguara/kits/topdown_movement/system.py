@@ -31,6 +31,43 @@ _DEFAULT_HALF_EXTENTS = Vector2(12.0, 12.0)
 _DEGENERATE_PUSH_DIRECTION = Vector2(1.0, 0.0)
 
 
+def step_body(
+    mover: CharacterMover,
+    entity_id: str,
+    body: TopDownBody,
+    transform: Transform,
+    collider: Collider | None,
+    delta_time: float,
+) -> None:
+    """Move one body by its velocity for one step, sliding along solids.
+
+    This is everything a body's motion depends on apart from separation. A networked
+    client replays it to predict its own character, so the host and the replay can't
+    drift apart.
+
+    Args:
+        mover: Does the swept movement.
+        entity_id: The body's entity, which its own collider must not block.
+        body: Holds the velocity and the sub-pixel remainder.
+        transform: Holds the position.
+        collider: The entity's collider, or None to use the default box.
+        delta_time: Length of the step in seconds.
+    """
+    # The collider's centre, not the entity's origin: `offset` moves the box the
+    # mover sweeps, and is subtracted again on the way out.
+    centre, half_extents = collider_bounds(transform, collider, _DEFAULT_HALF_EXTENTS)
+    collider_offset = collider.offset if collider else Vector2(0.0, 0.0)
+    result = mover.move(
+        centre,
+        half_extents,
+        body.velocity * delta_time,
+        body._remainder,
+        entity_id,
+    )
+    transform.position = result.position - collider_offset
+    body._remainder = result.remainder
+
+
 class TopDownSystem:
     """Moves every `TopDownBody` and separates overlapping actors.
 
@@ -67,30 +104,18 @@ class TopDownSystem:
             delta_time: Time elapsed since last update (seconds).
         """
         for entity in self._entity_manager.get_entities_with(TopDownBody, Transform):
-            body = entity.get_component(TopDownBody)
-            transform = entity.get_component(Transform)
-            # The collider's centre, not the entity's origin: `offset`
-            # moves the box the mover sweeps, and is subtracted again on
-            # the way out.
-            collider = (
-                entity.get_component(Collider)
-                if entity.has_component(Collider)
-                else None
-            )
-            centre, half_extents = collider_bounds(
-                transform, collider, _DEFAULT_HALF_EXTENTS
-            )
-            collider_offset = collider.offset if collider else Vector2(0.0, 0.0)
-
-            result = self._mover.move(
-                centre,
-                half_extents,
-                body.velocity * delta_time,
-                body._remainder,
+            step_body(
+                self._mover,
                 entity.id,
+                entity.get_component(TopDownBody),
+                entity.get_component(Transform),
+                (
+                    entity.get_component(Collider)
+                    if entity.has_component(Collider)
+                    else None
+                ),
+                delta_time,
             )
-            transform.position = result.position - collider_offset
-            body._remainder = result.remainder
 
         self._separate_actors()
 

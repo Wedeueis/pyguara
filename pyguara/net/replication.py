@@ -56,11 +56,12 @@ _DIGEST = 0xE5
 
 _TICK_HEADER = struct.Struct("<BI")
 _RECORD_HEADER = struct.Struct("<HH")
-_SPAWN_HEADER = struct.Struct("<BIHB")
+_SPAWN_HEADER = struct.Struct("<BIHBB")
 _DESPAWN_MESSAGE = struct.Struct("<BIH")
 _HELLO_MESSAGE = struct.Struct("<BI")
 _DIGEST_MESSAGE = struct.Struct("<BIII")
 _MASK = struct.Struct("<H")
+_SPAWN_FLAG_CONTROLLED = 1
 
 _MAX_ID = 65535
 _MAX_PREFAB_NAME_BYTES = 64
@@ -83,10 +84,14 @@ class Replicated(StrictComponent):
             bytes: one that can't be sent is refused and counted in `unreplicated`.
         owner: The player slot that alone may see it, or None for everyone. Per-player
             drops use this.
+        controller: The player slot whose character this is. Only that client is told,
+            and it predicts the entity rather than drawing it from snapshots. Set it
+            before the entity's first snapshot: a later change isn't sent.
     """
 
     prefab: str = ""
     owner: int | None = None
+    controller: int | None = None
 
     def __post_init__(self) -> None:
         """Initialise the StrictComponent state the dataclass __init__ skips."""
@@ -209,7 +214,7 @@ class ReplicationHost:
         for tracked in self._tracked.values():
             if tracked.announced and self._visible(tracked, state):
                 self._refresh_record(tracked)
-                self._queue(state, self._spawn_message(tracked), True)
+                self._queue(state, self._spawn_message(tracked, state), True)
 
     def remove_peer(self, peer: int) -> None:
         """Stop replicating to a peer."""
@@ -310,10 +315,13 @@ class ReplicationHost:
             [schema.encode(component) for schema, component in tracked.parts]
         )
 
-    def _spawn_message(self, tracked: _Tracked) -> bytes:
+    def _spawn_message(self, tracked: _Tracked, peer: _Peer) -> bytes:
         name = tracked.replicated.prefab.encode()
+        flags = (
+            _SPAWN_FLAG_CONTROLLED if tracked.replicated.controller == peer.slot else 0
+        )
         return (
-            _SPAWN_HEADER.pack(_SPAWN, self._tick, tracked.net_id, len(name))
+            _SPAWN_HEADER.pack(_SPAWN, self._tick, tracked.net_id, len(name), flags)
             + name
             + _MASK.pack(tracked.mask)
             + tracked.record
@@ -323,10 +331,9 @@ class ReplicationHost:
         for tracked in self._new:
             tracked.announced = True
             self._refresh_record(tracked)
-            message = self._spawn_message(tracked)
             for peer in self._peers.values():
                 if self._visible(tracked, peer):
-                    self._queue(peer, message, True)
+                    self._queue(peer, self._spawn_message(tracked, peer), True)
         self._new.clear()
 
     def _queue(self, peer: _Peer, message: bytes, counted: bool) -> None:
@@ -424,6 +431,7 @@ class _Remote:
     parts: dict[int, tuple[ComponentSchema, Any]] | None = None
     applied: bytes | None = None
     gone: bool = False
+    controlled: bool = False
 
 
 class ReplicationClient:
@@ -449,6 +457,8 @@ class ReplicationClient:
         spawners: Mapping[str, Callable[[], Entity]],
         interpolation_ticks: float = 6.0,
         tick_rate: float = 60.0,
+        predicted_components: tuple[type, ...] = (),
+        on_controlled: Callable[[Entity | None], None] | None = None,
     ) -> None:
         """Start empty.
 
@@ -459,10 +469,17 @@ class ReplicationClient:
             interpolation_ticks: How far behind the newest snapshot to draw. 6 is 100
                 ms at 60 Hz, which rides out one lost 20 Hz snapshot.
             tick_rate: The host's fixed updates per second.
+            predicted_components: What prediction writes on this player's own character,
+                which snapshots must leave alone. Its other components still update, so
+                health can keep arriving.
+            on_controlled: Called with this player's own character when it appears, and
+                with None when it goes.
         """
         self._manager = entity_manager
         self._schema = schema
         self._spawners = spawners
+        self._predicted = predicted_components
+        self._on_controlled = on_controlled
         self._delay = interpolation_ticks
         self._rate = tick_rate
         self._remotes: dict[int, _Remote] = {}
@@ -606,7 +623,9 @@ class ReplicationClient:
             del history[0]
 
     def _on_spawn(self, data: bytes) -> None:
-        _, tick, net_id, name_length = _SPAWN_HEADER.unpack_from(data, 0)
+        _, tick, net_id, name_length, flags = _SPAWN_HEADER.unpack_from(data, 0)
+        if flags & ~_SPAWN_FLAG_CONTROLLED:
+            raise ValueError("A spawn has unknown flags")
         offset = _SPAWN_HEADER.size
         name = data[offset : offset + name_length]
         if len(name) != name_length:
@@ -625,6 +644,7 @@ class ReplicationClient:
             prefab,
             tick,
             [_Sample(tick, data[offset:end], values)],
+            controlled=bool(flags & _SPAWN_FLAG_CONTROLLED),
         )
         self._remotes[net_id] = remote
         self._timeline.append((tick, True, remote))
@@ -720,12 +740,21 @@ class ReplicationClient:
                     entity.get_component(schema.component_type),
                 )
         self._active[remote.net_id] = remote
+        if remote.controlled and self._on_controlled is not None:
+            # Where it starts comes from the spawn. After that, prediction decides.
+            self._write(remote.parts, remote.history[0].values)
+            for index, (schema, _) in list(remote.parts.items()):
+                if schema.component_type in self._predicted:
+                    del remote.parts[index]
+            self._on_controlled(entity)
 
     def _destroy(self, remote: _Remote) -> None:
         remote.gone = True
         if self._active.get(remote.net_id) is remote:
             del self._active[remote.net_id]
         if remote.entity is not None:
+            if remote.controlled and self._on_controlled is not None:
+                self._on_controlled(None)
             self._manager.remove_entity(remote.entity.id)
             remote.entity = None
 

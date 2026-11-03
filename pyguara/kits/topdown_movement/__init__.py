@@ -23,11 +23,14 @@ from pyguara.kits.topdown_movement.facing import (
     Facing,
     facing_from_vector,
 )
-from pyguara.kits.topdown_movement.system import TopDownSystem
+from pyguara.kits.topdown_movement.prediction import TopDownPrediction
+from pyguara.kits.topdown_movement.system import TopDownSystem, step_body
 
 __all__ = [
     "TopDownBody",
+    "TopDownPrediction",
     "TopDownSystem",
+    "step_body",
     # Directional animation: N actions x 4 or 8 facings
     "Facing",
     "DirectionalClipSet",

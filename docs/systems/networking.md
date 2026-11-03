@@ -132,6 +132,95 @@ simulation. **Python's garbage collector is the remaining hitch**: a full collec
 ms, which makes the worst frame about 20 ms where it would otherwise be about 4. That run held four
 worlds in one process, so a real client should be smaller, but measure it in a real game.
 
+## Prediction
+
+Your own character runs at once. Its commands go to the host, each naming the host tick it
+applies to, and the host sends back the exact state. If that differs from what the client
+predicted for that tick, the client goes back to the host's state and replays the newer
+commands. A state "at tick N" includes every command before N.
+
+```python
+@dataclass(frozen=True)
+class Move:
+    x: float = 0.0
+    y: float = 0.0
+
+commands = CommandSchema(Move, x=Quantised(step=1 / 64), y=Quantised(step=1 / 64))
+
+def velocity_of(command: Move) -> Vector2:   # runs on both machines
+    direction = Vector2(command.x, command.y)
+    if direction.magnitude > 1.0:            # untrusted on the host
+        direction = direction.normalize()
+    return direction * SPEED
+
+# Host
+prediction = PredictionHost(commands, Move(), session.send)
+app.add_step_hook(HostDriver(app, session, replication, prediction=prediction))
+character.add_component(Replicated("player", controller=slot))
+prediction.bind(slot, TopDownPrediction(character, mover, velocity_of))
+# In fixed_update, for each remote player, before TopDownSystem runs:
+body.velocity = velocity_of(prediction.take(slot, app.fixed_tick))
+
+# Client
+prediction = PredictionClient(commands, Move(), session.send)
+replication = ReplicationClient(
+    entity_manager, schema, spawners,
+    predicted_components=(Transform,),
+    on_controlled=lambda entity: prediction.bind(
+        entity and TopDownPrediction(entity, mover, velocity_of)
+    ),
+)
+app.add_step_hook(ClientDriver(session, replication, prediction=prediction))
+# In fixed_update:
+prediction.step(command_from_keys())
+```
+
+The client needs its own copy of the solids for the mover to query. The host's own player
+just uses the keys: it has no one to predict for.
+
+Things that will catch you out:
+
+- **Velocity has to be a pure function of the command.** Anything else it reads, such as a
+  timer, has to be in the state `capture` returns, or a replay comes out differently.
+- **Only the movement is predicted.** `TopDownSystem`'s separation push needs other actors, so
+  it arrives as a correction. Expect visible corrections while pressed against something the
+  client doesn't simulate: phase 0 measured 10-19 px in constant contact before smoothing.
+- **After the fixed updates, `Transform` holds what's shown**, which can include a fading
+  correction. Read it in a fixed update for the simulated position.
+- **The first moment after joining isn't predicted well.** The client starts with a guess at its
+  lead, and commands sent before that settles get corrected.
+- **Other players' characters are drawn about 100 ms behind.** They're interpolated like
+  everything else.
+
+**`PredictionClient.corrections` should stay flat** while you walk around walls with nothing
+pushing you. If it climbs, the host and client are stepping differently, which is a bug.
+
+### What it costs
+
+Measured with the test harness on one machine, at a simulated 100 ms round trip.
+
+| | |
+| --- | ---: |
+| Client, per frame, standing still, including the message | 18 us |
+| Host, per player, per tick | 4 us |
+| Replay of 6 ticks while moving, from phase 0 | 0.28 ms |
+| Longest replay one correction can cause | 120 ticks |
+| Command message, 60 a second | 47 bytes |
+| State message, 20 a second | 40 bytes |
+| A client's upload, on the simulated link | 26 kbit/s |
+
+Over 30 seconds of walking and hitting walls, with five seeds, after the first 3 seconds:
+
+| Network | Corrections | Commands late | Lead over the host |
+| --- | ---: | ---: | ---: |
+| 100 ms | 0 | 0 | 8 ticks |
+| 100 ms, 2% loss | 0 | 0 | 8-9 ticks |
+| 200 ms, 30 ms jitter, 2% loss | 0 | 0 | 12 ticks |
+| 160 ms, 30 ms jitter, 20% loss | 0 | 2-6 | 10-12 ticks |
+
+A simulated network proves the logic. **Whether it feels immediate has to be judged by a person**,
+which is what `games/net_horde` is for.
+
 ## Everything from the network is untrusted
 
 The Rust core authenticates packets and survives hostile ones, but **it does not make a

@@ -229,8 +229,8 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ## Networking
 
-### [net_horde](./net_horde) - Replication
-* **Goal:** See a client's world follow a host's, over a bad network.
-* **Key Concepts:** `ReplicationHost`, `ReplicationClient`, `Replicated`, per-player drops.
-* **Worth seeing:** with no arguments, both sides run side by side over a simulated 100 ms, 5% loss network, with their state hashes on screen. The blue squares are drops, and each player sees a different one.
+### [net_horde](./net_horde) - Replication and prediction
+* **Goal:** See a client's world follow a host's over a bad network, and steer your own character without feeling the delay.
+* **Key Concepts:** `ReplicationHost`, `ReplicationClient`, `Replicated`, `PredictionClient`, `PredictionHost`, per-player drops.
+* **Worth seeing:** with no arguments, both sides run side by side over a simulated 100 ms, 2% loss network. WASD or the arrows steer the right side, and the left shows the host receiving it later. The blue squares are drops, and each player sees a different one. `--latency-ms` and `--loss` make the link worse.
 * **Run:** `uv run python games/net_horde/main.py`, or `--host` and `--join` for two windows.

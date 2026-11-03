@@ -4,7 +4,10 @@
     uv run python games/net_horde/main.py --host               # first window
     uv run python games/net_horde/main.py --join "pyguara://"  # second window
 
-Only the host simulates anything. A client draws what arrives, about 100 ms behind.
+The host simulates everything. A client draws what arrives, about 100 ms behind, except
+its own character, which it runs at once. WASD or the arrows steer. To feel a worse link:
+
+    uv run python games/net_horde/main.py --latency-ms 100 --loss 0.05
 """
 
 from __future__ import annotations
@@ -32,6 +35,15 @@ def main() -> None:
         default="127.0.0.1",
         help="the address other machines reach this one at",
     )
+    parser.add_argument(
+        "--latency-ms",
+        type=float,
+        default=50.0,
+        help="one-window mode: simulated delay each way",
+    )
+    parser.add_argument(
+        "--loss", type=float, default=0.02, help="one-window mode: packets lost, 0 to 1"
+    )
     args = parser.parse_args()
 
     container = configure_game_container()
@@ -42,7 +54,7 @@ def main() -> None:
     elif args.join:
         scene = JoinScene(dispatcher, args.join)
     else:
-        scene = SideBySideScene(dispatcher)
+        scene = SideBySideScene(dispatcher, args.latency_ms / 1000, args.loss)
     app.run(starting_scene=scene)
 
 
