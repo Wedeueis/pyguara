@@ -130,6 +130,13 @@ are **kits** (`pyguara/kits/platformer_movement`,
 platformer's questions; actor-vs-actor separation answers a top-down
 game's. Neither belongs to the other, and core belongs to both.
 
+A character that something else steps, such as a player controller or network
+prediction calling `step_body` itself, sets `TopDownBody.moved_elsewhere`. `TopDownSystem`
+then leaves its movement alone, so it isn't moved twice, and it still takes part in
+separation. Separation pushes positions directly, so it can push an actor into a wall;
+for a crowd in a level, give the actors a separation force instead (`FlockingSystem`'s
+does this) and leave `separation_radius` at zero.
+
 Import them from the kit, and register the component yourself if you want
 it in prefabs — core does not register a kit's components:
 

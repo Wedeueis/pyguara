@@ -171,3 +171,82 @@ def test_untracked_actor_does_not_participate_in_separation() -> None:
 
     assert a.get_component(Transform).position == Vector2(0, 0)
     assert b.get_component(Transform).position == Vector2(5, 0)
+
+
+# ========== Bodies moved elsewhere, and order ==========
+
+
+def test_a_body_moved_elsewhere_is_not_moved_again() -> None:
+    manager = EntityManager()
+    system = TopDownSystem(manager, _unobstructed_engine(), SpatialHash[str]())
+    entity = manager.create_entity()
+    transform = entity.add_component(Transform(position=Vector2(0, 0)))
+    entity.add_component(TopDownBody(velocity=Vector2(100, 0), moved_elsewhere=True))
+    system.update(1.0)
+    assert transform.position == Vector2(0, 0)
+
+
+def test_a_body_moved_elsewhere_still_takes_part_in_separation() -> None:
+    manager = EntityManager()
+    index = SpatialHash[str]()
+    system = TopDownSystem(manager, _unobstructed_engine(), index)
+    moved = manager.create_entity()
+    moved_at = moved.add_component(Transform(position=Vector2(0, 0)))
+    moved.add_component(TopDownBody(separation_radius=10, moved_elsewhere=True))
+    moved.add_component(SpatialTracked())
+    other = manager.create_entity()
+    other_at = other.add_component(Transform(position=Vector2(5, 0)))
+    other.add_component(TopDownBody(separation_radius=10))
+    other.add_component(SpatialTracked())
+    index.insert(moved.id, moved_at.position)
+    index.insert(other.id, other_at.position)
+    system.update(0.0)
+    assert (other_at.position - moved_at.position).magnitude == 20
+
+
+_CROWD = """
+from unittest.mock import MagicMock
+from pyguara.common.components import Transform
+from pyguara.common.spatial import SpatialHash
+from pyguara.common.types import Vector2
+from pyguara.ecs.manager import EntityManager
+from pyguara.kits.topdown_movement.body import TopDownBody
+from pyguara.kits.topdown_movement.system import TopDownSystem
+from pyguara.spatial.components import SpatialTracked
+engine = MagicMock()
+engine.overlap_box.return_value = None
+manager = EntityManager()
+index = SpatialHash(cell_size=32.0, accelerate=False)
+system = TopDownSystem(manager, engine, index)
+transforms = []
+for i in range(40):
+    entity = manager.create_entity(f"actor-{i}")
+    at = Vector2((i * 37) % 23 * 0.7, (i * 53) % 19 * 0.7)
+    transforms.append(entity.add_component(Transform(position=at)))
+    entity.add_component(TopDownBody(separation_radius=12.0))
+    entity.add_component(SpatialTracked())
+for _ in range(5):
+    for i, transform in enumerate(transforms):
+        index.insert(f"actor-{i}", transform.position)
+    system.update(1 / 60)
+print([tuple(t.position) for t in transforms])
+"""
+
+
+def test_a_crowd_separates_the_same_way_in_every_process() -> None:
+    """The index's set order changes with each process's string hashing."""
+    import os
+    import subprocess
+    import sys
+
+    results = {
+        subprocess.run(
+            [sys.executable, "-c", _CROWD],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "PYTHONHASHSEED": seed},
+        ).stdout
+        for seed in ("1", "2", "3", "4")
+    }
+    assert len(results) == 1

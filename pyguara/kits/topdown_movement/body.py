@@ -36,10 +36,15 @@ class TopDownBody(StrictComponent):
             between them is less than the sum of their two radii. Zero (the
             default) opts this actor out of separation entirely, in both
             directions -- it neither pushes others nor is pushed by them.
+        moved_elsewhere: Something else steps this body, such as a player
+            controller or network prediction calling `step_body` itself.
+            `TopDownSystem` then leaves its movement alone, so it isn't
+            moved twice in a tick. Separation still applies.
     """
 
     velocity: Vector2 = field(default_factory=lambda: Vector2(0, 0))
     separation_radius: float = 0.0
+    moved_elsewhere: bool = False
 
     # Celeste-style sub-pixel accumulator, round-tripped through
     # CharacterMover.move() every tick. Never read by game code.

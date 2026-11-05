@@ -83,6 +83,26 @@ For simpler logic, use the FSM system.
 
 The **Blackboard** pattern allows different AI systems (or nodes in a BT) to share data (e.g., "TargetPosition", "AlertLevel") without tight coupling.
 
+## Flocking in a level with walls
+
+`FlockingSystem` moves each agent by writing `Transform.position`, so by default a flock
+goes straight through walls. In a level, steer with the flock and move with something that
+collides: build it with `integrate=False`, and it only updates each agent's `velocity`.
+Copy that into the agent's `TopDownBody.velocity`, and `TopDownSystem` moves it through
+`CharacterMover`, sliding along solids. Both stores honour it.
+
+```python
+flock = FlockingSystem(entity_manager, integrate=False)
+movement = TopDownSystem(entity_manager, physics_engine, spatial_index)
+
+flock.update(dt)
+for entity in entity_manager.get_entities_with(FlockingAgent, TopDownBody):
+    entity.get_component(TopDownBody).velocity = entity.get_component(FlockingAgent).velocity
+movement.update(dt)
+```
+
+`SteeringSystem` still writes positions directly.
+
 ## Measured ceiling
 
 `FlockingSystem` has been benchmarked — see

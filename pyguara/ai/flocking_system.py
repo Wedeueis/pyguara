@@ -251,6 +251,7 @@ class FlockingSystem:
         groups: int = 1,
         *,
         accelerate: bool | None = None,
+        integrate: bool = True,
     ) -> None:
         """Initialize the flocking system.
 
@@ -272,12 +273,18 @@ class FlockingSystem:
                 it is missing; False forces the Python path. Both are
                 overrides for tests and for the parity suite, not a
                 second configuration surface.
+            integrate: Whether to move each agent by its velocity. True, the
+                default, writes `Transform.position` directly, which goes
+                through walls. False only steers: each agent's `velocity` is
+                updated and its position is left for something that collides
+                to move, such as `TopDownSystem` or `CharacterMover`.
 
         Raises:
             RuntimeError: If `accelerate=True` and the extension is absent.
         """
         self._entity_manager = entity_manager
         self._cell_size = cell_size
+        self._integrate = integrate
         # Registered here, at system construction, which is what the API
         # asks for: the cache is maintained incrementally as components
         # come and go, so it only pays off for a query that runs every
@@ -446,7 +453,8 @@ class FlockingSystem:
         ):
             if not is_enabled:
                 continue
-            transform.position = _new_vector(Vector2, position)
+            if self._integrate:
+                transform.position = _new_vector(Vector2, position)
             agent.velocity = _new_vector(Vector2, velocity)
 
     def update(self, dt: float) -> None:
@@ -506,7 +514,8 @@ class FlockingSystem:
 
             if groups > 1 and slot % groups != steering_group:
                 # Not this agent's tick to think. It still moves.
-                transform.position = transform.position + agent.velocity * dt
+                if self._integrate:
+                    transform.position = transform.position + agent.velocity * dt
                 continue
 
             position = transform.position
@@ -537,4 +546,5 @@ class FlockingSystem:
                 )
             agent.velocity = new_velocity
 
-            transform.position = transform.position + agent.velocity * dt
+            if self._integrate:
+                transform.position = transform.position + agent.velocity * dt
