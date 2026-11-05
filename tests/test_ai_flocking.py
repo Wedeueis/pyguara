@@ -489,3 +489,43 @@ class TestTheStoreIsOneEngineWideChoice:
 
         with pytest.raises(RuntimeError, match="not available"):
             FlockingSystem(EntityManager(), accelerate=True)
+
+
+@pytest.mark.parametrize("accelerate", STORES)
+def test_without_integrating_a_flock_steers_but_does_not_move(
+    accelerate: bool,
+) -> None:
+    """For agents that a collider moves, so the flock can't walk through walls."""
+    manager = EntityManager()
+    _flock_entity(manager, Vector2(0, 0), seek_target=Vector2(500, 0))
+    _flock_entity(manager, Vector2(10, 0), seek_target=Vector2(500, 0))
+    system = _system(manager, accelerate, integrate=False)
+    _run(system, frames=30)
+    for entity in manager.get_entities_with(FlockingAgent, Transform):
+        assert entity.get_component(FlockingAgent).velocity.x > 0
+    positions = sorted(
+        e.get_component(Transform).position.x
+        for e in manager.get_entities_with(Transform)
+    )
+    assert positions == [0, 10]
+
+
+@pytest.mark.parametrize("accelerate", STORES)
+def test_integrating_is_still_the_default(accelerate: bool) -> None:
+    manager = EntityManager()
+    _flock_entity(manager, Vector2(0, 0), seek_target=Vector2(500, 0))
+    _run(_system(manager, accelerate), frames=30)
+    (entity,) = manager.get_entities_with(Transform)
+    assert entity.get_component(Transform).position.x > 0
+
+
+def test_without_integrating_a_staggered_agent_does_not_move_either() -> None:
+    manager = EntityManager()
+    for x in (0.0, 10.0, 20.0):
+        _flock_entity(manager, Vector2(x, 0), seek_target=Vector2(500, 0))
+    _run(_system(manager, False, integrate=False, groups=3), frames=7)
+    positions = sorted(
+        e.get_component(Transform).position.x
+        for e in manager.get_entities_with(Transform)
+    )
+    assert positions == [0, 10, 20]

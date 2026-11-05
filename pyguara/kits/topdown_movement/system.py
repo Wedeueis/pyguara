@@ -104,10 +104,13 @@ class TopDownSystem:
             delta_time: Time elapsed since last update (seconds).
         """
         for entity in self._entity_manager.get_entities_with(TopDownBody, Transform):
+            body = entity.get_component(TopDownBody)
+            if body.moved_elsewhere:
+                continue
             step_body(
                 self._mover,
                 entity.id,
-                entity.get_component(TopDownBody),
+                body,
                 entity.get_component(Transform),
                 (
                     entity.get_component(Collider)
@@ -134,8 +137,13 @@ class TopDownSystem:
                 continue
             transform = entity.get_component(Transform)
 
-            for other_id in self._spatial_index.query_radius(
-                transform.world_position, body.separation_radius * 2
+            # Sorted: the index answers in set order, which string hashing
+            # changes per process, and each push moves what the next one
+            # sees. Unsorted, a seeded game wouldn't repeat.
+            for other_id in sorted(
+                self._spatial_index.query_radius(
+                    transform.world_position, body.separation_radius * 2
+                )
             ):
                 if other_id <= entity.id:
                     continue
