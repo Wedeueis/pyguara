@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`FlockingSystem(integrate=False)` steers a flock without moving it**, so something that collides can, and a flock in a level stops walking through walls. Pair it with `TopDownSystem`: see `docs/ai/intelligence.md`.
+- **`TopDownBody.moved_elsewhere`** keeps `TopDownSystem` from moving a body that a controller or network prediction already steps, so it isn't moved twice in a tick.
 - **`QuickSaver`, for saving during play** without stalling a frame. It writes on a worker thread and keeps only the newest value per key: a character-sized save costs the main thread about 5 us, against 4 ms for `save_data`. See `docs/systems/persistence.md`.
 - **Prediction, in `pyguara.net`** (phase 3 of the plan). `PredictionClient` runs your own character at once and corrects it from the host's exact state, replaying newer commands, and `PredictionHost` applies one command per tick whatever a client sends. `Replicated(controller=)` says whose character an entity is. `TopDownPrediction` connects the top-down kit, and `step_body` is now the one movement step the host and a replay share. See `docs/systems/networking.md`.
 - **Replication, in `pyguara.net`** (phase 2 of the plan). `ReplicationHost` and `ReplicationClient` keep a client's world matching the host's through loss and reordering, drawn about 100 ms behind with interpolation. `Replicated(owner=)` makes an entity visible to one player only, for per-player drops. See `games/net_horde` to watch it run.
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`spawn_objects` turns a map's objects into entities, through prefabs** (#345), from `pyguara.tilemap.spawning`. Every problem is listed with nothing spawned, a property named `Component.field` overrides that field, and a sized rectangle or a circle shapes the prefab's `Collider` or `TriggerVolume`.
 
 ### Fixed
+- **`TopDownSystem`'s separation now repeats from a seed.** It took neighbours in the spatial index's set order, which string hashing changes per process, and each push moves what the next one sees.
 - **The engine's types now reach games built on it.** The package had no `py.typed` marker, so mypy in a game treated every PyGuara type as `Any` and checked nothing against the engine.
 - **A connected controller no longer triggers a deprecation warning every frame.** `GamepadManager` rescans devices each frame, and the pygame backend initialized each joystick again, which pygame has deprecated.
 - **`create_headless_application()` and the sandbox factories built a second `Application`**, so anything a scene registered through `container.get(Application)` went to an instance nobody ran. Normal game entry points were never affected.
