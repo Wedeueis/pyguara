@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from pyguara.common.types import Vector2
 from pyguara.kits.stats.damage_type import DamageType
@@ -43,6 +44,9 @@ class Projectile:
         passed: Entities an `on_hit` handler declined for this projectile --
             a dodge -- so it flies on without offering them to the handler
             again. Cleared when the slot is reused.
+        payload: Whatever the game attached at `spawn()` -- its own damage
+            rules, the skill that fired it -- for an `on_hit` handler to read.
+            The engine never looks at it.
     """
 
     position: Vector2 = field(default_factory=Vector2.zero)
@@ -64,3 +68,4 @@ class Projectile:
     invincibility_duration: float = 0.0
     attacker: str | None = None
     passed: set[str] = field(default_factory=set)
+    payload: Any = None

@@ -708,3 +708,55 @@ def test_candidate_without_transform_is_ignored(event_dispatcher: Any) -> None:
 
     assert entity.get_component(Health).current == 100.0
     assert len(system.get_active()) == 1
+
+
+# ========== what a game attaches ==========
+
+
+def test_spawn_returns_the_projectile(event_dispatcher: Any) -> None:
+    system, _, _ = _system(event_dispatcher)
+
+    projectile = system.spawn(None, Vector2(0, 0), Vector2(1, 0), damage=3.0)
+
+    assert projectile is not None
+    assert projectile.active
+    assert system.get_active() == [projectile]
+
+
+def test_spawn_into_a_full_pool_returns_none(event_dispatcher: Any) -> None:
+    system, _, _ = _system(event_dispatcher)
+    for _ in range(4):  # capacity is 4
+        system.spawn(None, Vector2(0, 0), Vector2(0, 0), life=10.0)
+
+    assert system.spawn(None, Vector2(0, 0), Vector2(0, 0)) is None
+
+
+def test_on_hit_receives_the_payload_given_at_spawn(event_dispatcher: Any) -> None:
+    payloads: list[Any] = []
+
+    def on_hit(projectile: Any, entity: Any) -> bool:
+        payloads.append(projectile.payload)
+        return True
+
+    manager = EntityManager()
+    index: SpatialHash[str] = SpatialHash()
+    system = ProjectileSystem(manager, event_dispatcher, index, on_hit=on_hit)
+    _target(manager, index, Vector2(100, 0))
+    rules = {"physical": 12.0, "statuses": ["bleed"]}
+    system.spawn(None, Vector2(0, 0), Vector2(100, 0), payload=rules)
+
+    system.update(1.0)
+
+    assert payloads == [rules]
+
+
+def test_a_reused_slot_drops_the_old_payload(event_dispatcher: Any) -> None:
+    manager = EntityManager()
+    system = ProjectileSystem(manager, event_dispatcher, SpatialHash(), capacity=1)
+    system.spawn(None, Vector2(0, 0), Vector2(0, 0), life=0.1, payload="old")
+    system.update(0.2)
+
+    projectile = system.spawn(None, Vector2(0, 0), Vector2(0, 0))
+
+    assert projectile is not None
+    assert projectile.payload is None

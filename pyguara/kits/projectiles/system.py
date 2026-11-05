@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from pyguara.common.components import Transform
 from pyguara.common.spatial import SpatialHash
@@ -108,7 +109,8 @@ class ProjectileSystem:
         attacker: str | None = None,
         rotation: float = 0.0,
         scale: Vector2 = Vector2(1, 1),
-    ) -> None:
+        payload: Any = None,
+    ) -> Projectile | None:
         """Spawn one projectile into the first free pool slot.
 
         Args:
@@ -127,6 +129,12 @@ class ProjectileSystem:
             attacker: Entity id to record as `DamageDealt.attacker`.
             rotation: Initial sprite rotation, degrees.
             scale: Sprite scale.
+            payload: See `Projectile.payload`.
+
+        Returns:
+            The projectile, or None if the pool was full and it was dropped.
+            The pool reuses it once it expires or hits, so hold on to it only
+            while it is active.
         """
         search_start = self._next_index
         while True:
@@ -148,12 +156,13 @@ class ProjectileSystem:
                 projectile.invincibility_duration = invincibility_duration
                 projectile.attacker = attacker
                 projectile.passed.clear()
+                projectile.payload = payload
                 projectile.active = True
-                return
+                return projectile
 
             self._next_index = (self._next_index + 1) % self._capacity
             if self._next_index == search_start:
-                return  # Pool full; drop the spawn, like ParticleSystem does.
+                return None  # Pool full; drop the spawn, like ParticleSystem.
 
     def update(self, dt: float) -> None:
         """Advance every active projectile and resolve any hit."""
