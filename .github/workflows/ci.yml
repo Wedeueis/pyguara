@@ -196,7 +196,9 @@ jobs:
       - name: Run the network suites
         run: >-
           uv run pytest tests/test_net_transport.py tests/test_net_hostile.py
-          tests/test_net_session.py tests/integration/test_net_udp.py
+          tests/test_net_session.py tests/test_net_replication.py
+          tests/test_net_prediction.py tests/integration/test_net_udp.py
+          tests/integration/test_net_demo.py
 
       # Reports, rather than asserts: on Linux this link reads about 7 ms, and
       # coarse Windows timers would show here as a much higher figure.
