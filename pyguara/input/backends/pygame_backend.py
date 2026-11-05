@@ -19,8 +19,14 @@ class PygameJoystick:
         self._joystick: Any = pygame.joystick.Joystick(device_index)
 
     def init(self) -> None:
-        """Initialize this joystick for use."""
-        self._joystick.init()
+        """Initialize this joystick for use.
+
+        Creating one already does, and pygame has deprecated initializing it again.
+        `GamepadManager` asks on every scan, which is every frame, so with a controller
+        attached the unguarded call warned once a frame.
+        """
+        if not self._joystick.get_init():
+            self._joystick.init()
 
     def quit(self) -> None:
         """Release this joystick's resources."""
