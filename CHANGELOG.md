@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`ProjectileSystem(on_hit=, solids=)`.** `on_hit` lets a game decide what a hit does (its own dodge, shields and events) and whether the shot is spent; a declined target is a dodge, passed and not offered again. `solids` takes an `IPhysicsEngine` with the level's walls, and a shot stops at the first one it meets. A target now needs a `Transform` as well as `Hurtbox` and `Health`.
 - **`FlockingSystem(integrate=False)` steers a flock without moving it**, so something that collides can, and a flock in a level stops walking through walls. Pair it with `TopDownSystem`: see `docs/ai/intelligence.md`.
 - **`TopDownBody.moved_elsewhere`** keeps `TopDownSystem` from moving a body that a controller or network prediction already steps, so it isn't moved twice in a tick.
 - **`QuickSaver`, for saving during play** without stalling a frame. It writes on a worker thread and keeps only the newest value per key: a character-sized save costs the main thread about 5 us, against 4 ms for `save_data`. See `docs/systems/persistence.md`.
@@ -19,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`spawn_objects` turns a map's objects into entities, through prefabs** (#345), from `pyguara.tilemap.spawning`. Every problem is listed with nothing spawned, a property named `Component.field` overrides that field, and a sized rectangle or a circle shapes the prefab's `Collider` or `TriggerVolume`.
 
 ### Fixed
+- **A fast projectile no longer passes through targets between ticks.** `ProjectileSystem` only checked where a shot ended each tick, so one moving further than its `hit_radius` in a tick could skip a target entirely. It now checks the whole step.
+- **`ProjectileSystem` hits the same target from the same seed.** It took the first candidate in the spatial index's order, which is a set's and changes per process; it now takes the one the shot reaches first, then the smaller id.
 - **`TopDownSystem`'s separation now repeats from a seed.** It took neighbours in the spatial index's set order, which string hashing changes per process, and each push moves what the next one sees.
 - **The engine's types now reach games built on it.** The package had no `py.typed` marker, so mypy in a game treated every PyGuara type as `Any` and checked nothing against the engine.
 - **A connected controller no longer triggers a deprecation warning every frame.** `GamepadManager` rescans devices each frame, and the pygame backend initialized each joystick again, which pygame has deprecated.

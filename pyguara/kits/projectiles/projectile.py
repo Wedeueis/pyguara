@@ -40,6 +40,9 @@ class Projectile:
         pierce_fraction: Forwarded to `apply_damage()`.
         invincibility_duration: Forwarded to `apply_damage()`.
         attacker: Entity id to record as `DamageDealt.attacker`, if any.
+        passed: Entities an `on_hit` handler declined for this projectile --
+            a dodge -- so it flies on without offering them to the handler
+            again. Cleared when the slot is reused.
     """
 
     position: Vector2 = field(default_factory=Vector2.zero)
@@ -60,3 +63,4 @@ class Projectile:
     pierce_fraction: float = 0.0
     invincibility_duration: float = 0.0
     attacker: str | None = None
+    passed: set[str] = field(default_factory=set)
