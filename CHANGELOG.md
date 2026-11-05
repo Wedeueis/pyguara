@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.6.0] - 2026-11-01
 
 The audit remediation tracked in #305, reconciled with the Rust core RFC. Three things to know before upgrading: **a source build now needs a Rust toolchain**, because the wheel ships the native accelerator (an install from a wheel does not); **a playing sound is a `SoundHandle`, not a channel number**; and **`pyguara.editor` is now part of `pyguara.studio`**. Every breaking change is marked below.
+- **A machine with no audio output could not start any game.** The mixer failing to open raised during bootstrap. It now logs a warning and runs silently. Found on a Windows CI runner, which has no sound device.
 
 ### Known issues
 - **A seeded flock does not simulate the same way twice** (#324), because ECS query order depends on `uuid4` entity ids. A replay of anything containing a flock therefore does not reproduce, even on the machine that recorded it.

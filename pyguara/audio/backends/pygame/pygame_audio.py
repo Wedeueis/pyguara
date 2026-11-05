@@ -2,6 +2,7 @@
 
 import contextlib
 import math
+import os
 from collections.abc import Sequence
 
 import pygame
@@ -24,6 +25,41 @@ from pyguara.resources.meta import AudioMeta
 from pyguara.resources.types import AudioClip
 
 logger = get_logger(__name__)
+
+_DRIVER_VARIABLE = "SDL_AUDIODRIVER"
+
+
+def _open_mixer(frequency: int, size: int, channels: int, buffer: int) -> None:
+    """Open the mixer, running silently if this machine has no audio output.
+
+    A disabled or missing sound device shouldn't stop a game from starting, so this
+    falls back to SDL's dummy driver. The rest of the audio system works as normal, and
+    what's played just isn't heard. The variable is only needed while opening.
+
+    Args:
+        frequency: Sample rate.
+        size: Sample size.
+        channels: Number of audio channels.
+        buffer: Buffer size.
+
+    Raises:
+        pygame.error: If even the dummy driver can't open.
+    """
+    try:
+        pygame.mixer.init(frequency, size, channels, buffer)
+        return
+    except pygame.error as error:
+        logger.warning("No audio output, so the game will be silent: %s", error)
+
+    configured = os.environ.get(_DRIVER_VARIABLE)
+    os.environ[_DRIVER_VARIABLE] = "dummy"
+    try:
+        pygame.mixer.init(frequency, size, channels, buffer)
+    finally:
+        if configured is None:
+            del os.environ[_DRIVER_VARIABLE]
+        else:
+            os.environ[_DRIVER_VARIABLE] = configured
 
 
 class PygameAudioSystem:
@@ -62,7 +98,7 @@ class PygameAudioSystem:
             buffer: Buffer size (512 is low latency).
             num_channels: Number of mixer channels for simultaneous sounds.
         """
-        pygame.mixer.init(frequency, size, channels, buffer)
+        _open_mixer(frequency, size, channels, buffer)
         pygame.mixer.set_num_channels(num_channels)
         self._num_channels = num_channels
 
