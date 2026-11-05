@@ -1,8 +1,9 @@
 # Networked multiplayer: engine plan
 
-**Status:** Phases 0 and 1 are merged (#372, #373): the transport and session exist, and
-replication and prediction do not. Still open from those phases: probe 4, which needs two
-machines, and running the transport on Windows at all. Written 2026-11-01, against `4ea2fa1`.
+**Status:** Phases 0 to 3 are merged (#372, #373, #378, #380): the transport, session,
+replication and prediction exist, and run on Linux and native Windows. The owner has played the
+demo on both and judged that it feels right. Probe 4, which needs two machines, is postponed by
+the owner, so nothing here has run over a real connection yet. Written 2026-11-01, against `4ea2fa1`.
 Reproduce the Python numbers with `tools/net_phase0.py`.
 
 **The requirement.** One player hosts a game from their own machine, and other players

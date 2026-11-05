@@ -222,6 +222,10 @@ for the `master` / `sfx` / `music` buses.
 
 ## Backend notes
 
+**A machine with no audio output still runs.** If the mixer can't open, because the device is
+missing or disabled, both backends log a warning and fall back to SDL's dummy driver. Everything
+keeps working and nothing is heard, so a game doesn't need to handle this itself.
+
 `PygameAudioSystem` wraps `pygame.mixer` (pygame-ce). It allocates 32
 channels by default. `shutdown()` stops all audio and releases the device;
 it is idempotent and is called from `Application.shutdown()`.
