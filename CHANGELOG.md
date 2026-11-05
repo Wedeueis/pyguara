@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`ProjectileSystem.spawn()` returns the projectile and takes a `payload`**, for whatever the game's `on_hit` needs to know about the shot: its own damage rules, or the skill that fired it. A full pool returns None.
 - **`ProjectileSystem(on_hit=, solids=)`.** `on_hit` lets a game decide what a hit does (its own dodge, shields and events) and whether the shot is spent; a declined target is a dodge, passed and not offered again. `solids` takes an `IPhysicsEngine` with the level's walls, and a shot stops at the first one it meets. A target now needs a `Transform` as well as `Hurtbox` and `Health`.
 - **`FlockingSystem(integrate=False)` steers a flock without moving it**, so something that collides can, and a flock in a level stops walking through walls. Pair it with `TopDownSystem`: see `docs/ai/intelligence.md`.
 - **`TopDownBody.moved_elsewhere`** keeps `TopDownSystem` from moving a body that a controller or network prediction already steps, so it isn't moved twice in a tick.
