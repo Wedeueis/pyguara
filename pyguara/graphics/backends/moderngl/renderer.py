@@ -16,6 +16,7 @@ from pyguara.graphics.backends.moderngl.blend import (
     apply_blend_mode,
 )
 from pyguara.graphics.backends.moderngl.texture import GLTexture, GLTextureFactory
+from pyguara.graphics.backends.surface_blending import render_text
 from pyguara.graphics.materials.material import Material
 from pyguara.graphics.types import (
     SHAPE_INSTANCE_FLOATS as _PACKED_SHAPE_FLOATS,
@@ -588,8 +589,8 @@ class ModernGLRenderer:
             self._text_cache.move_to_end(key)
             return cached
 
-        surface = self._get_font(size).render(
-            text, True, (color.r, color.g, color.b, color.a)
+        surface = render_text(
+            self._get_font(size), text, (color.r, color.g, color.b, color.a)
         )
         # Top-down, like every other upload in this backend.
         texture = self._texture_factory.create_from_bytes(

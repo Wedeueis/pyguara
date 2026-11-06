@@ -7,8 +7,19 @@ from pyguara.graphics.backends.pygame.conversions import (
     to_pygame_color,
     to_pygame_rect,
 )
+from pyguara.graphics.backends.surface_blending import (
+    RGBA,
+    blit_blended_circle,
+    blit_blended_line,
+    blit_blended_rect,
+    render_text,
+)
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
+
+
+def _rgba(color: Color) -> RGBA:
+    return (color.r, color.g, color.b, color.a)
 
 
 def _to_area(region: Rect | None, whole: pygame.Rect) -> pygame.Rect:
@@ -200,7 +211,21 @@ class PygameBackend:
             self._screen.blit(surf, dest)
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
-        """Draw a rectangle primitive."""
+        """Draw a rectangle primitive, blending a translucent colour.
+
+        `pygame.draw` replaces the pixels it touches, alpha and all, so a
+        translucent colour drawn straight onto the opaque display lands
+        solid: a 30% red hurt flash painted the whole screen red. One below
+        full alpha is drawn through `surface_blending`, which composites,
+        exactly as the UI renderer does.
+        """
+        if color.a == 0:
+            return
+        if color.a < 255:
+            blit_blended_rect(
+                self._screen, to_pygame_rect(rect), _rgba(color), width, 0
+            )
+            return
         pygame.draw.rect(
             self._screen, to_pygame_color(color), to_pygame_rect(rect), width
         )
@@ -208,7 +233,18 @@ class PygameBackend:
     def draw_circle(
         self, center: Vector2, radius: float, color: Color, width: int = 0
     ) -> None:
-        """Draw a circle primitive."""
+        """Draw a circle primitive, blending a translucent colour."""
+        if color.a == 0:
+            return
+        if color.a < 255:
+            blit_blended_circle(
+                self._screen,
+                (int(center.x), int(center.y)),
+                int(radius),
+                _rgba(color),
+                width,
+            )
+            return
         pygame.draw.circle(
             self._screen,
             to_pygame_color(color),
@@ -220,7 +256,18 @@ class PygameBackend:
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
-        """Draw a line primitive."""
+        """Draw a line primitive, blending a translucent colour."""
+        if color.a == 0:
+            return
+        if color.a < 255:
+            blit_blended_line(
+                self._screen,
+                (int(start.x), int(start.y)),
+                (int(end.x), int(end.y)),
+                _rgba(color),
+                width,
+            )
+            return
         pygame.draw.line(
             self._screen,
             to_pygame_color(color),
@@ -241,8 +288,9 @@ class PygameBackend:
         """Draw a text string, in screen space (see `IRenderer.draw_text`)."""
         if not text:
             return
-        font = self._get_font(size)
-        surf = font.render(text, True, to_pygame_color(color))
+        if color.a == 0:
+            return
+        surf = render_text(self._get_font(size), text, _rgba(color))
         self._screen.blit(surf, (int(position.x), int(position.y)))
 
     def resize(self, width: int, height: int) -> None:
