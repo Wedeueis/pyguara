@@ -1,5 +1,10 @@
 """High-level Audio Manager for game audio management."""
 
+import math
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.types import AudioCapability, SoundHandle
 from pyguara.events.dispatcher import EventDispatcher
@@ -8,6 +13,19 @@ from pyguara.resources.manager import ResourceManager
 from pyguara.resources.types import AudioClip
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class SfxLimit:
+    """How much of one sound may play at once. See `AudioManager.set_sfx_limit`.
+
+    Attributes:
+        max_voices: The most copies playing together, or None for no cap.
+        min_interval: Seconds that must pass between two starts.
+    """
+
+    max_voices: int | None = None
+    min_interval: float = 0.0
 
 
 class AudioManager:
@@ -33,6 +51,7 @@ class AudioManager:
         audio_system: IAudioSystem,
         resource_manager: ResourceManager | None = None,
         event_dispatcher: EventDispatcher | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         """
         Initialize the audio manager.
@@ -41,6 +60,8 @@ class AudioManager:
             audio_system: The underlying audio system implementation.
             resource_manager: Optional resource manager for loading audio clips.
             event_dispatcher: Optional event dispatcher for audio events.
+            clock: Seconds, for `SfxLimit.min_interval`. Real time, because a
+                sound is heard in real time; a test passes its own.
         """
         self._audio_system = audio_system
         self._resource_manager = resource_manager
@@ -51,6 +72,12 @@ class AudioManager:
 
         # Current music track
         self._current_music: str | None = None
+
+        # Per-sound limits, by clip path, and what each limited sound is doing.
+        self._clock = clock
+        self._limits: dict[str, SfxLimit] = {}
+        self._voices: dict[str, list[SoundHandle]] = {}
+        self._last_start: dict[str, float] = {}
 
     # ========== Capabilities ==========
 
@@ -95,7 +122,7 @@ class AudioManager:
 
         Returns:
             A handle for the playing sound, or None if the clip could not
-            be loaded or no channel was free.
+            be loaded, its `SfxLimit` held it back, or no channel was free.
 
         Raises:
             UnsupportedAudioCapability: If `pitch` or the loop points ask
@@ -103,7 +130,7 @@ class AudioManager:
         """
         clip = self._get_clip(path)
         if clip:
-            return self._audio_system.play_sfx(
+            return self.play_sfx_clip(
                 clip,
                 volume,
                 loops,
@@ -134,13 +161,18 @@ class AudioManager:
             loop_end: Seconds into the clip a loop restarts from.
 
         Returns:
-            A handle for the playing sound, or None if no channel was free.
+            A handle for the playing sound, or None if its `SfxLimit` held it
+            back or no channel was free.
 
         Raises:
             UnsupportedAudioCapability: If `pitch` or the loop points ask
                 for something the backend cannot do.
         """
-        return self._audio_system.play_sfx(
+        limit = self._limits.get(clip.path)
+        now = self._clock()
+        if limit is not None and not self._admits(clip.path, limit, now):
+            return None
+        sound = self._audio_system.play_sfx(
             clip,
             volume,
             loops,
@@ -148,6 +180,65 @@ class AudioManager:
             loop_start=loop_start,
             loop_end=loop_end,
         )
+        if limit is not None and sound is not None:
+            self._last_start[clip.path] = now
+            if limit.max_voices is not None:
+                self._voices.setdefault(clip.path, []).append(sound)
+        return sound
+
+    def set_sfx_limit(
+        self, path: str, *, max_voices: int | None = None, min_interval: float = 0.0
+    ) -> None:
+        """Limit how much of one sound plays at once.
+
+        Ten hits landing in one frame would otherwise start ten copies of the
+        same clip together, which is one sound, much louder. A play the limit
+        holds back is dropped, not queued: the copies already playing are the
+        sound of that moment, and a late one would be heard after it.
+
+        Both arguments at their defaults remove the limit.
+
+        Args:
+            path: The sound, as `play_sfx` names it. `play_sfx_clip` is
+                limited by its clip's path.
+            max_voices: The most copies playing together, or None for no cap.
+            min_interval: Seconds that must pass between two starts.
+
+        Raises:
+            ValueError: If `max_voices` is below 1, or `min_interval` is
+                negative or not finite.
+        """
+        if max_voices is not None and max_voices < 1:
+            raise ValueError(f"max_voices must be at least 1, got {max_voices}.")
+        if not math.isfinite(min_interval) or min_interval < 0.0:
+            raise ValueError(
+                f"min_interval must be a finite number of seconds, at least 0, "
+                f"got {min_interval}."
+            )
+        self._voices.pop(path, None)
+        self._last_start.pop(path, None)
+        if max_voices is None and min_interval == 0.0:
+            self._limits.pop(path, None)
+            return
+        self._limits[path] = SfxLimit(max_voices, min_interval)
+
+    def get_sfx_limit(self, path: str) -> SfxLimit | None:
+        """Return the limit set on a sound, or None if it has none."""
+        return self._limits.get(path)
+
+    def _admits(self, path: str, limit: SfxLimit, now: float) -> bool:
+        last = self._last_start.get(path)
+        if last is not None and now - last < limit.min_interval:
+            return False
+        if limit.max_voices is None:
+            return True
+        playing = [
+            sound
+            for sound in self._voices.get(path, ())
+            if self._audio_system.is_sound_active(sound)
+        ]
+        self._voices[path] = playing
+        return len(playing) < limit.max_voices
 
     def stop_sfx(self, sound: SoundHandle) -> None:
         """
@@ -312,3 +403,5 @@ class AudioManager:
         self.stop_music(fade_ms=0)
         self._loaded_clips.clear()
         self._current_music = None
+        self._voices.clear()
+        self._last_start.clear()

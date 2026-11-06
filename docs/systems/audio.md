@@ -151,6 +151,26 @@ Loudness and stereo pan are applied to the **channel**, never to the `Sound`
 object — the `ResourceManager` hands every concurrent play of one clip the
 *same* `Sound`, so setting its volume would bleed across all of them.
 
+### Limiting one sound
+
+Ten hits landing in one frame start ten copies of the same clip at once,
+which sounds like one hit, much louder. `AudioManager.set_sfx_limit` caps it:
+
+```python
+audio = container.get(AudioManager)
+audio.set_sfx_limit("sfx/hit.wav", max_voices=4, min_interval=0.03)
+```
+
+- **`max_voices`** is the most copies playing together. A copy stops counting
+  once `is_sound_active` says it has ended.
+- **`min_interval`** is the seconds between two starts, in real time.
+- **A play over the limit is dropped**, and `play_sfx` returns `None`. It isn't
+  queued, which would be heard late, and it doesn't cut off a copy already
+  playing.
+- The limit is per clip path. `play_sfx_clip` reads it from the clip.
+- Calling it with both arguments at their defaults removes the limit.
+  `get_sfx_limit` returns what is set.
+
 ### One-shot lifecycle
 
 A one-shot sound finishes on its own with no callback. `IAudioSystem`

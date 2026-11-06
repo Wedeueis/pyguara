@@ -15,7 +15,7 @@ from pyguara.audio.audio_system import (
 )
 from pyguara.audio.components import AudioEmitter, AudioListener, AudioSource
 from pyguara.audio.exceptions import AudioError, UnsupportedAudioCapability
-from pyguara.audio.manager import AudioManager
+from pyguara.audio.manager import AudioManager, SfxLimit
 from pyguara.audio.types import (
     AudioBus,
     AudioBusManager,
@@ -36,6 +36,7 @@ __all__ = [
     # Core system
     "IAudioSystem",
     "AudioManager",
+    "SfxLimit",
     "AudioSourceSystem",
     "require_capability",
     "resolve_loop_points",
