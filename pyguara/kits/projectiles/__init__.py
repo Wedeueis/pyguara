@@ -16,12 +16,27 @@ one in its path. Each tick checks the whole step, nearest target first and
 then by id, so a fast shot can't pass through a target between ticks and
 the same seed always hits the same thing.
 
+`on_end=` is told each time a projectile stops, with a `ProjectileEnd` saying
+why, and `clear()` stops them all. `pyguara.net.projectiles` uses both to
+tell clients about shots.
+
 Bullet *patterns* (spiral, fan, and so on) are explicitly out of scope
 per #28 -- "a shmup recipe on top" a game builds using `spawn()`, not
 something this kit provides.
 """
 
 from pyguara.kits.projectiles.projectile import Projectile
-from pyguara.kits.projectiles.system import HitHandler, ProjectileSystem
+from pyguara.kits.projectiles.system import (
+    EndHandler,
+    HitHandler,
+    ProjectileEnd,
+    ProjectileSystem,
+)
 
-__all__ = ["HitHandler", "Projectile", "ProjectileSystem"]
+__all__ = [
+    "EndHandler",
+    "HitHandler",
+    "Projectile",
+    "ProjectileEnd",
+    "ProjectileSystem",
+]

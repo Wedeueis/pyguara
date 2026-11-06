@@ -11,7 +11,7 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.kits.action_combat import ARMOR_STAT, DamageDealt, Health, Hurtbox
-from pyguara.kits.projectiles import ProjectileSystem
+from pyguara.kits.projectiles import ProjectileEnd, ProjectileSystem
 from pyguara.kits.stats import DamageType, StatBlock
 
 
@@ -760,3 +760,73 @@ def test_a_reused_slot_drops_the_old_payload(event_dispatcher: Any) -> None:
 
     assert projectile is not None
     assert projectile.payload is None
+
+
+# ========== on_end ==========
+
+
+def _ends(
+    event_dispatcher: Any, solids: Any = None
+) -> tuple[ProjectileSystem, EntityManager, SpatialHash, list[Any]]:
+    manager = EntityManager()
+    index: SpatialHash[str] = SpatialHash()
+    ends: list[Any] = []
+    system = ProjectileSystem(
+        manager,
+        event_dispatcher,
+        index,
+        solids=solids,
+        on_end=lambda p, reason: ends.append((reason, p.position, p.active)),
+    )
+    return system, manager, index, ends
+
+
+def test_on_end_hears_a_hit_where_it_landed(event_dispatcher: Any) -> None:
+    system, manager, index, ends = _ends(event_dispatcher)
+    _target(manager, index, Vector2(50, 0))
+    system.spawn(None, Vector2(0, 0), Vector2(100, 0), hit_radius=4.0)
+
+    system.update(1.0)
+
+    assert ends == [(ProjectileEnd.HIT, Vector2(50, 0), False)]
+
+
+def test_on_end_hears_a_wall(event_dispatcher: Any) -> None:
+    system, _, _, ends = _ends(event_dispatcher, solids=_Wall(40.0))
+    system.spawn(None, Vector2(0, 0), Vector2(100, 0), life=10.0)
+
+    system.update(1.0)
+
+    assert ends == [(ProjectileEnd.WALL, Vector2(40, 0), False)]
+
+
+def test_on_end_hears_an_expiry(event_dispatcher: Any) -> None:
+    system, _, _, ends = _ends(event_dispatcher)
+    system.spawn(None, Vector2(0, 0), Vector2(100, 0), life=0.5)
+
+    system.update(1.0)
+
+    assert [end[0] for end in ends] == [ProjectileEnd.EXPIRED]
+
+
+def test_a_dodge_is_not_an_end(event_dispatcher: Any) -> None:
+    system, manager, index, ends = _ends(event_dispatcher)
+    system.on_hit = lambda projectile, target: False
+    _target(manager, index, Vector2(50, 0))
+    system.spawn(None, Vector2(0, 0), Vector2(100, 0), life=10.0, hit_radius=4.0)
+
+    system.update(1.0)
+
+    assert ends == []
+    assert len(system.get_active()) == 1
+
+
+def test_clear_ends_every_active_projectile(event_dispatcher: Any) -> None:
+    system, _, _, ends = _ends(event_dispatcher)
+    for _ in range(3):
+        system.spawn(None, Vector2(0, 0), Vector2(1, 0), life=10.0)
+
+    system.clear()
+
+    assert not system.get_active()
+    assert [end[0] for end in ends] == [ProjectileEnd.CLEARED] * 3

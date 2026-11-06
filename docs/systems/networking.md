@@ -156,8 +156,68 @@ replication = ReplicationClient(entity_manager, schema, spawners, on_event=dispa
   `ReplicationHost.send_event`.
 - **Don't relay what a client predicts.** A client's own hop or shot already played when the
   player pressed the button, and the host's copy arrives about a round trip later. Leave those
-  events unregistered, or have the client ignore its own.
+  events unregistered, or have the client ignore its own. Shots have this built in: see
+  [Shots](#shots).
 - **Events don't reach a player who joins later.** They describe moments, not state.
+
+### Shots
+
+Bullets are not replicated: hundreds of them read every snapshot would use up the budget. The
+host sends each shot once, as a reliable event, and every client flies it on its own
+`ProjectileSystem`. The host alone decides what a shot hits. It lives in the projectiles kit,
+as `pyguara.kits.projectiles.net`, since core never imports a kit:
+
+```python
+from pyguara.kits.projectiles.net import (
+    ProjectileClient, ProjectileHost, register_projectiles,
+)
+
+# Both sides, on the same schema.
+register_projectiles(
+    schema, SHOT_KINDS,
+    position=QuantisedVector(step=0.25, wide=True),
+    velocity=QuantisedVector(step=0.25),
+)
+
+# Host: the game's own ProjectileSystem, with its real on_hit. Fire through the relay.
+shots = ProjectileHost(projectiles, replication, app)
+shots.spawn("bolt", origin, velocity, slot=player_slot, life=0.8, hit_radius=6, payload=shot)
+
+# Client: a display-only ProjectileSystem. Dispatch the host's events to it.
+replication = ReplicationClient(world, schema, spawners, on_event=dispatcher.dispatch)
+shots = ProjectileClient(display_projectiles, dispatcher, replication, TICK_SECONDS)
+# Each frame, after the network update:
+shots.update(frame_time)
+```
+
+A client draws from `projectile.payload`, a `NetShot` carrying the shot's kind.
+
+- **A shot costs bytes once, when fired.** 24 bytes of event, about 34 on the wire. When one
+  stops early, at a target, at a wall or by `ProjectileSystem.clear()`, the host sends where it
+  stopped, 15 bytes more. One that runs out of life ends by itself on both sides. With 200
+  bullets in flight a client receives exactly what it does with none
+  (`tests/test_net_projectiles.py`).
+- **Shots fly on the delayed timeline.** A shot leaves its shooter where the client draws the
+  shooter, and moves with the delayed view's clock rather than the frame's, so it keeps pace with
+  the interpolated world while that clock is corrected.
+- **A player's own shots show at once.** Call `ProjectileClient.fire` from the predicted step,
+  with the tick being predicted (`PredictionClient.tick`, read before stepping), where the
+  host's game calls `ProjectileHost.spawn` with that player's slot. A shot is named by
+  `ProjectileKey(slot, tick, index)`, so the host's copy is recognised and not shown twice.
+  Both sides must fire a tick's shots in the same order, and a tick only once: firing from a
+  prediction replay is ignored, since the shot is already showing.
+- **Prediction can be wrong about a skill being ready.** A shot shown that the host never fired
+  is taken away half a second after the host's would have arrived, and counted in
+  `mispredicted`. One the host fired that the client didn't show appears from the network, late,
+  and is counted in `unpredicted`. Either one staying above zero means the client's idea of
+  cooldowns or energy differs from the host's.
+- **On a client, an own shot stops at the first opposing target it reaches**, for display only.
+  That needs the display system to have a spatial index of what the client draws. Other players'
+  shots pass through until the host says they stopped. A shot can look as if it touched a target
+  and did nothing, which is the accepted trade: damage comes only from the host, as game events.
+- **The host's `ProjectileSystem` must leave `on_end` free**, since the relay takes it.
+  Stopping shots by setting `active = False` bypasses it, so a client never hears. Use
+  `ProjectileSystem.clear()`.
 
 ### What it costs
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import enum
 from collections.abc import Callable
 from typing import Any
 
@@ -25,6 +26,23 @@ HitHandler = Callable[[Projectile, Entity], bool]
 """What a hit does: given the projectile and the target, return whether the
 projectile is spent. False means the target was passed -- a dodge -- and the
 projectile flies on, never offering that target to the handler again."""
+
+
+class ProjectileEnd(enum.Enum):
+    """Why a projectile stopped."""
+
+    HIT = enum.auto()
+    """A hit handler spent it."""
+    WALL = enum.auto()
+    """It met one of the solids."""
+    EXPIRED = enum.auto()
+    """Its life ran out."""
+    CLEARED = enum.auto()
+    """`ProjectileSystem.clear()` removed it."""
+
+
+EndHandler = Callable[[Projectile, ProjectileEnd], None]
+"""Told each time a projectile stops, while it still holds where it ended."""
 
 
 class ProjectileSystem:
@@ -57,6 +75,7 @@ class ProjectileSystem:
         on_hit: HitHandler | None = None,
         solids: IPhysicsEngine | None = None,
         solid_mask: int = 0xFFFFFFFF,
+        on_end: EndHandler | None = None,
     ) -> None:
         """Pre-allocate the pool and store collaborators.
 
@@ -82,8 +101,14 @@ class ProjectileSystem:
                 targets before that point. None (the default) lets
                 projectiles fly through everything.
             solid_mask: Collision mask for that raycast.
+            on_end: Told each time a projectile stops, and why. It can also be set
+                later through the `on_end` attribute, which is how a network relay
+                attaches to a system the game built.
         """
-        self._on_hit: HitHandler = on_hit if on_hit is not None else self._damage
+        self.on_hit: HitHandler = on_hit if on_hit is not None else self._damage
+        """What a hit does. Settable, so a display-only copy can replace it."""
+        self.on_end: EndHandler | None = on_end
+        """Told each time a projectile stops. None tells no one."""
         self._solids = solids
         self._solid_mask = solid_mask
         self._entity_manager = entity_manager
@@ -171,7 +196,7 @@ class ProjectileSystem:
                 continue
             projectile.life -= dt
             if projectile.life <= 0:
-                projectile.active = False
+                self._end(projectile, ProjectileEnd.EXPIRED)
                 continue
             start = projectile.position
             end = start + projectile.velocity * dt
@@ -181,8 +206,21 @@ class ProjectileSystem:
                 if wall is not None:
                     end = wall.position
                     blocked = True
-            if not self._check_hit(projectile, start, end) and blocked:
-                projectile.active = False
+            if self._check_hit(projectile, start, end):
+                self._end(projectile, ProjectileEnd.HIT)
+            elif blocked:
+                self._end(projectile, ProjectileEnd.WALL)
+
+    def clear(self) -> None:
+        """Stop every active projectile, telling `on_end` about each."""
+        for projectile in self._pool:
+            if projectile.active:
+                self._end(projectile, ProjectileEnd.CLEARED)
+
+    def _end(self, projectile: Projectile, reason: ProjectileEnd) -> None:
+        projectile.active = False
+        if self.on_end is not None:
+            self.on_end(projectile, reason)
 
     def _check_hit(self, projectile: Projectile, start: Vector2, end: Vector2) -> bool:
         """Offer each target along `start`-`end` to the handler, nearest first.
@@ -191,8 +229,8 @@ class ProjectileSystem:
         target, so an impact effect can be drawn there.
 
         Returns:
-            Whether the projectile was spent, in which case it is also
-            deactivated and left at that point. Otherwise it ends at `end`.
+            Whether the projectile was spent, in which case it is left at that
+            point for the caller to end. Otherwise it ends at `end`.
         """
         step = end - start
         step_sq = step.x * step.x + step.y * step.y
@@ -234,8 +272,7 @@ class ProjectileSystem:
         along.sort(key=lambda candidate: (candidate[0], candidate[1]))
         for t, entity_id, entity in along:
             projectile.position = start + step * t
-            if self._on_hit(projectile, entity):
-                projectile.active = False
+            if self.on_hit(projectile, entity):
                 return True
             projectile.passed.add(entity_id)
         projectile.position = end

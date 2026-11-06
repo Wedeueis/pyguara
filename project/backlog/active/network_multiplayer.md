@@ -597,8 +597,12 @@ screen shows a drop belonging to someone else.
 **Game events are built.** They are registered on the replication schema, sent in order with
 spawns and despawns, and applied on each client's delayed timeline, so every client agrees on
 who was hit and who died (`tests/test_net_events.py`, including 300 hits over 20% loss).
-Projectile spawn events come next. Role-based registration needs no engine code: a client's
-scene simply doesn't register the simulation. Drops wait for a game that has them, Reclaimer's M3.
+**Projectile spawn events are built**, in `pyguara.kits.projectiles.net`. Each shot is sent once,
+and the host sends where it stopped only when that's early, so 200 bullets in flight cost a
+client nothing at all beyond the 34 bytes each took to fire (`tests/test_net_projectiles.py`).
+A player's own shots show at once and are matched to the host's by who fired them, on which
+tick, in which order. Role-based registration needs no engine code: a client's scene simply
+doesn't register the simulation. Drops wait for a game that has them, Reclaimer's M3.
 
 ### Phase 5: Robustness
 Lobby API, closing admission when a run starts (a late joiner is refused with a message saying
