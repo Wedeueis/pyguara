@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Game events over the network** (phase 4 of the plan). `ReplicationSchema.register_event` declares an event's fields, `EventRelay` sends what the host's game dispatches, and `ReplicationClient(on_event=)` dispatches it on each client when its delayed view reaches the event's tick, in order with spawns and despawns. `EntityRef` names a replicated entity and arrives as the client's own id, and `Choice` sends a string from a fixed list. See `docs/systems/networking.md`.
 - **`AudioManager.set_sfx_limit(path, max_voices=, min_interval=)`** caps how much of one sound plays at once, so a burst of hits in one frame doesn't start a dozen copies of one clip. A play over the limit is dropped and returns None. See `docs/systems/audio.md`.
 - **Placeholder sounds: `pyguara.audio.placeholder` and `pyguara sounds`.** These build short stand-in sound effects from tones and noise, using only the standard library, either from code or from a JSON recipe file, and write them as `.wav`. Output is deterministic, and every recipe is checked before anything is written, so a mistake names its place in the tree. Quintal do Cerrado's generator now uses it and rebuilds its files byte for byte. See `docs/systems/audio.md`.
 - **`ProjectileSystem.spawn()` returns the projectile and takes a `payload`**, for whatever the game's `on_hit` needs to know about the shot: its own damage rules, or the skill that fired it. A full pool returns None.
