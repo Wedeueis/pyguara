@@ -11,6 +11,7 @@ from pyguara.graphics.backends.surface_blending import (
     blit_blended_line,
     blit_blended_polygon,
     blit_blended_rect,
+    render_text,
 )
 from pyguara.graphics.backends.surface_texture import as_surface, blit_texture
 from pyguara.log import get_logger
@@ -121,10 +122,7 @@ class PygameUIRenderer:
             return
 
         font = self._get_font(size, bold, italic)
-        rgba = self._to_pygame_color(color)
-
-        texture = font.render(text, True, rgba)
-
+        texture = render_text(font, text, self._to_pygame_color(color))
         self._surface.blit(texture, (int(position.x), int(position.y)))
 
     def draw_texture(

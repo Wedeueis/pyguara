@@ -13,7 +13,13 @@ consequence differs per backend and neither is what anyone wants:
 Blitting composites instead, so both backends share this one path. Every
 primitive goes through it -- rects, circles, lines and polygons -- not
 rects alone: a translucent glow ring or a faded icon is exactly as much a
-hole-puncher as a scrim is.
+hole-puncher as a scrim is. The pygame **world** renderer draws onto the
+same opaque display, so it uses these too.
+
+Text has a problem of its own: `Font.render` ignores the colour's alpha
+altogether, so faded text came out fully opaque on every backend.
+`render_text` bakes the alpha into the glyphs' pixels, which works whether
+the result is blitted or uploaded to the GPU.
 """
 
 from __future__ import annotations
@@ -175,3 +181,25 @@ def blit_blended_polygon(
         pygame.draw.polygon(scratch, rgba, [(x + dx, y + dy) for x, y in points], width)
 
     blit_blended(surface, bounds, draw)
+
+
+def render_text(font: pygame.font.Font, text: str, rgba: RGBA) -> pygame.Surface:
+    """Rasterise text in a colour, its alpha included.
+
+    `Font.render` draws antialiased glyphs onto a per-pixel-alpha surface but
+    takes only the colour's red, green and blue: a damage number fading out
+    stayed solid until it vanished. Multiplying the alpha into every pixel
+    fades it, and keeps the antialiased edges in proportion.
+
+    Args:
+        font: The font.
+        text: What to draw. May be empty.
+        rgba: The colour, alpha included.
+
+    Returns:
+        A per-pixel-alpha surface with the text on it.
+    """
+    surface = font.render(text, True, rgba[:3])
+    if rgba[3] < 255:
+        surface.fill((255, 255, 255, rgba[3]), special_flags=pygame.BLEND_RGBA_MULT)
+    return surface
