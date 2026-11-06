@@ -206,8 +206,10 @@ A client draws from `projectile.payload`, a `NetShot` carrying the shot's kind.
   several ticks when the client catches up, and a correction replays past ticks from inside
   `handle_message`, so only `advancing` is the tick being simulated. A shot is named by
   `ProjectileKey(slot, tick, index)`, so the host's copy is recognised and not shown twice.
-  Both sides must fire a tick's shots in the same order. A replay firing a shot again is
-  ignored, since it's already showing.
+  Both sides must fire a tick's shots in the same order. Give `ProjectileClient` the
+  `PredictionClient` as `prediction`, so it numbers each advance's shots afresh: then a replay
+  firing a shot again is ignored, since it's already showing. Without it, a replay of the tick
+  last fired on looks like more shots on that tick.
 - **Prediction can be wrong about a skill being ready.** A shot shown that the host never fired
   is taken away half a second after the host's would have arrived, and counted in
   `mispredicted`. One the host fired that the client didn't show appears from the network, late,

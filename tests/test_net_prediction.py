@@ -626,6 +626,7 @@ def test_each_advance_names_the_host_tick_it_simulates_while_catching_up() -> No
     game.run(2.0)
     player = game.players[0]
     body = record(player)
+    advances = player.prediction.advances
     replayed = player.prediction.replayed_ticks
     # What a report of commands arriving late sets. Set directly, since late commands
     # also bring corrections, and this is about the steps alone.
@@ -638,6 +639,7 @@ def test_each_advance_names_the_host_tick_it_simulates_while_catching_up() -> No
     game.run(1.0, wander())
 
     assert player.prediction.replayed_ticks == replayed
+    assert player.prediction.advances - advances == len(body.advances)
     host = game.history[1]
     checked = [(tick, state) for tick, state in body.advances if tick in host]
     assert len(checked) > 50
@@ -662,7 +664,10 @@ def test_each_replayed_advance_names_the_host_tick_it_simulates() -> None:
         game.frame(lambda _: Move(0.0, 1.0))
     replays = player.prediction.replayed_ticks - replayed
     assert replays > 0
+    # Counted from the frame the correction landed in, replays and steps alike.
+    advances = player.prediction.advances - len(body.advances)
     game.run(0.5, lambda _: Move(0.0, 1.0))
+    assert player.prediction.advances - advances == len(body.advances)
 
     host = game.history[1]
     checked = [(tick, state) for tick, state in body.advances if tick in host]

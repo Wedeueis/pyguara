@@ -367,6 +367,9 @@ class PredictionClient[C]:
         largest_correction: The largest so far, in world units.
         replayed_ticks: Ticks simulated again because of corrections.
         tick_adjustments: How many times the lead over the host was changed.
+        advances: How many times the character has been advanced, replays included.
+            It changes as each advance begins, so whatever numbers what an advance
+            does can tell a replay of a tick from more of the same tick.
     """
 
     def __init__(
@@ -420,6 +423,7 @@ class PredictionClient[C]:
         self.last_correction = 0.0
         self.largest_correction = 0.0
         self.replayed_ticks = 0
+        self.advances = 0
         self.tick_adjustments = 0
 
     @property
@@ -617,6 +621,7 @@ class PredictionClient[C]:
 
     def _advance(self, body: PredictedBody, command: C, tick: int) -> None:
         self._advancing = tick
+        self.advances += 1
         try:
             body.advance(command, self._dt)
         finally:
