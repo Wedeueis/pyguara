@@ -14,16 +14,21 @@ would teleport an entity across the map, and that would look like a network bug.
 
 from __future__ import annotations
 
+import dataclasses
+import difflib
 import enum
 import math
 import struct
 import zlib
+from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
 from pyguara.common.types import Vector2
 
 _MAX_COMPONENTS = 16
+_MAX_EVENTS = 256
 _MAX_RECORD_BYTES = 512
+_MAX_NET_ID = 65535
 _INT16 = (-32768, 32767)
 _INT32 = (-(2**31), 2**31 - 1)
 
@@ -309,6 +314,177 @@ class EnumField(_Codec):
         return self._members[packed[start]]
 
 
+class Choice(_Codec):
+    """One string from a fixed list, sent by its position: a skill's name, say.
+
+    Only the listed values can arrive, so a name from the network can only ever
+    choose among them.
+    """
+
+    format = "B"
+
+    def __init__(self, values: Sequence[str]) -> None:
+        """Fix the values.
+
+        Args:
+            values: Every value the field can hold, at most 256, each once. Both
+                sides must list them in the same order.
+
+        Raises:
+            ValueError: If there are none, too many, or a repeat.
+        """
+        super().__init__()
+        self._values = list(values)
+        if not self._values or len(self._values) > 256:
+            raise ValueError("A choice holds from 1 to 256 values")
+        if len(set(self._values)) != len(self._values):
+            raise ValueError("A choice lists each value once")
+        self._positions = {value: i for i, value in enumerate(self._values)}
+        self.signature = "|".join(self._values)
+
+    def encode(self, value: Any) -> tuple[int, ...]:
+        """See `FieldCodec.encode`. A value not listed is counted, and sends the first."""
+        position = self._positions.get(value)
+        if position is None:
+            self.saturated += 1
+            return (0,)
+        return (position,)
+
+    def decode(self, packed: tuple[int, ...], start: int = 0) -> str:
+        """See `FieldCodec.decode`.
+
+        Raises:
+            ValueError: If no value sits at that position.
+        """
+        if packed[start] >= len(self._values):
+            raise ValueError("No such choice")
+        return self._values[packed[start]]
+
+
+class EntityRef(_Codec):
+    """An entity, in an event: the host's id going out, the client's own coming in.
+
+    It travels as the entity's network id, so only replicated entities can be named.
+    One that isn't replicated, or is gone, arrives as None, and a client resolves it
+    when the event is applied, so it names the entity as it is then.
+    """
+
+    format = "i"
+
+    def encode(self, value: Any) -> tuple[int, ...]:
+        """See `FieldCodec.encode`. Takes a network id, or None."""
+        return (-1 if value is None else int(value),)
+
+    def decode(self, packed: tuple[int, ...], start: int = 0) -> int | None:
+        """See `FieldCodec.decode`. Returns a network id, or None.
+
+        Raises:
+            ValueError: If it is outside the range of network ids.
+        """
+        value = packed[start]
+        if value == -1:
+            return None
+        if not 0 <= value <= _MAX_NET_ID:
+            raise ValueError("Not a network id")
+        return value
+
+
+class EventLayout:
+    """How one event type is packed.
+
+    Attributes:
+        index: Its position in registration order, sent with each event.
+        event_type: The event class, a dataclass.
+        size: Bytes one event takes on the wire.
+        signature: Its layout as text, for the schema's fingerprint.
+    """
+
+    def __init__(
+        self, index: int, event_type: type, fields: dict[str, FieldCodec]
+    ) -> None:
+        """Compile the packing.
+
+        Args:
+            index: Its position in registration order.
+            event_type: The event class.
+            fields: Field name to codec, in wire order.
+        """
+        self.index = index
+        self.event_type = event_type
+        self._fields = list(fields.items())
+        self._struct = struct.Struct("<" + "".join(c.format for c in fields.values()))
+        self.size = self._struct.size
+        self._slices: list[tuple[str, FieldCodec, int, bool]] = []
+        position = 0
+        for name, codec in self._fields:
+            width = len(
+                struct.unpack(
+                    "<" + codec.format, bytes(struct.calcsize("<" + codec.format))
+                )
+            )
+            self._slices.append((name, codec, position, isinstance(codec, EntityRef)))
+            position += width
+        self.signature = (
+            f"{event_type.__name__}("
+            + ",".join(
+                f"{name}:{codec.format}{_extra_signature(codec)}"
+                for name, codec in self._fields
+            )
+            + ")"
+        )
+
+    def encode(self, event: Any, net_id_of: Callable[[str], int | None]) -> bytes:
+        """Pack an event.
+
+        Args:
+            event: The event.
+            net_id_of: Turns an entity id into its network id, or None.
+        """
+        packed: list[int] = []
+        for name, codec, _, is_entity in self._slices:
+            value = getattr(event, name)
+            if is_entity:
+                value = None if value is None else net_id_of(value)
+            packed.extend(codec.encode(value))
+        return self._struct.pack(*packed)
+
+    def decode(self, data: bytes, offset: int) -> tuple[Any, ...]:
+        """Unpack one event's values, in field order, with entities as network ids.
+
+        Raises:
+            ValueError: If it does not fit, or a value is invalid for its field.
+        """
+        if offset + self.size != len(data):
+            raise ValueError("An event does not fit its message")
+        packed = self._struct.unpack_from(data, offset)
+        return tuple(codec.decode(packed, start) for _, codec, start, _ in self._slices)
+
+    def build(
+        self, values: tuple[Any, ...], entity_of: Callable[[int], str | None]
+    ) -> Any:
+        """Make the event, naming entities as they are here.
+
+        Args:
+            values: From `decode`.
+            entity_of: Turns a network id into a local entity id, or None.
+        """
+        arguments = {}
+        for (name, _, _, is_entity), value in zip(self._slices, values, strict=True):
+            if is_entity and value is not None:
+                value = entity_of(value)
+            arguments[name] = value
+        return self.event_type(**arguments)
+
+    def saturated(self) -> int:
+        """Return how many values have not fit their field so far."""
+        return sum(codec.saturated for _, codec in self._fields)
+
+
+def _extra_signature(codec: FieldCodec) -> str:
+    extra = getattr(codec, "signature", None)
+    return f"[{extra}]" if isinstance(extra, str) else ""
+
+
 class ComponentSchema:
     """How one component type is packed.
 
@@ -337,7 +513,9 @@ class ComponentSchema:
         self.interpolates = any(c.interpolates for c in fields.values())
         self.signature = (
             f"{component_type.__name__}("
-            + ",".join(f"{name}:{c.format}" for name, c in self._fields)
+            + ",".join(
+                f"{name}:{c.format}{_extra_signature(c)}" for name, c in self._fields
+            )
             + ")"
         )
         self._slices: list[tuple[str, FieldCodec, int, int]] = []
@@ -399,12 +577,14 @@ class ComponentSchema:
 
 
 class ReplicationSchema:
-    """Every replicated component. Both sides must register the same, in order."""
+    """Every replicated component and event. Both sides register the same, in order."""
 
     def __init__(self) -> None:
         """Start empty."""
         self.components: list[ComponentSchema] = []
+        self.events: list[EventLayout] = []
         self._by_type: dict[type, ComponentSchema] = {}
+        self._events_by_type: dict[type, EventLayout] = {}
 
     def register(self, component_type: type, **fields: FieldCodec) -> None:
         """Replicate these fields of this component.
@@ -428,6 +608,54 @@ class ReplicationSchema:
         self.components.append(schema)
         self._by_type[component_type] = schema
 
+    def register_event(self, event_type: type, **fields: FieldCodec) -> None:
+        """Send this event to clients, with these fields.
+
+        A client builds the event from the fields alone, so every other field of the
+        dataclass needs a default. Name entities with `EntityRef`.
+
+        Args:
+            event_type: The event, a dataclass.
+            **fields: Field name to codec. May be empty, for an event that is only
+                its type.
+
+        Raises:
+            ValueError: If it is already registered, isn't a dataclass, names a
+                field it doesn't have, leaves out one without a default, or would
+                not fit.
+        """
+        name = event_type.__name__
+        if event_type in self._events_by_type:
+            raise ValueError(f"{name} is already registered")
+        if not dataclasses.is_dataclass(event_type):
+            raise ValueError(f"{name} must be a dataclass to be sent as an event")
+        if len(self.events) >= _MAX_EVENTS:
+            raise ValueError(f"At most {_MAX_EVENTS} event types can be sent")
+        declared = {f.name: f for f in dataclasses.fields(event_type) if f.init}
+        for field_name in fields:
+            if field_name not in declared:
+                close = difflib.get_close_matches(field_name, declared, n=1)
+                hint = f"; did you mean {close[0]!r}?" if close else ""
+                raise ValueError(f"{name} has no field {field_name!r}{hint}")
+        for field_name, declared_field in declared.items():
+            required = (
+                declared_field.default is dataclasses.MISSING
+                and declared_field.default_factory is dataclasses.MISSING
+            )
+            if required and field_name not in fields:
+                raise ValueError(
+                    f"{name}.{field_name} has no default, so it must be sent"
+                )
+        layout = EventLayout(len(self.events), event_type, fields)
+        if layout.size > _MAX_RECORD_BYTES:
+            raise ValueError(f"{name} is too large to send")
+        self.events.append(layout)
+        self._events_by_type[event_type] = layout
+
+    def event_layout(self, event_type: type) -> EventLayout | None:
+        """Return an event's layout, or None if it is not sent."""
+        return self._events_by_type.get(event_type)
+
     def for_type(self, component_type: type) -> ComponentSchema | None:
         """Return a component's schema, or None if it does not replicate."""
         return self._by_type.get(component_type)
@@ -435,6 +663,8 @@ class ReplicationSchema:
     def fingerprint(self) -> int:
         """Return a hash of the wire layout, so two sides can check they agree."""
         layout = ";".join(c.signature for c in self.components)
+        if self.events:
+            layout += ";events:" + ";".join(e.signature for e in self.events)
         return zlib.crc32(layout.encode())
 
     def payload_size(self, mask: int) -> int | None:

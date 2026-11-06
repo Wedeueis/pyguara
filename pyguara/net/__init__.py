@@ -11,6 +11,7 @@ See `docs/systems/networking.md`.
 """
 
 from pyguara.net.driver import ClientDriver, HostDriver
+from pyguara.net.events import EventRelay
 from pyguara.net.prediction import (
     CommandSchema,
     PredictedBody,
@@ -20,6 +21,8 @@ from pyguara.net.prediction import (
 from pyguara.net.replication import Replicated, ReplicationClient, ReplicationHost
 from pyguara.net.schema import (
     Angle,
+    Choice,
+    EntityRef,
     EnumField,
     Flag,
     Int32,
@@ -49,10 +52,13 @@ from pyguara.net.transport import Channel, LinkStats, Transport, UdpTransport
 __all__ = [
     "Angle",
     "Channel",
+    "Choice",
     "ClientDriver",
     "ClientSession",
     "CommandSchema",
+    "EntityRef",
     "EnumField",
+    "EventRelay",
     "Flag",
     "HostDriver",
     "HostSession",

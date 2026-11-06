@@ -57,7 +57,7 @@ addresses on a direct connection, and a game should say so.
 | --- | --- | --- |
 | `COMMANDS` | Unreliable | Per-tick input. Repeat recent ticks in each message, so one loss costs nothing |
 | `SNAPSHOT` | Unreliable, may reorder | State. **Carry a tick, and drop anything older than you have** |
-| `EVENTS` | Reliable, ordered | Damage, deaths, drops, spawns |
+| `EVENTS` | Reliable, ordered | Damage, deaths, drops, spawns. See [Game events](#game-events) |
 | `LEVEL` | Reliable, ordered, lowest priority | Large transfers |
 | `CONTROL` | Reliable, ordered | The session's own. A client's messages here are ignored |
 
@@ -115,6 +115,49 @@ Things that will catch you out:
 - **A component needs to exist on the client's entity**, from its spawner, or its state is ignored.
 - **Pass `digest_every=` while developing.** The host then sends a hash of the state, and
   `ReplicationClient.digests_mismatched` above 0 is a real desync.
+
+### Game events
+
+Hits, kills and heals have to agree on every screen, so the host sends them as events and
+each client dispatches them to its own game. Register an event on the same schema, with a
+codec per field, and the host's relay sends every registered type as the game dispatches it:
+
+```python
+schema.register_event(
+    HitLanded,
+    target=EntityRef(),                       # arrives as the client's own entity id
+    amount=Quantised(step=0.01, wide=True),
+    damage_type=EnumField(DamageType),
+    killed=Flag(),
+)
+schema.register_event(SkillUsed, user=EntityRef(), skill=Choice(SKILL_NAMES))
+
+# Host: the game dispatches as always, and its own screen reacts as before.
+relay = EventRelay(dispatcher, replication, app)
+
+# Client: the same presentation code reacts, since it listens to the same events.
+replication = ReplicationClient(entity_manager, schema, spawners, on_event=dispatcher.dispatch)
+```
+
+- **An event lands with the snapshot it belongs to.** It goes out reliably, in order with spawns
+  and despawns, and a client applies it when its delayed view reaches the event's tick. A hit
+  number appears as the health drops, and a kill still names the enemy, although the host
+  removed it the same tick.
+- **`EntityRef` names replicated entities only.** It travels as the network id and arrives as
+  the client's id for that entity, or None if it isn't replicated or is already gone. An entity
+  spawned the same tick can be named: sending an event announces pending spawns first.
+- **A client builds the event from the sent fields alone**, so every other field of the
+  dataclass needs a default. Registering one without a default, or a field the class doesn't
+  have, raises at once.
+- **`Choice` sends a string from a fixed list**, such as a skill's name, by its position. Both
+  sides list the same values in the same order; the fingerprint includes them, so a client with
+  a different list refuses rather than misreading.
+- **For one player only**, pass `slot_of=` to the relay, or `slot=` to
+  `ReplicationHost.send_event`.
+- **Don't relay what a client predicts.** A client's own hop or shot already played when the
+  player pressed the button, and the host's copy arrives about a round trip later. Leave those
+  events unregistered, or have the client ignore its own.
+- **Events don't reach a player who joins later.** They describe moments, not state.
 
 ### What it costs
 
