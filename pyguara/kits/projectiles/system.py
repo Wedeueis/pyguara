@@ -41,7 +41,7 @@ class ProjectileEnd(enum.Enum):
     """`ProjectileSystem.clear()` removed it."""
 
 
-EndHandler = Callable[[Projectile, ProjectileEnd], None]
+EndHandler = Callable[[Projectile, ProjectileEnd], object]
 """Told each time a projectile stops, while it still holds where it ended."""
 
 

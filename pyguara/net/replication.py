@@ -146,7 +146,7 @@ class ReplicationHost:
         snapshot_interval_ticks: int = 3,
         max_snapshot_bytes: int = 16_000,
         digest_every: int = 0,
-        on_backlog: Callable[[int], None] | None = None,
+        on_backlog: Callable[[int], object] | None = None,
     ) -> None:
         """Start tracking.
 
@@ -511,8 +511,8 @@ class ReplicationClient:
         interpolation_ticks: float = 6.0,
         tick_rate: float = 60.0,
         predicted_components: tuple[type, ...] = (),
-        on_controlled: Callable[[Entity | None], None] | None = None,
-        on_event: Callable[[Any], None] | None = None,
+        on_controlled: Callable[[Entity | None], object] | None = None,
+        on_event: Callable[[Any], object] | None = None,
     ) -> None:
         """Start empty.
 
