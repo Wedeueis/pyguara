@@ -200,12 +200,14 @@ A client draws from `projectile.payload`, a `NetShot` carrying the shot's kind.
 - **Shots fly on the delayed timeline.** A shot leaves its shooter where the client draws the
   shooter, and moves with the delayed view's clock rather than the frame's, so it keeps pace with
   the interpolated world while that clock is corrected.
-- **A player's own shots show at once.** Call `ProjectileClient.fire` from the predicted step,
-  with the tick being predicted (`PredictionClient.tick`, read before stepping), where the
-  host's game calls `ProjectileHost.spawn` with that player's slot. A shot is named by
+- **A player's own shots show at once.** Call `ProjectileClient.fire` from the character's
+  `advance`, where the host's game calls `ProjectileHost.spawn` with that player's slot, with
+  the tick `PredictionClient.advancing` names. Not `PredictionClient.tick`: one `step` advances
+  several ticks when the client catches up, and a correction replays past ticks from inside
+  `handle_message`, so only `advancing` is the tick being simulated. A shot is named by
   `ProjectileKey(slot, tick, index)`, so the host's copy is recognised and not shown twice.
-  Both sides must fire a tick's shots in the same order, and a tick only once: firing from a
-  prediction replay is ignored, since the shot is already showing.
+  Both sides must fire a tick's shots in the same order. A replay firing a shot again is
+  ignored, since it's already showing.
 - **Prediction can be wrong about a skill being ready.** A shot shown that the host never fired
   is taken away half a second after the host's would have arrived, and counted in
   `mispredicted`. One the host fired that the client didn't show appears from the network, late,
