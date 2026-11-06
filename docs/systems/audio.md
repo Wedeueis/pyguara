@@ -179,6 +179,57 @@ sound is still playing — it returns `False` once the sound has ended *or* its
 channel has been recycled by an unrelated sound. `AudioSourceSystem` calls it
 every frame to reconcile `AudioSource` state; you rarely call it directly.
 
+## Placeholder sounds
+
+Before any real sounds exist, `pyguara.audio.placeholder` builds short stand-ins
+(a thud, a blip, a hiss) from simple tones and noise, and writes them as `.wav`
+files the game loads like any other. When a real recording arrives it replaces
+the file, with no code change.
+
+From code, the functions combine like this:
+
+```python
+from pyguara.audio.placeholder import envelope, mix, rng_for, sine, transient, write_wav
+
+rng = rng_for("hit")
+hit = envelope(mix(transient(0.03, 0.5, rng), sine(140.0, 0.12, 0.6)), decay_rate=20.0)
+write_wav(Path("assets/audio/hit.wav"), hit)
+```
+
+From data, the same tree as JSON. Each node is an object with one key, naming a
+function, holding that function's arguments; `envelope` and `concat` take what
+they wrap as `of`, and `mix` takes a list:
+
+```json
+{"hit": {"envelope": {"decay_rate": 20.0, "of": {"mix": [
+    {"transient": {"duration": 0.03, "amplitude": 0.5}},
+    {"sine": {"freq": 140.0, "duration": 0.12, "amplitude": 0.6}}]}}}}
+```
+
+```bash
+pyguara sounds data/sounds.json assets/audio/
+```
+
+| Node | Arguments |
+| --- | --- |
+| `sine`, `square` | `freq`, `duration`, `amplitude` (1.0) |
+| `sweep` | `freq_start`, `freq_end`, `duration`, `amplitude` (1.0) |
+| `noise`, `transient` | `duration`, `amplitude` |
+| `envelope` | `of`, `attack` (0.005 s), `decay_rate` (8.0) |
+| `concat` | `of` (a list), `gap` (0.01 s) |
+| `mix` | a list |
+
+- **Every recipe is checked before anything is written.** A mistake names
+  its place in the tree and the closest valid name, for example
+  `hit > envelope > of > mix[1] > sine: unknown argument 'frq'; did you mean 'freq'?`
+- **The output is deterministic.** Noise is seeded by the sound's own name, so
+  editing one sound leaves every other file byte-identical, and a rebuild with
+  no edits changes nothing. `--seed` rerolls all of them.
+- Files are mono, 16-bit, 22,050 Hz. Anything past full scale is clipped.
+
+Quintal do Cerrado's `assets/audio/generate_placeholder_sfx.py` is a worked
+example in code.
+
 ## Spatial audio
 
 Attach components to entities that also carry a `Transform`:
