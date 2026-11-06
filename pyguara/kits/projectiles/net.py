@@ -163,16 +163,22 @@ class _HasFixedTick(Protocol):
     def fixed_tick(self) -> int: ...
 
 
+class _CountsAdvances(Protocol):
+    @property
+    def advances(self) -> int: ...
+
+
 class _Counter:
-    """Numbers each slot's shots within a tick."""
+    """Numbers each slot's shots within a tick, or within one advance of a tick."""
 
     def __init__(self) -> None:
-        self._tick: int | None = None
+        self._at: tuple[int, int | None] | None = None
         self._next: dict[int, int] = {}
 
-    def take(self, slot: int, tick: int) -> int | None:
-        if tick != self._tick:
-            self._tick = tick
+    def take(self, slot: int, tick: int, advance: int | None = None) -> int | None:
+        at = (tick, advance)
+        if at != self._at:
+            self._at = at
             self._next.clear()
         index = self._next.get(slot, 0)
         if index > _MAX_INDEX:
@@ -301,6 +307,7 @@ class ProjectileClient:
         dispatcher: EventDispatcher,
         replication: ReplicationClient,
         tick_seconds: float,
+        prediction: _CountsAdvances | None = None,
     ) -> None:
         """Attach to a display-only projectile system.
 
@@ -313,8 +320,12 @@ class ProjectileClient:
                 events, through `on_event=dispatcher.dispatch`.
             replication: The client's replication, for its delayed view.
             tick_seconds: How long one tick is.
+            prediction: The client's `PredictionClient`, when own shots are fired
+                from its advances. Without it, a replay of the tick last fired on
+                can't be told from more shots on that tick, and shows them twice.
         """
         self._projectiles = projectiles
+        self._prediction = prediction
         self._dispatcher = dispatcher
         self._replication = replication
         self._tick_seconds = tick_seconds
@@ -376,7 +387,8 @@ class ProjectileClient:
             The projectile, or None if it wasn't shown, including when this same shot
             is already showing, as it is when prediction replays a tick.
         """
-        index = self._counter.take(_slot_number(slot), tick)
+        advance = None if self._prediction is None else self._prediction.advances
+        index = self._counter.take(_slot_number(slot), tick, advance)
         if index is None:
             return None
         self._own_slots.add(slot)

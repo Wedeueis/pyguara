@@ -340,6 +340,33 @@ def test_a_replayed_tick_does_not_show_its_shot_again() -> None:
     assert len(player.shown()) == 2
 
 
+class Advances:
+    """Stands in for `PredictionClient.advances`."""
+
+    def __init__(self) -> None:
+        self.advances = 0
+
+
+def test_a_replay_of_the_tick_last_fired_on_does_not_show_its_shots_again() -> None:
+    """Nothing but the advance tells the replay from two more shots on that tick."""
+    game = Game(seed=8)
+    game.connect()
+    (player,) = game.players
+    prediction = Advances()
+    shots = ProjectileClient(
+        player.projectiles, player.dispatcher, player.replication, DT, prediction
+    )
+    tick = game.fixed_tick + 5
+    # The first fires two on its tick, the second replays it, the third replays it
+    # again after a rewind.
+    for _ in range(3):
+        prediction.advances += 1
+        for _ in range(2):
+            shots.fire(1, tick, "bolt", Vector2(0, 0), Vector2(SPEED, 0))
+
+    assert len(player.shown()) == 2
+
+
 def test_an_own_shot_the_host_never_fired_is_taken_away() -> None:
     game = Game(seed=9)
     game.connect()
