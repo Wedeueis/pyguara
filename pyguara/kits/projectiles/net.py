@@ -357,12 +357,14 @@ class ProjectileClient:
         """Show one of this player's own shots at once, before the host confirms it.
 
         Call it where the host's game calls `ProjectileHost.spawn` for the same shot,
-        from the predicted step of the same command, so both number it alike.
+        from the predicted step of the same command and in the same order, so both
+        number it alike.
 
         Args:
             slot: This player's slot.
-            tick: The tick being predicted, `PredictionClient.tick` read before
-                stepping.
+            tick: The tick being predicted: `PredictionClient.advancing`, read from
+                inside the character's `advance`. Prediction replays ticks there too,
+                which shows nothing twice.
             kind: What it is.
             position: Where it starts.
             velocity: Pixels per second.

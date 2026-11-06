@@ -401,6 +401,7 @@ class PredictionClient[C]:
         self._snap = snap_distance
         self._body: PredictedBody | None = None
         self._tick: int | None = None
+        self._advancing: int | None = None
         self._sim: tuple[float, ...] | None = None
         self._states: dict[int, tuple[float, ...]] = {}
         self._commands: dict[int, _Sent[C]] = {}
@@ -425,6 +426,17 @@ class PredictionClient[C]:
     def tick(self) -> int | None:
         """The host tick being predicted, or None before there's a character to predict."""
         return self._tick
+
+    @property
+    def advancing(self) -> int | None:
+        """The host tick the character is stepping through, while its `advance` runs.
+
+        Read it from inside `advance`, to act as the host does on that tick, such as
+        firing a shot numbered by it. `tick` can't tell you: one `step` may advance
+        several ticks to catch up, and a correction replays past ones from inside
+        `handle_message`. None outside an `advance`.
+        """
+        return self._advancing
 
     def bind(self, body: PredictedBody | None) -> None:
         """Say which character this player controls.
@@ -532,7 +544,7 @@ class PredictionClient[C]:
             if sent is not None:
                 last = sent.command
             self._states[tick] = body.capture()
-            body.advance(last, self._dt)
+            self._advance(body, last, tick)
             self.replayed_ticks += 1
 
     def _note_correction(self, error_x: float, error_y: float) -> None:
@@ -598,10 +610,17 @@ class PredictionClient[C]:
             self._commands[tick] = sent
             self._commands.pop(tick - _REPLAY_WINDOW, None)
             self._states.pop(tick - _REPLAY_WINDOW, None)
-            body.advance(sent.command, self._dt)
+            self._advance(body, sent.command, tick)
             self._tick = tick + 1
         self._catch_up = 0
         self._new_commands = True
+
+    def _advance(self, body: PredictedBody, command: C, tick: int) -> None:
+        self._advancing = tick
+        try:
+            body.advance(command, self._dt)
+        finally:
+            self._advancing = None
 
     def begin_frame(self) -> None:
         """Take away what was only for display. Call before messages and fixed updates."""
