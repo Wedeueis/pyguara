@@ -202,6 +202,8 @@ class Game:
         )
         self.players = [Player(self) for _ in range(players)]
         self.max_step = 0.0
+        # Each character's state as each tick began, before its command.
+        self.history: dict[int, dict[int, tuple[float, ...]]] = {}
 
     def on_host_event(self, event: object) -> None:
         slot = getattr(event, "slot", None)
@@ -223,6 +225,9 @@ class Game:
             player.driver.before_fixed_updates(DT * ticks)
         for _ in range(ticks):
             for slot, entity in self.characters.items():
+                self.history.setdefault(slot, {})[self.fixed_tick] = self.host_state(
+                    slot
+                )
                 command = self.host_prediction.take(slot, self.fixed_tick)
                 entity.get_component(TopDownBody).velocity = velocity_of(command)
             self.topdown.update(DT)
@@ -589,6 +594,87 @@ def test_a_correction_while_moving_replays_the_newer_commands() -> None:
     game.run(0.5, lambda _: Move(0.0, 1.0))
     assert player.prediction.corrections == corrections + 1
     assert player.prediction.replayed_ticks > replayed
+
+
+class Recording(TopDownPrediction):
+    """Notes the tick prediction says each advance is, and the state it starts from."""
+
+    def __init__(self, player: Player) -> None:
+        assert player.own is not None
+        super().__init__(player.own, player.mover, velocity_of)
+        self.prediction = player.prediction
+        self.advances: list[tuple[int, tuple[float, ...]]] = []
+
+    def advance(self, command: Any, dt: float) -> None:
+        tick = self.prediction.advancing
+        assert tick is not None
+        self.advances.append((tick, self.capture()))
+        super().advance(command, dt)
+
+
+def record(player: Player) -> Recording:
+    body = Recording(player)
+    # Swapped in place, so nothing about the prediction under way is reset.
+    player.prediction._body = body
+    return body
+
+
+def test_each_advance_names_the_host_tick_it_simulates_while_catching_up() -> None:
+    """Catching up makes one step advance several ticks, which `tick` can't name."""
+    game = Game(conditions=LinkConditions(latency=0.05))
+    game.join()
+    game.run(2.0)
+    player = game.players[0]
+    body = record(player)
+    replayed = player.prediction.replayed_ticks
+    # What a report of commands arriving late sets. Set directly, since late commands
+    # also bring corrections, and this is about the steps alone.
+    player.prediction._catch_up = 5
+    game.frame(wander())
+    assert len(body.advances) == 6
+    assert [tick for tick, _ in body.advances] == list(
+        range(body.advances[0][0], body.advances[0][0] + 6)
+    )
+    game.run(1.0, wander())
+
+    assert player.prediction.replayed_ticks == replayed
+    host = game.history[1]
+    checked = [(tick, state) for tick, state in body.advances if tick in host]
+    assert len(checked) > 50
+    assert all(state == host[tick] for tick, state in checked)
+
+
+def test_each_replayed_advance_names_the_host_tick_it_simulates() -> None:
+    game = Game(conditions=LinkConditions(latency=0.05))
+    game.join()
+    game.run(2.0)
+    player = game.players[0]
+    transform = game.character().get_component(Transform)
+    game.run(0.3, lambda _: Move(1.0, 0.0))
+    transform.position = transform.position + Vector2(5, 0)
+    body = record(player)
+    corrections = player.prediction.corrections
+    replayed = player.prediction.replayed_ticks
+    while player.prediction.corrections == corrections:
+        # Only the frame the correction lands in is kept: before it, the client
+        # rightly predicted ticks the push then changed.
+        body.advances.clear()
+        game.frame(lambda _: Move(0.0, 1.0))
+    replays = player.prediction.replayed_ticks - replayed
+    assert replays > 0
+    game.run(0.5, lambda _: Move(0.0, 1.0))
+
+    host = game.history[1]
+    checked = [(tick, state) for tick, state in body.advances if tick in host]
+    assert len(checked) > replays
+    assert all(state == host[tick] for tick, state in checked)
+
+
+def test_nothing_is_advancing_between_steps() -> None:
+    game = Game()
+    game.join()
+    game.run(0.5, wander())
+    assert game.players[0].prediction.advancing is None
 
 
 def test_after_a_stall_the_lead_goes_straight_to_where_it_should_be() -> None:
