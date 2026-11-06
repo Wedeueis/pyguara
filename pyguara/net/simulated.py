@@ -67,7 +67,7 @@ class SimulatedNetwork:
         """
         self.conditions = conditions if conditions is not None else LinkConditions()
         self.now = 0.0
-        self.tap: Callable[[str, str, bytes], None] | None = None
+        self.tap: Callable[[str, str, bytes], object] | None = None
         """Sees every datagram put on the wire, as (source, destination, bytes)."""
         self.drop: Callable[[str, str, bytes], bool] | None = None
         """Decides a datagram's fate exactly, for a test that needs one lost."""

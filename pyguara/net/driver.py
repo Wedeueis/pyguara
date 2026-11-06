@@ -36,7 +36,7 @@ class HostDriver:
         clock: _HasFixedTick,
         session: HostSession,
         replication: ReplicationHost,
-        on_event: Callable[[SessionEvent], None] | None = None,
+        on_event: Callable[[SessionEvent], object] | None = None,
         prediction: PredictionHost[Any] | None = None,
     ) -> None:
         """Bind them together.
@@ -91,7 +91,7 @@ class ClientDriver:
         self,
         session: ClientSession,
         replication: ReplicationClient,
-        on_event: Callable[[SessionEvent], None] | None = None,
+        on_event: Callable[[SessionEvent], object] | None = None,
         prediction: PredictionClient[Any] | None = None,
     ) -> None:
         """Bind them together.
