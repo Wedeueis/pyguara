@@ -20,6 +20,11 @@ handled here on purpose:
 - **The two sides disagree about the layout.** The host sends a fingerprint of its
   schema, and a client that differs stops applying anything and says so.
 
+Game events registered on the schema (`register_event`) travel the same way: reliably,
+in order with spawns and despawns, and applied on the same delayed timeline, so a kill
+lands while the enemy is still there and a client's screen never shows a hit before the
+snapshot it belongs to. `EventRelay` sends a dispatcher's events as they happen.
+
 `notify_component_changed` is not used: no movement system calls it, which Phase 0
 measured, so a snapshot reads the fields directly.
 
@@ -41,7 +46,7 @@ from pyguara.ecs.component import StrictComponent
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.log import get_logger
-from pyguara.net.schema import ComponentSchema, ReplicationSchema
+from pyguara.net.schema import ComponentSchema, EventLayout, ReplicationSchema
 from pyguara.net.transport import Channel
 
 logger = get_logger(__name__)
@@ -53,6 +58,7 @@ _SPAWN = 0xE2
 _DESPAWN = 0xE3
 _HELLO = 0xE4
 _DIGEST = 0xE5
+_EVENT = 0xE6
 
 _TICK_HEADER = struct.Struct("<BI")
 _RECORD_HEADER = struct.Struct("<HH")
@@ -60,6 +66,7 @@ _SPAWN_HEADER = struct.Struct("<BIHBB")
 _DESPAWN_MESSAGE = struct.Struct("<BIH")
 _HELLO_MESSAGE = struct.Struct("<BI")
 _DIGEST_MESSAGE = struct.Struct("<BIII")
+_EVENT_HEADER = struct.Struct("<BIB")
 _MASK = struct.Struct("<H")
 _SPAWN_FLAG_CONTROLLED = 1
 
@@ -191,13 +198,53 @@ class ReplicationHost:
             self._track(entity, entity.get_component(Replicated))
 
     @property
+    def schema(self) -> ReplicationSchema:
+        """What crosses the wire."""
+        return self._schema
+
+    @property
     def tracked_count(self) -> int:
         """How many entities are being replicated."""
         return len(self._tracked)
 
     def saturated(self) -> int:
-        """Return how many values have not fit their field, across all components."""
-        return sum(component.saturated() for component in self._schema.components)
+        """Return how many values have not fit their field, across the schema."""
+        return sum(
+            component.saturated() for component in self._schema.components
+        ) + sum(event.saturated() for event in self._schema.events)
+
+    def net_id_of(self, entity_id: str) -> int | None:
+        """Return an entity's network id, or None if it isn't replicated."""
+        tracked = self._tracked.get(entity_id)
+        return None if tracked is None else tracked.net_id
+
+    def send_event(self, event: Any, tick: int, slot: int | None = None) -> None:
+        """Send a game event to clients, reliably and in order with spawns.
+
+        Anything spawned before this call is announced first, so an event can name
+        an entity created in the same tick.
+
+        Args:
+            event: An event whose type is registered with `register_event`.
+            tick: The first tick whose state includes it. A client applies it when
+                its delayed view reaches that tick.
+            slot: The one player to tell, or None for everyone.
+
+        Raises:
+            ValueError: If its type isn't registered.
+        """
+        layout = self._schema.event_layout(type(event))
+        if layout is None:
+            raise ValueError(
+                f"{type(event).__name__} isn't registered with register_event"
+            )
+        self._announce_new()
+        message = _EVENT_HEADER.pack(_EVENT, tick, layout.index) + layout.encode(
+            event, self.net_id_of
+        )
+        for peer in self._peers.values():
+            if slot is None or peer.slot == slot:
+                self._queue(peer, message, True)
 
     def add_peer(self, peer: int, slot: int) -> None:
         """Start replicating to a peer, telling it about everything it can see.
@@ -434,6 +481,12 @@ class _Remote:
     controlled: bool = False
 
 
+@dataclass(slots=True)
+class _Arrived:
+    layout: EventLayout
+    values: tuple[Any, ...]
+
+
 class ReplicationClient:
     """A client's side: applies what the host sent, on a delayed timeline.
 
@@ -459,6 +512,7 @@ class ReplicationClient:
         tick_rate: float = 60.0,
         predicted_components: tuple[type, ...] = (),
         on_controlled: Callable[[Entity | None], None] | None = None,
+        on_event: Callable[[Any], None] | None = None,
     ) -> None:
         """Start empty.
 
@@ -474,17 +528,21 @@ class ReplicationClient:
                 health can keep arriving.
             on_controlled: Called with this player's own character when it appears, and
                 with None when it goes.
+            on_event: Called with each game event the host sends, when the delayed
+                view reaches its tick, with entities named by their ids here. Usually
+                a dispatcher's `dispatch`. Without it, events are read and dropped.
         """
         self._manager = entity_manager
         self._schema = schema
         self._spawners = spawners
         self._predicted = predicted_components
         self._on_controlled = on_controlled
+        self._on_event = on_event
         self._delay = interpolation_ticks
         self._rate = tick_rate
         self._remotes: dict[int, _Remote] = {}
         self._active: dict[int, _Remote] = {}
-        self._timeline: deque[tuple[int, bool, _Remote]] = deque()
+        self._timeline: deque[tuple[int, _Remote | _Arrived, bool]] = deque()
         self._newest_tick: int | None = None
         self._render_tick: float | None = None
         self._events_received = 0
@@ -554,6 +612,8 @@ class ReplicationClient:
                 self._on_despawn(data)
             elif kind == _HELLO:
                 self._on_hello(data)
+            elif kind == _EVENT:
+                self._on_event_message(data)
             else:
                 self.malformed += 1
         else:
@@ -647,7 +707,7 @@ class ReplicationClient:
             controlled=bool(flags & _SPAWN_FLAG_CONTROLLED),
         )
         self._remotes[net_id] = remote
-        self._timeline.append((tick, True, remote))
+        self._timeline.append((tick, remote, True))
 
     def _on_despawn(self, data: bytes) -> None:
         _, tick, net_id = _DESPAWN_MESSAGE.unpack(data)
@@ -657,7 +717,17 @@ class ReplicationClient:
         if remote is None:
             self.unknown_records += 1
             return
-        self._timeline.append((tick, False, remote))
+        self._timeline.append((tick, remote, False))
+
+    def _on_event_message(self, data: bytes) -> None:
+        _, tick, index = _EVENT_HEADER.unpack_from(data, 0)
+        if index >= len(self._schema.events):
+            raise ValueError("No such event")
+        layout = self._schema.events[index]
+        values = layout.decode(data, _EVENT_HEADER.size)
+        self._events_received += 1
+        self._see_tick(tick)
+        self._timeline.append((tick, _Arrived(layout, values), False))
 
     def _on_digest(self, data: bytes) -> None:
         _, tick, events_sent, crc = _DIGEST_MESSAGE.unpack(data)
@@ -709,11 +779,34 @@ class ReplicationClient:
         assert render is not None
         timeline = self._timeline
         while timeline and timeline[0][0] <= render:
-            _, is_spawn, remote = timeline.popleft()
-            if is_spawn:
-                self._create(remote)
+            _, item, is_spawn = timeline.popleft()
+            if isinstance(item, _Arrived):
+                self._apply_event(item)
+            elif is_spawn:
+                self._create(item)
             else:
-                self._destroy(remote)
+                self._destroy(item)
+
+    def _entity_of(self, net_id: int) -> str | None:
+        remote = self._active.get(net_id)
+        if remote is None or remote.entity is None:
+            return None
+        return remote.entity.id
+
+    def _apply_event(self, arrived: _Arrived) -> None:
+        if self._on_event is None:
+            return
+        try:
+            event = arrived.layout.build(arrived.values, self._entity_of)
+        except Exception:  # noqa: BLE001 - a host's values must not end the frame
+            self.malformed += 1
+            logger.error(
+                "Could not build a %s from the host's values",
+                arrived.layout.event_type.__name__,
+                exc_info=True,
+            )
+            return
+        self._on_event(event)
 
     def _create(self, remote: _Remote) -> None:
         if remote.gone:
