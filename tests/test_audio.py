@@ -586,3 +586,26 @@ def test_full_audio_workflow(
     assert audio_manager.get_current_music() is None
 
     audio_manager.cleanup()
+
+
+def test_audio_manager_limits_voices_on_the_real_mixer(
+    audio_system: PygameAudioSystem,
+) -> None:
+    """A limited clip holds at its cap on real channels, and frees as one ends."""
+    from pyguara.audio.audio_system import IAudioSystem
+    from pyguara.di.container import DIContainer
+
+    container = DIContainer()
+    container.register_instance(IAudioSystem, audio_system)  # type: ignore[type-abstract]
+    container.register_singleton(AudioManager, AudioManager)
+    manager = container.get(AudioManager)  # the real clock, from the default
+    clip = _make_clip("limited.wav")
+    manager.set_sfx_limit("limited.wav", max_voices=2)
+
+    first = manager.play_sfx_clip(clip)
+    second = manager.play_sfx_clip(clip)
+    assert first is not None and second is not None
+    assert manager.play_sfx_clip(clip) is None
+
+    manager.stop_sfx(first)
+    assert manager.play_sfx_clip(clip) is not None
