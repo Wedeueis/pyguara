@@ -26,7 +26,8 @@
         "gravity_y": 0.0
     },
     "performance": {
-        "native_acceleration": "auto"
+        "native_acceleration": "auto",
+        "freeze_on_scene_change": true
     },
     "debug": {
         "log_level": "INFO",
