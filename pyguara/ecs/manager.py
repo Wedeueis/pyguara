@@ -20,15 +20,21 @@ C4 = TypeVar("C4", bound=Component)
 
 _EMPTY_IDS: frozenset[str] = frozenset()
 
-EntityRemovedCallback = Callable[[Entity], None]
-"""Called synchronously with an entity at the moment it is soft-removed."""
+EntityRemovedCallback = Callable[[Entity], object]
+"""Called synchronously with an entity at the moment it is soft-removed.
 
-ComponentCallback = Callable[[Entity, Component], None]
+What it returns is ignored. Typed `object` rather than `None` so a function
+that happens to return something -- `dispatcher.dispatch`, a list's `append`
+-- can be passed as it is, without a wrapper to satisfy the checker.
+"""
+
+ComponentCallback = Callable[[Entity, Component], object]
 """Called synchronously with the entity and the component involved.
 
 Both are passed because neither is reliably reachable from the other at
 the moment it fires: on removal the component is already detached, so
-`entity.get_component(...)` would return nothing.
+`entity.get_component(...)` would return nothing. What it returns is
+ignored, as for `EntityRemovedCallback`.
 """
 
 
