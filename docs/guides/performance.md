@@ -1178,6 +1178,41 @@ The last row measures thread-pool overhead, not disk: 2.5 MB out of the
 page cache costs 0.17 ms, less than the ~0.7 ms it takes to hand the work
 to a pool. Quoted so nobody reads it as "file I/O does not parallelise".
 
+## The garbage collector
+
+CPython's cycle collector runs a **full** collection now and then, and a full
+collection walks every container object in the process: every module, class,
+function, asset, component and system. Nearly all of those were made while
+loading and stay alive until the scene ends, so the walk finds nothing and
+still costs a frame.
+
+Measured on Reclaimer's host (four players, three of them guests over a
+simulated network, 50 enemies), about 80,000 tracked objects, 1200 ticks:
+
+| | Full collections | 95th percentile | 99th percentile | Worst tick |
+| --- | ---: | ---: | ---: | ---: |
+| Left alone | 21 | 6.2 ms | 18.8 ms | 25.2 ms |
+| Frozen once the room had loaded | 22 | 5.5 ms | 6.9 ms | 9.3 ms |
+| Frozen mid-fight | 22 | 5.2 ms | 6.7 ms | 7.8 ms |
+
+Left alone, every tick over 15 ms in that room was a full collection: about
+one every 0.8 s, each adding 15 to 20 ms. Freezing doesn't make collections
+rarer, it makes them cheap, because what was frozen is no longer walked.
+Freezing once the room had loaded did nearly as well as freezing mid-fight,
+since what a game makes during play is a small part of what it holds.
+
+So the application does it for you: `PerformanceConfig.freeze_on_scene_change`
+(on by default) runs `pyguara.application.memory.settle_memory()` after the
+first frame of any new set of scenes. That unfreezes what it froze last time,
+runs one full collection, which frees the cycles the old scene left, and
+freezes what's left. The unfreeze matters: a cycle among frozen objects is
+never collected while frozen, so freezing alone would keep every scene's
+cyclic garbage forever.
+
+The engine sees scene changes and nothing else. A game that loads more
+inside a running scene, such as a level built on demand or a world that
+arrives over the network, calls `settle_memory()` itself once the load is done.
+
 ---
 
 ## What the test suite guarantees

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 from pyguara import native
 from pyguara.application.clock import Clock
+from pyguara.application.memory import settle_memory
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
 from pyguara.dev.asset_reload import AssetReloadWatcher
@@ -180,6 +181,11 @@ class Application:
         self._fixed_dt = 0.0
         self._target_fps = 0
         self._max_frame_time = 0.0
+
+        # Which scenes memory was last settled for, and whether to settle it
+        # at all; see `_settle_memory_if_scenes_changed()`.
+        self._freeze_on_scene_change = False
+        self._settled_for: tuple[str | None, tuple[str, ...]] | None = None
 
         # Global time-scale and pause. Freely settable by game code at any
         # point; see _effective_time_scale() for how they combine, and
@@ -365,6 +371,9 @@ class Application:
         self._target_fps = self._config_manager.config.display.fps_target
         self._fixed_dt = physics_config.fixed_dt  # also lets _render() get alpha
         self._max_frame_time = physics_config.max_frame_time
+        self._freeze_on_scene_change = (
+            self._config_manager.config.performance.freeze_on_scene_change
+        )
 
         self.logger.debug(
             f"Game loop: target_fps={self._target_fps}, "
@@ -480,7 +489,33 @@ class Application:
         # last two fixed steps.
         self._render()
 
+        # 7. After the first whole frame of new scenes, keep what they loaded
+        # out of the garbage collector's way.
+        self._settle_memory_if_scenes_changed()
+
         return self._is_running and self._window.is_open
+
+    def _settle_memory_if_scenes_changed(self) -> None:
+        """Settle memory once the scenes being run differ from last time.
+
+        Checked here, once a frame, rather than in each of the scene manager's
+        ways in -- a switch, a push, a pop, a layer, each with or without a
+        transition -- because they all end the same way: a different set of
+        scenes running, and a frame of them done. A transition needs no check
+        of its own: the manager makes its target current only once it's over,
+        so nothing settles while the old scene is still alive. Re-entering a
+        scene under the same name isn't seen; a game that reloads in place
+        calls `settle_memory()` itself.
+        """
+        if not self._freeze_on_scene_change:
+            return
+        current = self._scene_manager.current_scene
+        running = (current.name if current else None, self._scene_manager.layers)
+        if running == self._settled_for:
+            return
+        self._settled_for = running
+        frozen = settle_memory()
+        self.logger.debug(f"Settled memory for {running}: {frozen} objects frozen")
 
     def start_recording(self, seed: int | None = None, description: str = "") -> int:
         """Start recording input for a deterministic replay.

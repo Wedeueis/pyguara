@@ -177,6 +177,12 @@ class PerformanceConfig:
     uses it; `required` fails at startup without it, which is what a game
     depending on native performance should ship."""
 
+    freeze_on_scene_change: bool = True
+    """Whether the application settles memory each time the scenes it runs
+    change: one full garbage collection, then `gc.freeze()` on what's left,
+    so later full collections skip what was loaded. See
+    `pyguara.application.memory`. Off leaves the collector alone."""
+
 
 @dataclass
 class DebugConfig:
