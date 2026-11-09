@@ -24,9 +24,14 @@ class Hurtbox(StrictComponent):
 
     Attributes:
         team: This entity's side. See `Hitbox.team` for the matching rule.
+        radius: How far from its centre a projectile reaches it, added to the
+            projectile's own `hit_radius` by `kits.projectiles`. 0, the default,
+            treats it as a point, as before. A `Hitbox` overlap ignores it: that
+            uses the solid `Collider`.
     """
 
     team: str | None = None
+    radius: float = 0.0
 
     def __post_init__(self) -> None:
         """Initialise the StrictComponent state the dataclass __init__ skips.

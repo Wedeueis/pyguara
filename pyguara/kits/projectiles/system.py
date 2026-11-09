@@ -9,6 +9,7 @@ from typing import Any
 from pyguara.common.components import Transform
 from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
+from pyguara.ecs.component import Component
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.manager import EntityManager
 from pyguara.events.dispatcher import EventDispatcher
@@ -117,6 +118,18 @@ class ProjectileSystem:
         self._pool = [Projectile() for _ in range(capacity)]
         self._capacity = capacity
         self._next_index = 0
+        # The widest `Hurtbox.radius` seen, which every query is widened by so a
+        # large target's centre is found. It only grows: a smaller one later
+        # costs a slightly wider query, never a missed hit.
+        self._largest_radius = 0.0
+        for entity in entity_manager.get_entities_with(Hurtbox):
+            self._note_radius(entity, entity.get_component(Hurtbox))
+        entity_manager.subscribe_component_added(Hurtbox, self._note_radius)
+        entity_manager.subscribe_component_changed(Hurtbox, self._note_radius)
+
+    def _note_radius(self, entity: Entity, hurtbox: Component) -> None:
+        assert isinstance(hurtbox, Hurtbox)
+        self._largest_radius = max(self._largest_radius, hurtbox.radius)
 
     def spawn(
         self,
@@ -234,9 +247,8 @@ class ProjectileSystem:
         """
         step = end - start
         step_sq = step.x * step.x + step.y * step.y
-        reach_sq = projectile.hit_radius * projectile.hit_radius
         middle = (start + end) * 0.5
-        query_radius = projectile.hit_radius + 0.5 * step_sq**0.5
+        query_radius = projectile.hit_radius + self._largest_radius + 0.5 * step_sq**0.5
 
         along: list[tuple[float, str, Entity]] = []
         for entity_id in self._spatial_index.query_radius(middle, query_radius):
@@ -265,7 +277,9 @@ class ProjectileSystem:
                 t = min(1.0, max(0.0, t))
             closest_x = offset.x - step.x * t
             closest_y = offset.y - step.y * t
-            if closest_x * closest_x + closest_y * closest_y > reach_sq:
+            # A target is reached at its edge: its own radius plus the shot's.
+            reach = projectile.hit_radius + hurtbox.radius
+            if closest_x * closest_x + closest_y * closest_y > reach * reach:
                 continue
             along.append((t, entity_id, entity))
 

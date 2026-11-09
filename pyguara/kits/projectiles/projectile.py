@@ -32,7 +32,8 @@ class Projectile:
         active: Whether this slot is currently in use.
         rotation: Sprite rotation in degrees.
         scale: Sprite scale.
-        hit_radius: Query radius for the spatial-hash hit check each tick.
+        hit_radius: How near its path a target's edge must come to be hit;
+            the target's `Hurtbox.radius` is added to it.
         team: See `kits.action_combat.Hitbox.team` -- same matching rule
             against a target's `Hurtbox.team`.
         damage: Base damage, before crit/mitigation.
