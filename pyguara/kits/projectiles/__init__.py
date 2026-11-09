@@ -16,6 +16,11 @@ one in its path. Each tick checks the whole step, nearest target first and
 then by id, so a fast shot can't pass through a target between ticks and
 the same seed always hits the same thing.
 
+A shot reaches a target at its edge: its own `hit_radius` plus the target's
+`Hurtbox.radius`, which is 0 (a point) unless the game sizes it. A game with
+targets of different sizes sets each one's, rather than padding every shot by
+the widest.
+
 `on_end=` is told each time a projectile stops, with a `ProjectileEnd` saying
 why, and `clear()` stops them all. `pyguara.net.projectiles` uses both to
 tell clients about shots.

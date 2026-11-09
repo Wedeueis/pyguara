@@ -830,3 +830,63 @@ def test_clear_ends_every_active_projectile(event_dispatcher: Any) -> None:
 
     assert not system.get_active()
     assert [end[0] for end in ends] == [ProjectileEnd.CLEARED] * 3
+
+
+# ========== a target's own radius ==========
+
+
+def _wide_target(
+    manager: EntityManager, index: SpatialHash, position: Vector2, radius: float
+) -> Any:
+    entity = manager.create_entity()
+    entity.add_component(Transform(position=position))
+    entity.add_component(Health(current=100.0, max_health=100.0))
+    entity.add_component(Hurtbox(radius=radius))
+    index.insert(entity.id, position)
+    return entity
+
+
+def test_a_shot_reaches_a_wide_target_at_its_edge(event_dispatcher: Any) -> None:
+    """10 off the path: missed by a point target's reach of 4, hit by a radius of 8."""
+    system, manager, index = _system(event_dispatcher)
+    target = _wide_target(manager, index, Vector2(50, 10), radius=8.0)
+    system.spawn(None, Vector2(0, 0), Vector2(100, 0), damage=10.0, hit_radius=4.0)
+
+    system.update(1.0)
+
+    assert target.get_component(Health).current < 100.0
+
+
+def test_a_shot_misses_just_past_a_wide_targets_edge(event_dispatcher: Any) -> None:
+    system, manager, index = _system(event_dispatcher)
+    target = _wide_target(manager, index, Vector2(50, 12.5), radius=8.0)
+    system.spawn(None, Vector2(0, 0), Vector2(100, 0), damage=10.0, hit_radius=4.0)
+
+    system.update(1.0)
+
+    assert target.get_component(Health).current == 100.0
+
+
+def test_a_wide_target_added_after_the_system_is_found(event_dispatcher: Any) -> None:
+    """Its centre is past the shot's own reach of the query; its radius widens it."""
+    system, manager, index = _system(event_dispatcher)
+    # A tiny step, so the query is only as wide as the reach itself.
+    target = _wide_target(manager, index, Vector2(0, 30), radius=30.0)
+    system.spawn(None, Vector2(0, 0), Vector2(1, 0), damage=10.0, hit_radius=1.0)
+
+    system.update(0.01)
+
+    assert target.get_component(Health).current < 100.0
+
+
+def test_a_radius_set_after_adding_counts_once_announced(event_dispatcher: Any) -> None:
+    system, manager, index = _system(event_dispatcher)
+    target = _target(manager, index, Vector2(0, 30))
+    hurtbox = target.get_component(Hurtbox)
+    hurtbox.radius = 30.0
+    manager.notify_component_changed(target.id, Hurtbox)
+    system.spawn(None, Vector2(0, 0), Vector2(1, 0), damage=10.0, hit_radius=1.0)
+
+    system.update(0.01)
+
+    assert target.get_component(Health).current < 100.0
