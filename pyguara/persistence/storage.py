@@ -61,16 +61,21 @@ def _atomic_write_bytes(path: str, data: bytes) -> None:
         raise
 
     # Flush the rename itself so the swap survives a crash, not just the
-    # bytes inside the file.
+    # bytes inside the file. Windows has no `os.O_DIRECTORY` and can't open a
+    # directory to sync it, so there the rename is all there is; reading the
+    # missing flag raised AttributeError, which the OSError below never caught.
+    directory_flag = getattr(os, "O_DIRECTORY", None)
+    if directory_flag is None:
+        return
     try:
-        dir_fd = os.open(dir_path, os.O_DIRECTORY)
+        dir_fd = os.open(dir_path, directory_flag)
         try:
             os.fsync(dir_fd)
         finally:
             os.close(dir_fd)
     except OSError:
-        # Directory fsync is a durability nicety; platforms without
-        # O_DIRECTORY (or where it is not permitted) still get the rename.
+        # Directory fsync is a durability nicety; where it is not permitted
+        # the rename still stands.
         pass
 
 

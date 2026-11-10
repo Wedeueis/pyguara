@@ -6,6 +6,7 @@ end to end against real files under ``tmp_path``.
 
 import gzip
 import json
+import os
 import pathlib
 
 import pytest
@@ -686,3 +687,19 @@ class TestSaveFileIsNotCode:
         self._forge(tmp_path / "weird.save", payload, "abc123", "json")
 
         assert manager.load_data("weird", verify_integrity=True) is None
+
+
+def test_saving_works_where_os_has_no_directory_flag(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows has no `os.O_DIRECTORY`; saving there must not crash.
+
+    Reading the missing flag raised AttributeError, which the directory sync's
+    `except OSError` never caught, so every save on Windows failed.
+    """
+    monkeypatch.delattr(os, "O_DIRECTORY", raising=False)
+    backend = FileStorageBackend(base_path=str(tmp_path))
+
+    assert backend.save("profile", b"kept")
+
+    assert backend.load("profile") == b"kept"
