@@ -149,16 +149,18 @@ def _ui_renderers() -> list[type]:
     from pyguara.graphics.backends.headless_renderer import HeadlessUIRenderer
     from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
     from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
+    from pyguara.graphics.backends.wgpu.ui_renderer import WgpuUIRenderer
 
-    return [HeadlessUIRenderer, PygameUIRenderer, GLUIRenderer]
+    return [HeadlessUIRenderer, PygameUIRenderer, GLUIRenderer, WgpuUIRenderer]
 
 
 def _world_renderers() -> list[type]:
     from pyguara.graphics.backends.headless_renderer import HeadlessBackend
     from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
     from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+    from pyguara.graphics.backends.wgpu.renderer import WgpuRenderer
 
-    return [HeadlessBackend, PygameBackend, ModernGLRenderer]
+    return [HeadlessBackend, PygameBackend, ModernGLRenderer, WgpuRenderer]
 
 
 class TestEveryRendererKeepsItsProtocolSignature:

@@ -84,3 +84,45 @@
 - **Alternatives:** separate branches from `main`, merged into a throwaway branch for every measurement; or one integration branch carrying one commit per increment.
 - **Chose:** `next`, one commit per increment. Nothing here is being reviewed into `main` yet, and the commits stay split so each can be lifted onto its own branch when it is.
 - **Tags:** repository, workflow
+
+## wgpu for the renderer, behind the existing protocols
+- **Context:** Asked to replace the most critical infrastructure first, naming the OpenGL stack.
+- **Alternatives:** (a) keep ModernGL and fix its UI upload (issue #334); (b) SDL's own GPU API through a newer SDL; (c) wgpu in the Rust extension behind `IRenderer`/`UIRenderer`.
+- **Chose:** (c). OpenGL 3.3 is deprecated on macOS and absent from the browser, so fixing (a) improves a backend with no future. wgpu reaches DX12, Metal, Vulkan, GL and WebGPU from one code path and lives beside the rest of the native code. It grows the extension from 2.6 MB to 7.6 MB.
+- **Tags:** renderer, wgpu, platform
+
+## Stage A renders offscreen and presents by copying into the pygame window
+- **Context:** The first wgpu increment needs a way to show a frame.
+- **Alternatives:** go straight to a swapchain on the SDL window's native handle, or render offscreen and blit a readback to the pygame surface.
+- **Chose:** offscreen plus readback first. It can be verified here, headless, against the pygame renderer's own pixels, before any platform's window handle is involved. The readback costs about 19 ms a frame on this machine, so the backend is opt-in and stage B (the swapchain) is what makes it usable.
+- **Tags:** renderer, wgpu, verification
+
+## One instanced quad pipeline; a primitive is a row
+- **Context:** How the native renderer represents rectangles, circles, lines, sprites and text.
+- **Alternatives:** separate pipelines per primitive kind (as the ModernGL renderer has for sprites and shapes), or one pipeline whose fragment shader branches on a per-instance kind.
+- **Chose:** one pipeline. Painter's order must be kept across kinds, and a separate pipeline per kind breaks a batch every time the kind changes; with one, a batch breaks only on a texture or scissor change. 600 mixed rectangles, circles and lines are one draw call.
+- **Tags:** renderer, wgpu, batching
+
+## Match the pygame renderer's pixels, not the ModernGL renderer's
+- **Context:** Which existing backend the new one is held to.
+- **Alternatives:** ModernGL (the other GPU backend) or pygame (software).
+- **Chose:** pygame. It is what Reclaimer runs on, and its conventions are checkable without a GPU on the reference side. That meant learning them: a circle is centred on a pixel's corner and drawn 0.25 px inside its radius; a thick line is thickened along its minor axis, not across itself, and an even width sits half a pixel towards positive.
+- **Tags:** renderer, parity
+
+## Text stays rasterised by pygame.font, cached white and tinted
+- **Context:** Drawing text on the GPU.
+- **Alternatives:** native shaping and a glyph atlas now, or `pygame.font` into a cached texture per string.
+- **Chose:** `pygame.font`, rendered once in white and tinted by the instance colour, so one texture serves every colour and every step of a fade. Glyphs are then identical to the pygame backend's. Native shaping is its own workstream.
+- **Tags:** renderer, text
+
+## Keep pygame's texture type and image loader for the wgpu backend
+- **Context:** What a `Texture` is under the new backend.
+- **Alternatives:** a new GPU texture type with its own loader and factory, or keep `PygameTexture` (a CPU surface) and upload it on first draw.
+- **Chose:** keep it. No new loader, the UI's `as_surface` path works unchanged, and nothing reads pixels back from the GPU. The cost is one copy of each image in system memory.
+- **Tags:** renderer, resources
+
+## A device-open panic becomes RuntimeError, and the pixel suite also runs in a clean process
+- **Context:** wgpu's GL backend panics with EGL `BadAccess` if another OpenGL context is current, which is the case inside a full test run after the ModernGL tests.
+- **Alternatives:** let the `PanicException` propagate; skip the suite whenever a device cannot be opened; or convert the panic and add a wrapper test that runs the suite in a fresh interpreter.
+- **Chose:** convert and wrap. Skipping alone would leave a full run green having drawn nothing, which is the failure this repo's own instructions warn about for its parity suites.
+- **Tags:** renderer, testing

@@ -37,6 +37,14 @@ symphonia = { version = "0.5", features = ["mp3"] }
 # both MIT or Apache-2.0. Pinned exactly, because `rust/src/net/core.rs` guards
 # panics in these exact versions: re-run `tests/test_net_hostile.py` and re-read
 # the parsers before moving either. See `network_multiplayer.md`, section 3.
+# The renderer. Pure Rust: DX12 on Windows, Metal on macOS, Vulkan and GL
+# on Linux, from one code path. See `project/backlog/active/next_engine_plan.md`.
+wgpu = "30"
+# Blocks on wgpu's two async calls (adapter and device); nothing else here
+# is async.
+pollster = "1"
+# Casts the instance array to bytes for upload.
+bytemuck = { version = "1", features = ["derive"] }
 renet = "=2.0.1"
 renetcode = "=2.0.0"
 

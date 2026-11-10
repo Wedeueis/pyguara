@@ -28,10 +28,16 @@ class RenderingBackend(Enum):
 
     MODERNGL: GPU-accelerated rendering using ModernGL.
               Requires OpenGL 3.3+, higher performance with hardware instancing.
+
+    WGPU: GPU-accelerated rendering through the native extension, on
+          whichever of DX12, Metal, Vulkan or GL the machine has. Stage A:
+          rectangles, circles, lines, text and sprites, with no render
+          graph. See `project/backlog/active/next_engine_plan.md`.
     """
 
     PYGAME = "pygame"
     MODERNGL = "moderngl"
+    WGPU = "wgpu"
 
 
 @dataclass

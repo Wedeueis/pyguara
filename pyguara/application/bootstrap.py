@@ -397,6 +397,36 @@ def _setup_container(
 
         # Store texture loader for later registration
         gl_texture_loader = GLTextureLoader(ctx)
+    elif disp_cfg.backend == RenderingBackend.WGPU:
+        # The native renderer. It reuses pygame's texture type and image
+        # loader: a texture stays a CPU surface, uploaded to the GPU the
+        # first time it is drawn.
+        from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
+        from pyguara.graphics.backends.pygame.types import PygameTextureFactory
+        from pyguara.graphics.backends.wgpu import (
+            WgpuRenderer,
+            WgpuUIRenderer,
+            WgpuWindow,
+        )
+
+        wgpu_window_backend = WgpuWindow()
+        window = Window(win_config, wgpu_window_backend)
+        window.create()
+        container.register_instance(Window, window)
+
+        frame = wgpu_window_backend.frame
+        assert frame is not None  # `create()` opened it or raised
+        container.register_instance(IRenderer, WgpuRenderer(frame))  # type: ignore[type-abstract]
+        container.register_instance(UIRenderer, WgpuUIRenderer(frame))  # type: ignore[type-abstract]
+        container.register_instance(TextureFactory, PygameTextureFactory())  # type: ignore[type-abstract]
+
+        # No render graph yet (stage D), so the same stand-in the pygame
+        # backend registers: lighting and post-processing degrade to
+        # nothing rather than failing to resolve.
+        container.register_instance(
+            RenderGraph,
+            PygameRenderGraph(disp_cfg.screen_width, disp_cfg.screen_height),
+        )
     else:
         # Default Pygame backend
         from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph

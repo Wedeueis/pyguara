@@ -59,6 +59,7 @@ use pyo3::prelude::*;
 mod audio;
 mod flocking;
 mod flowfield;
+mod gpu;
 mod grid;
 mod net;
 mod particles;
@@ -75,6 +76,7 @@ pub type Rgba = (u8, u8, u8, u8);
 fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<flocking::NativeFlockingSolver>()?;
     module.add_class::<flowfield::NativeFlowField>()?;
+    module.add_class::<gpu::NativeGpu>()?;
     module.add_class::<particles::NativeParticlePool>()?;
     module.add_class::<solids::NativeSolids>()?;
     module.add_class::<sparks::NativeSparkPool>()?;

@@ -1,0 +1,98 @@
+# pyguara-next: the consolidated plan
+
+Written 2026-11-10. This joins three things that each said what to do next
+and did not agree: the roadmap in the "Path to a Competitive Engine" report,
+the engine items Reclaimer's own plan is waiting on
+(`reclaimer_v2/project/backlog/active/reclaimer_game_plan.md`, sections 4, 6
+and 7), and what profiling Reclaimer on this fork showed (ADR 0009).
+
+Where they conflict, **the profile and Reclaimer's plan win over the
+report**. The report led with columnar component storage; the profile showed
+that would not have moved any of Reclaimer's costs.
+
+## What Reclaimer's plan was waiting on, and where each stands
+
+| Reclaimer's plan says | Section | Status here |
+| --- | --- | --- |
+| Wall collision allocates and holds the enemy cap at 100; "waits for RFC-0003's native sweep" | 6 | **Done** (ADR 0009). Host tick at 200 enemies, four players: 13.97 ms to 4.28 ms mean, 21.2 ms to 6.0 ms at the 95th percentile. The cap can be re-set from measurement; that is the game's decision |
+| "Rendering isn't measured yet" | 7 | **Measured.** One rendered frame at 200 enemies: 16.8 ms originally, 8.2 ms now, of which 53% is drawing |
+| GL HUD costs about 12 ms a frame at 1080p (pyguara #334) | 4 | **Open, and the reason for workstream 1.** The ModernGL UI renderer uploads a whole screen-sized surface every frame. A renderer that draws UI as instanced quads has no such upload |
+| Pitch variation needs the native audio backend; the game runs on `pygame`, which cannot change pitch | 4 | Open. Workstream 4 |
+| Garbage collection stalled a tick | 6 | Done upstream (pyguara #397) |
+| Packed assets (W30), near release | 4 | Open. Workstream 6 |
+| Hosting may not work on players' home connections; "decide before M4" | 7 | Open. Workstream 5 |
+| Input buffering (pyguara #73) | 4 | Deferred by the game's own plan; not scheduled here |
+
+Two costs the plan does not name and the profile does:
+
+- **A guest interpolates every replicated field of every entity each
+  frame.** It is the largest engine cost on a guest's machine.
+- **The game draws one primitive per enemy part, through Python.** That is
+  most of the 53%, and no renderer makes a Python call cheaper.
+
+## Order of work
+
+Critical infrastructure first: the pieces that decide which platforms
+exist and that everything else is built on.
+
+### 1. The renderer: wgpu in place of ModernGL and the software path
+
+The engine has two renderers and neither is the future. ModernGL is
+OpenGL 3.3, which is deprecated on macOS and absent from the browser. The
+pygame renderer is software, which is what Reclaimer actually runs on.
+
+One renderer in Rust on wgpu (DX12 on Windows, Metal on macOS, Vulkan and
+GL on Linux, WebGPU in the browser), behind the existing `IRenderer`,
+`UIRenderer` and window protocols, selected by
+`display.backend = "wgpu"`.
+
+| Stage | What | Proof |
+| --- | --- | --- |
+| **A** | Native core: one instanced pipeline for rectangles, circles, lines and textured quads, drawn offscreen. `IRenderer` and `UIRenderer` on top, text rasterised by `pygame.font` and cached as textures. Presented by reading the frame back into the pygame window | Reclaimer's frame matches the pygame renderer's within a stated pixel tolerance, headless |
+| **B** | A real swapchain on the SDL window's native handle, so nothing is read back | A window on Windows shows the game; frame time measured at 1080p |
+| **C** | Sprites: `render_batch`, `ShapeBatch`, atlases, filtering, materials | The visual snapshot suite and the demos |
+| **D** | The render graph on wgpu: offscreen buffers, lighting, post-processing | `true_coral`, `protocolo_bandeira`, `mourisco_ressonancia` |
+| **E** | ModernGL retired; Studio's viewport moved | Nothing imports `moderngl` |
+
+Stage A is deliberately the one whose result can be *checked* without a
+screen. Stage B is the one that pays for it.
+
+### 2. A batched drawing interface for game code
+
+Once the renderer is native, the remaining cost is the call per primitive.
+Let a scene hand over arrays -- positions, sizes, colours -- for many
+shapes in one call. This is the first change that needs Reclaimer's view
+code to change, and the first real consumer of ADR 0008's columns.
+
+### 3. Window and input off pygame
+
+SDL2 through pygame is the other half of the platform stack. Replace with
+winit or SDL3 once the renderer no longer needs a pygame surface. Not
+before: stage A leans on the pygame window on purpose.
+
+### 4. Native audio as the default backend
+
+It exists and Reclaimer's feedback data already carries pitch variation
+that only it can play. What is missing is hearing it on Windows.
+
+### 5. Hosting on home connections
+
+A relay, or Steam Datagram Relay for the Steam release. Reclaimer's plan
+wants this decided before M4.
+
+### 6. Packed assets
+
+A bake step in `pyguara build`. Near release.
+
+### 7. Columnar components (ADR 0008)
+
+Kept, and moved down. Increment 1 measured bulk work at 290x to 1000x and
+per-entity reads at 4.7x to 9.5x *slower*, so it belongs to state that is
+consumed in bulk. Its first real use is workstream 2.
+
+## What is not in this plan
+
+- 3D, visual scripting, a custom physics solver.
+- A Rapier physics backend. The wall sweep removed the reason Reclaimer
+  needed one; revisit if rollback netcode is wanted.
+- Rust ports of gameplay kits.
