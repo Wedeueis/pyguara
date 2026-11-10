@@ -14,14 +14,16 @@ much faster.
 So Reclaimer was profiled before anything else was built, and the profile
 disagreed with the plan.
 
-At 200 enemies, one player, one rendered frame cost 16.8 ms. Where it went:
+At 200 enemies, one player, one rendered frame cost 16.8 ms. Where it went,
+from a `cProfile` run (shares, not timings -- the profiler inflates
+everything):
 
 | | Share of the frame |
 | --- | ---: |
 | `CharacterMover` asking the physics engine about walls | 31% |
 | Enemy AI, mostly line-of-sight rays and `Vector2` arithmetic | 20% |
 | Immediate-mode drawing from the game's view code | 27% |
-| `Vector2` operators, across all of the above | about 25% |
+| `Vector2` operators, spread across all of the above | about 18% |
 
 A wall probe was the largest single cost in the game. `CharacterMover`
 moves a box one whole pixel at a time and asks `overlap_box` once per
@@ -158,7 +160,8 @@ simulation, and what remains in each is per-entity Python:
 - the game's view code issuing one `draw_rect` per enemy part,
 - enemy brains and state machines,
 - a guest interpolating every replicated field of every entity each
-  frame, about 2.8 ms a frame at 200 enemies.
+  frame: about 2.8 ms a frame at 200 enemies under the profiler, which
+  inflates it, so read that as a ranking and not a cost.
 
 None of that can be made faster from underneath without changing what the
 calling code does. That is where ADR 0008's columnar world and a batched
