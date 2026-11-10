@@ -25,7 +25,10 @@ from typing import Any, Protocol
 
 from pyguara.common.types import Vector2
 
-_MAX_COMPONENTS = 16
+_MAX_COMPONENTS = 32
+# Up to this many component types, a record's mask of which it carries is 16 bits;
+# beyond it, 32. A game that fits keeps the smaller records.
+_NARROW_COMPONENTS = 16
 _MAX_EVENTS = 256
 _MAX_RECORD_BYTES = 512
 _MAX_NET_ID = 65535
@@ -607,6 +610,16 @@ class ReplicationSchema:
             raise ValueError(f"{component_type.__name__} is too large to replicate")
         self.components.append(schema)
         self._by_type[component_type] = schema
+
+    @property
+    def mask_format(self) -> str:
+        """The `struct` code for a record's component mask: "H", or "I" past 16.
+
+        Read when a `ReplicationHost` or `ReplicationClient` is built, so register
+        every component before that. Host and client build the same schema, so they
+        agree on it.
+        """
+        return "H" if len(self.components) <= _NARROW_COMPONENTS else "I"
 
     def register_event(self, event_type: type, **fields: FieldCodec) -> None:
         """Send this event to clients, with these fields.
