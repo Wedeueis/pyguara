@@ -126,3 +126,21 @@
 - **Alternatives:** let the `PanicException` propagate; skip the suite whenever a device cannot be opened; or convert the panic and add a wrapper test that runs the suite in a fresh interpreter.
 - **Chose:** convert and wrap. Skipping alone would leave a full run green having drawn nothing, which is the failure this repo's own instructions warn about for its parity suites.
 - **Tags:** renderer, testing
+
+## Present to the SDL window's own handle; keep pygame for the window and input
+- **Context:** Stage B needs a swapchain.
+- **Alternatives:** replace the window too, with winit, in the same step; or keep the pygame/SDL window and hand its native handle (HWND, X11 window, Wayland surface) to wgpu.
+- **Chose:** keep the window. It changes one thing at a time: input, events and every test that opens a pygame display are untouched, and the windowing swap stays its own workstream.
+- **Tags:** renderer, wgpu, window
+
+## Choose the window kind by SDL's driver name
+- **Context:** `pygame.display.get_wm_info()` returns a dictionary describing the native window.
+- **Alternatives:** infer the platform from which keys are present, or ask `pygame.display.get_driver()`.
+- **Chose:** the driver name. On X11 the dictionary also carries `surface` and `shell_surface`, the Wayland members of the same C union, holding leftover bytes; inferring from keys read them as a Wayland surface and crashed the process. Regression-tested in `tests/test_wgpu_window.py`.
+- **Tags:** renderer, window, crash
+
+## Always render offscreen, then copy to the window
+- **Context:** Where the frame is drawn when a swapchain exists.
+- **Alternatives:** draw straight into the swapchain's texture, or keep drawing into the offscreen target and copy it across in a second pass.
+- **Chose:** offscreen plus a copy, for now. `read_pixels` -- and so headless capture and the pixel suite -- works identically with or without a window, and the swapchain's format (often BGRA, sometimes sRGB) never reaches the drawing pipeline. It costs one extra pass, which is recorded in the plan as something to take back.
+- **Tags:** renderer, wgpu

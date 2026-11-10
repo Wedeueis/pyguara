@@ -123,6 +123,108 @@ fn fragment(in: Varying) -> @location(0) vec4<f32> {
 }
 ";
 
+/// Copies the offscreen target onto the window: one triangle that covers
+/// the screen, sampling the frame.
+const PRESENT_SHADER: &str = r"
+@group(0) @binding(0) var frame: texture_2d<f32>;
+@group(0) @binding(1) var frame_sampler: sampler;
+
+struct Varying {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vertex(@builtin(vertex_index) index: u32) -> Varying {
+    let corner = vec2<f32>(f32((index << 1u) & 2u), f32(index & 2u));
+    var out: Varying;
+    out.position = vec4<f32>(corner * 2.0 - vec2<f32>(1.0, 1.0), 0.0, 1.0);
+    out.uv = vec2<f32>(corner.x, 1.0 - corner.y);
+    return out;
+}
+
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    return textureSample(frame, frame_sampler, in.uv);
+}
+";
+
+/// A window's display connection, in the form wgpu wants at start-up.
+#[derive(Debug)]
+struct Display(wgpu::rwh::RawDisplayHandle);
+
+// The handle is a pointer the windowing system owns for the life of the
+// window. It is only ever read, and only from the thread that drew.
+unsafe impl Send for Display {}
+unsafe impl Sync for Display {}
+
+impl wgpu::rwh::HasDisplayHandle for Display {
+    fn display_handle(&self) -> Result<wgpu::rwh::DisplayHandle<'_>, wgpu::rwh::HandleError> {
+        // SAFETY: the caller of `for_window` keeps the window open for as
+        // long as this renderer lives.
+        Ok(unsafe { wgpu::rwh::DisplayHandle::borrow_raw(self.0) })
+    }
+}
+
+/// What `for_window` is told about a window: its kind, its native
+/// identifiers, and whether to wait for the display's refresh.
+type WindowSpec = (String, usize, usize, bool);
+
+/// Turn a window's native identifiers into raw handles.
+///
+/// `window` and `display` are what the windowing library reports: an HWND
+/// on Windows, an X11 window id and its display pointer, or a Wayland
+/// surface pointer and its display pointer.
+fn raw_handles(
+    kind: &str,
+    window: usize,
+    display: usize,
+) -> PyResult<(wgpu::rwh::RawDisplayHandle, wgpu::rwh::RawWindowHandle)> {
+    use std::ptr::NonNull;
+    use wgpu::rwh;
+
+    let pointer = |value: usize, what: &str| {
+        NonNull::new(value as *mut std::ffi::c_void)
+            .ok_or_else(|| PyValueError::new_err(format!("the {what} handle is null")))
+    };
+    match kind {
+        "win32" => {
+            let handle = std::num::NonZeroIsize::new(window as isize)
+                .ok_or_else(|| PyValueError::new_err("the window handle is null"))?;
+            Ok((
+                rwh::RawDisplayHandle::Windows(rwh::WindowsDisplayHandle::new()),
+                rwh::RawWindowHandle::Win32(rwh::Win32WindowHandle::new(handle)),
+            ))
+        }
+        "x11" => Ok((
+            rwh::RawDisplayHandle::Xlib(rwh::XlibDisplayHandle::new(
+                Some(pointer(display, "display")?),
+                0,
+            )),
+            rwh::RawWindowHandle::Xlib(rwh::XlibWindowHandle::new(window as std::ffi::c_ulong)),
+        )),
+        "wayland" => Ok((
+            rwh::RawDisplayHandle::Wayland(rwh::WaylandDisplayHandle::new(pointer(
+                display, "display",
+            )?)),
+            rwh::RawWindowHandle::Wayland(rwh::WaylandWindowHandle::new(pointer(
+                window, "surface",
+            )?)),
+        )),
+        other => Err(PyValueError::new_err(format!(
+            "no window surface for {other:?}; expected win32, x11 or wayland"
+        ))),
+    }
+}
+
+/// The window's swapchain and what copies a frame onto it.
+struct Presenter {
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    pipeline: wgpu::RenderPipeline,
+    group: wgpu::BindGroup,
+}
+
 /// One primitive. 18 floats, matching the shader's `Instance`.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -187,6 +289,10 @@ pub struct NativeGpu {
     next_image: u32,
     /// Frames rendered, for callers that want to know one happened.
     frames: u64,
+    /// Set when drawing to a window rather than only offscreen.
+    presenter: Option<Presenter>,
+    /// Frames that reached the window.
+    presented: u64,
 }
 
 fn make_target(device: &wgpu::Device, width: u32, height: u32) -> (wgpu::Texture, wgpu::TextureView) {
@@ -201,7 +307,9 @@ fn make_target(device: &wgpu::Device, width: u32, height: u32) -> (wgpu::Texture
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: TARGET_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
     let view = target.create_view(&wgpu::TextureViewDescriptor::default());
@@ -218,10 +326,36 @@ fn make_instance_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer 
 }
 
 impl NativeGpu {
-    fn open(width: u32, height: u32) -> PyResult<Self> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    fn open(width: u32, height: u32, window: Option<WindowSpec>) -> PyResult<Self> {
+        let handles = match &window {
+            Some((kind, native, display, _)) => Some(raw_handles(kind, *native, *display)?),
+            None => None,
+        };
+        let instance = wgpu::Instance::new(match handles {
+            // The GL backend has to know the display before it can make
+            // a context that is able to draw to one of its windows.
+            Some((display, _)) => {
+                wgpu::InstanceDescriptor::new_with_display_handle(Box::new(Display(display)))
+            }
+            None => wgpu::InstanceDescriptor::new_without_display_handle(),
+        });
+        let surface = match handles {
+            Some((display, native)) => Some(
+                // SAFETY: the handles name a live window, which the caller
+                // keeps open for as long as this renderer lives.
+                unsafe {
+                    instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                        raw_display_handle: Some(display),
+                        raw_window_handle: native,
+                    })
+                }
+                .map_err(|error| runtime_error("the window cannot be drawn to", error))?,
+            ),
+            None => None,
+        };
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: surface.as_ref(),
             ..Default::default()
         }))
         .map_err(|error| runtime_error("no graphics adapter is available", error))?;
@@ -369,10 +503,124 @@ impl NativeGpu {
             images: HashMap::new(),
             next_image: 1,
             frames: 0,
+            presenter: None,
+            presented: 0,
         };
         let white = gpu.upload_image(1, 1, &[255, 255, 255, 255])?;
         gpu.images.insert(WHITE, white);
+        if let Some(surface) = surface {
+            let vsync = window.is_some_and(|(_, _, _, vsync)| vsync);
+            gpu.presenter = Some(gpu.make_presenter(surface, &adapter, vsync)?);
+        }
         Ok(gpu)
+    }
+
+    fn make_presenter(
+        &self,
+        surface: wgpu::Surface<'static>,
+        adapter: &wgpu::Adapter,
+        vsync: bool,
+    ) -> PyResult<Presenter> {
+        let capabilities = surface.get_capabilities(adapter);
+        let mut config = surface
+            .get_default_config(adapter, self.width, self.height)
+            .ok_or_else(|| PyRuntimeError::new_err("the adapter cannot draw to this window"))?;
+        // The frame's bytes are already display-encoded, as the pygame
+        // renderer's are. An sRGB swapchain would encode them a second
+        // time and wash the picture out, so prefer a plain one.
+        if let Some(plain) = capabilities.formats.iter().find(|format| !format.is_srgb()) {
+            config.format = *plain;
+        }
+        config.present_mode = if vsync {
+            wgpu::PresentMode::AutoVsync
+        } else {
+            wgpu::PresentMode::AutoNoVsync
+        };
+        surface.configure(&self.device, &config);
+
+        let shader = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("pyguara present"),
+            source: wgpu::ShaderSource::Wgsl(PRESENT_SHADER.into()),
+        });
+        let layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pyguara present"),
+            bind_group_layouts: &[Some(&self.image_layout)],
+            ..Default::default()
+        });
+        let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("pyguara present"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vertex"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fragment"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        let group = self.frame_group();
+        Ok(Presenter {
+            surface,
+            config,
+            pipeline,
+            group,
+        })
+    }
+
+    /// A bind group over the offscreen target, for the copy to the window.
+    fn frame_group(&self) -> wgpu::BindGroup {
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("pyguara frame"),
+            layout: &self.image_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&self.target_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        })
+    }
+
+    fn guarded(width: u32, height: u32, window: Option<WindowSpec>) -> PyResult<Self> {
+        // wgpu's GL backend unwraps EGL errors while it opens a device. The
+        // one seen in practice is `BadAccess`, raised when another OpenGL
+        // context is already current in this process -- a ModernGL context
+        // from earlier in a test run, never a game, which has one backend.
+        // A panic would surface in Python as a `BaseException`; this makes
+        // it the `RuntimeError` the caller is told to expect.
+        match std::panic::catch_unwind(|| Self::open(width, height, window)) {
+            Ok(opened) => opened,
+            Err(panic) => {
+                let reason = panic
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| panic.downcast_ref::<&str>().map(|text| (*text).to_owned()))
+                    .unwrap_or_else(|| "unknown".to_owned());
+                Err(PyRuntimeError::new_err(format!(
+                    "the graphics device could not be opened: {reason}. If this \
+                     process already holds an OpenGL context, wgpu's GL backend \
+                     cannot open a second one"
+                )))
+            }
+        }
     }
 
     fn check_size(width: u32, height: u32) -> PyResult<()> {
@@ -489,28 +737,86 @@ impl NativeGpu {
     #[new]
     fn new(width: u32, height: u32) -> PyResult<Self> {
         Self::check_size(width, height)?;
-        // wgpu's GL backend unwraps EGL errors while it opens a device. The
-        // one seen in practice is `BadAccess`, raised when another OpenGL
-        // context is already current in this process -- a ModernGL context
-        // from earlier in a test run, never a game, which has one backend.
-        // A panic would surface in Python as a `BaseException`; this makes
-        // it the `RuntimeError` the caller is told to expect.
-        match std::panic::catch_unwind(|| Self::open(width, height)) {
-            Ok(opened) => opened,
-            Err(panic) => {
-                let reason = panic
-                    .downcast_ref::<String>()
-                    .cloned()
-                    .or_else(|| panic.downcast_ref::<&str>().map(|text| (*text).to_owned()))
-                    .unwrap_or_else(|| "unknown".to_owned());
-                Err(PyRuntimeError::new_err(format!(
-                    "the graphics device could not be opened: {reason}. If this \
-                     process already holds an OpenGL context, wgpu's GL backend \
-                     cannot open a second one"
-                )))
-            }
-        }
+        Self::guarded(width, height, None)
     }
+
+    /// Open a device that draws to a window as well as offscreen.
+    ///
+    /// `kind` is `win32`, `x11` or `wayland`; `window` and `display` are
+    /// the native identifiers the windowing library reports for it. The
+    /// window must stay open for as long as the returned object lives.
+    #[staticmethod]
+    #[pyo3(signature = (kind, window, display, width, height, vsync = true))]
+    fn for_window(
+        kind: String,
+        window: usize,
+        display: usize,
+        width: u32,
+        height: u32,
+        vsync: bool,
+    ) -> PyResult<Self> {
+        Self::check_size(width, height)?;
+        Self::guarded(width, height, Some((kind, window, display, vsync)))
+    }
+
+    /// Whether frames can be presented to a window.
+    #[getter]
+    fn has_surface(&self) -> bool {
+        self.presenter.is_some()
+    }
+
+    /// How many frames have reached the window.
+    #[getter]
+    fn presented(&self) -> u64 {
+        self.presented
+    }
+
+    /// Copy the last rendered frame to the window and show it.
+    ///
+    /// Returns False when there was nothing to show it on this time -- no
+    /// window, a minimised one, or a swapchain that had to be rebuilt --
+    /// which is a frame skipped, not an error.
+    fn present(&mut self) -> bool {
+        let Some(presenter) = &self.presenter else {
+            return false;
+        };
+        let frame = match presenter.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                presenter.surface.configure(&self.device, &presenter.config);
+                return false;
+            }
+            _ => return false,
+        };
+        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("pyguara present") });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("pyguara present"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
+            pass.set_pipeline(&presenter.pipeline);
+            pass.set_bind_group(0, &presenter.group, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        self.queue.submit([encoder.finish()]);
+        self.queue.present(frame);
+        self.presented += 1;
+        true
+    }
+
     /// Which backend and adapter the device is on, for the boot log.
     #[getter]
     fn adapter(&self) -> &str {
@@ -553,6 +859,15 @@ impl NativeGpu {
         self.target_view = view;
         self.width = width;
         self.height = height;
+        if self.presenter.is_some() {
+            let group = self.frame_group();
+            if let Some(presenter) = &mut self.presenter {
+                presenter.group = group;
+                presenter.config.width = width;
+                presenter.config.height = height;
+                presenter.surface.configure(&self.device, &presenter.config);
+            }
+        }
         self.instances.clear();
         self.runs.clear();
         self.scissor = None;

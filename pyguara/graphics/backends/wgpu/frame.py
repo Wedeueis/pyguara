@@ -105,20 +105,44 @@ class GpuFrame:
         gpu: The `NativeGpu`.
     """
 
-    def __init__(self, width: int, height: int) -> None:
-        """Open a device with an offscreen target.
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        window: tuple[str, int, int] | None = None,
+        vsync: bool = True,
+    ) -> None:
+        """Open a device with an offscreen target, and a window's if given.
 
         Args:
             width: Target width in pixels.
             height: Target height in pixels.
+            window: `(kind, window, display)` naming a native window to
+                present to -- see `NativeGpu.for_window`. None renders
+                offscreen only. If the window cannot be drawn to, this
+                logs why and carries on offscreen, so `gpu.has_surface`
+                is what says which happened.
+            vsync: Wait for the display's refresh when presenting.
 
         Raises:
             RuntimeError: If the extension cannot be imported or no
-                graphics adapter can be opened.
+                graphics adapter can be opened at all.
         """
         extension = native.require_extension("The wgpu rendering backend")
-        self.gpu: Any = extension.NativeGpu(width, height)
-        logger.info(f"wgpu renderer on {self.gpu.adapter}")
+        self.gpu: Any = None
+        if window is not None:
+            try:
+                self.gpu = extension.NativeGpu.for_window(*window, width, height, vsync)
+            except (RuntimeError, ValueError) as error:
+                logger.warning(
+                    f"wgpu could not draw to the {window[0]} window directly "
+                    f"({error}); rendering offscreen and copying each frame "
+                    f"to it instead, which is much slower."
+                )
+        if self.gpu is None:
+            self.gpu = extension.NativeGpu(width, height)
+        how = "to the window" if self.gpu.has_surface else "offscreen"
+        logger.info(f"wgpu renderer on {self.gpu.adapter}, drawing {how}")
         if not pygame.font.get_init():
             pygame.font.init()
         self._fonts: dict[FontKey, pygame.font.Font] = {}
