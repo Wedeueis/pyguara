@@ -57,6 +57,7 @@ mod flowfield;
 mod grid;
 mod net;
 mod particles;
+mod solids;
 mod sparks;
 mod spatialhash;
 
@@ -69,6 +70,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<flocking::NativeFlockingSolver>()?;
     module.add_class::<flowfield::NativeFlowField>()?;
     module.add_class::<particles::NativeParticlePool>()?;
+    module.add_class::<solids::NativeSolids>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
     module.add_class::<spatialhash::NativeSpatialHash>()?;
     net::register(module)?;

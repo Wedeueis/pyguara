@@ -2,10 +2,12 @@
 
 import contextlib
 import math
+from dataclasses import dataclass
 from typing import Any
 
 import pymunk
 
+from pyguara import native
 from pyguara.common.types import Rect, Vector2
 from pyguara.physics.protocols import IPhysicsBody
 from pyguara.physics.types import (
@@ -135,12 +137,67 @@ def _scaled_gravity(scale: float) -> Any:
     return velocity_func
 
 
+_FULL_MASK = 0xFFFFFFFF
+
+# `NativeSolids.overlap`'s "certainly nothing there". Its other negative
+# answers all mean "ask Chipmunk".
+_CLEAR = -1
+
+
+@dataclass(frozen=True, slots=True)
+class _SolidsMirror:
+    """A space's static boxes held natively. See `_static_solids`.
+
+    Attributes:
+        native: The `NativeSolids` holding the boxes.
+        owners: Owner index -> entity id.
+        index_of: Entity id -> owner index.
+        sensor_free: Whether the space holds no sensor shape at all. A ray
+            may be answered from the mirror only then, because the mirror
+            leaves sensors out and a ray query can report one.
+    """
+
+    native: Any
+    owners: list[int | str]
+    index_of: dict[int | str, int]
+    sensor_free: bool
+
+    def index_for(self, entity_id: int | str | None) -> int:
+        """Return the owner index to ignore, or -1 for none."""
+        if entity_id is None:
+            return -1
+        return self.index_of.get(entity_id, -1)
+
+
 class PymunkBodyAdapter:
     """Wrapper around pymunk.Body to conform to IPhysicsBody."""
 
-    def __init__(self, body: pymunk.Body) -> None:
-        """Initialize the adapter with a pymunk Body."""
+    def __init__(
+        self, body: pymunk.Body, static_moved: list[bool] | None = None
+    ) -> None:
+        """Initialize the adapter with a pymunk Body.
+
+        Args:
+            body: The pymunk body wrapped.
+            static_moved: A one-element flag the engine shares with every
+                adapter it makes, set when a *static* body is repositioned
+                so the engine can drop what it derived from where static
+                geometry was. A flag and not a callback on purpose: a
+                bound method would make this adapter reference the engine,
+                and a `RigidBody` holding the adapter is deep-copied when
+                Studio snapshots a scene -- which then walked into the
+                engine and every entity it knows.
+        """
         self._body = body
+        self._static_moved = static_moved
+
+    def _moved(self) -> None:
+        """Flag a reposition, if this body is static and anyone asked."""
+        if (
+            self._static_moved is not None
+            and self._body.body_type == pymunk.Body.STATIC
+        ):
+            self._static_moved[0] = True
 
     @property
     def position(self) -> Vector2:
@@ -151,6 +208,7 @@ class PymunkBodyAdapter:
     def position(self, value: Vector2) -> None:
         """Set the body's world position."""
         self._body.position = value.x, value.y
+        self._moved()
 
     @property
     def rotation(self) -> float:
@@ -161,6 +219,7 @@ class PymunkBodyAdapter:
     def rotation(self, value: float) -> None:
         """Set the body's rotation in degrees."""
         self._body.angle = math.radians(value)
+        self._moved()
 
     @property
     def velocity(self) -> Vector2:
@@ -191,10 +250,18 @@ class PymunkEngine:
         substeps: int = DEFAULT_SUBSTEPS,
         penetration_recovery: float = DEFAULT_PENETRATION_RECOVERY,
         sleep_time_threshold: float = DEFAULT_SLEEP_TIME_THRESHOLD,
+        accelerate: bool | None = None,
     ) -> None:
         """Initialize the Pymunk engine wrapper.
 
         Args:
+            accelerate: Whether box and ray queries may be answered from a
+                native mirror of the static geometry (see
+                `_static_solids`). None follows the engine-wide
+                `native_acceleration` switch; False never does; True does
+                whenever the extension can be loaded. The answers are the
+                same either way -- this exists so a test can hold the two
+                paths side by side.
             penetration_recovery: Fraction of remaining overlap removed per
                 1/60s, between 0 and 1. Chipmunk's own 10% is too weak to
                 beat continuous gravity, leaving a landed character visibly
@@ -242,10 +309,98 @@ class PymunkEngine:
         self._bodies: dict[int | str, PymunkBodyAdapter] = {}
         # Collision system for event routing (injected after construction)
         self._collision_system: Any | None = None
+        self._accelerate = accelerate
+        self._solids: _SolidsMirror | None = None
+        # One element, shared with every body adapter: see
+        # `PymunkBodyAdapter.__init__` for why it is not a callback.
+        self._solids_stale: list[bool] = [True]
+
+    def _mark_solids_stale(self) -> None:
+        """Forget the native mirror; the next query rebuilds it."""
+        self._solids_stale[0] = True
+
+    def _static_solids(self) -> _SolidsMirror | None:
+        """Return the native mirror of this space's solids, if it is exact.
+
+        The mirror holds the boxes of static, unrotated, non-sensor box
+        shapes. It exists only while those are the *only* solids in the
+        space: one dynamic or kinematic body, one circle, one rotated
+        wall, and this returns None and every query goes to Chipmunk as
+        before. So it serves a world of level geometry -- which is what a
+        character mover sweeps against -- and steps aside for anything
+        richer rather than approximating it.
+
+        Rebuilt lazily after anything that can change static geometry:
+        `initialize`, `cleanup`, `create_body`, `destroy_body`,
+        `add_shape`, and a static body being repositioned through its
+        adapter. Geometry is read from each shape's cached bounding box,
+        which is what Chipmunk's own queries test against, so a static
+        body moved without a reindex is mirrored where Chipmunk still
+        believes it is.
+
+        Returns:
+            The mirror, or None when the space cannot be mirrored exactly
+            or acceleration is off.
+        """
+        if not self._solids_stale[0]:
+            return self._solids
+        self._solids_stale[0] = False
+        self._solids = None
+        if self.space is None or self._accelerate is False:
+            return None
+        extension = (
+            native.native_module()
+            if self._accelerate is None
+            else native.require_extension("PymunkEngine(accelerate=True)")
+        )
+        if extension is None:
+            return None
+
+        rows: list[tuple[float, float, float, float, int, int, int]] = []
+        owners: list[int | str] = []
+        index_of: dict[int | str, int] = {}
+        sensor_free = True
+        for shape in self.space.shapes:
+            if shape.sensor:
+                sensor_free = False
+                continue
+            body = shape.body
+            entity_id = getattr(body, "entity_id", None)
+            if (
+                body is None
+                or entity_id is None
+                or not getattr(shape, "pyguara_box", False)
+                or body.body_type != pymunk.Body.STATIC
+                or body.angle != 0.0
+            ):
+                return None
+            owner = index_of.get(entity_id)
+            if owner is None:
+                owner = len(owners)
+                index_of[entity_id] = owner
+                owners.append(entity_id)
+            box = shape.bb
+            shape_filter = shape.filter
+            rows.append(
+                (
+                    box.left,
+                    box.bottom,
+                    box.right,
+                    box.top,
+                    shape_filter.categories & _FULL_MASK,
+                    shape_filter.mask & _FULL_MASK,
+                    owner,
+                )
+            )
+        self._solids = _SolidsMirror(
+            extension.NativeSolids(rows), owners, index_of, sensor_free
+        )
+        return self._solids
 
     def initialize(self, gravity: Vector2) -> None:
         """Initialize the physics space with gravity."""
         self.space = pymunk.Space()
+        self._mark_solids_stale()
         self.space.gravity = (gravity.x, gravity.y)
         # Chipmunk expresses this as the error *remaining* after one second.
         self.space.collision_bias = pow(1.0 - self._penetration_recovery, 60)
@@ -282,6 +437,7 @@ class PymunkEngine:
                 pass
 
             self.space = None
+            self._mark_solids_stale()
             self._bodies.clear()
             self._collision_system = None
 
@@ -518,8 +674,9 @@ class PymunkEngine:
         body.entity_id = entity_id
 
         self.space.add(body)
+        self._mark_solids_stale()
 
-        adapter = PymunkBodyAdapter(body)
+        adapter = PymunkBodyAdapter(body, self._solids_stale)
         self._bodies[entity_id] = adapter
         return adapter
 
@@ -549,6 +706,7 @@ class PymunkEngine:
         for shape in list(body.shapes):
             self.space.remove(shape)
         self.space.remove(body)
+        self._mark_solids_stale()
         self._bodies.pop(body.entity_id, None)
 
     def add_shape(
@@ -649,7 +807,13 @@ class PymunkEngine:
                 solid = one_way_normal if one_way_normal is not None else Vector2(0, -1)
                 shape.pyguara_one_way_normal = (solid.x, solid.y)
 
+            # What `_static_solids` may mirror as an axis-aligned box: built
+            # here from four axis-aligned vertices, so its cached bounding
+            # box *is* the shape while its body is unrotated.
+            shape.pyguara_box = shape_type == ShapeType.BOX
+
             self.space.add(shape)
+            self._mark_solids_stale()
 
             # Setting density makes Chipmunk recompute the body's mass and
             # moment from its shapes, which silently discards the infinite
@@ -678,6 +842,20 @@ class PymunkEngine:
             The nearest hit that is not excluded, or None.
         """
         if not self.space:
+            return None
+
+        # A ray that certainly clears every static box misses in Chipmunk
+        # too. Only a miss is answered here; a possible hit goes on to
+        # Chipmunk, which owns the hit point and the normal.
+        mirror = self._static_solids()
+        if (
+            mirror is not None
+            and mirror.sensor_free
+            and 0 <= mask <= _FULL_MASK
+            and mirror.native.segment_clear(
+                start.x, start.y, end.x, end.y, RAYCAST_RADIUS, mask
+            )
+        ):
             return None
 
         shape_filter = pymunk.ShapeFilter(mask=mask)
@@ -801,6 +979,32 @@ class PymunkEngine:
         if not self.space:
             return None
 
+        mirror = self._static_solids()
+        if mirror is not None and 0 <= mask <= _FULL_MASK:
+            found: int = mirror.native.overlap(
+                centre.x,
+                centre.y,
+                half_extents.x,
+                half_extents.y,
+                mask,
+                mirror.index_for(ignore_entity_id),
+            )
+            if found == _CLEAR:
+                return None
+            if found >= 0:
+                return mirror.owners[found]
+            # Too close to call, or several owners: Chipmunk decides.
+        return self._overlap_box_exact(centre, half_extents, mask, ignore_entity_id)
+
+    def _overlap_box_exact(
+        self,
+        centre: Vector2,
+        half_extents: Vector2,
+        mask: int,
+        ignore_entity_id: int | str | None,
+    ) -> int | str | None:
+        """`overlap_box` as Chipmunk answers it, with no mirror involved."""
+        assert self.space is not None
         probe = self._probe_shape("box", centre, half_extents, mask=mask)
         for hit in self.space.shape_query(probe):
             if hit.shape is None or hit.shape.sensor:
@@ -810,6 +1014,103 @@ class PymunkEngine:
                 continue
             return entity_id
         return None
+
+    def sweep_box(
+        self,
+        position: Vector2,
+        half_extents: Vector2,
+        delta: Vector2,
+        remainder: Vector2,
+        ignore_entity_id: int | str | None = None,
+    ) -> tuple[float, float, float, float, int | str | None, int | str | None] | None:
+        """Run a whole `CharacterMover.move` natively, when that is exact.
+
+        The mover's per-pixel loop asks `overlap_box` once per pixel per
+        axis. Against mirrored static geometry the entire loop -- both
+        axes, the rounding, the remainder -- runs in one native call.
+
+        Args:
+            position: Current centre of the box.
+            half_extents: The *probe's* half extents, skin already removed.
+            delta: Desired movement.
+            remainder: Sub-pixel motion carried in.
+            ignore_entity_id: Body to disregard.
+
+        Returns:
+            `(x, y, remainder_x, remainder_y, blocking_x, blocking_y)`, or
+            None when this world cannot be swept natively or a probe on
+            the way was too close to call -- in which case the caller
+            runs its own loop and reaches the same answer the slow way.
+        """
+        mirror = self._static_solids()
+        if mirror is None:
+            return None
+        # The loop this replaces does arithmetic on whatever it is given,
+        # so an integer position stays an integer through it. Anything
+        # that is not a plain float or int is left to that loop.
+        kinds = (
+            type(position.x),
+            type(position.y),
+            type(delta.x),
+            type(delta.y),
+            type(remainder.x),
+            type(remainder.y),
+        )
+        for kind in kinds:
+            if kind is not float and kind is not int:
+                return None
+        swept = mirror.native.sweep(
+            position.x,
+            position.y,
+            half_extents.x,
+            half_extents.y,
+            delta.x,
+            delta.y,
+            remainder.x,
+            remainder.y,
+            _FULL_MASK,
+            mirror.index_for(ignore_entity_id),
+        )
+        if swept is None:
+            return None
+        x, y, remainder_x, remainder_y, found_x, found_y = swept
+        blocking_x: int | str | None = None
+        blocking_y: int | str | None = None
+        if found_x >= 0:
+            blocking_x = mirror.owners[found_x]
+        elif found_x != _CLEAR:
+            # Several owners overlap the blocked pixel. Which one Chipmunk
+            # names depends on its index, so ask it about that one pixel.
+            step = 1.0 if remainder.x + delta.x > 0 else -1.0
+            blocking_x = self._overlap_box_exact(
+                Vector2(x + step, position.y),
+                half_extents,
+                _FULL_MASK,
+                ignore_entity_id,
+            )
+            if blocking_x is None:
+                return None
+        if found_y >= 0:
+            blocking_y = mirror.owners[found_y]
+        elif found_y != _CLEAR:
+            step = 1.0 if remainder.y + delta.y > 0 else -1.0
+            blocking_y = self._overlap_box_exact(
+                Vector2(x, y + step), half_extents, _FULL_MASK, ignore_entity_id
+            )
+            if blocking_y is None:
+                return None
+        # Give back the types the loop would have: an int coordinate plus
+        # whole steps is an int, and an int remainder plus an int distance
+        # stays one unless a block reset it to 0.0.
+        if kinds[0] is int:
+            x = int(x)
+        if kinds[1] is int:
+            y = int(y)
+        if kinds[2] is int and kinds[4] is int and blocking_x is None:
+            remainder_x = int(remainder_x)
+        if kinds[3] is int and kinds[5] is int and blocking_y is None:
+            remainder_y = int(remainder_y)
+        return x, y, remainder_x, remainder_y, blocking_x, blocking_y
 
     def overlap_box_all(
         self,
