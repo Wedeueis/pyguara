@@ -61,13 +61,12 @@ _DIGEST = 0xE5
 _EVENT = 0xE6
 
 _TICK_HEADER = struct.Struct("<BI")
-_RECORD_HEADER = struct.Struct("<HH")
 _SPAWN_HEADER = struct.Struct("<BIHBB")
 _DESPAWN_MESSAGE = struct.Struct("<BIH")
 _HELLO_MESSAGE = struct.Struct("<BI")
 _DIGEST_MESSAGE = struct.Struct("<BIII")
 _EVENT_HEADER = struct.Struct("<BIB")
-_MASK = struct.Struct("<H")
+_NET_ID = struct.Struct("<H")
 _SPAWN_FLAG_CONTROLLED = 1
 
 _MAX_ID = 65535
@@ -164,6 +163,8 @@ class ReplicationHost:
         """
         self._manager = entity_manager
         self._schema = schema
+        self._mask = struct.Struct("<" + schema.mask_format)
+        self._record_header = struct.Struct("<H" + schema.mask_format)
         self._send = send
         self._interval = snapshot_interval_ticks
         self._budget = max_snapshot_bytes
@@ -370,7 +371,7 @@ class ReplicationHost:
         return (
             _SPAWN_HEADER.pack(_SPAWN, self._tick, tracked.net_id, len(name), flags)
             + name
-            + _MASK.pack(tracked.mask)
+            + self._mask.pack(tracked.mask)
             + tracked.record
         )
 
@@ -424,10 +425,10 @@ class ReplicationHost:
         size = len(header)
         total = 0
         sent = 0
-        record_header = _RECORD_HEADER
+        record_header = self._record_header
         for tracked in rotated:
             record = tracked.record
-            length = 4 + len(record)
+            length = record_header.size + len(record)
             if total + length > self._budget:
                 break
             if size + length > _MAX_MESSAGE_BYTES:
@@ -457,7 +458,7 @@ class ReplicationHost:
 def _state_crc(records: Any) -> int:
     crc = 0
     for net_id, record in sorted(records):
-        crc = zlib.crc32(_MASK.pack(net_id) + record, crc)
+        crc = zlib.crc32(_NET_ID.pack(net_id) + record, crc)
     return crc
 
 
@@ -534,6 +535,8 @@ class ReplicationClient:
         """
         self._manager = entity_manager
         self._schema = schema
+        self._mask = struct.Struct("<" + schema.mask_format)
+        self._record_header = struct.Struct("<H" + schema.mask_format)
         self._spawners = spawners
         self._predicted = predicted_components
         self._on_controlled = on_controlled
@@ -657,8 +660,8 @@ class ReplicationClient:
         offset = _TICK_HEADER.size
         end = len(data)
         while offset < end:
-            net_id, mask = _RECORD_HEADER.unpack_from(data, offset)
-            offset += _RECORD_HEADER.size
+            net_id, mask = self._record_header.unpack_from(data, offset)
+            offset += self._record_header.size
             start = offset
             values, offset = self._decode_record(data, offset, mask)
             remote = self._remotes.get(net_id)
@@ -692,8 +695,8 @@ class ReplicationClient:
             raise ValueError("A spawn's name does not fit its message")
         prefab = name.decode("utf-8")
         offset += name_length
-        (mask,) = _MASK.unpack_from(data, offset)
-        offset += _MASK.size
+        (mask,) = self._mask.unpack_from(data, offset)
+        offset += self._mask.size
         values, end = self._decode_record(data, offset, mask)
         if end != len(data):
             raise ValueError("A spawn has trailing bytes")
