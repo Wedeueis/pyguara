@@ -37,6 +37,11 @@
 //! it is chosen by `AudioConfig.backend` rather than by the switch below.
 //! `net`, the network transport, is the same kind of thing.
 //!
+//! **A columnar world** -- `world`. The inverse of everything above: state
+//! that *lives* here and is lent to Python, rather than the other way
+//! round. A spike, wired into nothing yet; see ADR 0008. Like `audio` and
+//! `net` it has no Python counterpart.
+//!
 //! The extension is **optional** throughout. The pure-Python
 //! implementations are kept and used whenever it is absent, so the engine
 //! installs and runs with no Rust toolchain; `pyguara/native.py` is the
@@ -59,6 +64,7 @@ mod net;
 mod particles;
 mod sparks;
 mod spatialhash;
+mod world;
 
 /// An RGBA tint as the renderer wants it.
 pub type Rgba = (u8, u8, u8, u8);
@@ -71,6 +77,10 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<particles::NativeParticlePool>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
     module.add_class::<spatialhash::NativeSpatialHash>()?;
+    module.add_class::<world::NativeWorld>()?;
+    module.add_class::<world::ColumnView>()?;
+    module.add_class::<world::RowView>()?;
+    module.add_class::<world::FieldAccessor>()?;
     net::register(module)?;
     module.add_function(wrap_pyfunction!(audio::decode_audio, module)?)?;
     module.add_function(wrap_pyfunction!(audio::resample_pcm, module)?)?;
