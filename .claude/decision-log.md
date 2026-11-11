@@ -168,3 +168,27 @@
 - **Alternatives:** rewrite Reclaimer's `_Chase`/`nearest_target` in the fork's Reclaimer worktree; a native FSM; or only make the engine's dispatch leaner.
 - **Chose:** the engine's dispatch only. Skip the transition table when none is declared, reuse the empty pending-event list, and read each `AIComponent` field once. 0.81 to 0.74 ms, tick hash unchanged. Game changes made in the fork's worktree would never reach Reclaimer itself, and a native FSM cannot help states written in Python.
 - **Tags:** performance, ai, parity
+
+## Stage C's demo check: compare whole frames on a pinned clock, in clean processes
+- **Context:** The plan named "the visual snapshot suite and the demos" as stage C's check. The snapshot suite records backend calls through a recording renderer, so it never touches a backend.
+- **Alternatives:** extend the snapshot suite; extend `test_demos_render` (not-blank only); or render each pygame demo on both backends and compare frames.
+- **Chose:** compare frames, every pixel within 2/255, each render in its own process with the clock pinned to 1/60 s and `PYTHONHASHSEED=0`, and the pygame frame rendered twice so an unreproducible demo fails as that rather than as a renderer bug. Without the pinned clock `ecs_mental_model` differed by 4 px only because wgpu's headless frames are slower.
+- **Tags:** renderer, testing, parity
+
+## Move a sprite batch's placement into Rust, in f64, keeping the Python loop as the reference
+- **Context:** `render_batch` cost 0.5-1.2 us a sprite, nearly all of it Python placing each sprite before its `quad` call.
+- **Alternatives:** vectorise the placement in NumPy, as the ModernGL packer does; or port the loop to Rust.
+- **Chose:** Rust, taking the batch's lists as pyo3 extracts them, with the loop's arithmetic in f64 and in its order. Rust's `f64::cos` is the platform libm, as `math.cos` is, so the frames are byte-identical to the old loop, which stays as `sprites_one_by_one` and is what the test compares against. NumPy's own trig gives no such promise.
+- **Tags:** renderer, native, parity, performance
+
+## Defer `ShapeBatch` on wgpu to stage D
+- **Context:** `render_shapes` was listed in stage C.
+- **Alternatives:** take the rows as ModernGL draws them; convert them in Rust to wgpu's pygame-matching primitives; or defer.
+- **Chose:** defer. Its consumers are the four GL demos, which need stage D to run on wgpu at all, and in Reclaimer `Sparks` averages 5 live and 0.04 ms a frame. Taking the rows as they are would also make sparks look different depending on which path drew them, a choice better made with those demos in front of it.
+- **Tags:** renderer, scope
+
+## Warn once on a material under wgpu rather than dropping it silently
+- **Context:** A material is a GLSL program; wgpu runs WGSL.
+- **Alternatives:** silent, as pygame does; raise; or draw without it and log once.
+- **Chose:** draw without and log once. Raising would stop a game that runs today on pygame; silence leaves an author guessing why a shader has no effect.
+- **Tags:** renderer, materials
