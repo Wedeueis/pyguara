@@ -22,6 +22,7 @@
 //! here: `tests/test_native_solids_parity.py` compares with `==`.
 
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 /// How close to touching a probe may come before the answer is left to
 /// Chipmunk. Far above any rounding in either implementation at world
@@ -283,6 +284,22 @@ impl NativeSolids {
 /// `(left, bottom, right, top, categories, mask, owner)`.
 type SolidRow = (f64, f64, f64, f64, u32, u32, u32);
 
+/// One body for `step_bodies`: box centre, collider offset, half extents,
+/// velocity, remainder, and the entity id the mirror may know as an owner.
+type StepRow<'py> = (
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    f64,
+    Bound<'py, PyAny>,
+);
+
 #[pymethods]
 impl NativeSolids {
     /// Build from one row per box.
@@ -352,6 +369,74 @@ impl NativeSolids {
         let (new_y, rem_y, block_y) =
             self.axis(y, new_x, half_x, half_y, delta_y, remainder_y, false, mask, ignore)?;
         Some((new_x, new_y, rem_x, rem_y, block_x, block_y))
+    }
+
+    /// `TopDownSystem`'s whole movement step, for every body at once.
+    ///
+    /// One row per body: `(centre_x, centre_y, offset_x, offset_y, half_x,
+    /// half_y, velocity_x, velocity_y, remainder_x, remainder_y, entity_id)`:
+    /// the box's centre and the collider's offset exactly as
+    /// `collider_bounds` gives them, and the half extents *before* the
+    /// skin. The rest of the arithmetic `step_body` does in Python is done
+    /// here in the same order on the same doubles, so each answer is the
+    /// one it would have reached: the probe is the half extent less `skin`
+    /// but never under 0.01, the move is `velocity * delta_time`, and the
+    /// position handed back is the swept centre less the offset.
+    ///
+    /// The centre arrives already offset, rather than being added here,
+    /// because without a collider `step_body` adds nothing at all -- and
+    /// adding a zero offset is not nothing: `-0.0 + 0.0` is `+0.0`.
+    ///
+    /// Bodies are independent of one another here -- the mirror holds only
+    /// static boxes, and nothing a sweep does changes it -- so one call for
+    /// all of them gives what a call apiece in any order would.
+    ///
+    /// Returns, per row, `(x, y, remainder_x, remainder_y)`, or `None` when
+    /// that body has to be stepped the slow way: a probe on its path was
+    /// too close to call. Which box blocked it is not reported, because
+    /// nothing in the step reads it -- a block is a block, whoever owns it.
+    #[pyo3(signature = (rows, owners, delta_time, skin, mask))]
+    fn step_bodies<'py>(
+        &self,
+        rows: Vec<StepRow<'py>>,
+        owners: &Bound<'py, PyDict>,
+        delta_time: f64,
+        skin: f64,
+        mask: u32,
+    ) -> PyResult<Vec<Option<(f64, f64, f64, f64)>>> {
+        let mut out = Vec::with_capacity(rows.len());
+        for (x, y, offset_x, offset_y, half_x, half_y, velocity_x, velocity_y, rem_x, rem_y, id) in
+            rows
+        {
+            let ignore = match owners.get_item(&id)? {
+                Some(index) => index.extract::<i64>()?,
+                None => CLEAR,
+            };
+            // Python's `max(h - SKIN, 0.01)`, spelled out: `f64::max` and
+            // Python's `max` disagree about NaN.
+            let probe_x = half_x - skin;
+            let probe_x = if 0.01 > probe_x { 0.01 } else { probe_x };
+            let probe_y = half_y - skin;
+            let probe_y = if 0.01 > probe_y { 0.01 } else { probe_y };
+            out.push(
+                self.sweep(
+                    x,
+                    y,
+                    probe_x,
+                    probe_y,
+                    velocity_x * delta_time,
+                    velocity_y * delta_time,
+                    rem_x,
+                    rem_y,
+                    mask,
+                    ignore,
+                )
+                .map(|(new_x, new_y, new_rem_x, new_rem_y, _, _)| {
+                    (new_x - offset_x, new_y - offset_y, new_rem_x, new_rem_y)
+                }),
+            );
+        }
+        Ok(out)
     }
 
     /// Whether a ray of the given radius certainly touches nothing.

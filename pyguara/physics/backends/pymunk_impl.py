@@ -1112,6 +1112,57 @@ class PymunkEngine:
             remainder_y = int(remainder_y)
         return x, y, remainder_x, remainder_y, blocking_x, blocking_y
 
+    def step_bodies(
+        self,
+        rows: list[
+            tuple[
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                float,
+                int | str,
+            ]
+        ],
+        delta_time: float,
+        skin: float,
+    ) -> list[tuple[float, float, float, float] | None] | None:
+        """Run `step_body` for many bodies in one native call, when exact.
+
+        `sweep_box` saves the per-pixel probes of one move; this saves the
+        Python around each move as well -- the bounds, the scaled velocity,
+        the result object -- which at 200 enemies was most of what a
+        top-down step still cost once the probes were native.
+
+        Args:
+            rows: Per body, `(centre_x, centre_y, offset_x, offset_y, half_x,
+                half_y, velocity_x, velocity_y, remainder_x, remainder_y,
+                entity_id)`: the box centre and offset as `collider_bounds`
+                gives them, and the half extents before the skin.
+            delta_time: Length of the step in seconds.
+            skin: What the mover shrinks its probe by on each side.
+
+        Returns:
+            Per row, the body's new `(x, y, remainder_x, remainder_y)` --
+            the position already less the offset -- or None for a body
+            that must be stepped the ordinary way. None for the whole call
+            when this world has no exact mirror.
+        """
+        mirror = self._static_solids()
+        if mirror is None:
+            return None
+        steps: list[tuple[float, float, float, float] | None] = (
+            mirror.native.step_bodies(
+                rows, mirror.index_of, delta_time, skin, _FULL_MASK
+            )
+        )
+        return steps
+
     def overlap_box_all(
         self,
         centre: Vector2,
