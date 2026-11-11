@@ -22,26 +22,117 @@ Typical use, per frame::
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pyguara.common.random import RandomStream
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform, glsl
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
-    import moderngl
-
+    from pyguara.graphics.pipeline.device import GraphicsDevice
     from pyguara.graphics.pipeline.framebuffer import Framebuffer
-
-
-# Shader directory
-_SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
 
 # Cool, slightly blue daylight-through-cloud, and a colder white for the
 # discharge itself. Both are overridable; these are what read as weather
 # over a warm scene.
 DEFAULT_RAIN_COLOR = (0.55, 0.72, 0.95)
 DEFAULT_FLASH_COLOR = (0.78, 0.86, 1.0)
+
+STORM = FullscreenShader(
+    "storm",
+    inputs=("u_texture",),
+    uniforms=(
+        Uniform("u_resolution", "vec2"),
+        Uniform("u_time"),
+        Uniform("u_rain"),
+        Uniform("u_rain_speed"),
+        Uniform("u_wind"),
+        Uniform("u_rain_color", "vec3"),
+        Uniform("u_flash"),
+        Uniform("u_flash_color", "vec3"),
+        Uniform("u_bolt"),
+        Uniform("u_bolt_x"),
+        Uniform("u_bolt_seed"),
+    ),
+    glsl=glsl("storm.frag"),
+    # A line-for-line port of storm.frag; see it for the reasoning.
+    # Ported in GL's coordinate convention, not wgpu's: `v_uv` is rebuilt
+    # with y up, every expression below is the GLSL's, and only the texture
+    # read flips back. The rain and the bolt are hashes of position, so
+    # mirroring the coordinates instead would mirror nothing -- it would
+    # draw different noise.
+    wgsl="""
+fn hash11(n: f32) -> f32 {
+    return fract(sin(n * 78.233) * 43758.5453);
+}
+
+fn hash21(p: vec2<f32>) -> f32 {
+    return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453);
+}
+
+fn tri(x: f32) -> f32 {
+    return abs(fract(x) - 0.5) * 4.0 - 1.0;
+}
+
+fn rain_layer(uv: vec2<f32>, cells: f32, speed: f32, dash: f32, width: f32, density: f32) -> f32 {
+    var p = uv * cells;
+    p.x += p.y * params.u_wind;
+    p.y += params.u_time * speed * params.u_rain_speed * cells;
+    let column = floor(p.x);
+    p.y += hash11(column) * 7.0;
+    let cell = vec2<f32>(column, floor(p.y));
+    let f = fract(p);
+    let exists = step(1.0 - density, hash21(cell));
+    let across = 1.0 - smoothstep(0.0, width, abs(f.x - 0.5));
+    let along = smoothstep(0.0, dash * 0.35, f.y) * (1.0 - smoothstep(dash * 0.7, dash, f.y));
+    return exists * across * along;
+}
+
+fn bolt_offset(t: f32, seed: f32) -> f32 {
+    var o = tri(t * 3.5 + seed * 7.3) * 0.030;
+    o += tri(t * 9.0 + seed * 13.7) * 0.013;
+    o += tri(t * 21.0 + seed * 23.1) * 0.005;
+    return o * (0.35 + 1.8 * t);
+}
+
+fn bolt_stroke(uv: vec2<f32>, x0: f32, seed: f32, y_top: f32, y_end: f32, width: f32) -> f32 {
+    let span = max(y_top - y_end, 1e-4);
+    let t = clamp((y_top - uv.y) / span, 0.0, 1.0);
+    let inside = step(y_end, uv.y) * step(uv.y, y_top);
+    let x = x0 + bolt_offset(t, seed);
+    let d = abs(uv.x - x);
+    let core = 1.0 - smoothstep(0.0, width * mix(1.2, 0.45, t), d);
+    let halo = exp(-d / (width * 9.0)) * 0.55;
+    return inside * (core + halo);
+}
+
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    let v_uv = vec2<f32>(in.uv.x, 1.0 - in.uv.y);
+    let aspect = params.u_resolution.x / max(params.u_resolution.y, 1.0);
+    let auv = vec2<f32>(v_uv.x * aspect, v_uv.y);
+    var color = textureSample(u_texture, input_sampler, in.uv).rgb;
+    if (params.u_rain > 0.0) {
+        var rain = rain_layer(auv, 15.0, 0.85, 0.20, 0.030, 0.30) * 0.45;
+        rain += rain_layer(auv, 10.0, 1.40, 0.27, 0.045, 0.22) * 0.75;
+        rain += rain_layer(auv, 6.0, 2.20, 0.28, 0.060, 0.14) * 1.00;
+        color += params.u_rain_color * rain * params.u_rain;
+    }
+    var bolt = 0.0;
+    if (params.u_bolt > 0.0) {
+        let bx = params.u_bolt_x * aspect;
+        bolt = bolt_stroke(auv, bx, params.u_bolt_seed, 1.05, 0.10, 0.0045);
+        let fork_y = mix(0.72, 0.42, hash11(params.u_bolt_seed * 3.1));
+        let fork_t = clamp((1.05 - fork_y) / 0.95, 0.0, 1.0);
+        let fork_x = bx + bolt_offset(fork_t, params.u_bolt_seed);
+        bolt += 0.6 * bolt_stroke(auv, fork_x, params.u_bolt_seed + 5.0, fork_y, fork_y - 0.32, 0.0028);
+    }
+    color = color * (1.0 + 0.9 * params.u_flash) + params.u_flash_color * (0.28 * params.u_flash);
+    color += params.u_flash_color * bolt * params.u_bolt * 1.6;
+    return vec4<f32>(color, 1.0);
+}
+""",
+)
 
 
 class StormEffect(PostProcessEffect):
@@ -66,7 +157,7 @@ class StormEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: moderngl.Context,
+        ctx: Any = None,
         *,
         rain: float = 0.0,
         rain_speed: float = 1.0,
@@ -76,10 +167,11 @@ class StormEffect(PostProcessEffect):
         rng: RandomStream | None = None,
         enabled: bool = True,
     ) -> None:
-        """Build the storm's shader program.
+        """Set the storm's starting weather.
 
         Args:
-            ctx: The ModernGL context.
+            ctx: Unused. Accepted so callers written when effects needed a
+                ModernGL context keep working; removed in stage E.
             rain: Initial downpour amount.
             rain_speed: Initial fall-rate multiplier.
             wind: Initial streak slant.
@@ -91,7 +183,6 @@ class StormEffect(PostProcessEffect):
             enabled: Whether the effect is active.
         """
         super().__init__("storm", enabled=enabled)
-        self._ctx = ctx
         self._rng = rng if rng is not None else RandomStream()
 
         self.rain = rain
@@ -107,20 +198,6 @@ class StormEffect(PostProcessEffect):
         self._time = 0.0
         self._bolt_seed = 0.0
         self._resolution = (1.0, 1.0)
-
-        self._program: moderngl.Program | None = None
-        self._vao: moderngl.VertexArray | None = None
-        self._create_resources()
-
-    def _create_resources(self) -> None:
-        """Compile the fullscreen-quad program."""
-        vert_source = (_SHADER_DIR / "fullscreen_quad.vert").read_text()
-        frag_source = (_SHADER_DIR / "storm.frag").read_text()
-
-        self._program = self._ctx.program(
-            vertex_shader=vert_source, fragment_shader=frag_source
-        )
-        self._vao = self._ctx.vertex_array(self._program, [])
 
     @property
     def time(self) -> float:
@@ -157,46 +234,32 @@ class StormEffect(PostProcessEffect):
 
     def apply(
         self,
-        ctx: moderngl.Context,
+        device: GraphicsDevice,
         input_fbo: Framebuffer,
         output_fbo: Framebuffer,
     ) -> None:
         """Draw the weather over the input frame.
 
         Args:
-            ctx: The ModernGL context.
+            device: What to run the shader on.
             input_fbo: Source framebuffer.
             output_fbo: Destination framebuffer.
         """
-        if self._program is None or self._vao is None:
-            return
-
-        output_fbo.bind()
-        input_fbo.texture.use(0)
-
-        self._program["u_texture"] = 0
-        self._program["u_resolution"] = (
-            float(input_fbo.width),
-            float(input_fbo.height),
+        device.run(
+            STORM,
+            {"u_texture": input_fbo},
+            {
+                "u_resolution": (float(input_fbo.width), float(input_fbo.height)),
+                "u_time": self._time,
+                "u_rain": self.rain,
+                "u_rain_speed": self.rain_speed,
+                "u_wind": self.wind,
+                "u_rain_color": self.rain_color,
+                "u_flash": self.flash,
+                "u_flash_color": self.flash_color,
+                "u_bolt": self.bolt,
+                "u_bolt_x": self.bolt_x,
+                "u_bolt_seed": self._bolt_seed,
+            },
+            output_fbo,
         )
-        self._program["u_time"] = self._time
-        self._program["u_rain"] = self.rain
-        self._program["u_rain_speed"] = self.rain_speed
-        self._program["u_wind"] = self.wind
-        self._program["u_rain_color"] = self.rain_color
-        self._program["u_flash"] = self.flash
-        self._program["u_flash_color"] = self.flash_color
-        self._program["u_bolt"] = self.bolt
-        self._program["u_bolt_x"] = self.bolt_x
-        self._program["u_bolt_seed"] = self._bolt_seed
-
-        self._vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-
-    def release(self) -> None:
-        """Release GPU resources."""
-        if self._vao is not None:
-            self._vao.release()
-            self._vao = None
-        if self._program is not None:
-            self._program.release()
-            self._program = None

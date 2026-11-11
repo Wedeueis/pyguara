@@ -252,7 +252,86 @@ def lit(backend: Backend) -> Any:
     return out
 
 
+def _post_process(backend: Backend, *effects: Any) -> Any:
+    """Run the picture through `PostProcessPass` with these effects."""
+    from pyguara.graphics.pipeline.passes import PostProcessPass
+    from pyguara.graphics.vfx.post_process import PostProcessStack
+
+    manager = backend.graph.fbo_manager
+    world = manager.get_or_create("w", dtype="f1")
+    backend.fill(world, picture())
+    stack = PostProcessStack(backend.graph.ctx, manager)
+    for effect in effects:
+        stack.add_effect(effect)
+    PostProcessPass(stack, input_fbo_name="w", output_fbo_name="out").execute(
+        backend.graph.ctx, backend.graph
+    )
+    return manager.get("out")
+
+
+def vignette(backend: Backend) -> Any:
+    """Edges darkened, the centre left alone."""
+    from pyguara.graphics.vfx.effects import VignetteEffect
+
+    return _post_process(backend, VignetteEffect(intensity=0.7, radius=0.6))
+
+
+def bloom(backend: Backend) -> Any:
+    """Bright areas thresholded, blurred both ways, added back, tonemapped."""
+    from pyguara.graphics.vfx.effects import BloomEffect
+
+    effect = BloomEffect(None, backend.graph.fbo_manager, threshold=0.6, blur_passes=2)
+    return _post_process(backend, effect)
+
+
+def heat_haze(backend: Backend) -> Any:
+    """Shimmer, dust and sun: procedural, so the noise must be GL's own."""
+    from pyguara.graphics.vfx.effects import HeatHazeEffect
+
+    effect = HeatHazeEffect(haze=6.0, horizon=0.3, dust=0.8, sun=0.5, wind=-0.6)
+    effect.update(2.0)
+    return _post_process(backend, effect)
+
+
+def storm(backend: Backend) -> Any:
+    """Rain, a forked bolt and a flash."""
+    from pyguara.common.random import RandomStream
+    from pyguara.graphics.vfx.effects import StormEffect
+
+    effect = StormEffect(rain=0.8, wind=0.25, rng=RandomStream(4))
+    effect.update(1.3)
+    effect.strike(x=0.4)
+    effect.bolt, effect.flash = 1.0, 0.3
+    return _post_process(backend, effect)
+
+
+def chain(backend: Backend) -> Any:
+    """Three effects through the stack's ping-pong buffers, then copied out."""
+    from games.quintal_cerrado.soil_health_effect import SoilHealthEffect
+    from pyguara.graphics.vfx.effects import BloomEffect, VignetteEffect
+
+    return _post_process(
+        backend,
+        SoilHealthEffect(health=0.2, strength=0.8),
+        BloomEffect(None, backend.graph.fbo_manager, threshold=0.6, blur_passes=1),
+        VignetteEffect(),
+    )
+
+
+def passthrough(backend: Backend) -> Any:
+    """No effect enabled: the input is copied to the output unchanged."""
+    from pyguara.graphics.vfx.effects import VignetteEffect
+
+    return _post_process(backend, VignetteEffect(enabled=False))
+
+
 CASES: dict[str, Callable[[Backend], Any]] = {
+    "vignette": vignette,
+    "bloom": bloom,
+    "heat_haze": heat_haze,
+    "storm": storm,
+    "chain": chain,
+    "passthrough": passthrough,
     "composite": composite,
     "composite_unlit": composite_unlit,
     "lights": lights,

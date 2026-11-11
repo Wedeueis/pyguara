@@ -1,38 +1,35 @@
 """Tests for `StormEffect`'s parameter plumbing.
 
-What the rain and the bolt *look like* is the fragment shader's business
-and needs a GL context to judge; these cover the half that does not --
-that the caller's weather reaches the uniforms, and that a strike is a
-distinct event rather than a value that drifts every frame.
+What the rain and the bolt *look like* is the fragment shader's business,
+held to ModernGL's on wgpu by `tests/integration/test_wgpu_graph.py`; these
+cover the half that needs no GPU -- that the caller's weather reaches the
+uniforms, and that a strike is a distinct event rather than a value that
+drifts every frame.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from pyguara.common.random import RandomStream
-from pyguara.graphics.vfx.effects.storm import StormEffect
+from pyguara.graphics.vfx.effects.storm import STORM, StormEffect
+from tests.recording_device import RecordingDevice
 
 
 def make_effect(**kwargs) -> StormEffect:
-    """Build a StormEffect over a mock context, with no shader compiled."""
-    ctx = MagicMock()
-    ctx.program.return_value = MagicMock()
-    ctx.vertex_array.return_value = MagicMock()
-    return StormEffect(ctx, **kwargs)
+    """Build a StormEffect; it compiles nothing until it runs."""
+    return StormEffect(**kwargs)
 
 
 def apply_once(effect: StormEffect) -> dict[str, object]:
     """Apply the effect to mock framebuffers and return the uniforms set."""
-    ctx = MagicMock()
+    device = RecordingDevice()
     input_fbo, output_fbo = MagicMock(), MagicMock()
     input_fbo.width, input_fbo.height = 800, 600
 
-    uniforms: dict[str, object] = {}
-    program = MagicMock()
-    program.__setitem__ = lambda _self, key, value: uniforms.__setitem__(key, value)
-    effect._program = program
-
-    effect.apply(ctx, input_fbo, output_fbo)
-    return uniforms
+    effect.apply(device, input_fbo, output_fbo)
+    assert device.last.shader is STORM
+    assert device.last.inputs == {"u_texture": input_fbo}
+    assert device.last.output is output_fbo
+    return device.last.uniforms
 
 
 class TestUniforms:
@@ -64,15 +61,6 @@ class TestUniforms:
 
         assert effect.time == 0.75
         assert apply_once(effect)["u_time"] == 0.75
-
-    def test_nothing_is_drawn_without_a_program(self) -> None:
-        effect = make_effect()
-        effect.release()
-
-        ctx, input_fbo, output_fbo = MagicMock(), MagicMock(), MagicMock()
-        effect.apply(ctx, input_fbo, output_fbo)
-
-        output_fbo.bind.assert_not_called()
 
 
 class TestStrike:
@@ -111,22 +99,14 @@ class TestStrike:
 
 
 class TestResources:
-    def test_the_shader_is_compiled_from_the_storm_sources(self) -> None:
-        ctx = MagicMock()
-        with patch(
-            "pyguara.graphics.vfx.effects.storm.Path.read_text",
-            return_value="// shader",
-        ):
-            StormEffect(ctx)
+    def test_the_shader_comes_in_both_languages(self) -> None:
+        """GLSL for ModernGL, WGSL for wgpu, until stage E."""
+        assert STORM.glsl is not None and "u_bolt_seed" in STORM.glsl
+        assert "u_bolt_seed: f32" in STORM.wgsl_source()
 
-        ctx.program.assert_called_once()
-
-    def test_release_drops_both_gpu_objects(self) -> None:
+    def test_release_is_harmless(self) -> None:
+        """The device owns the compiled shader; an effect has nothing to free."""
         effect = make_effect()
-        program, vao = effect._program, effect._vao
 
         effect.release()
-
-        program.release.assert_called_once()
-        vao.release.assert_called_once()
-        assert effect._program is None
+        effect.release()

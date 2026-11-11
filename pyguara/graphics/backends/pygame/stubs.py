@@ -94,6 +94,11 @@ class PygamePostProcessStack:
         self._effects: list[Any] = []
 
     @property
+    def device(self) -> None:
+        """Return None: there is no GPU behind the pygame backend."""
+        return None
+
+    @property
     def effects(self) -> list[Any]:
         """Return empty effect list."""
         return self._effects

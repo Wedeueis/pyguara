@@ -9,12 +9,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import POST_PROCESSED_FBO_NAME
-from pyguara.graphics.pipeline.render_pass import BaseRenderPass, require_gl
+from pyguara.graphics.pipeline.passes.final_pass import BLIT
+from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
     import moderngl
 
-    from pyguara.graphics.pipeline.framebuffer import Framebuffer
     from pyguara.graphics.pipeline.graph import RenderGraph
     from pyguara.graphics.vfx.post_process import PostProcessStack
 
@@ -73,49 +73,24 @@ class PostProcessPass(BaseRenderPass):
         """Execute the post-processing pass.
 
         Args:
-            ctx: The ModernGL rendering context.
+            ctx: Unused; effects run through `graph.device`.
             graph: The RenderGraph providing access to framebuffers.
         """
-        ctx = require_gl(ctx, "PostProcessPass")
         if not self._enabled:
             return
-
-        # Get input framebuffer
         input_fbo = graph.fbo_manager.get(self._input_fbo_name)
         if input_fbo is None:
             return
-
-        # Check if any effects are enabled
         enabled_effects = [e for e in self._stack.effects if e.enabled]
-        if not enabled_effects:
-            # No effects - copy input to output for consistency
-            output_fbo = graph.fbo_manager.get_or_create(self._output_fbo_name)
-            self._blit(ctx, input_fbo, output_fbo)
-            return
-
-        # Process through effect stack
-        result_fbo = self._stack.process(input_fbo)
-
-        # Copy result to named output FBO if different
+        # With nothing enabled the input is copied through, so the output
+        # buffer always holds this frame.
+        result_fbo = self._stack.process(input_fbo) if enabled_effects else input_fbo
         if result_fbo.name != self._output_fbo_name:
             output_fbo = graph.fbo_manager.get_or_create(self._output_fbo_name)
-            self._blit(ctx, result_fbo, output_fbo)
-
-    def _blit(
-        self,
-        ctx: moderngl.Context,
-        src: Framebuffer,
-        dst: Framebuffer,
-    ) -> None:
-        """Copy one framebuffer to another.
-
-        Args:
-            ctx: The ModernGL context.
-            src: Source framebuffer.
-            dst: Destination framebuffer.
-        """
-        # Use ModernGL's blit functionality
-        ctx.copy_framebuffer(dst.fbo, src.fbo)
+            # A copy, as `ctx.copy_framebuffer` was: no blending.
+            graph.device.run(
+                BLIT, {"u_texture": result_fbo}, {}, output_fbo, blend="replace"
+            )
 
     def on_resize(self, width: int, height: int) -> None:
         """Handle viewport resize.

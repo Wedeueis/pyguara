@@ -32,6 +32,7 @@ import numpy as np
 import pytest
 
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE
+from pyguara.graphics.pipeline.device import ModernGLDevice
 from pyguara.graphics.pipeline.framebuffer import Framebuffer, FramebufferManager
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 
@@ -82,7 +83,7 @@ def _composite_of(
     target.bind()
     ctx.clear(0.0, 0.0, 0.0, 1.0)
 
-    effect.apply(ctx, source, target)
+    effect.apply(ModernGLDevice(ctx), source, target)
 
     raw = np.frombuffer(target.fbo.read(components=4, dtype="f4"), dtype="f4")
     return float(raw.reshape((_SIZE, _SIZE, 4))[_SIZE // 2, _SIZE // 2][0])

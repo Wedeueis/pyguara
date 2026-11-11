@@ -8,20 +8,16 @@ multi-pass processing.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE
+from pyguara.graphics.pipeline.device import GraphicsDevice, as_device
 from pyguara.log import get_logger
 
 if TYPE_CHECKING:
     import moderngl
 
     from pyguara.graphics.pipeline.framebuffer import Framebuffer, FramebufferManager
-
-
-# Shader directory
-_SHADER_DIR = Path(__file__).parent.parent / "backends" / "moderngl" / "shaders"
 
 
 logger = get_logger(__name__)
@@ -62,14 +58,19 @@ class PostProcessEffect(ABC):
     @abstractmethod
     def apply(
         self,
-        ctx: moderngl.Context,
+        device: GraphicsDevice,
         input_fbo: Framebuffer,
         output_fbo: Framebuffer,
     ) -> None:
         """Apply this effect.
 
+        Run its shader through `device` -- `device.run(SHADER, {...},
+        {...}, output_fbo)` -- which is what lets one effect work on
+        ModernGL and on wgpu. `device.ctx` is the ModernGL context, for an
+        effect not ported yet; it is None on wgpu.
+
         Args:
-            ctx: The ModernGL context.
+            device: What to run shaders on.
             input_fbo: Framebuffer to read from.
             output_fbo: Framebuffer to write to.
         """
@@ -109,7 +110,9 @@ class PostProcessStack:
         """Initialize the post-processing stack.
 
         Args:
-            ctx: The ModernGL context.
+            ctx: Unused. Accepted so callers written when effects needed a
+                ModernGL context keep working; removed in stage E. The
+                effects run on `fbo_manager.device`.
             fbo_manager: The framebuffer manager for creating temp FBOs.
         """
         self._ctx = ctx
@@ -231,7 +234,7 @@ class PostProcessStack:
         current_output = ping
 
         for i, effect in enumerate(enabled_effects):
-            effect.apply(self._ctx, current_input, current_output)
+            effect.apply(self.device, current_input, current_output)
 
             # Swap for next effect
             if i < len(enabled_effects) - 1:
@@ -245,6 +248,15 @@ class PostProcessStack:
 
         # Return the last output
         return current_output
+
+    @property
+    def device(self) -> GraphicsDevice:
+        """The device effects run on: the framebuffer manager's."""
+        device = getattr(self._fbo_manager, "device", None)
+        if isinstance(device, GraphicsDevice):
+            return device
+        # A manager without one -- a test's mock -- over the context given.
+        return as_device(self._ctx)
 
     def on_resize(self, width: int, height: int) -> None:
         """Handle viewport resize.

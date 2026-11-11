@@ -6,19 +6,32 @@ and creating a cinematic look.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform, glsl
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
-    import moderngl
-
+    from pyguara.graphics.pipeline.device import GraphicsDevice
     from pyguara.graphics.pipeline.framebuffer import Framebuffer
 
-
-# Shader directory
-_SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
+VIGNETTE = FullscreenShader(
+    "vignette",
+    inputs=("u_texture",),
+    uniforms=(Uniform("u_intensity"), Uniform("u_radius"), Uniform("u_softness")),
+    glsl=glsl("vignette.frag"),
+    # Symmetric about the centre, so the two uv conventions agree.
+    wgsl="""
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    let color = textureSample(u_texture, input_sampler, in.uv);
+    let dist = distance(in.uv, vec2<f32>(0.5, 0.5));
+    let vignette = smoothstep(params.u_radius, params.u_radius - params.u_softness, dist);
+    let result = color.rgb * mix(1.0 - params.u_intensity, 1.0, vignette);
+    return vec4<f32>(result, color.a);
+}
+""",
+)
 
 
 class VignetteEffect(PostProcessEffect):
@@ -32,7 +45,7 @@ class VignetteEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: moderngl.Context,
+        ctx: Any = None,
         *,
         intensity: float = 0.5,
         radius: float = 0.75,
@@ -42,72 +55,38 @@ class VignetteEffect(PostProcessEffect):
         """Initialize the vignette effect.
 
         Args:
-            ctx: The ModernGL context.
+            ctx: Unused. Accepted so callers written when effects needed a
+                ModernGL context keep working; removed in stage E.
             intensity: Edge darkness (0.0-1.0).
             radius: Where vignette starts (0.0-1.0 from center).
             softness: Edge transition softness.
             enabled: Whether the effect is active.
         """
         super().__init__("vignette", enabled=enabled)
-        self._ctx = ctx
-
         self.intensity = intensity
         self.radius = radius
         self.softness = softness
 
-        # Shader program
-        self._program: moderngl.Program | None = None
-        self._vao: moderngl.VertexArray | None = None
-
-        self._create_resources()
-
-    def _create_resources(self) -> None:
-        """Create shader program."""
-        # Load fullscreen quad vertex shader
-        vert_path = _SHADER_DIR / "fullscreen_quad.vert"
-        frag_path = _SHADER_DIR / "vignette.frag"
-
-        with open(vert_path) as f:
-            vert_source = f.read()
-        with open(frag_path) as f:
-            frag_source = f.read()
-
-        self._program = self._ctx.program(
-            vertex_shader=vert_source, fragment_shader=frag_source
-        )
-        self._vao = self._ctx.vertex_array(self._program, [])
-
     def apply(
         self,
-        ctx: moderngl.Context,
+        device: GraphicsDevice,
         input_fbo: Framebuffer,
         output_fbo: Framebuffer,
     ) -> None:
         """Apply the vignette effect.
 
         Args:
-            ctx: The ModernGL context.
+            device: What to run the shader on.
             input_fbo: Source framebuffer.
             output_fbo: Destination framebuffer.
         """
-        if self._program is None or self._vao is None:
-            return
-
-        output_fbo.bind()
-        input_fbo.texture.use(0)
-
-        self._program["u_texture"] = 0
-        self._program["u_intensity"] = self.intensity
-        self._program["u_radius"] = self.radius
-        self._program["u_softness"] = self.softness
-
-        self._vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-
-    def release(self) -> None:
-        """Release GPU resources."""
-        if self._vao is not None:
-            self._vao.release()
-            self._vao = None
-        if self._program is not None:
-            self._program.release()
-            self._program = None
+        device.run(
+            VIGNETTE,
+            {"u_texture": input_fbo},
+            {
+                "u_intensity": self.intensity,
+                "u_radius": self.radius,
+                "u_softness": self.softness,
+            },
+            output_fbo,
+        )
