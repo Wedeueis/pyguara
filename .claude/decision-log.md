@@ -222,3 +222,15 @@
 - **Alternatives:** compare pass-level tests only; or compare whole demo frames before and after.
 - **Chose:** whole frames, byte for byte, through a wrapper of `agent_view` that pins `PygameClock` to 1/60 s and gives an unseeded `RandomStream` seed 0. Unpinned, five of six differed from themselves; `true_coral` is unseeded by design.
 - **Tags:** testing, parity
+
+## Procedural shaders are ported in GL's coordinate convention
+- **Context:** Heat haze and storm hash screen position into noise.
+- **Alternatives:** port in wgpu's top-left convention and accept different noise; or rebuild GL's `v_uv` (y up) in the WGSL and flip only at the texture read.
+- **Chose:** GL's convention. The same inputs give the same noise, so the frames can be compared exactly; a mirrored port would draw a different storm, not a flipped one. Sabotage-tested.
+- **Tags:** shaders, parity
+
+## Keep the heat haze's inverted horizon in the port
+- **Context:** Measured on ModernGL, ground heat builds towards the top of the frame; the docstring says bottom.
+- **Alternatives:** fix it in the WGSL only; fix both; or port it as it is.
+- **Chose:** port it as it is and record it. Fixing one side breaks the comparison that proves the port, and fixing both changes how `protocolo_bandeira` looks -- a decision for the user, made separately.
+- **Tags:** shaders, bug, parity
