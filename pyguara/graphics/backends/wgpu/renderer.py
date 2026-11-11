@@ -162,59 +162,31 @@ class WgpuRenderer:
         )  # fmt: skip
 
     def render_batch(self, batch: RenderBatch) -> None:
-        """Draw many instances of one texture.
+        """Draw many instances of one texture, in one native call.
 
         Places sprites as the pygame backend does: a destination is the
         top-left corner of the sprite's box, and a rotated sprite's box is
-        the one that bounds it after turning.
+        the one that bounds it after turning. The per-sprite arithmetic is
+        `NativeGpu.sprites`; `sprites_one_by_one` below is the same thing
+        a sprite at a time, kept as the reference it is tested against.
         """
         surface = as_surface(batch.texture)
         if surface is None:
             return
-        texture = self._frame.surface(surface)
-        full_width, full_height = surface.get_size()
-        regions = batch.source_rects if batch.source_rects_enabled else ()
         transforms = batch.transforms_enabled
-        tinted = batch.colors_enabled
-        quad = self._gpu.quad
-
-        for index, (x, y) in enumerate(batch.destinations):
-            region = regions[index] if regions else None
-            if region is None:
-                source_x, source_y = 0, 0
-                width, height = full_width, full_height
-            else:
-                source_x, source_y = int(region.x), int(region.y)
-                width, height = int(region.width), int(region.height)
-            turn = 0.0
-            box_width, box_height = float(width), float(height)
-            drawn_width, drawn_height = float(width), float(height)
-            if transforms:
-                if index < len(batch.rotations):
-                    turn = batch.rotations[index]
-                if index < len(batch.scales):
-                    scale_x, scale_y = batch.scales[index]
-                    drawn_width = float(int(width * scale_x))
-                    drawn_height = float(int(height * scale_y))
-                if turn != 0.0:
-                    radians = math.radians(turn)
-                    cos, sin = abs(math.cos(radians)), abs(math.sin(radians))
-                    # pygame turns first and scales the turned box; the
-                    # box that bounds the result is what `dest` anchors.
-                    box_width = (width * cos + height * sin) * (drawn_width / width)
-                    box_height = (width * sin + height * cos) * (drawn_height / height)
-                else:
-                    box_width, box_height = drawn_width, drawn_height
-            red, green, blue, alpha = 255, 255, 255, 255
-            if tinted and index < len(batch.colors):
-                red, green, blue, alpha = batch.colors[index]
-            quad(
-                texture,
-                x + box_width / 2, y + box_height / 2,
-                drawn_width / 2, drawn_height / 2,
-                source_x, source_y, width, height, turn,
-                red, green, blue, alpha,
-            )  # fmt: skip
+        self._gpu.sprites(
+            self._frame.surface(surface),
+            batch.destinations,
+            [
+                None if r is None else (r.x, r.y, r.width, r.height)
+                for r in batch.source_rects
+            ]
+            if batch.source_rects_enabled
+            else None,
+            batch.rotations if transforms else None,
+            batch.scales if transforms else None,
+            batch.colors if batch.colors_enabled else None,
+        )
 
     def resize(self, width: int, height: int) -> None:
         """Adopt a new target size.
@@ -228,3 +200,63 @@ class WgpuRenderer:
 
     def present(self) -> None:
         """Present the frame. Nothing to do: the window presents it."""
+
+
+def sprites_one_by_one(frame: GpuFrame, batch: RenderBatch) -> None:
+    """`WgpuRenderer.render_batch`, one `quad` call per sprite.
+
+    What `render_batch` did before `NativeGpu.sprites` existed, kept
+    unchanged as the reference the native path is held to. Not used
+    to draw.
+
+    Args:
+        frame: The frame to draw into.
+        batch: The sprites.
+    """
+    surface = as_surface(batch.texture)
+    if surface is None:
+        return
+    texture = frame.surface(surface)
+    full_width, full_height = surface.get_size()
+    regions = batch.source_rects if batch.source_rects_enabled else ()
+    transforms = batch.transforms_enabled
+    tinted = batch.colors_enabled
+    quad = frame.gpu.quad
+
+    for index, (x, y) in enumerate(batch.destinations):
+        region = regions[index] if regions else None
+        if region is None:
+            source_x, source_y = 0, 0
+            width, height = full_width, full_height
+        else:
+            source_x, source_y = int(region.x), int(region.y)
+            width, height = int(region.width), int(region.height)
+        turn = 0.0
+        box_width, box_height = float(width), float(height)
+        drawn_width, drawn_height = float(width), float(height)
+        if transforms:
+            if index < len(batch.rotations):
+                turn = batch.rotations[index]
+            if index < len(batch.scales):
+                scale_x, scale_y = batch.scales[index]
+                drawn_width = float(int(width * scale_x))
+                drawn_height = float(int(height * scale_y))
+            if turn != 0.0:
+                radians = math.radians(turn)
+                cos, sin = abs(math.cos(radians)), abs(math.sin(radians))
+                # pygame turns first and scales the turned box; the
+                # box that bounds the result is what `dest` anchors.
+                box_width = (width * cos + height * sin) * (drawn_width / width)
+                box_height = (width * sin + height * cos) * (drawn_height / height)
+            else:
+                box_width, box_height = drawn_width, drawn_height
+        red, green, blue, alpha = 255, 255, 255, 255
+        if tinted and index < len(batch.colors):
+            red, green, blue, alpha = batch.colors[index]
+        quad(
+            texture,
+            x + box_width / 2, y + box_height / 2,
+            drawn_width / 2, drawn_height / 2,
+            source_x, source_y, width, height, turn,
+            red, green, blue, alpha,
+        )  # fmt: skip

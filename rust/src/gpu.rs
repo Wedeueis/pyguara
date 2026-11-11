@@ -16,6 +16,10 @@
 //! **Python pushes one primitive per call**, with scalar arguments. ADR
 //! 0004 measured that shape as the cheap one -- 20,000 scalar pushes cost
 //! 2.3 ms, less than building the lists a single bulk call would need.
+//! **Except a sprite batch**: there the lists already exist (`RenderBatch`
+//! is made of them), and what cost was the Python placing each sprite
+//! before its push. `sprites` takes the batch's lists as they are and does
+//! that placement here -- 0.5 to 1.2 us a sprite down to 0.04 to 0.13.
 //!
 //! **The target is offscreen.** A frame is rendered into a texture, and
 //! `read_pixels` copies it out: that is what makes a frame checkable in a
@@ -1127,6 +1131,101 @@ impl NativeGpu {
                 params: [KIND_QUAD, 0.0, 0.0, 0.0],
             },
         );
+        Ok(())
+    }
+
+    /// Many sprites of one texture, placed as the pygame backend places them.
+    ///
+    /// `WgpuRenderer.render_batch`'s per-sprite loop, moved here so a batch
+    /// is one call: `destinations` is each sprite's top-left corner, and
+    /// the other lists are optional and per sprite, applied to sprite `i`
+    /// only when the list reaches index `i` -- the guard the pygame
+    /// backend uses. A region is `(x, y, width, height)` in texels, or
+    /// None for the whole texture; `rotations` are degrees, `scales` are
+    /// factors, `colors` are 0-255 tints.
+    ///
+    /// **The arithmetic is the Python loop's, in `f64`, in the same
+    /// order**, and the result is narrowed to `f32` exactly where `quad`'s
+    /// arguments were. `f64::cos` is the platform's libm, as `math.cos`
+    /// is, so a batch drawn here and one drawn a sprite at a time through
+    /// `quad` produce the same instances; `tests/integration/test_wgpu_pixels.py`
+    /// compares the two.
+    #[pyo3(signature = (texture, destinations, regions = None, rotations = None, scales = None, colors = None))]
+    #[allow(clippy::too_many_arguments)]
+    fn sprites(
+        &mut self,
+        texture: u32,
+        destinations: Vec<(f64, f64)>,
+        regions: Option<Vec<Option<(f64, f64, f64, f64)>>>,
+        rotations: Option<Vec<f64>>,
+        scales: Option<Vec<(f64, f64)>>,
+        colors: Option<Vec<(u8, u8, u8, u8)>>,
+    ) -> PyResult<()> {
+        let Some(image) = self.images.get(&texture) else {
+            return Err(PyKeyError::new_err(format!("no texture {texture}")));
+        };
+        let (full_width, full_height) = (image.width, image.height);
+        let (texture_width, texture_height) = (full_width as f32, full_height as f32);
+        let regions = regions.unwrap_or_default();
+        let rotations = rotations.unwrap_or_default();
+        let scales = scales.unwrap_or_default();
+        let colors = colors.unwrap_or_default();
+        self.instances.reserve(destinations.len());
+
+        for (index, (x, y)) in destinations.into_iter().enumerate() {
+            // Python's `int(region.x)`: truncation toward zero.
+            let (source_x, source_y, width, height) = match regions.get(index).copied().flatten() {
+                Some((rx, ry, rw, rh)) => (rx.trunc(), ry.trunc(), rw.trunc(), rh.trunc()),
+                None => (0.0, 0.0, f64::from(full_width), f64::from(full_height)),
+            };
+            let turn = rotations.get(index).copied().unwrap_or(0.0);
+            let (mut drawn_width, mut drawn_height) = (width, height);
+            if let Some(&(scale_x, scale_y)) = scales.get(index) {
+                drawn_width = (width * scale_x).trunc();
+                drawn_height = (height * scale_y).trunc();
+            }
+            let (box_width, box_height) = if turn != 0.0 {
+                let radians = turn.to_radians();
+                let (cos, sin) = (radians.cos().abs(), radians.sin().abs());
+                (
+                    (width * cos + height * sin) * (drawn_width / width),
+                    (width * sin + height * cos) * (drawn_height / height),
+                )
+            } else {
+                (drawn_width, drawn_height)
+            };
+            let (red, green, blue, alpha) = colors.get(index).copied().unwrap_or((255, 255, 255, 255));
+
+            // From here on, `quad` with the arguments the loop passed it.
+            let half_width = (drawn_width / 2.0) as f32;
+            let half_height = (drawn_height / 2.0) as f32;
+            let (source_x, source_y) = (source_x as f32, source_y as f32);
+            let (source_width, source_height) = (width as f32, height as f32);
+            let mut uv_low = [source_x / texture_width, source_y / texture_height];
+            let mut uv_high = [
+                (source_x + source_width) / texture_width,
+                (source_y + source_height) / texture_height,
+            ];
+            if half_width < 0.0 {
+                std::mem::swap(&mut uv_low[0], &mut uv_high[0]);
+            }
+            if half_height < 0.0 {
+                std::mem::swap(&mut uv_low[1], &mut uv_high[1]);
+            }
+            let radians = (turn as f32).to_radians();
+            self.push(
+                texture,
+                Instance {
+                    center: [(x + box_width / 2.0) as f32, (y + box_height / 2.0) as f32],
+                    half: [half_width.abs(), half_height.abs()],
+                    turn: [radians.cos(), radians.sin()],
+                    uv_low,
+                    uv_high,
+                    color: [unit(red), unit(green), unit(blue), unit(alpha)],
+                    params: [KIND_QUAD, 0.0, 0.0, 0.0],
+                },
+            );
+        }
         Ok(())
     }
 

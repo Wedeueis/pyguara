@@ -341,6 +341,127 @@ class TestSprites:
         assert _differing(reference, actual) == 0
 
 
+def _odd_batches() -> dict[str, RenderBatch]:
+    """Batches that exercise every branch of the per-sprite placement."""
+    import random
+
+    rng = random.Random(7)
+    texture = _checker(16)
+    count = 40
+    destinations = [(rng.uniform(-8, 230), rng.uniform(-8, 150)) for _ in range(count)]
+    return {
+        "plain": RenderBatch(texture, destinations),
+        "integer destinations": RenderBatch(
+            texture, [(i * 5, i * 3) for i in range(count)]
+        ),
+        "atlas, mixed with whole sprites": RenderBatch(
+            texture,
+            destinations,
+            source_rects=[
+                None if i % 3 == 0 else Rect(i % 8, 0, 8.7, 4.2) for i in range(count)
+            ],
+            source_rects_enabled=True,
+        ),
+        "turned and scaled, flips and fractions": RenderBatch(
+            texture,
+            destinations,
+            rotations=[
+                rng.choice([0.0, 30.0, -45.0, 90.0, 123.4]) for _ in range(count)
+            ],
+            scales=[
+                rng.choice([(1.0, 1.0), (1.5, 0.75), (-1.3, 1.0), (1.0, -1.3)])
+                for _ in range(count)
+            ],
+            transforms_enabled=True,
+        ),
+        "lists shorter than the batch": RenderBatch(
+            texture,
+            destinations,
+            rotations=[45.0] * 10,
+            scales=[(2.0, 2.0)] * 20,
+            transforms_enabled=True,
+            colors=[(255, 0, 0, 128)] * 5,
+            colors_enabled=True,
+        ),
+        "lists given but switched off": RenderBatch(
+            texture,
+            destinations,
+            rotations=[45.0] * count,
+            scales=[(2.0, 2.0)] * count,
+            colors=[(255, 0, 0, 128)] * count,
+        ),
+        "tinted, turned, in an atlas": RenderBatch(
+            texture,
+            destinations,
+            rotations=[rng.uniform(0, 360) for _ in range(count)],
+            scales=[(rng.uniform(0.5, 2), rng.uniform(0.5, 2)) for _ in range(count)],
+            transforms_enabled=True,
+            colors=[
+                (
+                    rng.randrange(256),
+                    rng.randrange(256),
+                    rng.randrange(256),
+                    rng.randrange(256),
+                )
+                for _ in range(count)
+            ],
+            colors_enabled=True,
+            source_rects=[Rect(4, 4, 8, 8)] * count,
+            source_rects_enabled=True,
+        ),
+    }
+
+
+class TestNativeBatch:
+    """`render_batch`'s one native call against the loop it replaced.
+
+    `sprites_one_by_one` is the per-sprite loop `render_batch` used to run,
+    one `quad` call each. Both are drawn and the frames must be identical
+    to the byte: the native path is a move of the same arithmetic, not an
+    approximation of it.
+    """
+
+    @pytest.mark.parametrize("case", list(_odd_batches()))
+    def test_the_native_batch_draws_what_the_loop_drew(
+        self, wgpu: Any, case: str
+    ) -> None:
+        from pyguara.graphics.backends.wgpu.renderer import sprites_one_by_one
+
+        batch = _odd_batches()[case]
+
+        def draw(path: Callable[[Any], None]) -> bytes:
+            frame = wgpu.GpuFrame(WIDTH, HEIGHT)
+            frame.gpu.clear(*BACKGROUND, 255)
+            path(frame)
+            frame.gpu.end_frame()
+            return bytes(frame.gpu.read_pixels())
+
+        native = draw(lambda frame: wgpu.WgpuRenderer(frame).render_batch(batch))
+        loop = draw(lambda frame: sprites_one_by_one(frame, batch))
+
+        assert _drawn(loop) > 0
+        assert native == loop
+
+    def test_a_batch_is_one_call_however_many_sprites(self, wgpu: Any) -> None:
+        frame = wgpu.GpuFrame(64, 64)
+        calls: list[int] = []
+        gpu = frame.gpu
+
+        class Counting:
+            def __getattr__(self, name: str) -> Any:
+                value = getattr(gpu, name)
+                if name in ("quad", "sprites"):
+                    calls.append(1)
+                return value
+
+        renderer = wgpu.WgpuRenderer(frame)
+        renderer._gpu = Counting()
+        renderer.render_batch(RenderBatch(_checker(), [(i, i) for i in range(500)]))
+
+        assert len(calls) == 1
+        assert gpu.pending == 500
+
+
 class TestBounded:
     @pytest.mark.parametrize("radius", [6, 9, 11, 13, 21, 40, 70])
     def test_a_circles_edge(self, wgpu: Any, radius: int) -> None:
