@@ -225,6 +225,16 @@ def _render_graph(container: object) -> object | None:
     return graph
 
 
+def _is_gl(graph: object | None) -> bool:
+    """Whether a render graph runs on ModernGL rather than wgpu.
+
+    Only a GL graph needs the readback below. The wgpu window, run
+    headless, already copies the finished frame -- UI included -- onto
+    pygame's display surface, so its capture is that surface.
+    """
+    return graph is not None and getattr(graph, "ctx", None) is not None
+
+
 def _capture_fbo(graph: object) -> object | None:
     """Return the framebuffer the final pass blits from, if it exists.
 
@@ -298,7 +308,7 @@ def _capture(graph: object | None) -> pygame.Surface | None:
     see `_redirect_ui_into()`.
     """
     surface = pygame.display.get_surface()
-    if graph is None:
+    if not _is_gl(graph):
         return surface
 
     fbo = _capture_fbo(graph)
@@ -331,10 +341,25 @@ def _capture_world(graph: object | None) -> pygame.Surface | None:
     fbo = graph.fbo_manager.get("world")  # type: ignore[attr-defined]
     if fbo is None:
         return None
+    if not _is_gl(graph):
+        return _wgpu_buffer(fbo)
     frame = pygame.image.frombuffer(
         fbo.fbo.read(components=3), (fbo.width, fbo.height), "RGB"
     )
     return pygame.transform.flip(frame, False, True)
+
+
+def _wgpu_buffer(fbo: object) -> pygame.Surface:
+    """Read a wgpu buffer back as a surface; an HDR one is clipped to 8 bits."""
+    import numpy as np
+
+    gpu = fbo._gpu  # type: ignore[attr-defined]
+    size = (fbo.width, fbo.height)  # type: ignore[attr-defined]
+    raw = gpu.read_pixels(fbo.target)  # type: ignore[attr-defined]
+    if fbo.dtype == "f2":  # type: ignore[attr-defined]
+        floats = np.frombuffer(raw, dtype="<f2").astype(np.float32)
+        raw = (np.clip(floats, 0.0, 1.0) * 255 + 0.5).astype(np.uint8).tobytes()
+    return pygame.image.frombuffer(raw, size, "RGBA").copy()
 
 
 def is_blank(surface: pygame.Surface) -> bool:
@@ -395,7 +420,7 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
     # the buffer the capture reads instead of onto the unreadable screen.
     # Not installed for a windowed run -- see `_redirect_ui_into()`.
     capturing = {"on": False}
-    if graph is not None and "--windowed" not in sys.argv:
+    if _is_gl(graph) and "--windowed" not in sys.argv:
         _redirect_ui_into(container, graph, capturing)
 
     def render_and_capture() -> None:
