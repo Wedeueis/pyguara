@@ -519,15 +519,201 @@ class TestFiltering:
 
 
 class TestMaterials:
-    def test_a_material_is_drawn_without_and_said_once(
+    """`SpriteShader` materials on wgpu, each against an equivalent plain draw.
+
+    A material sprite is placed by the same vertex stage as a plain one, so
+    the only thing a material may change is the colour its function
+    returns. Each test picks a function whose result can also be produced
+    without a material -- an identity, an inverted texture, a tint, a
+    pre-masked texture -- and requires the two frames to be identical.
+    """
+
+    @staticmethod
+    def _draw(wgpu: Any, *batches: RenderBatch) -> bytes:
+        frame = wgpu.GpuFrame(WIDTH, HEIGHT)
+        frame.gpu.clear(*BACKGROUND, 255)
+        renderer = wgpu.WgpuRenderer(frame)
+        for batch in batches:
+            renderer.render_batch(batch)
+        frame.gpu.end_frame()
+        return bytes(frame.gpu.read_pixels())
+
+    @staticmethod
+    def _batch(texture: Any, material: Any = None) -> RenderBatch:
+        """Turned, scaled, flipped, tinted sprites, some from an atlas region."""
+        count = 6
+        return RenderBatch(
+            texture,
+            [(12.0 + i * 36, 20.0 + (i % 3) * 40) for i in range(count)],
+            rotations=[0.0, 30.0, 90.0, -45.0, 180.0, 12.5],
+            scales=[
+                (2.0, 2.0),
+                (1.5, -1.0),
+                (-2.0, 2.0),
+                (1.0, 1.0),
+                (2.5, 1.5),
+                (1.0, 2.0),
+            ],
+            transforms_enabled=True,
+            colors=[(255, 255, 255, 255), (255, 128, 0, 200)] * 3,
+            colors_enabled=True,
+            source_rects=[None, Rect(0, 0, 8, 8), None, Rect(8, 0, 8, 4), None, None],
+            source_rects_enabled=True,
+            material=material,
+        )
+
+    def test_the_identity_material_draws_the_plain_sprite(self, wgpu: Any) -> None:
+        from pyguara.graphics.materials import Material, SpriteShader
+
+        identity = SpriteShader(
+            "identity",
+            wgsl="fn material(sprite: Sprite) -> vec4<f32> {"
+            " return textureSample(sprite_texture, sprite_sampler, sprite.uv)"
+            " * sprite.color; }",
+        )
+        texture = _checker()
+
+        plain = self._draw(wgpu, self._batch(texture))
+        drawn = self._draw(wgpu, self._batch(texture, Material(identity)))
+
+        assert _drawn(plain) > 0
+        assert drawn == plain
+
+    def test_inverting_is_drawing_the_inverted_texture(self, wgpu: Any) -> None:
+        from pyguara.graphics.materials import Material, SpriteShader
+
+        invert = SpriteShader(
+            "invert",
+            wgsl="fn material(sprite: Sprite) -> vec4<f32> {"
+            " let texel = textureSample(sprite_texture, sprite_sampler, sprite.uv);"
+            " return vec4<f32>(1.0 - texel.rgb, texel.a) * sprite.color; }",
+        )
+        texture = _checker()
+        inverted = texture.native_handle.copy()
+        for x in range(inverted.get_width()):
+            for y in range(inverted.get_height()):
+                r, g, b, a = inverted.get_at((x, y))
+                inverted.set_at((x, y), (255 - r, 255 - g, 255 - b, a))
+
+        drawn = self._draw(wgpu, self._batch(texture, Material(invert)))
+        expected = self._draw(wgpu, self._batch(PygameTexture("inv", inverted)))
+
+        assert drawn == expected
+
+    def test_uniforms_reach_the_material(self, wgpu: Any) -> None:
+        from pyguara.graphics.materials import Material, SpriteShader, Uniform
+
+        tinted = SpriteShader(
+            "tinted",
+            # A float first, so the vec3 sits at offset 16: the layout matters.
+            uniforms=(Uniform("unused"), Uniform("tint", "vec3")),
+            wgsl="fn material(sprite: Sprite) -> vec4<f32> {"
+            " return textureSample(sprite_texture, sprite_sampler, sprite.uv)"
+            " * vec4<f32>(params.tint, 1.0); }",
+        )
+        texture = _checker()
+        batch = RenderBatch(texture, [(20.0, 20.0), (90.0, 60.0)])
+        batch.material = Material(
+            tinted, uniforms={"unused": 9.0, "tint": (51 / 255, 153 / 255, 1.0)}
+        )
+        reference = RenderBatch(
+            texture,
+            batch.destinations,
+            colors=[(51, 153, 255, 255)] * 2,
+            colors_enabled=True,
+        )
+
+        assert self._draw(wgpu, batch) == self._draw(wgpu, reference)
+
+    def test_a_material_texture_masks_the_sprite(self, wgpu: Any) -> None:
+        from pyguara.graphics.materials import Material, SpriteShader
+
+        masked = SpriteShader(
+            "masked",
+            texture=True,
+            wgsl="fn material(sprite: Sprite) -> vec4<f32> {"
+            " let texel = textureSample(sprite_texture, sprite_sampler, sprite.uv);"
+            " let keep = textureSample(material_texture, material_sampler, sprite.uv).a;"
+            " return vec4<f32>(texel.rgb, texel.a * keep) * sprite.color; }",
+        )
+        texture = _checker(16)
+        mask = pygame.Surface((16, 16), pygame.SRCALPHA)
+        mask.fill((0, 0, 0, 0))
+        pygame.draw.circle(mask, (255, 255, 255, 255), (8, 8), 6)
+        cut = texture.native_handle.copy()
+        for x in range(16):
+            for y in range(16):
+                if mask.get_at((x, y)).a == 0:
+                    cut.set_at((x, y), (0, 0, 0, 0))
+        batch = RenderBatch(texture, [(20.0, 20.0), (90.0, 60.0)])
+        batch.material = Material(masked, texture=PygameTexture("mask", mask))
+
+        expected = self._draw(
+            wgpu, RenderBatch(PygameTexture("cut", cut), batch.destinations)
+        )
+        assert self._draw(wgpu, batch) == expected
+
+    def test_order_is_kept_around_a_material(self, wgpu: Any) -> None:
+        """A plain sprite drawn after a material one lands on top of it."""
+        from pyguara.graphics.materials import Material, SpriteShader
+
+        white = SpriteShader(
+            "white",
+            wgsl="fn material(sprite: Sprite) -> vec4<f32> {"
+            " return vec4<f32>(1.0, 1.0, 1.0, 1.0); }",
+        )
+        texture = _checker()
+        under = RenderBatch(texture, [(40.0, 40.0)], material=Material(white))
+        over = RenderBatch(texture, [(44.0, 44.0)])
+
+        frame = wgpu.GpuFrame(WIDTH, HEIGHT)
+        renderer = wgpu.WgpuRenderer(frame)
+        renderer.render_batch(under)
+        renderer.render_batch(over)
+        assert frame.gpu.pending_runs == 2
+        frame.gpu.end_frame()
+        pixels = bytes(frame.gpu.read_pixels())
+
+        top_left_of_over = (44 * WIDTH + 44) * 4
+        assert tuple(pixels[top_left_of_over : top_left_of_over + 3]) == (255, 60, 60)
+
+    def test_a_material_that_does_not_compile_says_why(self, wgpu: Any) -> None:
+        from pyguara.graphics.materials import Material, SpriteShader
+
+        broken = SpriteShader("broken", wgsl="fn material(s: Sprite) -> vec4<f32> {")
+        batch = RenderBatch(_checker(), [(0.0, 0.0)], material=Material(broken))
+
+        with pytest.raises(ValueError, match="the material does not compile"):
+            self._draw(wgpu, batch)
+
+    def test_a_missing_uniform_is_named(self, wgpu: Any) -> None:
+        from pyguara.graphics.materials import Material, SpriteShader, Uniform
+
+        glow = SpriteShader(
+            "glow",
+            uniforms=(Uniform("strength"),),
+            wgsl="fn material(s: Sprite) -> vec4<f32> {"
+            " return vec4<f32>(params.strength); }",
+        )
+        batch = RenderBatch(_checker(), [(0.0, 0.0)], material=Material(glow))
+
+        with pytest.raises(KeyError, match="glow: no value for uniform 'strength'"):
+            self._draw(wgpu, batch)
+
+    def test_a_modern_gl_material_is_drawn_without_and_said_once(
         self, wgpu: Any, caplog: pytest.LogCaptureFixture
     ) -> None:
-        # A GLSL program wgpu cannot run. The sprites must still draw, as
-        # on pygame, and the author must be told why their shader is absent.
+        # A compiled GLSL program, which wgpu cannot run. The sprites still
+        # draw, and the author is told to give it a SpriteShader.
+        from unittest.mock import MagicMock
+
+        from pyguara.graphics.materials import Material, Shader
+
+        gl_shader = MagicMock(spec=Shader)
         batch = RenderBatch(
             texture=_checker(),
             destinations=[(20.0, 20.0), (60.0, 40.0)],
-            material=object(),  # type: ignore[arg-type]
+            material=Material(gl_shader),
         )
         plain = RenderBatch(texture=batch.texture, destinations=batch.destinations)
 
@@ -538,7 +724,7 @@ class TestMaterials:
         _, without = _frames(wgpu, lambda r: r.render_batch(plain))
 
         assert with_material == without
-        assert sum("material" in record.getMessage() for record in caplog.records) == 1
+        assert sum("SpriteShader" in r.getMessage() for r in caplog.records) == 1
 
 
 class TestEffects:

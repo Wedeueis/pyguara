@@ -93,56 +93,62 @@ actually comes from: a tilemap row, a crowd of identical particles.
 
 ## Material System
 
-Materials combine shader, texture, and uniforms. A `Shader` wraps an
-already-compiled `moderngl.Program`; `ShaderCache` is what turns source into
-one, keyed by name so the same shader compiles once:
+A material gives a sprite its own shader. Write it as a `SpriteShader`: one
+WGSL function, which runs on the wgpu backend, with an optional GLSL twin
+for ModernGL until stage E retires that backend.
 
 ```python
-from pyguara.graphics.materials import Material, ShaderCache
+from pyguara.graphics.materials import Material, SpriteShader, Uniform
 
-cache = ShaderCache(ctx)
-grayscale_shader = cache.get_or_compile("grayscale", vert_src, frag_src)
-material = Material(
-    shader=grayscale_shader,
-    texture=my_texture,
-    uniforms={"intensity": 0.8},
+HIT_FLASH = SpriteShader(
+    "hit_flash",
+    uniforms=(Uniform("amount"), Uniform("flash", "vec3")),
+    wgsl="""
+fn material(sprite: Sprite) -> vec4<f32> {
+    let texel = textureSample(sprite_texture, sprite_sampler, sprite.uv);
+    let lit = mix(texel.rgb, params.flash, params.amount);
+    return vec4<f32>(lit, texel.a) * sprite.color;
+}
+""",
 )
 
-# Assign to sprite
-sprite.material = material
+sprite.material = Material(HIT_FLASH, uniforms={"amount": 0.0, "flash": (1, 1, 1)})
+sprite.material.set_uniform("amount", 0.8)   # on a hit, then fade it back
 ```
 
-A material's `id` sorts the queue and breaks batches, and
-`ModernGLRenderer.render_batch()` then draws the batch through the material's
-program, feeding it the same projection the sprite path uses, the batch's
-texture on unit 0, and the material's own uniforms. Sprites without an
-explicit material sort together as material `0` and draw through the built-in
-sprite shader.
+What `material` sees:
 
-**The instance layout is fixed**, so a material's *vertex* shader has to
-consume it: `in_vert`, `in_uv` per vertex and `in_pos`, `in_rot`, `in_scale`,
-`in_size`, `in_color` per instance. For a fragment-only effect -- the common
-case -- reuse the default vertex stage:
+| Name | What it is |
+| --- | --- |
+| `sprite.uv` | Texture coordinate, atlas region and flips applied |
+| `sprite.color` | The per-sprite tint, 0-1. A plain sprite is `texel * color` |
+| `sprite_texture`, `sprite_sampler` | The sprite's own texture |
+| `params.<name>` | Each uniform, laid out as WGSL requires; `pack` does it |
+| `material_texture`, `material_sampler` | `Material.texture`, when `texture=True`: a mask, a ramp, noise |
 
-```python
-from pyguara.graphics.materials.defaults import DEFAULT_SPRITE_VERTEX
+The vertex stage is the engine's, so a material sprite is placed, sized,
+turned, flipped and batched exactly like any other, and draws in order with
+everything around it. Make one `SpriteShader` per kind of material, at module
+level: a renderer compiles each once, keyed on the object. A material that
+does not compile, or lacks a uniform's value, raises with the reason.
 
-shader = cache.get_or_compile("grayscale", DEFAULT_SPRITE_VERTEX, frag_src)
-```
+A material's `id` sorts the queue and breaks batches. Sprites without one sort
+together as material `0` and draw through the built-in sprite shader. On the
+Pygame backend materials are ignored, as the comparison table below records.
 
-A vertex shader that consumes neither `in_vert` nor `in_pos` raises rather
-than drawing every sprite on top of each other. Attributes the GLSL linker
-drops because nothing downstream reads them -- `in_uv` and `in_color` in a
-fragment shader that ignores `v_uv`/`v_color` -- are fine and expected.
+### On ModernGL
 
-**A material's own `texture` is a second sampler, not a replacement.** Unit 0
-belongs to the batch's texture, which is what the sprites *are*; a material
-texture binds to unit 1 as `u_material_texture`, for a mask, a ramp or a noise
-field. A uniform the shader does not declare is ignored, matching
-`Shader.set_uniform` everywhere else.
+Give the `SpriteShader` a `glsl` twin -- a GLSL 330 fragment shader reading
+`v_uv`, `v_color`, `u_texture`, the uniforms by name and `u_material_texture`
+-- and ModernGL compiles it with `sprite.vert`. Without one, ModernGL draws
+the sprite plainly and says so once.
 
-Materials are a ModernGL-backend feature: the Pygame backend ignores them, as
-the comparison table below records.
+A material can still carry a `Shader`, a compiled `moderngl.Program` made by
+`ShaderCache`. That runs only on ModernGL, and on wgpu the sprites are drawn
+plainly with a warning to move it to a `SpriteShader`. Its vertex shader has
+to consume the fixed instance layout -- `in_vert`, `in_uv` per vertex and
+`in_pos`, `in_rot`, `in_scale`, `in_size`, `in_color` per instance -- so for a
+fragment-only effect reuse `materials.defaults.DEFAULT_SPRITE_VERTEX`.
 
 ## 2D Lighting
 
@@ -394,13 +400,13 @@ The engine uses the `IRenderer` protocol, allowing for different implementations
 
 When using Pygame backend, advanced graphics features gracefully degrade:
 
-| Feature | ModernGL | Pygame |
-|---------|----------|--------|
-| Sprite rendering | Hardware instanced | Software blitting |
-| Per-sprite tint | Per-instance vertex attribute | `BLEND_RGBA_MULT` per sprite |
-| Lighting | Dynamic light maps | Fully lit (no shadows) |
-| Post-processing | Bloom, vignette, etc. | Pass-through (no effects) |
-| Materials | Custom shaders | Default only |
+| Feature | wgpu | ModernGL | Pygame |
+|---------|------|----------|--------|
+| Sprite rendering | Native, one call a batch | Hardware instanced | Software blitting |
+| Per-sprite tint | Per-instance colour | Per-instance vertex attribute | `BLEND_RGBA_MULT` per sprite |
+| Lighting | Dynamic light maps | Dynamic light maps | Fully lit (no shadows) |
+| Post-processing | Bloom, vignette, etc. | Bloom, vignette, etc. | Pass-through (no effects) |
+| Materials | `SpriteShader` (WGSL) | `SpriteShader` with a GLSL twin, or a `Shader` | Default only |
 
 Game code using these features runs unchanged on Pygame - stubs accept the API calls but skip the GPU operations.
 

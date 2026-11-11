@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pyguara.graphics.materials.shader import Shader
+    from pyguara.graphics.pipeline.device import SpriteShader
     from pyguara.resources.types import Texture
 
 
@@ -30,15 +31,22 @@ class Material:
     """Defines the visual properties of a rendered object.
 
     Materials combine:
-    - A shader program for GPU processing
-    - A primary texture (for sprite materials)
-    - Custom uniform values
+    - A shader: a `SpriteShader`, which runs on every GPU backend, or a
+      compiled ModernGL `Shader`, which runs only there
+    - An optional second texture -- a mask, a ramp, a noise field
+    - Uniform values, by name
 
     Materials are sorted by ID during batching to minimize
     shader/texture switches.
+
+    ```python
+    FLASH = SpriteShader("flash", uniforms=(Uniform("amount"),), wgsl=...)
+    sprite.material = Material(FLASH, uniforms={"amount": 0.0})
+    sprite.material.set_uniform("amount", 0.8)   # on a hit
+    ```
     """
 
-    shader: Shader
+    shader: Shader | SpriteShader
     texture: Texture | None = None
     uniforms: dict[str, Any] = field(default_factory=dict)
 
@@ -51,10 +59,15 @@ class Material:
         return self._id
 
     def bind(self) -> None:
-        """Bind this material for rendering.
+        """Bind this material for rendering, on ModernGL.
 
-        Activates the shader and sets all uniforms.
+        Activates the shader and sets all uniforms. A `SpriteShader` is not
+        bound this way: the renderer that draws the batch runs it.
         """
+        from pyguara.graphics.materials.shader import Shader
+
+        if not isinstance(self.shader, Shader):
+            return
         self.shader.use()
 
         # Set custom uniforms

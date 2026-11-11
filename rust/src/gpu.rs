@@ -60,11 +60,11 @@ const BLEND_REPLACE: u8 = 0;
 const BLEND_ADD: u8 = 1;
 const BLEND_ALPHA: u8 = 2;
 
-const SHADER: &str = r"
+/// The quad pipeline's vertex stage, shared by the default fragment and
+/// by every material: a material sprite is placed exactly as any other.
+const QUAD_VERTEX: &str = r"
 struct Globals { size: vec2<f32>, pad: vec2<f32> };
 @group(0) @binding(0) var<uniform> globals: Globals;
-@group(1) @binding(0) var image: texture_2d<f32>;
-@group(1) @binding(1) var image_sampler: sampler;
 
 struct Instance {
     @location(0) center: vec2<f32>,
@@ -113,6 +113,16 @@ fn vertex(@builtin(vertex_index) index: u32, instance: Instance) -> Varying {
     return out;
 }
 
+";
+
+/// The sprite's own texture, as the default fragment names it.
+const QUAD_IMAGE: &str = r"
+@group(1) @binding(0) var image: texture_2d<f32>;
+@group(1) @binding(1) var image_sampler: sampler;
+";
+
+/// The default fragment: shapes, text and plain sprites.
+const QUAD_FRAGMENT: &str = r"
 @fragment
 fn fragment(in: Varying) -> @location(0) vec4<f32> {
     // Sampled before any branch: a texture sample may not sit inside
@@ -138,6 +148,33 @@ fn fragment(in: Varying) -> @location(0) vec4<f32> {
         return in.color;
     }
     return in.color * texel;
+}
+";
+
+/// What a material's module adds between the vertex stage and the
+/// author's `material` function: the sprite texture under the names the
+/// author uses, and what a sprite hands the function.
+const MATERIAL_PRELUDE: &str = r"
+@group(1) @binding(0) var sprite_texture: texture_2d<f32>;
+@group(1) @binding(1) var sprite_sampler: sampler;
+
+struct Sprite {
+    // Where in the sprite's texture this fragment is, atlas region and
+    // flips applied: sample `sprite_texture` here for the plain sprite.
+    uv: vec2<f32>,
+    // The per-sprite tint, 0-1 RGBA. The plain sprite is texel * color.
+    color: vec4<f32>,
+};
+";
+
+/// Calls the author's `material` with the fragment's sprite.
+const MATERIAL_FRAGMENT: &str = r"
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    var sprite: Sprite;
+    sprite.uv = in.uv;
+    sprite.color = in.color;
+    return material(sprite);
 }
 ";
 
@@ -260,6 +297,9 @@ struct Instance {
 struct Run {
     texture: u32,
     scissor: Option<[u32; 4]>,
+    /// Index into the frame's material bindings, or None for the default
+    /// fragment.
+    material: Option<usize>,
     start: u32,
     count: u32,
 }
@@ -310,9 +350,20 @@ struct Effect {
     pipelines: HashMap<(wgpu::TextureFormat, u8), wgpu::RenderPipeline>,
 }
 
+/// A sprite material: the quad pipeline with the author's fragment.
+struct Material {
+    group_layout: wgpu::BindGroupLayout,
+    uniform_bytes: usize,
+    has_texture: bool,
+    pipelines: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
+}
+
 struct Image {
     // Held so the view and bind group stay valid; never read back.
     _texture: wgpu::Texture,
+    /// For a material that samples this image as its second texture.
+    view: wgpu::TextureView,
+    smooth: bool,
     bind_group: wgpu::BindGroup,
     width: u32,
     height: u32,
@@ -355,6 +406,13 @@ pub struct NativeGpu {
     current: u32,
     effects: HashMap<u32, Effect>,
     next_effect: u32,
+    materials: HashMap<u32, Material>,
+    next_material: u32,
+    /// This frame's material uses: which material, and its bind group of
+    /// uniforms and texture. A run names one by index.
+    material_bindings: Vec<(u32, wgpu::BindGroup)>,
+    /// The binding pushes are made with, if any.
+    current_material: Option<usize>,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
@@ -397,6 +455,62 @@ fn make_target(device: &wgpu::Device, width: u32, height: u32, format: wgpu::Tex
         height,
         format,
     }
+}
+
+/// The instanced quad pipeline over `module`'s `vertex` and `fragment`:
+/// the default one, or a material's, which shares the vertex stage.
+fn make_quad_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    module: &wgpu::ShaderModule,
+    format: wgpu::TextureFormat,
+) -> wgpu::RenderPipeline {
+    let attributes = wgpu::vertex_attr_array![
+        0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Float32x2,
+        4 => Float32x2, 5 => Float32x4, 6 => Float32x4
+    ];
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("pyguara quads"),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module,
+            entry_point: Some("vertex"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: &[Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<Instance>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &attributes,
+            })],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module,
+            entry_point: Some("fragment"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                // Straight alpha, which is what the textures hold: a
+                // glyph is its colour with coverage in alpha.
+                blend: Some(wgpu::BlendState {
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::One,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                }),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 fn make_globals(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, steps: usize) -> (wgpu::Buffer, wgpu::BindGroup) {
@@ -501,7 +615,7 @@ impl NativeGpu {
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("pyguara quads"),
-            source: wgpu::ShaderSource::Wgsl(SHADER.into()),
+            source: wgpu::ShaderSource::Wgsl(format!("{QUAD_VERTEX}{QUAD_IMAGE}{QUAD_FRAGMENT}").into()),
         });
         let globals_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("pyguara globals"),
@@ -543,55 +657,9 @@ impl NativeGpu {
             bind_group_layouts: &[Some(&globals_layout), Some(&image_layout)],
             ..Default::default()
         });
-        let attributes = wgpu::vertex_attr_array![
-            0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Float32x2,
-            4 => Float32x2, 5 => Float32x4, 6 => Float32x4
-        ];
-        let quad_pipeline = |format: wgpu::TextureFormat| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("pyguara quads"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vertex"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[Some(wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Instance>() as u64,
-                    step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &attributes,
-                })],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fragment"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    // Straight alpha, which is what the textures hold: a
-                    // glyph is its colour with coverage in alpha.
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        });
         let pipelines = HashMap::from([
-            (TARGET_FORMAT, quad_pipeline(TARGET_FORMAT)),
-            (HDR_FORMAT, quad_pipeline(HDR_FORMAT)),
+            (TARGET_FORMAT, make_quad_pipeline(&device, &layout, &shader, TARGET_FORMAT)),
+            (HDR_FORMAT, make_quad_pipeline(&device, &layout, &shader, HDR_FORMAT)),
         ]);
         // Nearest, as pygame scales: a pixel-art sprite stays pixel art,
         // and text drawn at its own size samples texel for texel.
@@ -644,6 +712,10 @@ impl NativeGpu {
             current: MAIN,
             effects: HashMap::new(),
             next_effect: 1,
+            materials: HashMap::new(),
+            next_material: 1,
+            material_bindings: Vec::new(),
+            current_material: None,
             instances: Vec::with_capacity(instance_capacity),
             instance_buffer,
             instance_capacity,
@@ -842,6 +914,8 @@ impl NativeGpu {
         });
         Ok(Image {
             _texture: texture,
+            view,
+            smooth,
             bind_group,
             width,
             height,
@@ -970,14 +1044,18 @@ impl NativeGpu {
     fn push(&mut self, texture: u32, instance: Instance) {
         let index = self.instances.len() as u32;
         let scissor = self.scissor;
+        let material = self.current_material;
         // The step before the instance, so a step it opens starts at this
         // instance; and found once, since this runs for every primitive.
         let runs = self.draw_runs();
         match runs.last_mut() {
-            Some(last) if last.texture == texture && last.scissor == scissor => last.count += 1,
+            Some(last) if last.texture == texture && last.scissor == scissor && last.material == material => {
+                last.count += 1
+            }
             _ => runs.push(Run {
                 texture,
                 scissor,
+                material,
                 start: index,
                 count: 1,
             }),
@@ -1380,6 +1458,159 @@ impl NativeGpu {
     #[getter]
     fn target_count(&self) -> usize {
         self.targets.len()
+    }
+
+    /// Compile a sprite material and return its id.
+    ///
+    /// `source` is the author's part of the module: their uniforms as a
+    /// `Params` struct at `@group(2) @binding(0)` when `uniform_bytes` is
+    /// above zero, `material_texture` and `material_sampler` at bindings 1
+    /// and 2 when `has_texture`, and `fn material(sprite: Sprite) ->
+    /// vec4<f32>`. The engine's vertex stage, the sprite texture and the
+    /// fragment entry point that calls `material` are added here, so a
+    /// material sprite is placed exactly as any other sprite.
+    ///
+    /// A material that does not compile is a `ValueError`, with the
+    /// compiler's message.
+    #[pyo3(signature = (source, uniform_bytes, has_texture = false))]
+    fn create_material(&mut self, source: &str, uniform_bytes: usize, has_texture: bool) -> PyResult<u32> {
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("pyguara material"),
+            source: wgpu::ShaderSource::Wgsl(
+                format!("{QUAD_VERTEX}{MATERIAL_PRELUDE}{source}{MATERIAL_FRAGMENT}").into(),
+            ),
+        });
+        let mut entries = Vec::new();
+        if uniform_bytes > 0 {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        }
+        if has_texture {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            });
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            });
+        }
+        let group_layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("pyguara material"),
+            entries: &entries,
+        });
+        let layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pyguara material"),
+            bind_group_layouts: &[Some(&self.globals_layout), Some(&self.image_layout), Some(&group_layout)],
+            ..Default::default()
+        });
+        let pipelines = HashMap::from([
+            (TARGET_FORMAT, make_quad_pipeline(&self.device, &layout, &module, TARGET_FORMAT)),
+            (HDR_FORMAT, make_quad_pipeline(&self.device, &layout, &module, HDR_FORMAT)),
+        ]);
+        if let Some(error) = pollster::block_on(scope.pop()) {
+            return Err(PyValueError::new_err(format!("the material does not compile: {error}")));
+        }
+        let id = self.next_material;
+        self.next_material += 1;
+        self.materials.insert(
+            id,
+            Material {
+                group_layout,
+                uniform_bytes,
+                has_texture,
+                pipelines,
+            },
+        );
+        Ok(id)
+    }
+
+    /// Draw what is pushed from now on with a material, these uniforms and,
+    /// if it takes one, this second texture -- until `clear_material`.
+    #[pyo3(signature = (material, uniforms, texture = None))]
+    fn set_material(&mut self, material: u32, uniforms: &[u8], texture: Option<u32>) -> PyResult<()> {
+        let Some(found) = self.materials.get(&material) else {
+            return Err(PyKeyError::new_err(format!("no material {material}")));
+        };
+        if uniforms.len() != found.uniform_bytes {
+            return Err(PyValueError::new_err(format!(
+                "the material's uniforms are {} bytes, got {}",
+                found.uniform_bytes,
+                uniforms.len()
+            )));
+        }
+        let image = match (found.has_texture, texture) {
+            (true, Some(id)) => match self.images.get(&id) {
+                Some(image) => Some(image),
+                None => return Err(PyKeyError::new_err(format!("no texture {id}"))),
+            },
+            (true, None) => return Err(PyValueError::new_err("the material samples a texture; none given")),
+            (false, _) => None,
+        };
+        let buffer = (found.uniform_bytes > 0).then(|| {
+            let size = found.uniform_bytes.next_multiple_of(16);
+            let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("pyguara material uniforms"),
+                size: size as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let mut padded = uniforms.to_vec();
+            padded.resize(size, 0);
+            self.queue.write_buffer(&buffer, 0, &padded);
+            buffer
+        });
+        let mut entries = Vec::new();
+        if let Some(buffer) = &buffer {
+            entries.push(wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            });
+        }
+        if let Some(image) = image {
+            entries.push(wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(&image.view),
+            });
+            entries.push(wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Sampler(if image.smooth {
+                    &self.smooth_sampler
+                } else {
+                    &self.sampler
+                }),
+            });
+        }
+        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("pyguara material"),
+            layout: &found.group_layout,
+            entries: &entries,
+        });
+        self.material_bindings.push((material, group));
+        self.current_material = Some(self.material_bindings.len() - 1);
+        Ok(())
+    }
+
+    /// Draw what is pushed from now on with the default fragment again.
+    fn clear_material(&mut self) {
+        self.current_material = None;
     }
 
     /// Compile a fullscreen shader and return its id.
@@ -1917,13 +2148,28 @@ impl NativeGpu {
                     if runs.is_empty() {
                         continue;
                     }
-                    pass.set_pipeline(&self.pipelines[&target.format]);
-                    pass.set_bind_group(0, &self.globals_group, &[globals_offset]);
                     pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    // The pipeline changes only where a run's material does.
+                    let mut drawing: Option<Option<usize>> = None;
                     for run in runs {
                         let Some(image) = self.images.get(&run.texture) else {
                             continue;
                         };
+                        if drawing != Some(run.material) {
+                            match run.material {
+                                None => pass.set_pipeline(&self.pipelines[&target.format]),
+                                Some(binding) => {
+                                    let (material, group) = &self.material_bindings[binding];
+                                    let Some(found) = self.materials.get(material) else {
+                                        continue;
+                                    };
+                                    pass.set_pipeline(&found.pipelines[&target.format]);
+                                    pass.set_bind_group(2, group, &[]);
+                                }
+                            }
+                            pass.set_bind_group(0, &self.globals_group, &[globals_offset]);
+                            drawing = Some(run.material);
+                        }
                         match run.scissor {
                             Some([_, _, 0, _] | [_, _, _, 0]) => continue,
                             Some([x, y, width, height]) => pass.set_scissor_rect(x, y, width, height),
@@ -1980,6 +2226,8 @@ impl NativeGpu {
         self.queue.submit([encoder.finish()]);
         self.instances.clear();
         self.steps.clear();
+        self.material_bindings.clear();
+        self.current_material = None;
         self.current = MAIN;
         self.scissor = None;
         self.frames += 1;

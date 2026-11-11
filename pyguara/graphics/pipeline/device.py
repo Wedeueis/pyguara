@@ -118,14 +118,14 @@ def _pack(shader: str, layout: _Layout, values: Mapping[str, Any]) -> bytes:
     return bytes(out)
 
 
-def _params_preamble(layout: _Layout) -> list[str]:
+def _params_preamble(layout: _Layout, group: int = 0) -> list[str]:
     """Declare the `Params` struct and its binding, if there are uniforms."""
     if not layout:
         return []
     fields = ",\n".join(f"    {name}: {_WGSL_TYPE[kind]}" for name, kind, _ in layout)
     return [
         f"struct Params {{\n{fields},\n}};",
-        "@group(0) @binding(0) var<uniform> params: Params;",
+        f"@group({group}) @binding(0) var<uniform> params: Params;",
     ]
 
 
@@ -346,6 +346,82 @@ fn quad_corner(index: u32) -> vec2<f32> {
     return corners[index];
 }
 """
+
+
+@dataclass(frozen=True, eq=False)
+class SpriteShader:
+    """A sprite's own shader: what a `Material` runs in place of the default.
+
+    The author writes one WGSL function, and the engine does the rest: the
+    vertex stage is the sprite pipeline's own, so a material sprite is
+    placed, sized, turned, flipped and batched exactly as any other.
+
+    ```wgsl
+    fn material(sprite: Sprite) -> vec4<f32> {
+        let texel = textureSample(sprite_texture, sprite_sampler, sprite.uv);
+        return vec4<f32>(mix(texel.rgb, params.flash, params.amount), texel.a) * sprite.color;
+    }
+    ```
+
+    In scope: `sprite.uv` (the texture coordinate, atlas region and flips
+    applied), `sprite.color` (the tint, 0-1 -- a plain sprite is `texel *
+    color`), `sprite_texture` and `sprite_sampler`, `params.<name>` for
+    each uniform, and `material_texture` / `material_sampler` when
+    `texture` is set -- a mask, a ramp, a noise field, from
+    `Material.texture`.
+
+    Compared by identity, like the other shaders: make one per kind of
+    material, at module level, and share it between materials.
+
+    Attributes:
+        name: For error messages and the cache.
+        uniforms: Values a `Material` supplies, by name.
+        texture: Whether it samples a second texture.
+        wgsl: The `material` function and anything it calls.
+        glsl: Optionally, a GLSL 330 fragment shader for the ModernGL
+            backend, reading `v_uv`, `v_color`, `u_texture`, the uniforms
+            and `u_material_texture`, as `sprite.frag` does. Without it,
+            ModernGL draws the sprite plainly and says so once. ModernGL is
+            retired in stage E; this is for the meantime.
+    """
+
+    name: str
+    uniforms: tuple[Uniform, ...] = ()
+    texture: bool = False
+    wgsl: str | None = None
+    glsl: str | None = None
+    _layout: _Layout = field(init=False, repr=False, default=())
+
+    def __post_init__(self) -> None:
+        """Lay the uniforms out once."""
+        object.__setattr__(self, "_layout", _lay_out(self.uniforms))
+
+    @property
+    def uniform_bytes(self) -> int:
+        """Size of WGSL's `Params` struct."""
+        return _layout_bytes(self._layout)
+
+    def pack(self, values: Mapping[str, Any]) -> bytes:
+        """Lay the uniforms out; see `FullscreenShader.pack`."""
+        return _pack(self.name, self._layout, values)
+
+    def wgsl_source(self) -> str:
+        """Assemble the author's part of the module: bindings and `wgsl`.
+
+        The vertex stage, the sprite texture and the entry point that calls
+        `material` are added natively, by `NativeGpu.create_material`.
+
+        Raises:
+            ValueError: If the shader has no WGSL source.
+        """
+        if self.wgsl is None:
+            raise ValueError(f"{self.name} has no WGSL source, so wgpu cannot run it")
+        lines = _params_preamble(self._layout, group=2)
+        if self.texture:
+            lines.append("@group(2) @binding(1) var material_texture: texture_2d<f32>;")
+            lines.append("@group(2) @binding(2) var material_sampler: sampler;")
+        lines.append(self.wgsl)
+        return "\n".join(lines)
 
 
 class GraphicsDevice(ABC):

@@ -53,6 +53,9 @@ class WgpuRenderer:
         self._gpu = frame.gpu
         self._warned_material = False
         self._shapes: int | None = None
+        # Compiled materials, by the identity of their `SpriteShader`; the
+        # shader is held too, so its id cannot be reused while cached.
+        self._materials: dict[int, tuple[object, int]] = {}
 
     @property
     def width(self) -> int:
@@ -188,17 +191,7 @@ class WgpuRenderer:
         surface = as_surface(batch.texture)
         if surface is None:
             return
-        if batch.material is not None and not self._warned_material:
-            # A material is a GLSL program, which wgpu cannot run. The
-            # sprites still draw, plainly, as on the pygame backend -- which
-            # says nothing at all. Materials on wgpu come with the render
-            # graph, stage D of `project/backlog/active/next_engine_plan.md`.
-            self._warned_material = True
-            logger.warning(
-                "A sprite batch has a material, which the wgpu renderer cannot "
-                "run yet (it is a GLSL shader); drawing the sprites without it. "
-                "Said once."
-            )
+        material = self._use_material(batch)
         transforms = batch.transforms_enabled
         self._gpu.sprites(
             self._frame.surface(surface, _smooth(batch.texture)),
@@ -213,6 +206,48 @@ class WgpuRenderer:
             batch.scales if transforms else None,
             batch.colors if batch.colors_enabled else None,
         )
+        if material:
+            self._gpu.clear_material()
+
+    def _use_material(self, batch: RenderBatch) -> bool:
+        """Set the batch's material for the sprites about to be pushed.
+
+        Returns:
+            Whether one was set, so the caller clears it afterwards.
+        """
+        from pyguara.graphics.pipeline.device import SpriteShader
+
+        material = batch.material
+        if material is None:
+            return False
+        shader = material.shader
+        if not isinstance(shader, SpriteShader):
+            # A compiled ModernGL program: GLSL, which wgpu cannot run.
+            if not self._warned_material:
+                self._warned_material = True
+                logger.warning(
+                    "A sprite batch has a ModernGL material, which the wgpu "
+                    "renderer cannot run; drawing the sprites without it. Give "
+                    "it a SpriteShader. Said once."
+                )
+            return False
+        found = self._materials.get(id(shader))
+        if found is None:
+            effect = self._gpu.create_material(
+                shader.wgsl_source(), shader.uniform_bytes, shader.texture
+            )
+            found = (shader, effect)
+            self._materials[id(shader)] = found
+        texture = None
+        if shader.texture:
+            surface = as_surface(material.texture)
+            if surface is None:
+                raise ValueError(
+                    f"material '{shader.name}' samples a texture, and has none"
+                )
+            texture = self._frame.surface(surface, _smooth(material.texture))
+        self._gpu.set_material(found[1], shader.pack(material.uniforms), texture)
+        return True
 
     def render_shapes(self, batch: ShapeBatch) -> None:
         """Draw many primitives of one kind in one instanced call.

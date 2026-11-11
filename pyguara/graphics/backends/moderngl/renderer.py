@@ -17,7 +17,10 @@ from pyguara.graphics.backends.moderngl.blend import (
 )
 from pyguara.graphics.backends.moderngl.texture import GLTexture, GLTextureFactory
 from pyguara.graphics.backends.surface_blending import render_text
+from pyguara.graphics.materials.defaults import DEFAULT_SPRITE_VERTEX
 from pyguara.graphics.materials.material import Material
+from pyguara.graphics.materials.shader import Shader
+from pyguara.graphics.pipeline.device import SpriteShader
 from pyguara.graphics.types import (
     SHAPE_INSTANCE_FLOATS as _PACKED_SHAPE_FLOATS,
 )
@@ -26,6 +29,7 @@ from pyguara.graphics.types import (
     ShapeBatch,
     ShapeKind,
 )
+from pyguara.log import get_logger
 from pyguara.resources.types import Texture
 
 # Shader file paths (relative to this module)
@@ -38,6 +42,8 @@ _SHADER_DIR = Path(__file__).parent / "shaders"
 # worst case (a string that changes every frame, like an FPS counter) cost
 # what it cost before the cache existed rather than growing without end.
 _TEXT_CACHE_LIMIT = 256
+
+logger = get_logger(__name__)
 
 
 class ModernGLRenderer:
@@ -131,6 +137,9 @@ class ModernGLRenderer:
         # pack and upload above are shared. Dropped and rebuilt whenever the
         # instance buffer is grown, since the VAOs reference the old one.
         self._material_vaos: dict[int, moderngl.VertexArray] = {}
+        # SpriteShaders compiled from their GLSL, by identity, shader held.
+        self._sprite_shaders: dict[int, tuple[SpriteShader, Shader]] = {}
+        self._warned_sprite_shaders: set[int] = set()
 
         # Create dynamic instance buffer, and the CPU-side scratch array
         # that is packed and uploaded from. The two are grown together so
@@ -689,6 +698,33 @@ class ModernGLRenderer:
         # Draw all instances in one call
         vao.render(moderngl.TRIANGLE_STRIP, instances=count)
 
+    def _gl_shader(self, material: Material) -> Shader | None:
+        """Return the compiled program for a material, or None to draw it plainly.
+
+        A `SpriteShader` is compiled once, from `sprite.vert` and its GLSL.
+        One with no GLSL is drawn plainly here, and that is said once: the
+        material is written for wgpu, and ModernGL is on its way out.
+        """
+        shader = material.shader
+        if isinstance(shader, Shader):
+            return shader
+        compiled = self._sprite_shaders.get(id(shader))
+        if compiled is None:
+            if shader.glsl is None:
+                if id(shader) not in self._warned_sprite_shaders:
+                    self._warned_sprite_shaders.add(id(shader))
+                    logger.warning(
+                        f"Material '{shader.name}' has no GLSL, so the ModernGL "
+                        f"backend draws its sprites plainly. It runs on wgpu."
+                    )
+                return None
+            program = self._ctx.program(
+                vertex_shader=DEFAULT_SPRITE_VERTEX, fragment_shader=shader.glsl
+            )
+            compiled = (shader, Shader(shader.name, program))
+            self._sprite_shaders[id(shader)] = compiled
+        return compiled[1]
+
     def _bind_material(self, material: Material) -> moderngl.VertexArray:
         """Select `material`'s program, feed it its uniforms, and return its VAO.
 
@@ -702,7 +738,10 @@ class ModernGLRenderer:
         Returns:
             The vertex array bound to the material's program.
         """
-        shader = material.shader
+        shader = self._gl_shader(material)
+        if shader is None:
+            self._program["u_texture"] = 0
+            return self._vao
         vao = self._material_vaos.get(shader.program.glo)
         if vao is None:
             vao = self._create_vao(shader.program)
