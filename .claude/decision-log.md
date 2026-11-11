@@ -264,3 +264,15 @@
 - **Alternatives:** compare material sprites between backends with a tolerance; or choose material functions whose output a plain draw can also produce.
 - **Chose:** the latter, on each backend: identity, inverted texture, uniform tint vs per-sprite tint, mask vs pre-masked texture. Exact, and a dropped tint in the native wrapper fails it.
 - **Tags:** testing, materials
+
+## Fix the shape shader's rotation rather than the producers' angles
+- **Context:** `shape.vert` rotated from +x towards -y; both producers (`draw_line`, the spark pool) pass `atan2(dy, dx)` in screen space. Every diagonal line and streak on ModernGL was mirrored, and the D4 WGSL port copied it.
+- **Alternatives:** negate the angle in each producer and keep the documented "counter-clockwise"; or turn the shader the way the producers measure.
+- **Chose:** the shader, in both languages, and correct the layout doc. Two producers agree on the convention and the shader was the odd one out; sprites have their own vertex stage and are unaffected.
+- **Tags:** renderer, bug
+
+## Hold the GL demos to ModernGL with a bound, not exactly
+- **Context:** Whole demo frames on wgpu against ModernGL differ at every shape edge: wgpu rasterises primitives as pygame does, ModernGL by distance, with round line caps.
+- **Alternatives:** make wgpu's primitives match ModernGL's; exact comparison per pass only; or a bounded whole-frame comparison.
+- **Chose:** passes exact (`test_wgpu_graph.py`), frames bounded -- 1.5% of pixels over 32 apart, mean 2.0, against measured 0.03-0.98% and 0.03-0.66 -- and sabotage-checked: no lights on wgpu fails four demos by wide margins. wgpu stays matched to pygame, which is what Reclaimer runs on.
+- **Tags:** testing, parity
