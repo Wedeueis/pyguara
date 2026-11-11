@@ -462,6 +462,62 @@ class TestNativeBatch:
         assert gpu.pending == 500
 
 
+class TestFiltering:
+    """`filter: linear` in a texture's meta reaches the sampler.
+
+    The pygame renderer scales nearest whatever the meta says, so there is
+    no pygame frame to hold a smooth texture to. What is held instead: a
+    smooth texture blends where a nearest one cannot, and the same surface
+    drawn nearest still matches pygame exactly.
+    """
+
+    @staticmethod
+    def _two_tone(smooth: bool) -> PygameTexture:
+        surface = pygame.Surface((2, 1), pygame.SRCALPHA)
+        surface.set_at((0, 0), (255, 0, 0, 255))
+        surface.set_at((1, 0), (0, 0, 255, 255))
+        return PygameTexture("two-tone", surface, smooth=smooth)
+
+    @staticmethod
+    def _colours(frame: bytes) -> set[tuple[int, ...]]:
+        return {
+            tuple(frame[i : i + 3])
+            for i in range(0, len(frame), 4)
+            if tuple(frame[i : i + 3]) != BACKGROUND
+        }
+
+    def test_a_smooth_texture_blends_when_scaled(self, wgpu: Any) -> None:
+        texture = self._two_tone(smooth=True)
+
+        _, actual = _frames(
+            wgpu,
+            lambda r: r.draw_texture(texture, Vector2(80, 60), 0.0, Vector2(40, 40)),
+        )
+
+        # Red, blue, and the purples bilinear filtering puts between them.
+        assert len(self._colours(actual)) > 10
+
+    def test_a_nearest_texture_still_matches_pygame(self, wgpu: Any) -> None:
+        texture = self._two_tone(smooth=False)
+
+        reference, actual = _frames(
+            wgpu,
+            lambda r: r.draw_texture(texture, Vector2(80, 60), 0.0, Vector2(40, 40)),
+        )
+
+        assert self._colours(actual) == {(255, 0, 0), (0, 0, 255)}
+        assert _differing(reference, actual) == 0
+
+    def test_one_surface_drawn_both_ways_is_two_textures(self, wgpu: Any) -> None:
+        frame = wgpu.GpuFrame(32, 32)
+        surface = self._two_tone(smooth=False).native_handle
+        before = frame.gpu.texture_count
+
+        assert frame.surface(surface, smooth=True) != frame.surface(surface)
+        assert frame.surface(surface, smooth=True) == frame.surface(surface, True)
+        assert frame.gpu.texture_count == before + 2
+
+
 class TestBounded:
     @pytest.mark.parametrize("radius", [6, 9, 11, 13, 21, 40, 70])
     def test_a_circles_edge(self, wgpu: Any, radius: int) -> None:

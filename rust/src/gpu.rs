@@ -277,6 +277,8 @@ pub struct NativeGpu {
     pipeline: wgpu::RenderPipeline,
     image_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
+    /// Bilinear, for a texture whose meta asks for `filter: linear`.
+    smooth_sampler: wgpu::Sampler,
     globals: wgpu::Buffer,
     globals_group: wgpu::BindGroup,
     target: wgpu::Texture,
@@ -467,6 +469,14 @@ impl NativeGpu {
             min_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
+        // Bilinear, as the ModernGL backend samples a texture whose meta
+        // says `linear`: "linear for HD", per `TextureMeta`.
+        let smooth_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("pyguara linear"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("pyguara globals"),
             size: 16,
@@ -492,6 +502,7 @@ impl NativeGpu {
             pipeline,
             image_layout,
             sampler,
+            smooth_sampler,
             globals,
             globals_group,
             target,
@@ -510,7 +521,7 @@ impl NativeGpu {
             presenter: None,
             presented: 0,
         };
-        let white = gpu.upload_image(1, 1, &[255, 255, 255, 255])?;
+        let white = gpu.upload_image(1, 1, &[255, 255, 255, 255], false)?;
         gpu.images.insert(WHITE, white);
         if let Some(surface) = surface {
             let vsync = window.is_some_and(|(_, _, _, vsync)| vsync);
@@ -636,7 +647,7 @@ impl NativeGpu {
         Ok(())
     }
 
-    fn upload_image(&self, width: u32, height: u32, pixels: &[u8]) -> PyResult<Image> {
+    fn upload_image(&self, width: u32, height: u32, pixels: &[u8], smooth: bool) -> PyResult<Image> {
         Self::check_size(width, height)?;
         let expected = width as usize * height as usize * 4;
         if pixels.len() != expected {
@@ -686,7 +697,11 @@ impl NativeGpu {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    resource: wgpu::BindingResource::Sampler(if smooth {
+                        &self.smooth_sampler
+                    } else {
+                        &self.sampler
+                    }),
                 },
             ],
         });
@@ -879,8 +894,12 @@ impl NativeGpu {
     }
 
     /// Upload an RGBA image and return its id.
-    fn create_texture(&mut self, width: u32, height: u32, pixels: &[u8]) -> PyResult<u32> {
-        let image = self.upload_image(width, height, pixels)?;
+    ///
+    /// `smooth` samples it bilinearly when it is drawn scaled or turned;
+    /// otherwise texel for texel, as pygame scales.
+    #[pyo3(signature = (width, height, pixels, smooth = false))]
+    fn create_texture(&mut self, width: u32, height: u32, pixels: &[u8], smooth: bool) -> PyResult<u32> {
+        let image = self.upload_image(width, height, pixels, smooth)?;
         let id = self.next_image;
         self.next_image += 1;
         self.images.insert(id, image);

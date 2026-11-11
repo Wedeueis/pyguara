@@ -27,6 +27,16 @@ from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 
 
+def _smooth(texture: object) -> bool:
+    """Whether a texture's meta asked for bilinear filtering.
+
+    `PygameTexture.smooth`, set by the loader from `TextureMeta.filter`.
+    Anything else -- a bare surface, a texture from a factory -- draws
+    nearest, as pygame scales.
+    """
+    return getattr(texture, "smooth", False) is True
+
+
 class WgpuRenderer:
     """Renderer backend that draws through the native wgpu frame."""
 
@@ -153,7 +163,7 @@ class WgpuRenderer:
         half_width = max(1, round(width * abs(scale.x))) / 2
         half_height = max(1, round(height * abs(scale.y))) / 2
         self._gpu.quad(
-            self._frame.surface(surface),
+            self._frame.surface(surface, _smooth(texture)),
             int(destination.x), int(destination.y),
             -half_width if scale.x < 0 else half_width,
             -half_height if scale.y < 0 else half_height,
@@ -175,7 +185,7 @@ class WgpuRenderer:
             return
         transforms = batch.transforms_enabled
         self._gpu.sprites(
-            self._frame.surface(surface),
+            self._frame.surface(surface, _smooth(batch.texture)),
             batch.destinations,
             [
                 None if r is None else (r.x, r.y, r.width, r.height)

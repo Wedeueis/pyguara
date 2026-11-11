@@ -8,16 +8,20 @@ from pyguara.resources.types import Texture
 class PygameTexture(Texture):
     """A concrete implementation of Texture using pygame.Surface."""
 
-    def __init__(self, path: str, surface: pygame.Surface):
+    def __init__(self, path: str, surface: pygame.Surface, smooth: bool = False):
         """
         Initialize the Pygame texture.
 
         Args:
             path (str): The source file path.
             surface (pygame.Surface): The loaded pygame image object.
+            smooth: Whether its meta asked for `filter: linear`. The pygame
+                renderer scales nearest regardless; a GPU renderer drawing
+                from this texture (wgpu) samples it bilinearly.
         """
         super().__init__(path)
         self._surface = surface
+        self.smooth = smooth
 
     @property
     def width(self) -> int:

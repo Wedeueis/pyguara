@@ -147,7 +147,9 @@ class GpuFrame:
             pygame.font.init()
         self._fonts: dict[FontKey, pygame.font.Font] = {}
         self._text: OrderedDict[tuple[FontKey, str], GlyphRun] = OrderedDict()
-        self._surfaces: dict[int, tuple[weakref.ref[pygame.Surface], int]] = {}
+        self._surfaces: dict[
+            tuple[int, bool], tuple[weakref.ref[pygame.Surface], int]
+        ] = {}
         self._doomed: list[int] = []
 
     # -- fonts and text ----------------------------------------------------
@@ -199,20 +201,23 @@ class GpuFrame:
 
     # -- images ------------------------------------------------------------
 
-    def surface(self, surface: pygame.Surface) -> int:
+    def surface(self, surface: pygame.Surface, smooth: bool = False) -> int:
         """Return the texture for a surface, uploading it on first use.
 
-        The upload happens once per surface object. A surface drawn onto
-        *after* it was first drawn here keeps showing what it held then:
-        this is for images, which do not change, not for scratch surfaces.
+        The upload happens once per surface object and filter. A surface
+        drawn onto *after* it was first drawn here keeps showing what it
+        held then: this is for images, which do not change, not for
+        scratch surfaces.
 
         Args:
             surface: The pixels.
+            smooth: Sample bilinearly when scaled or turned, rather than
+                texel for texel. A texture's meta says which.
 
         Returns:
             The texture id.
         """
-        key = id(surface)
+        key = (id(surface), smooth)
         found = self._surfaces.get(key)
         if found is not None and found[0]() is surface:
             return found[1]
@@ -220,6 +225,7 @@ class GpuFrame:
             surface.get_width(),
             surface.get_height(),
             pygame.image.tobytes(surface, "RGBA"),
+            smooth,
         )
 
         # `id()` is reused once a surface is collected, so the entry has to
