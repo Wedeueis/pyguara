@@ -162,3 +162,9 @@
 - **Alternatives:** add in Rust, or have Python pass the centre exactly as `collider_bounds` computes it.
 - **Chose:** Python passes the centre. With no collider `step_body` adds nothing, and `-0.0 + 0.0` is `+0.0`, so adding a zero offset is not bit-identical. Pinned by a dedicated test, the only one that catches it.
 - **Tags:** parity, floats
+
+## Trim the FSM's per-tick cost in the engine, leave the brains to the game
+- **Context:** Enemy brains were named as the next largest host cost. Split unprofiled: 0.81 ms of 3.62 ms, of which about 0.5 ms is Reclaimer's own state code and about 0.3 ms the engine's `AISystem`/`StateMachine`.
+- **Alternatives:** rewrite Reclaimer's `_Chase`/`nearest_target` in the fork's Reclaimer worktree; a native FSM; or only make the engine's dispatch leaner.
+- **Chose:** the engine's dispatch only. Skip the transition table when none is declared, reuse the empty pending-event list, and read each `AIComponent` field once. 0.81 to 0.74 ms, tick hash unchanged. Game changes made in the fork's worktree would never reach Reclaimer itself, and a native FSM cannot help states written in Python.
+- **Tags:** performance, ai, parity

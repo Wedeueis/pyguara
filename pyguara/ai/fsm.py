@@ -157,23 +157,32 @@ class StateMachine:
 
     def update(self, dt: float) -> None:
         """Update current state and handle transitions."""
-        if not self._current_state:
+        state = self._current_state
+        if state is None:
             self._pending_events.clear()
             return
 
+        # Swapped out only when something was posted: a machine updates every
+        # tick and usually has nothing queued, and a fresh list each time was
+        # an allocation per agent per tick for no reason. Reusing the empty
+        # one is safe because `events` is not read after the state's update,
+        # which is the only code that could post into it.
         events = self._pending_events
-        self._pending_events = []
+        if events:
+            self._pending_events = []
 
         # The table is checked first. A declared interrupt -- "on_damaged,
         # go to stagger, from anywhere" -- should win over whatever the
-        # current state would otherwise have asked for.
-        target = self._first_matching_transition(events)
-        if target is not None:
-            self._transition_to(target)
-            return
+        # current state would otherwise have asked for. With no table there
+        # is nothing to match, which is how most machines are written.
+        if self._transitions:
+            target = self._first_matching_transition(events)
+            if target is not None:
+                self._transition_to(target)
+                return
 
         # Update returns potential transition
-        next_state_name = self._current_state.update(dt)
+        next_state_name = state.update(dt)
 
         if next_state_name and next_state_name != self._current_state_name:
             self._transition_to(next_state_name)

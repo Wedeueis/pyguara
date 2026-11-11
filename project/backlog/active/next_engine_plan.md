@@ -20,6 +20,7 @@ that would not have moved any of Reclaimer's costs.
 | Pitch variation needs the native audio backend; the game runs on `pygame`, which cannot change pitch | 4 | Open. Workstream 4 |
 | Garbage collection stalled a tick | 6 | Done upstream (pyguara #397) |
 | (not in the plan) The top-down movement step around the native sweep | -- | **Done** (ADR 0009, Decision 5). 1.28 to 0.51 ms at 200 enemies; host tick at 200 enemies and four players 4.64 to 3.83 ms, bit-identical |
+| (not in the plan) Enemy brains, measured 2026-11-10 | -- | **Engine share trimmed; the rest is the game's.** At 200 enemies and four players the AI is 0.81 ms of a 3.62 ms host tick: about 0.5 ms in Reclaimer's own states (`_Chase` alone 0.43 ms, mostly `nearest_target` and its raycast) and about 0.3 ms in `AISystem` and `StateMachine`. Skipping an empty transition table and not allocating an empty event list took the AI to 0.74 ms, bit-identical. What remains is game code, and belongs in Reclaimer's repository, not this one |
 | Packed assets (W30), near release | 4 | Open. Workstream 6 |
 | Hosting may not work on players' home connections; "decide before M4" | 7 | Open. Workstream 5 |
 | Input buffering (pyguara #73) | 4 | Deferred by the game's own plan; not scheduled here |
