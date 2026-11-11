@@ -401,7 +401,6 @@ def _setup_container(
         # The native renderer. It reuses pygame's texture type and image
         # loader: a texture stays a CPU surface, uploaded to the GPU the
         # first time it is drawn.
-        from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
         from pyguara.graphics.backends.pygame.types import PygameTextureFactory
         from pyguara.graphics.backends.wgpu import (
             WgpuRenderer,
@@ -420,13 +419,19 @@ def _setup_container(
         container.register_instance(UIRenderer, WgpuUIRenderer(frame))  # type: ignore[type-abstract]
         container.register_instance(TextureFactory, PygameTextureFactory())  # type: ignore[type-abstract]
 
-        # No render graph yet (stage D), so the same stand-in the pygame
-        # backend registers: lighting and post-processing degrade to
-        # nothing rather than failing to resolve.
-        container.register_instance(
-            RenderGraph,
-            PygameRenderGraph(disp_cfg.screen_width, disp_cfg.screen_height),
+        # A real render graph, on the native device: the world is drawn
+        # into its buffer and blitted to the window, as on ModernGL, so a
+        # game can add passes. Those still written against a ModernGL
+        # context say so when they run; see stage D of the plan.
+        from pyguara.graphics.pipeline.device import WgpuDevice
+        from pyguara.graphics.pipeline.passes import FinalPass
+
+        wgpu_graph = RenderGraph(
+            WgpuDevice(frame), disp_cfg.screen_width, disp_cfg.screen_height
         )
+        container.register_instance(FramebufferManager, wgpu_graph.fbo_manager)
+        wgpu_graph.add_pass(FinalPass(input_fbo_name="world"))
+        container.register_instance(RenderGraph, wgpu_graph)
     else:
         # Default Pygame backend
         from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
