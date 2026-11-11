@@ -868,22 +868,19 @@ impl NativeGpu {
     fn push(&mut self, texture: u32, instance: Instance) {
         let index = self.instances.len() as u32;
         let scissor = self.scissor;
-        // The step first, so a step it opens starts at this instance.
-        self.draw_runs();
-        self.instances.push(instance);
+        // The step before the instance, so a step it opens starts at this
+        // instance; and found once, since this runs for every primitive.
         let runs = self.draw_runs();
-        if let Some(last) = runs.last_mut() {
-            if last.texture == texture && last.scissor == scissor {
-                last.count += 1;
-                return;
-            }
+        match runs.last_mut() {
+            Some(last) if last.texture == texture && last.scissor == scissor => last.count += 1,
+            _ => runs.push(Run {
+                texture,
+                scissor,
+                start: index,
+                count: 1,
+            }),
         }
-        runs.push(Run {
-            texture,
-            scissor,
-            start: index,
-            count: 1,
-        });
+        self.instances.push(instance);
     }
 
     fn target_size(&self, id: u32) -> (u32, u32) {
