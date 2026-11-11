@@ -234,3 +234,21 @@
 - **Alternatives:** fix it in the WGSL only; fix both; or port it as it is.
 - **Chose:** port it as it is and record it. Fixing one side breaks the comparison that proves the port, and fixing both changes how `protocolo_bandeira` looks -- a decision for the user, made separately.
 - **Tags:** shaders, bug, parity
+
+## ShapeBatch on wgpu follows ModernGL's shapes, not pygame's
+- **Context:** A batch's rows use ModernGL's conventions (capsule lines, distance-tested circle edges); wgpu's per-primitive calls match pygame.
+- **Alternatives:** convert rows to pygame-style primitives in Rust; or port `shape.vert/frag` as they are.
+- **Chose:** port them. The only producer is `Sparks`, and the four GL demos that use it were made to look like ModernGL, which stage D holds them to. Side effect: Reclaimer's sparks on wgpu become capsules.
+- **Tags:** renderer, parity
+
+## Defer materials to stage E
+- **Context:** Materials were listed in D4.
+- **Alternatives:** design a WGSL sprite-material API now; or defer.
+- **Chose:** defer. No game, demo or Reclaimer uses a material; the API is a wrapped ModernGL `Program`. With no consumer, nothing would check the design. On wgpu a material is drawn without, with a warning once.
+- **Tags:** renderer, scope
+
+## Compare 8-bit buffers on colour; alpha is a known divergence
+- **Context:** The shape case differed on 700 pixels, almost all in alpha.
+- **Alternatives:** make wgpu blend alpha as GL does; or compare colour and state the divergence.
+- **Chose:** colour. GL lowering a buffer's alpha under translucent draws is the worse behaviour (the final blit then shows the window's previous frame through), and imitating it would make wgpu wrong to make the test pass.
+- **Tags:** renderer, testing, parity
