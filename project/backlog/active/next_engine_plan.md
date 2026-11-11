@@ -19,6 +19,7 @@ that would not have moved any of Reclaimer's costs.
 | GL HUD costs about 12 ms a frame at 1080p (pyguara #334) | 4 | **Open, and the reason for workstream 1.** The ModernGL UI renderer uploads a whole screen-sized surface every frame. A renderer that draws UI as instanced quads has no such upload |
 | Pitch variation needs the native audio backend; the game runs on `pygame`, which cannot change pitch | 4 | Open. Workstream 4 |
 | Garbage collection stalled a tick | 6 | Done upstream (pyguara #397) |
+| (not in the plan) The top-down movement step around the native sweep | -- | **Done** (ADR 0009, Decision 5). 1.28 to 0.51 ms at 200 enemies; host tick at 200 enemies and four players 4.64 to 3.83 ms, bit-identical |
 | Packed assets (W30), near release | 4 | Open. Workstream 6 |
 | Hosting may not work on players' home connections; "decide before M4" | 7 | Open. Workstream 5 |
 | Input buffering (pyguara #73) | 4 | Deferred by the game's own plan; not scheduled here |
@@ -64,6 +65,13 @@ be rendered straight to the swapchain; and macOS is not handled, because
 wgpu wants the window's view where SDL reports the window.
 
 ### 2. A batched drawing interface for game code
+
+**Measured before building, 2026-11-10, and deferred.** At 200 enemies
+`draw_world` is 2.6 ms of a 6.6 ms frame: about 1.5 ms inside the
+renderer's calls and 1.0 ms in the view's own per-enemy Python, which a
+batch call does not touch. The ceiling is about 1.2 ms, roughly 18% of
+the frame, and almost nothing at 24 enemies. The movement step was the
+larger cost and was done first instead (ADR 0009, Decision 5).
 
 Once the renderer is native, the remaining cost is the call per primitive.
 Let a scene hand over arrays -- positions, sizes, colours -- for many

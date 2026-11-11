@@ -103,6 +103,44 @@ ADR 0003 declined a native `Vector2` and optimised its call sites one at
 a time instead. This is neither: the class stays a `Vec2d`, and every
 call site gets faster at once.
 
+## Decision 5 -- The top-down step in one call
+
+Added after the rest, once the sweep was native and a second profile was
+taken. At 200 enemies `TopDownSystem.update` still cost 1.28 ms of a
+6.6 ms rendered frame -- 6.4 us a body, nearly all of it the Python
+*around* the sweep: `collider_bounds`, two scaled vectors, the skinned
+half extents, a `MoveResult`, the offset taken back off.
+
+The engine now offers `step_bodies`, and `TopDownSystem` hands it every
+body it is about to move in one call. The native side does `step_body`'s
+arithmetic in the same order on the same doubles and runs the existing
+sweep for each, so a body it answers for ends where `step_body` would
+have put it, to the bit. Anything it declines -- a probe too close to
+call -- goes through `step_body` as before, as does any body whose centre
+is not a pair of floats or whose velocity or remainder is not a plain
+`float` or `int` (Decision 3's reason).
+
+Batching is exact rather than merely close because of Decision 2: the
+mirror exists only while every solid is static, so no body's move can
+change what another's sweep sees, and the order bodies are stepped in
+cannot matter. Separation, whose order does matter, is untouched.
+
+One trap is recorded because the parity suite has a test for it and
+nothing else would: with no collider, `step_body` uses the position as the
+centre and adds no offset. Adding a zero offset is not the same, since
+`-0.0 + 0.0` is `+0.0`. So the centre crosses the boundary already offset,
+and only the subtraction on the way back happens natively.
+
+`step_body` itself is unchanged, because client prediction replays it one
+body at a time and must agree with the host.
+
+Checked by `tests/test_native_topdown_step_parity.py`, comparing on
+`repr` so that neither `-0.0` against `0.0` nor `70` against `70.0` can
+pass, with a count that fails if the batch declines everything. Four
+sabotages were built: the skin dropped and the offset added twice in
+Rust, the centre type check and the no-collider centre removed in Python.
+Each fails at least one test; the last two only their dedicated ones.
+
 ## Measured
 
 WSL2, CPython 3.12, release build. Reclaimer at commit `88b2604`,
@@ -125,6 +163,22 @@ One rendered frame, one player, enemies in sight:
 | 200 | 16.78 / 26.36 ms | 8.24 / 9.44 ms | 2.0x |
 
 One swept move against five walls: 64 us to 4 us.
+
+Decision 5 alone, measured with it switched off and on in the same build
+(the host's own part of a four-player tick, and one rendered frame, one
+player, by a different harness from the tables above):
+
+| | Off | On | |
+| --- | ---: | ---: | ---: |
+| `TopDownSystem.update`, 200 enemies | 1.28 ms | 0.51 ms | 2.5x |
+| Host tick, 100 enemies, four players | 2.39 ms | 2.05 ms | 1.17x |
+| Host tick, 200 enemies, four players | 4.64 ms | 3.83 ms | 1.21x |
+| Rendered frame, 200 enemies | 6.66 ms | 6.15 ms | 1.08x |
+
+The 900-tick hash of every position, remainder and their types, at 40
+and 150 enemies and at 150 with three guests, is identical before and
+after, and every one of the 156,000 body-steps in the frame run was
+answered by the batch.
 
 ## How "no bugs" was checked
 
@@ -157,8 +211,11 @@ recognising:
 After these changes the 200-enemy frame is 53% rendering and 47%
 simulation, and what remains in each is per-entity Python:
 
-- the game's view code issuing one `draw_rect` per enemy part,
-- enemy brains and state machines,
+- the game's view code issuing one `draw_rect` per enemy part. Measured
+  since: `draw_world` is 2.6 ms of the 6.6 ms frame, about 1.5 ms of it
+  in the renderer's calls and 1.0 ms the view's own per-enemy Python, so
+  a batched drawing call alone could take back about 1.2 ms;
+- enemy brains and state machines, now the largest part of a tick;
 - a guest interpolating every replicated field of every entity each
   frame: about 2.8 ms a frame at 200 enemies under the profiler, which
   inflates it, so read that as a ranking and not a cost.

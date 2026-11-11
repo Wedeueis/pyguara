@@ -144,3 +144,21 @@
 - **Alternatives:** draw straight into the swapchain's texture, or keep drawing into the offscreen target and copy it across in a second pass.
 - **Chose:** offscreen plus a copy, for now. `read_pixels` -- and so headless capture and the pixel suite -- works identically with or without a window, and the swapchain's format (often BGRA, sometimes sRGB) never reaches the drawing pipeline. It costs one extra pass, which is recorded in the plan as something to take back.
 - **Tags:** renderer, wgpu
+
+## Measure the batched draw interface before building it, and defer it
+- **Context:** Workstream 2 was next; the plan said per-primitive drawing was "most of the 53%".
+- **Alternatives:** build `ShapeBatch` support in the pygame and wgpu backends and port Reclaimer's view; or measure the split first.
+- **Chose:** measure. `draw_world` was 2.6 ms of 6.6 ms at 200 enemies, about 1.5 ms of it in renderer calls and 1.0 ms in the view's own Python, so a batch call could save about 1.2 ms. The top-down step was 1.28 ms with more of it removable, and the user chose it.
+- **Tags:** performance, renderer, measurement
+
+## Batch the top-down step through the engine, keep `step_body` as the reference
+- **Context:** The Python around each native sweep cost about 6.4 us per body.
+- **Alternatives:** make `step_body` leaner in Python; move the whole `TopDownSystem` (separation too) into Rust; or one engine call taking a row per body and returning per-body results or None.
+- **Chose:** the per-body-row call, `step_bodies`, offered by the engine like `sweep_box` is. Exact because the mirror only exists for all-static worlds, so the order of moves cannot matter. Separation stays in Python because its order does matter and it costs 0.06 ms. `step_body` stays unchanged for client prediction.
+- **Tags:** physics, native, parity
+
+## Hand the centre across already offset
+- **Context:** Rust could add the collider offset itself, which would be one fewer Python operation per body.
+- **Alternatives:** add in Rust, or have Python pass the centre exactly as `collider_bounds` computes it.
+- **Chose:** Python passes the centre. With no collider `step_body` adds nothing, and `-0.0 + 0.0` is `+0.0`, so adding a zero offset is not bit-identical. Pinned by a dedicated test, the only one that catches it.
+- **Tags:** parity, floats
