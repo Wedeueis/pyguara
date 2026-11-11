@@ -32,12 +32,12 @@ from tools.agent_view import DEMOS, is_blank  # noqa: E402
 # boot_process only opens a window and draws nothing; that is its whole point
 # as tutorial module 1, so a flat frame there is correct rather than a defect.
 #
-# mourisco_ressonancia, true_coral, protocolo_bandeira and quintal_cerrado
-# (the fun-improvement roadmap's Phase 5) run on the ModernGL backend, and
-# these tests run under SDL's dummy video driver, which provides no OpenGL
-# at all -- none of them can even create a context, let alone draw. They
-# are covered instead by `tools/agent_view.py <demo> --gl`, which uses
-# SDL's offscreen driver and reads the GL framebuffer.
+# The demos built on the render graph -- lighting, post-processing -- run on
+# the wgpu backend, and are held to their ModernGL frames whole by
+# `test_wgpu_gl_demos.py`, each backend in a process of its own. They are
+# left out here because this module renders demos in one process, after
+# others, and wgpu's GL backend cannot open a device while another OpenGL
+# context is current.
 GL_ONLY_DEMOS = {
     "mourisco_ressonancia",
     "true_coral",

@@ -43,7 +43,7 @@ BLOOM_BLUR_PASSES = 3
 
 
 def _configure(config: GameConfig) -> None:
-    """Select the ModernGL backend, and name the window.
+    """Select the wgpu backend, and name the window.
 
     Called before the window exists, which is the only point where
     `backend` still decides which one gets built.
@@ -54,7 +54,7 @@ def _configure(config: GameConfig) -> None:
     config.display.title = "Mourisco: Ressonância -- Master the Mix!"
     config.display.screen_width = WINDOW_WIDTH
     config.display.screen_height = WINDOW_HEIGHT
-    config.display.backend = RenderingBackend.MODERNGL
+    config.display.backend = RenderingBackend.WGPU
 
 
 def configure_game_container() -> DIContainer:

@@ -99,7 +99,7 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ### [mourisco_ressonancia](./mourisco_ressonancia) — Mourisco: Ressonância
 * **Genre:** Stealth exploration in a pitch-black cave, lit only by echolocation.
-* **Key Concepts:** the **ModernGL** backend and the full lighting pipeline
+* **Key Concepts:** the **wgpu** backend and the full lighting pipeline
   (`WorldPass → LightPass → PulsePass → CompositePass → PostProcessPass → FinalPass`),
   a custom wavefront-ring shader, DDA ray occlusion, `kits/echolocation`.
 * **Run:** `uv run python games/mourisco_ressonancia/main.py`
@@ -109,7 +109,7 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ### [protocolo_bandeira](./protocolo_bandeira) — Protocolo Bandeira
 * **Genre:** Twin-stick wave arena. A giant anteater holds a cerrado clearing against a swarm.
-* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+* **Key Concepts:** the **wgpu** backend with lighting and post-processing
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`), the
   engine's `HeatHazeEffect` shader for the afternoon shimmer and its dust, an
   HDR light map, `Sparks`/`Shaker`/`FloatingText`/`ScreenFlash` for the
@@ -125,7 +125,7 @@ These modules correspond to the "Tutorial Series Roadmap".
 ### [tamandua_murundus](./tamandua_murundus) — Tamanduá: O Guardião dos Murundus
 * **Genre:** Horde survivor / density showcase. A giant anteater holds one
   cerrado clearing from dusk to dawn against a rising swarm.
-* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+* **Key Concepts:** the **wgpu** backend with lighting and post-processing
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`),
   **per-instance sprite tint** on the GL sprite path (one texture, N colours,
   one draw call), the **ambient day/night cycle**, a genuine `SPOT` light for
@@ -142,7 +142,7 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ### [true_coral](./true_coral) — True Coral
 * **Genre:** Snake, on a rain-soaked forest floor at night.
-* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+* **Key Concepts:** the **wgpu** backend with lighting and post-processing
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`),
   the engine's `StormEffect` shader driving rain and forked lightning, an HDR
   light map, `kits/trail` for the body, `kits/action_combat` for lives,

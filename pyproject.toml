@@ -213,7 +213,7 @@ summary = """\
 PyGuara is a code-first 2D game engine for Python 3.12+: an \
 Entity-Component-System core with inverted-index queries, a \
 reflection-based dependency-injection container, an event bus, and \
-backend-agnostic rendering over pygame-ce and ModernGL. This repository is \
+backend-agnostic rendering over pygame-ce, ModernGL and wgpu. This repository is \
 the engine itself, not a game built on it -- `games/` holds the demos and \
 tutorials."""
 
