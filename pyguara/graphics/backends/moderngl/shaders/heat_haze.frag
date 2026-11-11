@@ -98,7 +98,10 @@ void main() {
     // Heat pools on the ground. Above the horizon there is still some
     // shimmer -- air does not stop moving -- but the strength ramps into
     // the bottom of the frame, where the baked earth is.
-    float ground = smoothstep(u_horizon, 1.0, v_uv.y);
+    // `u_horizon` is measured down from the top, and v_uv.y runs up from
+    // the bottom, so the ground's depth is 1 - v_uv.y. Reading v_uv.y
+    // directly put the heat at the top of the frame.
+    float ground = smoothstep(u_horizon, 1.0, 1.0 - v_uv.y);
     float heat = u_haze * mix(0.4, 1.0, ground);
 
     // Two noise fields sampled a little apart: one displaces horizontally,

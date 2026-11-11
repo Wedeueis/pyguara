@@ -104,7 +104,7 @@ fn dust_layer(uv: vec2<f32>, cells: vec2<f32>, rise: f32, drift: f32, size: f32,
 @fragment
 fn fragment(in: Varying) -> @location(0) vec4<f32> {
     let v_uv = vec2<f32>(in.uv.x, 1.0 - in.uv.y);
-    let ground = smoothstep(params.u_horizon, 1.0, v_uv.y);
+    let ground = smoothstep(params.u_horizon, 1.0, 1.0 - v_uv.y);
     let heat = params.u_haze * mix(0.4, 1.0, ground);
     let flow = vec2<f32>(params.u_time * params.u_wind * 0.06, -params.u_time * params.u_haze_speed);
     let sp = v_uv * params.u_haze_scale + flow;
