@@ -231,7 +231,8 @@ class ViewportPanel(EditorPanel):
 
         Args:
             camera_provider: Returns the active `Camera2D`, or None.
-            texture_provider: Returns `(texture_id, width, height)` for the
+            texture_provider: Returns `(texture_id, width, height[,
+                bottom_up])` for the
                 frame to show, or None when there is nothing to show.
             physics_provider: Returns an `IPhysicsEngine`, or None.
             ui_provider: Returns the `UIManager`, or None. Used only to
@@ -403,11 +404,13 @@ class ViewportPanel(EditorPanel):
             # context and so no texture to hand over. Saying so beats an
             # empty panel that looks like a broken render path.
             imgui.text_disabled(
-                "No rendered frame available. The viewport needs the ModernGL backend."
+                "No rendered frame available. The viewport needs a GPU backend."
             )
             return
 
-        texture_id, target_width, target_height = frame
+        texture_id, target_width, target_height = frame[:3]
+        # A ModernGL framebuffer's rows run bottom-up; a wgpu target's top-down.
+        bottom_up = bool(frame[3]) if len(frame) > 3 else True
         self._state.target = Rect(0, 0, int(target_width), int(target_height))
 
         # Letterboxed rather than stretched to the panel. A docked panel is
@@ -444,8 +447,8 @@ class ViewportPanel(EditorPanel):
         imgui.image(
             imgui.ImTextureRef(texture_id),
             imgui.ImVec2(float(fit.width), float(fit.height)),
-            imgui.ImVec2(0.0, 1.0),
-            imgui.ImVec2(1.0, 0.0),
+            imgui.ImVec2(0.0, 1.0 if bottom_up else 0.0),
+            imgui.ImVec2(1.0, 0.0 if bottom_up else 1.0),
         )
         hovered = imgui.is_item_hovered()
 

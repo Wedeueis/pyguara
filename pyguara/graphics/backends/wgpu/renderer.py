@@ -51,6 +51,11 @@ class WgpuRenderer:
         """
         self._frame = frame
         self._gpu = frame.gpu
+        # The size the world is drawn at. Not the window's: with
+        # `keep_aspect` the game renders at its configured size and the
+        # graph scales that into the window, whose size the graph gives the
+        # main target (`GraphicsDevice.resize_screen`).
+        self._size = (int(frame.gpu.width), int(frame.gpu.height))
         self._warned_material = False
         self._shapes: int | None = None
         # Compiled materials, by the identity of their `SpriteShader`; the
@@ -59,13 +64,13 @@ class WgpuRenderer:
 
     @property
     def width(self) -> int:
-        """Get the width of the render target."""
-        return int(self._gpu.width)
+        """Get the width the world is rendered at."""
+        return self._size[0]
 
     @property
     def height(self) -> int:
-        """Get the height of the render target."""
-        return int(self._gpu.height)
+        """Get the height the world is rendered at."""
+        return self._size[1]
 
     def begin_frame(self) -> None:
         """Prepare for a new frame. Nothing to do: the window owns the frame."""
@@ -280,14 +285,20 @@ class WgpuRenderer:
         )
 
     def resize(self, width: int, height: int) -> None:
-        """Adopt a new target size.
+        """Adopt the size the world is rendered at.
+
+        The world draws into the render graph's buffer, which the graph
+        sizes; the main target is the window, which the graph sizes too
+        (`GraphicsDevice.resize_screen`). Resizing it here to the render
+        size shrank the window's own target whenever the two differed --
+        a letterboxed window -- and the editor, drawn over the whole window,
+        was cut to the game's frame.
 
         Args:
             width: The new width in pixels.
             height: The new height in pixels.
         """
-        if (width, height) != (self.width, self.height):
-            self._gpu.resize(width, height)
+        self._size = (width, height)
 
     def present(self) -> None:
         """Present the frame. Nothing to do: the window presents it."""

@@ -19,7 +19,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-os.environ["SDL_VIDEODRIVER"] = "offscreen"
+# Which backend the scenarios run on: `test_attach.py` runs every scenario on
+# each. ModernGL needs a real GL context, so SDL's offscreen driver; wgpu
+# draws offscreen itself and copies the frame out, under the dummy driver.
+BACKEND = os.environ.get("STUDIO_BACKEND", "moderngl")
+os.environ["SDL_VIDEODRIVER"] = "offscreen" if BACKEND == "moderngl" else "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
@@ -45,13 +49,13 @@ def _project_root() -> Path:
 
 
 def _configure(config: object) -> None:
-    """Select the ModernGL backend with vsync off."""
-    config.display.backend = RenderingBackend.MODERNGL  # type: ignore[attr-defined]
+    """Select the scenario's backend with vsync off."""
+    config.display.backend = RenderingBackend(BACKEND)  # type: ignore[attr-defined]
     config.display.vsync = False  # type: ignore[attr-defined]
 
 
 def _application() -> object:
-    """Build a ModernGL application."""
+    """Build an application on the scenario's backend."""
     return create_application(configure=_configure)
 
 
@@ -137,7 +141,7 @@ def frames_and_operations() -> None:
 
         frame = attachment._frame_texture()
         assert frame is not None, "the viewport got no frame texture"
-        texture_id, width, height = frame
+        texture_id, width, height, _bottom_up = frame
         assert texture_id > 0 and width > 0 and height > 0
 
         # Idempotent: a viewport registers its framebuffer every frame, and
@@ -291,7 +295,7 @@ def the_layout_follows_the_window() -> None:
 
         frame = attachment._frame_texture()
         assert frame is not None
-        _, width, height = frame
+        _, width, height, _bottom_up = frame
 
         # The window keeps its shape, so with `keep_aspect` the game
         # renders at the configured resolution and is scaled up: what has
@@ -376,6 +380,14 @@ def the_menus_are_studios_own() -> None:
         app.shutdown()
 
 
+def imgui_clear_colour(graph: object) -> tuple[int, int, int]:
+    """The colour the editor's pass clears the screen to, in 0-255."""
+    colour = graph.get_pass("imgui")._clear_colour  # type: ignore[attr-defined]
+    if colour is None:
+        return (0, 0, 0)
+    return tuple(round(channel * 255) for channel in colour)  # type: ignore[return-value]
+
+
 def the_editor_gets_the_whole_window() -> None:
     """The editor is not letterboxed with the game.
 
@@ -402,6 +414,32 @@ def the_editor_gets_the_whole_window() -> None:
 
         graph = app._render_graph
         assert graph.screen_rect[2:] != window, "nothing was letterboxed"
+
+        if BACKEND == "wgpu":
+            # No viewport is left narrowed on wgpu -- each ImGui command
+            # clips itself -- so check the outcome: the editor's panels
+            # reach into the letterbox bars, where the game never draws.
+            for _ in range(3):
+                app.step()
+            # The frame `step()` already rendered and presented: rendering
+            # another here would show only the clear colour.
+            gpu = graph.device.frame.gpu
+            import numpy as np
+
+            pixels = np.frombuffer(gpu.read_pixels(), dtype=np.uint8)
+            image = pixels.reshape(window[1], window[0], 4)[..., :3].astype(int)
+            x, _, width, _ = graph.screen_rect
+            bars = np.concatenate([image[:, :x], image[:, x + width :]], axis=1)
+            # Panels, text and borders: anything that is not the colour the
+            # screen was cleared to. A bare clear passes no brightness test.
+            clear = np.array(imgui_clear_colour(graph), dtype=int)
+            drawn = int((np.abs(bars - clear).max(axis=2) > 6).sum())
+            assert drawn > bars.shape[0] * bars.shape[1] // 50, (
+                f"only {drawn} pixels of the letterbox bars differ from the "
+                f"clear colour: the editor is squeezed into the game's frame "
+                f"{graph.screen_rect}"
+            )
+            return
 
         seen: list[tuple[int, int, int, int]] = []
         imgui_pass = graph.get_pass("imgui")
@@ -477,6 +515,8 @@ def the_edit_lifecycle_works() -> None:
         def frame() -> bytes:
             fbo = graph.fbo_manager.get("world")
             assert fbo is not None, "no world framebuffer to compare"
+            if BACKEND == "wgpu":
+                return bytes(fbo.read_rgba())
             return bytes(fbo.fbo.read(components=3))
 
         def settle(count: int = 4) -> None:

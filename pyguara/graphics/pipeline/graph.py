@@ -221,6 +221,7 @@ class RenderGraph:
         # is what `use()` then applies.
         if self._ctx is not None and self._ctx.screen is not None:
             self._ctx.screen.viewport = self._screen_rect
+        self._device.resize_screen(*self._window_size)
 
         for render_pass in self._passes:
             render_pass.on_resize(*self._window_size)

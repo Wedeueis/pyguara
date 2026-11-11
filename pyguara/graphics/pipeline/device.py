@@ -525,6 +525,17 @@ class GraphicsDevice(ABC):
             rgba: Red, green, blue and alpha.
         """
 
+    def resize_screen(self, width: int, height: int) -> None:
+        """Make the screen the window's size.
+
+        A no-op where the screen follows the window by itself, as GL's
+        default framebuffer does.
+
+        Args:
+            width: The window's width in pixels.
+            height: The window's height in pixels.
+        """
+
     def release(self) -> None:
         """Release compiled shaders. Buffers belong to their manager."""
 
@@ -896,6 +907,16 @@ class WgpuDevice(GraphicsDevice):
         self._frame = frame
         self._gpu = frame.gpu
         self._effects: dict[int, tuple[FullscreenShader | InstancedShader, int]] = {}
+
+    @property
+    def frame(self) -> GpuFrame:
+        """The native frame, for what draws outside the graph: the editor."""
+        return self._frame
+
+    def resize_screen(self, width: int, height: int) -> None:
+        """Give the main target -- the window -- the window's size."""
+        if (width, height) != (self._gpu.width, self._gpu.height):
+            self._gpu.resize(width, height)
 
     @property
     def ctx(self) -> None:

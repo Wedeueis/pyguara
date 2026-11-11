@@ -178,6 +178,46 @@ fn fragment(in: Varying) -> @location(0) vec4<f32> {
 }
 ";
 
+/// Dear ImGui's draw lists: its own vertex layout -- position, uv and a
+/// packed RGBA8 colour -- mapped from its display rectangle, top-left
+/// origin, to clip space. Straight alpha, as ImGui's colours are.
+const MESH_SHADER: &str = r"
+struct Display { origin: vec2<f32>, size: vec2<f32> };
+@group(0) @binding(0) var<uniform> display: Display;
+@group(1) @binding(0) var image: texture_2d<f32>;
+@group(1) @binding(1) var image_sampler: sampler;
+
+struct Vertex {
+    @location(0) pos: vec2<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) color: vec4<f32>,
+};
+
+struct Varying {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) color: vec4<f32>,
+};
+
+@vertex
+fn vertex(v: Vertex) -> Varying {
+    let n = (v.pos - display.origin) / display.size;
+    var out: Varying;
+    out.position = vec4<f32>(n.x * 2.0 - 1.0, 1.0 - n.y * 2.0, 0.0, 1.0);
+    out.uv = v.uv;
+    out.color = v.color;
+    return out;
+}
+
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    return in.color * textureSample(image, image_sampler, in.uv);
+}
+";
+
+/// Bytes in one ImGui vertex: two f32 pairs and four colour bytes.
+const MESH_VERTEX: usize = 20;
+
 /// Copies the offscreen target onto the window: one triangle that covers
 /// the screen, sampling the frame.
 const PRESENT_SHADER: &str = r"
@@ -324,6 +364,17 @@ enum Step {
         runs: Vec<Run>,
         first: usize,
     },
+    /// An indexed triangle list -- Dear ImGui's draw lists -- drawn as a
+    /// series of commands, each with its own texture and clip rectangle.
+    Mesh {
+        target: u32,
+        pipeline: wgpu::RenderPipeline,
+        display: wgpu::BindGroup,
+        vertices: wgpu::Buffer,
+        indices: wgpu::Buffer,
+        draws: Vec<(wgpu::BindGroup, [u32; 4], u32, u32)>,
+        clear: Option<wgpu::Color>,
+    },
     /// A shader step: a fullscreen pass (one triangle), or instanced
     /// quads read from `instances` (six vertices each).
     Shader {
@@ -408,6 +459,9 @@ pub struct NativeGpu {
     next_effect: u32,
     materials: HashMap<u32, Material>,
     next_material: u32,
+    /// The mesh pipeline's uniform layout, and its pipelines per format,
+    /// built the first time a mesh is drawn.
+    mesh_layout: Option<(wgpu::BindGroupLayout, HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>)>,
     /// This frame's material uses: which material, and its bind group of
     /// uniforms and texture. A run names one by index.
     material_bindings: Vec<(u32, wgpu::BindGroup)>,
@@ -714,6 +768,7 @@ impl NativeGpu {
             next_effect: 1,
             materials: HashMap::new(),
             next_material: 1,
+            mesh_layout: None,
             material_bindings: Vec::new(),
             current_material: None,
             instances: Vec::with_capacity(instance_capacity),
@@ -1019,6 +1074,77 @@ impl NativeGpu {
         Ok(())
     }
 
+    /// The mesh pipeline for a target format, and the display layout.
+    fn mesh_pipeline(&mut self, format: wgpu::TextureFormat) -> (wgpu::RenderPipeline, wgpu::BindGroupLayout) {
+        if self.mesh_layout.is_none() {
+            let layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("pyguara mesh display"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+            self.mesh_layout = Some((layout, HashMap::new()));
+        }
+        let built = self.mesh_layout.as_ref().and_then(|(_, pipelines)| pipelines.get(&format).cloned());
+        let Some((group_layout, _)) = self.mesh_layout.as_ref() else {
+            unreachable!("the layout was just made");
+        };
+        if let Some(pipeline) = built {
+            return (pipeline, group_layout.clone());
+        }
+        let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("pyguara mesh"),
+            source: wgpu::ShaderSource::Wgsl(MESH_SHADER.into()),
+        });
+        let layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pyguara mesh"),
+            bind_group_layouts: &[Some(group_layout), Some(&self.image_layout)],
+            ..Default::default()
+        });
+        let attributes = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Unorm8x4];
+        let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("pyguara mesh"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vertex"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: MESH_VERTEX as u64,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &attributes,
+                })],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fragment"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        let group_layout = group_layout.clone();
+        if let Some((_, pipelines)) = self.mesh_layout.as_mut() {
+            pipelines.insert(format, pipeline.clone());
+        }
+        (pipeline, group_layout)
+    }
+
     fn main(&self) -> &Target {
         &self.targets[&MAIN]
     }
@@ -1256,6 +1382,7 @@ impl NativeGpu {
             .map(|step| match step {
                 Step::Draw { runs, .. } => runs.len(),
                 Step::Shader { .. } => 1,
+                Step::Mesh { draws, .. } => draws.len(),
             })
             .sum()
     }
@@ -1298,6 +1425,161 @@ impl NativeGpu {
         self.next_image += 1;
         self.images.insert(id, image);
         Ok(id)
+    }
+
+    /// Replace a texture's pixels, keeping its id and filter.
+    ///
+    /// Written in place when the size is unchanged; otherwise the texture
+    /// is made again at the new size. What Dear ImGui asks for when its
+    /// font atlas gains glyphs.
+    fn update_texture(&mut self, id: u32, width: u32, height: u32, pixels: &[u8]) -> PyResult<()> {
+        if id == WHITE {
+            return Err(PyValueError::new_err("the white pixel cannot be replaced"));
+        }
+        let Some(image) = self.images.get(&id) else {
+            return Err(PyKeyError::new_err(format!("no texture {id}")));
+        };
+        if (image.width, image.height) != (width, height) {
+            let smooth = image.smooth;
+            let replaced = self.upload_image(width, height, pixels, smooth)?;
+            self.images.insert(id, replaced);
+            return Ok(());
+        }
+        if pixels.len() != width as usize * height as usize * 4 {
+            return Err(PyValueError::new_err(format!(
+                "a {width}x{height} RGBA image is {} bytes, got {}",
+                width as usize * height as usize * 4,
+                pixels.len()
+            )));
+        }
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &image._texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        Ok(())
+    }
+
+    /// Queue an indexed triangle list into a target: Dear ImGui's output.
+    ///
+    /// `vertices` are ImGui's own 20-byte vertices -- position and uv as
+    /// f32 pairs, then the colour as four bytes -- and `indices` are u32.
+    /// `display` is `(x, y, width, height)`: the rectangle of ImGui's
+    /// coordinates that covers the target. Each command is `(kind, id, x,
+    /// y, width, height, first, count)`: the texture (`kind` 0 an uploaded
+    /// texture, 1 a render target), the clip rectangle in target pixels,
+    /// and which indices to draw. A command naming a texture that no
+    /// longer exists is skipped, as is one clipped to nothing.
+    #[allow(clippy::type_complexity)]
+    fn mesh(
+        &mut self,
+        target: u32,
+        vertices: &[u8],
+        indices: &[u8],
+        commands: Vec<(u8, u32, i64, i64, i64, i64, u32, u32)>,
+        display: (f32, f32, f32, f32),
+    ) -> PyResult<()> {
+        let Some((format, target_width, target_height)) =
+            self.targets.get(&target).map(|found| (found.format, found.width, found.height))
+        else {
+            return Err(PyKeyError::new_err(format!("no target {target}")));
+        };
+        if vertices.len() % MESH_VERTEX != 0 || indices.len() % 4 != 0 {
+            return Err(PyValueError::new_err(
+                "vertices are 20 bytes each and indices 4; the lengths do not divide",
+            ));
+        }
+        let index_count = (indices.len() / 4) as u32;
+        let (pipeline, display_layout) = self.mesh_pipeline(format);
+        let mut draws = Vec::with_capacity(commands.len());
+        for (kind, id, x, y, width, height, first, count) in commands {
+            if count == 0 || first.saturating_add(count) > index_count {
+                continue;
+            }
+            let left = x.clamp(0, i64::from(target_width));
+            let top = y.clamp(0, i64::from(target_height));
+            let right = (x + width).clamp(left, i64::from(target_width));
+            let bottom = (y + height).clamp(top, i64::from(target_height));
+            if right <= left || bottom <= top {
+                continue;
+            }
+            let group = match kind {
+                0 => match self.images.get(&id) {
+                    Some(image) => image.bind_group.clone(),
+                    None => continue,
+                },
+                _ => match self.targets.get(&id) {
+                    Some(source) if id != target => self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("pyguara mesh target"),
+                        layout: &self.image_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::TextureView(&source.view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::Sampler(&self.smooth_sampler),
+                            },
+                        ],
+                    }),
+                    _ => continue,
+                },
+            };
+            let scissor = [left as u32, top as u32, (right - left) as u32, (bottom - top) as u32];
+            draws.push((group, scissor, first, count));
+        }
+        if draws.is_empty() {
+            return Ok(());
+        }
+        let make = |contents: &[u8], usage: wgpu::BufferUsages| {
+            let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("pyguara mesh"),
+                size: contents.len() as u64,
+                usage: usage | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            self.queue.write_buffer(&buffer, 0, contents);
+            buffer
+        };
+        let vertex_buffer = make(vertices, wgpu::BufferUsages::VERTEX);
+        let index_buffer = make(indices, wgpu::BufferUsages::INDEX);
+        let uniform = make(
+            bytemuck::cast_slice(&[display.0, display.1, display.2, display.3]),
+            wgpu::BufferUsages::UNIFORM,
+        );
+        let display_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("pyguara mesh display"),
+            layout: &display_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            }],
+        });
+        self.steps.push(Step::Mesh {
+            target,
+            pipeline,
+            display: display_group,
+            vertices: vertex_buffer,
+            indices: index_buffer,
+            draws,
+            clear: None,
+        });
+        Ok(())
     }
 
     /// Free a texture. Unknown ids are ignored, so a cache can evict freely.
@@ -2113,7 +2395,9 @@ impl NativeGpu {
         let mut slot = 0u32;
         for step in &self.steps {
             let (target_id, own_clear) = match step {
-                Step::Draw { target, clear, .. } | Step::Shader { target, clear, .. } => (*target, *clear),
+                Step::Draw { target, clear, .. }
+                | Step::Shader { target, clear, .. }
+                | Step::Mesh { target, clear, .. } => (*target, *clear),
             };
             let globals_offset = slot * GLOBALS_STRIDE as u32;
             if matches!(step, Step::Draw { .. }) {
@@ -2177,6 +2461,24 @@ impl NativeGpu {
                         }
                         pass.set_bind_group(1, &image.bind_group, &[]);
                         pass.draw(0..6, run.start..run.start + run.count);
+                    }
+                }
+                Step::Mesh {
+                    pipeline,
+                    display,
+                    vertices,
+                    indices,
+                    draws,
+                    ..
+                } => {
+                    pass.set_pipeline(pipeline);
+                    pass.set_bind_group(0, display, &[]);
+                    pass.set_vertex_buffer(0, vertices.slice(..));
+                    pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
+                    for (group, [x, y, width, height], first, count) in draws {
+                        pass.set_scissor_rect(*x, *y, *width, *height);
+                        pass.set_bind_group(1, group, &[]);
+                        pass.draw_indexed(*first..*first + *count, 0, 0..1);
                     }
                 }
                 Step::Shader {

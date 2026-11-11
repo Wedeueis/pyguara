@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pyguara.graphics.pipeline.render_pass import BaseRenderPass, require_gl
+from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.log import get_logger
 
 if TYPE_CHECKING:
@@ -90,8 +90,10 @@ class ImGuiPass(BaseRenderPass):
             graph: The graph running this pass (unused: the editor reads no
                 framebuffers, it draws over whatever is on screen).
         """
-        ctx = require_gl(ctx, "The editor's ImGui pass")
         if not self._enabled:
+            return
+        if ctx is None:
+            self._execute_on_wgpu(graph)
             return
 
         # Every earlier pass renders into an offscreen FBO and `FinalPass`
@@ -133,6 +135,22 @@ class ImGuiPass(BaseRenderPass):
         finally:
             if screen is not None and previous is not None:
                 screen.viewport = previous
+
+    def _execute_on_wgpu(self, graph: RenderGraph) -> None:
+        """Draw the editor onto the window on the wgpu backend.
+
+        The window is the native frame's main target. Unlike GL there is no
+        viewport left narrowed to a letterbox: each ImGui command carries its
+        own clip rectangle, in window pixels.
+        """
+        from typing import Any, cast
+
+        frame = cast(Any, graph.device).frame
+        gpu = frame.gpu
+        gpu.set_target(0)
+        if self._clear_colour is not None:
+            gpu.clear_target(*self._clear_colour, 1.0)
+        self._layer.render(self._width, self._height)
 
     def on_resize(self, width: int, height: int) -> None:
         """Track the new window size.

@@ -47,9 +47,14 @@ _VERTEX_ATTRIBUTES = ("in_pos", "in_uv", "in_color")
 class ModernGLImGuiRenderer:
     """Draws ImGui draw data with a ModernGL program, buffers and textures.
 
+    Its registered textures are GL framebuffers, stored bottom-up, which the
+    Viewport panel flips when it shows them (`bottom_up`).
+
     Owns GL resources, so it must be constructed on the thread and context
     that will draw, and `release()`d before the context goes away.
     """
+
+    bottom_up = True
 
     def __init__(self, ctx: moderngl.Context) -> None:
         """Compile the program and declare renderer capabilities to ImGui.

@@ -42,6 +42,7 @@ would be reverting commands into a world that never saw them applied.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -656,8 +657,8 @@ class StudioAttachment:
         except Exception:
             return None
 
-    def _frame_texture(self) -> tuple[int, int, int] | None:
-        """Return the composed frame as `(texture_id, width, height)`.
+    def _frame_texture(self) -> tuple[int, int, int, bool] | None:
+        """Return the composed frame as `(texture_id, width, height, bottom_up)`.
 
         The buffer `FinalPass` composed into, registered with the ImGui
         renderer so a panel can draw it. The same buffer
@@ -690,10 +691,15 @@ class StudioAttachment:
         if framebuffer is None:
             return None
 
-        texture_id = self._layer.register_texture(framebuffer.texture)
+        bottom_up = self._layer.textures_bottom_up
+        # A GL renderer draws from the framebuffer's texture; the wgpu one
+        # samples the framebuffer itself.
+        texture_id = self._layer.register_texture(
+            framebuffer.texture if bottom_up else framebuffer
+        )
         if texture_id is None:
             return None
-        return (texture_id, framebuffer.width, framebuffer.height)
+        return (texture_id, framebuffer.width, framebuffer.height, bottom_up)
 
     def _resolve_registry(self) -> ComponentRegistry:
         """Return the component registry, falling back to the global one.
@@ -788,21 +794,28 @@ def attach_editor(
     # stub, which is registered under the same key but is not a subclass.
     if not isinstance(candidate, RenderGraph):
         logger.info(
-            "Editor not attached: this backend has no GL render graph "
-            f"({type(candidate).__name__}). The editor is ModernGL-only; "
+            "Editor not attached: this backend has no render graph "
+            f"({type(candidate).__name__}). The editor needs a GPU backend; "
             "use the pyguara/tools overlay on the Pygame backend."
         )
         return None
 
-    # A real `RenderGraph` on the wgpu backend has no GL context, and the
-    # editor's ImGui renderer still needs one: moving it is stage E.
+    # The renderer follows the graph's device: GL draws through the
+    # context, wgpu through the native frame.
     ctx = candidate.ctx
-    if ctx is None:
-        logger.info(
-            "Editor not attached: the editor is ModernGL-only, and this "
-            "render graph runs on wgpu."
-        )
-        return None
+    renderer_factory: Callable[[], Any]
+    if ctx is not None:
+        renderer_factory = lambda: ModernGLImGuiRenderer(ctx)  # noqa: E731
+        backend = "ModernGL"
+    else:
+        from pyguara.studio.wgpu_renderer import WgpuImGuiRenderer
+
+        frame = getattr(candidate.device, "frame", None)
+        if frame is None:
+            logger.info("Editor not attached: this render graph has no GPU frame.")
+            return None
+        renderer_factory = lambda: WgpuImGuiRenderer(frame)  # noqa: E731
+        backend = "wgpu"
 
     # The graph's own dimensions, not `ctx.screen.size`: `ctx.screen` is
     # `None` on a standalone (offscreen) context, which is what the GL
@@ -813,7 +826,7 @@ def attach_editor(
     height = candidate.fbo_manager.height
     layer = EditorLayer(
         container,
-        renderer_factory=lambda: ModernGLImGuiRenderer(ctx),
+        renderer_factory=renderer_factory,
         panels=panels,
     )
     # Appended, so it runs after `final` has blitted the scene to the
@@ -822,7 +835,7 @@ def attach_editor(
     container.register_instance(EditorLayer, layer)
     _install_title_bar(container, layer)
 
-    logger.info(f"Editor attached: {len(layer.panels)} panel(s) over ModernGL.")
+    logger.info(f"Editor attached: {len(layer.panels)} panel(s) over {backend}.")
     return layer
 
 

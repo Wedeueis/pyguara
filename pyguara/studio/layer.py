@@ -34,6 +34,7 @@ from pyguara.studio.selection import Selection
 from pyguara.studio.theme import apply_theme, scale_for
 from pyguara.studio.titlebar import TitleBar
 from pyguara.studio.toasts import ToastStack
+from pyguara.studio.wgpu_renderer import WgpuImGuiRenderer
 
 logger = get_logger(__name__)
 
@@ -90,6 +91,10 @@ def default_panels() -> list[EditorPanel]:
     return [HierarchyPanel(), InspectorPanel()]
 
 
+ImGuiRenderer = ModernGLImGuiRenderer | WgpuImGuiRenderer
+"""Whichever draws the editor: chosen by the render graph's device."""
+
+
 class EditorLayer:
     """Owns an ImGui context and draws the editor's panels over the game."""
 
@@ -97,7 +102,7 @@ class EditorLayer:
         self,
         container: DIContainer,
         *,
-        renderer_factory: Callable[[], ModernGLImGuiRenderer] | None = None,
+        renderer_factory: Callable[[], ImGuiRenderer] | None = None,
         panels: list[EditorPanel] | None = None,
     ) -> None:
         """Create the ImGui context and install the panels.
@@ -193,7 +198,7 @@ class EditorLayer:
 
         # Built last, and only now: the context above is current, so the
         # renderer's `backend_flags` reach this layer's IO and not another's.
-        self._renderer: ModernGLImGuiRenderer | None = (
+        self._renderer: ImGuiRenderer | None = (
             renderer_factory() if renderer_factory is not None else None
         )
 
@@ -282,18 +287,25 @@ class EditorLayer:
         say so rather than draw an image with a meaningless id.
 
         Args:
-            texture: A `moderngl.Texture` on the renderer's context.
+            texture: What the renderer draws from: a `moderngl.Texture`
+                for `ModernGLImGuiRenderer`, a wgpu framebuffer for
+                `WgpuImGuiRenderer`.
 
         Returns:
             The id to hand `imgui.image()`, or None.
         """
         if self._renderer is None:
             return None
-        from typing import cast
+        return self._renderer.register_texture(texture)  # type: ignore[arg-type]
 
-        import moderngl
+    @property
+    def textures_bottom_up(self) -> bool:
+        """Whether a registered texture's rows run bottom-up, as GL's do.
 
-        return self._renderer.register_texture(cast(moderngl.Texture, texture))
+        A ModernGL framebuffer is stored bottom-up and shown flipped; a
+        wgpu target is stored top-down, as ImGui draws.
+        """
+        return bool(getattr(self._renderer, "bottom_up", True))
 
     def process_event(self, event: object) -> bool:
         """Feed one engine event to ImGui and report whether it took it.

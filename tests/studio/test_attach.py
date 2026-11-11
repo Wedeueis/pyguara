@@ -189,14 +189,19 @@ class TestAttachToARealApplication:
             "editing_and_playing_are_separate",
         ],
     )
-    def test_scenario(self, scenario: str) -> None:
+    @pytest.mark.parametrize("backend", ["moderngl", "wgpu"])
+    def test_scenario(self, scenario: str, backend: str) -> None:
         pytest.importorskip("imgui_bundle")
-        pytest.importorskip("moderngl")
+        if backend == "moderngl":
+            pytest.importorskip("moderngl")
 
         from tests.conftest import REQUIRE_GL
 
         environment = dict(os.environ)
-        environment["SDL_VIDEODRIVER"] = "offscreen"
+        environment["STUDIO_BACKEND"] = backend
+        environment["SDL_VIDEODRIVER"] = (
+            "offscreen" if backend == "moderngl" else "dummy"
+        )
         environment["SDL_AUDIODRIVER"] = "dummy"
         environment["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
