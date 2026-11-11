@@ -86,3 +86,42 @@ def test_the_demo_draws_the_same_scene_on_wgpu(demo: str, tmp_path: Path) -> Non
         f"{demo}: {edges:.2%} of pixels differ by more than 32, mean difference "
         f"{mean:.2f}; the bound is {EDGE_FRACTION:.1%} and {MEAN_DIFFERENCE}"
     )
+
+
+# Against its own approved frame, a demo should be the same image; these
+# leave room only for another GPU's rounding of the procedural shaders.
+GOLDEN_FRACTION = 0.005
+GOLDEN_MEAN = 0.5
+
+
+@pytest.mark.integration
+@pytest.mark.slow
+@pytest.mark.parametrize("demo", GRAPH_DEMOS)
+def test_the_demo_matches_its_golden(
+    demo: str, tmp_path: Path, update_golden: bool
+) -> None:
+    """The wgpu frame against the one approved when it matched ModernGL."""
+    import numpy as np
+    import pygame
+
+    from tests.integration import golden
+
+    surface = pygame.image.load(str(_capture("wgpu", demo, tmp_path / "wgpu")))
+    width, height = surface.get_size()
+    image = np.frombuffer(
+        pygame.image.tobytes(surface, "RGBA"), dtype=np.uint8
+    ).reshape(height, width, 4)
+    if update_golden:
+        golden.save("demos", demo, image)
+        return
+    stored = golden.load("demos", demo, hdr=False)
+    assert stored is not None, golden.missing("demos", demo, False)
+    assert stored.shape == image.shape
+    gap = np.abs(stored[..., :3].astype(np.int16) - image[..., :3].astype(np.int16))
+    off = float((gap.max(axis=2) > 8).mean())
+    mean = float(gap.mean())
+    assert off <= GOLDEN_FRACTION and mean <= GOLDEN_MEAN, (
+        f"{demo}: {off:.2%} of pixels differ from the golden frame by more than "
+        f"8, mean {mean:.2f}. If intended, rerun with --update-golden and review "
+        f"{golden.path_for('demos', demo, False)}"
+    )

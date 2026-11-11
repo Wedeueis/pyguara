@@ -196,3 +196,25 @@ def container():
 def event_dispatcher():
     """Provide an event dispatcher."""
     return EventDispatcher()
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """`--update-golden`: rewrite the stored golden images from this run.
+
+    For `tests/integration/golden.py`'s users. A golden image is the
+    approved output of a render path; when an intended change moves pixels,
+    rerun those tests with this flag and **look at the diff** of the images
+    before committing them, as with `--snapshot-update`.
+    """
+    parser.addoption(
+        "--update-golden",
+        action="store_true",
+        default=False,
+        help="rewrite golden images from this run's output",
+    )
+
+
+@pytest.fixture
+def update_golden(request: pytest.FixtureRequest) -> bool:
+    """Whether this run rewrites golden images rather than checking them."""
+    return bool(request.config.getoption("--update-golden"))

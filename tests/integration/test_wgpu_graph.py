@@ -95,3 +95,36 @@ def test_the_pass_matches_moderngl(case: str, tmp_path: Path) -> None:
     drawn = int((image != background).any(axis=1).sum())
     assert drawn > 0.05 * len(image), f"{case} drew almost nothing ({drawn} pixels)"
     assert differing == 0, f"{case}: {differing} pixels differ, by up to {largest}"
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("case", list(CASES))
+def test_the_pass_matches_its_golden(
+    case: str, tmp_path: Path, update_golden: bool
+) -> None:
+    """The wgpu output against the image approved when it matched ModernGL.
+
+    What guards the render graph once ModernGL is gone; see
+    `tests/integration/golden.py`. The tolerances are the cross-backend
+    ones above, which leave room for a different GPU's rounding.
+    """
+    import numpy as np
+
+    from tests.integration import golden
+
+    actual = _run("wgpu", case, tmp_path / "wgpu.rgba")
+    hdr = len(actual) == WIDTH * HEIGHT * 8
+    image = np.frombuffer(actual, dtype="<f2" if hdr else np.uint8).reshape(
+        HEIGHT, WIDTH, 4
+    )
+    if update_golden:
+        golden.save("graph", case, image)
+        return
+    stored = golden.load("graph", case, hdr)
+    assert stored is not None, golden.missing("graph", case, hdr)
+    differing, largest, _ = _worst(stored.astype(image.dtype).tobytes(), actual)
+    assert differing == 0, (
+        f"{case}: {differing} pixels differ from the golden image, by up to "
+        f"{largest}. If the change is intended, rerun with --update-golden "
+        f"and review {golden.path_for('graph', case, hdr)}"
+    )
