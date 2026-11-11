@@ -24,7 +24,10 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.surface_texture import as_surface
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
 from pyguara.graphics.types import RenderBatch
+from pyguara.log import get_logger
 from pyguara.resources.types import Texture
+
+logger = get_logger(__name__)
 
 
 def _smooth(texture: object) -> bool:
@@ -48,6 +51,7 @@ class WgpuRenderer:
         """
         self._frame = frame
         self._gpu = frame.gpu
+        self._warned_material = False
 
     @property
     def width(self) -> int:
@@ -183,6 +187,17 @@ class WgpuRenderer:
         surface = as_surface(batch.texture)
         if surface is None:
             return
+        if batch.material is not None and not self._warned_material:
+            # A material is a GLSL program, which wgpu cannot run. The
+            # sprites still draw, plainly, as on the pygame backend -- which
+            # says nothing at all. Materials on wgpu come with the render
+            # graph, stage D of `project/backlog/active/next_engine_plan.md`.
+            self._warned_material = True
+            logger.warning(
+                "A sprite batch has a material, which the wgpu renderer cannot "
+                "run yet (it is a GLSL shader); drawing the sprites without it. "
+                "Said once."
+            )
         transforms = batch.transforms_enabled
         self._gpu.sprites(
             self._frame.surface(surface, _smooth(batch.texture)),

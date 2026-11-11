@@ -518,6 +518,29 @@ class TestFiltering:
         assert frame.gpu.texture_count == before + 2
 
 
+class TestMaterials:
+    def test_a_material_is_drawn_without_and_said_once(
+        self, wgpu: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A GLSL program wgpu cannot run. The sprites must still draw, as
+        # on pygame, and the author must be told why their shader is absent.
+        batch = RenderBatch(
+            texture=_checker(),
+            destinations=[(20.0, 20.0), (60.0, 40.0)],
+            material=object(),  # type: ignore[arg-type]
+        )
+        plain = RenderBatch(texture=batch.texture, destinations=batch.destinations)
+
+        with caplog.at_level("WARNING"):
+            _, with_material = _frames(
+                wgpu, lambda r: (r.render_batch(batch), r.render_batch(batch))
+            )
+        _, without = _frames(wgpu, lambda r: r.render_batch(plain))
+
+        assert with_material == without
+        assert sum("material" in record.getMessage() for record in caplog.records) == 1
+
+
 class TestBounded:
     @pytest.mark.parametrize("radius", [6, 9, 11, 13, 21, 40, 70])
     def test_a_circles_edge(self, wgpu: Any, radius: int) -> None:
