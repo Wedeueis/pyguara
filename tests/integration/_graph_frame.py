@@ -325,7 +325,32 @@ def passthrough(backend: Backend) -> Any:
     return _post_process(backend, VignetteEffect(enabled=False))
 
 
+def pulse(backend: Backend) -> Any:
+    """`mourisco_ressonancia`'s wavefront rings, added over a lit light map."""
+    from games.mourisco_ressonancia.pulse_pass import PulsePass, PulseRing
+    from pyguara.common.types import Vector2
+    from pyguara.graphics.components.camera import Camera2D
+    from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME
+    from pyguara.graphics.pipeline.viewport import Viewport
+
+    lights(backend)
+    camera = Camera2D(WIDTH, HEIGHT)
+    camera.position = Vector2(WIDTH / 2, HEIGHT / 2)
+    rings = PulsePass()
+    rings.set_rings(
+        [
+            PulseRing(Vector2(30, 30), 24.0, (0.4, 0.9, 1.0), 1.5),
+            PulseRing(Vector2(60, 40), 14.0, (1.0, 0.5, 0.2), 0.8, thickness=0.2),
+            PulseRing(Vector2(80, 16), 6.0, (0.9, 0.9, 0.9), 2.0, thickness=0.02),
+        ]
+    )
+    rings.set_camera(camera, Viewport(0, 0, WIDTH, HEIGHT))
+    rings.execute(backend.graph.ctx, backend.graph)
+    return backend.graph.fbo_manager.get(LIGHT_FBO_NAME)
+
+
 CASES: dict[str, Callable[[Backend], Any]] = {
+    "pulse": pulse,
     "vignette": vignette,
     "bloom": bloom,
     "heat_haze": heat_haze,

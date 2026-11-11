@@ -649,16 +649,36 @@ class _GLInstanced:
             self._instances = self._ctx.buffer(
                 reserve=self._capacity * self.shader.stride
             )
-            layout = " ".join(f"{n}f" for n in self.shader.floats) + "/i"
-            names = [f"in_{a.name}" for a in self.shader.attributes]
+            per_instance = tuple(
+                (a.name, n)
+                for a, n in zip(self.shader.attributes, self.shader.floats, strict=True)
+            )
             self.vao = self._ctx.vertex_array(
                 self.program,
                 [
-                    (self._quad, "2f 2f", "in_vert", "in_uv"),
-                    (self._instances, layout, *names),
+                    self._binding(self._quad, (("vert", 2), ("uv", 2)), ""),
+                    self._binding(self._instances, per_instance, "/i"),
                 ],
             )
         self._instances.write(data)
+
+    def _binding(
+        self, buffer: Any, fields: tuple[tuple[str, int], ...], suffix: str
+    ) -> tuple[Any, ...]:
+        """Bind a buffer's fields by `in_<name>`, skipping what GLSL dropped.
+
+        A GL compiler strips an attribute the shader never reads, and
+        binding a stripped name fails outright -- `pulse_ring.vert` reads
+        no `in_uv`. Those bytes are skipped (`Nx`) instead.
+        """
+        layout, names = [], []
+        for name, floats in fields:
+            if f"in_{name}" in self.program:
+                layout.append(f"{floats}f")
+                names.append(f"in_{name}")
+            else:
+                layout.append(f"{floats * 4}x")
+        return (buffer, " ".join(layout) + suffix, *names)
 
     def release(self) -> None:
         """Release the GL objects."""
