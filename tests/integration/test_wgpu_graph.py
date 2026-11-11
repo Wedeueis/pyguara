@@ -18,6 +18,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -46,22 +47,41 @@ def _run(backend: str, case: str, out: Path) -> bytes:
     return out.read_bytes()
 
 
-def _worst(reference: bytes, actual: bytes) -> tuple[int, int]:
-    """How many pixels differ by more than `TOLERANCE`, and the largest gap."""
+# An HDR buffer is compared in its own units. Half floats carry about three
+# decimal digits, and two GPUs evaluating `pow` and `smoothstep` round
+# differently in the last of them: 1% of the value, or 0.004 near zero,
+# which is a little over one 8-bit step.
+HDR_ABSOLUTE = 0.004
+HDR_RELATIVE = 0.01
+
+
+def _worst(reference: bytes, actual: bytes) -> tuple[int, float, Any]:
+    """How many pixels differ beyond tolerance, the largest gap, and the image."""
     import numpy as np
 
-    a = np.frombuffer(reference, dtype=np.uint8).reshape(-1, 4).astype(np.int16)
-    b = np.frombuffer(actual, dtype=np.uint8).reshape(-1, 4).astype(np.int16)
-    gap = np.abs(a - b).max(axis=1)
-    return int((gap > TOLERANCE).sum()), int(gap.max())
+    if len(reference) == WIDTH * HEIGHT * 8:
+        a = np.frombuffer(reference, dtype="<f2").reshape(-1, 4).astype(np.float32)
+        b = np.frombuffer(actual, dtype="<f2").reshape(-1, 4).astype(np.float32)
+        gap = np.abs(a - b)
+        bad = (gap > HDR_ABSOLUTE + HDR_RELATIVE * np.abs(a)).any(axis=1)
+        return int(bad.sum()), float(gap.max()), a
+    a8 = np.frombuffer(reference, dtype=np.uint8).reshape(-1, 4).astype(np.int16)
+    b8 = np.frombuffer(actual, dtype=np.uint8).reshape(-1, 4).astype(np.int16)
+    gap8 = np.abs(a8 - b8).max(axis=1)
+    return int((gap8 > TOLERANCE).sum()), float(gap8.max()), a8
 
 
 @pytest.mark.integration
 @pytest.mark.parametrize("case", list(CASES))
 def test_the_pass_matches_moderngl(case: str, tmp_path: Path) -> None:
+    import numpy as np
+
     reference = _run("moderngl", case, tmp_path / "gl.rgba")
     actual = _run("wgpu", case, tmp_path / "wgpu.rgba")
 
-    assert len(reference) == len(actual) == WIDTH * HEIGHT * 4
-    differing, largest = _worst(reference, actual)
+    assert len(reference) == len(actual)
+    assert len(reference) in (WIDTH * HEIGHT * 4, WIDTH * HEIGHT * 8)
+    differing, largest, image = _worst(reference, actual)
+    # Not a blank pass compared with a blank pass.
+    assert len(np.unique(image, axis=0)) > 20, f"{case} drew almost nothing"
     assert differing == 0, f"{case}: {differing} pixels differ, by up to {largest}"

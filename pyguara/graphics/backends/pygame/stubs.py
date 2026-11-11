@@ -187,6 +187,11 @@ class PygameFramebufferManager:
         self._height = height
 
     @property
+    def device(self) -> None:
+        """Return None: there is no GPU behind the pygame backend."""
+        return None
+
+    @property
     def width(self) -> int:
         """Current viewport width."""
         return self._width

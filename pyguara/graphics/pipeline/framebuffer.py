@@ -195,6 +195,11 @@ class FramebufferManager:
         self._declared: dict[str, str] = {}
 
     @property
+    def device(self) -> GraphicsDevice:
+        """The device this manager's buffers are made on."""
+        return self._device
+
+    @property
     def width(self) -> int:
         """Current viewport width."""
         return self._width

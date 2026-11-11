@@ -30,7 +30,7 @@ from __future__ import annotations
 import contextlib
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -51,7 +51,7 @@ because the renderer leaves GL blending on and in that mode. `add` is the
 light accumulation. `replace` overwrites.
 """
 
-UniformKind = Literal["f32", "i32", "vec2", "vec3", "vec4"]
+UniformKind = Literal["f32", "i32", "vec2", "vec3", "vec4", "mat4"]
 
 # WGSL's uniform layout: (alignment, size) in bytes.
 _LAYOUT: dict[str, tuple[int, int]] = {
@@ -60,6 +60,7 @@ _LAYOUT: dict[str, tuple[int, int]] = {
     "vec2": (8, 8),
     "vec3": (16, 12),
     "vec4": (16, 16),
+    "mat4": (16, 64),
 }
 _WGSL_TYPE: dict[str, str] = {
     "f32": "f32",
@@ -67,7 +68,67 @@ _WGSL_TYPE: dict[str, str] = {
     "vec2": "vec2<f32>",
     "vec3": "vec3<f32>",
     "vec4": "vec4<f32>",
+    "mat4": "mat4x4<f32>",
 }
+# Floats in a per-instance attribute.
+_ATTRIBUTE_FLOATS: dict[str, int] = {"f32": 1, "vec2": 2, "vec3": 3, "vec4": 4}
+
+_Layout = tuple[tuple[str, str, int], ...]
+
+
+def _lay_out(uniforms: Sequence[Uniform]) -> _Layout:
+    """Place each uniform at its WGSL offset."""
+    offset = 0
+    layout = []
+    for uniform in uniforms:
+        align, size = _LAYOUT[uniform.kind]
+        offset = (offset + align - 1) // align * align
+        layout.append((uniform.name, uniform.kind, offset))
+        offset += size
+    return tuple(layout)
+
+
+def _layout_bytes(layout: _Layout) -> int:
+    """Size of a `Params` struct: rounded to 16, as uniform buffers are."""
+    if not layout:
+        return 0
+    _, kind, offset = layout[-1]
+    return (offset + _LAYOUT[kind][1] + 15) // 16 * 16
+
+
+def _pack(shader: str, layout: _Layout, values: Mapping[str, Any]) -> bytes:
+    """Lay `values` out as a `Params` struct; see `FullscreenShader.pack`."""
+    out = bytearray(_layout_bytes(layout))
+    for name, kind, offset in layout:
+        if name not in values:
+            raise KeyError(f"{shader}: no value for uniform '{name}'")
+        value = values[name]
+        if kind == "i32":
+            struct.pack_into("<i", out, offset, int(value))
+        elif kind == "f32":
+            struct.pack_into("<f", out, offset, float(value))
+        else:
+            count = 16 if kind == "mat4" else int(kind[-1])
+            floats = [float(v) for v in value]
+            if len(floats) != count:
+                raise ValueError(
+                    f"{shader}: uniform '{name}' is {count} floats, got {len(floats)}"
+                )
+            struct.pack_into(f"<{count}f", out, offset, *floats)
+    return bytes(out)
+
+
+def _params_preamble(layout: _Layout) -> list[str]:
+    """Declare the `Params` struct and its binding, if there are uniforms."""
+    if not layout:
+        return []
+    fields = ",\n".join(f"    {name}: {_WGSL_TYPE[kind]}" for name, kind, _ in layout)
+    return [
+        f"struct Params {{\n{fields},\n}};",
+        "@group(0) @binding(0) var<uniform> params: Params;",
+    ]
+
+
 _BLEND_CODE: dict[str, int] = {"replace": 0, "add": 1, "alpha": 2}
 
 _GLSL_DIR = Path(__file__).parent.parent / "backends" / "moderngl" / "shaders"
@@ -85,11 +146,30 @@ class Uniform:
     Attributes:
         name: Its name in both sources: a `uniform` in GLSL, a field of
             `params` in WGSL.
-        kind: Its type.
+        kind: Its type. A `mat4` is sixteen floats, column by column, as
+            GL and WGSL both store one.
     """
 
     name: str
     kind: UniformKind = "f32"
+
+
+@dataclass(frozen=True)
+class Attribute:
+    """One per-instance value an `InstancedShader` reads.
+
+    Attributes:
+        name: A field of `Instance` in WGSL; `in_<name>` in GLSL.
+        kind: `f32`, `vec2`, `vec3` or `vec4`.
+    """
+
+    name: str
+    kind: UniformKind = "f32"
+
+    def __post_init__(self) -> None:
+        """Refuse a kind that cannot be a vertex attribute."""
+        if self.kind not in _ATTRIBUTE_FLOATS:
+            raise ValueError(f"attribute '{self.name}' cannot be a {self.kind}")
 
 
 @dataclass(frozen=True, eq=False)
@@ -124,23 +204,12 @@ class FullscreenShader:
 
     def __post_init__(self) -> None:
         """Lay the uniforms out once."""
-        offset = 0
-        layout = []
-        for uniform in self.uniforms:
-            align, size = _LAYOUT[uniform.kind]
-            offset = (offset + align - 1) // align * align
-            layout.append((uniform.name, uniform.kind, offset))
-            offset += size
-        object.__setattr__(self, "_layout", tuple(layout))
+        object.__setattr__(self, "_layout", _lay_out(self.uniforms))
 
     @property
     def uniform_bytes(self) -> int:
         """Size of WGSL's `Params` struct: rounded to 16, as uniform buffers are."""
-        if not self._layout:
-            return 0
-        _, kind, offset = self._layout[-1]
-        end = offset + _LAYOUT[kind][1]
-        return (end + 15) // 16 * 16
+        return _layout_bytes(self._layout)
 
     def pack(self, values: Mapping[str, Any]) -> bytes:
         """Lay `values` out as WGSL's `Params` struct expects them.
@@ -154,20 +223,9 @@ class FullscreenShader:
 
         Raises:
             KeyError: If a uniform has no value, naming it.
+            ValueError: If a vector or matrix has the wrong number of floats.
         """
-        out = bytearray(self.uniform_bytes)
-        for name, kind, offset in self._layout:
-            if name not in values:
-                raise KeyError(f"{self.name}: no value for uniform '{name}'")
-            value = values[name]
-            if kind == "i32":
-                struct.pack_into("<i", out, offset, int(value))
-            elif kind == "f32":
-                struct.pack_into("<f", out, offset, float(value))
-            else:
-                count = int(kind[-1])
-                struct.pack_into(f"<{count}f", out, offset, *(float(v) for v in value))
-        return bytes(out)
+        return _pack(self.name, self._layout, values)
 
     def wgsl_source(self) -> str:
         """Assemble the complete WGSL module: preamble, vertex stage and `wgsl`.
@@ -177,13 +235,7 @@ class FullscreenShader:
         """
         if self.wgsl is None:
             raise ValueError(f"{self.name} has no WGSL source, so wgpu cannot run it")
-        lines = []
-        if self._layout:
-            fields = ",\n".join(
-                f"    {name}: {_WGSL_TYPE[kind]}" for name, kind, _ in self._layout
-            )
-            lines.append(f"struct Params {{\n{fields},\n}};")
-            lines.append("@group(0) @binding(0) var<uniform> params: Params;")
+        lines = _params_preamble(self._layout)
         lines.append("@group(0) @binding(1) var input_sampler: sampler;")
         for index, name in enumerate(self.inputs):
             lines.append(
@@ -209,6 +261,89 @@ fn vertex(@builtin(vertex_index) index: u32) -> Varying {
     out.position = vec4<f32>(corner * 2.0 - vec2<f32>(1.0, 1.0), 0.0, 1.0);
     out.uv = vec2<f32>(corner.x, 1.0 - corner.y);
     return out;
+}
+"""
+
+
+@dataclass(frozen=True, eq=False)
+class InstancedShader:
+    """Many quads, one per instance, each placed and shaded by the shader.
+
+    What a light pass is: a quad per light, sized by its radius, additively
+    blended. Compared by identity, like `FullscreenShader`.
+
+    Attributes:
+        name: For error messages and the cache.
+        attributes: The per-instance values, in the order a row packs them.
+        uniforms: Its uniforms, as for `FullscreenShader`.
+        wgsl: A `vertex` entry point taking `@builtin(vertex_index)` and an
+            `Instance`, and a `fragment` one; the preamble declares
+            `Params`, `Instance` and `quad_corner(index)`, which gives the
+            six corners of a unit quad centred on the origin, two triangles.
+        glsl_vertex: The GLSL vertex shader. It reads the unit quad as
+            `in_vert` (-0.5 to 0.5) and `in_uv` (0 to 1), and each
+            attribute as `in_<name>`.
+        glsl_fragment: The GLSL fragment shader.
+    """
+
+    name: str
+    attributes: tuple[Attribute, ...]
+    uniforms: tuple[Uniform, ...] = ()
+    wgsl: str | None = None
+    glsl_vertex: str | None = None
+    glsl_fragment: str | None = None
+    _layout: _Layout = field(init=False, repr=False, default=())
+
+    def __post_init__(self) -> None:
+        """Lay the uniforms out once."""
+        object.__setattr__(self, "_layout", _lay_out(self.uniforms))
+
+    @property
+    def uniform_bytes(self) -> int:
+        """Size of WGSL's `Params` struct."""
+        return _layout_bytes(self._layout)
+
+    @property
+    def floats(self) -> tuple[int, ...]:
+        """How many floats each attribute is."""
+        return tuple(_ATTRIBUTE_FLOATS[a.kind] for a in self.attributes)
+
+    @property
+    def stride(self) -> int:
+        """Bytes in one row of instance data."""
+        return 4 * sum(self.floats)
+
+    def pack(self, values: Mapping[str, Any]) -> bytes:
+        """Lay the uniforms out; see `FullscreenShader.pack`."""
+        return _pack(self.name, self._layout, values)
+
+    def wgsl_source(self) -> str:
+        """Assemble the complete WGSL module: preamble and `wgsl`.
+
+        Raises:
+            ValueError: If the shader has no WGSL source.
+        """
+        if self.wgsl is None:
+            raise ValueError(f"{self.name} has no WGSL source, so wgpu cannot run it")
+        lines = _params_preamble(self._layout)
+        fields = ",\n".join(
+            f"    @location({index}) {a.name}: {_WGSL_TYPE[a.kind]}"
+            for index, a in enumerate(self.attributes)
+        )
+        lines.append(f"struct Instance {{\n{fields},\n}};")
+        lines.append(_WGSL_QUAD)
+        lines.append(self.wgsl)
+        return "\n".join(lines)
+
+
+# The unit quad as two triangles, the same square GL's triangle strip covers.
+_WGSL_QUAD = """
+fn quad_corner(index: u32) -> vec2<f32> {
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(-0.5, -0.5), vec2<f32>(0.5, -0.5), vec2<f32>(0.5, 0.5),
+        vec2<f32>(-0.5, -0.5), vec2<f32>(0.5, 0.5), vec2<f32>(-0.5, 0.5),
+    );
+    return corners[index];
 }
 """
 
@@ -275,6 +410,45 @@ class GraphicsDevice(ABC):
             clear: Clear all of `output` to this first.
         """
 
+    @abstractmethod
+    def draw_instanced(
+        self,
+        shader: InstancedShader,
+        data: bytes,
+        count: int,
+        uniforms: Mapping[str, Any],
+        output: Framebuffer,
+        *,
+        blend: Blend = "alpha",
+    ) -> None:
+        """Draw `count` quads into `output`, one per row of `data`.
+
+        Afterwards `output` is where drawing goes, as for `run`.
+
+        Args:
+            shader: What to draw them with.
+            data: `count` rows of `shader.stride` bytes: each attribute's
+                floats, little-endian, in order.
+            count: How many.
+            uniforms: A value for each of `shader.uniforms`, by name.
+            output: Where to draw.
+            blend: How to combine with what `output` holds.
+        """
+
+    @abstractmethod
+    def clear(
+        self, buffer: Framebuffer, rgba: tuple[float, float, float, float]
+    ) -> None:
+        """Clear a buffer to a colour given in floats, which may exceed 1.0.
+
+        `Framebuffer.clear` takes 0-255 channels, which cannot say "1.4"
+        to an HDR buffer; an ambient light can.
+
+        Args:
+            buffer: The buffer.
+            rgba: Red, green, blue and alpha.
+        """
+
     def release(self) -> None:
         """Release compiled shaders. Buffers belong to their manager."""
 
@@ -310,6 +484,7 @@ class ModernGLDevice(GraphicsDevice):
         # Keyed on the shader's identity, holding the shader too so the id
         # cannot be reused while its program lives.
         self._programs: dict[int, tuple[FullscreenShader, Any, Any]] = {}
+        self._instanced: dict[int, _GLInstanced] = {}
 
     @property
     def ctx(self) -> moderngl.Context:
@@ -352,8 +527,6 @@ class ModernGLDevice(GraphicsDevice):
         clear: Color | None = None,
     ) -> None:
         """Bind, set and draw, as the passes did by hand."""
-        from pyguara.graphics.backends.moderngl.blend import BlendMode, blending
-
         program, vao = self._program(shader)
         if output is None:
             screen = self._ctx.screen
@@ -374,22 +547,60 @@ class ModernGLDevice(GraphicsDevice):
             _set(program, name, unit)
         for uniform in shader.uniforms:
             _set(program, uniform.name, uniforms[uniform.name])
+        self._draw(blend, lambda: vao.render(mode=self._ctx.TRIANGLE_STRIP, vertices=4))
+
+    def _draw(self, blend: Blend, render: Callable[[], None]) -> None:
+        """Render under `blend`, leaving the renderer's default mode after."""
+        from pyguara.graphics.backends.moderngl.blend import (
+            DEFAULT_BLEND_MODE,
+            BlendMode,
+            apply_blend_mode,
+            blending,
+        )
+
         if blend == "add":
             with blending(self._ctx, BlendMode.ADDITIVE):
-                vao.render(mode=self._ctx.TRIANGLE_STRIP, vertices=4)
+                render()
         elif blend == "replace":
             self._ctx.disable(self._ctx.BLEND)
             try:
-                vao.render(mode=self._ctx.TRIANGLE_STRIP, vertices=4)
+                render()
             finally:
-                from pyguara.graphics.backends.moderngl.blend import (
-                    DEFAULT_BLEND_MODE,
-                    apply_blend_mode,
-                )
-
                 apply_blend_mode(self._ctx, DEFAULT_BLEND_MODE)
         else:
-            vao.render(mode=self._ctx.TRIANGLE_STRIP, vertices=4)
+            render()
+
+    def draw_instanced(
+        self,
+        shader: InstancedShader,
+        data: bytes,
+        count: int,
+        uniforms: Mapping[str, Any],
+        output: Framebuffer,
+        *,
+        blend: Blend = "alpha",
+    ) -> None:
+        """Bind `output`, upload the rows and draw a triangle strip each."""
+        output.bind()
+        if count == 0:
+            return
+        drawn = self._instanced.get(id(shader))
+        if drawn is None:
+            drawn = _GLInstanced(self._ctx, shader)
+            self._instanced[id(shader)] = drawn
+        drawn.upload(data, count)
+        for uniform in shader.uniforms:
+            _set(drawn.program, uniform.name, uniforms[uniform.name])
+        self._draw(
+            blend,
+            lambda: drawn.vao.render(mode=self._ctx.TRIANGLE_STRIP, instances=count),
+        )
+
+    def clear(
+        self, buffer: Framebuffer, rgba: tuple[float, float, float, float]
+    ) -> None:
+        """Clear the framebuffer object directly, in floats."""
+        buffer.fbo.clear(*rgba)
 
     def release(self) -> None:
         """Release every compiled program."""
@@ -397,6 +608,65 @@ class ModernGLDevice(GraphicsDevice):
             vao.release()
             program.release()
         self._programs.clear()
+        for drawn in self._instanced.values():
+            drawn.release()
+        self._instanced.clear()
+
+
+class _GLInstanced:
+    """An `InstancedShader`'s program, unit quad and instance buffer in GL."""
+
+    def __init__(self, ctx: moderngl.Context, shader: InstancedShader) -> None:
+        if shader.glsl_vertex is None or shader.glsl_fragment is None:
+            raise ValueError(
+                f"{shader.name} has no GLSL source, so ModernGL cannot run it"
+            )
+        import numpy as np
+
+        self._ctx = ctx
+        self.shader = shader
+        self.program = ctx.program(
+            vertex_shader=shader.glsl_vertex, fragment_shader=shader.glsl_fragment
+        )
+        # The unit quad as a strip: position (-0.5..0.5) and uv (0..1).
+        self._quad = ctx.buffer(
+            np.array(
+                [-0.5, -0.5, 0, 0, 0.5, -0.5, 1, 0, -0.5, 0.5, 0, 1, 0.5, 0.5, 1, 1],
+                dtype="f4",
+            ).tobytes()
+        )
+        self._capacity = 0
+        self._instances: Any = None
+        self.vao: Any = None
+
+    def upload(self, data: bytes, count: int) -> None:
+        """Write the rows, growing the buffer and its VAO when they do not fit."""
+        if count > self._capacity:
+            if self.vao is not None:
+                self.vao.release()
+                self._instances.release()
+            self._capacity = max(64, 1 << (count - 1).bit_length())
+            self._instances = self._ctx.buffer(
+                reserve=self._capacity * self.shader.stride
+            )
+            layout = " ".join(f"{n}f" for n in self.shader.floats) + "/i"
+            names = [f"in_{a.name}" for a in self.shader.attributes]
+            self.vao = self._ctx.vertex_array(
+                self.program,
+                [
+                    (self._quad, "2f 2f", "in_vert", "in_uv"),
+                    (self._instances, layout, *names),
+                ],
+            )
+        self._instances.write(data)
+
+    def release(self) -> None:
+        """Release the GL objects."""
+        if self.vao is not None:
+            self.vao.release()
+            self._instances.release()
+        self._quad.release()
+        self.program.release()
 
 
 class WgpuFramebuffer:
@@ -481,9 +751,13 @@ class WgpuFramebuffer:
 
     def clear(self, color: Color) -> None:
         """Clear to a colour, leaving drawing going where it was going."""
+        self.clear_rgba(tuple(channel / 255 for channel in _rgba(color)))
+
+    def clear_rgba(self, rgba: tuple[float, ...]) -> None:
+        """Clear to a colour in floats, which may exceed 1.0 in an HDR buffer."""
         previous = self._gpu.current_target
         self._gpu.set_target(self._id())
-        self._gpu.clear_target(*(channel / 255 for channel in _rgba(color)))
+        self._gpu.clear_target(*rgba)
         self._gpu.set_target(previous)
 
     def resize(self, width: int, height: int) -> None:
@@ -511,7 +785,7 @@ class WgpuDevice(GraphicsDevice):
         """
         self._frame = frame
         self._gpu = frame.gpu
-        self._effects: dict[int, tuple[FullscreenShader, int]] = {}
+        self._effects: dict[int, tuple[FullscreenShader | InstancedShader, int]] = {}
 
     @property
     def ctx(self) -> None:
@@ -528,15 +802,49 @@ class WgpuDevice(GraphicsDevice):
         buffer: Any = WgpuFramebuffer(self._frame, name, width, height, dtype)
         return buffer  # type: ignore[no-any-return]
 
-    def _effect(self, shader: FullscreenShader) -> int:
+    def _effect(self, shader: FullscreenShader | InstancedShader) -> int:
         found = self._effects.get(id(shader))
         if found is None:
-            effect = self._gpu.create_effect(
-                shader.wgsl_source(), len(shader.inputs), shader.uniform_bytes
-            )
+            if isinstance(shader, InstancedShader):
+                effect = self._gpu.create_effect(
+                    shader.wgsl_source(), 0, shader.uniform_bytes, list(shader.floats)
+                )
+            else:
+                effect = self._gpu.create_effect(
+                    shader.wgsl_source(), len(shader.inputs), shader.uniform_bytes
+                )
             found = (shader, effect)
             self._effects[id(shader)] = found
         return found[1]
+
+    def draw_instanced(
+        self,
+        shader: InstancedShader,
+        data: bytes,
+        count: int,
+        uniforms: Mapping[str, Any],
+        output: Framebuffer,
+        *,
+        blend: Blend = "alpha",
+    ) -> None:
+        """Queue the quads in the native frame, then draw into `output`."""
+        target = _target_of(output)
+        self._gpu.instanced(
+            self._effect(shader),
+            target,
+            data,
+            count,
+            shader.pack(uniforms),
+            _BLEND_CODE[blend],
+        )
+        self._gpu.set_target(target)
+
+    def clear(
+        self, buffer: Framebuffer, rgba: tuple[float, float, float, float]
+    ) -> None:
+        """Clear a buffer in the native frame, in floats."""
+        target: Any = buffer
+        target.clear_rgba(rgba)
 
     def run(
         self,

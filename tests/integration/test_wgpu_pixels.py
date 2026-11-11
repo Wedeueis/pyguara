@@ -610,6 +610,27 @@ class TestEffects:
         with pytest.raises(ValueError, match="cannot read the target it writes"):
             frame.gpu.fullscreen(effect, target, [target], b"")
 
+    def test_instance_rows_must_fill_whole_instances(self, wgpu: Any) -> None:
+        from pyguara.graphics.pipeline.device import Attribute, InstancedShader
+
+        frame = wgpu.GpuFrame(16, 16)
+        shader = InstancedShader(
+            "dots",
+            attributes=(Attribute("pos", "vec2"),),
+            wgsl="@vertex fn vertex(@builtin(vertex_index) i: u32, d: Instance) "
+            "-> @builtin(position) vec4<f32> "
+            "{ return vec4<f32>(quad_corner(i) + d.pos, 0.0, 1.0); }\n"
+            "@fragment fn fragment() -> @location(0) vec4<f32> "
+            "{ return vec4<f32>(1.0); }",
+        )
+        effect = frame.gpu.create_effect(shader.wgsl_source(), 0, 0, [2])
+        target = frame.gpu.create_target(16, 16)
+
+        with pytest.raises(ValueError, match="2 instances of 8 bytes are 16 bytes"):
+            frame.gpu.instanced(effect, target, b"\0" * 12, 2, b"")
+        with pytest.raises(ValueError, match="drawn with instanced"):
+            frame.gpu.fullscreen(effect, target, [], b"")
+
     def test_drawing_into_a_target_leaves_the_screen_alone(self, wgpu: Any) -> None:
         frame = wgpu.GpuFrame(16, 16)
         renderer = wgpu.WgpuRenderer(frame)

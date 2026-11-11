@@ -44,9 +44,9 @@ def picture() -> bytes:
     return b"".join(rows)
 
 
-def flip(rows: bytes, width: int, height: int) -> bytes:
-    """Reverse the row order of a tightly packed RGBA image."""
-    stride = width * 4
+def flip(rows: bytes, width: int, height: int, texel: int = 4) -> bytes:
+    """Reverse the row order of a tightly packed image of `texel`-byte pixels."""
+    stride = width * texel
     return b"".join(
         rows[y * stride : (y + 1) * stride] for y in reversed(range(height))
     )
@@ -62,7 +62,10 @@ class Backend:
         raise NotImplementedError
 
     def read(self, buffer: Any) -> bytes:
-        """Return a buffer as top-row-first RGBA, once the frame is drawn."""
+        """Return a buffer as top-row-first RGBA, once the frame is drawn.
+
+        Bytes for an 8-bit buffer; little-endian half floats for an HDR one.
+        """
         raise NotImplementedError
 
 
@@ -88,6 +91,9 @@ class GL(Backend):
         buffer.texture.write(flip(pixels, buffer.width, buffer.height))
 
     def read(self, buffer: Any) -> bytes:
+        if buffer.dtype == "f2":
+            data = buffer.fbo.read(components=4, dtype="f2")
+            return flip(data, buffer.width, buffer.height, texel=8)
         data = buffer.fbo.read(components=4)
         return flip(data, buffer.width, buffer.height)
 
@@ -162,10 +168,97 @@ def composite_unlit(backend: Backend) -> Any:
     return out
 
 
+def _lighting() -> Any:
+    """A lit scene: overlapping and HDR point lights, a cone, a sun, ambient."""
+    from pyguara.common.components import Transform
+    from pyguara.common.types import Color, Vector2
+    from pyguara.ecs.manager import EntityManager
+    from pyguara.graphics.lighting.components import (
+        AmbientLight,
+        LightSource,
+        LightType,
+    )
+    from pyguara.graphics.lighting.light_system import LightingSystem
+
+    world = EntityManager()
+
+    def light(x: float, y: float, source: Any) -> None:
+        entity = world.create_entity()
+        entity.add_component(Transform(position=Vector2(x, y)))
+        entity.add_component(source)
+
+    light(28, 30, LightSource(color=Color(255, 80, 40), radius=26.0))
+    # Overlaps the first, and at 2.5 needs the HDR map to hold it.
+    light(
+        44, 36,
+        LightSource(color=Color(40, 120, 255), radius=22.0, intensity=2.5, falloff=1.0),
+    )  # fmt: skip
+    # Aimed down and to the right: upside down, it would point up.
+    light(
+        70, 18,
+        LightSource(
+            color=Color(255, 255, 255),
+            radius=20.0,
+            light_type=LightType.SPOT,
+            spot_angle=50.0,
+            spot_direction=60.0,
+        ),
+    )  # fmt: skip
+    light(
+        84, 52,
+        LightSource(
+            color=Color(200, 255, 120),
+            radius=9.0,
+            intensity=0.5,
+            light_type=LightType.DIRECTIONAL,
+        ),
+    )  # fmt: skip
+    world.create_entity().add_component(
+        AmbientLight(color=Color(30, 40, 60), intensity=0.5)
+    )
+    lighting = LightingSystem(world)
+    lighting.update(0.0)
+    return lighting
+
+
+def lights(backend: Backend) -> Any:
+    """The light map `LightPass` draws: additive quads over ambient, in HDR."""
+    from pyguara.common.types import Vector2
+    from pyguara.graphics.components.camera import Camera2D
+    from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME
+    from pyguara.graphics.pipeline.passes import LightPass
+    from pyguara.graphics.pipeline.viewport import Viewport
+
+    camera = Camera2D(WIDTH, HEIGHT)
+    camera.position = Vector2(WIDTH / 2, HEIGHT / 2)
+    light_pass = LightPass(backend.graph.ctx, _lighting())
+    light_pass.set_camera(camera, Viewport(0, 0, WIDTH, HEIGHT))
+    light_pass.execute(backend.graph.ctx, backend.graph)
+    return backend.graph.fbo_manager.get(LIGHT_FBO_NAME)
+
+
+def lit(backend: Backend) -> Any:
+    """The picture lit by that light map: light, then composite, end to end."""
+    from pyguara.graphics.pipeline.passes import CompositePass
+
+    manager = backend.graph.fbo_manager
+    world = manager.get_or_create("w", dtype="f1")
+    out = manager.get_or_create("out", dtype="f1")
+    backend.fill(world, picture())
+    lights(backend)
+    CompositePass(world_fbo_name="w", output_fbo_name="out").execute(
+        backend.graph.ctx, backend.graph
+    )
+    return out
+
+
 CASES: dict[str, Callable[[Backend], Any]] = {
     "composite": composite,
     "composite_unlit": composite_unlit,
+    "lights": lights,
+    "lit": lit,
 }
+"""Each case returns the buffer to compare: 8-bit as bytes, HDR as floats."""
 
 
 def main() -> None:

@@ -37,13 +37,14 @@ _CENTRE = _SIZE // 2
 
 
 class _Graph:
-    """The one thing `LightPass.execute` reads off a render graph."""
+    """What `LightPass.execute` reads off a render graph: buffers, and a device."""
 
     def __init__(self, fbo_manager: FramebufferManager) -> None:
         self.fbo_manager = fbo_manager
+        self.device = fbo_manager.device
 
 
-def render_light(gl_ctx: Any, light: LightSource) -> np.ndarray:
+def render_light(gl_ctx: Any, light: LightSource, *others: LightSource) -> np.ndarray:
     """Draw one light into the lightmap and return the pixels.
 
     The light sits at the centre of the frame with the camera centred on
@@ -57,6 +58,10 @@ def render_light(gl_ctx: Any, light: LightSource) -> np.ndarray:
     entity = entity_manager.create_entity()
     entity.add_component(Transform(position=Vector2(_CENTRE, _CENTRE)))
     entity.add_component(light)
+    for other in others:
+        extra = entity_manager.create_entity()
+        extra.add_component(Transform(position=Vector2(_CENTRE, _CENTRE)))
+        extra.add_component(other)
 
     lighting = LightingSystem(entity_manager)
     lighting.update(0.0)
@@ -244,3 +249,24 @@ class TestTypesDiffer:
         point = images[LightType.POINT]
         assert not np.array_equal(point, images[LightType.SPOT])
         assert not np.array_equal(point, images[LightType.DIRECTIONAL])
+
+
+class TestLightsAccumulate:
+    """Overlapping lights add up; they do not paint over each other.
+
+    The blend mode is the pass's own choice, shared by every backend, so
+    the wgpu-against-ModernGL comparison cannot catch it changing: both
+    sides would change together. This is what does.
+    """
+
+    def test_two_half_lights_are_one_whole_light(self, gl_ctx: Any) -> None:
+        half = dict(color=Color(255, 0, 0), radius=60.0, intensity=0.5)
+
+        whole = render_light(gl_ctx, LightSource(**{**half, "intensity": 1.0}))
+        pair = render_light(gl_ctx, LightSource(**half), LightSource(**half))
+
+        assert whole[_CENTRE, _CENTRE, 0] > 200
+        assert (
+            abs(int(pair[_CENTRE, _CENTRE, 0]) - int(whole[_CENTRE, _CENTRE, 0])) <= 2
+        )
+        assert abs(at_angle(pair, 0, 20) - at_angle(whole, 0, 20)) <= 2
