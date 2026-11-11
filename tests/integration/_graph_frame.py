@@ -349,7 +349,68 @@ def pulse(backend: Backend) -> Any:
     return backend.graph.fbo_manager.get(LIGHT_FBO_NAME)
 
 
+def _shape_rows() -> dict[str, list[list[float]]]:
+    """Rows for every branch of the shape shader, in `ShapeBatch`'s layout.
+
+    Centre, padded half-size, rotation, colour (0-1), stroke, kind.
+    """
+    import math
+
+    rect, circle, line = 0.0, 1.0, 2.0
+    return {
+        "rects": [
+            [20, 16, 10, 7, 0.0, 1.0, 0.3, 0.2, 1.0, 0.0, rect],
+            [50, 18, 12.5, 8.5, 0.5, 0.2, 0.8, 1.0, 1.0, 3.0, rect],
+            [78, 46, 9, 9, -0.3, 0.9, 0.9, 0.2, 0.6, 0.0, rect],
+        ],
+        "circles": [
+            [24, 44, 11, 11, 0.0, 0.4, 1.0, 0.5, 1.0, 0.0, circle],
+            [52, 46, 9.5, 9.5, 0.0, 1.0, 0.5, 0.9, 1.0, 3.0, circle],
+            [70, 20, 3.2, 3.2, 0.0, 1.0, 1.0, 1.0, 0.5, 0.0, circle],
+        ],
+        "lines": [
+            # Off the half-pixel: an edge through pixel centres is a
+            # tie-break between GPUs, not a test of the port.
+            [48, 32.2, 30 + 1.5, 1.5, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, line],
+            [48, 32, 25 + 2.5, 2.5, math.pi / 5, 1.0, 0.6, 0.1, 0.8, 0.0, line],
+            [30, 52, 12 + 1, 1, -1.2, 0.3, 0.9, 1.0, 1.0, 0.0, line],
+        ],
+    }
+
+
+def shapes(backend: Backend) -> Any:
+    """A `ShapeBatch` of each kind, through each backend's own world renderer."""
+    from pyguara.common.types import Color
+    from pyguara.graphics.types import ShapeBatch, ShapeKind
+
+    manager = backend.graph.fbo_manager
+    out = manager.get_or_create("out", dtype="f1")
+    out.clear(Color(20, 30, 40, 255))
+    rows = _shape_rows()
+    batches = [
+        ShapeBatch(ShapeKind.RECT, rows["rects"]),
+        ShapeBatch(ShapeKind.CIRCLE, rows["circles"]),
+        ShapeBatch(ShapeKind.LINE, rows["lines"]),
+    ]
+    if isinstance(backend, GL):
+        from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+
+        renderer: Any = ModernGLRenderer(backend.ctx, WIDTH, HEIGHT)
+        out.bind()
+        for batch in batches:
+            renderer.render_shapes(batch)
+        renderer.end_frame()
+    else:
+        assert isinstance(backend, WGPU)
+        out.bind()
+        for batch in batches:
+            backend.renderer.render_shapes(batch)
+        out.unbind()
+    return out
+
+
 CASES: dict[str, Callable[[Backend], Any]] = {
+    "shapes": shapes,
     "pulse": pulse,
     "vignette": vignette,
     "bloom": bloom,

@@ -102,6 +102,11 @@ class TestShapeBatchRendererIsACapability:
 
         assert hasattr(ModernGLRenderer, "render_shapes")
 
+    def test_the_wgpu_renderer_satisfies_it(self) -> None:
+        from pyguara.graphics.backends.wgpu.renderer import WgpuRenderer
+
+        assert hasattr(WgpuRenderer, "render_shapes")
+
     def test_the_pygame_backend_does_not(self) -> None:
         from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
 

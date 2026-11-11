@@ -344,9 +344,8 @@ class Sparks:
         half and 13-20x on the frame.
 
         A renderer that cannot batch gets one call per spark, as before --
-        the ModernGL world renderer is the only backend where batching is
-        free, and a software backend would be doing this loop internally
-        anyway. The arithmetic is still native, which is the 1.9x that
+        batching is free only on the GPU world renderers (ModernGL, wgpu),
+        and a software backend would be doing this loop internally anyway. The arithmetic is still native, which is the 1.9x that
         remains.
 
         Args:

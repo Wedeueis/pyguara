@@ -23,7 +23,7 @@ import math
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.surface_texture import as_surface
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
-from pyguara.graphics.types import RenderBatch
+from pyguara.graphics.types import RenderBatch, ShapeBatch
 from pyguara.log import get_logger
 from pyguara.resources.types import Texture
 
@@ -52,6 +52,7 @@ class WgpuRenderer:
         self._frame = frame
         self._gpu = frame.gpu
         self._warned_material = False
+        self._shapes: int | None = None
 
     @property
     def width(self) -> int:
@@ -211,6 +212,36 @@ class WgpuRenderer:
             batch.rotations if transforms else None,
             batch.scales if transforms else None,
             batch.colors if batch.colors_enabled else None,
+        )
+
+    def render_shapes(self, batch: ShapeBatch) -> None:
+        """Draw many primitives of one kind in one instanced call.
+
+        The rows are `shape.vert`'s instance layout already, so they go to
+        the GPU as they are. Drawn in order with everything pushed around
+        them, into whatever target is current. See `shapes.py` for whose
+        conventions these follow, and why.
+        """
+        import numpy as np
+
+        from pyguara.graphics.backends.wgpu.shapes import SHAPES
+        from pyguara.graphics.pipeline.passes.light_pass import projection
+
+        if not batch.instances:
+            return
+        if self._shapes is None:
+            self._shapes = self._gpu.create_effect(
+                SHAPES.wgsl_source(), 0, SHAPES.uniform_bytes, list(SHAPES.floats)
+            )
+        rows = np.asarray(batch.instances, dtype="<f4")
+        width, height = self._gpu.current_size
+        self._gpu.instanced(
+            self._shapes,
+            self._gpu.current_target,
+            rows.tobytes(),
+            len(rows),
+            SHAPES.pack({"u_projection": projection(width, height)}),
+            2,  # alpha, as every shape is blended
         )
 
     def resize(self, width: int, height: int) -> None:

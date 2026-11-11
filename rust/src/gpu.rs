@@ -1370,6 +1370,12 @@ impl NativeGpu {
         self.current
     }
 
+    /// The size of the target pushes go to, in pixels.
+    #[getter]
+    fn current_size(&self) -> (u32, u32) {
+        self.target_size(self.current)
+    }
+
     /// How many targets exist, the main one included.
     #[getter]
     fn target_count(&self) -> usize {

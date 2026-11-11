@@ -65,8 +65,14 @@ def _worst(reference: bytes, actual: bytes) -> tuple[int, float, Any]:
         gap = np.abs(a - b)
         bad = (gap > HDR_ABSOLUTE + HDR_RELATIVE * np.abs(a)).any(axis=1)
         return int(bad.sum()), float(gap.max()), a
-    a8 = np.frombuffer(reference, dtype=np.uint8).reshape(-1, 4).astype(np.int16)
-    b8 = np.frombuffer(actual, dtype=np.uint8).reshape(-1, 4).astype(np.int16)
+    # Colour only. A buffer's own alpha is a known, deliberate divergence:
+    # GL blends alpha with the colour's factors, so drawing something
+    # translucent into a buffer lowers the buffer's alpha (and the final
+    # blit then lets the window's last frame through); wgpu blends alpha as
+    # `one, one - src_alpha` and keeps an opaque buffer opaque. See the
+    # stage D entries in `.claude/decision-log.md`.
+    a8 = np.frombuffer(reference, dtype=np.uint8).reshape(-1, 4)[:, :3].astype(np.int16)
+    b8 = np.frombuffer(actual, dtype=np.uint8).reshape(-1, 4)[:, :3].astype(np.int16)
     gap8 = np.abs(a8 - b8).max(axis=1)
     return int((gap8 > TOLERANCE).sum()), float(gap8.max()), a8
 
@@ -82,6 +88,10 @@ def test_the_pass_matches_moderngl(case: str, tmp_path: Path) -> None:
     assert len(reference) == len(actual)
     assert len(reference) in (WIDTH * HEIGHT * 4, WIDTH * HEIGHT * 8)
     differing, largest, image = _worst(reference, actual)
-    # Not a blank pass compared with a blank pass.
-    assert len(np.unique(image, axis=0)) > 20, f"{case} drew almost nothing"
+    # Not a blank pass compared with a blank pass: at least 5% of the image
+    # differs from its most common colour.
+    colours, counts = np.unique(image, axis=0, return_counts=True)
+    background = colours[counts.argmax()]
+    drawn = int((image != background).any(axis=1).sum())
+    assert drawn > 0.05 * len(image), f"{case} drew almost nothing ({drawn} pixels)"
     assert differing == 0, f"{case}: {differing} pixels differ, by up to {largest}"

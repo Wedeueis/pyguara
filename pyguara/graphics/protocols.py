@@ -227,10 +227,11 @@ class ShapeBatchRenderer(Protocol):
     satisfies it structurally, and one that cannot simply does not, which
     is what a caller tests with `isinstance`.
 
-    Only the ModernGL world renderer satisfies it today, because it is the
-    only backend where batching is free: its shape instances are already
-    accumulated per kind and drawn with one instanced call each, so a batch
-    is an `extend` of a list it is already holding. A software backend
+    The two GPU world renderers satisfy it, because batching is free there:
+    ModernGL already accumulates shape instances per kind and draws each
+    kind with one instanced call, so a batch is an `extend` of a list it is
+    holding; wgpu uploads the rows as they are and draws them in one
+    instanced step (`backends/wgpu/shapes.py`). A software backend
     would have to loop over the rows and draw them one at a time, which is
     what its caller was doing anyway -- so it gains nothing by claiming the
     capability, and claiming it would hide that fact.

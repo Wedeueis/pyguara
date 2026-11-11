@@ -659,8 +659,8 @@ entities, prices at 15x.
 `Sparks` also added `ShapeBatch` and the `ShapeBatchRenderer` capability
 (`pyguara/graphics/types.py`, `protocols.py`), because a spark is one
 primitive and 55-73% of a Python spark frame is `draw_circle`/`draw_line`
-call overhead. Only the ModernGL world renderer takes a batch; every other
-renderer keeps the per-primitive path, and `tests/test_graphics_protocol_conformance.py`
+call overhead. The ModernGL and wgpu world renderers take a batch; every
+other renderer keeps the per-primitive path, and `tests/test_graphics_protocol_conformance.py`
 asserts both halves of that on purpose.
 
 The crate is wired into `pyproject.toml` through maturin, which puts the
