@@ -52,6 +52,7 @@ GL on Linux, WebGPU in the browser), behind the existing `IRenderer`,
 | --- | --- | --- |
 | **A** | Native core: one instanced pipeline for rectangles, circles, lines and textured quads. `IRenderer` and `UIRenderer` on top, text rasterised by `pygame.font` and cached as textures | **Done.** Held to the pygame renderer's pixels by `tests/integration/test_wgpu_pixels.py`; a Reclaimer frame differs in 10 to 14 pixels of 960,000 |
 | **B** | A swapchain on the SDL window's native handle, with the offscreen copy kept as the fallback and for capture | **Done, and measured on native Windows (2026-11-10).** DX12 on an RTX 3050, presenting straight to the Win32 window: 400 rectangles at 1280x720 cost 0.52 ms a frame (push 0.16, render 0.13, present 0.22) against 1.39 ms for pygame's software renderer, 2.7x faster. On WSL the same frame costs about 10 ms, which is the GL-over-D3D12 translation layer, not the backend. At 4000 rectangles: 2.00 ms (push 1.60, render 0.17, present 0.23) against 7.50 ms, 3.75x. The GPU side is flat; what grows is push, about 0.4 us of Python per primitive, which is workstream 2's cost. The Win32 handle path, unrun until now, works |
+| **B, in a game** | Reclaimer's own frame on native Windows (DX12, RTX 3050), vsync off, enemy count held | **Measured 2026-11-10.** 24 enemies: 4.34 ms to 1.67 ms (p95 6.13 to 1.84). 200 enemies: 7.94 ms to 4.87 ms (p95 9.71 to 5.43); `draw_world` 2.64 to 1.46 ms. At 200 the frame is now mostly the simulation tick, not drawing |
 | **C** | Sprites through the render system: `ShapeBatch`, filtering, materials. `render_batch` and `draw_texture` already work | The visual snapshot suite and the demos |
 | **D** | The render graph on wgpu: offscreen buffers, lighting, post-processing | `true_coral`, `protocolo_bandeira`, `mourisco_ressonancia` |
 | **E** | ModernGL retired; Studio's viewport moved | Nothing imports `moderngl` |
@@ -71,6 +72,11 @@ wgpu wants the window's view where SDL reports the window.
 primitives is 1.60 ms of Python handing them over against 0.40 ms of GPU
 work. With the renderer native, the per-primitive call is the frame's
 largest drawing cost, which is the case this section was waiting for.
+
+But in Reclaimer itself, on the same machine, `draw_world` is 1.46 ms of a
+4.87 ms frame at 200 enemies, and about 1 ms of that is the view's own
+Python. The ceiling for a batch call there is about half a millisecond, so
+this stays deferred until a game draws thousands of primitives.
 
 **Measured before building, 2026-11-10, and deferred.** At 200 enemies
 `draw_world` is 2.6 ms of a 6.6 ms frame: about 1.5 ms inside the
