@@ -252,3 +252,15 @@
 - **Alternatives:** make wgpu blend alpha as GL does; or compare colour and state the divergence.
 - **Chose:** colour. GL lowering a buffer's alpha under translucent draws is the worse behaviour (the final blit then shows the window's previous frame through), and imitating it would make wgpu wrong to make the test pass.
 - **Tags:** renderer, testing, parity
+
+## Sprite materials: the author writes one function, the engine owns the vertex stage
+- **Context:** The user asked for per-sprite shaders after materials had been deferred.
+- **Alternatives:** let a material supply its own vertex shader, as the ModernGL `Shader` route allows; or a fragment-only `material(sprite)` on the engine's vertex stage.
+- **Chose:** fragment-only. A material sprite is then placed, batched and ordered exactly as a plain one, which is what lets each material be tested against a plain draw byte for byte; a custom vertex stage is a later addition if a game needs one. Natively a material is a pipeline variant with a third bind group, carried per run.
+- **Tags:** renderer, materials, api
+
+## Test materials against plain draws on the same backend, not across backends
+- **Context:** GL and wgpu place sprites by different conventions (wgpu follows pygame).
+- **Alternatives:** compare material sprites between backends with a tolerance; or choose material functions whose output a plain draw can also produce.
+- **Chose:** the latter, on each backend: identity, inverted texture, uniform tint vs per-sprite tint, mask vs pre-masked texture. Exact, and a dropped tint in the native wrapper fails it.
+- **Tags:** testing, materials
