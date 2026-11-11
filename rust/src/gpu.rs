@@ -45,6 +45,20 @@ const KIND_CIRCLE: f32 = 1.0;
 const KIND_ROUNDED: f32 = 2.0;
 
 const TARGET_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+/// A target that holds values above 1.0, for the render graph's chain.
+const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+/// The target the frame is presented from, and drawn to by default.
+const MAIN: u32 = 0;
+
+/// Stride of one draw step's globals in the uniform buffer: the minimum
+/// dynamic-offset alignment every adapter accepts.
+const GLOBALS_STRIDE: u64 = 256;
+
+/// How a fullscreen pass combines with what its target already holds.
+const BLEND_REPLACE: u8 = 0;
+const BLEND_ADD: u8 = 1;
+const BLEND_ALPHA: u8 = 2;
 
 const SHADER: &str = r"
 struct Globals { size: vec2<f32>, pad: vec2<f32> };
@@ -250,6 +264,47 @@ struct Run {
     count: u32,
 }
 
+/// A texture the frame can be drawn into and then sampled from.
+struct Target {
+    texture: wgpu::Texture,
+    view: wgpu::TextureView,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+}
+
+/// One thing the frame does, in the order the caller asked for it.
+enum Step {
+    /// Instanced quads into a target. `first` is the index of its first
+    /// instance; a step's instances are contiguous, because only the last
+    /// step ever receives pushes.
+    Draw {
+        target: u32,
+        clear: Option<wgpu::Color>,
+        runs: Vec<Run>,
+        first: usize,
+    },
+    /// A fullscreen shader, reading its inputs and writing its target.
+    Fullscreen {
+        target: u32,
+        pipeline: wgpu::RenderPipeline,
+        group: wgpu::BindGroup,
+        viewport: Option<[u32; 4]>,
+        clear: Option<wgpu::Color>,
+    },
+}
+
+/// A fullscreen shader and the pipelines built for it, per target format
+/// and blend mode, as they are first asked for.
+struct Effect {
+    module: wgpu::ShaderModule,
+    group_layout: wgpu::BindGroupLayout,
+    layout: wgpu::PipelineLayout,
+    inputs: usize,
+    uniform_bytes: usize,
+    pipelines: HashMap<(wgpu::TextureFormat, u8), wgpu::RenderPipeline>,
+}
+
 struct Image {
     // Held so the view and bind group stay valid; never read back.
     _texture: wgpu::Texture,
@@ -274,23 +329,34 @@ pub struct NativeGpu {
     device: wgpu::Device,
     queue: wgpu::Queue,
     adapter: String,
-    pipeline: wgpu::RenderPipeline,
+    /// The instanced quad pipeline, per target format.
+    pipelines: HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>,
     image_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     /// Bilinear, for a texture whose meta asks for `filter: linear`.
     smooth_sampler: wgpu::Sampler,
+    /// Linear and wrapping, as ModernGL samples a framebuffer's texture:
+    /// what a fullscreen pass reads its inputs through.
+    input_sampler: wgpu::Sampler,
+    globals_layout: wgpu::BindGroupLayout,
     globals: wgpu::Buffer,
     globals_group: wgpu::BindGroup,
-    target: wgpu::Texture,
-    target_view: wgpu::TextureView,
-    width: u32,
-    height: u32,
+    /// How many draw steps `globals` has room for.
+    globals_capacity: usize,
+    /// Every target, the main one under `MAIN`.
+    targets: HashMap<u32, Target>,
+    next_target: u32,
+    /// Where pushes go.
+    current: u32,
+    effects: HashMap<u32, Effect>,
+    next_effect: u32,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
-    runs: Vec<Run>,
+    steps: Vec<Step>,
     scissor: Option<[u32; 4]>,
-    clear: wgpu::Color,
+    /// What the main target is cleared to at the start of a frame.
+    main_clear: wgpu::Color,
     images: HashMap<u32, Image>,
     next_image: u32,
     /// Frames rendered, for callers that want to know one happened.
@@ -301,8 +367,8 @@ pub struct NativeGpu {
     presented: u64,
 }
 
-fn make_target(device: &wgpu::Device, width: u32, height: u32) -> (wgpu::Texture, wgpu::TextureView) {
-    let target = device.create_texture(&wgpu::TextureDescriptor {
+fn make_target(device: &wgpu::Device, width: u32, height: u32, format: wgpu::TextureFormat) -> Target {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("pyguara target"),
         size: wgpu::Extent3d {
             width,
@@ -312,14 +378,70 @@ fn make_target(device: &wgpu::Device, width: u32, height: u32) -> (wgpu::Texture
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: TARGET_FORMAT,
+        format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::COPY_SRC
             | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     });
-    let view = target.create_view(&wgpu::TextureViewDescriptor::default());
-    (target, view)
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    Target {
+        texture,
+        view,
+        width,
+        height,
+        format,
+    }
+}
+
+fn make_globals(device: &wgpu::Device, layout: &wgpu::BindGroupLayout, steps: usize) -> (wgpu::Buffer, wgpu::BindGroup) {
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("pyguara globals"),
+        size: GLOBALS_STRIDE * steps as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("pyguara globals"),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                buffer: &buffer,
+                offset: 0,
+                size: wgpu::BufferSize::new(16),
+            }),
+        }],
+    });
+    (buffer, group)
+}
+
+fn blend_state(blend: u8) -> Option<wgpu::BlendState> {
+    match blend {
+        BLEND_ADD => Some(wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+        }),
+        BLEND_ALPHA => Some(wgpu::BlendState::ALPHA_BLENDING),
+        _ => None,
+    }
+}
+
+fn color(red: f64, green: f64, blue: f64, alpha: f64) -> wgpu::Color {
+    wgpu::Color {
+        r: red,
+        g: green,
+        b: blue,
+        a: alpha,
+    }
 }
 
 fn make_instance_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {
@@ -383,7 +505,8 @@ impl NativeGpu {
                 visibility: wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
+                    // One slot per draw step: targets differ in size.
+                    has_dynamic_offset: true,
                     min_binding_size: None,
                 },
                 count: None,
@@ -419,7 +542,7 @@ impl NativeGpu {
             0 => Float32x2, 1 => Float32x2, 2 => Float32x2, 3 => Float32x2,
             4 => Float32x2, 5 => Float32x4, 6 => Float32x4
         ];
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let quad_pipeline = |format: wgpu::TextureFormat| device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("pyguara quads"),
             layout: Some(&layout),
             vertex: wgpu::VertexState {
@@ -437,7 +560,7 @@ impl NativeGpu {
                 entry_point: Some("fragment"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: TARGET_FORMAT,
+                    format,
                     // Straight alpha, which is what the textures hold: a
                     // glyph is its colour with coverage in alpha.
                     blend: Some(wgpu::BlendState {
@@ -461,6 +584,10 @@ impl NativeGpu {
             multiview_mask: None,
             cache: None,
         });
+        let pipelines = HashMap::from([
+            (TARGET_FORMAT, quad_pipeline(TARGET_FORMAT)),
+            (HDR_FORMAT, quad_pipeline(HDR_FORMAT)),
+        ]);
         // Nearest, as pygame scales: a pixel-art sprite stays pixel art,
         // and text drawn at its own size samples texel for texel.
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -477,21 +604,20 @@ impl NativeGpu {
             min_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
-        let globals = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("pyguara globals"),
-            size: 16,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+        // Linear and repeating: ModernGL's defaults for a framebuffer's
+        // texture, which every effect was written against. An effect that
+        // offsets its UVs near an edge reads the far side, there and here.
+        let input_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("pyguara inputs"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
         });
-        let globals_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("pyguara globals"),
-            layout: &globals_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals.as_entire_binding(),
-            }],
-        });
-        let (target, target_view) = make_target(&device, width, height);
+        let globals_capacity = 16;
+        let (globals, globals_group) = make_globals(&device, &globals_layout, globals_capacity);
+        let main = make_target(&device, width, height, TARGET_FORMAT);
         let instance_capacity = 4096;
         let instance_buffer = make_instance_buffer(&device, instance_capacity);
 
@@ -499,22 +625,26 @@ impl NativeGpu {
             device,
             queue,
             adapter: format!("{:?}: {}", info.backend, info.name),
-            pipeline,
+            pipelines,
             image_layout,
             sampler,
             smooth_sampler,
+            input_sampler,
+            globals_layout,
             globals,
             globals_group,
-            target,
-            target_view,
-            width,
-            height,
+            globals_capacity,
+            targets: HashMap::from([(MAIN, main)]),
+            next_target: 1,
+            current: MAIN,
+            effects: HashMap::new(),
+            next_effect: 1,
             instances: Vec::with_capacity(instance_capacity),
             instance_buffer,
             instance_capacity,
-            runs: Vec::new(),
+            steps: Vec::new(),
             scissor: None,
-            clear: wgpu::Color::BLACK,
+            main_clear: wgpu::Color::BLACK,
             images: HashMap::new(),
             next_image: 1,
             frames: 0,
@@ -538,7 +668,7 @@ impl NativeGpu {
     ) -> PyResult<Presenter> {
         let capabilities = surface.get_capabilities(adapter);
         let mut config = surface
-            .get_default_config(adapter, self.width, self.height)
+            .get_default_config(adapter, self.main().width, self.main().height)
             .ok_or_else(|| PyRuntimeError::new_err("the adapter cannot draw to this window"))?;
         // The frame's bytes are already display-encoded, as the pygame
         // renderer's are. An sRGB swapchain would encode them a second
@@ -604,7 +734,7 @@ impl NativeGpu {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&self.target_view),
+                    resource: wgpu::BindingResource::TextureView(&self.main().view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -713,21 +843,88 @@ impl NativeGpu {
         })
     }
 
+    fn main(&self) -> &Target {
+        &self.targets[&MAIN]
+    }
+
+    /// The runs of the draw step pushes go to, opening one if the last
+    /// step is not a draw into the current target.
+    fn draw_runs(&mut self) -> &mut Vec<Run> {
+        let reuse = matches!(self.steps.last(), Some(Step::Draw { target, .. }) if *target == self.current);
+        if !reuse {
+            self.steps.push(Step::Draw {
+                target: self.current,
+                clear: None,
+                runs: Vec::new(),
+                first: self.instances.len(),
+            });
+        }
+        match self.steps.last_mut() {
+            Some(Step::Draw { runs, .. }) => runs,
+            _ => unreachable!("a draw step was just ensured"),
+        }
+    }
+
     fn push(&mut self, texture: u32, instance: Instance) {
         let index = self.instances.len() as u32;
+        let scissor = self.scissor;
+        // The step first, so a step it opens starts at this instance.
+        self.draw_runs();
         self.instances.push(instance);
-        if let Some(last) = self.runs.last_mut() {
-            if last.texture == texture && last.scissor == self.scissor {
+        let runs = self.draw_runs();
+        if let Some(last) = runs.last_mut() {
+            if last.texture == texture && last.scissor == scissor {
                 last.count += 1;
                 return;
             }
         }
-        self.runs.push(Run {
+        runs.push(Run {
             texture,
-            scissor: self.scissor,
+            scissor,
             start: index,
             count: 1,
         });
+    }
+
+    fn target_size(&self, id: u32) -> (u32, u32) {
+        self.targets.get(&id).map_or((0, 0), |target| (target.width, target.height))
+    }
+
+    /// The fullscreen pipeline for an effect, a target format and a blend.
+    fn effect_pipeline(&mut self, effect: u32, format: wgpu::TextureFormat, blend: u8) -> PyResult<wgpu::RenderPipeline> {
+        let Some(found) = self.effects.get_mut(&effect) else {
+            return Err(PyKeyError::new_err(format!("no effect {effect}")));
+        };
+        if let Some(pipeline) = found.pipelines.get(&(format, blend)) {
+            return Ok(pipeline.clone());
+        }
+        let pipeline = self.device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("pyguara effect"),
+            layout: Some(&found.layout),
+            vertex: wgpu::VertexState {
+                module: &found.module,
+                entry_point: Some("vertex"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &found.module,
+                entry_point: Some("fragment"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: blend_state(blend),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        found.pipelines.insert((format, blend), pipeline.clone());
+        Ok(pipeline)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -844,12 +1041,12 @@ impl NativeGpu {
 
     #[getter]
     fn width(&self) -> u32 {
-        self.width
+        self.main().width
     }
 
     #[getter]
     fn height(&self) -> u32 {
-        self.height
+        self.main().height
     }
 
     /// How many frames `end_frame` has rendered.
@@ -867,17 +1064,26 @@ impl NativeGpu {
     /// How many draw calls the frame being built would issue.
     #[getter]
     fn pending_runs(&self) -> usize {
-        self.runs.len()
+        self.steps
+            .iter()
+            .map(|step| match step {
+                Step::Draw { runs, .. } => runs.len(),
+                Step::Fullscreen { .. } => 1,
+            })
+            .sum()
+    }
+
+    /// How many steps -- draws into a target, fullscreen passes -- the
+    /// frame being built holds.
+    #[getter]
+    fn pending_steps(&self) -> usize {
+        self.steps.len()
     }
 
     /// Replace the target with one of a new size. Drops the frame in progress.
     fn resize(&mut self, width: u32, height: u32) -> PyResult<()> {
         Self::check_size(width, height)?;
-        let (target, view) = make_target(&self.device, width, height);
-        self.target = target;
-        self.target_view = view;
-        self.width = width;
-        self.height = height;
+        self.targets.insert(MAIN, make_target(&self.device, width, height, TARGET_FORMAT));
         if self.presenter.is_some() {
             let group = self.frame_group();
             if let Some(presenter) = &mut self.presenter {
@@ -888,7 +1094,8 @@ impl NativeGpu {
             }
         }
         self.instances.clear();
-        self.runs.clear();
+        self.steps.clear();
+        self.current = MAIN;
         self.scissor = None;
         Ok(())
     }
@@ -929,16 +1136,12 @@ impl NativeGpu {
     /// rectangle, which is what `IRenderer.clear` means inside a viewport.
     fn clear(&mut self, red: u8, green: u8, blue: u8, alpha: u8) {
         match self.scissor {
-            None => {
-                self.instances.clear();
-                self.runs.clear();
-                self.clear = wgpu::Color {
-                    r: f64::from(red) / 255.0,
-                    g: f64::from(green) / 255.0,
-                    b: f64::from(blue) / 255.0,
-                    a: f64::from(alpha) / 255.0,
-                };
-            }
+            None => self.clear_target(
+                f64::from(red) / 255.0,
+                f64::from(green) / 255.0,
+                f64::from(blue) / 255.0,
+                f64::from(alpha) / 255.0,
+            ),
             Some([x, y, width, height]) => {
                 // Opaque by construction: a clear replaces, it does not blend.
                 self.solid(
@@ -954,10 +1157,11 @@ impl NativeGpu {
 
     /// Restrict what follows to a rectangle, clamped to the target.
     fn set_scissor(&mut self, x: i64, y: i64, width: i64, height: i64) {
-        let left = x.clamp(0, i64::from(self.width));
-        let top = y.clamp(0, i64::from(self.height));
-        let right = (x + width).clamp(left, i64::from(self.width));
-        let bottom = (y + height).clamp(top, i64::from(self.height));
+        let (target_width, target_height) = self.target_size(self.current);
+        let left = x.clamp(0, i64::from(target_width));
+        let top = y.clamp(0, i64::from(target_height));
+        let right = (x + width).clamp(left, i64::from(target_width));
+        let bottom = (y + height).clamp(top, i64::from(target_height));
         self.scissor = Some([
             left as u32,
             top as u32,
@@ -969,6 +1173,278 @@ impl NativeGpu {
     /// Draw to the whole target again.
     fn clear_scissor(&mut self) {
         self.scissor = None;
+    }
+
+    /// Clear the current target, whatever the scissor, to a colour given
+    /// in 0-1 floats.
+    ///
+    /// What was pushed into this target since the last step that did
+    /// something else is dropped, since it would all be painted over.
+    /// The main target keeps the colour: it is cleared to it at the start
+    /// of every frame, until told otherwise, as it always was.
+    fn clear_target(&mut self, red: f64, green: f64, blue: f64, alpha: f64) {
+        let fill = color(red, green, blue, alpha);
+        if self.current == MAIN {
+            self.main_clear = fill;
+        }
+        if let Some(Step::Draw { target, clear, runs, first }) = self.steps.last_mut() {
+            if *target == self.current {
+                self.instances.truncate(*first);
+                runs.clear();
+                *clear = Some(fill);
+                return;
+            }
+        }
+        self.steps.push(Step::Draw {
+            target: self.current,
+            clear: Some(fill),
+            runs: Vec::new(),
+            first: self.instances.len(),
+        });
+    }
+
+    /// Make an offscreen target and return its id.
+    ///
+    /// `hdr` makes it 16-bit float, so values above 1.0 survive -- the
+    /// render graph's chain is declared that way. Otherwise 8-bit, like
+    /// the main target.
+    #[pyo3(signature = (width, height, hdr = false))]
+    fn create_target(&mut self, width: u32, height: u32, hdr: bool) -> PyResult<u32> {
+        Self::check_size(width, height)?;
+        let format = if hdr { HDR_FORMAT } else { TARGET_FORMAT };
+        let id = self.next_target;
+        self.next_target += 1;
+        self.targets.insert(id, make_target(&self.device, width, height, format));
+        Ok(id)
+    }
+
+    /// Give an offscreen target a new size. Its contents are lost.
+    fn resize_target(&mut self, id: u32, width: u32, height: u32) -> PyResult<()> {
+        Self::check_size(width, height)?;
+        if id == MAIN {
+            return Err(PyValueError::new_err("resize the main target with resize()"));
+        }
+        let Some(format) = self.targets.get(&id).map(|target| target.format) else {
+            return Err(PyKeyError::new_err(format!("no target {id}")));
+        };
+        self.targets.insert(id, make_target(&self.device, width, height, format));
+        Ok(())
+    }
+
+    /// Free an offscreen target. Unknown ids, and the main one, are ignored.
+    ///
+    /// A step already queued into it, or reading it, is skipped.
+    fn destroy_target(&mut self, id: u32) {
+        if id != MAIN {
+            self.targets.remove(&id);
+        }
+        if self.current == id {
+            self.current = MAIN;
+        }
+    }
+
+    /// Send what is pushed from now on to a target; 0 is the main one.
+    ///
+    /// The scissor is dropped: it was a rectangle on the other target.
+    fn set_target(&mut self, id: u32) -> PyResult<()> {
+        if !self.targets.contains_key(&id) {
+            return Err(PyKeyError::new_err(format!("no target {id}")));
+        }
+        self.current = id;
+        self.scissor = None;
+        Ok(())
+    }
+
+    /// Which target pushes go to.
+    #[getter]
+    fn current_target(&self) -> u32 {
+        self.current
+    }
+
+    /// How many targets exist, the main one included.
+    #[getter]
+    fn target_count(&self) -> usize {
+        self.targets.len()
+    }
+
+    /// Compile a fullscreen shader and return its id.
+    ///
+    /// `source` is complete WGSL with a `vertex` and a `fragment` entry
+    /// point, binding at group 0: the uniforms at 0 when `uniform_bytes`
+    /// is above zero, a sampler at 1, and one texture per input from 2.
+    /// `pyguara.graphics.pipeline.device` writes that preamble; this only
+    /// compiles it. A shader that does not compile is a `ValueError`
+    /// here, with the compiler's message, rather than an abort mid-frame.
+    fn create_effect(&mut self, source: &str, inputs: usize, uniform_bytes: usize) -> PyResult<u32> {
+        let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let module = self.device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("pyguara effect"),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
+        });
+        let mut entries = Vec::new();
+        if uniform_bytes > 0 {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+        }
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+        });
+        for index in 0..inputs {
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 2 + index as u32,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            });
+        }
+        let group_layout = self.device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("pyguara effect"),
+            entries: &entries,
+        });
+        let layout = self.device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("pyguara effect"),
+            bind_group_layouts: &[Some(&group_layout)],
+            ..Default::default()
+        });
+        let id = self.next_effect;
+        self.next_effect += 1;
+        self.effects.insert(
+            id,
+            Effect {
+                module,
+                group_layout,
+                layout,
+                inputs,
+                uniform_bytes,
+                pipelines: HashMap::new(),
+            },
+        );
+        // Built now, inside the scope, so a wrong entry point or binding
+        // is reported with the compile errors rather than at first use.
+        let built = self.effect_pipeline(id, TARGET_FORMAT, BLEND_REPLACE);
+        if let Some(error) = pollster::block_on(scope.pop()) {
+            self.effects.remove(&id);
+            return Err(PyValueError::new_err(format!("the effect does not compile: {error}")));
+        }
+        built?;
+        Ok(id)
+    }
+
+    /// Queue a fullscreen pass: `effect` reads `inputs` (target ids) and
+    /// writes `target`.
+    ///
+    /// `uniforms` are the bytes of the shader's uniform struct, already
+    /// laid out. `blend` is 0 to replace, 1 to add, 2 to alpha-blend.
+    /// `viewport` restricts it to a rectangle of the target; `clear`
+    /// clears the whole target first, which is how a letterbox's bars are
+    /// filled.
+    #[pyo3(signature = (effect, target, inputs, uniforms, blend = 0, viewport = None, clear = None))]
+    #[allow(clippy::too_many_arguments)]
+    fn fullscreen(
+        &mut self,
+        effect: u32,
+        target: u32,
+        inputs: Vec<u32>,
+        uniforms: &[u8],
+        blend: u8,
+        viewport: Option<(u32, u32, u32, u32)>,
+        clear: Option<(f64, f64, f64, f64)>,
+    ) -> PyResult<()> {
+        let Some(format) = self.targets.get(&target).map(|found| found.format) else {
+            return Err(PyKeyError::new_err(format!("no target {target}")));
+        };
+        let (wanted_inputs, wanted_bytes) = match self.effects.get(&effect) {
+            Some(found) => (found.inputs, found.uniform_bytes),
+            None => return Err(PyKeyError::new_err(format!("no effect {effect}"))),
+        };
+        if inputs.len() != wanted_inputs {
+            return Err(PyValueError::new_err(format!(
+                "the effect reads {wanted_inputs} inputs, got {}",
+                inputs.len()
+            )));
+        }
+        if uniforms.len() != wanted_bytes {
+            return Err(PyValueError::new_err(format!(
+                "the effect's uniforms are {wanted_bytes} bytes, got {}",
+                uniforms.len()
+            )));
+        }
+        if inputs.contains(&target) {
+            return Err(PyValueError::new_err(
+                "a pass cannot read the target it writes; draw into another and swap",
+            ));
+        }
+        let mut views = Vec::with_capacity(inputs.len());
+        for input in &inputs {
+            match self.targets.get(input) {
+                Some(found) => views.push(found.view.clone()),
+                None => return Err(PyKeyError::new_err(format!("no target {input}"))),
+            }
+        }
+        let pipeline = self.effect_pipeline(effect, format, blend)?;
+        let buffer = (wanted_bytes > 0).then(|| {
+            let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("pyguara effect uniforms"),
+                size: wanted_bytes.next_multiple_of(16) as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let mut padded = uniforms.to_vec();
+            padded.resize(wanted_bytes.next_multiple_of(16), 0);
+            self.queue.write_buffer(&buffer, 0, &padded);
+            buffer
+        });
+        let mut entries = Vec::new();
+        if let Some(buffer) = &buffer {
+            entries.push(wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            });
+        }
+        entries.push(wgpu::BindGroupEntry {
+            binding: 1,
+            resource: wgpu::BindingResource::Sampler(&self.input_sampler),
+        });
+        for (index, view) in views.iter().enumerate() {
+            entries.push(wgpu::BindGroupEntry {
+                binding: 2 + index as u32,
+                resource: wgpu::BindingResource::TextureView(view),
+            });
+        }
+        let group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("pyguara effect"),
+            layout: &self.effects[&effect].group_layout,
+            entries: &entries,
+        });
+        let clear = clear.map(|(red, green, blue, alpha)| color(red, green, blue, alpha));
+        if target == MAIN {
+            if let Some(fill) = clear {
+                self.main_clear = fill;
+            }
+        }
+        self.steps.push(Step::Fullscreen {
+            target,
+            pipeline,
+            group,
+            viewport: viewport.map(|(x, y, width, height)| [x, y, width, height]),
+            clear,
+        });
+        Ok(())
     }
 
     /// A filled rectangle with its top-left corner at `(x, y)`.
@@ -1248,13 +1724,14 @@ impl NativeGpu {
         Ok(())
     }
 
-    /// Render everything pushed since the last clear, and start a new frame.
+    /// Render the frame's steps in order, and start a new frame.
+    ///
+    /// Each step is one render pass: a draw step loads its target (or
+    /// clears it, if it was cleared) and draws its runs; a fullscreen step
+    /// runs its shader over the target. The main target is cleared to its
+    /// colour by whichever step reaches it first, or on its own if none
+    /// does, so a frame that draws nothing still shows the clear colour.
     fn end_frame(&mut self) {
-        self.queue.write_buffer(
-            &self.globals,
-            0,
-            bytemuck::cast_slice(&[self.width as f32, self.height as f32, 0.0, 0.0]),
-        );
         if self.instances.len() > self.instance_capacity {
             self.instance_capacity = self.instances.len().next_power_of_two();
             self.instance_buffer = make_instance_buffer(&self.device, self.instance_capacity);
@@ -1263,54 +1740,147 @@ impl NativeGpu {
             self.queue
                 .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&self.instances));
         }
+        // One slot of globals per draw step: the size of what it draws into.
+        let draws = self.steps.iter().filter(|step| matches!(step, Step::Draw { .. })).count();
+        if draws > self.globals_capacity {
+            self.globals_capacity = draws.next_power_of_two();
+            let (buffer, group) = make_globals(&self.device, &self.globals_layout, self.globals_capacity);
+            self.globals = buffer;
+            self.globals_group = group;
+        }
+        let mut slots = vec![0u8; GLOBALS_STRIDE as usize * draws.max(1)];
+        let mut slot = 0;
+        for step in &self.steps {
+            if let Step::Draw { target, .. } = step {
+                let (width, height) = self.target_size(*target);
+                let size: [f32; 4] = [width as f32, height as f32, 0.0, 0.0];
+                let at = slot * GLOBALS_STRIDE as usize;
+                slots[at..at + 16].copy_from_slice(bytemuck::cast_slice(&size));
+                slot += 1;
+            }
+        }
+        self.queue.write_buffer(&self.globals, 0, &slots);
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("pyguara frame") });
-        {
+        let mut main_cleared = false;
+        let mut slot = 0u32;
+        for step in &self.steps {
+            let (target_id, own_clear) = match step {
+                Step::Draw { target, clear, .. } | Step::Fullscreen { target, clear, .. } => (*target, *clear),
+            };
+            let globals_offset = slot * GLOBALS_STRIDE as u32;
+            if matches!(step, Step::Draw { .. }) {
+                slot += 1;
+            }
+            let Some(target) = self.targets.get(&target_id) else {
+                continue;
+            };
+            let load = match own_clear {
+                Some(fill) => wgpu::LoadOp::Clear(fill),
+                None if target_id == MAIN && !main_cleared => wgpu::LoadOp::Clear(self.main_clear),
+                None => wgpu::LoadOp::Load,
+            };
+            if target_id == MAIN {
+                main_cleared = true;
+            }
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("pyguara frame"),
+                label: Some("pyguara step"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.target_view,
+                    view: &target.view,
                     depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear),
+                        load,
                         store: wgpu::StoreOp::Store,
                     },
                 })],
                 ..Default::default()
             });
-            pass.set_pipeline(&self.pipeline);
-            pass.set_bind_group(0, &self.globals_group, &[]);
-            pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-            for run in &self.runs {
-                let Some(image) = self.images.get(&run.texture) else {
-                    continue;
-                };
-                match run.scissor {
-                    Some([_, _, 0, _] | [_, _, _, 0]) => continue,
-                    Some([x, y, width, height]) => pass.set_scissor_rect(x, y, width, height),
-                    None => pass.set_scissor_rect(0, 0, self.width, self.height),
+            match step {
+                Step::Draw { runs, .. } => {
+                    if runs.is_empty() {
+                        continue;
+                    }
+                    pass.set_pipeline(&self.pipelines[&target.format]);
+                    pass.set_bind_group(0, &self.globals_group, &[globals_offset]);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    for run in runs {
+                        let Some(image) = self.images.get(&run.texture) else {
+                            continue;
+                        };
+                        match run.scissor {
+                            Some([_, _, 0, _] | [_, _, _, 0]) => continue,
+                            Some([x, y, width, height]) => pass.set_scissor_rect(x, y, width, height),
+                            None => pass.set_scissor_rect(0, 0, target.width, target.height),
+                        }
+                        pass.set_bind_group(1, &image.bind_group, &[]);
+                        pass.draw(0..6, run.start..run.start + run.count);
+                    }
                 }
-                pass.set_bind_group(1, &image.bind_group, &[]);
-                pass.draw(0..6, run.start..run.start + run.count);
+                Step::Fullscreen {
+                    pipeline,
+                    group,
+                    viewport,
+                    ..
+                } => {
+                    if let Some([x, y, width, height]) = *viewport {
+                        let right = (x + width).min(target.width);
+                        let bottom = (y + height).min(target.height);
+                        if right <= x || bottom <= y {
+                            continue;
+                        }
+                        pass.set_viewport(x as f32, y as f32, width as f32, height as f32, 0.0, 1.0);
+                        pass.set_scissor_rect(x, y, right - x, bottom - y);
+                    }
+                    pass.set_pipeline(pipeline);
+                    pass.set_bind_group(0, group, &[]);
+                    pass.draw(0..3, 0..1);
+                }
             }
+        }
+        if !main_cleared {
+            let main = self.main();
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("pyguara clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &main.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.main_clear),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                ..Default::default()
+            });
         }
         self.queue.submit([encoder.finish()]);
         self.instances.clear();
-        self.runs.clear();
+        self.steps.clear();
+        self.current = MAIN;
         self.scissor = None;
         self.frames += 1;
     }
 
-    /// Copy the last rendered frame out as tightly packed RGBA rows.
-    fn read_pixels<'py>(&self, python: Python<'py>) -> PyResult<Bound<'py, PyBytes>> {
+    /// Copy a target out as tightly packed rows: the main one by default.
+    ///
+    /// Four bytes a pixel, RGBA, for an 8-bit target; eight for an HDR
+    /// one, RGBA as little-endian 16-bit floats.
+    #[pyo3(signature = (target = MAIN))]
+    fn read_pixels<'py>(&self, python: Python<'py>, target: u32) -> PyResult<Bound<'py, PyBytes>> {
+        let Some(found) = self.targets.get(&target) else {
+            return Err(PyKeyError::new_err(format!("no target {target}")));
+        };
+        let (width, height) = (found.width, found.height);
+        let texel = if found.format == HDR_FORMAT { 8 } else { 4 };
         // A copy's rows must be padded to a multiple of 256 bytes.
-        let row = self.width as usize * 4;
+        let row = width as usize * texel;
         let padded = row.div_ceil(256) * 256;
         let buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("pyguara readback"),
-            size: (padded * self.height as usize) as u64,
+            size: (padded * height as usize) as u64,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
@@ -1319,7 +1889,7 @@ impl NativeGpu {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("pyguara readback") });
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
-                texture: &self.target,
+                texture: &found.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
@@ -1329,12 +1899,12 @@ impl NativeGpu {
                 layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(padded as u32),
-                    rows_per_image: Some(self.height),
+                    rows_per_image: Some(height),
                 },
             },
             wgpu::Extent3d {
-                width: self.width,
-                height: self.height,
+                width,
+                height,
                 depth_or_array_layers: 1,
             },
         );
@@ -1347,7 +1917,7 @@ impl NativeGpu {
         let mapped = slice
             .get_mapped_range()
             .map_err(|error| runtime_error("the copied frame could not be read", error))?;
-        let height = self.height as usize;
+        let height = height as usize;
         PyBytes::new_with(python, row * height, |out| {
             for line in 0..height {
                 out[line * row..(line + 1) * row]

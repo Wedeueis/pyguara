@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import POST_PROCESSED_FBO_NAME
-from pyguara.graphics.pipeline.render_pass import BaseRenderPass
+from pyguara.graphics.pipeline.render_pass import BaseRenderPass, require_gl
 
 if TYPE_CHECKING:
     import moderngl
@@ -69,13 +69,14 @@ class PostProcessPass(BaseRenderPass):
         """Name of the output framebuffer."""
         return self._output_fbo_name
 
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
         """Execute the post-processing pass.
 
         Args:
             ctx: The ModernGL rendering context.
             graph: The RenderGraph providing access to framebuffers.
         """
+        ctx = require_gl(ctx, "PostProcessPass")
         if not self._enabled:
             return
 

@@ -6,9 +6,10 @@ the default framebuffer (screen) for display.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from pyguara.common.types import Color
+from pyguara.graphics.pipeline.device import FullscreenShader, glsl
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
@@ -16,9 +17,20 @@ if TYPE_CHECKING:
 
     from pyguara.graphics.pipeline.graph import RenderGraph
 
+BLIT = FullscreenShader(
+    "blit",
+    inputs=("u_texture",),
+    glsl=glsl("blit.frag"),
+    wgsl="""
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    return textureSample(u_texture, input_sampler, in.uv);
+}
+""",
+)
+"""Copy a buffer to the output."""
 
-# Shader file paths
-_SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
+_BARS = Color(0, 0, 0, 255)
 
 
 class FinalPass(BaseRenderPass):
@@ -32,7 +44,7 @@ class FinalPass(BaseRenderPass):
 
     def __init__(
         self,
-        ctx: moderngl.Context,
+        ctx: Any = None,
         input_fbo_name: str = "world",
         *,
         enabled: bool = True,
@@ -40,37 +52,13 @@ class FinalPass(BaseRenderPass):
         """Initialize the final pass.
 
         Args:
-            ctx: The ModernGL rendering context.
+            ctx: Unused. Accepted so callers written when passes needed a
+                ModernGL context keep working; removed in stage E.
             input_fbo_name: Name of the framebuffer to blit from.
             enabled: Whether this pass should execute.
         """
         super().__init__("final", enabled=enabled)
-        self._ctx = ctx
         self._input_fbo_name = input_fbo_name
-
-        # Create shader program for fullscreen blit
-        self._program: moderngl.Program | None = None
-        self._vao: moderngl.VertexArray | None = None
-        self._create_resources()
-
-    def _create_resources(self) -> None:
-        """Create shader program and VAO for fullscreen quad."""
-        vert_path = _SHADER_DIR / "fullscreen_quad.vert"
-        frag_path = _SHADER_DIR / "blit.frag"
-
-        with open(vert_path) as f:
-            vert_source = f.read()
-
-        with open(frag_path) as f:
-            frag_source = f.read()
-
-        self._program = self._ctx.program(
-            vertex_shader=vert_source,
-            fragment_shader=frag_source,
-        )
-
-        # Create VAO for fullscreen quad (no vertex buffers needed)
-        self._vao = self._ctx.vertex_array(self._program, [])
 
     @property
     def input_fbo_name(self) -> str:
@@ -82,60 +70,32 @@ class FinalPass(BaseRenderPass):
         """Set the input framebuffer name."""
         self._input_fbo_name = value
 
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
         """Execute the final pass - blit to screen.
 
+        With a letterbox, the whole window is cleared first: the bars are
+        the part no pass ever writes, and would otherwise show whatever was
+        there -- the previous frame, smeared, or uninitialised memory. The
+        letterbox stays the screen's viewport afterwards on purpose: the
+        game's own UI composites after the graph runs and belongs inside
+        the same frame.
+
         Args:
-            ctx: The ModernGL rendering context.
+            ctx: Unused; the pass runs through `graph.device`.
             graph: The RenderGraph providing access to framebuffers.
         """
         if not self._enabled:
             return
-
-        if self._program is None or self._vao is None:
-            return
-
-        # Get the input framebuffer
         input_fbo = graph.fbo_manager.get(self._input_fbo_name)
         if input_fbo is None:
-            # If input doesn't exist, nothing to blit
             return
-
-        # Clear the whole window before narrowing to where the image
-        # goes. With a letterbox the bars are the part of the window no
-        # pass ever writes, and GL leaves whatever was there -- the
-        # previous frame, smeared, or uninitialised memory.
-        #
-        # The letterbox is left set afterwards on purpose: the game's own
-        # UI composites after the graph runs, as a fullscreen quad, and
-        # belongs inside the same frame. `ctx.screen.viewport` means where
-        # the *game's* frame goes, so anything that is not the game --
-        # the editor -- sets its own and puts this back.
-        screen = ctx.screen
         rect = graph.screen_rect
-        window = graph.window_size
-        letterboxed = (rect[2], rect[3]) != window
-        if letterboxed:
-            screen.viewport = (0, 0, window[0], window[1])
-            screen.use()
-            screen.clear(0.0, 0.0, 0.0, 1.0)
-            screen.viewport = rect
-
-        # Bind the default framebuffer (screen)
-        ctx.screen.use()
-
-        # Bind the input texture
-        input_fbo.texture.use(0)
-        self._program["u_texture"] = 0
-
-        # Draw fullscreen quad (4 vertices for triangle strip)
-        self._vao.render(mode=self._ctx.TRIANGLE_STRIP, vertices=4)
-
-    def release(self) -> None:
-        """Release GPU resources."""
-        if self._vao is not None:
-            self._vao.release()
-            self._vao = None
-        if self._program is not None:
-            self._program.release()
-            self._program = None
+        letterboxed = (rect[2], rect[3]) != graph.window_size
+        graph.device.run(
+            BLIT,
+            {"u_texture": input_fbo},
+            {},
+            None,
+            viewport=rect if letterboxed else None,
+            clear=_BARS if letterboxed else None,
+        )

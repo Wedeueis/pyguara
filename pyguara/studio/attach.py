@@ -794,9 +794,15 @@ def attach_editor(
         )
         return None
 
-    # A real `RenderGraph` is constructed with a context and exposes it
-    # non-optionally, so there is nothing further to guard here.
+    # A real `RenderGraph` on the wgpu backend has no GL context, and the
+    # editor's ImGui renderer still needs one: moving it is stage E.
     ctx = candidate.ctx
+    if ctx is None:
+        logger.info(
+            "Editor not attached: the editor is ModernGL-only, and this "
+            "render graph runs on wgpu."
+        )
+        return None
 
     # The graph's own dimensions, not `ctx.screen.size`: `ctx.screen` is
     # `None` on a standalone (offscreen) context, which is what the GL

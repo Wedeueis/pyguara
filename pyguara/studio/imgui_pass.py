@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pyguara.graphics.pipeline.render_pass import BaseRenderPass
+from pyguara.graphics.pipeline.render_pass import BaseRenderPass, require_gl
 from pyguara.log import get_logger
 
 if TYPE_CHECKING:
@@ -79,7 +79,7 @@ class ImGuiPass(BaseRenderPass):
         """
         self._clear_colour = colour
 
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
         """Draw the editor onto the default framebuffer.
 
         Runs after the game's UI has been composited, not with the rest
@@ -90,6 +90,7 @@ class ImGuiPass(BaseRenderPass):
             graph: The graph running this pass (unused: the editor reads no
                 framebuffers, it draws over whatever is on screen).
         """
+        ctx = require_gl(ctx, "The editor's ImGui pass")
         if not self._enabled:
             return
 

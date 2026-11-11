@@ -44,4 +44,4 @@ def test_the_pixel_suite_passes_in_a_clean_process() -> None:
     assert completed.returncode == 0, (
         completed.stdout[-4000:] + completed.stderr[-2000:]
     )
-    assert passed is not None and int(passed.group(1)) >= 59, summary
+    assert passed is not None and int(passed.group(1)) >= 64, summary

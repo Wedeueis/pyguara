@@ -63,11 +63,14 @@ class BaseRenderPass(ABC):
         self._enabled = value
 
     @abstractmethod
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
         """Execute this render pass.
 
         Args:
-            ctx: The ModernGL rendering context.
+            ctx: The ModernGL context, or None on a backend without one. A
+                pass written against `graph.device` ignores it; one that
+                still drives OpenGL itself must check, and say it needs
+                the ModernGL backend.
             graph: The RenderGraph orchestrating this pass.
         """
         ...
@@ -91,3 +94,28 @@ class BaseRenderPass(ABC):
         VAOs, or other GL objects.
         """
         pass
+
+
+def require_gl(ctx: moderngl.Context | None, what: str) -> moderngl.Context:
+    """Return `ctx`, or say plainly that `what` needs the ModernGL backend.
+
+    For the passes that still drive OpenGL themselves while the rest of the
+    graph moves onto `GraphicsDevice`; see stage D of
+    `project/backlog/active/next_engine_plan.md`.
+
+    Args:
+        ctx: The context the graph handed the pass.
+        what: The pass, for the message.
+
+    Returns:
+        The context.
+
+    Raises:
+        RuntimeError: If there is none.
+    """
+    if ctx is None:
+        raise RuntimeError(
+            f"{what} still drives OpenGL directly and needs the ModernGL backend; "
+            f"it has not been ported to GraphicsDevice yet."
+        )
+    return ctx

@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE, STANDARD_CHAIN
+from pyguara.graphics.pipeline.device import GraphicsDevice, as_device
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.log import get_logger
@@ -43,19 +44,22 @@ class RenderGraph:
 
     def __init__(
         self,
-        ctx: moderngl.Context,
+        ctx: moderngl.Context | GraphicsDevice,
         width: int,
         height: int,
     ) -> None:
         """Initialize the render graph.
 
         Args:
-            ctx: The ModernGL rendering context.
+            ctx: The device passes run on, or a ModernGL context, which is
+                wrapped in a `ModernGLDevice` -- what every caller passed
+                before devices existed, accepted until stage E.
             width: Initial viewport width.
             height: Initial viewport height.
         """
-        self._ctx = ctx
-        self._fbo_manager = FramebufferManager(ctx, width, height)
+        self._device = as_device(ctx)
+        self._ctx = self._device.ctx
+        self._fbo_manager = FramebufferManager(self._device, width, height)
         self._passes: list[BaseRenderPass] = []
         # Where the rendered image lands, and how big the window holding
         # it is. The same until the game is letterboxed; see `resize`.
@@ -70,9 +74,17 @@ class RenderGraph:
             self._fbo_manager.declare(name, dtype=HDR_DTYPE)
 
     @property
-    def ctx(self) -> moderngl.Context:
-        """The ModernGL rendering context."""
+    def ctx(self) -> moderngl.Context | None:
+        """The ModernGL context, for passes not yet ported; None on wgpu.
+
+        A pass written against `device` does not need it.
+        """
         return self._ctx
+
+    @property
+    def device(self) -> GraphicsDevice:
+        """What passes run their shaders through, on any backend."""
+        return self._device
 
     @property
     def fbo_manager(self) -> FramebufferManager:
@@ -207,7 +219,7 @@ class RenderGraph:
         # into a rectangle the size of the *original* window -- in the
         # bottom-left corner, GL's origin being there. Setting the viewport
         # is what `use()` then applies.
-        if self._ctx.screen is not None:
+        if self._ctx is not None and self._ctx.screen is not None:
             self._ctx.screen.viewport = self._screen_rect
 
         for render_pass in self._passes:
@@ -235,3 +247,4 @@ class RenderGraph:
 
         # Release framebuffers
         self._fbo_manager.release_all()
+        self._device.release()

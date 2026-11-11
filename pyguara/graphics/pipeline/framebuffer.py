@@ -13,6 +13,8 @@ from pyguara.common.types import Color
 if TYPE_CHECKING:
     import moderngl
 
+    from pyguara.graphics.pipeline.device import GraphicsDevice
+
 
 class Framebuffer:
     """Wrapper around a ModernGL framebuffer with associated texture.
@@ -171,15 +173,22 @@ class FramebufferManager:
     dimensions change and cleanup on shutdown.
     """
 
-    def __init__(self, ctx: moderngl.Context, width: int, height: int) -> None:
+    def __init__(
+        self, ctx: moderngl.Context | GraphicsDevice, width: int, height: int
+    ) -> None:
         """Initialize the framebuffer manager.
 
         Args:
-            ctx: The ModernGL context.
+            ctx: The device buffers are made on, or a ModernGL context,
+                which is wrapped in a `ModernGLDevice` -- what every caller
+                passed before devices existed, accepted until stage E.
             width: Initial viewport width.
             height: Initial viewport height.
         """
-        self._ctx = ctx
+        from pyguara.graphics.pipeline.device import as_device
+
+        self._device = as_device(ctx)
+        self._ctx = self._device.ctx
         self._width = width
         self._height = height
         self._framebuffers: dict[str, Framebuffer] = {}
@@ -245,8 +254,7 @@ class FramebufferManager:
         w = width if width is not None else self._width
         h = height if height is not None else self._height
 
-        fbo = Framebuffer(
-            self._ctx,
+        fbo = self._device.create_target(
             name,
             w,
             h,

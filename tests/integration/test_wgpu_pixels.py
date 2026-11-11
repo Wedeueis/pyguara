@@ -541,6 +541,90 @@ class TestMaterials:
         assert sum("material" in record.getMessage() for record in caplog.records) == 1
 
 
+class TestEffects:
+    """The native half of `GraphicsDevice.run`: targets and fullscreen passes."""
+
+    @staticmethod
+    def _solid(wgpu: Any, *, uniforms: tuple[Any, ...] = (), wgsl: str) -> Any:
+        from pyguara.graphics.pipeline.device import FullscreenShader
+
+        return FullscreenShader("test", uniforms=uniforms, wgsl=wgsl)
+
+    def test_a_shader_that_does_not_compile_is_a_value_error(self, wgpu: Any) -> None:
+        frame = wgpu.GpuFrame(16, 16)
+
+        with pytest.raises(ValueError, match="does not compile"):
+            frame.gpu.create_effect("this is not wgsl", 0, 0)
+
+    def test_uniforms_reach_the_shader(self, wgpu: Any) -> None:
+        from pyguara.graphics.pipeline.device import Uniform, WgpuDevice
+
+        frame = wgpu.GpuFrame(16, 16)
+        shader = self._solid(
+            wgpu,
+            uniforms=(Uniform("pad", "f32"), Uniform("colour", "vec3")),
+            wgsl="@fragment fn fragment(in: Varying) -> @location(0) vec4<f32> "
+            "{ return vec4<f32>(params.colour, 1.0); }",
+        )
+
+        WgpuDevice(frame).run(
+            shader, {}, {"pad": 9.0, "colour": (0.2, 0.6, 1.0)}, None, blend="replace"
+        )
+        frame.gpu.end_frame()
+
+        pixel = tuple(frame.gpu.read_pixels()[:3])
+        assert pixel == (51, 153, 255)
+
+    def test_additive_passes_add(self, wgpu: Any) -> None:
+        from pyguara.graphics.pipeline.device import WgpuDevice
+
+        frame = wgpu.GpuFrame(16, 16)
+        frame.gpu.clear(0, 0, 0, 255)
+        shader = self._solid(
+            wgpu,
+            wgsl="@fragment fn fragment(in: Varying) -> @location(0) vec4<f32> "
+            "{ return vec4<f32>(0.25, 0.0, 0.0, 1.0); }",
+        )
+        device = WgpuDevice(frame)
+
+        for _ in range(3):
+            device.run(shader, {}, {}, None, blend="add")
+        frame.gpu.end_frame()
+
+        assert frame.gpu.read_pixels()[0] in (191, 192)
+
+    def test_a_pass_cannot_read_what_it_writes(self, wgpu: Any) -> None:
+        frame = wgpu.GpuFrame(16, 16)
+        target = frame.gpu.create_target(16, 16)
+        effect = frame.gpu.create_effect(
+            "@group(0) @binding(1) var s: sampler;\n"
+            "@group(0) @binding(2) var t: texture_2d<f32>;\n"
+            "@vertex fn vertex(@builtin(vertex_index) i: u32) -> "
+            "@builtin(position) vec4<f32> { return vec4<f32>(0.0); }\n"
+            "@fragment fn fragment() -> @location(0) vec4<f32> "
+            "{ return textureSample(t, s, vec2<f32>(0.0)); }",
+            1,
+            0,
+        )
+
+        with pytest.raises(ValueError, match="cannot read the target it writes"):
+            frame.gpu.fullscreen(effect, target, [target], b"")
+
+    def test_drawing_into_a_target_leaves_the_screen_alone(self, wgpu: Any) -> None:
+        frame = wgpu.GpuFrame(16, 16)
+        renderer = wgpu.WgpuRenderer(frame)
+        target = frame.gpu.create_target(16, 16)
+        frame.gpu.clear(0, 0, 255, 255)
+
+        frame.gpu.set_target(target)
+        renderer.draw_rect(Rect(0, 0, 16, 16), RED)
+        frame.gpu.set_target(0)
+        frame.gpu.end_frame()
+
+        assert tuple(frame.gpu.read_pixels()[:3]) == (0, 0, 255)
+        assert tuple(frame.gpu.read_pixels(target)[:3]) == (RED.r, RED.g, RED.b)
+
+
 class TestBounded:
     @pytest.mark.parametrize("radius", [6, 9, 11, 13, 21, 40, 70])
     def test_a_circles_edge(self, wgpu: Any, radius: int) -> None:

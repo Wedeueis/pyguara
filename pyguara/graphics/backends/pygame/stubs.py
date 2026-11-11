@@ -297,6 +297,15 @@ class PygameRenderGraph:
         return None
 
     @property
+    def device(self) -> None:
+        """Return None: there is no GPU behind the pygame backend.
+
+        The real `RenderGraph` runs its passes through a `GraphicsDevice`.
+        Present here, like `ctx`, so the two surfaces match.
+        """
+        return None
+
+    @property
     def passes(self) -> list[Any]:
         """Get the pass list (always empty)."""
         return self._passes

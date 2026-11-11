@@ -15,7 +15,7 @@ import numpy as np
 from pyguara.graphics.backends.moderngl.blend import BlendMode, blending
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME  # re-exported
-from pyguara.graphics.pipeline.render_pass import BaseRenderPass
+from pyguara.graphics.pipeline.render_pass import BaseRenderPass, require_gl
 from pyguara.graphics.pipeline.viewport import Viewport
 
 if TYPE_CHECKING:
@@ -156,13 +156,14 @@ class LightPass(BaseRenderPass):
         self._camera = camera
         self._viewport = viewport
 
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
         """Execute the light pass.
 
         Args:
             ctx: The ModernGL rendering context.
             graph: The RenderGraph providing access to framebuffers.
         """
+        ctx = require_gl(ctx, "LightPass")
         if not self._enabled or self._program is None or self._vao is None:
             return
 

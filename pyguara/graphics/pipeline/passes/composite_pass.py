@@ -7,10 +7,10 @@ for post-processing or directly to the screen.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pyguara.graphics.pipeline.buffers import COMPOSITE_FBO_NAME  # re-exported
+from pyguara.graphics.pipeline.device import FullscreenShader, glsl
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
@@ -18,9 +18,21 @@ if TYPE_CHECKING:
 
     from pyguara.graphics.pipeline.graph import RenderGraph
 
-
-# Shader file paths
-_SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
+COMPOSITE = FullscreenShader(
+    "composite",
+    inputs=("u_world", "u_lightmap"),
+    glsl=glsl("composite.frag"),
+    wgsl="""
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    let world_color = textureSample(u_world, input_sampler, in.uv);
+    let light_color = textureSample(u_lightmap, input_sampler, in.uv);
+    // Light above 1.0 brightens, below darkens; the world's alpha is kept.
+    return vec4<f32>(world_color.rgb * light_color.rgb, world_color.a);
+}
+""",
+)
+"""World times light map, the same in both sources."""
 
 
 class CompositePass(BaseRenderPass):
@@ -28,14 +40,16 @@ class CompositePass(BaseRenderPass):
 
     This pass:
     1. Reads from the world FBO (rendered sprites)
-    2. Reads from the light FBO (accumulated lights)
+    2. Reads from the light FBO (accumulated lights), or the world again
+       when there is none, so an unlit scene passes through squared --
+       as it always has
     3. Multiplies them together (world * light)
     4. Writes to the composite FBO (or screen if no post-processing)
     """
 
     def __init__(
         self,
-        ctx: moderngl.Context,
+        ctx: Any = None,
         world_fbo_name: str = "world",
         light_fbo_name: str = "lightmap",
         output_fbo_name: str | None = COMPOSITE_FBO_NAME,
@@ -45,88 +59,37 @@ class CompositePass(BaseRenderPass):
         """Initialize the composite pass.
 
         Args:
-            ctx: The ModernGL rendering context.
+            ctx: Unused. Accepted so callers written when passes needed a
+                ModernGL context keep working; removed in stage E.
             world_fbo_name: Name of the world framebuffer.
             light_fbo_name: Name of the light map framebuffer.
             output_fbo_name: Name of output FBO (None = screen).
             enabled: Whether this pass should execute.
         """
         super().__init__("composite", enabled=enabled)
-        self._ctx = ctx
         self._world_fbo_name = world_fbo_name
         self._light_fbo_name = light_fbo_name
         self._output_fbo_name = output_fbo_name
 
-        # GPU resources
-        self._program: moderngl.Program | None = None
-        self._vao: moderngl.VertexArray | None = None
-
-        self._create_resources()
-
-    def _create_resources(self) -> None:
-        """Create shader program and VAO."""
-        # Load fullscreen quad vertex shader
-        vert_path = _SHADER_DIR / "fullscreen_quad.vert"
-        frag_path = _SHADER_DIR / "composite.frag"
-
-        with open(vert_path) as f:
-            vert_source = f.read()
-        with open(frag_path) as f:
-            frag_source = f.read()
-
-        self._program = self._ctx.program(
-            vertex_shader=vert_source,
-            fragment_shader=frag_source,
-        )
-
-        # Create VAO (no vertex buffers needed - fullscreen quad uses gl_VertexID)
-        self._vao = self._ctx.vertex_array(self._program, [])
-
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
         """Execute the composite pass.
 
         Args:
-            ctx: The ModernGL rendering context.
+            ctx: Unused; the pass runs through `graph.device`.
             graph: The RenderGraph providing access to framebuffers.
         """
-        if not self._enabled or self._program is None or self._vao is None:
+        if not self._enabled:
             return
-
-        # Get input framebuffers
-        world_fbo = graph.fbo_manager.get(self._world_fbo_name)
-        light_fbo = graph.fbo_manager.get(self._light_fbo_name)
-
+        manager = graph.fbo_manager
+        world_fbo = manager.get(self._world_fbo_name)
         if world_fbo is None:
-            # Can't composite without world
             return
-
-        # Bind output
-        if self._output_fbo_name is not None:
-            output_fbo = graph.fbo_manager.get_or_create(self._output_fbo_name)
-            output_fbo.bind()
-        else:
-            ctx.screen.use()
-
-        # Bind input textures
-        world_fbo.texture.use(0)
-        self._program["u_world"] = 0
-
-        if light_fbo is not None:
-            light_fbo.texture.use(1)
-            self._program["u_lightmap"] = 1
-        else:
-            # No light map - use world texture as "fully lit" fallback
-            world_fbo.texture.use(1)
-            self._program["u_lightmap"] = 1
-
-        # Draw fullscreen quad
-        self._vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-
-    def release(self) -> None:
-        """Release GPU resources."""
-        if self._vao is not None:
-            self._vao.release()
-            self._vao = None
-        if self._program is not None:
-            self._program.release()
-            self._program = None
+        light_fbo = manager.get(self._light_fbo_name) or world_fbo
+        output = (
+            manager.get_or_create(self._output_fbo_name)
+            if self._output_fbo_name is not None
+            else None
+        )
+        graph.device.run(
+            COMPOSITE, {"u_world": world_fbo, "u_lightmap": light_fbo}, {}, output
+        )
