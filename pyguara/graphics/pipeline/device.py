@@ -863,6 +863,20 @@ class WgpuFramebuffer:
         self._gpu.resize_target(self._id(), width, height)
         self._width, self._height = width, height
 
+    def read_rgba(self) -> bytes:
+        """Read the buffer back as 8-bit RGBA, top row first.
+
+        For capture and inspection, after the frame is drawn. An HDR buffer
+        is clipped to 0-1 on the way, as the screen would show it.
+        """
+        raw = bytes(self._gpu.read_pixels(self._id()))
+        if self._dtype != "f2":
+            return raw
+        import numpy as np
+
+        floats = np.frombuffer(raw, dtype="<f2").astype(np.float32)
+        return (np.clip(floats, 0.0, 1.0) * 255 + 0.5).astype(np.uint8).tobytes()
+
     def release(self) -> None:
         """Free the target."""
         if self.target is not None:

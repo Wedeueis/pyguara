@@ -223,6 +223,11 @@ class StudioHarness:
         """
         import pygame
 
+        graph = self._graph()
+        if graph is not None and getattr(graph, "ctx", None) is None:
+            # wgpu: the headless window already copies the finished frame,
+            # UI included, onto the display surface.
+            return pygame.display.get_surface()
         framebuffer = self._framebuffer(self._final_source())
         if framebuffer is not None:
             return _to_surface(framebuffer)
@@ -371,6 +376,10 @@ def _to_surface(framebuffer: Any) -> Any:
     import pygame
 
     size = (framebuffer.width, framebuffer.height)
+    read_rgba = getattr(framebuffer, "read_rgba", None)
+    if read_rgba is not None:
+        # A wgpu buffer: already top row first.
+        return pygame.image.frombuffer(read_rgba(), size, "RGBA").copy()
     frame = pygame.image.frombuffer(framebuffer.fbo.read(components=3), size, "RGB")
     # GL's origin is bottom-left and pygame's is top-left.
     return pygame.transform.flip(frame, False, True)

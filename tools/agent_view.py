@@ -351,14 +351,8 @@ def _capture_world(graph: object | None) -> pygame.Surface | None:
 
 def _wgpu_buffer(fbo: object) -> pygame.Surface:
     """Read a wgpu buffer back as a surface; an HDR one is clipped to 8 bits."""
-    import numpy as np
-
-    gpu = fbo._gpu  # type: ignore[attr-defined]
     size = (fbo.width, fbo.height)  # type: ignore[attr-defined]
-    raw = gpu.read_pixels(fbo.target)  # type: ignore[attr-defined]
-    if fbo.dtype == "f2":  # type: ignore[attr-defined]
-        floats = np.frombuffer(raw, dtype="<f2").astype(np.float32)
-        raw = (np.clip(floats, 0.0, 1.0) * 255 + 0.5).astype(np.uint8).tobytes()
+    raw = fbo.read_rgba()  # type: ignore[attr-defined]
     return pygame.image.frombuffer(raw, size, "RGBA").copy()
 
 
