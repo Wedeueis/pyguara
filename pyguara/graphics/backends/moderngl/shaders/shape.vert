@@ -28,7 +28,11 @@ void main() {
     // Apply rotation (2D rotation matrix)
     float c = cos(in_rotation);
     float s = sin(in_rotation);
-    vec2 rotated = mat2(c, -s, s, c) * local;
+    // From +x towards +y: on a y-down screen that is clockwise, and it is
+    // the angle every producer passes -- atan2(dy, dx) of a line, in screen
+    // space. mat2(c, -s, s, c) turned the other way, so every diagonal line
+    // and spark streak came out mirrored about its own centre.
+    vec2 rotated = mat2(c, s, -s, c) * local;
 
     // Translate to world position and project
     gl_Position = u_projection * vec4(rotated + in_pos, 0.0, 1.0);

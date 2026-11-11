@@ -832,6 +832,27 @@ class TestEffects:
         assert tuple(frame.gpu.read_pixels(target)[:3]) == (RED.r, RED.g, RED.b)
 
 
+class TestShapeBatchDirection:
+    def test_a_batched_line_turns_the_way_its_angle_says(self, wgpu: Any) -> None:
+        """A spark streak's row, as the pool packs one: atan2 in screen space."""
+        import math
+
+        from pyguara.graphics.types import ShapeBatch, ShapeKind
+
+        frame = wgpu.GpuFrame(72, 72)
+        frame.gpu.clear(0, 0, 0, 255)
+        row = [35, 35, 35.0 + 2, 2.0, math.atan2(50, 50), 1, 1, 1, 1, 0.0, 2.0]
+        wgpu.WgpuRenderer(frame).render_shapes(ShapeBatch(ShapeKind.LINE, [row]))
+        frame.gpu.end_frame()
+        pixels = frame.gpu.read_pixels()
+
+        def lit(x: int, y: int) -> bool:
+            return pixels[(y * 72 + x) * 4] > 100
+
+        assert lit(15, 15)
+        assert not lit(15, 55)
+
+
 class TestBounded:
     @pytest.mark.parametrize("radius", [6, 9, 11, 13, 21, 40, 70])
     def test_a_circles_edge(self, wgpu: Any, radius: int) -> None:

@@ -137,7 +137,8 @@ class ShapeKind(IntEnum):
 #     2  half width        a circle's radius; a capsule's half length
 #                          plus its half thickness
 #     3  half height       a circle's radius; a capsule's half thickness
-#     4  rotation          radians, counter-clockwise
+#     4  rotation          radians from +x towards +y: clockwise on screen,
+#                          and what atan2(dy, dx) of a line gives
 #     5  red               0.0 - 1.0
 #     6  green
 #     7  blue

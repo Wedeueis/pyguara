@@ -43,8 +43,8 @@ fn vertex(@builtin(vertex_index) index: u32, shape: Instance) -> Varying {
     let local = quad_corner(index) * 2.0 * shape.size;
     let c = cos(shape.rotation);
     let s = sin(shape.rotation);
-    // GLSL's mat2(c, -s, s, c) * local, column by column.
-    let rotated = vec2<f32>(c * local.x + s * local.y, -s * local.x + c * local.y);
+    // shape.vert's mat2(c, s, -s, c) * local: from +x towards +y.
+    let rotated = vec2<f32>(c * local.x - s * local.y, s * local.x + c * local.y);
     var out: Varying;
     out.position = params.u_projection * vec4<f32>(rotated + shape.pos, 0.0, 1.0);
     out.local = local;
