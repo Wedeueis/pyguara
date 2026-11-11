@@ -51,14 +51,14 @@ GL on Linux, WebGPU in the browser), behind the existing `IRenderer`,
 | Stage | What | Status |
 | --- | --- | --- |
 | **A** | Native core: one instanced pipeline for rectangles, circles, lines and textured quads. `IRenderer` and `UIRenderer` on top, text rasterised by `pygame.font` and cached as textures | **Done.** Held to the pygame renderer's pixels by `tests/integration/test_wgpu_pixels.py`; a Reclaimer frame differs in 10 to 14 pixels of 960,000 |
-| **B** | A swapchain on the SDL window's native handle, with the offscreen copy kept as the fallback and for capture | **Built, and measured only where it cannot be judged.** It presents to an X11 window here. On this machine wgpu has only OpenGL translated to Direct3D 12, and a frame costs about 10 ms whatever is in it against under 2 ms for pygame's software fill. Windows and Wayland handles are written and have never run. **Next: `uv run python tools/wgpu_probe.py` on native Windows** |
+| **B** | A swapchain on the SDL window's native handle, with the offscreen copy kept as the fallback and for capture | **Done, and measured on native Windows (2026-11-10).** DX12 on an RTX 3050, presenting straight to the Win32 window: 400 rectangles at 1280x720 cost 0.52 ms a frame (push 0.16, render 0.13, present 0.22) against 1.39 ms for pygame's software renderer, 2.7x faster. On WSL the same frame costs about 10 ms, which is the GL-over-D3D12 translation layer, not the backend. The Win32 handle path, unrun until now, works |
 | **C** | Sprites through the render system: `ShapeBatch`, filtering, materials. `render_batch` and `draw_texture` already work | The visual snapshot suite and the demos |
 | **D** | The render graph on wgpu: offscreen buffers, lighting, post-processing | `true_coral`, `protocolo_bandeira`, `mourisco_ressonancia` |
 | **E** | ModernGL retired; Studio's viewport moved | Nothing imports `moderngl` |
 
 Stage A was the one whose result could be *checked* without a screen.
-Stage B is the one that pays for it, and whether it does is a number
-from a Windows machine that nobody has yet.
+Stage B is the one that pays for it, and on native Windows it does:
+2.7x faster than software on a frame of 400 shapes.
 
 Two things known to be left on the table: the frame is rendered
 offscreen and then copied to the window in a second pass, where it could
