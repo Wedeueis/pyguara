@@ -192,3 +192,33 @@
 - **Alternatives:** silent, as pygame does; raise; or draw without it and log once.
 - **Chose:** draw without and log once. Raising would stop a game that runs today on pygame; silence leaves an author guessing why a shader has no effect.
 - **Tags:** renderer, materials
+
+## Stage D: one pass hierarchy on a GraphicsDevice, shaders in both languages until E
+- **Context:** Passes and effects received a `moderngl.Context` and ran GLSL; two demos ship their own GLSL passes. The user chose a neutral API with WGSL, held to ModernGL's frames.
+- **Alternatives:** wgpu twins of every pass beside the ModernGL ones; translate GLSL with naga; or one hierarchy over a device that runs either language.
+- **Chose:** one hierarchy. `GraphicsDevice.run(shader, inputs, uniforms, output, blend, viewport, clear)`; `FullscreenShader` carries `glsl` and `wgsl`; `ModernGLDevice` and `WgpuDevice` run them. `RenderGraph`/`FramebufferManager` accept a device or a bare context (wrapped), so no existing caller changed. Stage E deletes the GLSL and the context path.
+- **Tags:** renderer, architecture, render-graph
+
+## Devices are an ABC, not a Protocol
+- **Context:** The graph must tell a device from a ModernGL context, and unit tests pass `MagicMock` as the context.
+- **Alternatives:** a runtime-checkable Protocol; duck-typing on an attribute.
+- **Chose:** an abstract base class. A mock satisfies any runtime-checkable protocol and has every attribute, so either alternative would treat a mock context as a device. Unit-tested.
+- **Tags:** architecture, testing
+
+## WGSL's uv has its origin top-left; GLSL's bottom-left; ports flip deliberately
+- **Context:** GL framebuffer rows run bottom-up, wgpu's top-down.
+- **Alternatives:** flip every wgpu target to imitate GL; or let each language use its own native convention and flip in the shaders that have a direction.
+- **Chose:** native conventions. Shaders that only sample at `uv` port unchanged; directional ones (rain, rising heat, light positions) flip `y` in their WGSL. The graph test's picture carries a corner marker so an upside-down port fails.
+- **Tags:** renderer, shaders, parity
+
+## Input buffers sample linear and repeating, as GL framebuffer textures do
+- **Context:** The sampler wgpu's fullscreen passes read inputs through.
+- **Alternatives:** clamp-to-edge, the usual choice; or ModernGL's defaults.
+- **Chose:** ModernGL's -- linear, repeat. Effects were written against them, and one offsetting UVs near an edge reads the far side on GL; clamping would change those edge pixels.
+- **Tags:** renderer, parity
+
+## Pin the clock and seed unseeded streams to compare GL demo frames
+- **Context:** Checking the D1 refactor left the GL demos unchanged.
+- **Alternatives:** compare pass-level tests only; or compare whole demo frames before and after.
+- **Chose:** whole frames, byte for byte, through a wrapper of `agent_view` that pins `PygameClock` to 1/60 s and gives an unseeded `RandomStream` seed 0. Unpinned, five of six differed from themselves; `true_coral` is unseeded by design.
+- **Tags:** testing, parity
