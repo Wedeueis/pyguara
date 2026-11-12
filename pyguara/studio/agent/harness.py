@@ -182,10 +182,8 @@ class StudioHarness:
             The capture, or None when there is nothing to read -- a
             headless backend with no surface and no framebuffer.
         """
-        import pygame
-
-        surface = self._compose()
-        if surface is None:
+        image = self._compose()
+        if image is None:
             logger.warning(
                 "Nothing to capture: this backend exposes neither a display "
                 "surface nor a framebuffer."
@@ -194,34 +192,29 @@ class StudioHarness:
 
         self._out_dir.mkdir(parents=True, exist_ok=True)
         path = self._out_dir / f"{name or f'frame_{self._frame:04d}'}.png"
-        pygame.image.save(surface, str(path))
+        image.save(path)
 
-        world = self._world_surface()
-        width, height = surface.get_size()
+        world = self._world_image()
+        width, height = image.get_size()
         return Capture(
             path=path,
             width=width,
             height=height,
-            blank=is_flat(surface),
+            blank=is_flat(image),
             world_flat=None if world is None else is_flat(world),
         )
 
-    def _compose(self) -> Any:
-        """Return the composed frame as a pygame surface, or None.
+    def _compose(self) -> RgbaImage | None:
+        """Return the composed frame, UI included, or None.
 
-        `agent_view`'s logic, and its reasoning: the pygame backends draw
-        into the display surface, so reading it back is the whole job. The
-        wgpu backend does not -- its frame never touches the display
-        surface -- so the frame is read back from the GPU instead.
-        The default framebuffer is no use: after the swap it is an
-        undefined back buffer, and before it reads back as solid zeros
-        under the offscreen driver.
+        The wgpu window renders into the device's own target, so the frame
+        is read back from the GPU. The pygame backend draws onto its display
+        surface, which is read instead -- the only branch that touches
+        pygame, and only because that backend is pygame.
 
         Returns:
-            The surface, or None.
+            The frame, or None.
         """
-        import pygame
-
         from pyguara.graphics.window import Window
 
         try:
@@ -230,26 +223,24 @@ class StudioHarness:
             backend = None
         read_pixels = getattr(backend, "read_pixels", None)
         if read_pixels is not None:
-            # wgpu: the frame, UI included, is in the device's own target.
-            pixels, width, height = read_pixels()
-            return pygame.image.frombuffer(pixels, (width, height), "RGBA").copy()
+            return RgbaImage(*read_pixels())
         framebuffer = self._framebuffer(self._final_source())
         if framebuffer is not None:
-            return _to_surface(framebuffer)
-        return pygame.display.get_surface()
+            return _read_buffer(framebuffer)
+        return _display_surface()
 
-    def _world_surface(self) -> Any:
+    def _world_image(self) -> RgbaImage | None:
         """Return the world buffer alone, before any UI, or None.
 
         Returns:
-            The surface, or None when there is no separate world buffer.
+            The image, or None when there is no separate world buffer.
         """
         if self._final_source() == "world":
             # The composed frame already is the world buffer, so a second
             # read would say the same thing twice.
             return None
         framebuffer = self._framebuffer("world")
-        return None if framebuffer is None else _to_surface(framebuffer)
+        return None if framebuffer is None else _read_buffer(framebuffer)
 
     def _final_source(self) -> str:
         """Return the name of the buffer the finished frame is composed in.
@@ -369,25 +360,70 @@ def is_flat(surface: Any) -> bool:
     return True
 
 
-def _to_surface(framebuffer: Any) -> Any:
-    """Read a framebuffer into a pygame surface, the right way up.
+class RgbaImage:
+    """A captured frame: RGBA bytes, top row first.
 
-    Args:
-        framebuffer: A `Framebuffer` from the render graph.
-
-    Returns:
-        The surface.
+    Answers `get_size()` and `get_at()`, the two calls `is_flat` makes, so
+    a pygame surface and this are interchangeable there.
     """
+
+    def __init__(self, pixels: bytes, width: int, height: int) -> None:
+        """Hold a frame.
+
+        Args:
+            pixels: `width * height * 4` bytes.
+            width: Width in pixels.
+            height: Height in pixels.
+        """
+        self.pixels = bytes(pixels)
+        self.width = width
+        self.height = height
+
+    def get_size(self) -> tuple[int, int]:
+        """Return `(width, height)`."""
+        return self.width, self.height
+
+    def get_at(self, at: tuple[int, int]) -> tuple[int, int, int, int]:
+        """Return the RGBA of one pixel."""
+        start = (at[1] * self.width + at[0]) * 4
+        red, green, blue, alpha = self.pixels[start : start + 4]
+        return red, green, blue, alpha
+
+    def save(self, path: Path) -> None:
+        """Write the frame as a PNG.
+
+        Through the native extension where it is built, so a wgpu game's
+        capture loads no pygame; through pygame where it is not.
+        """
+        from pyguara import native
+
+        try:
+            extension = native.require_extension("PNG capture")
+        except RuntimeError:
+            extension = None
+        if extension is not None:
+            extension.encode_png(str(path), self.pixels, self.width, self.height)
+            return
+        import pygame
+
+        image = pygame.image.frombuffer(self.pixels, self.get_size(), "RGBA")
+        pygame.image.save(image, str(path))
+
+
+def _read_buffer(framebuffer: Any) -> RgbaImage:
+    """Read a render-graph buffer, which is top row first on wgpu."""
+    return RgbaImage(framebuffer.read_rgba(), framebuffer.width, framebuffer.height)
+
+
+def _display_surface() -> RgbaImage | None:
+    """Read the pygame backend's display surface, or None if it has none."""
     import pygame
 
-    size = (framebuffer.width, framebuffer.height)
-    read_rgba = getattr(framebuffer, "read_rgba", None)
-    if read_rgba is not None:
-        # A wgpu buffer: already top row first.
-        return pygame.image.frombuffer(read_rgba(), size, "RGBA").copy()
-    frame = pygame.image.frombuffer(framebuffer.fbo.read(components=3), size, "RGB")
-    # GL's origin is bottom-left and pygame's is top-left.
-    return pygame.transform.flip(frame, False, True)
+    surface = pygame.display.get_surface()
+    if surface is None:
+        return None
+    width, height = surface.get_size()
+    return RgbaImage(pygame.image.tobytes(surface, "RGBA"), width, height)
 
 
 def open_headless(

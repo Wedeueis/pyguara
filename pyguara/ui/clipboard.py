@@ -1,9 +1,9 @@
 """The clipboard, as something `pyguara.ui` can reach without pygame.
 
 Cut, copy and paste need somewhere to put the text, and the only real
-clipboard is the one the windowing system owns -- which here is SDL,
-reached through pygame. `pyguara/ui` may not import a backend, so the
-widget takes a `Clipboard` and the application decides which one.
+clipboard is the one the windowing system owns -- SDL through pygame, or
+arboard in the native extension. `pyguara/ui` may not import a backend, so
+the widget takes a `Clipboard` and the application decides which one.
 
 The default is deliberately **not** the system clipboard. A widget
 constructed as `TextInput(position)` gets `InMemoryClipboard`, which is
@@ -13,7 +13,8 @@ copy from the browser and it does not. That is a smaller promise than a
 constructed -- and a test, a headless run and a tool with no window all
 need a clipboard that cannot fail.
 
-`pyguara.input.backends.pygame_backend.PygameClipboard` is the real one.
+`pyguara.input.backends.NativeClipboard` (wgpu) and
+`pyguara.input.backends.PygameClipboard` (pygame) are the real ones.
 """
 
 from typing import Protocol, runtime_checkable

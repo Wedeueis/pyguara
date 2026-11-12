@@ -6,21 +6,15 @@ from pyguara import native
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock, FixedClock, WallClock
 from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.manager import AudioManager
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import AudioBackend, GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
-from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
-from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.window import Window
-from pyguara.input.backends.pygame_backend import PygameInputBackend
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
 from pyguara.log import LogManager, default_log_manager
@@ -369,9 +363,13 @@ def _setup_container(
         wgpu_graph.add_pass(FinalPass(input_fbo_name="world"))
         container.register_instance(RenderGraph, wgpu_graph)
     else:
-        # Default Pygame backend
+        # Default Pygame backend. Imported here, not at the top, so a game on
+        # wgpu never loads pygame at all.
+        from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+        from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
         from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
         from pyguara.graphics.backends.pygame.types import PygameTextureFactory
+        from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 
         pygame_window_backend = PygameWindow()
         window = Window(win_config, pygame_window_backend)
@@ -411,6 +409,10 @@ def _setup_container(
         container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
 
     # 5. Core Subsystems
+    # Gamepads. SDL's joystick subsystem through pygame on every backend
+    # for now: the wgpu backend's own (gilrs) is increment 3b.
+    from pyguara.input.backends.pygame_backend import PygameInputBackend
+
     container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
     container.register_singleton(SceneManager, SceneManager)
@@ -445,6 +447,9 @@ def _setup_container(
         audio_system = NativeAudioSystem()
         sound_loader = NativeSoundLoader()
     else:
+        from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
+        from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+
         audio_system = PygameAudioSystem()
         sound_loader = PygameSoundLoader()
     container.register_instance(IAudioSystem, audio_system)  # type: ignore[type-abstract]

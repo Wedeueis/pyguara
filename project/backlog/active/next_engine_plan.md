@@ -108,7 +108,7 @@ software renderer keeps pygame; it is the reference the wgpu one is held to.
 | **3c** | The frame clock without `pygame.time` | **Done 2026-11-12.** `WallClock`: pygame's contract, without rounding to whole milliseconds |
 | **3d** | Images decoded in Rust (`image` crate): a texture type holding RGBA, its loader and factory, premultiply; the wgpu renderers draw it | **Done 2026-11-12.** `ImageTexture`, `NativeImageLoader`, `ImageTextureFactory`. Every shipped PNG decodes byte-identical to pygame's, JPEGs within 4/255; every demo still matches its pygame frame |
 | **3e** | Text rasterised in Rust with a bundled font; the UI's polygon fill off `pygame.draw`; goldens re-approved, since the glyphs change | **Done 2026-11-12.** Liberation Sans 2.1.5 (the user's call) on both renderers, `NativeFont` on fontdue with SDL_ttf's layout: heights exact, widths exact on 97% (FreeType hinting is the rest). Polygons by pygame's own rules, transcribed: identical. Five demo goldens re-approved, text only |
-| **3f** | Nothing on the wgpu path imports pygame, asserted by a test; capture tools write PNGs without it | |
+| **3f** | Nothing on the wgpu path imports pygame, asserted by a test; capture tools write PNGs without it | **Done but for 3b and 4b, 2026-11-12.** `test_wgpu_without_pygame.py` runs three graph demos with `import pygame` made to raise: they pass with joysticks and audio stood in, and the real configuration is a strict xfail that will fail the suite once 3b and 4b land. Bootstrap imports each backend only on its branch; `NativeClipboard` on arboard; the Studio harness writes PNGs through `encode_png` |
 
 ### 4. Native audio as the default backend
 

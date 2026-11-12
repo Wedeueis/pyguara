@@ -378,3 +378,9 @@
 - **Alternatives:** a global tolerance (would hide a broken sprite); render pygame's text through `NativeFont` too (pygame backend's look would depend on the extension being built); a budget per demo that has text, zero for the rest.
 - **Chose:** per-demo budgets, measured plus a quarter, with every other demo still exact.
 - **Tags:** testing, text
+
+## The no-pygame promise is tested now, with joysticks and audio stood in, and pinned by a strict xfail
+- **Context:** Gamepads (3b) and audio (4b) are blocked on system headers, but the rest of the wgpu path is clear of pygame.
+- **Alternatives:** wait for 3b/4b before testing; test the real configuration only (it cannot pass yet); test with stand-ins for just those two, plus the real one as a strict xfail.
+- **Chose:** the stand-ins plus a strict xfail. The first guards everything else from regressing today; the second fails the suite as soon as it passes, so the marker cannot outlive its reason.
+- **Tags:** testing, packaging
