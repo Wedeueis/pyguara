@@ -164,30 +164,6 @@ class TestExact:
             ),
             pytest.param(
                 lambda r: [
-                    r.draw_text(
-                        f"Floor {i} HP 73/100",
-                        Vector2(8, 6 + i * 26),
-                        WHITE,
-                        14 + i * 2,
-                    )
-                    for i in range(5)
-                ],
-                id="text",
-            ),
-            pytest.param(
-                lambda r: [
-                    r.draw_text(
-                        "-17",
-                        Vector2(20 + i * 40, 60),
-                        Color(255, 220, 80, 40 + i * 40),
-                        22,
-                    )
-                    for i in range(5)
-                ],
-                id="fading-text",
-            ),
-            pytest.param(
-                lambda r: [
                     r.draw_circle(Vector2(30 + i * 28, 80), radius, RED)
                     for i, radius in enumerate((1, 2, 3, 4, 5, 7, 8))
                 ],
@@ -207,18 +183,6 @@ class TestExact:
             pytest.param(
                 lambda r: r.draw_polygon([(20, 20), (200, 40), (120, 140)], RED),
                 id="polygon",
-            ),
-            pytest.param(
-                lambda r: r.draw_text(
-                    "Salvage banked", Vector2(10, 10), WHITE, 20, bold=True
-                ),
-                id="bold-text",
-            ),
-            pytest.param(
-                lambda r: r.draw_text(
-                    "Iron Lung", Vector2(10, 10), WHITE, 20, italic=True
-                ),
-                id="italic-text",
             ),
             pytest.param(
                 lambda r: r.draw_rect(Rect(15, 15, 120, 70), GLASS),
@@ -267,6 +231,144 @@ def _checker(size: int = 16) -> PygameTexture:
     pygame.draw.rect(surface, (60, 255, 60, 255), (size // 2, 0, size // 2, size // 4))
     pygame.draw.rect(surface, (60, 60, 255, 255), (0, size // 2, size // 4, size // 2))
     return PygameTexture("checker", surface)
+
+
+class TestText:
+    """Text on both renderers: the same face, two rasterisers.
+
+    Both draw Liberation Sans from `pyguara.graphics.fonts`, the pygame one
+    through FreeType, which hints outlines to the pixel grid, and the wgpu
+    one through fontdue, which does not. So edges differ in shade, and what
+    is held is what a player would notice: where the text is (the same
+    columns, and rows within one), and how few pixels differ by more than
+    half their range -- a glyph that moved or vanished would be hundreds.
+    Measured 2026-11-12: at most 111 of 4248 drawn, 2.6%.
+    """
+
+    @staticmethod
+    def _compare(reference: bytes, actual: bytes) -> tuple[int, int]:
+        import numpy as np
+
+        def pixels(frame: bytes) -> Any:
+            rgba = np.frombuffer(frame, np.uint8).reshape(HEIGHT, WIDTH, 4)
+            return rgba[..., :3].astype(np.int16)
+
+        ours, theirs = pixels(actual), pixels(reference)
+
+        def box(image: Any) -> tuple[int, int, int, int]:
+            rows, columns = np.nonzero((image != BACKGROUND).any(axis=2))
+            return columns.min(), rows.min(), columns.max(), rows.max()
+
+        left, top, right, bottom = box(theirs)
+        our_left, our_top, our_right, our_bottom = box(ours)
+        assert (our_left, our_right) == (left, right)
+        assert abs(our_top - top) <= 1 and abs(our_bottom - bottom) <= 1
+        drawn = int(((theirs != BACKGROUND).any(axis=2)).sum())
+        far = int((np.abs(ours - theirs).max(axis=2) > 128).sum())
+        return drawn, far
+
+    @pytest.mark.parametrize(
+        ("draw", "ui"),
+        [
+            pytest.param(
+                lambda r: [
+                    r.draw_text(
+                        f"Floor {i} HP 73/100",
+                        Vector2(8, 6 + i * 26),
+                        WHITE,
+                        14 + i * 2,
+                    )
+                    for i in range(5)
+                ],
+                False,
+                id="sizes",
+            ),
+            pytest.param(
+                lambda r: [
+                    r.draw_text(
+                        "-17",
+                        Vector2(20 + i * 40, 60),
+                        Color(255, 220, 80, 40 + i * 40),
+                        22,
+                    )
+                    for i in range(5)
+                ],
+                False,
+                id="fading",
+            ),
+            pytest.param(
+                lambda r: r.draw_text(
+                    "Salvage banked", Vector2(10, 10), WHITE, 20, bold=True
+                ),
+                True,
+                id="bold",
+            ),
+            pytest.param(
+                lambda r: r.draw_text(
+                    "Iron Lung", Vector2(10, 10), WHITE, 20, italic=True
+                ),
+                True,
+                id="italic",
+            ),
+        ],
+    )
+    def test_text_lands_where_pygame_puts_it(
+        self, wgpu: Any, draw: Any, ui: bool
+    ) -> None:
+        drawn, far = self._compare(*_frames(wgpu, draw, ui=ui))
+
+        assert drawn > 0
+        assert far <= 0.03 * drawn
+
+
+class TestTextMetrics:
+    """`NativeFont` measures as `pygame.font` does, so a layout fits on both.
+
+    Sizes 10 to 40, all four styles, against FreeType with the same file.
+    Heights and line advances are exact. Widths are not always: FreeType
+    runs the font's hinting program, which at some sizes widens many
+    glyphs by a pixel (size 27 bold: 16.49 becomes 17), and fontdue has no
+    hinting interpreter. Measured: 1810 of 1860 strings exact.
+    """
+
+    WORDS = (
+        "Floor 0 HP 73/100", "-17", "Salvage banked", "Iron Lung", "AVAWAy",
+        "PAUSE", "Settings", "Quit to title", "Wave 12 cleared!", "x",
+        "Hello, World", "The quick brown fox", "01/04", "Tamanduá", "Volume: 80%",
+    )  # fmt: skip
+
+    def test_heights_and_line_advances_are_exact(self, wgpu: Any) -> None:
+        from pyguara import native
+        from pyguara.graphics.fonts import default_font_path
+
+        native_font = native.require_extension("test").NativeFont
+        for size in range(10, 41):
+            for bold in (False, True):
+                for italic in (False, True):
+                    path = default_font_path(bold, italic)
+                    theirs = pygame.font.Font(str(path), size)
+                    ours = native_font(size, bold, italic)
+                    assert ours.height == theirs.get_height(), (size, bold, italic)
+                    assert ours.line_height == theirs.get_linesize()
+                    assert ours.ascent == theirs.get_ascent()
+
+    def test_widths_match_but_for_hinting(self, wgpu: Any) -> None:
+        from pyguara import native
+        from pyguara.graphics.fonts import default_font_path
+
+        native_font = native.require_extension("test").NativeFont
+        compared = exact = 0
+        for size in range(10, 41):
+            for bold in (False, True):
+                for italic in (False, True):
+                    theirs = pygame.font.Font(
+                        str(default_font_path(bold, italic)), size
+                    )
+                    ours = native_font(size, bold, italic)
+                    for word in self.WORDS:
+                        compared += 1
+                        exact += ours.size(word)[0] == theirs.size(word)[0]
+        assert exact >= 0.95 * compared
 
 
 class TestSprites:

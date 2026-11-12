@@ -56,6 +56,9 @@ arboard = "3.7.0"
 # Decodes textures and writes captures for the wgpu backend, in place of
 # `pygame.image`. Pure Rust; only the formats the image loader advertises.
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
+# Rasterises text for the wgpu backend, in place of `pygame.font`. Pure Rust;
+# the default faces are embedded from `pyguara/graphics/fonts/`.
+fontdue = "0.9.5"
 
 [profile.release]
 lto = "fat"

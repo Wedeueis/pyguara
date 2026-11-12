@@ -354,3 +354,27 @@
 - **Alternatives:** byte-exact for everything (JPEG fails: two IDCTs round differently); a frame-level tolerance only.
 - **Chose:** exact on every PNG the repository ships (all 21 are), and a bound for the three JPEGs (measured max 4, mean under 0.13).
 - **Tags:** textures, testing
+
+## The default font is Liberation Sans 2.1.5, on both renderers (user's call)
+- **Context:** Text leaves `pygame.font`, so the engine needs a face of its own; before, each renderer asked for system "arial" and got Arial on Windows, Ubuntu on Ubuntu.
+- **Alternatives:** Liberation Sans 2.x (OFL, Arial's metrics, downloaded); DejaVu Sans (local, permissive, wider than Arial); Noto Sans or Inter (OFL, a different look).
+- **Chose:** Liberation Sans 2.1.5, on the user's call, from the official release (sha256 7191c669...). Embedded in the extension from the same files the pygame renderers open, so both backends draw one typeface on every platform.
+- **Tags:** text, renderer, packaging
+
+## fontdue without hinting, laid out as SDL_ttf lays out
+- **Context:** Rasterising text in Rust.
+- **Alternatives:** fontdue (simple, no hinting interpreter); skrifa or swash (TrueType hinting, closer to FreeType's pixels, more work).
+- **Chose:** fontdue, with SDL_ttf's layout rules fitted against pygame (0 of 608 mismatches on the fitted sizes): heights and line advances exact at every size 10-40, widths exact on 97%, the rest off where FreeType's hinting program widens glyphs. A hinting crate is the upgrade if exact pixels matter.
+- **Tags:** text, renderer
+
+## The UI's polygons are rasterised in Python by pygame's own rules
+- **Context:** `draw_polygon` on wgpu drew into a scratch `pygame.Surface` with `pygame.draw.polygon`.
+- **Alternatives:** tessellate into wgpu triangles (different edge pixels); a Rust rasteriser; transcribe pygame-ce 2.5.6's `draw_fillpoly`, `draw_filltri` and `draw_line_width` into Python.
+- **Chose:** the transcription. UI polygons are a handful of small shapes, so speed is irrelevant, and it covers exactly pygame's pixels: 750 random polygons, filled and outlined, identical.
+- **Tags:** renderer, ui
+
+## Whole-demo parity gets a measured text budget per demo, not a tolerance
+- **Context:** Text no longer matches pygame pixel for pixel, so four demo frames stopped being identical.
+- **Alternatives:** a global tolerance (would hide a broken sprite); render pygame's text through `NativeFont` too (pygame backend's look would depend on the extension being built); a budget per demo that has text, zero for the rest.
+- **Chose:** per-demo budgets, measured plus a quarter, with every other demo still exact.
+- **Tags:** testing, text

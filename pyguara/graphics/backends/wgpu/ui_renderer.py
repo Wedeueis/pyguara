@@ -11,11 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
-import pygame
-
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.clipping import ClipStack
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
+from pyguara.graphics.backends.wgpu.polygon import rasterise_polygon
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -91,29 +90,15 @@ class WgpuUIRenderer:
         """Draw a filled or outlined polygon.
 
         The native pipeline draws quads, and an arbitrary polygon is not
-        one. So this rasterises it on the CPU into a surface the size of
-        its bounding box and draws that, once. Polygons are rare in a UI
+        one. So this rasterises it on the CPU (`polygon.py`, pygame's own
+        rules) into a mask the size of its bounding box and draws that once. Polygons are rare in a UI
         -- a dropdown's arrow, a slider's notch -- and small.
         """
         if color.a == 0 or len(points) < 3:
             return
-        left = min(x for x, _ in points)
-        top = min(y for _, y in points)
-        right = max(x for x, _ in points)
-        bottom = max(y for _, y in points)
-        # One pixel of room on the far side: pygame draws the edge pixels.
-        box_width, box_height = right - left + 1, bottom - top + 1
-        scratch = pygame.Surface((box_width, box_height), pygame.SRCALPHA)
-        pygame.draw.polygon(
-            scratch,
-            (255, 255, 255, 255),
-            [(x - left, y - top) for x, y in points],
-            width,
-        )
+        pixels, left, top, box_width, box_height = rasterise_polygon(points, width)
         self._gpu.quad(
-            self._frame.once_rgba(
-                pygame.image.tobytes(scratch, "RGBA"), box_width, box_height
-            ),
+            self._frame.once_rgba(pixels, box_width, box_height),
             left + box_width / 2, top + box_height / 2,
             box_width / 2, box_height / 2,
             0, 0, box_width, box_height, 0.0,
@@ -176,12 +161,12 @@ class WgpuUIRenderer:
         self, text: str, size: int, *, bold: bool = False, italic: bool = False
     ) -> tuple[int, int]:
         """Calculate the width and height of a string."""
-        measured = self._frame.font(size, bold, italic).size(text)
-        return (measured[0], measured[1])
+        width, height = self._frame.font(size, bold, italic).size(text)
+        return (int(width), int(height))
 
     def get_line_height(self, size: int) -> int:
         """Return the font's own line advance, leading included."""
-        return int(self._frame.font(size).get_linesize())
+        return int(self._frame.font(size).line_height)
 
     def push_clip(self, rect: Rect) -> None:
         """Restrict drawing to `rect`, intersected with any active clip."""

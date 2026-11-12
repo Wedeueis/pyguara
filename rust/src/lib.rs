@@ -67,6 +67,7 @@ mod particles;
 mod solids;
 mod sparks;
 mod spatialhash;
+mod text;
 mod window;
 mod world;
 
@@ -87,6 +88,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<world::ColumnView>()?;
     module.add_class::<world::RowView>()?;
     module.add_class::<world::FieldAccessor>()?;
+    module.add_class::<text::NativeFont>()?;
     module.add_class::<window::NativeWindow>()?;
     module.add_class::<window::NativeClipboard>()?;
     module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;

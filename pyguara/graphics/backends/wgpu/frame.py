@@ -4,11 +4,11 @@ All three draw into one `NativeGpu` frame, in the order they are called,
 so they hold one `GpuFrame` between them: the native device, and the two
 caches that turn CPU-side pixels into GPU textures.
 
-**Text is rasterised by `pygame.font` and cached as a texture**, as the
-ModernGL renderer does. A string is rendered once, in white, and tinted by
-the instance colour when drawn -- so a damage number fading out, or the
-same label in two colours, is one texture. Native shaping is its own
-workstream; see `project/backlog/active/next_engine_plan.md`.
+**Text is rasterised in Rust (`NativeFont`) and cached as a texture.** A
+string is rendered once, in white, and tinted by the instance colour when
+drawn -- so a damage number fading out, or the same label in two colours,
+is one texture. The face is the engine's bundled default
+(`pyguara.graphics.fonts`), which the pygame renderer opens too.
 
 **Nothing is freed in the middle of a frame.** A primitive already pushed
 names its texture by id, and the frame is only drawn at `end_frame`. So an
@@ -23,8 +23,6 @@ import sys
 import weakref
 from collections import OrderedDict
 from typing import Any
-
-import pygame
 
 from pyguara import native
 from pyguara.graphics.backends.wgpu.textures import ImageTexture
@@ -178,6 +176,7 @@ class GpuFrame:
                 graphics adapter can be opened at all.
         """
         extension = native.require_extension("The wgpu rendering backend")
+        self._extension = extension
         self.gpu: Any = None
         if window is not None:
             try:
@@ -192,23 +191,23 @@ class GpuFrame:
             self.gpu = extension.NativeGpu(width, height)
         how = "to the window" if self.gpu.has_surface else "offscreen"
         logger.info(f"wgpu renderer on {self.gpu.adapter}, drawing {how}")
-        if not pygame.font.get_init():
-            pygame.font.init()
-        self._fonts: dict[FontKey, pygame.font.Font] = {}
+        self._fonts: dict[FontKey, Any] = {}
         self._text: OrderedDict[tuple[FontKey, str], GlyphRun] = OrderedDict()
         self._images: dict[tuple[int, bool], tuple[weakref.ref[object], ImageRun]] = {}
         self._doomed: list[int] = []
 
     # -- fonts and text ----------------------------------------------------
 
-    def font(
-        self, size: int, bold: bool = False, italic: bool = False
-    ) -> pygame.font.Font:
-        """Return the font for a size and style, made once."""
+    def font(self, size: int, bold: bool = False, italic: bool = False) -> Any:
+        """Return the `NativeFont` for a size and style, made once.
+
+        The engine's default face (`pyguara.graphics.fonts`), rasterised in
+        Rust; see `rust/src/text.rs` for how its layout follows SDL_ttf's.
+        """
         key = (size, bold, italic)
         font = self._fonts.get(key)
         if font is None:
-            font = pygame.font.SysFont("arial", size, bold, italic)
+            font = self._extension.NativeFont(max(1, size), bold, italic)
             self._fonts[key] = font
         return font
 
@@ -232,13 +231,10 @@ class GpuFrame:
         if found is not None:
             self._text.move_to_end(key)
             return found
-        surface = self.font(size, bold, italic).render(text, True, (255, 255, 255))
-        width, height = surface.get_size()
+        pixels, width, height = self.font(size, bold, italic).render(text)
         if width == 0 or height == 0:
             return None
-        texture = self.gpu.create_texture(
-            width, height, pygame.image.tobytes(surface, "RGBA")
-        )
+        texture = self.gpu.create_texture(width, height, pixels)
         run = (texture, width, height)
         self._text[key] = run
         if len(self._text) > TEXT_CACHE_LIMIT:
