@@ -104,7 +104,7 @@ The obvious bevel is white at low alpha on the top edge and black on the
 bottom. It does not work: both UI backends draw through `pygame.draw`, which
 **replaces** the destination pixel including its alpha rather than blending.
 On the pygame backend the surface is opaque, so a 45/255 white lands as
-solid white; on the ModernGL backend the overlay is `SRCALPHA`, so the same
+solid white; on the (since retired) ModernGL backend the overlay was `SRCALPHA`, so the same
 call punches a transparent hole in the element. `bevel_edges()` mixes the
 highlight into the fill colour on the CPU instead, which gives the same
 result on both backends and is deterministic enough to assert in a test.

@@ -276,3 +276,27 @@
 - **Alternatives:** make wgpu's primitives match ModernGL's; exact comparison per pass only; or a bounded whole-frame comparison.
 - **Chose:** passes exact (`test_wgpu_graph.py`), frames bounded -- 1.5% of pixels over 32 apart, mean 2.0, against measured 0.03-0.98% and 0.03-0.66 -- and sabotage-checked: no lights on wgpu fails four demos by wide margins. wgpu stays matched to pygame, which is what Reclaimer runs on.
 - **Tags:** testing, parity
+
+## A config naming the retired backend raises; it does not fall back
+- **Context:** Removing ModernGL left configs and `PYGUARA_BACKEND` values naming it. The enum's usual handling of an unknown value is to log and keep the default.
+- **Alternatives:** map `moderngl` to `wgpu` silently; log and fall back to pygame; or raise at startup.
+- **Chose:** raise, on the user's call: `RenderingBackend._missing_` raises `RetiredBackendError(RuntimeError)` naming both live backends. A `RuntimeError`, not a `ValueError`, so neither the env-override loader nor the config fallback swallows it.
+- **Tags:** config, renderer, api
+
+## Port the borderless window chrome to WgpuWindow rather than drop it
+- **Context:** Minimise, maximise, drag and close for a borderless window lived only on the GL window, and Studio's title bar uses them.
+- **Alternatives:** drop borderless Studio with the GL window; or move the methods across.
+- **Chose:** move them. They are SDL window calls with nothing GL in them, and Studio's title bar is what a borderless editor has to close with.
+- **Tags:** studio, window
+
+## Delete the isolated wgpu pixel runner along with GL
+- **Context:** `test_wgpu_pixels_isolated.py` ran the wgpu pixel suite in a subprocess because wgpu's GL backend panics when another GL context is current, which ModernGL's tests made the case.
+- **Alternatives:** keep it as a guard; or delete it.
+- **Chose:** delete. With no GL context left in the process there is nothing to isolate from, and it doubled the suite's GPU time.
+- **Tags:** testing
+
+## The agent harness loses its `gl` flag
+- **Context:** `open_headless(gl=True)` chose SDL's `offscreen` driver so a ModernGL scene could create a context.
+- **Alternatives:** keep the flag as a no-op for compatibility; or remove it.
+- **Chose:** remove. wgpu renders offscreen under `dummy`, the only caller was a test scenario, and a flag that does nothing invites a wrong belief about what it buys.
+- **Tags:** studio, api

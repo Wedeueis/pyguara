@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ctypes
 import dataclasses
+import warnings
 from typing import Any
 
 import pygame
@@ -27,6 +28,9 @@ from pyguara.common.types import Color
 from pyguara.config.types import WindowConfig
 from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
 from pyguara.graphics.backends.wgpu.frame import GpuFrame
+from pyguara.log import get_logger
+
+logger = get_logger(__name__)
 
 
 def _pointer(capsule: Any) -> int:
@@ -77,6 +81,136 @@ class WgpuWindow(PygameWindow):
         """Initialise with no window and no device."""
         super().__init__()
         self.frame: GpuFrame | None = None
+        # Window controls, for Studio's own title bar (`IWindowChrome`).
+        self._window_object: Any = None
+        self._is_maximized = False
+        self._move_target: tuple[int, int] | None = None
+
+    def display_flags(self, config: WindowConfig) -> int:
+        """Return the SDL display flags: fullscreen, frame and resizing.
+
+        Decided once, at creation; SDL will not change most of them after.
+
+        Args:
+            config: The window configuration.
+        """
+        flags = super().display_flags(config)
+        if getattr(config, "borderless", False):
+            # The OS title bar is removed and the editor draws its own. Only
+            # useful with `resizable`, since a borderless window the user
+            # cannot drag an edge of is a window they cannot size.
+            flags |= pygame.NOFRAME
+        if getattr(config, "resizable", False):
+            # Without this SDL emits no resize event at all. A window manager
+            # may still let the frame be maximised -- WSLg does -- and nothing
+            # in the engine is told, so everything carries on rendering at
+            # the starting resolution into a corner of a larger window.
+            flags |= pygame.RESIZABLE
+        return flags
+
+    # -- IWindowChrome: what Studio's title bar drives --------------------
+
+    def minimize(self) -> None:
+        """Iconify the window."""
+        window = self._native_window()
+        if window is not None:
+            window.minimize()
+
+    def maximize(self) -> None:
+        """Fill the work area."""
+        window = self._native_window()
+        if window is not None:
+            window.maximize()
+            self._is_maximized = True
+
+    def restore(self) -> None:
+        """Return to the size before maximising."""
+        window = self._native_window()
+        if window is not None:
+            window.restore()
+            self._is_maximized = False
+
+    @property
+    def is_maximized(self) -> bool:
+        """Whether the window currently fills the work area.
+
+        SDL exposes no direct query through pygame, so this tracks what
+        was asked for. A user maximising through the window manager's own
+        control is not seen -- a wrong arrow on the restore button, not a
+        wrong window.
+        """
+        return self._is_maximized
+
+    def begin_move(self) -> None:
+        """Read the window's position once, for the moves about to follow.
+
+        Every move after adds to that remembered position rather than
+        reading a fresh one: the read costs something each frame of a drag,
+        and the window manager applies a move when it gets to it, so a read
+        straight after one can return the old position and the delta lands
+        on a stale base.
+        """
+        window = self._native_window()
+        if window is None:
+            return
+        try:
+            x, y = window.position
+            self._move_target = (int(x), int(y))
+        except Exception as exc:  # pragma: no cover - depends on the WM
+            logger.debug(f"Could not read the window position: {exc}")
+            self._move_target = None
+
+    def move_by(self, dx: int, dy: int) -> None:
+        """Move the window by a screen-space delta.
+
+        Args:
+            dx: Horizontal movement in pixels.
+            dy: Vertical movement in pixels.
+        """
+        window = self._native_window()
+        if window is None:
+            return
+        try:
+            if self._move_target is None:
+                x, y = window.position
+            else:
+                x, y = self._move_target
+            target = (int(x + dx), int(y + dy))
+            if self._move_target is not None:
+                self._move_target = target
+            window.position = target
+        except Exception as exc:  # pragma: no cover - depends on the WM
+            logger.debug(f"Could not move the window: {exc}")
+
+    def end_move(self) -> None:
+        """Forget the remembered position, so the next drag reads afresh."""
+        self._move_target = None
+
+    def request_close(self) -> None:
+        """Ask the application to shut down, as the OS close button does.
+
+        Posts a quit rather than closing: a borderless window's close button
+        is pressed from inside a frame still being drawn. Through the queue,
+        the next `poll_events` reports it and the application runs the
+        shutdown it runs for the OS's own button.
+        """
+        try:
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+        except Exception as exc:  # pragma: no cover - a full event queue
+            logger.debug(f"Could not post a quit event: {exc}")
+
+    def _native_window(self) -> Any:
+        """Return pygame's window object, or None where it is unavailable."""
+        if self._window_object is not None:
+            return self._window_object
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", DeprecationWarning)
+                self._window_object = pygame.Window.from_display_module()
+        except Exception as exc:  # pragma: no cover - old pygame, odd driver
+            logger.debug(f"No window object available: {exc}")
+            return None
+        return self._window_object
 
     def open(self, config: WindowConfig) -> bool:
         """Create the window, then the device that draws for it.

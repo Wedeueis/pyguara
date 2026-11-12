@@ -11,12 +11,10 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE
-from pyguara.graphics.pipeline.device import GraphicsDevice, as_device
+from pyguara.graphics.pipeline.device import GraphicsDevice
 from pyguara.log import get_logger
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.pipeline.framebuffer import Framebuffer, FramebufferManager
 
 
@@ -65,9 +63,7 @@ class PostProcessEffect(ABC):
         """Apply this effect.
 
         Run its shader through `device` -- `device.run(SHADER, {...},
-        {...}, output_fbo)` -- which is what lets one effect work on
-        ModernGL and on wgpu. `device.ctx` is the ModernGL context, for an
-        effect not ported yet; it is None on wgpu.
+        {...}, output_fbo)`.
 
         Args:
             device: What to run shaders on.
@@ -104,18 +100,13 @@ class PostProcessStack:
 
     def __init__(
         self,
-        ctx: moderngl.Context,
         fbo_manager: FramebufferManager,
     ) -> None:
         """Initialize the post-processing stack.
 
         Args:
-            ctx: Unused. Accepted so callers written when effects needed a
-                ModernGL context keep working; removed in stage E. The
-                effects run on `fbo_manager.device`.
             fbo_manager: The framebuffer manager for creating temp FBOs.
         """
-        self._ctx = ctx
         self._fbo_manager = fbo_manager
         self._effects: list[PostProcessEffect] = []
 
@@ -252,11 +243,7 @@ class PostProcessStack:
     @property
     def device(self) -> GraphicsDevice:
         """The device effects run on: the framebuffer manager's."""
-        device = getattr(self._fbo_manager, "device", None)
-        if isinstance(device, GraphicsDevice):
-            return device
-        # A manager without one -- a test's mock -- over the context given.
-        return as_device(self._ctx)
+        return self._fbo_manager.device
 
     def on_resize(self, width: int, height: int) -> None:
         """Handle viewport resize.

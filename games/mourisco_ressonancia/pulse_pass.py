@@ -14,20 +14,18 @@ compositing rather than being painted over the top of it.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from pyguara.common.types import Vector2
 from pyguara.graphics.components.camera import Camera2D
-from pyguara.graphics.pipeline.device import Attribute, InstancedShader, Uniform, glsl
+from pyguara.graphics.pipeline.device import Attribute, InstancedShader, Uniform
 from pyguara.graphics.pipeline.passes.light_pass import LIGHT_FBO_NAME, projection
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.graphics.pipeline.viewport import Viewport
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.pipeline.graph import RenderGraph
 
 PULSE_RINGS = InstancedShader(
@@ -40,8 +38,6 @@ PULSE_RINGS = InstancedShader(
         Attribute("thickness"),
     ),
     uniforms=(Uniform("u_projection", "mat4"),),
-    glsl_vertex=glsl("pulse_ring.vert"),
-    glsl_fragment=glsl("pulse_ring.frag"),
     # A port of pulse_ring.vert/frag. Radially symmetric, so the two uv
     # conventions agree; the projection is the light pass's.
     wgsl="""
@@ -101,11 +97,10 @@ class PulsePass(BaseRenderPass):
 
     INSTANCE_FLOATS = 8
 
-    def __init__(self, ctx: Any = None, *, enabled: bool = True) -> None:
+    def __init__(self, *, enabled: bool = True) -> None:
         """Start with no rings.
 
         Args:
-            ctx: Unused; kept so the existing bootstrap call still works.
             enabled: Whether this pass should execute.
         """
         super().__init__("pulse", enabled=enabled)
@@ -122,7 +117,7 @@ class PulsePass(BaseRenderPass):
         self._camera = camera
         self._viewport = viewport
 
-    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
+    def execute(self, graph: RenderGraph) -> None:
         """Add every active ring into the light map, additively."""
         if not self._enabled or not self._rings or self._camera is None:
             return

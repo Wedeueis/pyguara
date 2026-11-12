@@ -12,7 +12,8 @@ import pygame
 import pytest
 
 from pyguara.config.types import WindowConfig
-from pyguara.graphics.backends.moderngl.window import display_flags
+from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
+from pyguara.graphics.backends.wgpu.window import WgpuWindow
 from pyguara.graphics.protocols import IWindowChrome
 from pyguara.graphics.window import Window
 
@@ -38,6 +39,11 @@ class _WithChrome(_NoChrome):
     @property
     def is_maximized(self) -> bool:
         return False
+
+
+def display_flags(config: object) -> int:
+    """The flags the wgpu window -- the one Studio's chrome needs -- opens with."""
+    return WgpuWindow().display_flags(config)  # type: ignore[arg-type]
 
 
 @pytest.mark.unit
@@ -66,10 +72,18 @@ class TestConfig:
         assert flags & pygame.RESIZABLE
         assert flags & pygame.NOFRAME
 
-    def test_gl_and_double_buffering_are_always_asked_for(self) -> None:
+    def test_no_opengl_surface_is_asked_for(self) -> None:
+        """wgpu draws to the native handle; SDL's own GL surface would
+        compete for it (and the pygame window strips it for that reason)."""
         flags = display_flags(WindowConfig(resizable=True, borderless=True))
-        assert flags & pygame.OPENGL
-        assert flags & pygame.DOUBLEBUF
+        assert not flags & pygame.OPENGL
+
+    def test_the_software_window_ignores_both(self) -> None:
+        """No editor draws its own title bar over a software window."""
+        flags = PygameWindow().display_flags(
+            WindowConfig(resizable=True, borderless=True)
+        )
+        assert not flags & (pygame.RESIZABLE | pygame.NOFRAME)
 
     def test_fullscreen_still_works_alongside_them(self) -> None:
         flags = display_flags(WindowConfig(fullscreen=True, resizable=True))
@@ -80,7 +94,7 @@ class TestConfig:
         class Older:
             fullscreen = False
 
-        assert display_flags(Older()) == pygame.OPENGL | pygame.DOUBLEBUF
+        assert display_flags(Older()) == 0
 
 
 @pytest.mark.unit
@@ -97,3 +111,9 @@ class TestChromeExposure:
     def test_the_protocol_matches_the_same_way(self) -> None:
         assert isinstance(_WithChrome(), IWindowChrome)
         assert not isinstance(_NoChrome(), IWindowChrome)
+
+
+@pytest.mark.unit
+def test_the_wgpu_window_offers_the_controls() -> None:
+    """Studio's title bar drives these; they lived on the ModernGL window."""
+    assert isinstance(WgpuWindow(), IWindowChrome)

@@ -6,21 +6,18 @@ the default framebuffer (screen) for display.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pyguara.common.types import Color
-from pyguara.graphics.pipeline.device import FullscreenShader, glsl
+from pyguara.graphics.pipeline.device import FullscreenShader
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.pipeline.graph import RenderGraph
 
 BLIT = FullscreenShader(
     "blit",
     inputs=("u_texture",),
-    glsl=glsl("blit.frag"),
     wgsl="""
 @fragment
 fn fragment(in: Varying) -> @location(0) vec4<f32> {
@@ -44,7 +41,6 @@ class FinalPass(BaseRenderPass):
 
     def __init__(
         self,
-        ctx: Any = None,
         input_fbo_name: str = "world",
         *,
         enabled: bool = True,
@@ -52,8 +48,6 @@ class FinalPass(BaseRenderPass):
         """Initialize the final pass.
 
         Args:
-            ctx: Unused. Accepted so callers written when passes needed a
-                ModernGL context keep working; removed in stage E.
             input_fbo_name: Name of the framebuffer to blit from.
             enabled: Whether this pass should execute.
         """
@@ -70,7 +64,7 @@ class FinalPass(BaseRenderPass):
         """Set the input framebuffer name."""
         self._input_fbo_name = value
 
-    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
+    def execute(self, graph: RenderGraph) -> None:
         """Execute the final pass - blit to screen.
 
         With a letterbox, the whole window is cleared first: the bars are
@@ -81,7 +75,6 @@ class FinalPass(BaseRenderPass):
         the same frame.
 
         Args:
-            ctx: Unused; the pass runs through `graph.device`.
             graph: The RenderGraph providing access to framebuffers.
         """
         if not self._enabled:

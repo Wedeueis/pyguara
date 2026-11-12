@@ -1,54 +1,41 @@
-"""The render graph's view of the GPU, the same on every backend that has one.
+"""The render graph's view of the GPU.
 
-A pass used to be handed a `moderngl.Context` and to drive OpenGL itself:
-bind a framebuffer, bind its textures to units, set uniforms by name, draw a
-triangle strip. That made the graph an OpenGL graph, and a second backend
-could only run it by imitating OpenGL.
+What a pass does is narrow: read some buffers, run one shader over the
+whole of another buffer -- or many instanced quads into it -- with a few
+uniforms and a blend mode. `GraphicsDevice.run` and `draw_instanced` are
+that. A pass describes the work -- a `FullscreenShader` or an
+`InstancedShader`, its inputs by name, its uniform values, where the result
+goes -- and the device does it. `WgpuDevice` is the device: the native wgpu
+frame.
 
-What a pass actually does is narrower, and the same everywhere: read some
-buffers, run one shader over the whole of another buffer, with a few
-uniforms and a blend mode. `GraphicsDevice.run` is that. A pass describes the
-work -- a `FullscreenShader`, its inputs by name, its uniform values, where
-the result goes -- and the device does it: `ModernGLDevice` with the GLSL
-source, `WgpuDevice` with the WGSL one.
-
-**A shader carries both sources until stage E** of
-`project/backlog/active/next_engine_plan.md` retires ModernGL, and then only
-WGSL. Each is held to the other by rendering the same frame on both and
-comparing.
-
-**Texture coordinates differ, and the sources say so.** In GLSL, `v_uv` has
-its origin at the bottom left, because a GL framebuffer's first row is the
-bottom of the image. In WGSL, `in.uv` has it at the top left, as a wgpu
-texture's first row is the top. A shader that only reads at `uv` does not
-care; one whose effect has a direction -- rain falling, heat rising, a light
-at a screen position -- flips `y` in one of the two.
+Shaders are WGSL. A pass used to carry a GLSL twin of each, for the ModernGL
+backend, until stage E of `project/backlog/active/next_engine_plan.md`
+retired it. Two that draw procedural noise -- the heat haze and the storm --
+are still written in GL's coordinate convention, `v_uv` with y up, because
+that is what their noise was approved against; every other shader uses
+wgpu's, `in.uv` with (0, 0) at the top left.
 """
 
 from __future__ import annotations
 
-import contextlib
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from pyguara.common.types import Color
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.backends.wgpu.frame import GpuFrame
     from pyguara.graphics.pipeline.framebuffer import Framebuffer
 
 Blend = Literal["replace", "alpha", "add"]
 """How a pass combines with what its output already holds.
 
-`alpha` is what every pass on the ModernGL backend has always drawn with,
-because the renderer leaves GL blending on and in that mode. `add` is the
-light accumulation. `replace` overwrites.
+`alpha` is what the passes draw with: straight-alpha blending, as every
+pass was approved with against ModernGL. `add` is the light accumulation.
+`replace` overwrites.
 """
 
 UniformKind = Literal["f32", "i32", "vec2", "vec3", "vec4", "mat4"]
@@ -131,21 +118,13 @@ def _params_preamble(layout: _Layout, group: int = 0) -> list[str]:
 
 _BLEND_CODE: dict[str, int] = {"replace": 0, "add": 1, "alpha": 2}
 
-_GLSL_DIR = Path(__file__).parent.parent / "backends" / "moderngl" / "shaders"
-
-
-def glsl(name: str) -> str:
-    """Read one of the engine's GLSL fragment shaders by file name."""
-    return (_GLSL_DIR / name).read_text()
-
 
 @dataclass(frozen=True)
 class Uniform:
     """One uniform a fullscreen shader takes.
 
     Attributes:
-        name: Its name in both sources: a `uniform` in GLSL, a field of
-            `params` in WGSL.
+        name: Its name: a field of `params` in WGSL.
         kind: Its type. A `mat4` is sixteen floats, column by column, as
             GL and WGSL both store one.
     """
@@ -159,7 +138,7 @@ class Attribute:
     """One per-instance value an `InstancedShader` reads.
 
     Attributes:
-        name: A field of `Instance` in WGSL; `in_<name>` in GLSL.
+        name: A field of `Instance` in WGSL.
         kind: `f32`, `vec2`, `vec3` or `vec4`.
     """
 
@@ -174,7 +153,7 @@ class Attribute:
 
 @dataclass(frozen=True, eq=False)
 class FullscreenShader:
-    """A shader run over the whole of a buffer, in both shading languages.
+    """A shader run over the whole of a buffer.
 
     Compared by identity: a device compiles each one once and keys its
     cache on the object, so make one per effect and keep it, at module
@@ -183,21 +162,18 @@ class FullscreenShader:
     Attributes:
         name: For error messages and the cache.
         inputs: The buffers it samples, by the names its sources use -- a
-            `uniform sampler2D` in GLSL, a `texture_2d<f32>` in WGSL, which
-            the preamble declares, sampled through `input_sampler`.
+            `texture_2d<f32>` the preamble declares, sampled through
+            `input_sampler`.
         uniforms: Its uniforms, in the order WGSL's `Params` lays them out.
         wgsl: A fragment entry point, `@fragment fn fragment(in: Varying)
             -> @location(0) vec4<f32>`, using `in.uv`, `params.<name>` and
             the inputs. The preamble is added by `wgsl_source`.
-        glsl: A complete GLSL 330 fragment shader reading `v_uv`, run with
-            `fullscreen_quad.vert`.
     """
 
     name: str
     inputs: tuple[str, ...] = ()
     uniforms: tuple[Uniform, ...] = ()
     wgsl: str | None = None
-    glsl: str | None = None
     _layout: tuple[tuple[str, str, int], ...] = field(
         init=False, repr=False, default=()
     )
@@ -280,18 +256,12 @@ class InstancedShader:
             `Instance`, and a `fragment` one; the preamble declares
             `Params`, `Instance` and `quad_corner(index)`, which gives the
             six corners of a unit quad centred on the origin, two triangles.
-        glsl_vertex: The GLSL vertex shader. It reads the unit quad as
-            `in_vert` (-0.5 to 0.5) and `in_uv` (0 to 1), and each
-            attribute as `in_<name>`.
-        glsl_fragment: The GLSL fragment shader.
     """
 
     name: str
     attributes: tuple[Attribute, ...]
     uniforms: tuple[Uniform, ...] = ()
     wgsl: str | None = None
-    glsl_vertex: str | None = None
-    glsl_fragment: str | None = None
     _layout: _Layout = field(init=False, repr=False, default=())
 
     def __post_init__(self) -> None:
@@ -336,7 +306,7 @@ class InstancedShader:
         return "\n".join(lines)
 
 
-# The unit quad as two triangles, the same square GL's triangle strip covers.
+# The unit quad as two triangles.
 _WGSL_QUAD = """
 fn quad_corner(index: u32) -> vec2<f32> {
     var corners = array<vec2<f32>, 6>(
@@ -378,18 +348,12 @@ class SpriteShader:
         uniforms: Values a `Material` supplies, by name.
         texture: Whether it samples a second texture.
         wgsl: The `material` function and anything it calls.
-        glsl: Optionally, a GLSL 330 fragment shader for the ModernGL
-            backend, reading `v_uv`, `v_color`, `u_texture`, the uniforms
-            and `u_material_texture`, as `sprite.frag` does. Without it,
-            ModernGL draws the sprite plainly and says so once. ModernGL is
-            retired in stage E; this is for the meantime.
     """
 
     name: str
     uniforms: tuple[Uniform, ...] = ()
     texture: bool = False
     wgsl: str | None = None
-    glsl: str | None = None
     _layout: _Layout = field(init=False, repr=False, default=())
 
     def __post_init__(self) -> None:
@@ -427,17 +391,9 @@ class SpriteShader:
 class GraphicsDevice(ABC):
     """What a render pass needs from the GPU.
 
-    An abstract class rather than a `Protocol`, unusually for this
-    codebase, because `RenderGraph` and `FramebufferManager` have to tell a
-    device from a bare ModernGL context -- both are accepted until stage E
-    -- and a runtime-checkable protocol cannot tell either from the
-    `MagicMock` the unit tests hand in.
+    `WgpuDevice` is the engine's; `tests/recording_device.py` records calls
+    for unit tests of a pass's plumbing.
     """
-
-    @property
-    @abstractmethod
-    def ctx(self) -> moderngl.Context | None:
-        """The ModernGL context, for passes not yet ported; None on wgpu."""
 
     @abstractmethod
     def create_target(
@@ -471,7 +427,7 @@ class GraphicsDevice(ABC):
         """Run `shader` over `output`, reading `inputs`.
 
         Afterwards `output` is where drawing goes, as a bound framebuffer
-        stays bound in GL: the game's UI, drawn after the final pass, lands
+        stays bound: the game's UI, drawn after the final pass, lands
         on the screen because the final pass wrote there.
 
         Args:
@@ -480,9 +436,9 @@ class GraphicsDevice(ABC):
             uniforms: A value for each of `shader.uniforms`, by name.
             output: Where to write; None is the screen.
             blend: How to combine with what `output` holds.
-            viewport: Restrict to this rectangle of `output`, in GL's
-                convention -- `(x, y, width, height)` with `y` up from the
-                bottom -- as `RenderGraph.screen_rect` gives it.
+            viewport: Restrict to this rectangle of `output`, as
+                `RenderGraph.screen_rect` gives it: `(x, y, width, height)`
+                with `y` measured up from the bottom.
             clear: Clear all of `output` to this first.
         """
 
@@ -528,8 +484,7 @@ class GraphicsDevice(ABC):
     def resize_screen(self, width: int, height: int) -> None:
         """Make the screen the window's size.
 
-        A no-op where the screen follows the window by itself, as GL's
-        default framebuffer does.
+        A no-op for a device whose screen follows the window by itself.
 
         Args:
             width: The window's width in pixels.
@@ -540,248 +495,10 @@ class GraphicsDevice(ABC):
         """Release compiled shaders. Buffers belong to their manager."""
 
 
-def as_device(ctx_or_device: Any) -> GraphicsDevice:
-    """Return a device for what a caller handed the graph or the manager.
-
-    A `GraphicsDevice` is used as it is. Anything else is taken to be a
-    ModernGL context, as every caller passed before devices existed, and
-    wrapped -- including the `MagicMock` unit tests stand in for one.
-
-    Args:
-        ctx_or_device: A device, or a ModernGL context.
-
-    Returns:
-        The device.
-    """
-    if isinstance(ctx_or_device, GraphicsDevice):
-        return ctx_or_device
-    return ModernGLDevice(ctx_or_device)
-
-
-class ModernGLDevice(GraphicsDevice):
-    """`GraphicsDevice` over a ModernGL context, running the GLSL sources."""
-
-    def __init__(self, ctx: moderngl.Context) -> None:
-        """Wrap a context.
-
-        Args:
-            ctx: The ModernGL context.
-        """
-        self._ctx = ctx
-        # Keyed on the shader's identity, holding the shader too so the id
-        # cannot be reused while its program lives.
-        self._programs: dict[int, tuple[FullscreenShader, Any, Any]] = {}
-        self._instanced: dict[int, _GLInstanced] = {}
-
-    @property
-    def ctx(self) -> moderngl.Context:
-        """The ModernGL context."""
-        return self._ctx
-
-    def create_target(
-        self, name: str, width: int, height: int, *, samples: int, dtype: str
-    ) -> Framebuffer:
-        """Make a ModernGL framebuffer with a linear-filtered colour texture."""
-        from pyguara.graphics.pipeline.framebuffer import Framebuffer
-
-        return Framebuffer(self._ctx, name, width, height, samples=samples, dtype=dtype)
-
-    def _program(self, shader: FullscreenShader) -> tuple[Any, Any]:
-        found = self._programs.get(id(shader))
-        if found is not None:
-            return found[1], found[2]
-        if shader.glsl is None:
-            raise ValueError(
-                f"{shader.name} has no GLSL source, so ModernGL cannot run it"
-            )
-        program = self._ctx.program(
-            vertex_shader=glsl("fullscreen_quad.vert"),
-            fragment_shader=shader.glsl,
-        )
-        vao = self._ctx.vertex_array(program, [])
-        self._programs[id(shader)] = (shader, program, vao)
-        return program, vao
-
-    def run(
-        self,
-        shader: FullscreenShader,
-        inputs: Mapping[str, Framebuffer],
-        uniforms: Mapping[str, Any],
-        output: Framebuffer | None,
-        *,
-        blend: Blend = "alpha",
-        viewport: tuple[int, int, int, int] | None = None,
-        clear: Color | None = None,
-    ) -> None:
-        """Bind, set and draw, as the passes did by hand."""
-        program, vao = self._program(shader)
-        if output is None:
-            screen = self._ctx.screen
-            if clear is not None:
-                screen.viewport = (0, 0, *screen.size)
-                screen.use()
-                red, green, blue, alpha = _rgba(clear)
-                screen.clear(red / 255, green / 255, blue / 255, alpha / 255)
-            if viewport is not None:
-                screen.viewport = viewport
-            screen.use()
-        else:
-            output.bind()
-            if clear is not None:
-                output.clear(clear)
-        for unit, name in enumerate(shader.inputs):
-            inputs[name].texture.use(unit)
-            _set(program, name, unit)
-        for uniform in shader.uniforms:
-            _set(program, uniform.name, uniforms[uniform.name])
-        self._draw(blend, lambda: vao.render(mode=self._ctx.TRIANGLE_STRIP, vertices=4))
-
-    def _draw(self, blend: Blend, render: Callable[[], None]) -> None:
-        """Render under `blend`, leaving the renderer's default mode after."""
-        from pyguara.graphics.backends.moderngl.blend import (
-            DEFAULT_BLEND_MODE,
-            BlendMode,
-            apply_blend_mode,
-            blending,
-        )
-
-        if blend == "add":
-            with blending(self._ctx, BlendMode.ADDITIVE):
-                render()
-        elif blend == "replace":
-            self._ctx.disable(self._ctx.BLEND)
-            try:
-                render()
-            finally:
-                apply_blend_mode(self._ctx, DEFAULT_BLEND_MODE)
-        else:
-            render()
-
-    def draw_instanced(
-        self,
-        shader: InstancedShader,
-        data: bytes,
-        count: int,
-        uniforms: Mapping[str, Any],
-        output: Framebuffer,
-        *,
-        blend: Blend = "alpha",
-    ) -> None:
-        """Bind `output`, upload the rows and draw a triangle strip each."""
-        output.bind()
-        if count == 0:
-            return
-        drawn = self._instanced.get(id(shader))
-        if drawn is None:
-            drawn = _GLInstanced(self._ctx, shader)
-            self._instanced[id(shader)] = drawn
-        drawn.upload(data, count)
-        for uniform in shader.uniforms:
-            _set(drawn.program, uniform.name, uniforms[uniform.name])
-        self._draw(
-            blend,
-            lambda: drawn.vao.render(mode=self._ctx.TRIANGLE_STRIP, instances=count),
-        )
-
-    def clear(
-        self, buffer: Framebuffer, rgba: tuple[float, float, float, float]
-    ) -> None:
-        """Clear the framebuffer object directly, in floats."""
-        buffer.fbo.clear(*rgba)
-
-    def release(self) -> None:
-        """Release every compiled program."""
-        for _, program, vao in self._programs.values():
-            vao.release()
-            program.release()
-        self._programs.clear()
-        for drawn in self._instanced.values():
-            drawn.release()
-        self._instanced.clear()
-
-
-class _GLInstanced:
-    """An `InstancedShader`'s program, unit quad and instance buffer in GL."""
-
-    def __init__(self, ctx: moderngl.Context, shader: InstancedShader) -> None:
-        if shader.glsl_vertex is None or shader.glsl_fragment is None:
-            raise ValueError(
-                f"{shader.name} has no GLSL source, so ModernGL cannot run it"
-            )
-        import numpy as np
-
-        self._ctx = ctx
-        self.shader = shader
-        self.program = ctx.program(
-            vertex_shader=shader.glsl_vertex, fragment_shader=shader.glsl_fragment
-        )
-        # The unit quad as a strip: position (-0.5..0.5) and uv (0..1).
-        self._quad = ctx.buffer(
-            np.array(
-                [-0.5, -0.5, 0, 0, 0.5, -0.5, 1, 0, -0.5, 0.5, 0, 1, 0.5, 0.5, 1, 1],
-                dtype="f4",
-            ).tobytes()
-        )
-        self._capacity = 0
-        self._instances: Any = None
-        self.vao: Any = None
-
-    def upload(self, data: bytes, count: int) -> None:
-        """Write the rows, growing the buffer and its VAO when they do not fit."""
-        if count > self._capacity:
-            if self.vao is not None:
-                self.vao.release()
-                self._instances.release()
-            self._capacity = max(64, 1 << (count - 1).bit_length())
-            self._instances = self._ctx.buffer(
-                reserve=self._capacity * self.shader.stride
-            )
-            per_instance = tuple(
-                (a.name, n)
-                for a, n in zip(self.shader.attributes, self.shader.floats, strict=True)
-            )
-            self.vao = self._ctx.vertex_array(
-                self.program,
-                [
-                    self._binding(self._quad, (("vert", 2), ("uv", 2)), ""),
-                    self._binding(self._instances, per_instance, "/i"),
-                ],
-            )
-        self._instances.write(data)
-
-    def _binding(
-        self, buffer: Any, fields: tuple[tuple[str, int], ...], suffix: str
-    ) -> tuple[Any, ...]:
-        """Bind a buffer's fields by `in_<name>`, skipping what GLSL dropped.
-
-        A GL compiler strips an attribute the shader never reads, and
-        binding a stripped name fails outright -- `pulse_ring.vert` reads
-        no `in_uv`. Those bytes are skipped (`Nx`) instead.
-        """
-        layout, names = [], []
-        for name, floats in fields:
-            if f"in_{name}" in self.program:
-                layout.append(f"{floats}f")
-                names.append(f"in_{name}")
-            else:
-                layout.append(f"{floats * 4}x")
-        return (buffer, " ".join(layout) + suffix, *names)
-
-    def release(self) -> None:
-        """Release the GL objects."""
-        if self.vao is not None:
-            self.vao.release()
-            self._instances.release()
-        self._quad.release()
-        self.program.release()
-
-
 class WgpuFramebuffer:
     """A buffer in the native wgpu frame, with `Framebuffer`'s interface.
 
-    Bound by naming it as the target pushes go to; read by a fullscreen
-    pass by id. It has no `texture` or `fbo` to hand out: a pass that
-    reaches for one has not been ported to `GraphicsDevice.run` yet.
+    Bound by naming it as the target pushes go to; read by a pass by id.
     """
 
     def __init__(
@@ -830,19 +547,6 @@ class WgpuFramebuffer:
         """`"f1"` (8-bit) or `"f2"` (16-bit float)."""
         return self._dtype
 
-    @property
-    def texture(self) -> Any:
-        """Not available on wgpu; see the class docstring."""
-        raise AttributeError(
-            f"'{self._name}' is a wgpu buffer: it has no ModernGL texture. A pass "
-            f"that reads one has to run through GraphicsDevice.run."
-        )
-
-    @property
-    def fbo(self) -> Any:
-        """Not available on wgpu; see the class docstring."""
-        raise AttributeError(f"'{self._name}' is a wgpu buffer: it has no GL FBO.")
-
     def _id(self) -> int:
         if self.target is None:
             raise RuntimeError(f"Framebuffer '{self._name}' was released")
@@ -868,7 +572,7 @@ class WgpuFramebuffer:
         self._gpu.set_target(previous)
 
     def resize(self, width: int, height: int) -> None:
-        """Give it a new size. Its contents are lost, as in GL."""
+        """Give it a new size. Its contents are lost."""
         if (width, height) == (self._width, self._height):
             return
         self._gpu.resize_target(self._id(), width, height)
@@ -917,11 +621,6 @@ class WgpuDevice(GraphicsDevice):
         """Give the main target -- the window -- the window's size."""
         if (width, height) != (self._gpu.width, self._gpu.height):
             self._gpu.resize(width, height)
-
-    @property
-    def ctx(self) -> None:
-        """No ModernGL context behind this device."""
-        return None
 
     def create_target(
         self, name: str, width: int, height: int, *, samples: int, dtype: str
@@ -991,7 +690,8 @@ class WgpuDevice(GraphicsDevice):
         """Queue the pass in the native frame, then draw into `output`."""
         target = 0 if output is None else _target_of(output)
         if viewport is not None:
-            # GL's y is up from the bottom; the frame's is down from the top.
+            # `screen_rect`'s y is up from the bottom; the frame's is down from
+            # the top.
             x, y, width, height = viewport
             viewport = (x, self._target_height(output) - y - height, width, height)
         self._gpu.fullscreen(
@@ -1007,16 +707,6 @@ class WgpuDevice(GraphicsDevice):
 
     def _target_height(self, output: Framebuffer | None) -> int:
         return int(self._gpu.height if output is None else output.height)
-
-
-def _set(program: Any, name: str, value: Any) -> None:
-    """Set a GLSL uniform, if the compiler kept it.
-
-    A uniform the shader declares but never reads is optimised away, and
-    ModernGL then raises `KeyError` for it -- not a mistake in the pass.
-    """
-    with contextlib.suppress(KeyError):
-        program[name] = value
 
 
 def _target_of(buffer: Any) -> int:

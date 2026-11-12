@@ -25,6 +25,12 @@ from pathlib import Path
 import pytest
 
 from tests.integration.test_demos_render import DEMOS_THAT_DRAW
+from tests.integration.test_wgpu_graph_demos import GRAPH_DEMOS
+
+# The demos that run on pygame. Those built on the render graph choose wgpu
+# themselves, so both runs here would draw on wgpu and agree trivially; they
+# are held to their golden frames in `test_wgpu_graph_demos.py` instead.
+PYGAME_DEMOS = sorted(set(DEMOS_THAT_DRAW) - set(GRAPH_DEMOS))
 
 _SCRIPT = Path(__file__).with_name("_demo_frame.py")
 
@@ -69,7 +75,7 @@ def _differing(first: bytes, second: bytes) -> int:
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("demo", DEMOS_THAT_DRAW)
+@pytest.mark.parametrize("demo", PYGAME_DEMOS)
 def test_the_demo_draws_the_same_frame_on_wgpu(demo: str, tmp_path: Path) -> None:
     """The wgpu frame matches the pygame frame of the same demo."""
     reference = _frame(demo, "pygame", tmp_path / "pygame.rgb")

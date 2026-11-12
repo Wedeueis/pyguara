@@ -48,10 +48,13 @@ def wgpu() -> Any:
     if pygame.display.get_surface() is None:
         pygame.display.set_mode((64, 64))
     from pyguara.graphics.backends import wgpu as backend
+    from tests.conftest import REQUIRE_GPU
 
     try:
         backend.GpuFrame(8, 8)
     except RuntimeError as error:
+        if REQUIRE_GPU:
+            pytest.fail(f"PYGUARA_REQUIRE_GPU is set and no adapter opened: {error}")
         pytest.skip(f"no graphics adapter for wgpu: {error}")
     return backend
 
@@ -699,32 +702,6 @@ class TestMaterials:
 
         with pytest.raises(KeyError, match="glow: no value for uniform 'strength'"):
             self._draw(wgpu, batch)
-
-    def test_a_modern_gl_material_is_drawn_without_and_said_once(
-        self, wgpu: Any, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        # A compiled GLSL program, which wgpu cannot run. The sprites still
-        # draw, and the author is told to give it a SpriteShader.
-        from unittest.mock import MagicMock
-
-        from pyguara.graphics.materials import Material, Shader
-
-        gl_shader = MagicMock(spec=Shader)
-        batch = RenderBatch(
-            texture=_checker(),
-            destinations=[(20.0, 20.0), (60.0, 40.0)],
-            material=Material(gl_shader),
-        )
-        plain = RenderBatch(texture=batch.texture, destinations=batch.destinations)
-
-        with caplog.at_level("WARNING"):
-            _, with_material = _frames(
-                wgpu, lambda r: (r.render_batch(batch), r.render_batch(batch))
-            )
-        _, without = _frames(wgpu, lambda r: r.render_batch(plain))
-
-        assert with_material == without
-        assert sum("SpriteShader" in r.getMessage() for r in caplog.records) == 1
 
 
 class TestEffects:

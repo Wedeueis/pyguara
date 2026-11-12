@@ -1,19 +1,15 @@
-"""Capture one frame of a demo on a chosen backend. Run as a script.
+"""Capture one frame of a demo on the wgpu backend. Run as a script.
 
-    python tests/integration/_gl_demo_frame.py <moderngl|wgpu> <demo> <out_dir>
+    python tests/integration/_graph_demo_frame.py wgpu <demo> <out_dir>
 
-`test_wgpu_gl_demos.py` runs this once per backend, each in a process of
-its own. It drives `tools/agent_view.py`, with three things pinned so the
-two backends draw the same moment of the same scene:
+`test_wgpu_graph_demos.py` runs this in a process of its own. It drives
+`tools/agent_view.py`, with three things pinned so a run draws the same
+moment of the same scene every time:
 
-- the backend, set after the demo's own configure, which chooses one;
-- the clock, at 1/60 s, since demos move by elapsed time and the two
-  backends' headless frames take different times;
+- the backend, set after the demo's own configure;
+- the clock, at 1/60 s, since demos move by elapsed time;
 - every unseeded `RandomStream`, at seed 0 -- `true_coral`'s storm is
   unseeded by design.
-
-ModernGL needs a real GL context, so it runs under SDL's offscreen driver
-(`--gl`); wgpu runs under the dummy driver and copies its frame out.
 """
 
 from __future__ import annotations
@@ -68,7 +64,6 @@ def main() -> None:
         str(FRAME),
         "--out",
         out,
-        *(["--gl"] if backend == "moderngl" else []),
     ]
     runpy.run_path("tools/agent_view.py", run_name="__main__")
 

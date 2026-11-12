@@ -16,8 +16,6 @@ from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.log import get_logger
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.pipeline.graph import RenderGraph
     from pyguara.studio.layer import EditorLayer
 
@@ -79,70 +77,19 @@ class ImGuiPass(BaseRenderPass):
         """
         self._clear_colour = colour
 
-    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
-        """Draw the editor onto the default framebuffer.
+    def execute(self, graph: RenderGraph) -> None:
+        """Draw the editor onto the window.
 
         Runs after the game's UI has been composited, not with the rest
         of the chain -- see `after_ui` on `BaseRenderPass`.
 
         Args:
-            ctx: The ModernGL context.
             graph: The graph running this pass (unused: the editor reads no
                 framebuffers, it draws over whatever is on screen).
         """
         if not self._enabled:
             return
-        if ctx is None:
-            self._execute_on_wgpu(graph)
-            return
 
-        # Every earlier pass renders into an offscreen FBO and `FinalPass`
-        # blits to the screen, but the screen is not guaranteed to still be
-        # bound -- a pass added after `final` would have left its own target
-        # bound. Binding here makes the editor's target explicit.
-        #
-        # And so is the viewport, which is the part that bit. `ctx.screen`'s
-        # viewport is where the **game's** frame goes: with
-        # `display.keep_aspect` the graph narrows it to the letterbox, so
-        # that the game and its HUD land inside their own frame. The editor
-        # is not the game -- it owns the whole window -- and inheriting that
-        # viewport squeezed every panel into the letterbox. On a 2000x876
-        # window that is a horizontal scale of 0.73: compressed text, and a
-        # round sun in the Viewport panel drawn as an ellipse taller than
-        # wide. An ultrawide display makes it worse still.
-        #
-        # Put back afterwards, because the game's UI composites after the
-        # graph runs and has to land inside the letterbox rather than
-        # spilling onto the bars.
-        #
-        # `ctx.screen` is `None` on a standalone (offscreen) context, where
-        # there is no default framebuffer to bind; the editor then draws
-        # into whatever the caller bound, which is what an offscreen
-        # capture wants anyway.
-        screen = ctx.screen
-        previous = screen.viewport if screen is not None else None
-        if screen is not None:
-            screen.viewport = (0, 0, self._width, self._height)
-            screen.use()
-            if self._clear_colour is not None:
-                # Nothing else writes the screen when Studio owns it: the
-                # final blit is disabled so the game appears only inside
-                # the Viewport panel, which leaves the default framebuffer
-                # holding last frame's contents until something clears it.
-                screen.clear(*self._clear_colour, 1.0)
-        try:
-            self._layer.render(self._width, self._height)
-        finally:
-            if screen is not None and previous is not None:
-                screen.viewport = previous
-
-    def _execute_on_wgpu(self, graph: RenderGraph) -> None:
-        """Draw the editor onto the window on the wgpu backend.
-
-        The window is the native frame's main target. Unlike GL there is no
-        viewport left narrowed to a letterbox: each ImGui command carries its
-        own clip rectangle, in window pixels.
-        """
         from typing import Any, cast
 
         frame = cast(Any, graph.device).frame

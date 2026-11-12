@@ -22,10 +22,10 @@ Typical use, per frame::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pyguara.common.random import RandomStream
-from pyguara.graphics.pipeline.device import FullscreenShader, Uniform, glsl
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
@@ -54,7 +54,6 @@ STORM = FullscreenShader(
         Uniform("u_bolt_x"),
         Uniform("u_bolt_seed"),
     ),
-    glsl=glsl("storm.frag"),
     # A line-for-line port of storm.frag; see it for the reasoning.
     # Ported in GL's coordinate convention, not wgpu's: `v_uv` is rebuilt
     # with y up, every expression below is the GLSL's, and only the texture
@@ -157,7 +156,6 @@ class StormEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: Any = None,
         *,
         rain: float = 0.0,
         rain_speed: float = 1.0,
@@ -170,8 +168,6 @@ class StormEffect(PostProcessEffect):
         """Set the storm's starting weather.
 
         Args:
-            ctx: Unused. Accepted so callers written when effects needed a
-                ModernGL context keep working; removed in stage E.
             rain: Initial downpour amount.
             rain_speed: Initial fall-rate multiplier.
             wind: Initial streak slant.

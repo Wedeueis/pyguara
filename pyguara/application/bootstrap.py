@@ -56,7 +56,7 @@ reimplementing the wiring that follows:
 ```python
 def _configure(config: GameConfig) -> None:
     config.display.title = "My Game"
-    config.display.backend = RenderingBackend.MODERNGL
+    config.display.backend = RenderingBackend.WGPU
 ```
 """
 
@@ -181,8 +181,8 @@ def create_headless_application(
     any other SDL video call). Everything else -- ECS, physics, audio,
     persistence -- wires up exactly as `create_application()` does.
 
-    Not a third shipped rendering backend (the engine still ships pygame and
-    ModernGL only) -- this exists so the integration suite can boot a real
+    Not a third shipped rendering backend (the engine ships pygame and
+    wgpu) -- this exists so the integration suite can boot a real
     `Application` without an SDL video driver, dummy or otherwise.
 
     Args:
@@ -303,7 +303,6 @@ def _setup_container(
     win_config = disp_cfg
 
     # Select backend based on configuration
-    gl_texture_loader = None
     if headless:
         from pyguara.graphics.backends.headless_renderer import (
             HeadlessBackend,
@@ -335,68 +334,6 @@ def _setup_container(
         # No RenderGraph registered: Application's lookup gracefully falls
         # back to `_render_direct()` when the container has none at all,
         # which is exactly the single-pass path a headless test wants.
-    elif disp_cfg.backend == RenderingBackend.MODERNGL:
-        # ModernGL backend with hardware instancing
-        from pyguara.graphics.backends.moderngl import (
-            GLTextureFactory,
-            GLTextureLoader,
-            GLUIRenderer,
-            ModernGLRenderer,
-            PygameGLWindow,
-        )
-
-        gl_window_backend = PygameGLWindow()
-        window = Window(win_config, gl_window_backend)
-        window.create()
-        container.register_instance(Window, window)
-
-        # Get the ModernGL context from the window
-        ctx = gl_window_backend.get_screen()
-
-        # World Renderer (GPU-accelerated)
-        gl_renderer = ModernGLRenderer(
-            ctx, disp_cfg.screen_width, disp_cfg.screen_height
-        )
-        container.register_instance(IRenderer, gl_renderer)  # type: ignore[type-abstract]
-
-        # UI Renderer (hybrid: pygame surface composited via OpenGL)
-        gl_ui_renderer = GLUIRenderer(
-            ctx, disp_cfg.screen_width, disp_cfg.screen_height
-        )
-        container.register_instance(UIRenderer, gl_ui_renderer)  # type: ignore[type-abstract]
-
-        # Texture Factory (for SpriteSheet and other texture creation)
-        gl_texture_factory = GLTextureFactory(ctx)
-        container.register_instance(TextureFactory, gl_texture_factory)  # type: ignore[type-abstract]
-
-        # Render Pipeline (FBO management and render graph)
-        from pyguara.graphics.pipeline.passes import FinalPass
-
-        render_graph = RenderGraph(ctx, disp_cfg.screen_width, disp_cfg.screen_height)
-
-        # The graph's own manager, not a second one. `RenderGraph` builds a
-        # `FramebufferManager` internally and every pass resolves its buffers
-        # through that one, so registering a separately-constructed manager
-        # hands games an orphan: a buffer declared on it is invisible to the
-        # graph, silently. This is the same defect
-        # `tests/test_demo_bootstrap_conventions.py` has guarded the demos
-        # against since `mourisco_ressonancia` hit it -- the guard just never
-        # looked at the engine.
-        container.register_instance(FramebufferManager, render_graph.fbo_manager)
-
-        # Setup default render passes. There is no "world" pass: the world
-        # FBO is bound and cleared by `Application._render_with_graph`
-        # before the scenes draw into it, which a pass cannot do -- passes
-        # run *after* the scenes in that loop. `FinalPass` reads the buffer
-        # by name.
-        final_pass = FinalPass(ctx, input_fbo_name="world")
-
-        render_graph.add_pass(final_pass)
-
-        container.register_instance(RenderGraph, render_graph)
-
-        # Store texture loader for later registration
-        gl_texture_loader = GLTextureLoader(ctx)
     elif disp_cfg.backend == RenderingBackend.WGPU:
         # The native renderer. It reuses pygame's texture type and image
         # loader: a texture stays a CPU surface, uploaded to the GPU the
@@ -420,9 +357,8 @@ def _setup_container(
         container.register_instance(TextureFactory, PygameTextureFactory())  # type: ignore[type-abstract]
 
         # A real render graph, on the native device: the world is drawn
-        # into its buffer and blitted to the window, as on ModernGL, so a
-        # game can add passes. Those still written against a ModernGL
-        # context say so when they run; see stage D of the plan.
+        # into its buffer and blitted to the window, so a game can add
+        # passes -- lighting, post-processing -- between the two.
         from pyguara.graphics.pipeline.device import WgpuDevice
         from pyguara.graphics.pipeline.passes import FinalPass
 
@@ -523,9 +459,7 @@ def _setup_container(
     # none: nothing exercises image loading under it today, and the real
     # PygameImageLoader documents needing pygame.display initialized for some
     # formats -- exactly the SDL video coupling headless mode exists to avoid.
-    if gl_texture_loader is not None:
-        res_manager.register_loader(gl_texture_loader)
-    elif not headless:
+    if not headless:
         from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
 
         res_manager.register_loader(PygameImageLoader())

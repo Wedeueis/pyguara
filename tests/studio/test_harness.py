@@ -5,12 +5,9 @@ generalised: it can boot a demo and write frames, but not *loop* -- edit,
 run, check, undo, try again -- because it has no edit surface and exits
 when it is done.
 
-The GL-requiring scenarios run in a subprocess, for the reason
-`test_attach.py` records: the suite's session-scoped `gl_ctx` fixture
-already holds a standalone EGL context current, and a second one in the
-same process fails with `EGL_BAD_ACCESS`. A skip there would read as a
-pass, which is the failure `tests/test_gl_fixture_guard.py` exists to
-prevent.
+The scenarios that boot a real demo run in a subprocess each, on the wgpu
+backend; with no graphics adapter they skip, and fail instead under
+`PYGUARA_REQUIRE_GPU=1`.
 """
 
 from __future__ import annotations
@@ -163,12 +160,11 @@ class TestAgainstARealDemo:
     )
     def test_scenario(self, scenario: str) -> None:
         pytest.importorskip("imgui_bundle")
-        pytest.importorskip("moderngl")
 
-        from tests.conftest import REQUIRE_GL
+        from tests.conftest import REQUIRE_GPU
 
         environment = dict(os.environ)
-        environment["SDL_VIDEODRIVER"] = "offscreen"
+        environment["SDL_VIDEODRIVER"] = "dummy"
         environment["SDL_AUDIODRIVER"] = "dummy"
         environment["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
@@ -182,35 +178,22 @@ class TestAgainstARealDemo:
             env=environment,
         )
 
-        if completed.returncode != 0 and _is_missing_gl(completed.stderr):
-            if REQUIRE_GL:
+        if completed.returncode != 0 and _is_missing_gpu(completed.stderr):
+            if REQUIRE_GPU:
                 pytest.fail(
-                    "PYGUARA_REQUIRE_GL is set and no GL context was "
+                    "PYGUARA_REQUIRE_GPU is set and no graphics adapter was "
                     f"available, so this would have skipped silently.\n"
                     f"{completed.stderr}"
                 )
-            pytest.skip(f"no GL context available:\n{completed.stderr[-400:]}")
+            pytest.skip(f"no graphics adapter:\n{completed.stderr[-400:]}")
 
         assert completed.returncode == 0, (
             f"scenario '{scenario}' failed:\n{completed.stderr}"
         )
 
 
-def _is_missing_gl(stderr: str) -> bool:
-    """Whether a failure is the machine having no usable GL.
-
-    Args:
-        stderr: The subprocess's stderr.
-
-    Returns:
-        True when the failure looks like missing GL support rather than a
-        broken harness.
-    """
-    markers = (
-        "OpenGL support is either not configured",
-        "Could not create GL context",
-        "eglMakeCurrent",
-        "EGL_BAD_ACCESS",
-        "libGL",
+def _is_missing_gpu(stderr: str) -> bool:
+    """Whether a failure is the machine having no graphics adapter for wgpu."""
+    return "the graphics device could not be opened" in stderr or (
+        "no graphics adapter is available" in stderr
     )
-    return any(marker in stderr for marker in markers)

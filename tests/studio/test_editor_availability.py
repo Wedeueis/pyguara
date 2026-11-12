@@ -54,7 +54,7 @@ class TestNoHiddenGLDependency:
                 (
                     "import sys;"
                     "import pyguara.studio;"
-                    "import pyguara.studio.renderer;"
+                    "import pyguara.studio.wgpu_renderer;"
                     "import pyguara.studio.layer;"
                     "print('OpenGL' in sys.modules or "
                     "any(m.startswith('OpenGL.') for m in sys.modules))"

@@ -26,9 +26,7 @@ def device() -> RecordingDevice:
 
 def run_bloom(device: RecordingDevice, blur_passes: int) -> tuple[MagicMock, MagicMock]:
     manager = FramebufferManager(device, 64, 32)
-    effect = BloomEffect(
-        None, manager, threshold=0.7, intensity=1.5, blur_passes=blur_passes
-    )
+    effect = BloomEffect(manager, threshold=0.7, intensity=1.5, blur_passes=blur_passes)
     source, target = MagicMock(width=64, height=32), MagicMock(width=64, height=32)
     effect.apply(device, source, target)
     return source, target
@@ -74,7 +72,7 @@ def test_its_scratch_buffers_are_hdr(device: RecordingDevice) -> None:
 
 def test_release_is_idempotent() -> None:
     """A stack releasing an effect twice must not raise on the second."""
-    effect = BloomEffect(None, MagicMock())
+    effect = BloomEffect(MagicMock())
 
     effect.release()
     effect.release()

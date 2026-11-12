@@ -20,9 +20,9 @@ lighting pipeline this game does not run.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from pyguara.graphics.pipeline.device import FullscreenShader, Uniform, glsl
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
@@ -33,7 +33,6 @@ SOIL_HEALTH = FullscreenShader(
     "soil_health",
     inputs=("u_texture",),
     uniforms=(Uniform("u_health"), Uniform("u_strength")),
-    glsl=glsl("soil_health.frag"),
     wgsl="""
 const SICK_TINT = vec3<f32>(0.95, 0.62, 0.45);      // dusty, chemical red-brown
 const THRIVING_TINT = vec3<f32>(0.65, 1.05, 0.72);  // warm, saturated green
@@ -65,7 +64,6 @@ class SoilHealthEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: Any = None,
         *,
         health: float = 0.0,
         strength: float = 0.0,
@@ -74,7 +72,6 @@ class SoilHealthEffect(PostProcessEffect):
         """Set the grade's starting values.
 
         Args:
-            ctx: Unused; kept so the existing bootstrap call still works.
             health: Initial `health`.
             strength: Initial `strength`.
             enabled: Whether the effect is active.

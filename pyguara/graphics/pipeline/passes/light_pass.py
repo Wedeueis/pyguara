@@ -7,19 +7,17 @@ composited with the world in the composite pass.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME  # re-exported
-from pyguara.graphics.pipeline.device import Attribute, InstancedShader, Uniform, glsl
+from pyguara.graphics.pipeline.device import Attribute, InstancedShader, Uniform
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.graphics.pipeline.viewport import Viewport
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.lighting.light_system import LightingSystem
     from pyguara.graphics.pipeline.graph import RenderGraph
 
@@ -38,8 +36,6 @@ LIGHTS = InstancedShader(
         Attribute("spot_cos_half"),
     ),
     uniforms=(Uniform("u_projection", "mat4"),),
-    glsl_vertex=glsl("light.vert"),
-    glsl_fragment=glsl("light.frag"),
     # A line-for-line port of light.vert and light.frag. The projection is
     # the same matrix, so a light lands on the same pixels; and the quad's
     # uv runs as in_uv does -- (0, 0) at the corner nearest the screen's
@@ -132,7 +128,6 @@ class LightPass(BaseRenderPass):
 
     def __init__(
         self,
-        ctx: Any,
         lighting_system: LightingSystem,
         *,
         enabled: bool = True,
@@ -140,8 +135,6 @@ class LightPass(BaseRenderPass):
         """Initialize the light pass.
 
         Args:
-            ctx: Unused. Accepted so callers written when passes needed a
-                ModernGL context keep working; removed in stage E.
             lighting_system: The system that provides light data.
             enabled: Whether this pass should execute.
         """
@@ -161,11 +154,10 @@ class LightPass(BaseRenderPass):
         self._camera = camera
         self._viewport = viewport
 
-    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
+    def execute(self, graph: RenderGraph) -> None:
         """Execute the light pass.
 
         Args:
-            ctx: Unused; the pass runs through `graph.device`.
             graph: The RenderGraph providing access to framebuffers.
         """
         if not self._enabled:

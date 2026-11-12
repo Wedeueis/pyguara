@@ -99,9 +99,7 @@ class TestStrike:
 
 
 class TestResources:
-    def test_the_shader_comes_in_both_languages(self) -> None:
-        """GLSL for ModernGL, WGSL for wgpu, until stage E."""
-        assert STORM.glsl is not None and "u_bolt_seed" in STORM.glsl
+    def test_the_shader_declares_its_uniforms(self) -> None:
         assert "u_bolt_seed: f32" in STORM.wgsl_source()
 
     def test_release_is_harmless(self) -> None:

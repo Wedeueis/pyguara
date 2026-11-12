@@ -62,26 +62,21 @@ class TestEveryProtocolIsRuntimeCheckable:
 
 
 class TestFramebufferConforms:
-    """`Framebuffer` against `IFramebuffer`, over a mock context -- what the
-    framebuffer *does* needs GL, but which members it carries does not."""
+    """`Framebuffer` against `IFramebuffer`, on a real wgpu frame."""
 
-    def test_framebuffer_conforms(self) -> None:
-        ctx = MagicMock()
-        ctx.texture.side_effect = lambda *a, **k: MagicMock()
-        ctx.framebuffer.side_effect = lambda *a, **k: MagicMock()
+    def test_framebuffer_conforms(self, wgpu_frame) -> None:
+        from pyguara.graphics.pipeline.device import WgpuDevice
 
-        fbo = FramebufferManager(ctx, 800, 600).get_or_create("world")
+        manager = FramebufferManager(WgpuDevice(wgpu_frame(64, 64)), 64, 64)
 
-        assert isinstance(fbo, IFramebuffer)
+        assert isinstance(manager.get_or_create("world"), IFramebuffer)
 
 
 class TestRenderPassesConform:
-    """The two passes that need no GL context to construct. The ctx-taking
-    passes compile shaders in `__init__` and are covered by the integration
-    suite instead."""
+    """Passes compile nothing until they run, so any can be checked here."""
 
     def test_final_pass_conforms(self) -> None:
-        assert isinstance(FinalPass(MagicMock()), IRenderPass)
+        assert isinstance(FinalPass(), IRenderPass)
 
     def test_post_process_pass_conforms(self) -> None:
         assert isinstance(PostProcessPass(MagicMock()), IRenderPass)
@@ -96,11 +91,6 @@ class TestShapeBatchRendererIsACapability:
     it batches and these would catch the change rather than it being
     noticed as a slowdown.
     """
-
-    def test_the_moderngl_renderer_satisfies_it(self) -> None:
-        from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
-
-        assert hasattr(ModernGLRenderer, "render_shapes")
 
     def test_the_wgpu_renderer_satisfies_it(self) -> None:
         from pyguara.graphics.backends.wgpu.renderer import WgpuRenderer
@@ -152,20 +142,18 @@ def _signature_drift(protocol: type, implementation: type) -> list[str]:
 
 def _ui_renderers() -> list[type]:
     from pyguara.graphics.backends.headless_renderer import HeadlessUIRenderer
-    from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
     from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
     from pyguara.graphics.backends.wgpu.ui_renderer import WgpuUIRenderer
 
-    return [HeadlessUIRenderer, PygameUIRenderer, GLUIRenderer, WgpuUIRenderer]
+    return [HeadlessUIRenderer, PygameUIRenderer, WgpuUIRenderer]
 
 
 def _world_renderers() -> list[type]:
     from pyguara.graphics.backends.headless_renderer import HeadlessBackend
-    from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
     from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
     from pyguara.graphics.backends.wgpu.renderer import WgpuRenderer
 
-    return [HeadlessBackend, PygameBackend, ModernGLRenderer, WgpuRenderer]
+    return [HeadlessBackend, PygameBackend, WgpuRenderer]
 
 
 class TestEveryRendererKeepsItsProtocolSignature:

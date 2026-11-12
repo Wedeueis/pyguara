@@ -1,6 +1,6 @@
 """True Coral - Bootstrap.
 
-Runs on the **ModernGL** backend, for the same reason Mourisco does: the
+Runs on the **wgpu** backend, for the same reason Mourisco does: the
 demo's look is not something a blitter can produce. The forest floor is
 dark except where something glows on it, the glow is a bloom threshold,
 and the weather is a fragment shader -- all three are pipeline features,
@@ -108,7 +108,6 @@ def configure_game_container() -> DIContainer:
     _install_theme()
 
     graph = container.get(RenderGraph)
-    ctx = graph.ctx
 
     # The graph owns the framebuffer manager and every pass resolves
     # through it; anything built here has to share it or it allocates a
@@ -121,11 +120,10 @@ def configure_game_container() -> DIContainer:
     # one this demo would have built, stays.
     graph.remove_pass("final")
 
-    storm = StormEffect(ctx)
-    stack = PostProcessStack(ctx, fbo_manager)
+    storm = StormEffect()
+    stack = PostProcessStack(fbo_manager)
     stack.add_effect(
         BloomEffect(
-            ctx,
             fbo_manager,
             threshold=BLOOM_THRESHOLD,
             intensity=BLOOM_INTENSITY,
@@ -133,11 +131,11 @@ def configure_game_container() -> DIContainer:
         )
     )
     stack.add_effect(storm)
-    stack.add_effect(VignetteEffect(ctx, intensity=0.42, radius=0.86, softness=0.55))
+    stack.add_effect(VignetteEffect(intensity=0.42, radius=0.86, softness=0.55))
 
-    graph.add_pass(CompositePass(ctx))
+    graph.add_pass(CompositePass())
     graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
-    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
+    graph.add_pass(FinalPass(input_fbo_name="post_processed"))
 
     container.register_instance(StormEffect, storm)
 
@@ -164,4 +162,4 @@ def attach_lighting(container: DIContainer, lighting: LightingSystem) -> None:
 
     # Index 1: after the world is drawn, before it is composited with the
     # light map it is about to be multiplied by.
-    graph.insert_pass(1, LightPass(graph.ctx, lighting))
+    graph.insert_pass(1, LightPass(lighting))

@@ -10,9 +10,10 @@ flat colour. That is deliberately a low bar -- it catches "the render path
 produced nothing", not "the render path produced the wrong thing" -- but it is
 the bar nothing was holding.
 
-Scope: this exercises the pygame path only, and it reads the surface the
-renderer blitted onto. It says nothing about whether a window appears on
-screen; see docs/guides/agent-visual-inspection.md for why those differ.
+Scope: it reads the surface the renderer drew onto -- pygame's own, or
+the one the wgpu window copies each frame to. It says nothing about
+whether a window appears on screen; see
+docs/guides/agent-visual-inspection.md for why those differ.
 """
 
 from __future__ import annotations
@@ -32,21 +33,7 @@ from tools.agent_view import DEMOS, is_blank  # noqa: E402
 # boot_process only opens a window and draws nothing; that is its whole point
 # as tutorial module 1, so a flat frame there is correct rather than a defect.
 #
-# The demos built on the render graph -- lighting, post-processing -- run on
-# the wgpu backend, and are held to their ModernGL frames whole by
-# `test_wgpu_gl_demos.py`, each backend in a process of its own. They are
-# left out here because this module renders demos in one process, after
-# others, and wgpu's GL backend cannot open a device while another OpenGL
-# context is current.
-GL_ONLY_DEMOS = {
-    "mourisco_ressonancia",
-    "true_coral",
-    "protocolo_bandeira",
-    "tamandua_murundus",
-    "guara_falcao",
-    "quintal_cerrado",
-}
-DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"} - GL_ONLY_DEMOS)
+DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"})
 
 FRAMES = 20
 

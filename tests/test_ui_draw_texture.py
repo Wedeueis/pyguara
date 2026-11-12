@@ -64,17 +64,14 @@ def _colours(surface: pygame.Surface) -> set[tuple[int, int, int, int]]:
 
 
 def _ui_renderers(target: pygame.Surface) -> list[tuple[str, Any]]:
-    """Both renderers that actually put pixels somewhere, over one surface."""
-    from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
+    """The renderer that draws into a surface. (wgpu's UI renderer is held
+    to pygame's pixels in `test_wgpu_pixels.py`.)"""
     from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 
-    gl = GLUIRenderer.__new__(GLUIRenderer)
-    gl._surface = target  # type: ignore[attr-defined]
-    gl._dirty = False  # type: ignore[attr-defined]
-    return [("pygame", PygameUIRenderer(target)), ("moderngl", gl)]
+    return [("pygame", PygameUIRenderer(target))]
 
 
-@pytest.fixture(params=["pygame", "moderngl"])
+@pytest.fixture(params=["pygame"])
 def renderer(request: Any, target: pygame.Surface) -> Any:
     by_name = dict(_ui_renderers(target))
     return by_name[request.param]
@@ -229,23 +226,3 @@ class TestADegenerateDestination:
         "drew nothing" and "did not take the frame down with it" are
         different promises and only the second is about the guard."""
         renderer.draw_texture(_striped(), rect, None, Rect(0, 1, 3, 1))
-
-
-class TestTheModernGLBackendOnlyReuploadsWhenSomethingLanded:
-    """Its `present()` uploads the whole overlay when `_dirty` is set --
-    3.69 MB at the default window size. A draw that produced no pixels
-    must not buy that."""
-
-    def test_a_drawn_region_dirties_the_surface(self, target: pygame.Surface) -> None:
-        gl = dict(_ui_renderers(target))["moderngl"]
-
-        gl.draw_texture(_striped(), Rect(0, 0, 9, 9), None, Rect(0, 1, 3, 1))
-
-        assert gl._dirty is True
-
-    def test_a_fully_outside_region_does_not(self, target: pygame.Surface) -> None:
-        gl = dict(_ui_renderers(target))["moderngl"]
-
-        gl.draw_texture(_striped(), Rect(0, 0, 9, 9), None, Rect(50, 50, 3, 3))
-
-        assert gl._dirty is False

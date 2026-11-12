@@ -7,17 +7,11 @@ FramebufferManager and coordinates pass execution.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE, STANDARD_CHAIN
-from pyguara.graphics.pipeline.device import GraphicsDevice, as_device
+from pyguara.graphics.pipeline.device import GraphicsDevice
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.log import get_logger
-
-if TYPE_CHECKING:
-    import moderngl
-
 
 logger = get_logger(__name__)
 
@@ -44,21 +38,18 @@ class RenderGraph:
 
     def __init__(
         self,
-        ctx: moderngl.Context | GraphicsDevice,
+        device: GraphicsDevice,
         width: int,
         height: int,
     ) -> None:
         """Initialize the render graph.
 
         Args:
-            ctx: The device passes run on, or a ModernGL context, which is
-                wrapped in a `ModernGLDevice` -- what every caller passed
-                before devices existed, accepted until stage E.
+            device: The device passes run on.
             width: Initial viewport width.
             height: Initial viewport height.
         """
-        self._device = as_device(ctx)
-        self._ctx = self._device.ctx
+        self._device = device
         self._fbo_manager = FramebufferManager(self._device, width, height)
         self._passes: list[BaseRenderPass] = []
         # Where the rendered image lands, and how big the window holding
@@ -72,14 +63,6 @@ class RenderGraph:
         # that needs it, at 16-bit float instead of the 8-bit default.
         for name in STANDARD_CHAIN:
             self._fbo_manager.declare(name, dtype=HDR_DTYPE)
-
-    @property
-    def ctx(self) -> moderngl.Context | None:
-        """The ModernGL context, for passes not yet ported; None on wgpu.
-
-        A pass written against `device` does not need it.
-        """
-        return self._ctx
 
     @property
     def device(self) -> GraphicsDevice:
@@ -177,7 +160,7 @@ class RenderGraph:
         """
         for render_pass in self._passes:
             if render_pass.enabled:
-                render_pass.execute(self._ctx, self)
+                render_pass.execute(self)
 
     def resize(
         self,
@@ -201,10 +184,7 @@ class RenderGraph:
             screen: Where that rendered image lands on the screen, as
                 `(x, y, width, height)` in window pixels. Defaults to
                 filling from the origin. With a letterbox it is inset, and
-                the bars are what is left over. This becomes
-                `ctx.screen.viewport`, which therefore means *where the
-                game's frame goes* -- anything that is not the game and
-                binds the screen has to set its own and put this back.
+                the bars are what is left over. `FinalPass` blits into it.
             window: The window's own size, which is what a pass drawing
                 directly to the screen needs -- the editor's chrome fills
                 the window, not the letterbox. Defaults to the render size.
@@ -213,14 +193,7 @@ class RenderGraph:
         self._window_size = window if window is not None else (width, height)
         self._screen_rect = screen if screen is not None else (0, 0, width, height)
 
-        # The default framebuffer does not follow the window on its own:
-        # moderngl detects `ctx.screen` once at context creation and caches
-        # its size, so after a resize everything bound to it still draws
-        # into a rectangle the size of the *original* window -- in the
-        # bottom-left corner, GL's origin being there. Setting the viewport
-        # is what `use()` then applies.
-        if self._ctx is not None and self._ctx.screen is not None:
-            self._ctx.screen.viewport = self._screen_rect
+        # The screen is the window; the device gives it the window's size.
         self._device.resize_screen(*self._window_size)
 
         for render_pass in self._passes:

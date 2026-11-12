@@ -39,7 +39,7 @@ def as_surface(texture: Any) -> pygame.Surface | None:
     A UI draws onto a CPU surface on every backend, so it can only draw from
     one. A bare surface passes straight through, and a `resources.Texture`, which
     is what `ResourceManager.load` hands back, is unwrapped by asking it:
-    `PygameTexture` already holds a surface, and `GLTexture.read_surface()` reads
+    `PygameTexture` already holds a surface, and a texture with `read_surface()` reads
     its pixels back from the GPU the first time and keeps them.
 
     Anything else draws nothing, **and says so once**. This used to be a silent

@@ -220,22 +220,10 @@ class WgpuRenderer:
         Returns:
             Whether one was set, so the caller clears it afterwards.
         """
-        from pyguara.graphics.pipeline.device import SpriteShader
-
         material = batch.material
         if material is None:
             return False
         shader = material.shader
-        if not isinstance(shader, SpriteShader):
-            # A compiled ModernGL program: GLSL, which wgpu cannot run.
-            if not self._warned_material:
-                self._warned_material = True
-                logger.warning(
-                    "A sprite batch has a ModernGL material, which the wgpu "
-                    "renderer cannot run; drawing the sprites without it. Give "
-                    "it a SpriteShader. Said once."
-                )
-            return False
         found = self._materials.get(id(shader))
         if found is None:
             effect = self._gpu.create_material(
@@ -298,6 +286,10 @@ class WgpuRenderer:
             width: The new width in pixels.
             height: The new height in pixels.
         """
+        # Minimising reports zero, and a renderer believing it would divide
+        # by it.
+        if width <= 0 or height <= 0:
+            return
         self._size = (width, height)
 
     def present(self) -> None:

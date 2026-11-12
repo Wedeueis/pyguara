@@ -776,11 +776,6 @@ class IFramebuffer(Protocol):
         """Height of the framebuffer in pixels."""
         ...
 
-    @property
-    def texture(self) -> Any:
-        """The underlying texture that can be sampled from."""
-        ...
-
     def bind(self) -> None:
         """Bind this framebuffer as the current render target."""
         ...
@@ -821,11 +816,11 @@ class IRenderPass(Protocol):
         """Whether this pass should execute."""
         ...
 
-    def execute(self, ctx: Any, graph: Any) -> None:
+    def execute(self, graph: Any) -> None:
         """Execute this render pass.
 
         Args:
-            ctx: The rendering context (e.g., moderngl.Context).
-            graph: The RenderGraph orchestrating this pass (provides FBO access).
+            graph: The RenderGraph orchestrating this pass: its buffers, and
+                the device it runs shaders on.
         """
         ...

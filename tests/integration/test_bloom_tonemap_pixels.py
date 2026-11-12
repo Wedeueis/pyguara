@@ -1,4 +1,4 @@
-"""Real-GL pixel readback for the bloom composite's tonemap.
+"""Real-GPU pixel readback for the bloom composite's tonemap.
 
 The chain is 16-bit float end to end (`pipeline/buffers.py`), so an
 additive bloom genuinely leaves values above 1.0 at the composite -- a 2.0
@@ -8,8 +8,8 @@ every one of them to flat white, so the brightest part of the frame lost
 all its detail at exactly the moment the bloom was meant to be doing
 something.
 
-That is invisible to a mock -- `test_bloom_effect.py` counts GL objects
-against a `MagicMock` and cannot see a single pixel -- and invisible to a
+That is invisible to a mock -- `test_bloom_effect.py` records the passes
+against a recording device and cannot see a single pixel -- and invisible to a
 test that reads back through an 8-bit buffer, because the clip has already
 happened by then. So this renders the real composite pass into a real `f2`
 framebuffer and reads floats out of it.
@@ -32,7 +32,7 @@ import numpy as np
 import pytest
 
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE
-from pyguara.graphics.pipeline.device import ModernGLDevice
+from pyguara.graphics.pipeline.device import WgpuDevice
 from pyguara.graphics.pipeline.framebuffer import Framebuffer, FramebufferManager
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 
@@ -40,25 +40,26 @@ pytestmark = pytest.mark.integration
 
 _SIZE = 8
 
-# `bloom_composite.frag`'s own constant. Duplicated rather than imported
-# because it lives in GLSL; if one moves and the other does not, the
-# identity test below is what notices.
+# The bloom composite's own constant (`KNEE` in its WGSL). Duplicated rather
+# than imported because it lives in the shader; if one moves and the other
+# does not, the identity test below is what notices.
 _KNEE = 0.8
 
 
 @pytest.fixture
 def composite(
-    gl_ctx: Any,
+    wgpu_frame: Any,
 ) -> Iterator[tuple[Any, BloomEffect, Framebuffer, Framebuffer]]:
     """A bloom effect between two HDR framebuffers of its own."""
-    manager = FramebufferManager(gl_ctx, _SIZE, _SIZE)
+    frame = wgpu_frame(_SIZE, _SIZE)
+    manager = FramebufferManager(WgpuDevice(frame), _SIZE, _SIZE)
     manager.declare("_tonemap_in", dtype=HDR_DTYPE)
     manager.declare("_tonemap_out", dtype=HDR_DTYPE)
     source = manager.get_or_create("_tonemap_in")
     target = manager.get_or_create("_tonemap_out")
-    effect = BloomEffect(gl_ctx, manager, threshold=0.8, intensity=1.0, blur_passes=1)
+    effect = BloomEffect(manager, threshold=0.8, intensity=1.0, blur_passes=1)
     try:
-        yield gl_ctx, effect, source, target
+        yield frame, effect, source, target
     finally:
         effect.release()
         manager.release_all()
@@ -70,22 +71,21 @@ def _composite_of(
     """Fill the source with `value`, run bloom, read the centre back.
 
     Args:
-        scene: The fixture's context, effect and framebuffers.
+        scene: The fixture's frame, effect and framebuffers.
         value: The flat linear value to fill every scene channel with.
 
     Returns:
         The red channel of the composited centre pixel, as a float -- read
         out of the `f2` target, so before any 8-bit clip.
     """
-    ctx, effect, source, target = scene
-    source.bind()
-    ctx.clear(value, value, value, 1.0)
-    target.bind()
-    ctx.clear(0.0, 0.0, 0.0, 1.0)
+    frame, effect, source, target = scene
+    source.clear_rgba((value, value, value, 1.0))
+    target.clear_rgba((0.0, 0.0, 0.0, 1.0))
 
-    effect.apply(ModernGLDevice(ctx), source, target)
+    effect.apply(WgpuDevice(frame), source, target)
+    frame.gpu.end_frame()
 
-    raw = np.frombuffer(target.fbo.read(components=4, dtype="f4"), dtype="f4")
+    raw = np.frombuffer(frame.gpu.read_pixels(target.target), dtype="<f2")
     return float(raw.reshape((_SIZE, _SIZE, 4))[_SIZE // 2, _SIZE // 2][0])
 
 

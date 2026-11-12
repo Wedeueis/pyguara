@@ -1,15 +1,13 @@
-"""The render graph's passes on wgpu, against the same passes on ModernGL.
+"""The render graph's passes on wgpu, against their golden images.
 
-pygame has no render graph, so for everything the graph does -- compositing,
-lighting, post-processing -- ModernGL is the only reference there is. Each
-case in `_graph_frame.py` runs once per backend, each in its own process,
-from the same picture, and the outputs are compared.
+Each case in `_graph_frame.py` runs in a process of its own, from a known
+picture, and its output is compared with the image approved for it -- the
+wgpu output at the commit where every case matched ModernGL, pass by pass,
+before that backend was retired. See `tests/integration/golden.py`.
 
-Two things a case can get wrong that this catches: the arithmetic of the
-shader port, and the orientation. GL's texture rows run bottom-up and
-wgpu's top-down, so a WGSL port that copied a GLSL shader's use of `y`
-literally would come out upside down. The picture has a marker in its
-top-left corner for that reason.
+Two things a case can get wrong that this catches: the arithmetic of a
+shader, and the orientation. The picture has a marker in its top-left
+corner so a pass that turned the image upside down cannot pass.
 """
 
 from __future__ import annotations
@@ -41,7 +39,7 @@ def _run(backend: str, case: str, out: Path) -> bytes:
     )
     if completed.returncode != 0:
         tail = completed.stderr[-3000:]
-        if "could not be opened" in tail or "create_standalone_context" in tail:
+        if "could not be opened" in tail:
             pytest.skip(f"no {backend} device here: {tail.splitlines()[-1]}")
         raise AssertionError(f"{case} on {backend} failed:\n{tail}")
     return out.read_bytes()
@@ -75,26 +73,6 @@ def _worst(reference: bytes, actual: bytes) -> tuple[int, float, Any]:
     b8 = np.frombuffer(actual, dtype=np.uint8).reshape(-1, 4)[:, :3].astype(np.int16)
     gap8 = np.abs(a8 - b8).max(axis=1)
     return int((gap8 > TOLERANCE).sum()), float(gap8.max()), a8
-
-
-@pytest.mark.integration
-@pytest.mark.parametrize("case", list(CASES))
-def test_the_pass_matches_moderngl(case: str, tmp_path: Path) -> None:
-    import numpy as np
-
-    reference = _run("moderngl", case, tmp_path / "gl.rgba")
-    actual = _run("wgpu", case, tmp_path / "wgpu.rgba")
-
-    assert len(reference) == len(actual)
-    assert len(reference) in (WIDTH * HEIGHT * 4, WIDTH * HEIGHT * 8)
-    differing, largest, image = _worst(reference, actual)
-    # Not a blank pass compared with a blank pass: at least 5% of the image
-    # differs from its most common colour.
-    colours, counts = np.unique(image, axis=0, return_counts=True)
-    background = colours[counts.argmax()]
-    drawn = int((image != background).any(axis=1).sum())
-    assert drawn > 0.05 * len(image), f"{case} drew almost nothing ({drawn} pixels)"
-    assert differing == 0, f"{case}: {differing} pixels differ, by up to {largest}"
 
 
 @pytest.mark.integration

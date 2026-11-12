@@ -23,6 +23,18 @@ class PygameWindow:
         self._default_color = Color(0, 0, 0)
         self._is_open = False
 
+    def display_flags(self, config: WindowConfig) -> int:
+        """Return the SDL display flags this window opens with.
+
+        Fullscreen only: the software window has no editor drawing its own
+        title bar, so it ignores `resizable` and `borderless`. The wgpu
+        window, which does, adds them.
+
+        Args:
+            config: The window configuration.
+        """
+        return pygame.FULLSCREEN if config.fullscreen else 0
+
     def open(self, config: WindowConfig) -> bool:
         """Create the display surface.
 
@@ -32,10 +44,8 @@ class PygameWindow:
         Returns:
             True once the surface exists.
         """
-        flags = 0
+        flags = self.display_flags(config)
         self._default_color = config.default_color
-        if config.fullscreen:
-            flags |= pygame.FULLSCREEN
 
         size = (config.screen_width, config.screen_height)
         screen: pygame.Surface = pygame.display.set_mode(

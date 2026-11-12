@@ -1,8 +1,8 @@
 """`UIRenderer` on wgpu.
 
 The UI is drawn into the same native frame as the world, after it, as
-instanced quads. That is the difference from the ModernGL UI renderer,
-which draws onto a CPU surface and uploads the whole of it every frame:
+instanced quads. That is the difference from the retired ModernGL UI renderer,
+which drew onto a CPU surface and uploaded the whole of it every frame:
 about 12 ms at 1080p (issue #334), paid whether the HUD is one label or a
 full menu. Here a label costs one quad.
 """

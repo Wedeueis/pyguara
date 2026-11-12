@@ -3,18 +3,13 @@
 from __future__ import annotations
 
 import struct
-from unittest.mock import MagicMock
 
 import pytest
 
 from pyguara.graphics.pipeline.device import (
     FullscreenShader,
-    GraphicsDevice,
-    ModernGLDevice,
     Uniform,
-    as_device,
 )
-from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 
 
@@ -89,29 +84,14 @@ class TestWgslSource:
 
     def test_a_shader_without_wgsl_says_so(self) -> None:
         with pytest.raises(ValueError, match="blur has no WGSL source"):
-            FullscreenShader("blur", glsl="...").wgsl_source()
+            FullscreenShader("blur").wgsl_source()
 
 
 class TestDevices:
-    def test_a_context_is_wrapped_and_a_device_is_kept(self) -> None:
-        ctx = MagicMock()
-        device = ModernGLDevice(ctx)
-
-        assert as_device(device) is device
-        wrapped = as_device(ctx)
-        assert isinstance(wrapped, ModernGLDevice) and wrapped.ctx is ctx
-
-    def test_a_mock_is_not_mistaken_for_a_device(self) -> None:
-        # Why devices are a class, not a runtime-checkable Protocol.
-        assert not isinstance(MagicMock(), GraphicsDevice)
-
     def test_the_graph_and_its_manager_share_one_device(self) -> None:
-        graph = RenderGraph(MagicMock(), 64, 48)
+        from tests.recording_device import RecordingDevice
 
-        assert graph.fbo_manager._device is graph.device
-        assert graph.ctx is graph.device.ctx
+        device = RecordingDevice()
+        graph = RenderGraph(device, 64, 48)
 
-    def test_a_manager_accepts_a_device(self) -> None:
-        device = ModernGLDevice(MagicMock())
-
-        assert FramebufferManager(device, 8, 8)._device is device
+        assert graph.fbo_manager.device is graph.device is device

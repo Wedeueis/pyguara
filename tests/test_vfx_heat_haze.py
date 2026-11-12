@@ -104,9 +104,7 @@ class TestGusts:
 
 
 class TestResources:
-    def test_the_shader_comes_in_both_languages(self) -> None:
-        """GLSL for ModernGL, WGSL for wgpu, until stage E."""
-        assert HEAT_HAZE.glsl is not None and "u_horizon" in HEAT_HAZE.glsl
+    def test_the_shader_declares_its_uniforms(self) -> None:
         assert "u_horizon: f32" in HEAT_HAZE.wgsl_source()
 
     def test_release_is_harmless(self) -> None:

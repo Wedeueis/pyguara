@@ -210,10 +210,9 @@ class StudioHarness:
         """Return the composed frame as a pygame surface, or None.
 
         `agent_view`'s logic, and its reasoning: the pygame backends draw
-        into the display surface, so reading it back is the whole job. A
-        ModernGL backend does not -- under an `OPENGL` display,
-        `get_surface()` hands back a surface the GPU never touched -- so
-        the offscreen buffer the final pass blits from is read instead.
+        into the display surface, so reading it back is the whole job. The
+        wgpu backend does not -- its frame never touches the display
+        surface -- so the frame is read back from the GPU instead.
         The default framebuffer is no use: after the swap it is an
         undefined back buffer, and before it reads back as solid zeros
         under the offscreen driver.
@@ -391,7 +390,6 @@ def open_headless(
     project_root: Path | None = None,
     out_dir: Path | None = None,
     container_factory: Any = None,
-    gl: bool = False,
     seed: int | None = 0,
     fixed_clock: bool = True,
 ) -> StudioHarness:
@@ -405,9 +403,8 @@ def open_headless(
 
     So this boots the *normal* bootstrap under an SDL driver that needs no
     display -- the same arrangement `tools/agent_view.py` has used all
-    along. The driver choice matters too: `dummy` has no OpenGL
-    whatsoever, so a ModernGL scene cannot create its context under it and
-    needs `offscreen` instead, which is what `gl` selects.
+    along. `dummy` is enough for every backend: wgpu renders offscreen
+    and needs no GL context from SDL.
 
     Args:
         scene_factory: Called with the event dispatcher, returns the
@@ -418,8 +415,6 @@ def open_headless(
             with its own bootstrap. Demos in this repository expose
             `configure_game_container()` for exactly this. Defaults to
             `create_application()`'s container.
-        gl: Use the `offscreen` driver, which provides a real GL context,
-            instead of `dummy`. Required for a ModernGL scene.
         seed: Seed the engine's `RandomService` with this, so two runs
             draw the same numbers. None leaves whatever the bootstrap
             chose, which is a fresh seed per run.
@@ -429,7 +424,7 @@ def open_headless(
     Returns:
         The harness, with the scene active and no frame stepped yet.
     """
-    _force_headless_drivers(gl=gl)
+    _force_headless_drivers()
 
     from pyguara.application.application import Application
     from pyguara.events.dispatcher import EventDispatcher
@@ -504,20 +499,13 @@ def _seed_random(container: Any, seed: int) -> None:
     container.register_instance(RandomService, RandomService(root_seed=seed))
 
 
-def _force_headless_drivers(*, gl: bool = False) -> None:
+def _force_headless_drivers() -> None:
     """Point SDL at drivers that need no display.
 
     `setdefault`, so a caller or a test module that has already chosen
     keeps their choice -- changing it after pygame has initialised its
     video subsystem would not take effect anyway.
-
-    Args:
-        gl: Prefer `offscreen`, which provides a real GL context
-            headlessly. `dummy` has no OpenGL at all ("OpenGL support is
-            either not configured in SDL or not available in current SDL
-            video driver"), so a ModernGL scene cannot create its context
-            under it.
     """
-    os.environ.setdefault("SDL_VIDEODRIVER", "offscreen" if gl else "dummy")
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")

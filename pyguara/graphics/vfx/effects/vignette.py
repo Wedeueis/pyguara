@@ -6,9 +6,9 @@ and creating a cinematic look.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from pyguara.graphics.pipeline.device import FullscreenShader, Uniform, glsl
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
@@ -19,7 +19,6 @@ VIGNETTE = FullscreenShader(
     "vignette",
     inputs=("u_texture",),
     uniforms=(Uniform("u_intensity"), Uniform("u_radius"), Uniform("u_softness")),
-    glsl=glsl("vignette.frag"),
     # Symmetric about the centre, so the two uv conventions agree.
     wgsl="""
 @fragment
@@ -45,7 +44,6 @@ class VignetteEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: Any = None,
         *,
         intensity: float = 0.5,
         radius: float = 0.75,
@@ -55,8 +53,6 @@ class VignetteEffect(PostProcessEffect):
         """Initialize the vignette effect.
 
         Args:
-            ctx: Unused. Accepted so callers written when effects needed a
-                ModernGL context keep working; removed in stage E.
             intensity: Edge darkness (0.0-1.0).
             radius: Where vignette starts (0.0-1.0 from center).
             softness: Edge transition softness.

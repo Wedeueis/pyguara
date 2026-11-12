@@ -7,21 +7,18 @@ for post-processing or directly to the screen.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import COMPOSITE_FBO_NAME  # re-exported
-from pyguara.graphics.pipeline.device import FullscreenShader, glsl
+from pyguara.graphics.pipeline.device import FullscreenShader
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.pipeline.graph import RenderGraph
 
 COMPOSITE = FullscreenShader(
     "composite",
     inputs=("u_world", "u_lightmap"),
-    glsl=glsl("composite.frag"),
     wgsl="""
 @fragment
 fn fragment(in: Varying) -> @location(0) vec4<f32> {
@@ -49,7 +46,6 @@ class CompositePass(BaseRenderPass):
 
     def __init__(
         self,
-        ctx: Any = None,
         world_fbo_name: str = "world",
         light_fbo_name: str = "lightmap",
         output_fbo_name: str | None = COMPOSITE_FBO_NAME,
@@ -59,8 +55,6 @@ class CompositePass(BaseRenderPass):
         """Initialize the composite pass.
 
         Args:
-            ctx: Unused. Accepted so callers written when passes needed a
-                ModernGL context keep working; removed in stage E.
             world_fbo_name: Name of the world framebuffer.
             light_fbo_name: Name of the light map framebuffer.
             output_fbo_name: Name of output FBO (None = screen).
@@ -71,11 +65,10 @@ class CompositePass(BaseRenderPass):
         self._light_fbo_name = light_fbo_name
         self._output_fbo_name = output_fbo_name
 
-    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
+    def execute(self, graph: RenderGraph) -> None:
         """Execute the composite pass.
 
         Args:
-            ctx: Unused; the pass runs through `graph.device`.
             graph: The RenderGraph providing access to framebuffers.
         """
         if not self._enabled:

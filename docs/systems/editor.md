@@ -12,7 +12,7 @@ editor, animation editor, agentic authoring harness) is tracked separately as
 >
 > A **second**, working ImGui layer now exists beside them --
 > [the ImGui editor layer](#the-imgui-editor-layer) -- drawing through the
-> engine's own `moderngl` context instead of PyOpenGL. It lives in
+> engine's own wgpu device instead of PyOpenGL. It lives in
 > `pyguara.studio`, with the authoring application built on it; there is no
 > `pyguara/editor` package any more. The two surfaces are independent:
 > attaching the editor layer changes nothing about the overlay, and the
@@ -85,7 +85,7 @@ them on.
 
 The overlay reports; it does not author. Everything that *changes* the
 world now lives in [PyGuara Studio](studio.md), which is attached
-explicitly and is ModernGL-only:
+explicitly and needs the wgpu backend:
 
 ```python
 from pyguara.application.bootstrap import create_application
@@ -163,7 +163,7 @@ world in that window is writing into an orphan no scene will ever see. Return
 ## The ImGui editor layer
 
 A second dev surface, `pyguara.studio`: Dear ImGui panels drawn as a render
-pass over the finished frame. It is **ModernGL-only** and **opt-in**.
+pass over the finished frame. It needs the **wgpu** backend and is **opt-in**.
 
 ```python
 from pyguara.application.bootstrap import create_application
@@ -186,11 +186,11 @@ The two used to be separate packages, `pyguara/editor` and
 `pyguara/studio`, with ten imports and a panel subclass crossing between
 them. They are one package now. What *is* a boundary is the `pyguara.tools`
 overlay above: it draws through `UIRenderer`, needs no ImGui, and works on
-the Pygame backend, which has no GL context for this layer to draw into.
+the Pygame backend, which has no GPU device for this layer to draw into.
 
 `attach_editor` returns the `EditorLayer`, and registers it in the container
 so game code can reach it. It returns `None` -- logging why -- when the
-editor cannot run: ImGui is not installed, or the backend has no GL render
+editor cannot run: ImGui is not installed, or the backend has no GPU render
 graph. It does not half-install.
 
 It works on both `create_application()` and `create_sandbox_application()`,
@@ -198,26 +198,24 @@ which draw a frame the same way. That was briefly not true:
 `SandboxApplication` used to override `_render()` wholesale and never
 executed a single render-graph pass, so the editor attached and was then
 never drawn -- and the sandbox also skipped lighting, compositing and
-post-processing on the ModernGL backend. It now overrides the
+post-processing on the GPU backend. It now overrides the
 `_render_overlays()` hook instead and inherits the frame loop, so an
 overlay adds itself without restating how a frame is drawn.
 
-### Why ModernGL-only
+### Why wgpu-only
 
-The editor rasterises ImGui's draw data through the `moderngl.Context` the
-`RenderGraph` owns. The Pygame backend has none: its `PygameRenderGraph` is a
-stub whose `ctx` is `None`, and the window it opens is a software surface
-(`pygame_window.py` actively strips `pygame.OPENGL` to keep it one). On that
-backend `attach_editor` declines and the `pyguara.tools` overlay above stays
-the dev surface.
+The editor rasterises ImGui's draw data through the native wgpu frame the
+`RenderGraph`'s device owns, as one `mesh` step per frame. The Pygame backend
+has none: its `PygameRenderGraph` is a stub with no device, and the window it
+opens is a software surface. On that backend `attach_editor` declines and the
+`pyguara.tools` overlay above stays the dev surface.
 
 ### Why not `imgui_bundle.python_backends`
 
 Those backends import `OpenGL.GL`. An undeclared PyOpenGL dependency is
 exactly what made the *first* editor dead code, so the renderer here
-(`pyguara.studio.renderer.ModernGLImGuiRenderer`) is written against
-`moderngl` -- already a hard dependency of the engine -- and shares the
-context the renderer is already using rather than standing up a second GL
+(`pyguara.studio.wgpu_renderer.WgpuImGuiRenderer`) draws through the frame
+the renderer is already using rather than standing up a second graphics
 stack. `pyguara.studio.availability.IMGUI_AVAILABLE` records whether ImGui
 imported, and a test asserts it is `True`, so the editor cannot quietly
 switch itself off again.

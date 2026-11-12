@@ -47,6 +47,7 @@ class RecordingDevice(GraphicsDevice):
             height,
             dtype,
         )
+        buffer.samples = samples
         return buffer
 
     def run(

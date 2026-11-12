@@ -77,10 +77,6 @@ from pyguara.common.spatial import SpatialHash  # noqa: E402
 from pyguara.common.types import Color, Vector2  # noqa: E402
 from pyguara.ecs.manager import EntityManager  # noqa: E402
 from pyguara.events.dispatcher import EventDispatcher  # noqa: E402
-from pyguara.graphics.backends.moderngl.instancing import (  # noqa: E402
-    INSTANCE_FLOATS,
-    pack_sprite_instances,
-)
 from pyguara.graphics.components.camera import Camera2D  # noqa: E402
 from pyguara.graphics.components.particles import ParticleSystem  # noqa: E402
 from pyguara.graphics.components.sprite import Sprite  # noqa: E402
@@ -522,11 +518,12 @@ def price_spatial_index(count: int) -> Row | None:
 def price_render_batcher(sprites: int) -> Row | None:
     """Item 4, Marco 2's buffer handoff, priced after Decision 6.
 
-    The whole CPU-side frame, because a native batcher replaces all four
-    of its stages at once: `RenderSystem.submit` building a command per
-    renderable, `RenderQueue.sort`, `Batcher.create_batches`, and
-    `pack_sprite_instances` filling the instance array. Pricing the
-    batcher alone would be the error Decision 7 names.
+    The whole CPU-side frame, because a native batcher replaces all three
+    of its Python stages at once: `RenderSystem.submit` building a command
+    per renderable, `RenderQueue.sort` and `Batcher.create_batches`.
+    Pricing the batcher alone would be the error Decision 7 names. (There
+    was a fourth, ModernGL's `pack_sprite_instances`; on wgpu the placement
+    is already native, `NativeGpu.sprites`, and ModernGL is retired.)
 
     **`T_pinned` is the attribute reads**, and nothing else moves them.
     Each command's data lives on a Python object -- a `Sprite`, or an
@@ -578,7 +575,6 @@ def price_render_batcher(sprites: int) -> Row | None:
     camera = Camera2D(1280, 720)
     viewport = Viewport.create_fullscreen(1280, 720)
     batcher = Batcher()
-    instances = np.zeros((sprites, INSTANCE_FLOATS), dtype="f4")
 
     def submit_all() -> None:
         system._queue.clear()
@@ -594,21 +590,11 @@ def price_render_batcher(sprites: int) -> Row | None:
 
     sort_only()
     sorted_commands = list(system._queue.commands)
-    batches = batcher.create_batches(sorted_commands, camera, viewport)
 
     def batch_only() -> None:
         batcher.create_batches(sorted_commands, camera, viewport)
 
-    def pack_only() -> None:
-        for batch in batches:
-            pack_sprite_instances(batch, instances)
-
-    python_ms = (
-        measure(submit_all)
-        + measure(sort_only)
-        + measure(batch_only)
-        + measure(pack_only)
-    )
+    python_ms = measure(submit_all) + measure(sort_only) + measure(batch_only)
 
     # Pinned: reading the fields off each Python object, which happens in
     # either language.

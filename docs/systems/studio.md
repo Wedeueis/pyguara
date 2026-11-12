@@ -17,7 +17,7 @@ app.run(MyScene("game", dispatcher))
 
 ## Trying it
 
-Six demos already use the ModernGL backend, and `tools/studio_demo.py`
+Six demos already use the wgpu backend, and `tools/studio_demo.py`
 opens any of them with Studio attached:
 
 ```bash
@@ -30,8 +30,8 @@ uv run python tools/studio_demo.py guara_falcao --borderless
 `main.py` and the remaining demos run on the Pygame backend, where Studio
 declines rather than half-installing.
 
-`attach_studio` builds on `attach_editor`, so it is ModernGL-only for the
-same reason: it draws through the GL context the render graph owns, and
+`attach_studio` builds on `attach_editor`, so it needs wgpu for the
+same reason: it draws through the GPU device the render graph owns, and
 the Pygame backend's window is a software surface with none. On that
 backend it declines and logs why, and `pyguara/tools` remains the dev
 surface there. See [Editor Tools](editor.md).
@@ -463,7 +463,6 @@ from games.guara_falcao.scenes import GameScene
 harness = open_headless(
     GameScene,
     container_factory=configure_game_container,
-    gl=True,
 )
 harness.step(30)
 capture = harness.capture("frame")
@@ -474,8 +473,8 @@ print(capture.blank, capture.world_flat)
 `create_headless_application()` registers no texture loader, so any scene
 that loads an image dies before it finishes entering — and a real demo is
 almost entirely images. The harness boots the normal bootstrap under an
-SDL driver that needs no display. `gl=True` selects `offscreen`, which
-provides a real GL context; `dummy` has no OpenGL at all.
+SDL driver that needs no display, `dummy`; the wgpu backend renders
+offscreen and asks SDL for no GL context.
 
 Runs are deterministic: the harness installs `FixedClock` and seeds
 `RandomService` itself, so the same script twice produces the same frames.

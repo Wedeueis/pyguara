@@ -20,24 +20,45 @@ SectionT = TypeVar("SectionT")
 logger = get_logger(__name__)
 
 
+class RetiredBackendError(RuntimeError):
+    """A configuration names a rendering backend the engine no longer has.
+
+    Not a `ValueError` on purpose: an unknown enum value in a config file
+    falls back to the default with a warning, and a failed load is logged
+    and survived. A game asking for a backend that was removed should stop
+    at startup, saying what to choose instead, rather than quietly running
+    on another one.
+    """
+
+
 class RenderingBackend(Enum):
     """Available rendering backend options.
 
     PYGAME: Software rendering using Pygame's SDL2 backend.
             Compatible with all systems, lower performance.
 
-    MODERNGL: GPU-accelerated rendering using ModernGL.
-              Requires OpenGL 3.3+, higher performance with hardware instancing.
-
     WGPU: GPU-accelerated rendering through the native extension, on
-          whichever of DX12, Metal, Vulkan or GL the machine has. Stage A:
-          rectangles, circles, lines, text and sprites, with no render
-          graph. See `project/backlog/active/next_engine_plan.md`.
+          whichever of DX12, Metal, Vulkan or GL the machine has, with the
+          render graph -- lighting, post-processing -- and sprite materials.
+
+    ModernGL was the third, and was retired in stage E of
+    `project/backlog/active/next_engine_plan.md`; asking for it raises
+    `RetiredBackendError`.
     """
 
     PYGAME = "pygame"
-    MODERNGL = "moderngl"
     WGPU = "wgpu"
+
+    @classmethod
+    def _missing_(cls, value: object) -> RenderingBackend | None:
+        """Refuse the retired ModernGL backend by name, loudly."""
+        if isinstance(value, str) and value.strip().lower() == "moderngl":
+            raise RetiredBackendError(
+                "display.backend is 'moderngl', which was retired: the "
+                "rendering backends are 'wgpu' (GPU, with lighting and "
+                "post-processing) and 'pygame' (software)."
+            )
+        return None
 
 
 @dataclass

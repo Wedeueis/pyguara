@@ -1,17 +1,14 @@
-"""Run one render-graph case on one backend and write the result. Run as a script.
+"""Run one render-graph case and write the result. Run as a script.
 
-    python tests/integration/_graph_frame.py <moderngl|wgpu> <case> <out.rgba>
+    python tests/integration/_graph_frame.py wgpu <case> <out.rgba>
 
-`test_wgpu_graph.py` runs this once per backend, each in a process of its
-own: wgpu's GL backend cannot open a device while a ModernGL context is
-current, and the reverse is no better.
+`test_wgpu_graph.py` holds each case to its golden image. A case starts
+from a known picture -- drawn straight into a buffer, so the renderer's
+rasterisation is not part of what is compared -- runs passes over it
+through `GraphicsDevice`, and writes the output buffer top row first.
 
-A case starts from the same picture on both backends -- written straight
-into a buffer, so neither renderer's rasterisation is part of what is
-compared -- runs passes over it through `GraphicsDevice`, and writes the
-output buffer as RGBA rows **top row first** on both. GL stores its rows
-bottom-up, so its side flips the picture on the way in and the result on
-the way out; a pass that turned the image upside down would show.
+The cases were first held to ModernGL's output, pass by pass, which is
+what approved the golden images; that backend has since been retired.
 """
 
 from __future__ import annotations
@@ -44,14 +41,6 @@ def picture() -> bytes:
     return b"".join(rows)
 
 
-def flip(rows: bytes, width: int, height: int, texel: int = 4) -> bytes:
-    """Reverse the row order of a tightly packed image of `texel`-byte pixels."""
-    stride = width * texel
-    return b"".join(
-        rows[y * stride : (y + 1) * stride] for y in reversed(range(height))
-    )
-
-
 class Backend:
     """What a case needs from either backend."""
 
@@ -67,35 +56,6 @@ class Backend:
         Bytes for an 8-bit buffer; little-endian half floats for an HDR one.
         """
         raise NotImplementedError
-
-
-class GL(Backend):
-    """ModernGL on a standalone context."""
-
-    def __init__(self) -> None:
-        import moderngl
-
-        from pyguara.graphics.backends.moderngl.blend import (
-            DEFAULT_BLEND_MODE,
-            apply_blend_mode,
-        )
-        from pyguara.graphics.pipeline.device import ModernGLDevice
-        from pyguara.graphics.pipeline.graph import RenderGraph
-
-        self.ctx = moderngl.create_standalone_context()
-        # What `ModernGLRenderer` sets up, and every pass runs under.
-        apply_blend_mode(self.ctx, DEFAULT_BLEND_MODE)
-        self.graph = RenderGraph(ModernGLDevice(self.ctx), WIDTH, HEIGHT)
-
-    def fill(self, buffer: Any, pixels: bytes) -> None:
-        buffer.texture.write(flip(pixels, buffer.width, buffer.height))
-
-    def read(self, buffer: Any) -> bytes:
-        if buffer.dtype == "f2":
-            data = buffer.fbo.read(components=4, dtype="f2")
-            return flip(data, buffer.width, buffer.height, texel=8)
-        data = buffer.fbo.read(components=4)
-        return flip(data, buffer.width, buffer.height)
 
 
 class WGPU(Backend):
@@ -150,7 +110,7 @@ def composite(backend: Backend) -> Any:
     light.clear(Color(128, 200, 255, 255))
     CompositePass(
         world_fbo_name="w", light_fbo_name="l", output_fbo_name="out"
-    ).execute(backend.graph.ctx, backend.graph)
+    ).execute(backend.graph)
     return out
 
 
@@ -164,7 +124,7 @@ def composite_unlit(backend: Backend) -> Any:
     backend.fill(world, picture())
     CompositePass(
         world_fbo_name="w", light_fbo_name="none", output_fbo_name="out"
-    ).execute(backend.graph.ctx, backend.graph)
+    ).execute(backend.graph)
     return out
 
 
@@ -231,9 +191,9 @@ def lights(backend: Backend) -> Any:
 
     camera = Camera2D(WIDTH, HEIGHT)
     camera.position = Vector2(WIDTH / 2, HEIGHT / 2)
-    light_pass = LightPass(backend.graph.ctx, _lighting())
+    light_pass = LightPass(_lighting())
     light_pass.set_camera(camera, Viewport(0, 0, WIDTH, HEIGHT))
-    light_pass.execute(backend.graph.ctx, backend.graph)
+    light_pass.execute(backend.graph)
     return backend.graph.fbo_manager.get(LIGHT_FBO_NAME)
 
 
@@ -246,9 +206,7 @@ def lit(backend: Backend) -> Any:
     out = manager.get_or_create("out", dtype="f1")
     backend.fill(world, picture())
     lights(backend)
-    CompositePass(world_fbo_name="w", output_fbo_name="out").execute(
-        backend.graph.ctx, backend.graph
-    )
+    CompositePass(world_fbo_name="w", output_fbo_name="out").execute(backend.graph)
     return out
 
 
@@ -260,11 +218,11 @@ def _post_process(backend: Backend, *effects: Any) -> Any:
     manager = backend.graph.fbo_manager
     world = manager.get_or_create("w", dtype="f1")
     backend.fill(world, picture())
-    stack = PostProcessStack(backend.graph.ctx, manager)
+    stack = PostProcessStack(manager)
     for effect in effects:
         stack.add_effect(effect)
     PostProcessPass(stack, input_fbo_name="w", output_fbo_name="out").execute(
-        backend.graph.ctx, backend.graph
+        backend.graph
     )
     return manager.get("out")
 
@@ -280,12 +238,12 @@ def bloom(backend: Backend) -> Any:
     """Bright areas thresholded, blurred both ways, added back, tonemapped."""
     from pyguara.graphics.vfx.effects import BloomEffect
 
-    effect = BloomEffect(None, backend.graph.fbo_manager, threshold=0.6, blur_passes=2)
+    effect = BloomEffect(backend.graph.fbo_manager, threshold=0.6, blur_passes=2)
     return _post_process(backend, effect)
 
 
 def heat_haze(backend: Backend) -> Any:
-    """Shimmer, dust and sun: procedural, so the noise must be GL's own."""
+    """Shimmer, dust and sun: procedural noise, hashed on position."""
     from pyguara.graphics.vfx.effects import HeatHazeEffect
 
     effect = HeatHazeEffect(haze=6.0, horizon=0.3, dust=0.8, sun=0.5, wind=-0.6)
@@ -313,7 +271,7 @@ def chain(backend: Backend) -> Any:
     return _post_process(
         backend,
         SoilHealthEffect(health=0.2, strength=0.8),
-        BloomEffect(None, backend.graph.fbo_manager, threshold=0.6, blur_passes=1),
+        BloomEffect(backend.graph.fbo_manager, threshold=0.6, blur_passes=1),
         VignetteEffect(),
     )
 
@@ -345,7 +303,7 @@ def pulse(backend: Backend) -> Any:
         ]
     )
     rings.set_camera(camera, Viewport(0, 0, WIDTH, HEIGHT))
-    rings.execute(backend.graph.ctx, backend.graph)
+    rings.execute(backend.graph)
     return backend.graph.fbo_manager.get(LIGHT_FBO_NAME)
 
 
@@ -392,20 +350,11 @@ def shapes(backend: Backend) -> Any:
         ShapeBatch(ShapeKind.CIRCLE, rows["circles"]),
         ShapeBatch(ShapeKind.LINE, rows["lines"]),
     ]
-    if isinstance(backend, GL):
-        from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
-
-        renderer: Any = ModernGLRenderer(backend.ctx, WIDTH, HEIGHT)
-        out.bind()
-        for batch in batches:
-            renderer.render_shapes(batch)
-        renderer.end_frame()
-    else:
-        assert isinstance(backend, WGPU)
-        out.bind()
-        for batch in batches:
-            backend.renderer.render_shapes(batch)
-        out.unbind()
+    assert isinstance(backend, WGPU)
+    out.bind()
+    for batch in batches:
+        backend.renderer.render_shapes(batch)
+    out.unbind()
     return out
 
 
@@ -429,7 +378,9 @@ CASES: dict[str, Callable[[Backend], Any]] = {
 def main() -> None:
     """Run the case named on the command line on the backend named there."""
     backend_name, case, out = sys.argv[1], sys.argv[2], sys.argv[3]
-    backend: Backend = GL() if backend_name == "moderngl" else WGPU()
+    if backend_name != "wgpu":
+        raise SystemExit(f"unknown backend {backend_name!r}: wgpu is the one")
+    backend: Backend = WGPU()
     result = CASES[case](backend)
     Path(out).write_bytes(backend.read(result))
 

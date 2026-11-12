@@ -29,7 +29,6 @@ from pyguara.studio.input import feed_event, wants_keyboard, wants_mouse
 from pyguara.studio.panels.base import EditorPanel, PanelContext
 from pyguara.studio.panels.hierarchy import HierarchyPanel
 from pyguara.studio.panels.inspector import InspectorPanel
-from pyguara.studio.renderer import ModernGLImGuiRenderer
 from pyguara.studio.selection import Selection
 from pyguara.studio.theme import apply_theme, scale_for
 from pyguara.studio.titlebar import TitleBar
@@ -91,8 +90,8 @@ def default_panels() -> list[EditorPanel]:
     return [HierarchyPanel(), InspectorPanel()]
 
 
-ImGuiRenderer = ModernGLImGuiRenderer | WgpuImGuiRenderer
-"""Whichever draws the editor: chosen by the render graph's device."""
+ImGuiRenderer = WgpuImGuiRenderer
+"""What draws the editor: the native frame's mesh step."""
 
 
 class EditorLayer:
@@ -113,7 +112,7 @@ class EditorLayer:
             renderer_factory: Builds the renderer that rasterises the draw
                 data, called *after* this layer's ImGui context exists and
                 is current. It is a factory rather than a ready-made
-                renderer because `ModernGLImGuiRenderer.__init__` declares
+                renderer because `WgpuImGuiRenderer.__init__` declares
                 its capabilities on `imgui.get_io()`, which would otherwise
                 land on whichever context happened to be current when the
                 caller built it. `None` builds frames without drawing them,
@@ -167,7 +166,7 @@ class EditorLayer:
         # uploaded the font atlas itself. A layer with no renderer still
         # builds frames (that is how the panels are tested), and nothing
         # consumes the atlas in that mode, so claiming it here is both
-        # safe and necessary. `ModernGLImGuiRenderer` sets the same bit for
+        # safe and necessary. `WgpuImGuiRenderer` sets the same bit for
         # when it is driven on its own.
         io.backend_flags |= imgui.BackendFlags_.renderer_has_textures.value
         # Nothing is written unless a caller asks, through
@@ -287,25 +286,14 @@ class EditorLayer:
         say so rather than draw an image with a meaningless id.
 
         Args:
-            texture: What the renderer draws from: a `moderngl.Texture`
-                for `ModernGLImGuiRenderer`, a wgpu framebuffer for
-                `WgpuImGuiRenderer`.
+            texture: The framebuffer to show, from the render graph.
 
         Returns:
             The id to hand `imgui.image()`, or None.
         """
         if self._renderer is None:
             return None
-        return self._renderer.register_texture(texture)  # type: ignore[arg-type]
-
-    @property
-    def textures_bottom_up(self) -> bool:
-        """Whether a registered texture's rows run bottom-up, as GL's do.
-
-        A ModernGL framebuffer is stored bottom-up and shown flipped; a
-        wgpu target is stored top-down, as ImGui draws.
-        """
-        return bool(getattr(self._renderer, "bottom_up", True))
+        return self._renderer.register_texture(texture)
 
     def process_event(self, event: object) -> bool:
         """Feed one engine event to ImGui and report whether it took it.

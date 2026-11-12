@@ -82,7 +82,7 @@ class ShortcutsPanel(Tool):
 
         y += 16
         renderer.draw_text(
-            "Authoring is PyGuara Studio (ModernGL)",
+            "Authoring is PyGuara Studio (wgpu)",
             Vector2(x, y),
             Color(160, 160, 170),
             14,

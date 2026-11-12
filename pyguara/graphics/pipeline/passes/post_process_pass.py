@@ -13,8 +13,6 @@ from pyguara.graphics.pipeline.passes.final_pass import BLIT
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.pipeline.graph import RenderGraph
     from pyguara.graphics.vfx.post_process import PostProcessStack
 
@@ -69,11 +67,10 @@ class PostProcessPass(BaseRenderPass):
         """Name of the output framebuffer."""
         return self._output_fbo_name
 
-    def execute(self, ctx: moderngl.Context | None, graph: RenderGraph) -> None:
+    def execute(self, graph: RenderGraph) -> None:
         """Execute the post-processing pass.
 
         Args:
-            ctx: Unused; effects run through `graph.device`.
             graph: The RenderGraph providing access to framebuffers.
         """
         if not self._enabled:
@@ -87,7 +84,7 @@ class PostProcessPass(BaseRenderPass):
         result_fbo = self._stack.process(input_fbo) if enabled_effects else input_fbo
         if result_fbo.name != self._output_fbo_name:
             output_fbo = graph.fbo_manager.get_or_create(self._output_fbo_name)
-            # A copy, as `ctx.copy_framebuffer` was: no blending.
+            # A copy: no blending.
             graph.device.run(
                 BLIT, {"u_texture": result_fbo}, {}, output_fbo, blend="replace"
             )

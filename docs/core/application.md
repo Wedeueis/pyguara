@@ -85,7 +85,7 @@ app.run(MyScene("game", dispatcher))
 
 | Entry point | Backend |
 | --- | --- |
-| `create_application()` | The configured backend — pygame or ModernGL |
+| `create_application()` | The configured backend — wgpu or pygame |
 | `create_sandbox_application()` | Same, plus the developer tool overlays |
 | `create_headless_application()` | No SDL video at all; for tests |
 | `create_headless_sandbox_application()` | Headless, plus tools |

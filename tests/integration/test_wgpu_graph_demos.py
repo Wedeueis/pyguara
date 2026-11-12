@@ -1,18 +1,11 @@
-"""The demos built on the render graph draw the same scene on wgpu as on ModernGL.
+"""The demos built on the render graph draw their approved frames.
 
-Lighting, bloom, storms, heat haze, pulse rings, sparks: each is held to
-ModernGL pass by pass in `test_wgpu_graph.py`. This holds whole frames of
-the six demos that use them, which is where a pass wired up wrongly, or
-left out, would show.
-
-**The bound is not exact, on purpose.** The two backends rasterise a
-primitive's edge by different rules -- wgpu's `draw_circle`, `draw_line`
-and `draw_rect` match pygame's pixels, ModernGL tests a distance at each
-pixel centre, and a ModernGL line has rounded ends -- so the edges of
-every shape differ by a pixel. Measured, that is up to 1% of pixels off by
-more than 32, with a mean difference near 1. A missing light pass, a
-skipped bloom or a storm drawn upside down moves the whole frame, and
-fails both bounds by a wide margin.
+Lighting, bloom, storms, heat haze, pulse rings, sparks: each is held to its
+golden image pass by pass in `test_wgpu_graph.py`. This holds whole frames
+of the six demos that use them, which is where a pass wired up wrongly, or
+left out, would show. The frames were approved when each demo's wgpu frame
+matched its ModernGL one, within the bounds that edge rasterisation allows,
+before ModernGL was retired.
 """
 
 from __future__ import annotations
@@ -33,12 +26,7 @@ GRAPH_DEMOS = [
     "guara_falcao",
 ]
 
-_SCRIPT = Path(__file__).with_name("_gl_demo_frame.py")
-
-# Pixels more than 32 apart, as a fraction of the frame: shape edges only.
-EDGE_FRACTION = 0.015
-# Mean absolute difference over every channel of every pixel.
-MEAN_DIFFERENCE = 2.0
+_SCRIPT = Path(__file__).with_name("_graph_demo_frame.py")
 
 
 def _capture(backend: str, demo: str, out: Path) -> Path:
@@ -51,41 +39,17 @@ def _capture(backend: str, demo: str, out: Path) -> Path:
             **os.environ,
             "SDL_AUDIODRIVER": "dummy",
             "PYTHONHASHSEED": "0",
-            "SDL_VIDEODRIVER": "offscreen" if backend == "moderngl" else "dummy",
+            "SDL_VIDEODRIVER": "dummy",
         },
         check=False,
     )
     frames = sorted(out.glob("*.png"))
     if completed.returncode != 0 or not frames:
         tail = completed.stderr[-3000:] + completed.stdout[-1000:]
-        if "could not be opened" in tail or "OpenGL" in tail and backend == "moderngl":
+        if "could not be opened" in tail:
             pytest.skip(f"no {backend} device here")
         raise AssertionError(f"{demo} on {backend} failed:\n{tail}")
     return frames[-1]
-
-
-@pytest.mark.integration
-@pytest.mark.slow
-@pytest.mark.parametrize("demo", GRAPH_DEMOS)
-def test_the_demo_draws_the_same_scene_on_wgpu(demo: str, tmp_path: Path) -> None:
-    import numpy as np
-    import pygame
-
-    gl = pygame.surfarray.array3d(
-        pygame.image.load(str(_capture("moderngl", demo, tmp_path / "gl")))
-    ).astype(np.int16)
-    wgpu = pygame.surfarray.array3d(
-        pygame.image.load(str(_capture("wgpu", demo, tmp_path / "wgpu")))
-    ).astype(np.int16)
-
-    assert gl.shape == wgpu.shape
-    gap = np.abs(gl - wgpu)
-    edges = float((gap.max(axis=2) > 32).mean())
-    mean = float(gap.mean())
-    assert edges <= EDGE_FRACTION and mean <= MEAN_DIFFERENCE, (
-        f"{demo}: {edges:.2%} of pixels differ by more than 32, mean difference "
-        f"{mean:.2f}; the bound is {EDGE_FRACTION:.1%} and {MEAN_DIFFERENCE}"
-    )
 
 
 # Against its own approved frame, a demo should be the same image; these

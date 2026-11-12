@@ -1,6 +1,6 @@
 """Quintal do Cerrado - Bootstrap.
 
-Runs on the **ModernGL** backend, since the fun-improvement roadmap's
+Runs on the **wgpu** backend, since the fun-improvement roadmap's
 Phase 5 asked for the soil and the weather to actually look like they
 were affecting a living plot, not a sterile grid of flat colours -- and
 that meant a shader pass, which the plain pygame backend cannot give.
@@ -106,7 +106,6 @@ def configure_game_container() -> DIContainer:
     set_theme(cerrado_dusk())
 
     graph = container.get(RenderGraph)
-    ctx = graph.ctx
 
     # The graph owns the framebuffer manager and every pass resolves
     # through it; anything built here has to share it or it allocates a
@@ -120,18 +119,18 @@ def configure_game_container() -> DIContainer:
     # renders a light map.
     graph.remove_pass("final")
 
-    soil_health_effect = SoilHealthEffect(ctx)
-    storm = StormEffect(ctx)
+    soil_health_effect = SoilHealthEffect()
+    storm = StormEffect()
     vignette = VignetteEffect(
-        ctx, intensity=BASE_VIGNETTE_INTENSITY, radius=BASE_VIGNETTE_RADIUS
+        intensity=BASE_VIGNETTE_INTENSITY, radius=BASE_VIGNETTE_RADIUS
     )
-    stack = PostProcessStack(ctx, fbo_manager)
+    stack = PostProcessStack(fbo_manager)
     stack.add_effect(soil_health_effect)
     stack.add_effect(storm)
     stack.add_effect(vignette)
 
     graph.add_pass(PostProcessPass(stack, input_fbo_name="world"))
-    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
+    graph.add_pass(FinalPass(input_fbo_name="post_processed"))
 
     container.register_instance(SoilHealthEffect, soil_health_effect)
     container.register_instance(StormEffect, storm)

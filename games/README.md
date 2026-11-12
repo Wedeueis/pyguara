@@ -86,8 +86,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   the backdrop to alpha and stands every frame on one shared canvas, and
   checked in as PNGs; the demo loads files and knows nothing about sheets.
 * **Run:** `uv run python games/guara_falcao/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py guara_falcao --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all).
+* **Look at it headlessly:** `uv run python tools/agent_view.py guara_falcao`
   Walk the screens with
   `--click 640,314@20 --click 1199,681@60 --click 640,358@100`.
 
@@ -103,8 +102,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   (`WorldPass → LightPass → PulsePass → CompositePass → PostProcessPass → FinalPass`),
   a custom wavefront-ring shader, DDA ray occlusion, `kits/echolocation`.
 * **Run:** `uv run python games/mourisco_ressonancia/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py mourisco_ressonancia --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py mourisco_ressonancia`
 * **Spec:** [`project/demos/mourisco_ressonancia_GDD.md`](../project/demos/mourisco_ressonancia_GDD.md)
 
 ### [protocolo_bandeira](./protocolo_bandeira) — Protocolo Bandeira
@@ -119,8 +117,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   when something is in the way — `kits/projectiles`,
   `kits/action_combat`, `kits/spawn` and `ecs/pool` for the waves.
 * **Run:** `uv run python games/protocolo_bandeira/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py protocolo_bandeira --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py protocolo_bandeira`
 
 ### [tamandua_murundus](./tamandua_murundus) — Tamanduá: O Guardião dos Murundus
 * **Genre:** Horde survivor / density showcase. A giant anteater holds one
@@ -136,8 +133,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   layer, in one instanced draw call. The 700 is measured, not chosen — see the
   table in `swarm.py`.
 * **Run:** `uv run python games/tamandua_murundus/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py tamandua_murundus --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py tamandua_murundus`
 * **Spec:** [`project/demos/tamandua_murundus_GDD.md`](../project/demos/tamandua_murundus_GDD.md)
 
 ### [true_coral](./true_coral) — True Coral
@@ -149,8 +145,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   `kits/stats` + `kits/effects` for the star's speed boost, `kits/loot` and
   `kits/spawn` for the prey.
 * **Run:** `uv run python games/true_coral/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py true_coral --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py true_coral`
 * **Spec:** [`project/demos/true_coral_GDD.md`](../project/demos/true_coral_GDD.md)
 
 ### [quintal_cerrado](./quintal_cerrado) — Quintal do Cerrado

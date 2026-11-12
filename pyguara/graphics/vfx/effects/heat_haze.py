@@ -22,9 +22,9 @@ Typical use, per frame::
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from pyguara.graphics.pipeline.device import FullscreenShader, Uniform, glsl
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
@@ -55,7 +55,6 @@ HEAT_HAZE = FullscreenShader(
         Uniform("u_sun"),
         Uniform("u_sun_color", "vec3"),
     ),
-    glsl=glsl("heat_haze.frag"),
     # A line-for-line port of heat_haze.frag; see it for the reasoning.
     # Ported in GL's coordinate convention, not wgpu's: `v_uv` is rebuilt
     # with y up, every expression below is the GLSL's, and only the texture
@@ -153,7 +152,6 @@ class HeatHazeEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: Any = None,
         *,
         haze: float = 3.0,
         haze_scale: float = 6.0,
@@ -169,8 +167,6 @@ class HeatHazeEffect(PostProcessEffect):
         """Set the heat haze's starting conditions.
 
         Args:
-            ctx: Unused. Accepted so callers written when effects needed a
-                ModernGL context keep working; removed in stage E.
             haze: Initial refraction strength, in pixels.
             haze_scale: Initial shimmer frequency.
             haze_speed: Initial rise rate.

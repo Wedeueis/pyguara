@@ -24,7 +24,6 @@ def _open(out_dir: Path):
         GameScene,
         out_dir=out_dir,
         container_factory=configure_game_container,
-        gl=True,
     )
 
 

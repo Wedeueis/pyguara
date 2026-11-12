@@ -112,9 +112,6 @@ class TestStubBehaviour:
         assert system.get_ambient_normalized() == (1.0, 1.0, 1.0)
         assert system.ambient_intensity == 1.0
 
-    def test_the_render_graph_stub_has_no_context(self) -> None:
-        assert PygameRenderGraph(800, 600).ctx is None
-
     def test_the_render_graph_stub_accepts_and_reports_passes(self) -> None:
         graph = PygameRenderGraph(800, 600)
         graph.add_pass(object())

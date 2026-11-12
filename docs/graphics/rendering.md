@@ -36,7 +36,7 @@ The rendering process within each pass follows these stages:
 3.  **Sorting**: The queue is sorted by **layer, sort group, depth, material**
     — in that order. See [Depth ordering](#depth-ordering).
 4.  **Batching**: The `Batcher` groups compatible draw calls (same material) into `RenderBatch` objects.
-5.  **Execution**: The backend (e.g., `ModernGLRenderer`) executes the batches.
+5.  **Execution**: The backend (e.g., `WgpuRenderer`) executes the batches.
 
 ## Depth ordering
 
@@ -94,8 +94,7 @@ actually comes from: a tilemap row, a crowd of identical particles.
 ## Material System
 
 A material gives a sprite its own shader. Write it as a `SpriteShader`: one
-WGSL function, which runs on the wgpu backend, with an optional GLSL twin
-for ModernGL until stage E retires that backend.
+WGSL function, which runs on the wgpu backend.
 
 ```python
 from pyguara.graphics.materials import Material, SpriteShader, Uniform
@@ -135,20 +134,6 @@ does not compile, or lacks a uniform's value, raises with the reason.
 A material's `id` sorts the queue and breaks batches. Sprites without one sort
 together as material `0` and draw through the built-in sprite shader. On the
 Pygame backend materials are ignored, as the comparison table below records.
-
-### On ModernGL
-
-Give the `SpriteShader` a `glsl` twin -- a GLSL 330 fragment shader reading
-`v_uv`, `v_color`, `u_texture`, the uniforms by name and `u_material_texture`
--- and ModernGL compiles it with `sprite.vert`. Without one, ModernGL draws
-the sprite plainly and says so once.
-
-A material can still carry a `Shader`, a compiled `moderngl.Program` made by
-`ShaderCache`. That runs only on ModernGL, and on wgpu the sprites are drawn
-plainly with a warning to move it to a `SpriteShader`. Its vertex shader has
-to consume the fixed instance layout -- `in_vert`, `in_uv` per vertex and
-`in_pos`, `in_rot`, `in_scale`, `in_size`, `in_color` per instance -- so for a
-fragment-only effect reuse `materials.defaults.DEFAULT_SPRITE_VERTEX`.
 
 ## 2D Lighting
 
@@ -392,7 +377,7 @@ Procedural shapes (`Box`, `Circle`) that lazy-generate their textures. This allo
 
 The engine uses the `IRenderer` protocol, allowing for different implementations:
 
-- **ModernGLRenderer** (Recommended): GPU-accelerated OpenGL 3.3+ with hardware instancing. Supports all advanced features (lighting, post-processing).
+- **WgpuRenderer** (Recommended): GPU-accelerated through wgpu (Vulkan, Metal, DirectX 12). Supports all advanced features (lighting, post-processing, materials). `display.backend: moderngl` was retired and raises `RetiredBackendError` at startup.
 - **PygameBackend**: CPU-based `pygame-ce` rendering. Uses stub implementations for advanced features (renders fully lit, no post-processing).
 - **HeadlessBackend**: Discards draw calls. Useful for CI/CD and server-side simulation.
 
@@ -400,13 +385,13 @@ The engine uses the `IRenderer` protocol, allowing for different implementations
 
 When using Pygame backend, advanced graphics features gracefully degrade:
 
-| Feature | wgpu | ModernGL | Pygame |
-|---------|------|----------|--------|
-| Sprite rendering | Native, one call a batch | Hardware instanced | Software blitting |
-| Per-sprite tint | Per-instance colour | Per-instance vertex attribute | `BLEND_RGBA_MULT` per sprite |
-| Lighting | Dynamic light maps | Dynamic light maps | Fully lit (no shadows) |
-| Post-processing | Bloom, vignette, etc. | Bloom, vignette, etc. | Pass-through (no effects) |
-| Materials | `SpriteShader` (WGSL) | `SpriteShader` with a GLSL twin, or a `Shader` | Default only |
+| Feature | wgpu | Pygame |
+|---------|------|--------|
+| Sprite rendering | Native, one call a batch | Software blitting |
+| Per-sprite tint | Per-instance colour | `BLEND_RGBA_MULT` per sprite |
+| Lighting | Dynamic light maps | Fully lit (no shadows) |
+| Post-processing | Bloom, vignette, etc. | Pass-through (no effects) |
+| Materials | `SpriteShader` (WGSL) | Default only |
 
 Game code using these features runs unchanged on Pygame - stubs accept the API calls but skip the GPU operations.
 
@@ -558,7 +543,7 @@ The render path has been benchmarked; the figures live in
 before optimising anything here:
 
 - **At scale the bottleneck is the CPU, not the GPU.** A 20,000-sprite batch
-  costs about 16 ms end to end on the ModernGL backend, and four fifths of that
+  cost about 16 ms end to end on the (since retired) ModernGL backend, and four fifths of that
   is the Python loop that packs the instance array. The pack's share grows with
   sprite count -- 42% at 1,000, 81% at 20,000.
 - **`Batcher.create_batches` costs more than the draw does** — roughly 53 ms

@@ -8,10 +8,10 @@ Creates a glowing halo around bright areas by:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE
-from pyguara.graphics.pipeline.device import FullscreenShader, Uniform, glsl
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
@@ -22,7 +22,6 @@ THRESHOLD = FullscreenShader(
     "bloom_threshold",
     inputs=("u_texture",),
     uniforms=(Uniform("u_threshold"),),
-    glsl=glsl("bloom_threshold.frag"),
     wgsl="""
 @fragment
 fn fragment(in: Varying) -> @location(0) vec4<f32> {
@@ -44,7 +43,6 @@ BLUR = FullscreenShader(
     "bloom_blur",
     inputs=("u_texture",),
     uniforms=(Uniform("u_direction", "vec2"), Uniform("u_texel_size", "vec2")),
-    glsl=glsl("blur.frag"),
     # The kernel is symmetric, so a vertical pass blurs the same whichever
     # way up the rows run.
     wgsl="""
@@ -68,7 +66,6 @@ COMPOSITE = FullscreenShader(
     "bloom_composite",
     inputs=("u_scene", "u_bloom"),
     uniforms=(Uniform("u_intensity"),),
-    glsl=glsl("bloom_composite.frag"),
     # The tonemap is `bloom_composite.frag`'s: identity below the knee,
     # asymptotic to 1.0 above it. See that file for why.
     wgsl="""
@@ -102,7 +99,6 @@ class BloomEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: Any,
         fbo_manager: FramebufferManager,
         *,
         threshold: float = 0.8,
@@ -113,8 +109,6 @@ class BloomEffect(PostProcessEffect):
         """Initialize the bloom effect.
 
         Args:
-            ctx: Unused. Accepted so callers written when effects needed a
-                ModernGL context keep working; removed in stage E.
             fbo_manager: Manager for creating temp framebuffers.
             threshold: Brightness threshold (0.0-1.0).
             intensity: Bloom intensity multiplier.

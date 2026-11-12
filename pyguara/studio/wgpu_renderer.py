@@ -1,18 +1,17 @@
 """Rasterise Dear ImGui draw data through the native wgpu frame.
 
-The editor's renderer on the wgpu backend: `ModernGLImGuiRenderer`'s job,
-with its interface, on `NativeGpu.mesh`. A frame's draw lists become one
+The editor's renderer, on `NativeGpu.mesh`. A frame's draw lists become one
 indexed triangle list, drawn command by command, each with its own texture
 and clip rectangle, into whatever target is current -- the window, when
 `ImGuiPass` runs.
 
-ImGui 1.92's dynamic textures are honoured as on ModernGL: the font atlas
+ImGui 1.92's dynamic textures are honoured: the font atlas
 arrives as a request on the draw data (`want_create`, `want_updates`,
 `want_destroy`), so `ImGuiBackendFlags_RendererHasTextures` is declared.
 
 A render target -- the game's frame, shown in the Viewport panel -- is
 registered as it is, and sampled directly. Its rows run top-down, as
-ImGui's do, so unlike a ModernGL framebuffer it needs no flip.
+ImGui's do, so it needs no flip.
 """
 
 from __future__ import annotations
@@ -38,9 +37,6 @@ _IMAGE, _TARGET = 0, 1
 
 class WgpuImGuiRenderer:
     """Draws ImGui draw data with the native frame's mesh step."""
-
-    # Read by the Viewport panel: wgpu targets need no V flip.
-    bottom_up = False
 
     def __init__(self, frame: Any) -> None:
         """Declare renderer capabilities to ImGui.

@@ -62,7 +62,7 @@ named `assets`, `resources`, or `data` (any case) and bundles the first it
 finds. Pass `-a` one or more times to be explicit; each becomes a PyInstaller
 `--add-data` entry preserving the folder name at runtime.
 
-A default set of hidden imports (`pygame`, `pymunk`, `moderngl`, `numpy`,
+A default set of hidden imports (`pygame`, `pymunk`, `numpy`,
 `PIL`, `msgpack`, …) is always passed so the frozen build finds the engine's
 backends; add project-specific ones with `--hidden-import`.
 

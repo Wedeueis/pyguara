@@ -72,7 +72,6 @@ def configure_game_container() -> DIContainer:
     container = create_container(_configure)
 
     graph = container.get(RenderGraph)
-    ctx = graph.ctx
 
     # The graph's own manager. Anything that allocates buffers -- the bloom
     # effect, the post-process stack -- has to share it, or it gets a
@@ -85,21 +84,20 @@ def configure_game_container() -> DIContainer:
     # what this demo would have built, stays.
     graph.remove_pass("final")
 
-    pulse_pass = PulsePass(ctx)
+    pulse_pass = PulsePass()
     bloom = BloomEffect(
-        ctx,
         fbo_manager,
         threshold=BLOOM_THRESHOLD,
         intensity=BLOOM_INTENSITY,
         blur_passes=BLOOM_BLUR_PASSES,
     )
-    stack = PostProcessStack(ctx, fbo_manager)
+    stack = PostProcessStack(fbo_manager)
     stack.add_effect(bloom)
 
     graph.add_pass(pulse_pass)
-    graph.add_pass(CompositePass(ctx))
+    graph.add_pass(CompositePass())
     graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
-    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
+    graph.add_pass(FinalPass(input_fbo_name="post_processed"))
 
     container.register_instance(PulsePass, pulse_pass)
     container.register_instance(BloomEffect, bloom)
@@ -125,4 +123,4 @@ def attach_lighting(container: DIContainer, lighting: LightingSystem) -> None:
     # Index 1: after WorldPass, before PulsePass -- the rings are added on
     # top of the accumulated lightmap, so they light the cave rather than
     # being multiplied away by it during compositing.
-    graph.insert_pass(1, LightPass(graph.ctx, lighting))
+    graph.insert_pass(1, LightPass(lighting))

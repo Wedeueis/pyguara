@@ -42,15 +42,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # Headless by default: surface capture works identically under the dummy
 # driver, needs no display, and is deterministic on CI. --windowed overrides.
-#
-# `dummy` has no OpenGL at all ("OpenGL support is either not configured in
-# SDL or not available in current SDL video driver"), so a ModernGL-backed
-# demo cannot even create its context under it. `offscreen` does provide a
-# real GL context headlessly, so --gl selects that instead; capture then has
-# to read the GL framebuffer rather than a pygame surface (see `_capture`).
+# A wgpu demo draws offscreen under it and copies each frame onto pygame's
+# display surface, which is what the capture reads.
 if "--windowed" not in sys.argv:
-    _headless_driver = "offscreen" if "--gl" in sys.argv else "dummy"
-    os.environ.setdefault("SDL_VIDEODRIVER", _headless_driver)
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame  # noqa: E402  (must follow the driver selection above)
@@ -206,12 +201,9 @@ def _window_type() -> type:
 
 
 def _render_graph(container: object) -> object | None:
-    """Return the demo's `RenderGraph`, if it runs on the ModernGL backend.
+    """Return the demo's `RenderGraph`, if it runs on the wgpu backend.
 
-    The graph is the handle to everything GL here: its own context (making
-    one fresh fails, since `moderngl.create_context()` detects through GLX
-    and SDL's offscreen driver provides EGL) and, more importantly, the
-    offscreen framebuffer the final pass blits from.
+    The handle to the world buffer, for `--require-world`.
     """
     try:
         from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
@@ -225,113 +217,31 @@ def _render_graph(container: object) -> object | None:
     return graph
 
 
-def _is_gl(graph: object | None) -> bool:
-    """Whether a render graph runs on ModernGL rather than wgpu.
+def _capture(graph: object | None) -> pygame.Surface | None:
+    """Return the frame just rendered, UI included.
 
-    Only a GL graph needs the readback below. The wgpu window, run
-    headless, already copies the finished frame -- UI included -- onto
-    pygame's display surface, so its capture is that surface.
-    """
-    return graph is not None and getattr(graph, "ctx", None) is not None
-
-
-def _capture_fbo(graph: object) -> object | None:
-    """Return the framebuffer the final pass blits from, if it exists.
-
-    This is the buffer that holds the composed frame, and the one a GL
-    capture reads. `_redirect_ui_into(...)` also aims the UI overlay at
-    it, so a capture shows the frame a player would see rather than the
-    frame minus its UI.
-    """
-    final_pass = graph.get_pass("final")  # type: ignore[attr-defined]
-    name = getattr(final_pass, "input_fbo_name", "world")
-    return graph.fbo_manager.get(name)  # type: ignore[attr-defined]
-
-
-def _redirect_ui_into(container: object, graph: object, active: dict) -> None:
-    """Make the UI overlay land in the capture buffer, not on the screen.
-
-    **Why this is needed at all.** `Application` composites the UI onto the
-    *default* framebuffer, after the final pass has blitted to it. A
-    capture cannot read that: under SDL's offscreen driver the default
-    framebuffer reads back as solid zeros (verified -- the read succeeds
-    and returns nothing). So for as long as this tool has existed, every
-    capture has been the frame *minus its UI*, and no `UIManager` widget
-    in any demo had ever been seen in one.
-
-    The fix is to bind the capture buffer immediately before the UI
-    composites, so the overlay lands there instead. `GLUIRenderer.present()`
-    draws a fullscreen quad into whatever framebuffer is bound, so no
-    engine change is needed -- only the target.
-
-    The screen loses its UI on those frames, which does not matter when
-    nobody is looking at it. In `--windowed` runs somebody is, so this is
-    not installed and a windowed capture still omits the UI layer.
+    Every backend leaves it on pygame's display surface: the pygame backends
+    draw there, and the wgpu window, run headless, copies each finished
+    frame onto it.
 
     Args:
-        container: The demo's DI container.
-        graph: The render graph, or None for a non-GL backend.
-        active: One-key dict the caller flips on capture ticks.
+        graph: Unused; kept so the call site reads alongside
+            `_capture_world`.
     """
-    from pyguara.graphics.protocols import UIRenderer
-
-    try:
-        ui_renderer = container.get(UIRenderer)  # type: ignore[attr-defined]
-    except Exception:  # pragma: no cover - backend without a UI renderer
-        return
-
-    original_present = ui_renderer.present
-
-    def present_into_capture() -> None:
-        if active["on"]:
-            fbo = _capture_fbo(graph)
-            if fbo is not None:
-                fbo.bind()
-        original_present()
-
-    ui_renderer.present = present_into_capture  # type: ignore[method-assign]
-
-
-def _capture(graph: object | None) -> pygame.Surface | None:
-    """Return the frame just rendered, from whichever backend drew it.
-
-    The pygame backends draw into the display surface, so reading it back
-    is the whole job -- and their UI draws straight onto that surface, so
-    it is already included.
-
-    A ModernGL backend does not: under an `OPENGL` display,
-    `get_surface()` hands back a surface the GPU never touched. So read
-    the offscreen framebuffer the final pass blits from. The default
-    framebuffer is no use -- after the swap it is an undefined back
-    buffer, and before it reads back as solid zeros under the offscreen
-    driver. The UI is composited into this same buffer on capture ticks;
-    see `_redirect_ui_into()`.
-    """
-    surface = pygame.display.get_surface()
-    if not _is_gl(graph):
-        return surface
-
-    fbo = _capture_fbo(graph)
-    if fbo is None:
-        return surface
-
-    size = (fbo.width, fbo.height)
-    frame = pygame.image.frombuffer(fbo.fbo.read(components=3), size, "RGB")
-    # GL's origin is bottom-left, pygame's is top-left.
-    return pygame.transform.flip(frame, False, True)
+    return pygame.display.get_surface()
 
 
 def _capture_world(graph: object | None) -> pygame.Surface | None:
     """Return the world pass's own buffer, before any UI is composited.
 
-    `_capture` reads the *composed* frame, which on a ModernGL demo also
+    `_capture` reads the *composed* frame, which on a wgpu demo also
     carries the UI overlay. That makes `is_blank` useless for the failure
     it was built to catch: a dead world render path still leaves a HUD on
     screen, so the frame is never a single flat colour. Reading "world"
     alone is what can tell whether the scene itself drew anything.
 
     Args:
-        graph: The render graph, or None for a non-GL backend.
+        graph: The render graph, or None for the pygame backend.
 
     Returns:
         The world buffer as a surface, or None when there is no graph.
@@ -341,12 +251,7 @@ def _capture_world(graph: object | None) -> pygame.Surface | None:
     fbo = graph.fbo_manager.get("world")  # type: ignore[attr-defined]
     if fbo is None:
         return None
-    if not _is_gl(graph):
-        return _wgpu_buffer(fbo)
-    frame = pygame.image.frombuffer(
-        fbo.fbo.read(components=3), (fbo.width, fbo.height), "RGB"
-    )
-    return pygame.transform.flip(frame, False, True)
+    return _wgpu_buffer(fbo)
 
 
 def _wgpu_buffer(fbo: object) -> pygame.Surface:
@@ -410,17 +315,9 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
     flat_world: list[Path] = []
     original_render = app._render
 
-    # Flipped on for the frames being captured, so the UI composites into
-    # the buffer the capture reads instead of onto the unreadable screen.
-    # Not installed for a windowed run -- see `_redirect_ui_into()`.
-    capturing = {"on": False}
-    if _is_gl(graph) and "--windowed" not in sys.argv:
-        _redirect_ui_into(container, graph, capturing)
-
     def render_and_capture() -> None:
         nonlocal tick
         tick += 1
-        capturing["on"] = tick in script.shots
 
         for at, key in script.keys:
             if at == tick:
@@ -566,12 +463,6 @@ def main(argv: list[str] | None = None) -> int:
         "--windowed",
         action="store_true",
         help="use a real window instead of the dummy driver",
-    )
-    parser.add_argument(
-        "--gl",
-        action="store_true",
-        help="headless OpenGL: use SDL's offscreen driver (dummy has no GL) "
-        "and capture the GL framebuffer. Required for ModernGL demos.",
     )
     args = parser.parse_args(argv)
 

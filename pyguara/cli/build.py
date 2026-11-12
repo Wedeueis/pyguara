@@ -170,7 +170,6 @@ def _build_pyinstaller_args(
         "pygame",
         "pygame.locals",
         "pymunk",
-        "moderngl",
         "numpy",
         "PIL",
         "PIL.Image",

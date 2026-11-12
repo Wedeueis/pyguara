@@ -505,7 +505,7 @@ A streak costs the Python pool twice what a dot does and costs the native
 pool the same, which is the clearest statement of what moved: the geometry a
 capsule needs is arithmetic, and arithmetic is no longer the frame.
 
-**Only the ModernGL world renderer takes the batch.** Any other renderer gets
+**Only the wgpu world renderer takes the batch.** Any other renderer gets
 one call per spark, as before, keeping the native arithmetic and about 1.9x.
 That is deliberate: a software backend would be looping internally anyway, so
 claiming the capability would buy nothing and hide that fact.
@@ -1045,7 +1045,8 @@ its cache budget.
 
 ### The UI overlay — milliseconds per frame, and why the HUD does not matter
 
-The ModernGL UI renderer is a hybrid. Every widget is rasterised by pygame onto
+*(Measured on the ModernGL backend, since retired; the wgpu UI renderer draws
+widgets as primitives and has no such upload.)* The ModernGL UI renderer was a hybrid. Every widget is rasterised by pygame onto
 an offscreen surface, and `present()` uploads that whole surface as a texture
 and composites it as a fullscreen quad. So the cost of a UI frame is set by the
 **window area**, not by what the UI drew.
