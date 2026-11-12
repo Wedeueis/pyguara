@@ -31,9 +31,12 @@ def main() -> None:
     """Render the demo named on the command line and write its frame."""
     import pygame
 
+    from pyguara.application.clock import WallClock
     from pyguara.graphics.backends.pygame.clock import PygameClock
 
-    PygameClock.tick = lambda self, target_fps=0: 1000.0 / 60.0  # type: ignore[method-assign]
+    # Both backends' wall clocks, pinned: each frame is exactly 1/60 s.
+    for clock in (PygameClock, WallClock):
+        clock.tick = lambda self, target_fps=0: 1000.0 / 60.0  # type: ignore[method-assign]
 
     import test_demos_render
 

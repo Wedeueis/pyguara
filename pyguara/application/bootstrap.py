@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from pyguara import native
 from pyguara.application.application import Application
-from pyguara.application.clock import Clock, FixedClock
+from pyguara.application.clock import Clock, FixedClock, WallClock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
@@ -399,9 +399,13 @@ def _setup_container(
         container.register_instance(RenderGraph, pygame_render_graph)
 
     # Frame-pacing clock. Headless runs advance by a fixed, reproducible
-    # delta (no wall-clock sleep); the real backends wrap `pygame.time.Clock`.
+    # delta (no wall-clock sleep); the software backend wraps
+    # `pygame.time.Clock`, and wgpu has the same contract without pygame.
     if headless:
         container.register_instance(Clock, FixedClock())  # type: ignore[type-abstract]
+    elif disp_cfg.backend == RenderingBackend.WGPU:
+        # pygame's contract without pygame: see `WallClock`.
+        container.register_instance(Clock, WallClock())  # type: ignore[type-abstract]
     else:
         from pyguara.graphics.backends.pygame.clock import PygameClock
 

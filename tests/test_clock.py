@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from pyguara.application.bootstrap import create_headless_application
-from pyguara.application.clock import Clock, FixedClock
+from pyguara.application.clock import Clock, FixedClock, WallClock
 
 
 class TestFixedClock:
@@ -61,3 +61,61 @@ class TestBootstrapWiring:
             assert app._clock is resolved
         finally:
             app.shutdown()
+
+
+class _FakeTime:
+    """A monotonic timer that only moves when told, or when slept on."""
+
+    def __init__(self) -> None:
+        self.now = 100.0
+        self.slept: list[float] = []
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+class TestWallClock:
+    def test_an_uncapped_tick_reports_the_frame_and_never_sleeps(self) -> None:
+        fake = _FakeTime()
+        clock = WallClock(now=fake, sleep=fake.sleep)
+        fake.now += 0.004
+
+        assert clock.tick() == pytest.approx(4.0)
+        assert fake.slept == []
+
+    def test_a_capped_tick_sleeps_out_the_rest_and_reports_all_of_it(self) -> None:
+        fake = _FakeTime()
+        clock = WallClock(now=fake, sleep=fake.sleep)
+        fake.now += 0.010
+
+        assert clock.tick(50) == pytest.approx(20.0)
+        assert fake.slept == [pytest.approx(0.010)]
+
+    def test_a_frame_over_budget_does_not_sleep(self) -> None:
+        fake = _FakeTime()
+        clock = WallClock(now=fake, sleep=fake.sleep)
+        fake.now += 0.030
+
+        assert clock.tick(60) == pytest.approx(30.0)
+        assert fake.slept == []
+
+    def test_time_is_not_rounded_to_whole_milliseconds(self) -> None:
+        fake = _FakeTime()
+        clock = WallClock(now=fake, sleep=fake.sleep)
+        fake.now += 1 / 60
+
+        assert clock.tick() == pytest.approx(16.6667, abs=1e-3)
+
+    def test_it_is_a_clock(self) -> None:
+        assert isinstance(WallClock(), Clock)
+
+    def test_the_real_timer_paces_roughly(self) -> None:
+        clock = WallClock()
+        clock.tick()
+        elapsed = clock.tick(100)
+        # Asleep for about 10 ms; generous on a loaded machine.
+        assert 9.0 <= elapsed < 60.0

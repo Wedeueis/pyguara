@@ -471,7 +471,8 @@ def open_headless(
 def _install_fixed_clock(container: Any) -> None:
     """Make every frame exactly one sixtieth of a second.
 
-    The non-headless bootstrap registers `PygameClock`, which measures
+    The non-headless bootstrap registers a wall clock (`PygameClock` or
+    `WallClock`, by backend), which measures
     wall-clock time -- so two runs of the same script step different
     amounts of simulated time and produce different results. That is the
     right behaviour for a game and useless for "run it again and diff".

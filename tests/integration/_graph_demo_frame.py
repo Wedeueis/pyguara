@@ -30,10 +30,13 @@ def main() -> None:
     os.chdir(ROOT)
     sys.path.insert(0, str(ROOT))
 
+    from pyguara.application.clock import WallClock
     from pyguara.common import random as engine_random
     from pyguara.graphics.backends.pygame.clock import PygameClock
 
-    PygameClock.tick = lambda self, target_fps=0: 1000.0 / 60.0  # type: ignore[method-assign]
+    # Both backends' wall clocks, pinned: each frame is exactly 1/60 s.
+    for clock in (PygameClock, WallClock):
+        clock.tick = lambda self, target_fps=0: 1000.0 / 60.0  # type: ignore[method-assign]
     seeded = engine_random.RandomStream.__init__
 
     def seed_zero(self: object, seed: int | None = None) -> None:

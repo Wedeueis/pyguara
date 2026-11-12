@@ -336,3 +336,9 @@
 - **Alternatives:** only set `SDL_NO_SIGNAL_HANDLERS` (SIGTERM kills outright, no shutdown, no save flush); a Python handler posting `QuitEvent`, as SDL effectively did.
 - **Chose:** both: the hint keeps SDL out, and the handler keeps the clean shutdown games had. Installed only over `SIG_DFL` and on the main thread, restored on close.
 - **Tags:** window, lifecycle
+
+## WallClock reports fractional milliseconds and sleeps rather than spins
+- **Context:** Replacing `pygame.time.Clock` on the wgpu backend.
+- **Alternatives:** copy pygame exactly (whole milliseconds, sleep); round nothing and sleep; sleep then busy-wait the last millisecond for precision.
+- **Chose:** fractional and sleep-only. Whole milliseconds alternate 16/17 at 60 Hz, jitter the game then absorbs; spinning buys sub-millisecond pacing nobody sees at the cost of a core. Same blocking behaviour as pygame's `tick`.
+- **Tags:** clock, application
