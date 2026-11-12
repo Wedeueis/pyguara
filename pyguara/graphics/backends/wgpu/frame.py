@@ -195,6 +195,7 @@ class GpuFrame:
         self._text: OrderedDict[tuple[FontKey, str], GlyphRun] = OrderedDict()
         self._images: dict[tuple[int, bool], tuple[weakref.ref[object], ImageRun]] = {}
         self._doomed: list[int] = []
+        self._white: int | None = None
 
     # -- fonts and text ----------------------------------------------------
 
@@ -286,6 +287,12 @@ class GpuFrame:
 
         self._images[key] = (weakref.ref(owner, forget), run)
         return run
+
+    def white(self) -> int:
+        """Return a 1x1 opaque white texture: what solid triangles sample."""
+        if self._white is None:
+            self._white = int(self.gpu.create_texture(1, 1, b"\xff\xff\xff\xff"))
+        return self._white
 
     def once_rgba(self, pixels: bytes, width: int, height: int) -> int:
         """Upload RGBA pixels for this frame only.

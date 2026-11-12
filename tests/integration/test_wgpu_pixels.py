@@ -19,6 +19,7 @@ software rasteriser sees a skip rather than a failure.
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Callable
 from typing import Any
@@ -180,10 +181,6 @@ class TestExact:
     @pytest.mark.parametrize(
         "draw",
         [
-            pytest.param(
-                lambda r: r.draw_polygon([(20, 20), (200, 40), (120, 140)], RED),
-                id="polygon",
-            ),
             pytest.param(
                 lambda r: r.draw_rect(Rect(15, 15, 120, 70), GLASS),
                 id="scrim",
@@ -945,18 +942,44 @@ class TestBounded:
         # on the pixel's middle instead gave 123 at r = 40.
         assert _differing(reference, actual) <= 2 * radius
 
-    def test_a_translucent_polygon_outline(self, wgpu: Any) -> None:
+    @pytest.mark.parametrize(
+        ("points", "color", "width"),
+        [
+            pytest.param([(20, 20), (200, 40), (120, 140)], RED, 0, id="filled"),
+            pytest.param(
+                [(20, 20), (120, 70), (20, 120), (60, 70)], RED, 0, id="concave"
+            ),
+            pytest.param([(20, 20), (200, 40), (120, 140)], GLASS, 2, id="outline"),
+            pytest.param(
+                [(30, 30), (180, 30), (180, 120), (30, 120)], RED, 5, id="thick"
+            ),
+        ],
+    )
+    def test_a_polygon(
+        self, wgpu: Any, points: list[tuple[int, int]], color: Color, width: int
+    ) -> None:
+        """GPU triangles, so edges sit up to a pixel from pygame's scan rules.
+
+        Measured: 221 of 10011 filled pixels differ, 419 of a 797-pixel
+        translucent outline whose edge runs half a pixel over -- all along
+        the edges. So at most one differing pixel per pixel of perimeter.
+
+        And the area within a fifth, because an outline's width is measured
+        differently: pygame repeats a line along one axis, so a diagonal
+        edge is thinner across than its width; the ring here is that wide
+        across every edge. A 2-pixel outline of a triangle covers 18% more.
+        """
         reference, actual = _frames(
-            wgpu,
-            lambda r: r.draw_polygon([(20, 20), (200, 40), (120, 140)], GLASS, 2),
-            ui=True,
+            wgpu, lambda r: r.draw_polygon(points, color, width), ui=True
         )
 
-        # One pixel, where two edges of the outline meet: pygame blends
-        # the corner once, having drawn the outline opaque onto a scratch
-        # surface first.
+        perimeter = sum(
+            math.dist(points[i], points[(i + 1) % len(points)])
+            for i in range(len(points))
+        )
         assert _drawn(reference) > 0
-        assert _differing(reference, actual) <= 2
+        assert _differing(reference, actual) <= perimeter
+        assert abs(_drawn(actual) - _drawn(reference)) <= 0.2 * _drawn(reference)
 
     def test_a_ring(self, wgpu: Any) -> None:
         reference, actual = _frames(

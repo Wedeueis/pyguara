@@ -367,10 +367,10 @@
 - **Chose:** fontdue, with SDL_ttf's layout rules fitted against pygame (0 of 608 mismatches on the fitted sizes): heights and line advances exact at every size 10-40, widths exact on 97%, the rest off where FreeType's hinting program widens glyphs. A hinting crate is the upgrade if exact pixels matter.
 - **Tags:** text, renderer
 
-## The UI's polygons are rasterised in Python by pygame's own rules
+## The UI's polygons are GPU triangles (user's override)
 - **Context:** `draw_polygon` on wgpu drew into a scratch `pygame.Surface` with `pygame.draw.polygon`.
 - **Alternatives:** tessellate into wgpu triangles (different edge pixels); a Rust rasteriser; transcribe pygame-ce 2.5.6's `draw_fillpoly`, `draw_filltri` and `draw_line_width` into Python.
-- **Chose:** the transcription. UI polygons are a handful of small shapes, so speed is irrelevant, and it covers exactly pygame's pixels: 750 random polygons, filled and outlined, identical.
+- **Chose:** I first transcribed pygame's rules (identical on 750 random polygons); in review the user chose GPU triangles. Fill by ear clipping, outline as one mitred ring (miter limit 4, so a translucent outline blends once at its corners), one native `mesh` step. Edges sit within a pixel of pygame's; a thin diagonal outline is fuller, since pygame measures width along an axis.
 - **Tags:** renderer, ui
 
 ## Whole-demo parity gets a measured text budget per demo, not a tolerance

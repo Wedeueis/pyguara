@@ -14,7 +14,7 @@ from typing import Any
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.clipping import ClipStack
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
-from pyguara.graphics.backends.wgpu.polygon import rasterise_polygon
+from pyguara.graphics.backends.wgpu.polygon import polygon_mesh
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -87,23 +87,34 @@ class WgpuUIRenderer:
     def draw_polygon(
         self, points: list[tuple[int, int]], color: Color, width: int = 0
     ) -> None:
-        """Draw a filled or outlined polygon.
+        """Draw a filled or outlined polygon, as triangles on the GPU.
 
-        The native pipeline draws quads, and an arbitrary polygon is not
-        one. So this rasterises it on the CPU (`polygon.py`, pygame's own
-        rules) into a mask the size of its bounding box and draws that once. Polygons are rare in a UI
-        -- a dropdown's arrow, a slider's notch -- and small.
+        Triangulated (or, outlined, turned into a ring) by `polygon.py` and
+        queued as one native `mesh` step, clipped like everything else the
+        UI draws. Its edges sit a pixel or so from pygame's; see there.
         """
         if color.a == 0 or len(points) < 3:
             return
-        pixels, left, top, box_width, box_height = rasterise_polygon(points, width)
-        self._gpu.quad(
-            self._frame.once_rgba(pixels, box_width, box_height),
-            left + box_width / 2, top + box_height / 2,
-            box_width / 2, box_height / 2,
-            0, 0, box_width, box_height, 0.0,
-            color.r, color.g, color.b, color.a,
-        )  # fmt: skip
+        vertices, indices, count = polygon_mesh(
+            points, width, (color.r, color.g, color.b, color.a)
+        )
+        if count == 0:
+            return
+        gpu = self._gpu
+        width_px, height_px = gpu.current_size
+        clip = self._clips.current
+        x, y, w, h = (
+            (0, 0, width_px, height_px)
+            if clip is None
+            else (int(clip.x), int(clip.y), int(clip.width), int(clip.height))
+        )
+        gpu.mesh(
+            gpu.current_target,
+            vertices,
+            indices,
+            [(0, self._frame.white(), x, y, w, h, 0, count)],
+            (0.0, 0.0, float(width_px), float(height_px)),
+        )
 
     def draw_text(
         self,
