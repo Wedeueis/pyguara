@@ -202,8 +202,9 @@ class GpuFrame:
     def font(self, size: int, bold: bool = False, italic: bool = False) -> Any:
         """Return the `NativeFont` for a size and style, made once.
 
-        The engine's default face (`pyguara.graphics.fonts`), rasterised in
-        Rust; see `rust/src/text.rs` for how its layout follows SDL_ttf's.
+        The engine's default face (`pyguara.graphics.fonts`), hinted and
+        rasterised in Rust; see `rust/src/text.rs` for how it follows
+        FreeType and SDL_ttf.
         """
         key = (size, bold, italic)
         font = self._fonts.get(key)

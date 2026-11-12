@@ -56,9 +56,6 @@ arboard = "3.7.0"
 # Decodes textures and writes captures for the wgpu backend, in place of
 # `pygame.image`. Pure Rust; only the formats the image loader advertises.
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
-# Rasterises text for the wgpu backend, in place of `pygame.font`. Pure Rust;
-# the default faces are embedded from `pyguara/graphics/fonts/`.
-fontdue = "0.9.5"
 # The native audio backend's output device. Optional only so a machine
 # without ALSA's headers (Linux) can still build and test the mixer through
 # its offline render; the wheel is always built with it. See
@@ -69,6 +66,13 @@ cpal = { version = "0.18", optional = true }
 # Linux machine without udev's headers can still build; the wheel is always
 # built with it. See `rust/src/gamepad.rs`.
 gilrs = { version = "0.11", optional = true }
+# Text for the wgpu backend, in place of `pygame.font`: reads the font and
+# runs its TrueType hinting instructions as FreeType's v40 interpreter does,
+# so glyphs snap to the grid as they do under pygame. Pure Rust (Google's
+# fontations). See `rust/src/text.rs`.
+skrifa = "0.50.0"
+# Fills a hinted glyph outline by area coverage.
+ab_glyph_rasterizer = "0.1.10"
 
 [profile.release]
 lto = "fat"

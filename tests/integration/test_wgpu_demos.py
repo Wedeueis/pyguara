@@ -38,17 +38,18 @@ _SCRIPT = Path(__file__).with_name("_demo_frame.py")
 TOLERANCE = 2
 
 # Pixels a demo's text may differ by, beyond `TOLERANCE`. Both renderers draw
-# the bundled face, FreeType hinting it on pygame and fontdue not on wgpu, so
-# glyph edges shade differently (see `test_wgpu_pixels.TestText`). Measured
-# 2026-11-12, plus a quarter: net_horde 5300, tilemap_authoring 1298,
-# ui_scene_graph 666, vinagre_matilha 7020. Every other demo is held to zero,
-# so a budget hides nothing but text -- and a demo gaining text fails loudly
-# rather than quietly earning one.
+# the bundled face, both hinting it (FreeType on pygame, skrifa on wgpu), but
+# their rasterisers shade glyph edges a little differently (see
+# `test_wgpu_pixels.TestText`). Measured 2026-11-12, plus a quarter:
+# net_horde 2113, tilemap_authoring 266, ui_scene_graph 89, vinagre_matilha
+# 1845 -- a third of what they were before hinting. Every other demo is held
+# to zero, so a budget hides nothing but text, and a demo gaining text fails
+# loudly rather than quietly earning one.
 TEXT_BUDGET = {
-    "net_horde": 6600,
-    "tilemap_authoring": 1600,
-    "ui_scene_graph": 850,
-    "vinagre_matilha": 8800,
+    "net_horde": 2650,
+    "tilemap_authoring": 340,
+    "ui_scene_graph": 115,
+    "vinagre_matilha": 2310,
 }
 
 

@@ -231,15 +231,15 @@ def _checker(size: int = 16) -> PygameTexture:
 
 
 class TestText:
-    """Text on both renderers: the same face, two rasterisers.
+    """Text on both renderers: the same face, hinted the same way.
 
-    Both draw Liberation Sans from `pyguara.graphics.fonts`, the pygame one
-    through FreeType, which hints outlines to the pixel grid, and the wgpu
-    one through fontdue, which does not. So edges differ in shade, and what
-    is held is what a player would notice: where the text is (the same
-    columns, and rows within one), and how few pixels differ by more than
-    half their range -- a glyph that moved or vanished would be hundreds.
-    Measured 2026-11-12: at most 111 of 4248 drawn, 2.6%.
+    Both draw Liberation Sans from `pyguara.graphics.fonts`, both run its
+    TrueType hinting instructions (FreeType under pygame, skrifa on wgpu),
+    so stems land on the same pixels. What differs is how each rasteriser
+    flattens a curve, a shade on an edge pixel. So what is held: the text
+    is where pygame puts it (the same columns, rows within one), and no
+    pixel differs by more than a quarter of its range. Measured 2026-11-12:
+    none over 64/255 in any case below; before hinting, 455 of 4248.
     """
 
     @staticmethod
@@ -261,7 +261,7 @@ class TestText:
         assert (our_left, our_right) == (left, right)
         assert abs(our_top - top) <= 1 and abs(our_bottom - bottom) <= 1
         drawn = int(((theirs != BACKGROUND).any(axis=2)).sum())
-        far = int((np.abs(ours - theirs).max(axis=2) > 128).sum())
+        far = int((np.abs(ours - theirs).max(axis=2) > 64).sum())
         return drawn, far
 
     @pytest.mark.parametrize(
@@ -315,17 +315,18 @@ class TestText:
         drawn, far = self._compare(*_frames(wgpu, draw, ui=ui))
 
         assert drawn > 0
-        assert far <= 0.03 * drawn
+        assert far == 0
 
 
 class TestTextMetrics:
     """`NativeFont` measures as `pygame.font` does, so a layout fits on both.
 
     Sizes 10 to 40, all four styles, against FreeType with the same file.
-    Heights and line advances are exact. Widths are not always: FreeType
-    runs the font's hinting program, which at some sizes widens many
-    glyphs by a pixel (size 27 bold: 16.49 becomes 17), and fontdue has no
-    hinting interpreter. Measured: 1810 of 1860 strings exact.
+    Heights and line advances are exact. Widths are exact on 1846 of 1860
+    strings and the rest one pixel out: both run the font's hinting program
+    (which is what turns bold 27's 16.49-pixel advance into 17), and the
+    stragglers are glyphs whose hinted box the two round differently.
+    Without hinting it was 1810, up to 8 pixels out.
     """
 
     WORDS = (
@@ -354,7 +355,7 @@ class TestTextMetrics:
         from pyguara.graphics.fonts import default_font_path
 
         native_font = native.require_extension("test").NativeFont
-        compared = exact = 0
+        compared = exact = worst = 0
         for size in range(10, 41):
             for bold in (False, True):
                 for italic in (False, True):
@@ -364,8 +365,11 @@ class TestTextMetrics:
                     ours = native_font(size, bold, italic)
                     for word in self.WORDS:
                         compared += 1
-                        exact += ours.size(word)[0] == theirs.size(word)[0]
-        assert exact >= 0.95 * compared
+                        off = abs(ours.size(word)[0] - theirs.size(word)[0])
+                        exact += off == 0
+                        worst = max(worst, off)
+        assert exact >= 0.99 * compared
+        assert worst <= 1
 
 
 class TestSprites:

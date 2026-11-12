@@ -361,10 +361,10 @@
 - **Chose:** Liberation Sans 2.1.5, on the user's call, from the official release (sha256 7191c669...). Embedded in the extension from the same files the pygame renderers open, so both backends draw one typeface on every platform.
 - **Tags:** text, renderer, packaging
 
-## fontdue without hinting, laid out as SDL_ttf lays out
+## Text is hinted with skrifa, laid out as SDL_ttf lays out (user's override)
 - **Context:** Rasterising text in Rust.
 - **Alternatives:** fontdue (simple, no hinting interpreter); skrifa or swash (TrueType hinting, closer to FreeType's pixels, more work).
-- **Chose:** fontdue, with SDL_ttf's layout rules fitted against pygame (0 of 608 mismatches on the fitted sizes): heights and line advances exact at every size 10-40, widths exact on 97%, the rest off where FreeType's hinting program widens glyphs. A hinting crate is the upgrade if exact pixels matter.
+- **Chose:** I first used fontdue (widths exact on 97%, up to 8 px out); in review the user chose hinting. skrifa runs the font's TrueType instructions in FreeType's v40 normal mode, ab_glyph_rasterizer fills the hinted outline, kerning comes from the `kern` table. Now heights exact, widths exact on 99.2% and never more than 1 px out, and no text pixel off by more than 64/255 from pygame.
 - **Tags:** text, renderer
 
 ## The UI's polygons are GPU triangles (user's override)
