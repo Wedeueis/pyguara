@@ -13,8 +13,9 @@ uv run python tools/agent_view.py guara_falcao --frames 120 --shot 1 --shot 119
 
 It boots a demo through its real bootstrap, advances it a fixed number of
 frames, saves PNGs, and exits. Headless by default (SDL's `dummy` driver for
-the pygame backend; the wgpu backend opens no window under it and renders
-offscreen), so it needs no display and behaves the same on CI.
+the pygame backend, `PYGUARA_WINDOW=offscreen` for the wgpu one, which then
+opens no window and renders offscreen), so it needs no display and behaves
+the same on CI.
 
 Frames land in `.agent-view/` (gitignored). Open them with the `Read` tool.
 

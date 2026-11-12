@@ -9,6 +9,11 @@ import pytest
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 
+# No test opens a real wgpu window unless it asks for one: the variable is
+# inherited by every subprocess a test starts, too. A test that wants a
+# window opens `NativeWindow` itself (`test_wgpu_window.py`).
+os.environ.setdefault("PYGUARA_WINDOW", "offscreen")
+
 # Set in CI, where a missing graphics adapter means the environment is wrong
 # rather than absent. Without it a machine with no GPU still runs the rest
 # of the suite green -- but every GPU test would then skip silently on CI.

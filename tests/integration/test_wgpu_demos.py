@@ -62,6 +62,7 @@ def _frame(demo: str, backend: str, out: Path) -> tuple[int, int, bytes]:
         env={
             **os.environ,
             "SDL_VIDEODRIVER": "dummy",
+            "PYGUARA_WINDOW": "offscreen",
             "SDL_AUDIODRIVER": "dummy",
             "PYGUARA_BACKEND": backend,
             "PYTHONHASHSEED": "0",

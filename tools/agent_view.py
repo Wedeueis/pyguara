@@ -47,6 +47,8 @@ sys.path.insert(0, str(REPO_ROOT))
 if "--windowed" not in sys.argv:
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    # The wgpu window's own switch; SDL's no longer reaches it.
+    os.environ.setdefault("PYGUARA_WINDOW", "offscreen")
 
 import pygame  # noqa: E402  (must follow the driver selection above)
 

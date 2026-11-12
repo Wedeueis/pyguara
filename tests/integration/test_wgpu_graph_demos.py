@@ -40,6 +40,7 @@ def _capture(backend: str, demo: str, out: Path) -> Path:
             "SDL_AUDIODRIVER": "dummy",
             "PYTHONHASHSEED": "0",
             "SDL_VIDEODRIVER": "dummy",
+            "PYGUARA_WINDOW": "offscreen",
         },
         check=False,
     )

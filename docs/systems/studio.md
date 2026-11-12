@@ -473,8 +473,8 @@ print(capture.blank, capture.world_flat)
 `create_headless_application()` registers no texture loader, so any scene
 that loads an image dies before it finishes entering — and a real demo is
 almost entirely images. The harness boots the normal bootstrap under an
-SDL driver that needs no display, `dummy`. The wgpu backend opens no window
-under it (or under `PYGUARA_WINDOW=offscreen`) and renders offscreen.
+SDL driver that needs no display, `dummy`, and `PYGUARA_WINDOW=offscreen`,
+under which the wgpu backend opens no window and renders offscreen.
 
 Runs are deterministic: the harness installs `FixedClock` and seeds
 `RandomService` itself, so the same script twice produces the same frames.

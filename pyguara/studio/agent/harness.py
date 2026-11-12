@@ -551,4 +551,6 @@ def _force_headless_drivers() -> None:
     """
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    # The wgpu window's own switch; SDL's no longer reaches it.
+    os.environ.setdefault("PYGUARA_WINDOW", "offscreen")
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")

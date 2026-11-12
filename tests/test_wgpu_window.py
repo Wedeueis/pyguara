@@ -113,9 +113,10 @@ class TestOffscreen:
         ("variables", "expected"),
         [
             ({"PYGUARA_WINDOW": "offscreen"}, True),
-            ({"SDL_VIDEODRIVER": "dummy"}, True),
-            ({"SDL_VIDEODRIVER": "offscreen"}, True),
-            ({"SDL_VIDEODRIVER": "x11"}, False),
+            ({"PYGUARA_WINDOW": "OFFSCREEN"}, True),
+            ({"PYGUARA_WINDOW": "window"}, False),
+            # SDL's variable configures a library this window does not use.
+            ({"SDL_VIDEODRIVER": "dummy"}, False),
             ({}, False),
         ],
     )
@@ -164,7 +165,6 @@ class _Frame:
 @pytest.fixture
 def recorded(monkeypatch: pytest.MonkeyPatch) -> type[_Recorder]:
     monkeypatch.delenv("PYGUARA_WINDOW", raising=False)
-    monkeypatch.setenv("SDL_VIDEODRIVER", "x11")
     monkeypatch.setattr(native, "require_extension", lambda _why: _Extension)
     monkeypatch.setattr(window_module, "GpuFrame", _Frame)
     _Recorder.opened = []

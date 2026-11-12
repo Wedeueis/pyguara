@@ -5,9 +5,9 @@ The window, its keyboard and mouse input and its native handle come from
 handle. Nothing here imports pygame: SDL is no longer part of this path.
 
 **Offscreen when asked, or when no window can be opened.** Under
-`PYGUARA_WINDOW=offscreen` -- or SDL's `dummy`/`offscreen` driver, which is
-how every test and capture tool has always asked for no window -- the frame
-is rendered into the device's own target and nothing is shown. A capture
+`PYGUARA_WINDOW=offscreen` -- which the test suite, `agent_view` and the
+Studio harness set -- the frame is rendered into the device's own target
+and nothing is shown. SDL's `SDL_VIDEODRIVER` does not reach it. A capture
 reads it back with `read_pixels()`. `frame.gpu.has_surface` says which path
 is in use, and the boot log does too.
 """
@@ -44,10 +44,13 @@ _MODIFIER_MASKS = (0x0003, 0x00C0, 0x0300)
 
 
 def wants_offscreen() -> bool:
-    """Return whether the environment asks for no window at all."""
-    if os.environ.get("PYGUARA_WINDOW", "").lower() == "offscreen":
-        return True
-    return os.environ.get("SDL_VIDEODRIVER", "").lower() in ("dummy", "offscreen")
+    """Return whether `PYGUARA_WINDOW=offscreen` asks for no window at all.
+
+    Only the engine's own variable: SDL's `SDL_VIDEODRIVER` configures a
+    library this window does not use, and honouring it would keep a name
+    alive that says the opposite of what is going on.
+    """
+    return os.environ.get("PYGUARA_WINDOW", "").lower() == "offscreen"
 
 
 def _modifiers(mods: int) -> set[int]:

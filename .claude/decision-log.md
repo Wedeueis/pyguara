@@ -319,10 +319,10 @@
 - **Chose:** cpal, on the user's call. On Linux the wheel now links ALSA, which `audio.rs` used to avoid on purpose.
 - **Tags:** audio, native, packaging
 
-## The wgpu window goes offscreen under SDL's `dummy` driver, or `PYGUARA_WINDOW=offscreen`
-- **Context:** Without SDL, nothing makes the wgpu window headless; every test, `agent_view` and the Studio harness ask for it through `SDL_VIDEODRIVER=dummy`.
+## The wgpu window goes offscreen only under `PYGUARA_WINDOW=offscreen` (user's override)
+- **Context:** Without SDL, nothing makes the wgpu window headless; every test, `agent_view` and the Studio harness asked for it through `SDL_VIDEODRIVER=dummy`.
 - **Alternatives:** only a new engine variable (touch every caller); only fall back when no display can be opened (tests would open real windows under WSLg); honour both the SDL variable and a new one.
-- **Chose:** both. The SDL variable keeps every existing caller headless unchanged, and `PYGUARA_WINDOW=offscreen` is the name that does not mention a library the path no longer uses. A failure to open a window still falls back to offscreen, with a warning.
+- **Chose:** I first honoured both; in review the user chose the engine's variable alone. `tests/conftest.py`, `agent_view` and the Studio harness set it; SDL's variable no longer reaches the wgpu window. A failure to open a window still falls back to offscreen, with a warning.
 - **Tags:** window, testing, tools
 
 ## Synthetic input goes through `post_event` on the window backend, as engine events
