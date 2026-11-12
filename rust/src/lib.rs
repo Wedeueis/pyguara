@@ -66,6 +66,7 @@ mod particles;
 mod solids;
 mod sparks;
 mod spatialhash;
+mod window;
 mod world;
 
 /// An RGBA tint as the renderer wants it.
@@ -85,6 +86,9 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<world::ColumnView>()?;
     module.add_class::<world::RowView>()?;
     module.add_class::<world::FieldAccessor>()?;
+    module.add_class::<window::NativeWindow>()?;
+    module.add_class::<window::NativeClipboard>()?;
+    module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;
     net::register(module)?;
     module.add_function(wrap_pyfunction!(audio::decode_audio, module)?)?;
     module.add_function(wrap_pyfunction!(audio::resample_pcm, module)?)?;

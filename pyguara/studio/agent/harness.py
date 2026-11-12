@@ -222,11 +222,17 @@ class StudioHarness:
         """
         import pygame
 
-        graph = self._graph()
-        if graph is not None and getattr(graph, "ctx", None) is None:
-            # wgpu: the headless window already copies the finished frame,
-            # UI included, onto the display surface.
-            return pygame.display.get_surface()
+        from pyguara.graphics.window import Window
+
+        try:
+            backend = self._application.container.get(Window).backend
+        except Exception:  # noqa: BLE001 - no window registered: fall through
+            backend = None
+        read_pixels = getattr(backend, "read_pixels", None)
+        if read_pixels is not None:
+            # wgpu: the frame, UI included, is in the device's own target.
+            pixels, width, height = read_pixels()
+            return pygame.image.frombuffer(pixels, (width, height), "RGBA").copy()
         framebuffer = self._framebuffer(self._final_source())
         if framebuffer is not None:
             return _to_surface(framebuffer)

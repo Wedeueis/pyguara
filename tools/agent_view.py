@@ -42,8 +42,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 # Headless by default: surface capture works identically under the dummy
 # driver, needs no display, and is deterministic on CI. --windowed overrides.
-# A wgpu demo draws offscreen under it and copies each frame onto pygame's
-# display surface, which is what the capture reads.
+# A wgpu demo draws offscreen under it (no window is opened), and the capture
+# reads the frame back from the GPU.
 if "--windowed" not in sys.argv:
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
@@ -217,18 +217,21 @@ def _render_graph(container: object) -> object | None:
     return graph
 
 
-def _capture(graph: object | None) -> pygame.Surface | None:
+def capture_frame(window: object) -> pygame.Surface | None:
     """Return the frame just rendered, UI included.
 
-    Every backend leaves it on pygame's display surface: the pygame backends
-    draw there, and the wgpu window, run headless, copies each finished
-    frame onto it.
+    The pygame backend draws onto pygame's display surface, so that is
+    read. The wgpu window draws into a GPU target, offscreen here, and is
+    read back from it.
 
     Args:
-        graph: Unused; kept so the call site reads alongside
-            `_capture_world`.
+        window: The application's `Window`.
     """
-    return pygame.display.get_surface()
+    read_pixels = getattr(window.backend, "read_pixels", None)  # type: ignore[attr-defined]
+    if read_pixels is None:
+        return pygame.display.get_surface()
+    pixels, width, height = read_pixels()
+    return pygame.image.frombuffer(pixels, (width, height), "RGBA").copy()
 
 
 def _capture_world(graph: object | None) -> pygame.Surface | None:
@@ -300,6 +303,11 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
     """
     from pyguara.application.application import Application
     from pyguara.events.dispatcher import EventDispatcher
+    from pyguara.events.input import (
+        KeyDownEvent,
+        MouseButtonEvent,
+        MouseMotionEvent,
+    )
 
     bootstrap_mod, scenes_mod, scene_name = DEMOS[demo]
     configure = importlib.import_module(bootstrap_mod).configure_game_container
@@ -308,6 +316,7 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     container = configure()
     app = container.get(Application)
+    window = container.get(_window_type())
     graph = _render_graph(container)
 
     tick = 0
@@ -319,27 +328,23 @@ def run(demo: str, script: Script, out_dir: Path) -> int:
         nonlocal tick
         tick += 1
 
+        # Engine events, posted to the window: they take the path real
+        # input takes, on either backend, with no SDL queue involved.
         for at, key in script.keys:
             if at == tick:
-                pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=key))
+                window.post_event(KeyDownEvent(key_code=key))
         for at, x, y in script.moves:
             if at == tick:
-                pygame.event.post(
-                    pygame.event.Event(pygame.MOUSEMOTION, pos=(x, y), rel=(0, 0))
-                )
+                window.post_event(MouseMotionEvent(x=x, y=y, rel_x=0, rel_y=0))
         for at, x, y in script.clicks:
             if at == tick:
-                pygame.event.post(
-                    pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(x, y), button=1)
-                )
-                pygame.event.post(
-                    pygame.event.Event(pygame.MOUSEBUTTONUP, pos=(x, y), button=1)
-                )
+                window.post_event(MouseButtonEvent(button=1, x=x, y=y, is_down=True))
+                window.post_event(MouseButtonEvent(button=1, x=x, y=y, is_down=False))
 
         original_render()
 
         if tick in script.shots:
-            captured = _capture(graph)
+            captured = capture_frame(window)
             if captured is not None:
                 path = out_dir / f"{demo}_{tick:04d}.png"
                 pygame.image.save(captured, str(path))

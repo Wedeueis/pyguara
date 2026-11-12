@@ -90,16 +90,41 @@ Let a scene hand over arrays -- positions, sizes, colours -- for many
 shapes in one call. This is the first change that needs Reclaimer's view
 code to change, and the first real consumer of ADR 0008's columns.
 
-### 3. Window and input off pygame
+### 3. Window, input, images and fonts off pygame
 
 SDL2 through pygame is the other half of the platform stack. Replace with
 winit or SDL3 once the renderer no longer needs a pygame surface. Not
 before: stage A leans on the pygame window on purpose.
 
+**Chosen 2026-11-12 (the user's calls):** winit and gilrs, in the existing
+crate; and images and fonts leave pygame too, not only the window. Done when
+a game on the wgpu backend runs without pygame ever being imported. The
+software renderer keeps pygame; it is the reference the wgpu one is held to.
+
+| Increment | What | Status |
+| --- | --- | --- |
+| **3a** | The window and its keyboard and mouse input on winit (`NativeWindow`, `rust/src/window.rs`), wgpu presenting to its handle; SDL keycodes and `KMOD_*` values kept, so saved bindings mean the same keys; clipboard on arboard; `post_event` for synthetic input; offscreen under `PYGUARA_WINDOW=offscreen` or SDL's `dummy`. AppKit handles are passed to wgpu, which is macOS's half of the window problem | **Done 2026-11-12.** Found: a windowed game ignored SIGTERM, because `pygame.mixer` still opened SDL and SDL's quit went unread; the window now turns it into a `QuitEvent` |
+| **3b** | Gamepads on gilrs: an `IInputBackend` whose button and axis numbers are `GamepadButton`/`GamepadAxis`, from gilrs's standard mapping | Needs `libudev-dev` to build on Linux |
+| **3c** | The frame clock without `pygame.time` | |
+| **3d** | Images decoded in Rust (`image` crate): a texture type holding RGBA, its loader and factory, premultiply; the wgpu renderers draw it | |
+| **3e** | Text rasterised in Rust with a bundled font; the UI's polygon fill off `pygame.draw`; goldens re-approved, since the glyphs change | |
+| **3f** | Nothing on the wgpu path imports pygame, asserted by a test; capture tools write PNGs without it | |
+
 ### 4. Native audio as the default backend
 
 It exists and Reclaimer's feedback data already carries pitch variation
 that only it can play. What is missing is hearing it on Windows.
+
+**Chosen 2026-11-12 (the user's call):** the native backend owns the device
+through cpal rather than handing buffers to `pygame.mixer`. On Linux the
+wheel then links ALSA, which `audio.rs` had avoided on purpose.
+
+| Increment | What | Status |
+| --- | --- | --- |
+| **4a** | A mixer in Rust: voices with continuous pitch and native loop regions, buses, music streamed with fades, written to cpal; an offline render for tests and `audio_capture` | Needs `libasound2-dev` to build on Linux |
+| **4b** | `NativeAudioSystem` on it, with no pygame | |
+| **4c** | `AudioConfig.backend` defaults to `native`; wheels build with ALSA | |
+| **4d** | Heard on native Windows | The user's ears |
 
 ### 5. Hosting on home connections
 

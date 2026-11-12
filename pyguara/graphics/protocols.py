@@ -532,6 +532,14 @@ class IWindowBackend(Protocol):
         """
         ...
 
+    def post_event(self, event: object) -> None:
+        """Deliver an engine event with the next `poll_events`.
+
+        Synthetic input -- a capture tool's click, a test's key press --
+        taking the same path as real input.
+        """
+        ...
+
     def get_screen(self) -> Any:
         """Return the native OS window."""
         ...

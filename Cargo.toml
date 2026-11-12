@@ -47,6 +47,12 @@ pollster = "1"
 bytemuck = { version = "1", features = ["derive"] }
 renet = "=2.0.1"
 renetcode = "=2.0.0"
+# The wgpu backend's window and its keyboard and mouse input, in place of SDL
+# through pygame. Pure Rust; on Linux it opens X11 and Wayland by dlopen, so
+# the wheel gains no link-time dependency. See `rust/src/window.rs`.
+winit = "0.30"
+# The desktop clipboard, which SDL provided through `pygame.scrap`.
+arboard = "3.7.0"
 
 [profile.release]
 lto = "fat"

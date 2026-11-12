@@ -57,6 +57,13 @@ class PygameImageLoader:
         # Apply convert_alpha for proper alpha handling
         if pygame.display.get_surface() is not None:
             surface = surface.convert_alpha()
+        elif not surface.get_flags() & pygame.SRCALPHA:
+            # No display -- the wgpu backend opens none -- so convert_alpha
+            # is unavailable; an alpha copy is what premultiplying and the
+            # upload to the GPU both need.
+            with_alpha = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+            with_alpha.blit(surface, (0, 0))
+            surface = with_alpha
 
         # Apply premultiply alpha if requested
         if texture_meta.premultiply_alpha:

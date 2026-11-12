@@ -307,7 +307,7 @@ both default off so a shipped game is unaffected:
 
 | `display.` | What it does |
 | --- | --- |
-| `resizable` | SDL reports resizes at all. Without it the window manager may still let the frame be maximised -- WSLg does -- while nothing in the engine is told, and the editor carries on drawing at the starting resolution into a corner of a much larger window |
+| `resizable` | The user can size the window, and the window system reports it. Without it the window manager may still let the frame be maximised -- WSLg does -- while nothing in the engine is told, and the editor carries on drawing at the starting resolution into a corner of a much larger window |
 | `borderless` | Removes the OS title bar, so the editor draws its own |
 
 `borderless` is what the grey Windows-classic frame around the editor was.
@@ -473,8 +473,8 @@ print(capture.blank, capture.world_flat)
 `create_headless_application()` registers no texture loader, so any scene
 that loads an image dies before it finishes entering — and a real demo is
 almost entirely images. The harness boots the normal bootstrap under an
-SDL driver that needs no display, `dummy`; the wgpu backend renders
-offscreen and asks SDL for no GL context.
+SDL driver that needs no display, `dummy`. The wgpu backend opens no window
+under it (or under `PYGUARA_WINDOW=offscreen`) and renders offscreen.
 
 Runs are deterministic: the harness installs `FixedClock` and seeds
 `RandomService` itself, so the same script twice produces the same frames.

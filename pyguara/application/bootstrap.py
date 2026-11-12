@@ -335,9 +335,10 @@ def _setup_container(
         # back to `_render_direct()` when the container has none at all,
         # which is exactly the single-pass path a headless test wants.
     elif disp_cfg.backend == RenderingBackend.WGPU:
-        # The native renderer. It reuses pygame's texture type and image
-        # loader: a texture stays a CPU surface, uploaded to the GPU the
-        # first time it is drawn.
+        # The native renderer, in a winit window (`NativeWindow`). It still
+        # reuses pygame's texture type and image loader -- which need no
+        # display -- so a texture stays a CPU surface, uploaded to the GPU
+        # the first time it is drawn.
         from pyguara.graphics.backends.pygame.types import PygameTextureFactory
         from pyguara.graphics.backends.wgpu import (
             WgpuRenderer,

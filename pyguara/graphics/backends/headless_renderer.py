@@ -32,6 +32,7 @@ class HeadlessWindowBackend:
         self._is_open = False
         self._width = 0
         self._height = 0
+        self._posted: list[object] = []
 
     def open(self, config: WindowConfig) -> bool:
         """Pretend to open a window; no real display is ever created.
@@ -58,8 +59,13 @@ class HeadlessWindowBackend:
         """No-op: nothing to flip."""
 
     def poll_events(self) -> Iterable[Any]:
-        """Return no events; nothing generates them without a real window."""
-        return []
+        """Return the posted events: nothing else makes one without a window."""
+        posted, self._posted = self._posted, []
+        return posted
+
+    def post_event(self, event: object) -> None:
+        """Deliver an engine event with the next `poll_events`."""
+        self._posted.append(event)
 
     def get_screen(self) -> Any:
         """Return `None`: there is no native surface/handle."""

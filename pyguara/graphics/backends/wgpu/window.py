@@ -1,77 +1,94 @@
-"""The window for the wgpu backend.
+"""The window for the wgpu backend, on winit.
 
-SDL, through pygame, still opens the window and delivers input: that half
-of the platform stack is a later workstream. What changes is who draws.
-The window's native handle -- an HWND, an X11 window, a Wayland surface --
-is handed to wgpu, which presents to it directly, and pygame's own display
-surface is never drawn to or flipped.
+The window, its keyboard and mouse input and its native handle come from
+`NativeWindow` (`rust/src/window.rs`), and wgpu presents straight to that
+handle. Nothing here imports pygame: SDL is no longer part of this path.
 
-**There is a fallback, and it is slow.** If no handle is available (SDL's
-`dummy` driver, as in a test or a headless capture) or wgpu cannot draw to
-the window, the frame is rendered offscreen, copied out, and blitted to
-the pygame surface. That costs a readback per frame -- about 19 ms on the
-machine this was written on -- and exists so the renderer can be checked
-without a screen and so a frame can be captured. `frame.gpu.has_surface`
-says which path is in use, and the boot log does too.
+**Offscreen when asked, or when no window can be opened.** Under
+`PYGUARA_WINDOW=offscreen` -- or SDL's `dummy`/`offscreen` driver, which is
+how every test and capture tool has always asked for no window -- the frame
+is rendered into the device's own target and nothing is shown. A capture
+reads it back with `read_pixels()`. `frame.gpu.has_surface` says which path
+is in use, and the boot log does too.
 """
 
 from __future__ import annotations
 
-import ctypes
-import dataclasses
-import warnings
+import os
+import signal
+import threading
+from collections.abc import Iterable
+from types import FrameType
 from typing import Any
 
-import pygame
-
+from pyguara import native
 from pyguara.common.types import Color
 from pyguara.config.types import WindowConfig
-from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
+from pyguara.events.input import (
+    KeyDownEvent,
+    KeyUpEvent,
+    MouseButtonEvent,
+    MouseMotionEvent,
+    MouseWheelEvent,
+    TextInputEvent,
+)
+from pyguara.events.lifecycle import QuitEvent
+from pyguara.events.window import WindowResizeEvent
 from pyguara.graphics.backends.wgpu.frame import GpuFrame
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
 
-
-def _pointer(capsule: Any) -> int:
-    """Return the address a PyCapsule from `get_wm_info()` holds."""
-    api = ctypes.pythonapi
-    api.PyCapsule_GetName.restype = ctypes.c_char_p
-    api.PyCapsule_GetName.argtypes = [ctypes.py_object]
-    api.PyCapsule_GetPointer.restype = ctypes.c_void_p
-    api.PyCapsule_GetPointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
-    return int(api.PyCapsule_GetPointer(capsule, api.PyCapsule_GetName(capsule)) or 0)
+# SDL's `KMOD_SHIFT`, `KMOD_CTRL`, `KMOD_ALT`: the engine's modifier values.
+_MODIFIER_MASKS = (0x0003, 0x00C0, 0x0300)
 
 
-def native_window() -> tuple[str, int, int] | None:
-    """Name the open pygame window as `NativeGpu.for_window` wants it.
+def wants_offscreen() -> bool:
+    """Return whether the environment asks for no window at all."""
+    if os.environ.get("PYGUARA_WINDOW", "").lower() == "offscreen":
+        return True
+    return os.environ.get("SDL_VIDEODRIVER", "").lower() in ("dummy", "offscreen")
+
+
+def _modifiers(mods: int) -> set[int]:
+    return {mask for mask in _MODIFIER_MASKS if mods & mask}
+
+
+def translate(raw: tuple[Any, ...]) -> object | None:
+    """Turn one `NativeWindow.pump` tuple into an engine event.
+
+    Args:
+        raw: The tuple, its first item naming the kind.
 
     Returns:
-        `(kind, window, display)`, or None when SDL has no native window
-        to offer -- the `dummy` driver, or a platform not handled yet
-        (macOS, where wgpu needs the window's view rather than the window).
+        The engine event, or None for one the engine has no event for.
     """
-    try:
-        driver = pygame.display.get_driver()
-        info = pygame.display.get_wm_info()
-    except pygame.error:
-        return None
-    # By SDL's driver name, never by which keys are present: on X11
-    # pygame's dictionary also carries `surface` and `shell_surface`, the
-    # Wayland fields of the same C union, holding whatever bytes were
-    # there. Reading them as a Wayland surface crashed the process.
-    if driver == "windows":
-        window = info.get("window")
-        return ("win32", int(window), 0) if window else None
-    if driver == "x11" and info.get("window") and "display" in info:
-        return ("x11", int(info["window"]), _pointer(info["display"]))
-    if driver == "wayland" and "surface" in info and "display" in info:
-        return ("wayland", _pointer(info["surface"]), _pointer(info["display"]))
+    kind = raw[0]
+    if kind == "quit":
+        return QuitEvent()
+    if kind == "key_down":
+        return KeyDownEvent(key_code=raw[1], modifiers=_modifiers(raw[2]))
+    if kind == "key_up":
+        return KeyUpEvent(key_code=raw[1], modifiers=_modifiers(raw[2]))
+    if kind == "text":
+        return TextInputEvent(text=raw[1])
+    if kind == "mouse_button":
+        _, button, x, y, down, mods = raw
+        return MouseButtonEvent(
+            button=button, x=x, y=y, is_down=down, modifiers=_modifiers(mods)
+        )
+    if kind == "mouse_motion":
+        _, x, y, rel_x, rel_y = raw
+        return MouseMotionEvent(x=x, y=y, rel_x=rel_x, rel_y=rel_y)
+    if kind == "wheel":
+        return MouseWheelEvent(x=float(raw[1]), y=float(raw[2]))
+    if kind == "resize":
+        return WindowResizeEvent(width=raw[1], height=raw[2])
     return None
 
 
-class WgpuWindow(PygameWindow):
-    """A pygame window whose pixels come from a wgpu frame.
+class WgpuWindow:
+    """A winit window whose pixels come from a wgpu frame.
 
     Attributes:
         frame: The frame the renderers draw into. None until `open()`.
@@ -79,138 +96,40 @@ class WgpuWindow(PygameWindow):
 
     def __init__(self) -> None:
         """Initialise with no window and no device."""
-        super().__init__()
         self.frame: GpuFrame | None = None
-        # Window controls, for Studio's own title bar (`IWindowChrome`).
-        self._window_object: Any = None
-        self._is_maximized = False
+        self._window: Any = None
+        self._default_color = Color(0, 0, 0)
+        self._is_open = False
+        self._posted: list[object] = []
+        self._size = (0, 0)
         self._move_target: tuple[int, int] | None = None
+        self._previous_sigterm: Any = None
 
-    def display_flags(self, config: WindowConfig) -> int:
-        """Return the SDL display flags: fullscreen, frame and resizing.
+    def _quit_on_sigterm(self) -> None:
+        """Turn SIGTERM into a `QuitEvent`, so the game shuts down cleanly.
 
-        Decided once, at creation; SDL will not change most of them after.
+        SDL did this for the pygame window: it catches SIGTERM and queues a
+        quit, which that window's event pump delivers. With no SDL window,
+        whoever opens SDL next -- `pygame.mixer`, for the audio -- still
+        caught it, and nothing read SDL's queue, so a SIGTERM was swallowed
+        and only SIGKILL ended the game. Telling SDL to keep out of signals
+        and handling the one that matters here restores what a game had.
 
-        Args:
-            config: The window configuration.
+        Left alone when the game has its own handler, and off the main
+        thread, where Python cannot install one.
         """
-        flags = super().display_flags(config)
-        if getattr(config, "borderless", False):
-            # The OS title bar is removed and the editor draws its own. Only
-            # useful with `resizable`, since a borderless window the user
-            # cannot drag an edge of is a window they cannot size.
-            flags |= pygame.NOFRAME
-        if getattr(config, "resizable", False):
-            # Without this SDL emits no resize event at all. A window manager
-            # may still let the frame be maximised -- WSLg does -- and nothing
-            # in the engine is told, so everything carries on rendering at
-            # the starting resolution into a corner of a larger window.
-            flags |= pygame.RESIZABLE
-        return flags
-
-    # -- IWindowChrome: what Studio's title bar drives --------------------
-
-    def minimize(self) -> None:
-        """Iconify the window."""
-        window = self._native_window()
-        if window is not None:
-            window.minimize()
-
-    def maximize(self) -> None:
-        """Fill the work area."""
-        window = self._native_window()
-        if window is not None:
-            window.maximize()
-            self._is_maximized = True
-
-    def restore(self) -> None:
-        """Return to the size before maximising."""
-        window = self._native_window()
-        if window is not None:
-            window.restore()
-            self._is_maximized = False
-
-    @property
-    def is_maximized(self) -> bool:
-        """Whether the window currently fills the work area.
-
-        SDL exposes no direct query through pygame, so this tracks what
-        was asked for. A user maximising through the window manager's own
-        control is not seen -- a wrong arrow on the restore button, not a
-        wrong window.
-        """
-        return self._is_maximized
-
-    def begin_move(self) -> None:
-        """Read the window's position once, for the moves about to follow.
-
-        Every move after adds to that remembered position rather than
-        reading a fresh one: the read costs something each frame of a drag,
-        and the window manager applies a move when it gets to it, so a read
-        straight after one can return the old position and the delta lands
-        on a stale base.
-        """
-        window = self._native_window()
-        if window is None:
+        os.environ.setdefault("SDL_NO_SIGNAL_HANDLERS", "1")
+        if threading.current_thread() is not threading.main_thread():
             return
-        try:
-            x, y = window.position
-            self._move_target = (int(x), int(y))
-        except Exception as exc:  # pragma: no cover - depends on the WM
-            logger.debug(f"Could not read the window position: {exc}")
-            self._move_target = None
-
-    def move_by(self, dx: int, dy: int) -> None:
-        """Move the window by a screen-space delta.
-
-        Args:
-            dx: Horizontal movement in pixels.
-            dy: Vertical movement in pixels.
-        """
-        window = self._native_window()
-        if window is None:
+        if signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL:
             return
-        try:
-            if self._move_target is None:
-                x, y = window.position
-            else:
-                x, y = self._move_target
-            target = (int(x + dx), int(y + dy))
-            if self._move_target is not None:
-                self._move_target = target
-            window.position = target
-        except Exception as exc:  # pragma: no cover - depends on the WM
-            logger.debug(f"Could not move the window: {exc}")
 
-    def end_move(self) -> None:
-        """Forget the remembered position, so the next drag reads afresh."""
-        self._move_target = None
+        def on_sigterm(_signum: int, _frame: FrameType | None) -> None:
+            self.post_event(QuitEvent())
 
-    def request_close(self) -> None:
-        """Ask the application to shut down, as the OS close button does.
+        self._previous_sigterm = signal.signal(signal.SIGTERM, on_sigterm)
 
-        Posts a quit rather than closing: a borderless window's close button
-        is pressed from inside a frame still being drawn. Through the queue,
-        the next `poll_events` reports it and the application runs the
-        shutdown it runs for the OS's own button.
-        """
-        try:
-            pygame.event.post(pygame.event.Event(pygame.QUIT))
-        except Exception as exc:  # pragma: no cover - a full event queue
-            logger.debug(f"Could not post a quit event: {exc}")
-
-    def _native_window(self) -> Any:
-        """Return pygame's window object, or None where it is unavailable."""
-        if self._window_object is not None:
-            return self._window_object
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", DeprecationWarning)
-                self._window_object = pygame.Window.from_display_module()
-        except Exception as exc:  # pragma: no cover - old pygame, odd driver
-            logger.debug(f"No window object available: {exc}")
-            return None
-        return self._window_object
+    # -- IWindowBackend -----------------------------------------------------
 
     def open(self, config: WindowConfig) -> bool:
         """Create the window, then the device that draws for it.
@@ -219,15 +138,96 @@ class WgpuWindow(PygameWindow):
             config: Window settings to open with.
 
         Returns:
-            True once both exist.
+            True once the device exists. A window that cannot be opened is
+            logged and replaced by an offscreen target, not raised.
         """
-        # SDL is asked for no vsync of its own: it would wait on a buffer
-        # this backend never flips, and on some drivers asking promotes the
-        # window to an OpenGL surface (see `PygameWindow`). wgpu's swapchain
-        # does the waiting.
-        super().open(dataclasses.replace(config, vsync=False))
-        self.frame = GpuFrame(self.width, self.height, native_window(), config.vsync)
+        self._default_color = config.default_color
+        self._quit_on_sigterm()
+        width, height = config.screen_width, config.screen_height
+        handles = None
+        if not wants_offscreen():
+            extension = native.require_extension("The wgpu window")
+            try:
+                self._window = extension.NativeWindow(
+                    config.title,
+                    width,
+                    height,
+                    fullscreen=config.fullscreen,
+                    resizable=getattr(config, "resizable", False),
+                    # Only useful with `resizable`: a borderless window the
+                    # user cannot drag an edge of is one they cannot size.
+                    borderless=getattr(config, "borderless", False),
+                )
+            except RuntimeError as error:
+                logger.warning(f"No window could be opened ({error}); offscreen.")
+            if self._window is not None:
+                # The OS need not grant the size asked for -- fullscreen
+                # takes the monitor's -- so the device is sized by what it got.
+                width, height = self._window.size
+                handles = self._window.native_handles()
+        self._size = (width, height)
+        self.frame = GpuFrame(width, height, handles, config.vsync)
+        self._is_open = True
         return True
+
+    @property
+    def width(self) -> int:
+        """The drawable width in pixels, as the window system granted it."""
+        return self._size[0]
+
+    @property
+    def height(self) -> int:
+        """The drawable height in pixels, as the window system granted it."""
+        return self._size[1]
+
+    @property
+    def has_window(self) -> bool:
+        """Whether a real window is open, rather than an offscreen target."""
+        return self._window is not None
+
+    def set_caption(self, title: str) -> None:
+        """Set the window title."""
+        if self._window is not None:
+            self._window.set_title(title)
+
+    def poll_events(self) -> Iterable[Any]:
+        """Pump the window and return this frame's engine events.
+
+        Posted events (`post_event`) come first, then the window's own.
+        """
+        if not self._is_open:
+            return []
+        events, self._posted = self._posted, []
+        if self._window is not None:
+            for raw in self._window.pump():
+                event = translate(raw)
+                if event is None:
+                    continue
+                if isinstance(event, WindowResizeEvent):
+                    if event.width <= 0 or event.height <= 0:
+                        # Minimised: nothing to size a target to.
+                        continue
+                    self._size = (event.width, event.height)
+                events.append(event)
+        for event in events:
+            if isinstance(event, QuitEvent):
+                self._is_open = False
+        return events
+
+    def post_event(self, event: object) -> None:
+        """Deliver an engine event with the next `poll_events`.
+
+        How a tool drives a game -- `agent_view`'s clicks, a test's keys --
+        through the path real input takes.
+
+        Args:
+            event: An engine event, such as a `KeyDownEvent`.
+        """
+        self._posted.append(event)
+
+    def get_screen(self) -> Any:
+        """Return the frame: what this backend's renderers draw into."""
+        return self.frame
 
     def clear(self, color: Color | None = None) -> None:
         """Start the frame from a solid colour."""
@@ -237,7 +237,7 @@ class WgpuWindow(PygameWindow):
         self.frame.gpu.clear(fill.r, fill.g, fill.b, 255)
 
     def present(self) -> None:
-        """Render the frame and show it."""
+        """Render the frame and show it, if there is a window to show it on."""
         if self.frame is None:
             return
         gpu: Any = self.frame.gpu
@@ -245,20 +245,98 @@ class WgpuWindow(PygameWindow):
         self.frame.after_frame()
         if gpu.has_surface:
             gpu.present()
-        else:
-            self._show(gpu)
 
-    def _show(self, gpu: Any) -> None:
-        """Copy the rendered frame onto the window's surface: the slow path."""
-        if self._screen is None:
-            return
-        image = pygame.image.frombuffer(
-            gpu.read_pixels(), (gpu.width, gpu.height), "RGBA"
-        )
-        self._screen.blit(image, (0, 0))
-        pygame.display.flip()
+    def read_pixels(self) -> tuple[bytes, int, int]:
+        """Return the last rendered frame, UI included, as RGBA top row first.
+
+        Returns:
+            `(pixels, width, height)`.
+
+        Raises:
+            RuntimeError: Before `open()`.
+        """
+        if self.frame is None:
+            raise RuntimeError("The window is not open.")
+        gpu: Any = self.frame.gpu
+        return bytes(gpu.read_pixels()), int(gpu.width), int(gpu.height)
 
     def close(self) -> None:
         """Release the device, then the window."""
         self.frame = None
-        super().close()
+        if self._window is not None:
+            self._window.close()
+            self._window = None
+        if self._previous_sigterm is not None:
+            signal.signal(signal.SIGTERM, self._previous_sigterm)
+            self._previous_sigterm = None
+        self._is_open = False
+
+    # -- IWindowChrome: what Studio's title bar drives ----------------------
+
+    def minimize(self) -> None:
+        """Iconify the window."""
+        if self._window is not None:
+            self._window.minimize()
+
+    def maximize(self) -> None:
+        """Fill the work area."""
+        if self._window is not None:
+            self._window.maximize()
+
+    def restore(self) -> None:
+        """Return to the size before maximising."""
+        if self._window is not None:
+            self._window.restore()
+
+    @property
+    def is_maximized(self) -> bool:
+        """Whether the window fills the work area, as the window system says.
+
+        Asked rather than remembered, so a maximise through the window
+        manager's own control is seen too.
+        """
+        return bool(self._window is not None and self._window.is_maximized)
+
+    def begin_move(self) -> None:
+        """Start a drag of the window from the title bar.
+
+        Where the window system places windows itself (Wayland, which will
+        not tell a client where its window is), the drag is handed to it
+        and the `move_by` calls that follow do nothing. Elsewhere the
+        position is read once and every move adds to it: a read straight
+        after a move can return the old position while the window manager
+        catches up, and a delta landing on a stale base jitters.
+        """
+        self._move_target = None
+        if self._window is None:
+            return
+        position = self._window.position
+        if position is None:
+            self._window.drag()
+            return
+        self._move_target = (int(position[0]), int(position[1]))
+
+    def move_by(self, dx: int, dy: int) -> None:
+        """Move the window by a screen-space delta.
+
+        Args:
+            dx: Horizontal movement in pixels.
+            dy: Vertical movement in pixels.
+        """
+        if self._window is None or self._move_target is None:
+            return
+        x, y = self._move_target
+        self._move_target = (x + dx, y + dy)
+        self._window.set_position(*self._move_target)
+
+    def end_move(self) -> None:
+        """Forget the remembered position, so the next drag reads afresh."""
+        self._move_target = None
+
+    def request_close(self) -> None:
+        """Ask the application to shut down, as the OS close button does.
+
+        Queued rather than closing: a borderless window's close button is
+        pressed from inside a frame still being drawn.
+        """
+        self.post_event(QuitEvent())

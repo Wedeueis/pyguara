@@ -22,6 +22,7 @@ class PygameWindow:
         self._screen: Any = None
         self._default_color = Color(0, 0, 0)
         self._is_open = False
+        self._posted: list[object] = []
 
     def display_flags(self, config: WindowConfig) -> int:
         """Return the SDL display flags this window opens with.
@@ -142,7 +143,16 @@ class PygameWindow:
             if event.type == pygame.QUIT:
                 self._is_open = False
 
-        return translate_events(raw_events)
+        posted, self._posted = self._posted, []
+        return posted + translate_events(raw_events)
+
+    def post_event(self, event: object) -> None:
+        """Deliver an engine event with the next `poll_events`.
+
+        Args:
+            event: An engine event, such as a `KeyDownEvent`.
+        """
+        self._posted.append(event)
 
     def get_screen(self) -> Any:
         """Return the native OS window."""

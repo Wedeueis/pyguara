@@ -306,8 +306,12 @@ fn raw_handles(
                 window, "surface",
             )?)),
         )),
+        "appkit" => Ok((
+            rwh::RawDisplayHandle::AppKit(rwh::AppKitDisplayHandle::new()),
+            rwh::RawWindowHandle::AppKit(rwh::AppKitWindowHandle::new(pointer(window, "view")?)),
+        )),
         other => Err(PyValueError::new_err(format!(
-            "no window surface for {other:?}; expected win32, x11 or wayland"
+            "no window surface for {other:?}; expected win32, x11, wayland or appkit"
         ))),
     }
 }

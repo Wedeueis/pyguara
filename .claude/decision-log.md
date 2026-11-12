@@ -300,3 +300,39 @@
 - **Alternatives:** keep the flag as a no-op for compatibility; or remove it.
 - **Chose:** remove. wgpu renders offscreen under `dummy`, the only caller was a test scenario, and a flag that does nothing invites a wrong belief about what it buys.
 - **Tags:** studio, api
+
+## Workstream 3: winit + gilrs for the window and input (user's call)
+- **Context:** Taking the wgpu backend's window and input off SDL-through-pygame.
+- **Alternatives:** winit + gilrs in the existing crate; SDL3 via the Rust crate (needs a C toolchain and CMake in every wheel build); SDL3 via Python bindings.
+- **Chose:** winit + gilrs, on the user's call. Pure Rust, hands wgpu its window directly, and the event loop is pumped once a frame from Python.
+- **Tags:** window, input, native
+
+## Workstream 3 also takes images and fonts off pygame (user's call)
+- **Context:** Deciding how much of pygame leaves the wgpu path.
+- **Alternatives:** window, input and clock only (textures stay `pygame.Surface`); or images and fonts as well.
+- **Chose:** images and fonts as well, on the user's call. Done when a wgpu game runs without pygame ever being imported. The software renderer keeps pygame.
+- **Tags:** resources, text, native
+
+## Workstream 4 owns the audio device through cpal (user's call)
+- **Context:** What making native audio the default includes.
+- **Alternatives:** default to native with output still on `pygame.mixer`; or a Rust mixer writing to the device through cpal.
+- **Chose:** cpal, on the user's call. On Linux the wheel now links ALSA, which `audio.rs` used to avoid on purpose.
+- **Tags:** audio, native, packaging
+
+## The wgpu window goes offscreen under SDL's `dummy` driver, or `PYGUARA_WINDOW=offscreen`
+- **Context:** Without SDL, nothing makes the wgpu window headless; every test, `agent_view` and the Studio harness ask for it through `SDL_VIDEODRIVER=dummy`.
+- **Alternatives:** only a new engine variable (touch every caller); only fall back when no display can be opened (tests would open real windows under WSLg); honour both the SDL variable and a new one.
+- **Chose:** both. The SDL variable keeps every existing caller headless unchanged, and `PYGUARA_WINDOW=offscreen` is the name that does not mention a library the path no longer uses. A failure to open a window still falls back to offscreen, with a warning.
+- **Tags:** window, testing, tools
+
+## Synthetic input goes through `post_event` on the window backend, as engine events
+- **Context:** `agent_view` injected keys and clicks by posting pygame events into SDL's queue, which a winit window never reads.
+- **Alternatives:** a winit-side injection of raw tuples; dispatching straight to `InputManager` (skips the editor's routing and replay); `post_event(engine_event)` on both window backends, returned by the next `poll_events`.
+- **Chose:** `post_event`. An injected event takes the same path as a real one, on either backend, and the tool stops needing SDL constants for it.
+- **Tags:** window, input, tools
+
+## SIGTERM becomes a QuitEvent on the wgpu window
+- **Context:** Off the SDL window, a windowed game ignored SIGTERM: `pygame.mixer` still opened SDL, SDL caught the signal and queued a quit nobody read.
+- **Alternatives:** only set `SDL_NO_SIGNAL_HANDLERS` (SIGTERM kills outright, no shutdown, no save flush); a Python handler posting `QuitEvent`, as SDL effectively did.
+- **Chose:** both: the hint keeps SDL out, and the handler keeps the clean shutdown games had. Installed only over `SIG_DFL` and on the main thread, restored on close.
+- **Tags:** window, lifecycle

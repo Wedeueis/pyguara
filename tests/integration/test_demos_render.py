@@ -28,7 +28,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.agent_view import DEMOS, is_blank  # noqa: E402
+from tools.agent_view import DEMOS, capture_frame, is_blank  # noqa: E402
 
 # boot_process only opens a window and draws nothing; that is its whole point
 # as tutorial module 1, so a flat frame there is correct rather than a defect.
@@ -51,6 +51,7 @@ def render_demo(demo: str):
 
     from pyguara.application.application import Application
     from pyguara.events.dispatcher import EventDispatcher
+    from pyguara.graphics.window import Window
 
     bootstrap_mod, scenes_mod, scene_name = DEMOS[demo]
     configure = importlib.import_module(bootstrap_mod).configure_game_container
@@ -58,6 +59,7 @@ def render_demo(demo: str):
 
     container = configure()
     app = container.get(Application)
+    window = container.get(Window)
 
     tick = 0
     captured: list[pygame.Surface] = []
@@ -68,7 +70,7 @@ def render_demo(demo: str):
         original_render()
         tick += 1
         if tick >= FRAMES:
-            surface = pygame.display.get_surface()
+            surface = capture_frame(window)
             if surface is not None:
                 # Copy: the live surface keeps being drawn over after this.
                 captured.append(surface.copy())

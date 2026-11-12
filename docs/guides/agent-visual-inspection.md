@@ -12,16 +12,18 @@ uv run python tools/agent_view.py guara_falcao --frames 120 --shot 1 --shot 119
 ```
 
 It boots a demo through its real bootstrap, advances it a fixed number of
-frames, saves PNGs, and exits. Headless by default (SDL dummy driver), so it
-needs no display and behaves the same on CI.
+frames, saves PNGs, and exits. Headless by default (SDL's `dummy` driver for
+the pygame backend; the wgpu backend opens no window under it and renders
+offscreen), so it needs no display and behaves the same on CI.
 
 Frames land in `.agent-view/` (gitignored). Open them with the `Read` tool.
 
 ### Driving it
 
-Input goes through the real path — `pygame.event.post()`, drained by the
-window backend's `poll_events()`, dispatched by `InputManager` — so it
-exercises the same code a keypress would.
+Input goes through the real path — engine events handed to
+`Window.post_event()`, returned by the window backend's next `poll_events()`,
+dispatched by `InputManager` — so it exercises the same code a keypress would,
+on either backend.
 
 ```bash
 # press a key on frame 30
