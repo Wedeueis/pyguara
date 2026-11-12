@@ -61,6 +61,7 @@ use pyo3::prelude::*;
 mod audio;
 mod flocking;
 mod flowfield;
+mod gamepad;
 mod gpu;
 mod grid;
 mod imaging;
@@ -94,6 +95,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<text::NativeFont>()?;
     module.add_class::<mixer::NativeMixer>()?;
     module.add_class::<mixer::MixerClip>()?;
+    module.add_class::<gamepad::NativeGamepads>()?;
     module.add_class::<window::NativeWindow>()?;
     module.add_class::<window::NativeClipboard>()?;
     module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;

@@ -409,11 +409,19 @@ def _setup_container(
         container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
 
     # 5. Core Subsystems
-    # Gamepads. SDL's joystick subsystem through pygame on every backend
-    # for now: the wgpu backend's own (gilrs) is increment 3b.
-    from pyguara.input.backends.pygame_backend import PygameInputBackend
+    # Gamepads: gilrs on the wgpu backend, SDL's joysticks through pygame
+    # on the software one. The headless backend keeps pygame's, which has
+    # no display to need.
+    input_backend: IInputBackend
+    if not headless and disp_cfg.backend == RenderingBackend.WGPU:
+        from pyguara.input.backends.native_backend import NativeInputBackend
 
-    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
+        input_backend = NativeInputBackend()
+    else:
+        from pyguara.input.backends.pygame_backend import PygameInputBackend
+
+        input_backend = PygameInputBackend()
+    container.register_instance(IInputBackend, input_backend)  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)

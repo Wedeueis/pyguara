@@ -408,3 +408,9 @@
 - **Alternatives:** `repair` (bundles libasound, which then cannot load the host's ALSA plugins, so no sound through PulseAudio/PipeWire); a dlopen-based ALSA (not available in cpal); `warn`, leaving them as system dependencies every desktop Linux has.
 - **Chose:** `warn`, as other cpal-based wheels do; aarch64 moves to a native ARM runner because the cross image has no target sysroot for the headers. Unverified until CI runs it.
 - **Tags:** packaging, audio, ci
+
+## Gamepad buttons come from gilrs's standard layout, not raw indices
+- **Context:** pygame handed `GamepadManager` a joystick's raw button indices, which matched `GamepadButton` only on pads that report in that order.
+- **Alternatives:** expose gilrs's raw codes (same problem); map gilrs's standard buttons (SDL's controller database) onto the engine's numbering.
+- **Chose:** the standard layout. `GamepadButton.A` is the south button on every pad gilrs knows; sticks are flipped to the engine's y-down.
+- **Tags:** input, gamepads

@@ -13,6 +13,8 @@ _WHERE = {
     "PygameInputBackend": "pyguara.input.backends.pygame_backend",
     "PygameJoystick": "pyguara.input.backends.pygame_backend",
     "NativeClipboard": "pyguara.input.backends.native_backend",
+    "NativeInputBackend": "pyguara.input.backends.native_backend",
+    "NativeJoystick": "pyguara.input.backends.native_backend",
 }
 
 __all__ = sorted(_WHERE)

@@ -64,6 +64,11 @@ fontdue = "0.9.5"
 # its offline render; the wheel is always built with it. See
 # `rust/src/mixer.rs`.
 cpal = { version = "0.18", optional = true }
+# Gamepads for the wgpu backend, in place of SDL's joysticks through pygame,
+# with SDL's controller database for the standard layout. Optional only so a
+# Linux machine without udev's headers can still build; the wheel is always
+# built with it. See `rust/src/gamepad.rs`.
+gilrs = { version = "0.11", optional = true }
 
 [profile.release]
 lto = "fat"
@@ -71,7 +76,9 @@ codegen-units = 1
 opt-level = 3
 
 [features]
-default = ["audio-output"]
+default = ["audio-output", "gamepads"]
 # The mixer writes to the sound card. Off, it plays to a silent real-time
 # clock instead, and says so when it opens.
 audio-output = ["dep:cpal"]
+# Gamepads are read. Off, none is ever connected.
+gamepads = ["dep:gilrs"]
