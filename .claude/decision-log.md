@@ -384,3 +384,21 @@
 - **Alternatives:** wait for 3b/4b before testing; test the real configuration only (it cannot pass yet); test with stand-ins for just those two, plus the real one as a strict xfail.
 - **Chose:** the stand-ins plus a strict xfail. The first guards everything else from regressing today; the second fails the suite as soon as it passes, so the marker cannot outlive its reason.
 - **Tags:** testing, packaging
+
+## cpal behind a default-on `audio-output` feature
+- **Context:** The mixer is pure Rust; only the device links ALSA on Linux, and this machine has no ALSA headers.
+- **Alternatives:** make cpal unconditional (no Linux build without headers, so nothing here builds); split the mixer into its own crate; an optional dependency behind a default feature.
+- **Chose:** the feature. Every wheel has it; a headerless build gets a mixer that runs silent and says so in `output` and the boot log, which is also what a machine with no sound card gets.
+- **Tags:** audio, packaging, native
+
+## The mixer clamps the sum, pygame-style, and the policy stays in Python
+- **Context:** Rebuilding `NativeAudioSystem` without `pygame.mixer`.
+- **Alternatives:** move priorities, buses and spatial maths into Rust; keep them in Python over a voice API.
+- **Chose:** Python. It is `PygameAudioSystem`'s logic, so a game hears the same mix on either backend, and none of it is per-sample. The mixer only knows voices, two groups and gains, and hard-clips the sum as SDL's mixer does.
+- **Tags:** audio, architecture
+
+## Bus volumes now reach sounds already playing, on the native backend
+- **Context:** pygame fixed a channel's loudness when it started; the native backend can recompute gains.
+- **Alternatives:** copy pygame (a slider moves only new sounds); recompute every playing voice on a bus change.
+- **Chose:** recompute. A looping ambience that ignores the volume slider is a bug players report; the pygame backend keeps its behaviour.
+- **Tags:** audio, behaviour

@@ -444,8 +444,11 @@ def _setup_container(
         from pyguara.audio.backends.native.loaders import NativeSoundLoader
         from pyguara.audio.backends.native.native_audio import NativeAudioSystem
 
-        audio_system = NativeAudioSystem()
-        sound_loader = NativeSoundLoader()
+        native_audio_system = NativeAudioSystem()
+        audio_system = native_audio_system
+        # Clips are converted to the rate this mixer runs at, which on a
+        # device is the device's own.
+        sound_loader = NativeSoundLoader(native_audio_system.mixer)
     else:
         from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
         from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem

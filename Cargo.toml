@@ -59,8 +59,19 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 # Rasterises text for the wgpu backend, in place of `pygame.font`. Pure Rust;
 # the default faces are embedded from `pyguara/graphics/fonts/`.
 fontdue = "0.9.5"
+# The native audio backend's output device. Optional only so a machine
+# without ALSA's headers (Linux) can still build and test the mixer through
+# its offline render; the wheel is always built with it. See
+# `rust/src/mixer.rs`.
+cpal = { version = "0.18", optional = true }
 
 [profile.release]
 lto = "fat"
 codegen-units = 1
 opt-level = 3
+
+[features]
+default = ["audio-output"]
+# The mixer writes to the sound card. Off, it plays to a silent real-time
+# clock instead, and says so when it opens.
+audio-output = ["dep:cpal"]

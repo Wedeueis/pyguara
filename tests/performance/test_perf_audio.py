@@ -12,7 +12,6 @@ import wave
 from collections.abc import Iterator
 from pathlib import Path
 
-import pygame
 import pytest
 
 from pyguara.audio.backends.native.loaders import NativeSoundLoader
@@ -24,9 +23,7 @@ pytest.importorskip("pyguara.pyguara_core_rs")
 
 @pytest.fixture
 def system() -> Iterator[NativeAudioSystem]:
-    if pygame.mixer.get_init() is not None:
-        pygame.mixer.quit()
-    audio = NativeAudioSystem()
+    audio = NativeAudioSystem(output="offline")
     yield audio
     audio.shutdown()
 
@@ -45,33 +42,39 @@ def _half_second_clip(path: Path) -> Path:
 
 
 @pytest.mark.performance
-def test_a_first_play_at_a_new_pitch_fits_in_a_frame(
+def test_a_pitched_play_costs_no_render(
     system: NativeAudioSystem, tmp_path: Path
 ) -> None:
-    """Measured at 0.40 ms; the bound is a quarter of a frame at 60 Hz."""
-    clip = NativeSoundLoader().load(str(_half_second_clip(tmp_path / "t.wav")))
+    """Pitch is a step size in the mixer: starting a voice copies nothing.
 
-    def first_play() -> None:
-        system._cache.clear()
-        system._cached_bytes = 0
-        system._pitched(clip, 1.2)
+    The old backend rendered a buffer per new pitch, 0.40 ms. Bounded at
+    0.2 ms, where a render of half a second would be well over.
+    """
+    clip = NativeSoundLoader(system.mixer).load(
+        str(_half_second_clip(tmp_path / "t.wav"))
+    )
 
-    assert measure(first_play) < 0.004
+    def play_and_stop() -> None:
+        handle = system.play_sfx(clip, pitch=1.2345)
+        assert handle is not None
+        system.stop_sfx(handle)
+
+    assert measure(play_and_stop) < 0.0002
 
 
 @pytest.mark.performance
-def test_a_cached_pitch_is_two_orders_cheaper(
+def test_mixing_a_frame_of_32_voices_fits_easily(
     system: NativeAudioSystem, tmp_path: Path
 ) -> None:
-    """A ratio, so it holds on any machine: this is what the 1% step buys."""
-    clip = NativeSoundLoader().load(str(_half_second_clip(tmp_path / "t.wav")))
+    """What the audio thread does per 60 Hz frame, at the voice limit.
 
-    def first_play() -> None:
-        system._cache.clear()
-        system._cached_bytes = 0
-        system._pitched(clip, 1.2)
+    A sixtieth of a second at 44.1 kHz is 735 frames; bounded at 1 ms, a
+    sixteenth of the frame, though the audio thread is not the game's.
+    """
+    clip = NativeSoundLoader(system.mixer).load(
+        str(_half_second_clip(tmp_path / "t.wav"))
+    )
+    for index in range(32):
+        system.play_sfx(clip, loops=-1, pitch=0.5 + index / 32)
 
-    miss = measure(first_play)
-    hit = measure(lambda: system._pitched(clip, 1.2))
-
-    assert hit < miss / 100
+    assert measure(lambda: system.mixer.render(735)) < 0.001

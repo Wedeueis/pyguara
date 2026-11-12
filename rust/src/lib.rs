@@ -32,9 +32,11 @@
 //! store that is *worse* than Python at anything: an alternating
 //! insert/query loop rebuilds the grid per query, 0.13x over 4000 keys.
 //!
-//! **An audio backend's decoder and resampler** -- `audio`. The one thing
-//! here that is not an accelerator: nothing in Python does what it does, so
-//! it is chosen by `AudioConfig.backend` rather than by the switch below.
+//! **An audio backend** -- `audio` decodes and resamples, `mixer` mixes and
+//! owns the output device. Not an accelerator: nothing in Python does what
+//! it does, so it is chosen by `AudioConfig.backend` rather than by the
+//! switch below. `window`, `imaging` and `text` are the wgpu backend's
+//! platform layer -- window and input, images, fonts -- and the same kind.
 //! `net`, the network transport, is the same kind of thing.
 //!
 //! **A columnar world** -- `world`. The inverse of everything above: state
@@ -62,6 +64,7 @@ mod flowfield;
 mod gpu;
 mod grid;
 mod imaging;
+mod mixer;
 mod net;
 mod particles;
 mod solids;
@@ -89,6 +92,8 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<world::RowView>()?;
     module.add_class::<world::FieldAccessor>()?;
     module.add_class::<text::NativeFont>()?;
+    module.add_class::<mixer::NativeMixer>()?;
+    module.add_class::<mixer::MixerClip>()?;
     module.add_class::<window::NativeWindow>()?;
     module.add_class::<window::NativeClipboard>()?;
     module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;

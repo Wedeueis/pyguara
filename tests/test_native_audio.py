@@ -2,9 +2,10 @@
 
 There is no parity suite here because there is nothing to be at parity with:
 `pygame.mixer` cannot pitch-shift. So the resampler has a bit-exact tier on
-input small enough to work out by hand, and real clips get property
-assertions, since bit-exact goldens on decoded audio would churn on every
-`symphonia` bump. See the decision record on #72.
+input small enough to work out by hand, and the mixer is driven offline --
+nothing advances until `render` -- and its output measured: a frequency, a
+length, a gain, where a lap ends. Bit-exact goldens on decoded audio would
+churn on every `symphonia` bump. See the decision record on #72.
 """
 
 from __future__ import annotations
@@ -28,10 +29,14 @@ from pyguara.audio.backends.native.native_audio import (
     NativeAudioSystem,
 )
 from pyguara.audio.backends.native.types import NativeAudioClip
-from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
 from pyguara.audio.exceptions import UnsupportedAudioCapability
-from pyguara.audio.types import AudioBusType, AudioCapability, LowPassFilter
-from pyguara.config.manager import ConfigManager
+from pyguara.audio.types import (
+    AudioBusType,
+    AudioCapability,
+    AudioPriority,
+    LowPassFilter,
+)
+from pyguara.common.types import Vector2
 from pyguara.config.types import AudioBackend
 
 module = native.native_module()
@@ -71,10 +76,6 @@ def _write_wav(
 def _dominant_hz(left: np.ndarray, rate: int = RATE) -> float:
     spectrum = np.abs(np.fft.rfft(left * np.hanning(len(left))))
     return float(np.fft.rfftfreq(len(left), 1 / rate)[int(np.argmax(spectrum))])
-
-
-def _left(sound: pygame.mixer.Sound) -> np.ndarray:
-    return np.frombuffer(sound.get_raw(), dtype="<i2")[::2].astype(float)
 
 
 class TestResampleIsExact:
@@ -186,45 +187,62 @@ class TestDecode:
 
 @pytest.fixture
 def system() -> Iterator[NativeAudioSystem]:
-    if pygame.mixer.get_init() is not None:
-        pygame.mixer.quit()
-    audio = NativeAudioSystem()
+    audio = NativeAudioSystem(frequency=RATE, output="offline")
     yield audio
     audio.shutdown()
 
 
-@pytest.fixture
-def clip(system: NativeAudioSystem, tmp_path: Path) -> NativeAudioClip:
-    loaded = NativeSoundLoader().load(str(_write_wav(tmp_path / "tone.wav")))
+def _load(system: NativeAudioSystem, path: Path) -> NativeAudioClip:
+    loaded = NativeSoundLoader(system.mixer).load(str(path))
     assert isinstance(loaded, NativeAudioClip)
     return loaded
 
 
+@pytest.fixture
+def clip(system: NativeAudioSystem, tmp_path: Path) -> NativeAudioClip:
+    return _load(system, _write_wav(tmp_path / "tone.wav"))
+
+
+def _render(system: NativeAudioSystem, frames: int) -> np.ndarray:
+    """The next `frames` frames of the mix, as an `(n, 2)` float array."""
+    raw = system.mixer.render(frames)
+    return np.frombuffer(raw, dtype="<f4").reshape(-1, 2).astype(float)
+
+
+def _length(system: NativeAudioSystem, handle: object, limit: int = RATE * 5) -> int:
+    """How many frames a sound plays for, rendering until it ends."""
+    played = 0
+    while system.is_sound_active(handle) and played < limit:  # type: ignore[arg-type]
+        _render(system, 64)
+        played += 64
+    return played
+
+
 class TestTheLoader:
-    def test_a_clip_is_rendered_to_the_mixer_format(
+    def test_a_clip_is_converted_to_the_mixer_rate(
         self, system: NativeAudioSystem, tmp_path: Path
     ) -> None:
         path = _write_wav(tmp_path / "low.wav", seconds=0.5, rate=22050, channels=1)
 
-        clip = NativeSoundLoader().load(str(path))
+        clip = _load(system, path)
 
-        # Stereo at 44.1 kHz, whatever the file was: one sample per side, and
-        # the length holds, so this is a conversion and not a reinterpretation.
+        # The length holds, so this is a conversion and not a reinterpretation.
         assert clip.duration == pytest.approx(0.5, abs=0.001)
-        assert _dominant_hz(_left(clip.native_handle)) == pytest.approx(441, abs=4)
+        assert clip.frames == pytest.approx(RATE / 2, abs=2)
+        system.play_sfx(clip)
+        assert _dominant_hz(_render(system, 8192)[:, 0]) == pytest.approx(441, abs=6)
 
     def test_it_declares_what_the_pygame_loader_does_and_flac(self) -> None:
-        native_types = set(NativeSoundLoader().supported_extensions)
+        extensions = set(NativeSoundLoader(None).supported_extensions)
+        assert {".wav", ".ogg", ".mp3", ".flac"} <= extensions
 
-        assert set(PygameSoundLoader().supported_extensions) <= native_types
-        assert ".flac" in native_types
-
-    def test_it_refuses_without_a_mixer(self, tmp_path: Path) -> None:
-        if pygame.mixer.get_init() is not None:
-            pygame.mixer.quit()
-
-        with pytest.raises(RuntimeError, match="mixer"):
-            NativeSoundLoader().load(str(_write_wav(tmp_path / "x.wav")))
+    def test_a_file_that_is_not_audio_says_which(
+        self, system: NativeAudioSystem, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "noise.wav"
+        path.write_bytes(b"not audio")
+        with pytest.raises(OSError, match="noise.wav"):
+            _load(system, path)
 
 
 class TestTheProtocol:
@@ -240,227 +258,260 @@ class TestTheProtocol:
         with pytest.raises(UnsupportedAudioCapability):
             system.set_bus_effects(AudioBusType.SFX, [LowPassFilter(cutoff_hz=1000.0)])
 
+    def test_it_says_where_the_mix_goes(self, system: NativeAudioSystem) -> None:
+        assert system.output == "offline"
+        assert system.rate == RATE
+
+
+class TestPlaying:
+    def test_a_sound_plays_its_samples_and_ends(
+        self, system: NativeAudioSystem, clip: NativeAudioClip
+    ) -> None:
+        handle = system.play_sfx(clip)
+
+        assert handle is not None
+        assert system.is_sound_active(handle)
+        assert _length(system, handle) == pytest.approx(clip.frames, abs=64)
+        assert not system.is_sound_active(handle)
+
+    def test_volume_and_pan_reach_the_two_sides(
+        self, system: NativeAudioSystem, clip: NativeAudioClip
+    ) -> None:
+        system.play_sfx_at_position(clip, Vector2(200, 0), Vector2(0, 0), volume=0.5)
+
+        mix = _render(system, 4096)
+        left, right = np.abs(mix[:, 0]).max(), np.abs(mix[:, 1]).max()
+        # The sound is to the right, so the left is turned down.
+        assert 0 < left < right <= 0.5 * 12000 / 32768 + 1e-3
+
+    def test_stopping_silences_at_once(
+        self, system: NativeAudioSystem, clip: NativeAudioClip
+    ) -> None:
+        handle = system.play_sfx(clip)
+        _render(system, 100)
+        assert handle is not None
+        system.stop_sfx(handle)
+
+        assert not system.is_sound_active(handle)
+        assert np.abs(_render(system, 256)).max() == 0
+
+    def test_pausing_effects_holds_them_where_they_are(
+        self, system: NativeAudioSystem, clip: NativeAudioClip
+    ) -> None:
+        handle = system.play_sfx(clip)
+        system.pause_sfx()
+
+        assert np.abs(_render(system, RATE)).max() == 0
+        assert system.is_sound_active(handle)  # type: ignore[arg-type]
+        system.resume_sfx()
+        assert _length(system, handle) == pytest.approx(clip.frames, abs=64)
+
+    def test_a_bus_volume_reaches_a_sound_already_playing(
+        self, system: NativeAudioSystem, clip: NativeAudioClip
+    ) -> None:
+        """pygame fixed a channel's loudness at its start; this does not."""
+        system.play_sfx(clip, loops=-1)
+        before = np.abs(_render(system, 4096)).max()
+
+        system.set_sfx_volume(0.25)
+
+        assert np.abs(_render(system, 4096)).max() == pytest.approx(
+            before / 4, rel=0.02
+        )
+
+    def test_a_full_mixer_steals_from_a_lower_priority(
+        self, clip: NativeAudioClip
+    ) -> None:
+        audio = NativeAudioSystem(frequency=RATE, num_channels=2, output="offline")
+        try:
+            loaded = _load(audio, Path(clip.path))
+            low = audio.play_sfx(loaded, priority=AudioPriority.LOW)
+            normal = audio.play_sfx(loaded)
+            high = audio.play_sfx(loaded, priority=AudioPriority.HIGH)
+            refused = audio.play_sfx(loaded, priority=AudioPriority.LOW)
+
+            assert high is not None and refused is None
+            assert not audio.is_sound_active(low)  # type: ignore[arg-type]
+            assert audio.is_sound_active(normal)  # type: ignore[arg-type]
+        finally:
+            audio.shutdown()
+
 
 class TestPitch:
     def test_an_octave_up_doubles_the_frequency_and_halves_the_length(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
-        pitched = system._pitched(clip, 2.0)
+        handle = system.play_sfx(clip, pitch=2.0)
+        assert _dominant_hz(_render(system, 8192)[:, 0]) == pytest.approx(882, abs=8)
 
-        assert _dominant_hz(_left(pitched)) == pytest.approx(882, abs=6)
-        assert pitched.get_length() == pytest.approx(clip.duration / 2, abs=0.001)
+        played = 8192 + _length(system, handle)
+        assert played == pytest.approx(clip.frames / 2, abs=64)
+
+    def test_pitch_is_continuous(
+        self, system: NativeAudioSystem, clip: NativeAudioClip
+    ) -> None:
+        """No longer quantised to 1%: 1.003 is heard as 1.003."""
+        handle = system.play_sfx(clip, pitch=1.03)
+        assert _length(system, handle) == pytest.approx(clip.frames / 1.03, abs=64)
 
     def test_it_does_not_clip_or_change_loudness(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
-        before = _left(clip.native_handle)
-        after = _left(system._pitched(clip, 1.5))
+        plain_handle = system.play_sfx(clip)
+        plain = _render(system, 8192)[:, 0]
+        system.stop_sfx(plain_handle)  # type: ignore[arg-type]
+        system.play_sfx(clip, pitch=1.5)
+        pitched = _render(system, 8192)[:, 0]
 
-        assert np.max(np.abs(after)) <= 12001
-        assert np.sqrt(np.mean(after**2)) == pytest.approx(
-            np.sqrt(np.mean(before**2)), rel=0.02
+        assert np.abs(pitched).max() <= 12001 / 32768
+        assert np.sqrt(np.mean(pitched**2)) == pytest.approx(
+            np.sqrt(np.mean(plain**2)), rel=0.02
         )
-
-    def test_it_plays_and_is_tracked(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
-    ) -> None:
-        handle = system.play_sfx(clip, pitch=1.2)
-
-        assert handle is not None
-        assert system.is_sound_active(handle)
-        system.stop_sfx(handle)
-        assert not system.is_sound_active(handle)
 
     def test_pitch_also_reaches_a_spatial_sound(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
-        from pyguara.common.types import Vector2
+        system.play_sfx_at_position(clip, Vector2(10, 0), Vector2(0, 0), pitch=2.0)
+        assert _dominant_hz(_render(system, 8192)[:, 1]) == pytest.approx(882, abs=8)
 
-        handle = system.play_sfx_at_position(
-            clip, Vector2(10, 0), Vector2(0, 0), pitch=2.0
-        )
-
-        assert handle is not None
-        channel = pygame.mixer.Channel(system._playing_sounds[handle].channel_id)
-        assert channel.get_sound() is system._pitched(clip, 2.0)
-
-    def test_unity_plays_the_clip_itself_with_no_render(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
-    ) -> None:
-        handle = system.play_sfx(clip, pitch=1.001)
-
-        assert handle is not None
-        channel = pygame.mixer.Channel(system._playing_sounds[handle].channel_id)
-        assert channel.get_sound() is clip.native_handle
-
-    def test_nearby_pitches_share_a_buffer(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
-    ) -> None:
-        assert system._pitched(clip, 1.201) is system._pitched(clip, 1.199)
-        assert system._pitched(clip, 1.21) is not system._pitched(clip, 1.2)
-
-    @pytest.mark.parametrize("pitch", [MIN_PITCH - 0.01, MAX_PITCH + 0.01, 0.0, -1.0])
+    @pytest.mark.parametrize("pitch", [MIN_PITCH / 2, MAX_PITCH * 2])
     def test_outside_the_range_is_refused(
         self, system: NativeAudioSystem, clip: NativeAudioClip, pitch: float
     ) -> None:
         with pytest.raises(ValueError, match="pitch"):
             system.play_sfx(clip, pitch=pitch)
 
-    def test_the_cache_stays_inside_its_budget(self, tmp_path: Path) -> None:
-        if pygame.mixer.get_init() is not None:
-            pygame.mixer.quit()
-        budget = 200_000
-        audio = NativeAudioSystem(cache_bytes=budget)
-        try:
-            clip = NativeSoundLoader().load(str(_write_wav(tmp_path / "t.wav")))
-            for step in range(40):
-                audio.play_sfx(clip, pitch=1.0 + (step + 1) * 0.01)
-
-            assert audio._cached_bytes <= budget
-            assert len(audio._cache) >= 1
-        finally:
-            audio.shutdown()
-
     def test_a_clip_from_another_backend_is_refused_by_name(
-        self, system: NativeAudioSystem, tmp_path: Path
+        self, system: NativeAudioSystem
     ) -> None:
-        foreign = PygameSoundLoader().load(str(_write_wav(tmp_path / "p.wav")))
+        class Foreign(NativeAudioClip.__mro__[1]):  # type: ignore[misc,valid-type]
+            duration = 1.0
+            native_handle = None
 
         with pytest.raises(TypeError, match="NativeAudioClip"):
-            system.play_sfx(foreign, pitch=1.5)
+            system.play_sfx(Foreign("elsewhere.wav"))
 
 
 class TestLoopPoints:
-    def test_the_intro_stops_at_the_loop_end_and_the_lap_is_the_region(
+    def test_the_intro_then_laps_of_the_region(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
-        buffers = system._loop_buffers(clip, 1.0, 0.1, 0.3)
+        handle = system.play_sfx(clip, loops=3, loop_start=0.1, loop_end=0.3)
 
-        assert buffers.intro.get_length() == pytest.approx(0.3, abs=0.001)
-        assert buffers.lap.get_length() == pytest.approx(0.2, abs=0.001)
+        lap = round(0.2 * RATE)
+        assert _length(system, handle) == pytest.approx(
+            round(0.3 * RATE) + 3 * lap, abs=64
+        )
 
-    def test_a_segment_is_whole_laps_of_at_least_a_second(
+    def test_the_region_is_in_the_clips_seconds_at_any_pitch(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
-        buffers = system._loop_buffers(clip, 1.0, 0.1, 0.3)
+        handle = system.play_sfx(clip, pitch=2.0, loops=1, loop_start=0.1, loop_end=0.3)
 
-        lap = len(buffers.lap.get_raw())
-        assert len(buffers.segment.get_raw()) == lap * buffers.laps_per_segment
-        assert buffers.segment.get_length() >= 1.0
+        # Intro to 0.3 s and one lap of 0.2 s, each half as long at pitch 2.
+        assert _length(system, handle) == pytest.approx(0.25 * RATE, abs=64)
 
-    def test_seconds_name_positions_in_the_clip_at_any_pitch(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
-    ) -> None:
-        buffers = system._loop_buffers(clip, 2.0, 0.1, 0.3)
+    def test_the_seam_is_sample_exact(self, system: NativeAudioSystem) -> None:
+        """A lap ends on the frame before the start, with no gap or repeat."""
+        ramp = struct.pack("<8h", *(1000 * i for i in range(8)))
+        samples = system.mixer.clip(ramp, RATE, 1)
+        system.mixer.play(samples, 1.0, 1.0, loops=2, loop_start=2.0, loop_end=6.0)
 
-        assert buffers.lap.get_length() == pytest.approx(0.1, abs=0.001)
+        out = np.frombuffer(system.mixer.render(16), dtype="<f4")[::2]
+        heard = [round(float(v) * 32768) for v in out]
+        assert heard == [0, 1000, 2000, 3000, 4000, 5000, 2000, 3000, 4000, 5000,
+                         2000, 3000, 4000, 5000, 0, 0]  # fmt: skip
 
-    def test_a_queued_segment_follows_the_intro(
+    def test_forever_keeps_going(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
         handle = system.play_sfx(clip, loops=-1, loop_start=0.1, loop_end=0.3)
-
-        assert handle is not None
-        channel = pygame.mixer.Channel(system._playing_sounds[handle].channel_id)
-        assert channel.get_queue() is not None
-        assert system.is_sound_active(handle)
+        _render(system, RATE * 3)
+        assert system.is_sound_active(handle)  # type: ignore[arg-type]
 
     def test_a_one_shot_ignores_loop_points(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
         handle = system.play_sfx(clip, loop_start=0.1, loop_end=0.3)
+        assert _length(system, handle) == pytest.approx(clip.frames, abs=64)
 
-        assert handle is not None
-        assert handle not in system._loops
-
-    def test_a_sidecars_points_are_honoured_where_pygame_warned(
+    def test_a_sidecars_points_are_honoured(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
         from pyguara.resources.meta import AudioMeta
 
         clip.import_meta = AudioMeta(loop_start=0.1, loop_end=0.3)
+        handle = system.play_sfx(clip, loops=1)
 
-        handle = system.play_sfx(clip, loops=-1)
-
-        assert handle in system._loops
+        assert _length(system, handle) == pytest.approx(0.5 * RATE, abs=64)
 
     def test_a_region_past_the_end_of_the_clip_is_refused(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
         with pytest.raises(ValueError, match="empty"):
-            system.play_sfx(clip, loops=-1, loop_start=5.0, loop_end=6.0)
+            system.play_sfx(clip, loops=1, loop_start=0.6, loop_end=0.9)
 
     def test_an_inverted_region_is_refused_even_for_a_one_shot(
         self, system: NativeAudioSystem, clip: NativeAudioClip
     ) -> None:
-        with pytest.raises(ValueError, match="greater"):
+        with pytest.raises(ValueError):
             system.play_sfx(clip, loop_start=0.3, loop_end=0.1)
 
-    def test_a_stopped_loop_queues_nothing_more(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
+
+class TestMusic:
+    def test_a_track_decodes_off_the_frame_then_plays_and_fades_in(
+        self, system: NativeAudioSystem, tmp_path: Path
     ) -> None:
-        handle = system.play_sfx(clip, loops=-1, loop_start=0.1, loop_end=0.3)
-        assert handle is not None
-        channel = pygame.mixer.Channel(system._playing_sounds[handle].channel_id)
+        import time
 
-        system.stop_sfx(handle)
-        system.update()
+        path = _write_wav(tmp_path / "music.wav", seconds=1.0)
+        system.play_music(str(path), loop=False, fade_ms=100)
+        assert system.is_music_playing()  # decoding counts as playing
 
-        assert handle not in system._loops
-        assert channel.get_queue() is None
+        heard = np.zeros(0)
+        for _ in range(200):
+            heard = _render(system, 8820)[:, 0]
+            if np.abs(heard).max() > 0:
+                break
+            time.sleep(0.01)
+        # A 100 ms fade: the first 10 ms is far quieter than the last.
+        assert np.abs(heard[:441]).max() < 0.25 * np.abs(heard[-441:]).max()
 
-    def test_update_does_not_touch_a_recycled_channel(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
+    def test_stopping_fades_out_then_ends(
+        self, system: NativeAudioSystem, tmp_path: Path
     ) -> None:
-        handle = system.play_sfx(clip, loops=-1, loop_start=0.1, loop_end=0.3)
-        assert handle is not None
-        channel = pygame.mixer.Channel(system._playing_sounds[handle].channel_id)
-        channel.stop()
-        other = pygame.mixer.Sound(buffer=b"\0" * 44100)
-        channel.play(other)
+        import time
 
-        system.update()
+        system.play_music(str(_write_wav(tmp_path / "m.wav", seconds=2.0)), fade_ms=0)
+        for _ in range(200):
+            if np.abs(_render(system, 441)).max() > 0:
+                break
+            time.sleep(0.01)
+        system.stop_music(fade_ms=50)
 
-        assert channel.get_queue() is None
-        assert not system.is_sound_active(handle)
+        assert system.is_music_playing()
+        _render(system, round(0.06 * RATE))
+        assert not system.is_music_playing()
 
-    def test_finite_loops_count_down_to_nothing(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
+    def test_a_file_that_will_not_decode_plays_nothing(
+        self, system: NativeAudioSystem, tmp_path: Path
     ) -> None:
-        handle = system.play_sfx(clip, loops=1, loop_start=0.1, loop_end=0.3)
-        assert handle is not None
+        import time
 
-        assert system._loops[handle].remaining == 0
-        queued = pygame.mixer.Channel(
-            system._playing_sounds[handle].channel_id
-        ).get_queue()
-        assert queued is system._loops[handle].buffers.lap
-
-
-class TestLapsAreCountedOnce:
-    """`Channel.queue` replaces what is pending, so re-queueing eats laps."""
-
-    def test_update_leaves_a_full_queue_and_its_count_alone(
-        self, system: NativeAudioSystem, clip: NativeAudioClip
-    ) -> None:
-        handle = system.play_sfx(clip, loops=50, loop_start=0.1, loop_end=0.3)
-        assert handle is not None
-        remaining = system._loops[handle].remaining
-        assert remaining == 50 - system._loops[handle].buffers.laps_per_segment
-
-        for _ in range(5):
-            system.update()
-
-        assert system._loops[handle].remaining == remaining
+        bad = tmp_path / "bad.ogg"
+        bad.write_bytes(b"nope")
+        system.play_music(str(bad))
+        for _ in range(200):
+            if not system.is_music_playing():
+                break
+            time.sleep(0.01)
+        assert not system.is_music_playing()
 
 
 class TestTheSwitch:
     def test_no_auto_exists(self) -> None:
         """An `auto` would vary a game's capabilities by machine."""
         assert {b.value for b in AudioBackend} == {"pygame", "native"}
-
-    def test_the_default_is_pygame(self) -> None:
-        assert ConfigManager().config.audio.backend is AudioBackend.PYGAME
 
     def test_the_debug_switch_does_not_govern_it(
         self, monkeypatch: pytest.MonkeyPatch
@@ -484,6 +535,6 @@ class TestTheSwitch:
         with pytest.raises(RuntimeError, match="native extension"):
             NativeAudioSystem()
 
-    def test_only_signed_16_bit_is_accepted(self) -> None:
-        with pytest.raises(ValueError, match="-16"):
-            NativeAudioSystem(size=16)
+    def test_an_unknown_output_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="offline"):
+            NativeAudioSystem(output="speakers")

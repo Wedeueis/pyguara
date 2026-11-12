@@ -121,8 +121,8 @@ wheel then links ALSA, which `audio.rs` had avoided on purpose.
 
 | Increment | What | Status |
 | --- | --- | --- |
-| **4a** | A mixer in Rust: voices with continuous pitch and native loop regions, buses, music streamed with fades, written to cpal; an offline render for tests and `audio_capture` | Needs `libasound2-dev` to build on Linux |
-| **4b** | `NativeAudioSystem` on it, with no pygame | |
+| **4a** | A mixer in Rust: voices with continuous pitch and native loop regions, buses, music streamed with fades, written to cpal; an offline render for tests and `audio_capture` | **Done 2026-11-12, but for hearing it.** `NativeMixer` (`rust/src/mixer.rs`): sample-exact loop seams, music decoded off the frame, a silent clock when there is no device, `offline` for tests. cpal sits behind the default-on `audio-output` feature, so a Linux machine without ALSA headers still builds and tests the mixer; the device path is type-checked for Windows and unrun until the headers are installed here or it is heard on Windows (4d) |
+| **4b** | `NativeAudioSystem` on it, with no pygame | **Done 2026-11-12.** pygame's policy (buses, spatial, priorities) over mixer voices; bus volumes now reach sounds already playing. `capture_native` keeps the seam and pitch output tests running on the new path |
 | **4c** | `AudioConfig.backend` defaults to `native`; wheels build with ALSA | |
 | **4d** | Heard on native Windows | The user's ears |
 

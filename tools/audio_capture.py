@@ -38,8 +38,10 @@ import argparse
 import os
 import sys
 import wave
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -85,6 +87,51 @@ def use_disk_driver(output: Path) -> None:
     os.environ["SDL_AUDIODRIVER"] = "disk"
     os.environ["SDL_DISKAUDIOFILE"] = str(output)
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+
+
+def capture_native(
+    output: Path,
+    play: Callable[[Any], Any],
+    rate: int = RATE,
+    tail_frames: int = 2048,
+) -> None:
+    """Capture the native backend's mix, offline, in the `disk` driver's format.
+
+    The native backend owns its device, so SDL's `disk` driver never sees
+    it. Its mixer renders offline instead -- nothing advances until asked --
+    which is the same samples a device would have been handed, written as
+    the same raw interleaved signed 16-bit stereo, so `read_capture` and
+    `compare_with_sine` read it unchanged.
+
+    Args:
+        output: Where the raw stream is written.
+        play: Called with the `NativeAudioSystem`; starts something and
+            returns its handle. Load clips with
+            `NativeSoundLoader(system.mixer)`.
+        rate: The rate to mix at.
+        tail_frames: Silence rendered after the sound ends, as a device
+            would have played on.
+    """
+    import numpy as np
+
+    from pyguara.audio.backends.native.native_audio import NativeAudioSystem
+
+    system = NativeAudioSystem(frequency=rate, output="offline")
+    chunks: list[bytes] = []
+
+    def render(frames: int) -> None:
+        mix = np.frombuffer(system.mixer.render(frames), dtype="<f4")
+        pcm = np.clip(np.round(mix * 32768.0), -32768, 32767).astype("<i2")
+        chunks.append(pcm.tobytes())
+
+    try:
+        handle = play(system)
+        while system.is_sound_active(handle):
+            render(256)
+        render(tail_frames)
+    finally:
+        system.shutdown()
+    output.write_bytes(b"".join(chunks))
 
 
 @dataclass(frozen=True, slots=True)

@@ -40,32 +40,50 @@ stand in for this one. So `PYGUARA_NO_NATIVE=1` does not mean "no native code
 runs" any more: to rule out the audio, set `PYGUARA_AUDIO_BACKEND=pygame`. See
 ADR 0004, Decision 4.
 
-`NativeAudioSystem` decodes with `symphonia` and resamples in Rust, then hands
-the buffers to `pygame.mixer`, so spatial audio, buses and channel stealing are
-the same code as the default backend:
+`NativeAudioSystem` decodes with `symphonia` and mixes in Rust
+(`rust/src/mixer.rs`), writing to the sound card through `cpal` -- no
+`pygame.mixer`, and no pygame at all. The policy is the default backend's, so a
+game hears the same mix: buses, spatial attenuation and pan, 32 voices with
+lower priorities stolen first. On top of it:
 
-- **Pitch is resampling, so it changes duration.** 2.0 is an octave up and half
-  as long, which is what SFX variation wants. The range is 0.25 to 4.0, and
-  outside it raises `ValueError`.
-- **Pitches are rendered to the nearest 1%**, and the buffers are cached with a
-  32 MB budget (`cache_bytes=`), least recently used first. A variation range of
-  a few percent is a handful of buffers.
-- **Resampling is linear**, so a large upward pitch aliases. Inaudible at a few
-  percent, and not meant for wide pitch sweeps.
-- **Loop points need `update()` once a frame**, which `Application` does. A
-  loop is an intro plus segments queued on the channel, and `Channel.queue`
-  holds one, so a segment is always at least a second of whole laps. A frame
-  stall shorter than that leaves no trace.
+- **Pitch is continuous, and changes duration.** A voice steps through its
+  clip by its pitch, so 2.0 is an octave up and half as long, and 1.003 is
+  1.003 -- nothing is rendered or cached per pitch. The range is 0.25 to 4.0,
+  and outside it raises `ValueError`.
+- **Interpolation is linear**, so a large upward pitch aliases. Inaudible at a
+  few percent, and not meant for wide pitch sweeps.
+- **Loop points wrap in the mixer**, sample-exact, in the same loop that plays
+  the voice: an intro, then `loops` laps of the region (-1 forever). No
+  `update()` is needed for them and a frame stall cannot reach them.
+- **Bus volumes reach sounds already playing.** pygame fixed a channel's
+  loudness when it started; here moving the SFX slider moves a loop under way.
+- **Music decodes off the frame**, on a worker thread, and starts when ready,
+  fading in; `is_music_playing()` is true while it decodes.
 - **It also reads `.flac`**, which the default backend's loader does not.
 - **A clip must come through `NativeSoundLoader`**, which bootstrap registers
-  for this backend. A clip from another loader raises `TypeError` for pitch or
-  loop points.
+  for this backend, given the system's mixer: clips are converted to the rate
+  the mixer runs at, which on a device is the device's own. A clip from
+  another loader raises `TypeError`.
+- **With no output device it runs silent, on a clock.** Sounds still end when
+  they would have, as pygame's `dummy` driver did, and the boot log says so.
+  `NativeAudioSystem.output` reads `device: <name>`, `silent: <why>` or
+  `offline`.
+
+`output="offline"` is a mixer that advances only when `mixer.render(frames)`
+is called. The tests and `tools/audio_capture.py` (`capture_native`) use it to
+measure what would have reached the speaker.
 
 | Measured, 44.1 kHz stereo | |
 | --- | ---: |
-| Render one pitch, first play | **0.79 ms per second of audio** |
-| Any later play at that pitch | 0.5 us |
-| A clip in memory | 176 KB per second, once |
+| Start a pitched voice, and stop it | **4 us** |
+| Mix one 60 Hz frame (735 samples) of 32 voices | 0.12 ms, on the audio thread |
+| Load and convert one second of audio | 1.3 ms |
+| A clip in memory | 353 KB per second (stereo float), once |
+
+`cpal` links **ALSA** on Linux, so a source build there needs its headers
+(`libasound2-dev`); the wheel carries the dependency on the system's
+`libasound.so.2`, which every desktop Linux has. A build without the
+`audio-output` cargo feature has no device and always runs silent.
 
 `symphonia` is **MPL-2.0**: file-level copyleft, fine to link unmodified from an
 MIT engine, but the wheel distributes it.
