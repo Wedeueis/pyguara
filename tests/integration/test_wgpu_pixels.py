@@ -516,8 +516,8 @@ class TestFiltering:
         surface = self._two_tone(smooth=False).native_handle
         before = frame.gpu.texture_count
 
-        assert frame.surface(surface, smooth=True) != frame.surface(surface)
-        assert frame.surface(surface, smooth=True) == frame.surface(surface, True)
+        assert frame.image(surface, smooth=True) != frame.image(surface)
+        assert frame.image(surface, smooth=True) == frame.image(surface, True)
         assert frame.gpu.texture_count == before + 2
 
 

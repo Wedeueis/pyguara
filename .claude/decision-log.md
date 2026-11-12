@@ -342,3 +342,15 @@
 - **Alternatives:** copy pygame exactly (whole milliseconds, sleep); round nothing and sleep; sleep then busy-wait the last millisecond for precision.
 - **Chose:** fractional and sleep-only. Whole milliseconds alternate 16/17 at 60 Hz, jitter the game then absorbs; spinning buys sub-millisecond pacing nobody sees at the cost of a core. Same blocking behaviour as pygame's `tick`.
 - **Tags:** clock, application
+
+## The wgpu path still draws a pygame.Surface a game made, but never imports pygame for it
+- **Context:** Moving the wgpu backend's textures to `ImageTexture` (RGBA decoded in Rust).
+- **Alternatives:** accept only `ImageTexture` (a game drawing its own surface breaks); keep `as_surface`, which imports pygame; recognise a surface only when `pygame` is already in `sys.modules`.
+- **Chose:** the last. A game that uses pygame itself keeps working, and one that does not never loads it.
+- **Tags:** textures, renderer, api
+
+## JPEG decodes are held to pygame within 4/255, PNGs exactly
+- **Context:** Testing the Rust decoder against `pygame.image.load`.
+- **Alternatives:** byte-exact for everything (JPEG fails: two IDCTs round differently); a frame-level tolerance only.
+- **Chose:** exact on every PNG the repository ships (all 21 are), and a bound for the three JPEGs (measured max 4, mean under 0.13).
+- **Tags:** textures, testing

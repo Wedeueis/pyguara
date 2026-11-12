@@ -53,6 +53,9 @@ renetcode = "=2.0.0"
 winit = "0.30"
 # The desktop clipboard, which SDL provided through `pygame.scrap`.
 arboard = "3.7.0"
+# Decodes textures and writes captures for the wgpu backend, in place of
+# `pygame.image`. Pure Rust; only the formats the image loader advertises.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
 
 [profile.release]
 lto = "fat"

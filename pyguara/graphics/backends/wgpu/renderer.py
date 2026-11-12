@@ -21,7 +21,6 @@ from __future__ import annotations
 import math
 
 from pyguara.common.types import Color, Rect, Vector2
-from pyguara.graphics.backends.surface_texture import as_surface
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
 from pyguara.graphics.types import RenderBatch, ShapeBatch
 from pyguara.log import get_logger
@@ -33,9 +32,9 @@ logger = get_logger(__name__)
 def _smooth(texture: object) -> bool:
     """Whether a texture's meta asked for bilinear filtering.
 
-    `PygameTexture.smooth`, set by the loader from `TextureMeta.filter`.
-    Anything else -- a bare surface, a texture from a factory -- draws
-    nearest, as pygame scales.
+    `ImageTexture.smooth` (or `PygameTexture.smooth`), set by the loader
+    from `TextureMeta.filter`. Anything else -- a bare surface, a texture
+    from a factory -- draws nearest, as pygame scales.
     """
     return getattr(texture, "smooth", False) is True
 
@@ -167,16 +166,16 @@ class WgpuRenderer:
         Honours `rotation` in degrees and `scale`, and treats a negative
         scale on either axis as a flip, as `IRenderer.draw_texture` says.
         """
-        surface = as_surface(texture)
-        if surface is None:
+        image = self._frame.image(texture, _smooth(texture))
+        if image is None:
             return
-        width, height = surface.get_size()
+        uploaded, width, height = image
         # Rounded to whole pixels and never below one, as the pygame
         # backend scales, so a sprite is the same size on both.
         half_width = max(1, round(width * abs(scale.x))) / 2
         half_height = max(1, round(height * abs(scale.y))) / 2
         self._gpu.quad(
-            self._frame.surface(surface, _smooth(texture)),
+            uploaded,
             int(destination.x), int(destination.y),
             -half_width if scale.x < 0 else half_width,
             -half_height if scale.y < 0 else half_height,
@@ -193,13 +192,13 @@ class WgpuRenderer:
         `NativeGpu.sprites`; `sprites_one_by_one` below is the same thing
         a sprite at a time, kept as the reference it is tested against.
         """
-        surface = as_surface(batch.texture)
-        if surface is None:
+        image = self._frame.image(batch.texture, _smooth(batch.texture))
+        if image is None:
             return
         material = self._use_material(batch)
         transforms = batch.transforms_enabled
         self._gpu.sprites(
-            self._frame.surface(surface, _smooth(batch.texture)),
+            image[0],
             batch.destinations,
             [
                 None if r is None else (r.x, r.y, r.width, r.height)
@@ -233,12 +232,12 @@ class WgpuRenderer:
             self._materials[id(shader)] = found
         texture = None
         if shader.texture:
-            surface = as_surface(material.texture)
-            if surface is None:
+            image = self._frame.image(material.texture, _smooth(material.texture))
+            if image is None:
                 raise ValueError(
                     f"material '{shader.name}' samples a texture, and has none"
                 )
-            texture = self._frame.surface(surface, _smooth(material.texture))
+            texture = image[0]
         self._gpu.set_material(found[1], shader.pack(material.uniforms), texture)
         return True
 
@@ -307,11 +306,10 @@ def sprites_one_by_one(frame: GpuFrame, batch: RenderBatch) -> None:
         frame: The frame to draw into.
         batch: The sprites.
     """
-    surface = as_surface(batch.texture)
-    if surface is None:
+    image = frame.image(batch.texture)
+    if image is None:
         return
-    texture = frame.surface(surface)
-    full_width, full_height = surface.get_size()
+    texture, full_width, full_height = image
     regions = batch.source_rects if batch.source_rects_enabled else ()
     transforms = batch.transforms_enabled
     tinted = batch.colors_enabled

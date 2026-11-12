@@ -335,16 +335,15 @@ def _setup_container(
         # back to `_render_direct()` when the container has none at all,
         # which is exactly the single-pass path a headless test wants.
     elif disp_cfg.backend == RenderingBackend.WGPU:
-        # The native renderer, in a winit window (`NativeWindow`). It still
-        # reuses pygame's texture type and image loader -- which need no
-        # display -- so a texture stays a CPU surface, uploaded to the GPU
+        # The native renderer, in a winit window (`NativeWindow`). A texture
+        # is RGBA bytes decoded in Rust (`ImageTexture`), uploaded to the GPU
         # the first time it is drawn.
-        from pyguara.graphics.backends.pygame.types import PygameTextureFactory
         from pyguara.graphics.backends.wgpu import (
             WgpuRenderer,
             WgpuUIRenderer,
             WgpuWindow,
         )
+        from pyguara.graphics.backends.wgpu.textures import ImageTextureFactory
 
         wgpu_window_backend = WgpuWindow()
         window = Window(win_config, wgpu_window_backend)
@@ -355,7 +354,7 @@ def _setup_container(
         assert frame is not None  # `create()` opened it or raised
         container.register_instance(IRenderer, WgpuRenderer(frame))  # type: ignore[type-abstract]
         container.register_instance(UIRenderer, WgpuUIRenderer(frame))  # type: ignore[type-abstract]
-        container.register_instance(TextureFactory, PygameTextureFactory())  # type: ignore[type-abstract]
+        container.register_instance(TextureFactory, ImageTextureFactory())  # type: ignore[type-abstract]
 
         # A real render graph, on the native device: the world is drawn
         # into its buffer and blitted to the window, so a game can add
@@ -464,7 +463,13 @@ def _setup_container(
     # none: nothing exercises image loading under it today, and the real
     # PygameImageLoader documents needing pygame.display initialized for some
     # formats -- exactly the SDL video coupling headless mode exists to avoid.
-    if not headless:
+    if headless:
+        pass
+    elif disp_cfg.backend == RenderingBackend.WGPU:
+        from pyguara.graphics.backends.wgpu.textures import NativeImageLoader
+
+        res_manager.register_loader(NativeImageLoader())
+    else:
         from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
 
         res_manager.register_loader(PygameImageLoader())

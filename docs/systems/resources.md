@@ -25,7 +25,7 @@ bootstrap wires:
 | Loader | Extensions | Produces |
 | --- | --- | --- |
 | `JsonLoader` | `.json`, `.manifest`, `.config` | `DataResource` |
-| `PygameImageLoader` / `GLTextureLoader` | `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga` | `Texture` |
+| `PygameImageLoader` (pygame backend) / `NativeImageLoader` (wgpu, decoded in Rust) | `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga` | `Texture` (`PygameTexture` / `ImageTexture`) |
 | `PygameSoundLoader` | `.wav`, `.ogg`, `.mp3` | `AudioClip` |
 | `PrefabLoader` | `.prefab`, `.prefab.json`, `.prefab.yaml` | `PrefabData` (see [Prefabs](prefabs.md)) |
 
@@ -143,7 +143,7 @@ and `save_meta()` writes one back.
 
 | Meta type | Fields | What currently consumes it |
 | --- | --- | --- |
-| `TextureMeta` | `filter`, `premultiply_alpha`, `srgb`, `mipmaps`, `wrap_s`, `wrap_t` | `PygameImageLoader` applies `premultiply_alpha`/`srgb`; `GLTextureLoader` applies `filter` (nearest ↔ linear). `mipmaps`/`wrap_*` are not applied yet. |
+| `TextureMeta` | `filter`, `premultiply_alpha`, `srgb`, `mipmaps`, `wrap_s`, `wrap_t` | Both image loaders apply `premultiply_alpha`, and both carry `filter` on the texture, which the wgpu renderer honours (nearest ↔ linear) and the pygame renderer cannot. `mipmaps`/`wrap_*` are not applied yet. |
 | `AudioMeta` | `volume_db`, `load_mode`, `loop_start`, `loop_end`, `normalize` | The audio system applies `volume_db` as a per-asset gain per play. `load_mode: stream` warns (clips are always fully decoded — use `play_music`). `loop_*`/`normalize` are not applied yet. |
 | `SpritesheetMeta` | `frame_width`, `frame_height`, `margin`, `spacing`, `filter` | `SpriteSheet.slice_from_meta(meta)` reads the grid geometry (`margin`/`spacing` included). `filter` is not applied. |
 

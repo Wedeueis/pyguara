@@ -61,6 +61,7 @@ mod flocking;
 mod flowfield;
 mod gpu;
 mod grid;
+mod imaging;
 mod net;
 mod particles;
 mod solids;
@@ -89,6 +90,9 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<window::NativeWindow>()?;
     module.add_class::<window::NativeClipboard>()?;
     module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;
+    module.add_function(wrap_pyfunction!(imaging::decode_image, module)?)?;
+    module.add_function(wrap_pyfunction!(imaging::premultiply_rgba, module)?)?;
+    module.add_function(wrap_pyfunction!(imaging::encode_png, module)?)?;
     net::register(module)?;
     module.add_function(wrap_pyfunction!(audio::decode_audio, module)?)?;
     module.add_function(wrap_pyfunction!(audio::resample_pcm, module)?)?;

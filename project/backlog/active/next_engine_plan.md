@@ -106,7 +106,7 @@ software renderer keeps pygame; it is the reference the wgpu one is held to.
 | **3a** | The window and its keyboard and mouse input on winit (`NativeWindow`, `rust/src/window.rs`), wgpu presenting to its handle; SDL keycodes and `KMOD_*` values kept, so saved bindings mean the same keys; clipboard on arboard; `post_event` for synthetic input; offscreen under `PYGUARA_WINDOW=offscreen` or SDL's `dummy`. AppKit handles are passed to wgpu, which is macOS's half of the window problem | **Done 2026-11-12.** Found: a windowed game ignored SIGTERM, because `pygame.mixer` still opened SDL and SDL's quit went unread; the window now turns it into a `QuitEvent` |
 | **3b** | Gamepads on gilrs: an `IInputBackend` whose button and axis numbers are `GamepadButton`/`GamepadAxis`, from gilrs's standard mapping | Needs `libudev-dev` to build on Linux |
 | **3c** | The frame clock without `pygame.time` | **Done 2026-11-12.** `WallClock`: pygame's contract, without rounding to whole milliseconds |
-| **3d** | Images decoded in Rust (`image` crate): a texture type holding RGBA, its loader and factory, premultiply; the wgpu renderers draw it | |
+| **3d** | Images decoded in Rust (`image` crate): a texture type holding RGBA, its loader and factory, premultiply; the wgpu renderers draw it | **Done 2026-11-12.** `ImageTexture`, `NativeImageLoader`, `ImageTextureFactory`. Every shipped PNG decodes byte-identical to pygame's, JPEGs within 4/255; every demo still matches its pygame frame |
 | **3e** | Text rasterised in Rust with a bundled font; the UI's polygon fill off `pygame.draw`; goldens re-approved, since the glyphs change | |
 | **3f** | Nothing on the wgpu path imports pygame, asserted by a test; capture tools write PNGs without it | |
 

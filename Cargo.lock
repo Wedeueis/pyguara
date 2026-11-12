@@ -779,6 +779,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -1648,6 +1650,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "bytemuck",
+ "image",
  "pollster",
  "pyo3",
  "renet",

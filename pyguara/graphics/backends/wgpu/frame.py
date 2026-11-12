@@ -19,6 +19,7 @@ might still use it has been rendered.
 from __future__ import annotations
 
 import math
+import sys
 import weakref
 from collections import OrderedDict
 from typing import Any
@@ -26,6 +27,7 @@ from typing import Any
 import pygame
 
 from pyguara import native
+from pyguara.graphics.backends.wgpu.textures import ImageTexture
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -39,6 +41,53 @@ FontKey = tuple[int, bool, bool]
 
 GlyphRun = tuple[int, int, int]
 """Texture id, width and height of one rasterised string."""
+
+ImageRun = tuple[int, int, int]
+"""Texture id, width and height of one uploaded image."""
+
+_warned_unusable: set[str] = set()
+
+
+def _owner(texture: object) -> object | None:
+    """Return the object whose pixels `texture` names, or None.
+
+    An `ImageTexture` is its own; a pygame surface, or a texture wrapping
+    one, is the surface -- recognised only if a game already imported
+    pygame.
+    """
+    if isinstance(texture, ImageTexture):
+        return texture
+    pygame = sys.modules.get("pygame")
+    if pygame is None:
+        return None
+    surface_type: type = pygame.Surface
+    if isinstance(texture, surface_type):
+        return texture
+    handle: object = getattr(texture, "native_handle", None)
+    if isinstance(handle, surface_type):
+        return handle
+    return None
+
+
+def _pixels(owner: object) -> tuple[bytes, int, int]:
+    """Read RGBA bytes and a size from what `_owner` returned."""
+    if isinstance(owner, ImageTexture):
+        return owner.pixels, owner.width, owner.height
+    pygame = sys.modules["pygame"]
+    width, height = owner.get_size()  # type: ignore[attr-defined]
+    return pygame.image.tobytes(owner, "RGBA"), width, height
+
+
+def _warn_unusable(texture: object) -> None:
+    kind = type(texture).__name__
+    if kind not in _warned_unusable:
+        _warned_unusable.add(kind)
+        logger.warning(
+            "The wgpu renderer cannot draw a %s: it needs an ImageTexture, or "
+            "a pygame.Surface a game made itself. Drawing nothing.",
+            kind,
+        )
+
 
 # pygame draws a circle of radius r inside a 2r-pixel box whose centre is
 # the *corner* of the pixel it was given, and its edge sits a little inside
@@ -147,9 +196,7 @@ class GpuFrame:
             pygame.font.init()
         self._fonts: dict[FontKey, pygame.font.Font] = {}
         self._text: OrderedDict[tuple[FontKey, str], GlyphRun] = OrderedDict()
-        self._surfaces: dict[
-            tuple[int, bool], tuple[weakref.ref[pygame.Surface], int]
-        ] = {}
+        self._images: dict[tuple[int, bool], tuple[weakref.ref[object], ImageRun]] = {}
         self._doomed: list[int] = []
 
     # -- fonts and text ----------------------------------------------------
@@ -201,60 +248,64 @@ class GpuFrame:
 
     # -- images ------------------------------------------------------------
 
-    def surface(self, surface: pygame.Surface, smooth: bool = False) -> int:
-        """Return the texture for a surface, uploading it on first use.
+    def image(self, texture: object, smooth: bool = False) -> ImageRun | None:
+        """Return the GPU texture for an image, uploading it on first use.
 
-        The upload happens once per surface object and filter. A surface
-        drawn onto *after* it was first drawn here keeps showing what it
-        held then: this is for images, which do not change, not for
-        scratch surfaces.
+        The upload happens once per image object and filter. Pixels changed
+        *after* the first draw are not seen: this is for images, which do
+        not change, not for scratch buffers.
+
+        Takes an `ImageTexture` -- what this backend's loader and factory
+        make -- or, for a game that made one itself, a `pygame.Surface` or
+        a texture wrapping one. A surface is only recognised if pygame is
+        already imported; this never imports it.
 
         Args:
-            surface: The pixels.
+            texture: The image.
             smooth: Sample bilinearly when scaled or turned, rather than
                 texel for texel. A texture's meta says which.
 
         Returns:
-            The texture id.
+            `(texture id, width, height)`, or None for something that is
+            not an image, which is logged once per type.
         """
-        key = (id(surface), smooth)
-        found = self._surfaces.get(key)
-        if found is not None and found[0]() is surface:
+        owner = _owner(texture)
+        if owner is None:
+            _warn_unusable(texture)
+            return None
+        key = (id(owner), smooth)
+        found = self._images.get(key)
+        if found is not None and found[0]() is owner:
             return found[1]
-        texture: int = self.gpu.create_texture(
-            surface.get_width(),
-            surface.get_height(),
-            pygame.image.tobytes(surface, "RGBA"),
-            smooth,
-        )
+        pixels, width, height = _pixels(owner)
+        uploaded: int = self.gpu.create_texture(width, height, pixels, smooth)
+        run = (uploaded, width, height)
 
-        # `id()` is reused once a surface is collected, so the entry has to
-        # go when the surface does or a new surface would inherit its pixels.
-        def forget(_: weakref.ref[pygame.Surface]) -> None:
-            found = self._surfaces.pop(key, None)
-            if found is not None:
-                self._doomed.append(found[1])
+        # `id()` is reused once an image is collected, so the entry has to
+        # go when the image does or a new one would inherit its pixels.
+        def forget(_: weakref.ref[object]) -> None:
+            gone = self._images.pop(key, None)
+            if gone is not None:
+                self._doomed.append(gone[1][0])
 
-        self._surfaces[key] = (weakref.ref(surface, forget), texture)
-        return texture
+        self._images[key] = (weakref.ref(owner, forget), run)
+        return run
 
-    def once(self, surface: pygame.Surface) -> int:
-        """Upload a surface for this frame only.
+    def once_rgba(self, pixels: bytes, width: int, height: int) -> int:
+        """Upload RGBA pixels for this frame only.
 
         For pixels made on the spot -- a polygon rasterised on the CPU --
         that nothing will ask for again.
 
         Args:
-            surface: The pixels.
+            pixels: RGBA bytes, top row first.
+            width: Width in pixels.
+            height: Height in pixels.
 
         Returns:
             A texture id, freed after the frame is drawn.
         """
-        texture: int = self.gpu.create_texture(
-            surface.get_width(),
-            surface.get_height(),
-            pygame.image.tobytes(surface, "RGBA"),
-        )
+        texture: int = self.gpu.create_texture(width, height, pixels)
         self._doomed.append(texture)
         return texture
 

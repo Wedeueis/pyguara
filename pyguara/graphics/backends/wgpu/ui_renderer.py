@@ -15,7 +15,6 @@ import pygame
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.clipping import ClipStack
-from pyguara.graphics.backends.surface_texture import as_surface
 from pyguara.graphics.backends.wgpu.frame import CIRCLE_SHRINK, GpuFrame, line_quad
 from pyguara.log import get_logger
 
@@ -112,7 +111,9 @@ class WgpuUIRenderer:
             width,
         )
         self._gpu.quad(
-            self._frame.once(scratch),
+            self._frame.once_rgba(
+                pygame.image.tobytes(scratch, "RGBA"), box_width, box_height
+            ),
             left + box_width / 2, top + box_height / 2,
             box_width / 2, box_height / 2,
             0, 0, box_width, box_height, 0.0,
@@ -152,16 +153,19 @@ class WgpuUIRenderer:
         source_rect: Rect | None = None,
     ) -> None:
         """Draw an image, or the `source_rect` region of it, scaled into `rect`."""
-        surface = as_surface(texture)
-        if surface is None or rect.width <= 0 or rect.height <= 0:
+        if rect.width <= 0 or rect.height <= 0:
             return
-        whole = Rect(0, 0, surface.get_width(), surface.get_height())
+        image = self._frame.image(texture)
+        if image is None:
+            return
+        uploaded, width, height = image
+        whole = Rect(0, 0, width, height)
         region = whole if source_rect is None else source_rect.clip(whole)
         if region.width <= 0 or region.height <= 0:
             return
         red, green, blue = (color.r, color.g, color.b) if color else (255, 255, 255)
         self._gpu.quad(
-            self._frame.surface(surface),
+            uploaded,
             rect.x + rect.width / 2, rect.y + rect.height / 2,
             rect.width / 2, rect.height / 2,
             region.x, region.y, region.width, region.height, 0.0,
