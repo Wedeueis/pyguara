@@ -34,6 +34,17 @@ install from PyPI does not: the wheel ships the extension already. See
 `docs/adr/0006-shipping-the-native-extension.md`, and "The native
 extension" below for the rest of it.
 
+**On Linux it also needs two system headers**, because the native audio
+device (cpal) links ALSA and gamepads (gilrs) link udev:
+
+```bash
+sudo apt install libasound2-dev libudev-dev pkg-config
+```
+
+Without them, build with `maturin develop --release --no-default-features`:
+the mixer then runs silent and no gamepad is ever seen, both of which say
+so at startup, and everything else -- tests included -- works.
+
 ### Testing
 ```bash
 # Run all tests
