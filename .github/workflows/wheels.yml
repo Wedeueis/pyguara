@@ -37,7 +37,10 @@ jobs:
         # dependencies have no 3.14t wheels either.
         platform:
           - { name: linux-x86_64, runner: ubuntu-22.04, target: x86_64 }
-          - { name: linux-aarch64, runner: ubuntu-22.04, target: aarch64 }
+          # Built natively on an ARM runner rather than cross-compiled:
+          # the crate links ALSA and udev, and the cross images have no
+          # aarch64 sysroot to install their headers into.
+          - { name: linux-aarch64, runner: ubuntu-22.04-arm, target: aarch64 }
           - { name: macos-x86_64, runner: macos-15-intel, target: x86_64 }
           - { name: macos-aarch64, runner: macos-latest, target: aarch64 }
           - { name: windows-x64, runner: windows-latest, target: x64 }
@@ -57,7 +60,21 @@ jobs:
           # current Ubuntu and a five-year-old distribution then all take
           # the same wheel. Ignored on macOS and Windows.
           manylinux: auto
-          args: --release --out dist
+          # The window, gamepad and audio crates link two system libraries
+          # on Linux: ALSA (cpal, the native audio device) and udev (gilrs,
+          # gamepad hot-plug). Their headers go into the build container,
+          # whichever package manager its image has.
+          before-script-linux: |
+            if command -v dnf >/dev/null; then dnf install -y alsa-lib-devel systemd-devel
+            elif command -v yum >/dev/null; then yum install -y alsa-lib-devel systemd-devel
+            else apt-get update && apt-get install -y libasound2-dev libudev-dev; fi
+          # `warn`, not `repair`, on Linux: repair would copy libasound into
+          # the wheel, and a bundled libasound cannot find the host's ALSA
+          # plugins -- which is how sound reaches PulseAudio and PipeWire --
+          # so a game would open the device and play nothing. Every desktop
+          # Linux has libasound.so.2 and libudev.so.1; the wheel uses the
+          # system's. Ignored on macOS and Windows.
+          args: --release --out dist ${{ runner.os == 'Linux' && '--auditwheel warn' || '' }}
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
       # A wheel that quietly shipped without the extension would install,

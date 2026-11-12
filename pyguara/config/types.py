@@ -100,10 +100,14 @@ class AudioBackend(Enum):
     capabilities on a machine without the extension, which is what
     `IAudioSystem.capabilities` exists to make impossible to miss.
 
-    PYGAME: `pygame.mixer` as it comes. Reports no optional capability.
+    NATIVE: The default. Decodes and mixes in Rust and owns the output
+        device, adding pitch and loop points. Fails at startup if the
+        extension cannot be imported; runs silent, and says so, if there is
+        no device.
 
-    NATIVE: Decodes and resamples in Rust, adding pitch and loop points. Fails
-        at startup if the extension cannot be imported.
+    PYGAME: `pygame.mixer` as it comes. Reports no optional capability. What
+        a checkout with no Rust toolchain needs, and what
+        `PYGUARA_AUDIO_BACKEND=pygame` selects to rule the native one out.
     """
 
     PYGAME = "pygame"
@@ -118,7 +122,7 @@ class AudioConfig:
     sfx_volume: float = 0.8
     music_volume: float = 0.6
     muted: bool = False
-    backend: AudioBackend = AudioBackend.PYGAME
+    backend: AudioBackend = AudioBackend.NATIVE
 
 
 @dataclass

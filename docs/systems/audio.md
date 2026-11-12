@@ -29,10 +29,12 @@ sound = audio.play_sfx("sfx/jump.wav", volume=0.8)
 
 ## Choosing a backend
 
-`AudioConfig.backend` is `pygame`, the default, or `native`; the environment
+`AudioConfig.backend` is `native`, the default, or `pygame`; the environment
 variable is `PYGUARA_AUDIO_BACKEND`. There is deliberately no `auto`, because it
 would give the same game different capabilities on different machines, and
-`native` fails at startup if the extension cannot be imported.
+`native` fails at startup if the extension cannot be imported -- which is what
+a checkout with no Rust toolchain, or nothing built yet, will see, and why
+`pygame` is kept.
 
 **It is not governed by `native_acceleration` or `PYGUARA_NO_NATIVE`.** Those
 switch between two implementations of the same thing, and nothing in Python can

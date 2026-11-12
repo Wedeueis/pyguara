@@ -38,6 +38,7 @@ def test_the_engine_starts_and_plays_with_no_audio_output() -> None:
     result = run(
         """
         import os
+        os.environ["PYGUARA_AUDIO_BACKEND"] = "pygame"
         import pygame
         from pyguara.application.bootstrap import create_headless_application
 

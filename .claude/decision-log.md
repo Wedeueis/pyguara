@@ -402,3 +402,9 @@
 - **Alternatives:** copy pygame (a slider moves only new sounds); recompute every playing voice on a bus change.
 - **Chose:** recompute. A looping ambience that ignores the volume slider is a bug players report; the pygame backend keeps its behaviour.
 - **Tags:** audio, behaviour
+
+## Linux wheels use the system's libasound and libudev (`--auditwheel warn`)
+- **Context:** cpal links ALSA and gilrs links udev, neither in the manylinux whitelist.
+- **Alternatives:** `repair` (bundles libasound, which then cannot load the host's ALSA plugins, so no sound through PulseAudio/PipeWire); a dlopen-based ALSA (not available in cpal); `warn`, leaving them as system dependencies every desktop Linux has.
+- **Chose:** `warn`, as other cpal-based wheels do; aarch64 moves to a native ARM runner because the cross image has no target sysroot for the headers. Unverified until CI runs it.
+- **Tags:** packaging, audio, ci
