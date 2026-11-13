@@ -427,9 +427,11 @@
 - **Alternatives:** map the five channels onto Steam's reliable/unreliable sends directly; keep renet and carry its packets in Steam's unreliable, no-Nagle messages.
 - **Chose:** keep renet. The channel limits, the half-limit rule in `bytes_to_check`, backpressure through `can_send_message`, slicing and link stats then behave exactly as on UDP, which is what lets `tests/test_net_steam_core.py` re-run 18 of `test_net_transport.py`'s tests unchanged. Steam's reliability would have needed its own limits and its own stats.
 - **Tags:** net, steam, transport
+- **Review:** approved by the user 2026-11-13.
 
 ## The Steam core's handshake is a repeated HELLO answered by WELCOME, with renetcode's reason names
 - **Context:** 5a. With no renetcode, something has to carry the guest's user data (versions, content hash) and tell the guest it was admitted.
 - **Alternatives:** send the user data as the first CONTROL message over renet (but renet needs a connection first, and a refusal needs a reason before one exists); a raw tagged HELLO resent every 100 ms until any reply.
 - **Chose:** the tagged HELLO; a host answers every HELLO from a peer with WELCOME, so a lost one costs a resend, not the join. Refusals (`REFUSED`, rate-limited by the shared stranger budget) and goodbyes (`BYE`, three times) carry a reason. A client's reasons reuse renetcode's names (`ConnectionDenied`, `ConnectionTimedOut`, `ConnectionRequestTimedOut`, `DisconnectedByServer`) so `session._explain` words them the same for players. A host is closed by default (admits only `allow`ed Steam IDs, which 5c's lobby will drive); `open_room` admits anyone, for development.
 - **Tags:** net, steam, transport, security
+- **Review:** approved by the user 2026-11-13.
