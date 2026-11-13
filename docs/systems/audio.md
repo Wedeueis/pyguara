@@ -82,9 +82,15 @@ measure what would have reached the speaker.
 | Load and convert one second of audio | 1.3 ms |
 | A clip in memory | 353 KB per second (stereo float), once |
 
-`cpal` links **ALSA** on Linux, so a source build there needs its headers
-(`libasound2-dev`); the wheel carries the dependency on the system's
-`libasound.so.2`, which every desktop Linux has. A build without the
+The device is `cpal` on Windows and macOS. **On Linux it is ALSA, loaded
+with `dlopen` when a mixer opens the device** rather than linked: a linked
+`libasound.so.2` made the whole extension fail to import on a machine
+without it (a slim container, a server), taking every native store with
+it. Now a missing ALSA is one more reason the mixer is silent, and says
+so. It plays 16-bit stereo at 48 kHz to ALSA's `default` device, which on a
+desktop is PipeWire's or PulseAudio's plugin; `PYGUARA_ALSA_DEVICE` names
+another (`null` takes samples with no card, which is how
+`tests/test_native_alsa.py` runs the path). A build without the
 `audio-output` cargo feature has no device and always runs silent.
 
 `symphonia` is **MPL-2.0**: file-level copyleft, fine to link unmodified from an

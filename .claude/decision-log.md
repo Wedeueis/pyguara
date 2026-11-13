@@ -414,3 +414,9 @@
 - **Alternatives:** expose gilrs's raw codes (same problem); map gilrs's standard buttons (SDL's controller database) onto the engine's numbering.
 - **Chose:** the standard layout. `GamepadButton.A` is the south button on every pad gilrs knows; sticks are flipped to the engine's y-down.
 - **Tags:** input, gamepads
+
+## Linux's audio device loads ALSA with dlopen instead of linking it through cpal
+- **Context:** The CI wheel linked `libasound.so.2` (via cpal), so in `python:3.12-slim` the whole extension failed to import, not only audio.
+- **Alternatives:** dlopen ALSA when a mixer opens the device (cpal has no such option, so our own small ALSA writer on Linux); move the device code into a second extension module.
+- **Chose:** dlopen, on the user's call (2026-11-13). cpal kept on Windows/macOS. The writer uses ALSA's simple API: 16-bit stereo, 48 kHz, 40 ms latency to `default`, 256-frame periods. ALSA's stderr error handler is silenced only while the device opens. libudev (gilrs) left linked: present in Debian and Fedora base images.
+- **Tags:** audio, native-extension, wheels, linux

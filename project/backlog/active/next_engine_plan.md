@@ -116,23 +116,28 @@ It exists and Reclaimer's feedback data already carries pitch variation
 that only it can play. What is missing is hearing it on Windows.
 
 **Chosen 2026-11-12 (the user's call):** the native backend owns the device
-through cpal rather than handing buffers to `pygame.mixer`. On Linux the
-wheel then links ALSA, which `audio.rs` had avoided on purpose.
+through cpal rather than handing buffers to `pygame.mixer` -- on Windows
+and macOS. On Linux it loads ALSA with `dlopen` instead (the user's call,
+2026-11-13), so the wheel never links it; see below.
 
 | Increment | What | Status |
 | --- | --- | --- |
 | **4a** | A mixer in Rust: voices with continuous pitch and native loop regions, buses, music streamed with fades, written to cpal; an offline render for tests and `audio_capture` | **Done 2026-11-12, but for hearing it.** `NativeMixer` (`rust/src/mixer.rs`): sample-exact loop seams, music decoded off the frame, a silent clock when there is no device, `offline` for tests. cpal sits behind the default-on `audio-output` feature, so a Linux machine without ALSA headers still builds and tests the mixer; the device path is type-checked for Windows and unrun until the headers are installed here or it is heard on Windows (4d) |
 | **4b** | `NativeAudioSystem` on it, with no pygame | **Done 2026-11-12.** pygame's policy (buses, spatial, priorities) over mixer voices; bus volumes now reach sounds already playing. `capture_native` keeps the seam and pitch output tests running on the new path |
-| **4c** | `AudioConfig.backend` defaults to `native`; wheels build with ALSA | **Done 2026-11-12, CI unrun.** The default is `native`. `wheels.yml` installs ALSA's and udev's headers in each manylinux container, builds aarch64 on an ARM runner rather than cross, and passes `--auditwheel warn` on Linux so the wheel uses the system's libasound (a bundled one cannot find the host's ALSA plugins). Ran on `next` by hand (`workflow_dispatch`, 2026-11-12): all five wheels and the sdist build. **Found:** the Linux wheel needs `libasound.so.2` and `libudev.so.1` at load, so on a machine without ALSA (a slim container, a server) the whole extension fails to import, not only audio; open, see below |
+| **4c** | `AudioConfig.backend` defaults to `native`; wheels build without linking ALSA | **Done 2026-11-12, CI unrun.** The default is `native`. `wheels.yml` installs ALSA's and udev's headers in each manylinux container, builds aarch64 on an ARM runner rather than cross, and passes `--auditwheel warn` on Linux so the wheel uses the system's libasound (a bundled one cannot find the host's ALSA plugins). Ran on `next` by hand (`workflow_dispatch`, 2026-11-12): all five wheels and the sdist build. **Found:** the Linux wheel needs `libasound.so.2` and `libudev.so.1` at load, so on a machine without ALSA (a slim container, a server) the whole extension fails to import, not only audio; open, see below |
 | **4d** | Heard on native Windows | **Done 2026-11-12.** The user listened through `listen_audio.py`: pitch, a seamless loop region, live bus volume, music fades and twelve overlapping voices |
 
-**Open: the Linux wheel's hard link to ALSA and udev.** cpal and gilrs link
-`libasound.so.2` and `libudev.so.1` as `DT_NEEDED`, so in `python:3.12-slim`
-the import fails with `libasound.so.2: cannot open shared object file` and
-every native store goes with it. A desktop Linux has both; a container, a
-server or a minimal CI image may not. Fixing it means loading ALSA at run
-time rather than link time, or moving the device code into a second
-extension; the user decides which.
+**Fixed 2026-11-13: the Linux wheel no longer links ALSA.** cpal linked
+`libasound.so.2` as `DT_NEEDED`, so in `python:3.12-slim` the import failed
+with `libasound.so.2: cannot open shared object file` and every native store
+went with it. On the user's call (over a second extension module), Linux's
+device is now ALSA opened with `dlopen` when a mixer asks for one: 16-bit
+stereo at 48 kHz to `default`, a writer thread into `snd_pcm_writei`; cpal
+stays on Windows and macOS. In the slim image the extension imports and the
+mixer reports `silent: ALSA is not installed`. `tests/test_native_alsa.py`
+pins the missing link and runs the path through ALSA's `null` device.
+libudev (gilrs) is still linked; it is in Debian's and Fedora's base images.
+Unheard on a real Linux desktop: this machine is WSL, with no card.
 
 ### 5. Hosting on home connections
 

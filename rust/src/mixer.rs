@@ -2,7 +2,7 @@
 //!
 //! What `pygame.mixer` did for the native backend, owned here instead:
 //! voices summed into one stereo stream and written to the sound card
-//! through cpal. Owning it is what makes three things simple that were
+//! (through cpal, or ALSA loaded at run time on Linux). Owning it is what makes three things simple that were
 //! not:
 //!
 //! - **Pitch is continuous.** A voice steps through its clip by its pitch,
@@ -19,8 +19,9 @@
 //! per side and a group -- effects or music -- that can be paused, and
 //! nothing else.
 //!
-//! **Three outputs, one mixer.** The device, through cpal (the
-//! `audio-output` feature, on in every wheel). A silent clock, when there is
+//! **Three outputs, one mixer.** The device (the `audio-output` feature, on
+//! in every wheel): cpal on Windows and macOS, ALSA through `dlopen` on
+//! Linux, so the extension never links `libasound` -- see `device` below. A silent clock, when there is
 //! no device or the feature is off: it renders and discards in real time, so
 //! a sound still ends when it would have -- what SDL's `dummy` driver did
 //! for pygame. And offline, where nothing runs until `render` is called,
@@ -212,7 +213,7 @@ enum Output {
     Offline,
     Silent { running: Arc<AtomicBool> },
     #[cfg(feature = "audio-output")]
-    Device { _stream: cpal::Stream },
+    Device { _stream: device::Stream },
 }
 
 /// Renders and discards in real time, so voices end when they would have.
@@ -241,11 +242,13 @@ fn silent_clock(shared: Shared, rate: u32) -> Arc<AtomicBool> {
     running
 }
 
-#[cfg(feature = "audio-output")]
+#[cfg(all(feature = "audio-output", not(target_os = "linux")))]
 mod device {
     use super::{Shared, lock};
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
     use cpal::{FromSample, SampleFormat, SizedSample, StreamConfig};
+
+    pub type Stream = cpal::Stream;
 
     /// Open the default output device at its own rate.
     ///
@@ -304,6 +307,215 @@ mod device {
                 None,
             )
             .map_err(|error| error.to_string())
+    }
+}
+
+/// Linux's device: ALSA, loaded with `dlopen` when a mixer opens one.
+///
+/// **Not cpal, and not linked**, because a linked `libasound.so.2` is a
+/// load-time dependency of the whole extension: on a machine without it --
+/// a slim container, a server, a minimal CI image -- `import
+/// pyguara.pyguara_core_rs` failed, taking every native store with it. Loaded
+/// here, a missing ALSA is one more reason the mixer is silent.
+///
+/// It plays through ALSA's `default` device, which on a desktop is
+/// PipeWire's or PulseAudio's plugin, as cpal's did. Only the simple API is
+/// used: `snd_pcm_set_params` asks for 16-bit stereo at 48 kHz and lets the
+/// plug layer convert, and a thread mixes a period at a time into the
+/// blocking `snd_pcm_writei`. `PYGUARA_ALSA_DEVICE` names another device;
+/// ALSA's `null` takes samples with no card, which is how this is tested.
+#[cfg(all(feature = "audio-output", target_os = "linux"))]
+mod device {
+    use std::ffi::{CStr, CString, c_char, c_int, c_long, c_uint, c_ulong, c_void};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread::{self, JoinHandle};
+
+    use libloading::Library;
+
+    use super::{Shared, lock};
+
+    const RATE: u32 = 48_000;
+    /// Frames mixed per write: about 5 ms.
+    const PERIOD: usize = 256;
+    /// What ALSA may hold, in microseconds.
+    const LATENCY_US: c_uint = 40_000;
+    const SND_PCM_STREAM_PLAYBACK: c_int = 0;
+    const SND_PCM_FORMAT_S16_LE: c_int = 2;
+    const SND_PCM_ACCESS_RW_INTERLEAVED: c_int = 3;
+
+    type Open = unsafe extern "C" fn(*mut *mut c_void, *const c_char, c_int, c_int) -> c_int;
+    type SetParams =
+        unsafe extern "C" fn(*mut c_void, c_int, c_int, c_uint, c_uint, c_int, c_uint) -> c_int;
+    type Writei = unsafe extern "C" fn(*mut c_void, *const c_void, c_ulong) -> c_long;
+    type Recover = unsafe extern "C" fn(*mut c_void, c_int, c_int) -> c_int;
+    type Close = unsafe extern "C" fn(*mut c_void) -> c_int;
+    type StrError = unsafe extern "C" fn(c_int) -> *const c_char;
+    type Quiet = unsafe extern "C" fn(*const c_char, c_int, *const c_char, c_int, *const c_char);
+    type SetErrorHandler = unsafe extern "C" fn(Option<Quiet>) -> c_int;
+
+    /// Takes ALSA's error reports while a device opens, and drops them.
+    ///
+    /// ALSA prints its config's complaints straight to stderr -- eight lines
+    /// of `ALSA lib confmisc.c` on a machine with no card -- where the mixer
+    /// already says in one why it is silent. The handler is variadic in C;
+    /// on Linux's x86_64 and aarch64 ABIs a callee that reads only the fixed
+    /// arguments is called correctly.
+    unsafe extern "C" fn quiet(_: *const c_char, _: c_int, _: *const c_char, _: c_int, _: *const c_char) {}
+
+    struct Alsa {
+        // Held so the functions below stay loaded.
+        _library: Library,
+        open: Open,
+        set_params: SetParams,
+        writei: Writei,
+        recover: Recover,
+        drop_pcm: Close,
+        close: Close,
+        strerror: StrError,
+        set_error_handler: SetErrorHandler,
+    }
+
+    impl Alsa {
+        fn load() -> Result<Self, String> {
+            // SAFETY: libasound's initialisers have no preconditions, and each
+            // symbol is read with the signature alsa/pcm.h gives it.
+            unsafe {
+                let library = Library::new("libasound.so.2")
+                    .map_err(|error| format!("ALSA is not installed ({error})"))?;
+                macro_rules! symbol {
+                    ($name:literal) => {
+                        *library
+                            .get($name)
+                            .map_err(|error| format!("ALSA lacks a function: {error}"))?
+                    };
+                }
+                Ok(Self {
+                    open: symbol!(b"snd_pcm_open\0"),
+                    set_params: symbol!(b"snd_pcm_set_params\0"),
+                    writei: symbol!(b"snd_pcm_writei\0"),
+                    recover: symbol!(b"snd_pcm_recover\0"),
+                    drop_pcm: symbol!(b"snd_pcm_drop\0"),
+                    close: symbol!(b"snd_pcm_close\0"),
+                    strerror: symbol!(b"snd_strerror\0"),
+                    set_error_handler: symbol!(b"snd_lib_error_set_handler\0"),
+                    _library: library,
+                })
+            }
+        }
+
+        fn error(&self, code: c_int) -> String {
+            // SAFETY: snd_strerror returns a static string for any code.
+            unsafe { CStr::from_ptr((self.strerror)(code)) }.to_string_lossy().into_owned()
+        }
+    }
+
+    /// An open PCM handle, moved once to the thread that writes it.
+    struct Pcm(*mut c_void);
+    // SAFETY: the handle is only ever used by one thread at a time: opened
+    // here, then owned by the writer until it closes it.
+    unsafe impl Send for Pcm {}
+
+    /// A playing device; dropping it stops the writer and closes ALSA.
+    pub struct Stream {
+        running: Arc<AtomicBool>,
+        writer: Option<JoinHandle<()>>,
+    }
+
+    impl Drop for Stream {
+        fn drop(&mut self) {
+            self.running.store(false, Ordering::Relaxed);
+            if let Some(writer) = self.writer.take() {
+                let _ = writer.join();
+            }
+        }
+    }
+
+    pub fn open(shared: Shared) -> Result<(Stream, u32, String), String> {
+        let alsa = Alsa::load()?;
+        let name = std::env::var("PYGUARA_ALSA_DEVICE").unwrap_or_else(|_| "default".to_owned());
+        let c_name = CString::new(name.clone()).map_err(|_| "bad device name".to_owned())?;
+        let mut pcm: *mut c_void = std::ptr::null_mut();
+        // SAFETY: the handler matches what ALSA calls (see `quiet`); None
+        // restores ALSA's own once the device is open or refused.
+        unsafe { (alsa.set_error_handler)(Some(quiet)) };
+        let opened = open_pcm(&alsa, &mut pcm, &c_name, &name);
+        // SAFETY: None is ALSA's documented way back to its default handler.
+        unsafe { (alsa.set_error_handler)(None) };
+        opened?;
+        let running = Arc::new(AtomicBool::new(true));
+        let flag = running.clone();
+        let handle = Pcm(pcm);
+        let writer = thread::Builder::new()
+            .name("pyguara-alsa".into())
+            .spawn(move || write(alsa, handle, shared, flag))
+            .map_err(|error| error.to_string())?;
+        Ok((Stream { running, writer: Some(writer) }, RATE, format!("ALSA {name}")))
+    }
+
+    /// Open `name` for playback and set its format; closes it on failure.
+    fn open_pcm(alsa: &Alsa, pcm: &mut *mut c_void, c_name: &CStr, name: &str) -> Result<(), String> {
+        // SAFETY: `pcm` is written by a successful open, and closed here on
+        // failure or later by the writer.
+        unsafe {
+            let code = (alsa.open)(pcm, c_name.as_ptr(), SND_PCM_STREAM_PLAYBACK, 0);
+            if code < 0 {
+                return Err(format!("ALSA could not open {name:?}: {}", alsa.error(code)));
+            }
+            let code = (alsa.set_params)(
+                *pcm,
+                SND_PCM_FORMAT_S16_LE,
+                SND_PCM_ACCESS_RW_INTERLEAVED,
+                2,
+                RATE,
+                1,
+                LATENCY_US,
+            );
+            if code < 0 {
+                (alsa.close)(*pcm);
+                return Err(format!("ALSA refused 16-bit stereo at {RATE} Hz: {}", alsa.error(code)));
+            }
+        }
+        Ok(())
+    }
+
+    fn write(alsa: Alsa, pcm: Pcm, shared: Shared, running: Arc<AtomicBool>) {
+        let pcm = pcm.0;
+        let mut mix = vec![0.0f32; PERIOD * 2];
+        let mut samples = vec![0i16; PERIOD * 2];
+        while running.load(Ordering::Relaxed) {
+            lock(&shared).render(&mut mix);
+            for (out, &value) in samples.iter_mut().zip(&mix) {
+                *out = (value.clamp(-1.0, 1.0) * 32767.0) as i16;
+            }
+            let mut done = 0usize;
+            while done < PERIOD && running.load(Ordering::Relaxed) {
+                // SAFETY: the slice holds PERIOD - done whole frames from `done`.
+                let wrote = unsafe {
+                    (alsa.writei)(
+                        pcm,
+                        samples[done * 2..].as_ptr().cast(),
+                        (PERIOD - done) as c_ulong,
+                    )
+                };
+                if wrote >= 0 {
+                    done += wrote as usize;
+                    continue;
+                }
+                // An underrun or a suspend: recover and carry on; anything
+                // else ends playback rather than spinning on it.
+                // SAFETY: `pcm` is open.
+                if unsafe { (alsa.recover)(pcm, wrote as c_int, 1) } < 0 {
+                    eprintln!("pyguara audio: ALSA stopped: {}", alsa.error(wrote as c_int));
+                    running.store(false, Ordering::Relaxed);
+                }
+            }
+        }
+        // SAFETY: the writer owns the handle; nothing uses it after this.
+        unsafe {
+            (alsa.drop_pcm)(pcm);
+            (alsa.close)(pcm);
+        }
     }
 }
 

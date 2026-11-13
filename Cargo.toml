@@ -56,11 +56,6 @@ arboard = "3.7.0"
 # Decodes textures and writes captures for the wgpu backend, in place of
 # `pygame.image`. Pure Rust; only the formats the image loader advertises.
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
-# The native audio backend's output device. Optional only so a machine
-# without ALSA's headers (Linux) can still build and test the mixer through
-# its offline render; the wheel is always built with it. See
-# `rust/src/mixer.rs`.
-cpal = { version = "0.18", optional = true }
 # Gamepads for the wgpu backend, in place of SDL's joysticks through pygame,
 # with SDL's controller database for the standard layout. Optional only so a
 # Linux machine without udev's headers can still build; the wheel is always
@@ -74,6 +69,19 @@ skrifa = "0.50.0"
 # Fills a hinted glyph outline by area coverage.
 ab_glyph_rasterizer = "0.1.10"
 
+# The native audio backend's output device on Windows and macOS. Not on
+# Linux: cpal links ALSA at load time there, so a machine without
+# `libasound.so.2` (a slim container, a server) could not import the
+# extension at all. See `rust/src/mixer.rs`.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+cpal = { version = "0.18", optional = true }
+
+# Linux's output device instead: ALSA, opened with `dlopen` when a mixer
+# first asks for the device, so its absence means a silent mixer rather
+# than a failed import.
+[target.'cfg(target_os = "linux")'.dependencies]
+libloading = { version = "0.8", optional = true }
+
 [profile.release]
 lto = "fat"
 codegen-units = 1
@@ -83,6 +91,6 @@ opt-level = 3
 default = ["audio-output", "gamepads"]
 # The mixer writes to the sound card. Off, it plays to a silent real-time
 # clock instead, and says so when it opens.
-audio-output = ["dep:cpal"]
+audio-output = ["dep:cpal", "dep:libloading"]
 # Gamepads are read. Off, none is ever connected.
 gamepads = ["dep:gilrs"]

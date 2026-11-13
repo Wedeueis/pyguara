@@ -1898,6 +1898,7 @@ dependencies = [
  "cpal",
  "gilrs",
  "image",
+ "libloading",
  "pollster",
  "pyo3",
  "renet",
