@@ -1,8 +1,10 @@
 name: Wheels
 
-# Called, never triggered on its own: `ci.yml` runs it on every pull
-# request and `release.yml` runs it on a tag, so what a release publishes
-# comes out of the same job that verified it on the branch.
+# Called: `ci.yml` runs it on every pull request and `release.yml` runs it
+# on a tag, so what a release publishes comes out of the same job that
+# verified it on the branch. It can also be started by hand
+# (`gh workflow run wheels.yml --ref <branch>`), for a branch neither caller
+# covers -- the fork's `next` -- after changing the build.
 #
 # The engine's wheel is no longer pure Python. `pyproject.toml` builds the
 # Rust accelerator through maturin and ships it inside the wheel, which is
@@ -15,6 +17,7 @@ name: Wheels
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read

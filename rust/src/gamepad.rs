@@ -10,6 +10,12 @@
 //! Sticks are -1 to 1 with **y down**, as the engine has them; gilrs has y
 //! up. Triggers are 0 to 1.
 //!
+//! **Input arrives only while the process has a focused window.** gilrs's
+//! default Windows backend, Windows.Gaming.Input, delivers nothing to an
+//! unfocused process -- the game's own window in practice, and SDL behaves
+//! the same. A console probe with no window sees every pad at rest while
+//! the terminal takes the input. See `docs/systems/input.md`.
+//!
 //! Without the `gamepads` feature (a Linux build with no udev headers) this
 //! compiles to an object that never sees a pad.
 
