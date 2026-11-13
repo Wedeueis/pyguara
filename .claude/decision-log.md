@@ -435,3 +435,9 @@
 - **Chose:** the tagged HELLO; a host answers every HELLO from a peer with WELCOME, so a lost one costs a resend, not the join. Refusals (`REFUSED`, rate-limited by the shared stranger budget) and goodbyes (`BYE`, three times) carry a reason. A client's reasons reuse renetcode's names (`ConnectionDenied`, `ConnectionTimedOut`, `ConnectionRequestTimedOut`, `DisconnectedByServer`) so `session._explain` words them the same for players. A host is closed by default (admits only `allow`ed Steam IDs, which 5c's lobby will drive); `open_room` admits anyone, for development.
 - **Tags:** net, steam, transport, security
 - **Review:** approved by the user 2026-11-13.
+
+## Steam callbacks by manual dispatch, drained by the caller each frame
+- **Context:** 5b, the Steam binding. Steam delivers session requests and failures as callbacks.
+- **Alternatives:** Steam's automatic dispatch (`SteamAPI_RunCallbacks` into registered C++ objects: needs the C++ ABI, and would run code on whatever thread calls it); manual dispatch drained on one thread.
+- **Chose:** manual dispatch through the flat C API, drained by `NativeSteam.run_callbacks()` and returned as tuples, so no C++ ABI is involved and nothing Steam does runs Python behind the frame loop. Messages go unreliable + no-Nagle + auto-restart-broken-session on channel 0, since renet carries its own reliability (see the 5a entry). The class is `unsendable` and one per process, as Steam allows.
+- **Tags:** net, steam, native-extension

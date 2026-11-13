@@ -71,6 +71,7 @@ mod particles;
 mod solids;
 mod sparks;
 mod spatialhash;
+mod steam;
 mod text;
 mod window;
 mod world;
@@ -98,6 +99,8 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<gamepad::NativeGamepads>()?;
     module.add_class::<window::NativeWindow>()?;
     module.add_class::<window::NativeClipboard>()?;
+    module.add_class::<steam::NativeSteam>()?;
+    module.add_function(wrap_pyfunction!(steam::steam_library_name, module)?)?;
     module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::decode_image, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::premultiply_rgba, module)?)?;
