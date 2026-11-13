@@ -65,10 +65,10 @@ const TOKEN_SERVER_ADDRESS: ([u8; 4], u16) = ([127, 0, 0, 1], 1);
 /// nothing: its keys are sealed inside, and one token cannot be used from a
 /// second address.
 const TOKEN_EXPIRY_SECONDS: u64 = 10 * 365 * 24 * 3600;
-const TIMEOUT_SECONDS: i32 = 10;
+pub(super) const TIMEOUT_SECONDS: i32 = 10;
 
 /// `renet`'s `SLICE_SIZE`, which it does not export. Pinned with the crate.
-const SLICE_SIZE: usize = 1200;
+pub(super) const SLICE_SIZE: usize = 1200;
 const MTU_BYTES: usize = NETCODE_MAX_PACKET_BYTES;
 const MAC_BYTES: usize = 16;
 const MAX_SEQUENCE_BYTES: u8 = 8;
@@ -76,23 +76,23 @@ const MIN_DATAGRAM_BYTES: usize = 2 + MAC_BYTES;
 
 /// Per peer, once authenticated. A connected client's normal load is a few
 /// hundred datagrams a second.
-const PEER_DATAGRAMS_PER_SECOND: f64 = 1500.0;
-const PEER_DATAGRAM_BURST: f64 = 2000.0;
-const PEER_DROPS_BEFORE_KICK: u32 = 30_000;
+pub(super) const PEER_DATAGRAMS_PER_SECOND: f64 = 1500.0;
+pub(super) const PEER_DATAGRAM_BURST: f64 = 2000.0;
+pub(super) const PEER_DROPS_BEFORE_KICK: u32 = 30_000;
 
 /// Shared by every address that has not authenticated.
-const UNAUTH_DATAGRAMS_PER_SECOND: f64 = 200.0;
-const UNAUTH_DATAGRAM_BURST: f64 = 400.0;
+pub(super) const UNAUTH_DATAGRAMS_PER_SECOND: f64 = 200.0;
+pub(super) const UNAUTH_DATAGRAM_BURST: f64 = 400.0;
 
 /// Past this, reliable messages wait in `renet`, whose own limit then ends the
 /// connection, and unreliable ones are dropped. So a long stall is bounded.
-const INBOX_LIMIT_BYTES: usize = 32 * 1024 * 1024;
+pub(super) const INBOX_LIMIT_BYTES: usize = 32 * 1024 * 1024;
 /// Sits outside `renet`'s packet types, so it can never be read as one.
 const CONFIRM: [u8; 1] = [0xFF];
 const CONFIRM_INTERVAL: Duration = Duration::from_millis(100);
 
-const FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
-const DISCONNECT_REPEATS: usize = 3;
+pub(super) const FLUSH_TIMEOUT: Duration = Duration::from_secs(5);
+pub(super) const DISCONNECT_REPEATS: usize = 3;
 
 const CONTROL: u8 = 0;
 const EVENTS: u8 = 1;
@@ -104,18 +104,18 @@ pub const CHANNEL_COUNT: u8 = 5;
 const KIB: usize = 1024;
 const MIB: usize = 1024 * KIB;
 
-struct ChannelSpec {
-    id: u8,
-    reliable: bool,
-    client_to_host_bytes: usize,
-    host_to_client_bytes: usize,
+pub(super) struct ChannelSpec {
+    pub(super) id: u8,
+    pub(super) reliable: bool,
+    pub(super) client_to_host_bytes: usize,
+    pub(super) host_to_client_bytes: usize,
 }
 
 /// In priority order: `renet` spends each tick's byte budget front to back, so
 /// a level transfer can never starve events or snapshots. Client limits are
 /// small on purpose. They bound what a client can make the host allocate, and
 /// `renet` checks them before allocating for a slice.
-const CHANNELS: [ChannelSpec; CHANNEL_COUNT as usize] = [
+pub(super) const CHANNELS: [ChannelSpec; CHANNEL_COUNT as usize] = [
     ChannelSpec { id: CONTROL, reliable: true, client_to_host_bytes: 16 * KIB, host_to_client_bytes: 16 * KIB },
     ChannelSpec { id: COMMANDS, reliable: false, client_to_host_bytes: 64 * KIB, host_to_client_bytes: 64 * KIB },
     ChannelSpec { id: EVENTS, reliable: true, client_to_host_bytes: 256 * KIB, host_to_client_bytes: MIB },
@@ -123,7 +123,7 @@ const CHANNELS: [ChannelSpec; CHANNEL_COUNT as usize] = [
     ChannelSpec { id: LEVEL, reliable: true, client_to_host_bytes: 64 * KIB, host_to_client_bytes: 16 * MIB },
 ];
 
-fn connection_config(send_bytes_per_tick: u64) -> ConnectionConfig {
+pub(super) fn connection_config(send_bytes_per_tick: u64) -> ConnectionConfig {
     let config = |bytes: fn(&ChannelSpec) -> usize| -> Vec<ChannelConfig> {
         CHANNELS
             .iter()
@@ -152,7 +152,7 @@ fn connection_config(send_bytes_per_tick: u64) -> ConnectionConfig {
 /// as whole slices, against the same limit, and disconnects when over. Rounding
 /// can at most double a message's charge (1,201 bytes is charged 2,400), so a
 /// reliable channel only accepts a send that would fit in half its limit.
-fn bytes_to_check(channel: u8, length: usize, limit: fn(&ChannelSpec) -> usize) -> usize {
+pub(super) fn bytes_to_check(channel: u8, length: usize, limit: fn(&ChannelSpec) -> usize) -> usize {
     let Some(spec) = CHANNELS.iter().find(|spec| spec.id == channel) else {
         return length;
     };
@@ -201,22 +201,22 @@ pub struct LinkStats {
     pub bytes_received_per_second: f64,
 }
 
-struct Bucket {
+pub(super) struct Bucket {
     tokens: f64,
     rate: f64,
     burst: f64,
 }
 
 impl Bucket {
-    fn new(rate: f64, burst: f64) -> Self {
+    pub(super) fn new(rate: f64, burst: f64) -> Self {
         Self { tokens: burst, rate, burst }
     }
 
-    fn refill(&mut self, seconds: f64) {
+    pub(super) fn refill(&mut self, seconds: f64) {
         self.tokens = (self.tokens + seconds * self.rate).min(self.burst);
     }
 
-    fn take(&mut self) -> bool {
+    pub(super) fn take(&mut self) -> bool {
         if self.tokens >= 1.0 {
             self.tokens -= 1.0;
             true

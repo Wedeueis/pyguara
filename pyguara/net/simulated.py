@@ -121,6 +121,45 @@ class SimulatedNetwork:
         )
         return self._attach(endpoint, address)
 
+    def add_steam_host(
+        self, steam_id: int, max_clients: int = 8, *, open_room: bool = False
+    ) -> NativeTransport:
+        """Add a host over the Steam core, addressed by its Steam ID.
+
+        Steam's own transport is not simulated: datagrams here are what the
+        Steam core would hand to Steam's messages, carried by this network.
+
+        Args:
+            steam_id: Its Steam ID, which is also its address here.
+            max_clients: How many may connect.
+            open_room: Admit anyone, rather than only IDs passed to `allow`.
+
+        Returns:
+            Its transport. `transport.endpoint.allow(id)` admits a player.
+        """
+        endpoint = self._core.NativeSteamEndpoint.host(
+            max_clients, self._send_bytes_per_tick, open_room
+        )
+        return self._attach(endpoint, str(steam_id))
+
+    def add_steam_client(
+        self, steam_id: int, host_steam_id: int, user_data: bytes = b""
+    ) -> NativeTransport:
+        """Add a client over the Steam core, which starts joining on `advance`.
+
+        Args:
+            steam_id: Its Steam ID, which is also its address here.
+            host_steam_id: The host's.
+            user_data: Up to 256 bytes the host receives with the connection.
+
+        Returns:
+            Its transport.
+        """
+        endpoint = self._core.NativeSteamEndpoint.client(
+            host_steam_id, user_data, self._send_bytes_per_tick
+        )
+        return self._attach(endpoint, str(steam_id))
+
     def _attach(self, endpoint: object, address: str | None) -> NativeTransport:
         if address is None:
             address = f"10.0.0.{self._next_host}:7000"
