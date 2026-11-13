@@ -141,8 +141,29 @@ Unheard on a real Linux desktop: this machine is WSL, with no card.
 
 ### 5. Hosting on home connections
 
-A relay, or Steam Datagram Relay for the Steam release. Reclaimer's plan
-wants this decided before M4.
+**Decided 2026-11-13 (the user's calls): Steam only**, through Steam's
+networking and its relay (network plan, section 8); **Steam's library is
+loaded at run time**, as ALSA now is, so the extension never links
+`steam_api` and the engine never redistributes it -- the game ships it; and
+**friends join through a Steam lobby and the overlay**, as Steam co-op games
+do, not by pasting an invite.
+
+The shape: Steam takes `renetcode`'s job and the socket's. It authenticates
+who sent a packet (a Steam ID), encrypts it, and relays it so neither side
+learns the other's address. `renet` keeps its job -- channels, acks,
+slicing, backpressure, link stats -- carried in Steam's unreliable,
+no-Nagle messages, so the five channels, `Transport`, the session and
+everything above it are the code the UDP path already runs and tests.
+
+| Increment | What | Needs |
+| --- | --- | --- |
+| **5a** | `SteamCore`, sans-IO: a host and a client over `renet` keyed by Steam ID instead of address, with no `renetcode`. Who may connect is a callback (lobby membership, in 5c); versions travel in a first `CONTROL` hello rather than token user data; `renet`'s slice panic still guarded by `catch_unwind`. Driven in CI through the existing simulated network with fake Steam IDs | Nothing outside this repo |
+| **5b** | The Steam binding: `steam_api` loaded with `dlopen`/`LoadLibrary` from beside the game, Steam's flat C API, manual callback dispatch. `SteamAPI_InitFlat`, the local Steam ID and name, `ISteamNetworkingMessages` (send, receive, accept a session, its failure callback), relay network init. Missing library or Steam not running is an error naming which, never an import failure | The Steamworks SDK's `steam_api` binaries, downloaded by the user (its licence does not allow them in this repository); app ID 480 for development |
+| **5c** | Lobbies and the overlay: create a friends-only lobby on hosting, rich presence so friends see "Join game", accept an overlay invite or a `+connect_lobby` launch argument, admit only lobby members | 5b |
+| **5d** | `SteamTransport` in Python under `Transport`, and `pyguara dist` copying `steam_api` (and `steam_appid.txt` in a development build) beside the game | 5a, 5b |
+| **5e** | Reclaimer hosts and joins through Steam; a playtest across two home connections | Two machines, two Steam accounts |
+
+Direct IP stays, for development, playtests and any build outside Steam.
 
 ### 6. Packed assets
 
