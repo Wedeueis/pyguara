@@ -1,11 +1,8 @@
 """Scenarios for `attach_studio`, run in a subprocess by `test_attach.py`.
 
-A separate process because `attach_studio` needs a real SDL window with a
-GL context, and the suite's session-scoped `gl_ctx` fixture already holds
-a standalone EGL context current. Creating the second one in the same
-process fails with `EGL_BAD_ACCESS` -- the "silently steals current"
-hazard `tests/conftest.py` documents on `isolated_gl_ctx`, met from the
-other direction.
+A separate process because `attach_studio` opens a real application and
+window -- on the wgpu backend, under SDL's dummy driver -- and a scenario's
+pygame display and native frame should not outlive it into the suite.
 
 Run as `python -m tests.studio._attach_scenarios <name>`. Each scenario
 raises on failure and prints nothing on success, so the exit code is the
@@ -19,7 +16,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-os.environ["SDL_VIDEODRIVER"] = "offscreen"
+# wgpu draws offscreen itself and copies the frame out, under the dummy driver.
+BACKEND = "wgpu"
+os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
@@ -45,13 +44,13 @@ def _project_root() -> Path:
 
 
 def _configure(config: object) -> None:
-    """Select the ModernGL backend with vsync off."""
-    config.display.backend = RenderingBackend.MODERNGL  # type: ignore[attr-defined]
+    """Select the scenario's backend with vsync off."""
+    config.display.backend = RenderingBackend(BACKEND)  # type: ignore[attr-defined]
     config.display.vsync = False  # type: ignore[attr-defined]
 
 
 def _application() -> object:
-    """Build a ModernGL application."""
+    """Build an application on the scenario's backend."""
     return create_application(configure=_configure)
 
 
@@ -376,6 +375,14 @@ def the_menus_are_studios_own() -> None:
         app.shutdown()
 
 
+def imgui_clear_colour(graph: object) -> tuple[int, int, int]:
+    """The colour the editor's pass clears the screen to, in 0-255."""
+    colour = graph.get_pass("imgui")._clear_colour  # type: ignore[attr-defined]
+    if colour is None:
+        return (0, 0, 0)
+    return tuple(round(channel * 255) for channel in colour)  # type: ignore[return-value]
+
+
 def the_editor_gets_the_whole_window() -> None:
     """The editor is not letterboxed with the game.
 
@@ -403,34 +410,30 @@ def the_editor_gets_the_whole_window() -> None:
         graph = app._render_graph
         assert graph.screen_rect[2:] != window, "nothing was letterboxed"
 
-        seen: list[tuple[int, int, int, int]] = []
-        imgui_pass = graph.get_pass("imgui")
-        original = imgui_pass._layer.render
+        # No viewport is left narrowed on wgpu -- each ImGui command
+        # clips itself -- so check the outcome: the editor's panels
+        # reach into the letterbox bars, where the game never draws.
+        for _ in range(3):
+            app.step()
+        # The frame `step()` already rendered and presented: rendering
+        # another here would show only the clear colour.
+        gpu = graph.device.frame.gpu
+        import numpy as np
 
-        def record(width: int, height: int, dt: float | None = None) -> None:
-            ctx = graph.ctx
-            if ctx.screen is not None:
-                seen.append(tuple(ctx.screen.viewport))
-            original(width, height, dt)
+        pixels = np.frombuffer(gpu.read_pixels(), dtype=np.uint8)
+        image = pixels.reshape(window[1], window[0], 4)[..., :3].astype(int)
+        x, _, width, _ = graph.screen_rect
+        bars = np.concatenate([image[:, :x], image[:, x + width :]], axis=1)
+        # Panels, text and borders: anything that is not the colour the
+        # screen was cleared to. A bare clear passes no brightness test.
+        clear = np.array(imgui_clear_colour(graph), dtype=int)
+        drawn = int((np.abs(bars - clear).max(axis=2) > 6).sum())
+        assert drawn > bars.shape[0] * bars.shape[1] // 50, (
+            f"only {drawn} pixels of the letterbox bars differ from the "
+            f"clear colour: the editor is squeezed into the game's frame "
+            f"{graph.screen_rect}"
+        )
 
-        imgui_pass._layer.render = record
-        try:
-            for _ in range(3):
-                app.step()
-        finally:
-            imgui_pass._layer.render = original
-
-        assert seen, "the editor never drew"
-        for viewport in seen:
-            assert viewport == (0, 0, *window), (
-                f"the editor drew under {viewport} rather than the whole "
-                f"window {window}; it is being squeezed into the game's "
-                f"letterbox {graph.screen_rect}"
-            )
-
-        # And put back, because the game's UI composites after the graph
-        # and belongs inside the frame rather than on the bars.
-        assert tuple(graph.ctx.screen.viewport) == graph.screen_rect
     finally:
         app.shutdown()
 
@@ -477,7 +480,7 @@ def the_edit_lifecycle_works() -> None:
         def frame() -> bytes:
             fbo = graph.fbo_manager.get("world")
             assert fbo is not None, "no world framebuffer to compare"
-            return bytes(fbo.fbo.read(components=3))
+            return bytes(fbo.read_rgba())
 
         def settle(count: int = 4) -> None:
             for _ in range(count):

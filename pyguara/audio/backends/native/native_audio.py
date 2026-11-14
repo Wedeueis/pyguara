@@ -1,23 +1,28 @@
-"""The audio backend with pitch and loop points."""
+"""The audio backend that owns its device: pitch, loop points, no pygame."""
 
-import contextlib
-from collections import OrderedDict
+from __future__ import annotations
+
+import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-import pygame
-
 from pyguara import native
-from pyguara.audio.audio_system import resolve_loop_points
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+from pyguara.audio.audio_system import require_capability, resolve_loop_points
 from pyguara.audio.types import (
+    AudioBusManager,
     AudioBusType,
     AudioCapability,
+    AudioEffect,
     AudioPriority,
+    PlayingSoundInfo,
     SoundHandle,
+    SpatialAudioConfig,
+    new_sound_handle,
 )
 from pyguara.common.types import Vector2
 from pyguara.log import get_logger
+from pyguara.resources.meta import AudioMeta
 from pyguara.resources.types import AudioClip
 
 from .types import NativeAudioClip
@@ -28,327 +33,466 @@ MIN_PITCH = 0.25
 """Two octaves down. Below this a clip is too stretched to be a variation."""
 
 MAX_PITCH = 4.0
-"""Two octaves up. Linear resampling aliases audibly well before this."""
-
-PITCH_STEP = 0.01
-"""Pitches are rendered to the nearest 1%, about 17 cents.
-
-A continuous pitch would allocate a buffer per play on the most frequently
-played sounds in a game. Quantised, a variation range of a few percent is a
-handful of buffers, and nobody hears the difference between 1.003 and 1.
-
-The cache key is this step, so it also bounds how many entries one clip can
-occupy at 375.
-"""
-
-DEFAULT_CACHE_BYTES = 32 * 1024 * 1024
-"""What rendered pitch and loop buffers may hold, over the clips themselves."""
-
-_MIN_LOOP_SEGMENT_SECONDS = 1.0
-"""A queued loop segment is at least this long, in whole laps.
-
-`Channel.queue` is one deep, so the next segment has to be queued while the
-current one plays, and the segment's length is the slack for that. A 50 ms
-loop would otherwise need re-queueing every 50 ms from a frame loop that can
-stall for longer than that. Baking laps together is measured sample-exact in
-`tests/integration/test_audio_output.py`.
-"""
-
-_BYTES_PER_SAMPLE = 2
-
-
-def _is_unity(pitch: float) -> bool:
-    """Return whether `pitch` rounds to the clip's own rate."""
-    return round(pitch / PITCH_STEP) == round(1.0 / PITCH_STEP)
+"""Two octaves up. Linear interpolation aliases audibly well before this."""
 
 
 @dataclass(slots=True)
-class _LoopBuffers:
-    """The rendered sounds a looping play moves through."""
+class _Playing:
+    """What a voice was asked for, so its gains can be worked out again."""
 
-    intro: pygame.mixer.Sound
-    segment: pygame.mixer.Sound
-    laps_per_segment: int
-    lap: pygame.mixer.Sound
-
-
-@dataclass(slots=True)
-class _Loop:
-    """A sound playing an intro and then laps of a region."""
-
-    channel_id: int
-    buffers: _LoopBuffers
-    remaining: int
-    """Laps still to queue, or -1 for forever."""
+    info: PlayingSoundInfo
+    voice: int
+    gain: float
+    """Base volume times the clip's and its sidecar's gain: all but the bus."""
+    attenuation: float
+    pan: float
 
 
-class NativeAudioSystem(PygameAudioSystem):
-    """`PygameAudioSystem`, plus pitch and loop points rendered in Rust.
+def _stereo(volume: float, pan: float) -> tuple[float, float]:
+    """Split a volume into left and right gains for a pan.
 
-    Output is still `pygame.mixer`: this backend changes what is handed to a
-    channel and nothing about how it reaches a speaker, so spatial audio, buses
-    and channel stealing are all inherited. `BUS_EFFECTS` is declined because
-    it needs post-mix ownership of the device, which `pygame.mixer` has no hook
-    for and `cpal` would link ALSA to get.
+    The same law `PygameAudioSystem` uses on a channel: the far side is
+    turned down, the near side left alone, so a centred sound and a panned
+    one are equally loud on the side they favour.
 
-    **Selected by `AudioConfig.backend`, not by `native_acceleration`.** Nothing
-    in Python can stand in for it, so `PYGUARA_NO_NATIVE=1` must not change what
-    a game is allowed to ask for: `PYGUARA_AUDIO_BACKEND=pygame` is what isolates
-    a bug here. See ADR 0004, Decision 4.
+    Args:
+        volume: Loudness, 0.0 to 1.0.
+        pan: -1.0 full left, 0.0 centred, 1.0 full right.
 
-    Pitch is resampling, so **it changes duration as well**: 2.0 is an octave up
-    and half as long. Loop points need `update()` called once a frame, which
-    `Application` does.
+    Returns:
+        `(left, right)`.
+    """
+    pan = max(-1.0, min(1.0, pan))
+    if pan >= 0.0:
+        return volume * (1.0 - pan), volume
+    return volume, volume * (1.0 + pan)
+
+
+class NativeAudioSystem:
+    """An audio system on the native mixer (`rust/src/mixer.rs`).
+
+    The mixer owns the device, through cpal, and plays voices; this decides
+    what they are. The policy is `PygameAudioSystem`'s -- buses, spatial
+    attenuation and pan, a fixed number of voices with lower priorities
+    stolen first -- so a game switching backend hears the same mix, plus:
+
+    - **Pitch, continuously.** 2.0 is an octave up and half as long.
+    - **Loop points.** An intro, then laps of a region, wrapped sample-exact
+      in the mixer.
+    - **Bus volumes reach sounds already playing.** pygame fixed a channel's
+      loudness when it started; here moving a slider moves a loop that is
+      going on.
+
+    **Selected by `AudioConfig.backend`, not by `native_acceleration`.**
+    Nothing in Python can stand in for it, so `PYGUARA_NO_NATIVE=1` must not
+    change what a game is allowed to ask for: `PYGUARA_AUDIO_BACKEND=pygame`
+    is what isolates a bug here. See ADR 0004, Decision 4.
+
+    With no output device -- or an extension built without the
+    `audio-output` feature -- the mixer runs against a silent clock and
+    sounds still end on time; `output` says which.
     """
 
     def __init__(
         self,
         frequency: int = 44100,
-        size: int = -16,
-        channels: int = 2,
-        buffer: int = 512,
         num_channels: int = 32,
-        cache_bytes: int = DEFAULT_CACHE_BYTES,
+        output: str = "device",
     ) -> None:
-        """Open the mixer, having checked the extension is there to use it.
+        """Open the mixer.
 
         Args:
-            frequency: Sample rate.
-            size: Sample size. Must be -16, which is all this backend renders.
-            channels: Number of audio channels.
-            buffer: Buffer size.
-            num_channels: Number of mixer channels for simultaneous sounds.
-            cache_bytes: The most rendered buffers may hold; the least recently
-                used go first. A sound that is playing outlives its eviction.
+            frequency: The rate to mix at when there is no device. A device
+                runs at its own rate, which `rate` reports.
+            num_channels: How many effects may sound at once; more steal
+                from lower priorities, as on pygame.
+            output: `"device"` (falling back to silent), `"silent"`, or
+                `"offline"`, where nothing advances until `mixer.render`.
 
         Raises:
             RuntimeError: If the extension cannot be imported.
-            ValueError: If `size` is anything but signed 16-bit.
         """
-        self._native = native.require_extension("the native audio backend")
-        if size != -16:
-            raise ValueError(
-                f"NativeAudioSystem renders signed 16-bit, so size must be -16, "
-                f"got {size}."
-            )
-        super().__init__(frequency, size, channels, buffer, num_channels)
-        self._cache_bytes = cache_bytes
-        self._cached_bytes = 0
-        self._cache: OrderedDict[tuple[Any, ...], tuple[Any, int]] = OrderedDict()
-        self._loops: dict[SoundHandle, _Loop] = {}
+        extension = native.require_extension("the native audio backend")
+        self.mixer: Any = extension.NativeMixer(frequency, output)
+        self._num_channels = num_channels
+        self._bus_manager = AudioBusManager()
+        self._master_volume = 1.0
+        self._sfx_volume = 1.0
+        self._music_volume = 1.0
+        self._spatial_config = SpatialAudioConfig()
+        self._listener_position = Vector2(0, 0)
+        self._playing: dict[SoundHandle, _Playing] = {}
+        self._shut_down = False
+        description = str(self.mixer.output)
+        if description.startswith("silent"):
+            logger.warning("Native audio is %s; the game will be silent.", description)
+        else:
+            logger.info("Native audio: %s at %d Hz", description, self.mixer.rate)
+
+    @property
+    def rate(self) -> int:
+        """The rate the mixer runs at."""
+        return int(self.mixer.rate)
+
+    @property
+    def output(self) -> str:
+        """Where the mix goes: `device: <name>`, `silent: <why>` or `offline`."""
+        return str(self.mixer.output)
 
     @property
     def capabilities(self) -> AudioCapability:
         """Report pitch and loop points."""
         return AudioCapability.PITCH | AudioCapability.LOOP_POINTS
 
-    def _decline_unsupported(
+    # ========== Playing ==========
+
+    def play_sfx(
         self,
         clip: AudioClip,
-        loops: int,
+        volume: float = 1.0,
+        loops: int = 0,
+        priority: AudioPriority = AudioPriority.NORMAL,
+        bus: AudioBusType = AudioBusType.SFX,
+        pitch: float = 1.0,
+        loop_start: float | None = None,
+        loop_end: float | None = None,
+    ) -> SoundHandle | None:
+        """Play a sound effect with priority and bus routing."""
+        self._check(clip, pitch, loop_start, loop_end)
+        return self._play(
+            clip, volume, 1.0, 0.0, loops, priority, bus, None, pitch,
+            loop_start, loop_end,
+        )  # fmt: skip
+
+    def play_sfx_at_position(
+        self,
+        clip: AudioClip,
+        source_pos: Vector2,
+        listener_pos: Vector2,
+        volume: float = 1.0,
+        loops: int = 0,
+        priority: AudioPriority = AudioPriority.NORMAL,
+        bus: AudioBusType = AudioBusType.SFX,
+        pitch: float = 1.0,
+        loop_start: float | None = None,
+        loop_end: float | None = None,
+    ) -> SoundHandle | None:
+        """Play a sound effect attenuated and panned by its position."""
+        self._check(clip, pitch, loop_start, loop_end)
+        distance = math.hypot(
+            source_pos.x - listener_pos.x, source_pos.y - listener_pos.y
+        )
+        attenuation = self._spatial_config.calculate_attenuation(distance)
+        if attenuation <= 0.001:
+            return None
+        pan = self._spatial_config.calculate_pan(source_pos, listener_pos)
+        return self._play(
+            clip, volume, attenuation, pan, loops, priority, bus, source_pos,
+            pitch, loop_start, loop_end,
+        )  # fmt: skip
+
+    def _check(
+        self,
+        clip: AudioClip,
         pitch: float,
         loop_start: float | None,
         loop_end: float | None,
     ) -> None:
-        """Reject what no backend could honour, which is all that is left.
-
-        Args:
-            clip: The clip about to play.
-            loops: The requested loop count.
-            pitch: The requested playback rate.
-            loop_start: Explicit loop start, if any.
-            loop_end: Explicit loop end, if any.
+        """Refuse what no backend could honour, before anything else.
 
         Raises:
             ValueError: If `pitch` is outside `MIN_PITCH`-`MAX_PITCH`, or the
-                loop range is negative or inverted.
+                loop range is negative or inverted -- for a one-shot too, so
+                a bad range is reported rather than dropped.
+            TypeError: If the clip came from another backend's loader.
         """
         if not MIN_PITCH <= pitch <= MAX_PITCH:
             raise ValueError(
                 f"pitch must be between {MIN_PITCH} and {MAX_PITCH}, got {pitch}"
             )
         resolve_loop_points(clip, loop_start, loop_end)
+        if not isinstance(clip, NativeAudioClip):
+            raise TypeError(
+                f"'{clip.path}' is a {type(clip).__name__}; the native backend "
+                "plays a NativeAudioClip. Load it through a ResourceManager "
+                "bootstrapped with AudioConfig.backend = NATIVE."
+            )
 
-    def _play_sound(
+    def _play(
         self,
         clip: AudioClip,
         volume: float,
+        attenuation: float,
+        pan: float,
         loops: int,
         priority: AudioPriority,
         bus: AudioBusType,
         position: Vector2 | None,
-        pan: float = 0.0,
-        pitch: float = 1.0,
-        loop_start: float | None = None,
-        loop_end: float | None = None,
-        sound: pygame.mixer.Sound | None = None,
+        pitch: float,
+        loop_start: float | None,
+        loop_end: float | None,
     ) -> SoundHandle | None:
-        """Render whatever the request needs, then play it on a channel."""
+        assert isinstance(clip, NativeAudioClip)
         start, end, _explicit = resolve_loop_points(clip, loop_start, loop_end)
-
-        if start is None or loops == 0:
-            played = None if _is_unity(pitch) else self._pitched(clip, pitch)
-            return super()._play_sound(
-                clip, volume, loops, priority, bus, position, pan, sound=played
+        region: dict[str, float] = {}
+        if start is not None and loops != 0:
+            # Seconds name positions in the clip, and the voice steps through
+            # the clip's own frames, so pitch does not enter into it.
+            first = round(start * self.rate)
+            last = (
+                clip.frames if end is None else min(round(end * self.rate), clip.frames)
             )
+            if last <= first:
+                raise ValueError(
+                    f"Loop region {start}-{end} s is empty in '{clip.path}', "
+                    f"which is {clip.duration:.3f} s long."
+                )
+            region = {"loop_start": float(first), "loop_end": float(last)}
 
-        buffers = self._loop_buffers(clip, pitch, start, end)
-        handle = super()._play_sound(
-            clip, volume, 0, priority, bus, position, pan, sound=buffers.intro
+        if not self._make_room(priority):
+            logger.debug("No voice free for '%s'", clip.path)
+            return None
+        base_volume = max(0.0, min(1.0, volume))
+        meta = clip.import_meta
+        import_gain = (
+            meta.get_volume_multiplier() if isinstance(meta, AudioMeta) else 1.0
         )
-        if handle is not None:
-            channel_id = self._playing_sounds[handle].channel_id
-            self._loops[handle] = _Loop(channel_id, buffers, remaining=loops)
-            self._queue_next(handle)
+        gain = base_volume * import_gain * clip.gain
+
+        left, right = _stereo(self._bus_gain(bus) * gain * attenuation, pan)
+        voice = int(
+            self.mixer.play(
+                clip.native_handle, left, right, pitch=pitch, loops=loops, **region
+            )
+        )
+        handle = new_sound_handle()
+        info = PlayingSoundInfo(
+            handle=handle,
+            channel_id=voice,
+            clip_path=clip.path,
+            priority=priority,
+            bus=bus,
+            base_volume=base_volume,
+            position=position,
+            is_spatial=position is not None,
+        )
+        self._playing[handle] = _Playing(info, voice, gain, attenuation, pan)
         return handle
 
-    def _pcm_of(self, clip: AudioClip) -> bytes:
-        """Read a clip's samples back from its sound.
+    def _make_room(self, priority: AudioPriority) -> bool:
+        """Free a voice if all are in use, stealing a lower priority's.
 
-        Raises:
-            TypeError: If the clip came from another backend's loader, whose
-                sound this one has no way to know the format of.
+        Returns:
+            Whether there is room to start one.
         """
-        if not isinstance(clip, NativeAudioClip):
-            raise TypeError(
-                f"'{clip.path}' is a {type(clip).__name__}, and pitch and loop "
-                "points need a NativeAudioClip. Load it through a ResourceManager "
-                "bootstrapped with AudioConfig.backend = NATIVE."
-            )
-        return bytes(clip.native_handle.get_raw())
+        self._reap()
+        if len(self._playing) < self._num_channels:
+            return True
+        lowest: _Playing | None = None
+        for playing in self._playing.values():
+            if playing.info.priority.value < priority.value and (
+                lowest is None
+                or playing.info.priority.value < lowest.info.priority.value
+            ):
+                lowest = playing
+        if lowest is None:
+            return False
+        self.stop_sfx(lowest.info.handle)
+        logger.debug("Stole a voice from a lower priority sound")
+        return True
 
-    def _cached(self, key: tuple[Any, ...]) -> Any | None:
-        entry = self._cache.get(key)
-        if entry is None:
-            return None
-        self._cache.move_to_end(key)
-        return entry[0]
+    def _reap(self) -> None:
+        ended = [
+            handle
+            for handle, playing in self._playing.items()
+            if not self.mixer.is_playing(playing.voice)
+        ]
+        for handle in ended:
+            del self._playing[handle]
 
-    def _remember(self, key: tuple[Any, ...], value: Any, size: int) -> None:
-        self._cache[key] = (value, size)
-        self._cached_bytes += size
-        while self._cached_bytes > self._cache_bytes and len(self._cache) > 1:
-            _key, (_value, evicted) = self._cache.popitem(last=False)
-            self._cached_bytes -= evicted
+    def _bus_gain(self, bus: AudioBusType) -> float:
+        name = self._bus_manager.get_bus_for_type(bus)
+        return self._bus_manager.get_effective_volume(name)
 
-    def _render(self, clip: AudioClip, pitch: float) -> bytes:
-        """Return a clip's samples at `pitch`, at the mixer's own rate."""
-        rate, _format, channels = pygame.mixer.get_init()
-        pcm = self._pcm_of(clip)
-        if _is_unity(pitch):
-            return pcm
-        rendered: bytes = self._native.resample_pcm(
-            pcm, rate, channels, rate, channels, pitch
-        )
-        return rendered
+    def _remix(self) -> None:
+        """Apply the buses' current volumes to everything playing."""
+        for playing in self._playing.values():
+            self._apply(playing)
+        self.mixer.set_music_gain(self._music_gain())
 
-    def _pitched(self, clip: AudioClip, pitch: float) -> pygame.mixer.Sound:
-        """Return the cached sound for a clip at a quantised pitch."""
-        key = ("pitch", clip.path, round(pitch / PITCH_STEP))
-        cached = self._cached(key)
-        if cached is not None:
-            result: pygame.mixer.Sound = cached
-            return result
-        pcm = self._render(clip, pitch)
-        sound = pygame.mixer.Sound(buffer=pcm)
-        self._remember(key, sound, len(pcm))
-        return sound
+    def _apply(self, playing: _Playing) -> None:
+        loudness = self._bus_gain(playing.info.bus) * playing.gain * playing.attenuation
+        self.mixer.set_gains(playing.voice, *_stereo(loudness, playing.pan))
 
-    def _loop_buffers(
-        self, clip: AudioClip, pitch: float, start: float, end: float | None
-    ) -> _LoopBuffers:
-        """Return the sounds for a region, rendered once per pitch and region."""
-        key = ("loop", clip.path, round(pitch / PITCH_STEP), start, end)
-        cached = self._cached(key)
-        if cached is not None:
-            result: _LoopBuffers = cached
-            return result
-
-        rate, _format, channels = pygame.mixer.get_init()
-        frame = channels * _BYTES_PER_SAMPLE
-        pcm = self._render(clip, pitch)
-        frames = len(pcm) // frame
-        # Seconds name positions in the clip, and a pitched clip reaches each
-        # one sooner.
-        # Rounded, because a whole number of frames in seconds rarely survives
-        # the round trip through a float, and one frame out is an audible click.
-        first = min(round(start * rate / pitch), frames)
-        last = frames if end is None else min(round(end * rate / pitch), frames)
-        if last <= first:
-            raise ValueError(
-                f"Loop region {start}-{end} s is empty in '{clip.path}', which is "
-                f"{clip.duration:.3f} s long."
-            )
-        lap_pcm = pcm[first * frame : last * frame]
-        laps = max(1, int(_MIN_LOOP_SEGMENT_SECONDS * rate / (last - first)) + 1)
-        intro_pcm = pcm[: last * frame]
-        # Nothing past the loop end is ever heard, so none of it is kept.
-        buffers = _LoopBuffers(
-            intro=pygame.mixer.Sound(buffer=intro_pcm),
-            segment=pygame.mixer.Sound(buffer=lap_pcm * laps),
-            laps_per_segment=laps,
-            lap=pygame.mixer.Sound(buffer=lap_pcm),
-        )
-        size = len(intro_pcm) + len(lap_pcm) * (laps + 1)
-        self._remember(key, buffers, size)
-        return buffers
-
-    def _queue_next(self, handle: SoundHandle) -> None:
-        """Queue the next segment of a loop, if the channel has room for one."""
-        loop = self._loops[handle]
-        buffers = loop.buffers
-        channel = pygame.mixer.Channel(loop.channel_id)
-        if channel.get_queue() is not None or loop.remaining == 0:
-            return
-        if loop.remaining < 0:
-            channel.queue(buffers.segment)
-        elif loop.remaining >= buffers.laps_per_segment:
-            channel.queue(buffers.segment)
-            loop.remaining -= buffers.laps_per_segment
-        else:
-            channel.queue(buffers.lap)
-            loop.remaining -= 1
-
-    def update(self) -> None:
-        """Keep every looping sound's queue topped up.
-
-        Reaps a loop whose sound has ended, so a channel that stopped on its
-        own or was recycled does not get a stale segment queued onto it.
-        """
-        for handle in list(self._loops):
-            if self.is_sound_active(handle):
-                with contextlib.suppress(pygame.error):
-                    self._queue_next(handle)
+    # ========== Playing sounds ==========
 
     def is_sound_active(self, sound: SoundHandle) -> bool:
-        """Return True only while the sound this handle refers to is playing.
-
-        A loop moves through three `Sound` objects on one channel, so it is
-        told apart from an unrelated sound by membership rather than identity.
-        """
-        loop = self._loops.get(sound)
-        if loop is None:
-            return super().is_sound_active(sound)
-        with contextlib.suppress(pygame.error):
-            channel = pygame.mixer.Channel(loop.channel_id)
-            current = channel.get_sound()
-            buffers = loop.buffers
-            if channel.get_busy() and any(
-                current is playing
-                for playing in (buffers.intro, buffers.segment, buffers.lap)
-            ):
-                return True
-        self._forget(sound)
+        """Return True only while the sound this handle refers to is playing."""
+        playing = self._playing.get(sound)
+        if playing is None:
+            return False
+        if self.mixer.is_playing(playing.voice):
+            return True
+        del self._playing[sound]
         return False
 
-    def _forget(self, sound: SoundHandle) -> None:
-        """Drop all tracking for a sound that is no longer ours."""
-        self._loops.pop(sound, None)
-        super()._forget(sound)
+    def set_sound_mix(self, sound: SoundHandle, attenuation: float, pan: float) -> None:
+        """Update a playing sound's attenuation and pan."""
+        playing = self._playing.get(sound)
+        if playing is None:
+            return
+        playing.attenuation = max(0.0, min(1.0, attenuation))
+        playing.pan = pan
+        self._apply(playing)
+
+    def stop_sfx(self, sound: SoundHandle) -> None:
+        """Stop one sound. A handle that has ended, or was never issued, is a no-op."""
+        playing = self._playing.pop(sound, None)
+        if playing is not None:
+            self.mixer.stop(playing.voice)
+
+    def pause_sfx(self) -> None:
+        """Pause all sound effects."""
+        self.mixer.pause()
+
+    def resume_sfx(self) -> None:
+        """Resume all paused sound effects."""
+        self.mixer.resume()
+
+    def update(self) -> None:
+        """Forget sounds that have ended. Looping needs no help here."""
+        self._reap()
+
+    def cleanup_finished_channels(self) -> None:
+        """Forget sounds that have ended."""
+        self._reap()
+
+    def get_active_sound_count(self) -> int:
+        """How many sounds are playing."""
+        self._reap()
+        return len(self._playing)
+
+    # ========== Music ==========
+
+    def _music_gain(self) -> float:
+        return self._bus_manager.get_effective_volume("music")
+
+    def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
+        """Decode a track off the frame, then play it, fading in.
+
+        A file that cannot be decoded plays nothing and is reported; the
+        game carries on, as it did when `pygame.mixer.music` failed.
+        """
+        self.mixer.play_music(path, loop, max(0, fade_ms), self._music_gain())
+
+    def stop_music(self, fade_ms: int = 1000) -> None:
+        """Fade the music out, then stop it."""
+        self.mixer.stop_music(max(0, fade_ms))
+
+    def pause_music(self) -> None:
+        """Pause the music."""
+        self.mixer.pause(music=True)
+
+    def resume_music(self) -> None:
+        """Resume the music."""
+        self.mixer.resume(music=True)
+
+    def is_music_playing(self) -> bool:
+        """Whether a track is playing, or being decoded to play."""
+        return bool(self.mixer.music_playing)
+
+    # ========== Volumes ==========
+
+    def set_master_volume(self, volume: float) -> None:
+        """Set the global master volume."""
+        self._master_volume = max(0.0, min(1.0, volume))
+        self._bus_manager.set_bus_volume("master", self._master_volume)
+        self._remix()
+
+    def set_sfx_volume(self, volume: float) -> None:
+        """Set the sound effects volume."""
+        self._sfx_volume = max(0.0, min(1.0, volume))
+        self._bus_manager.set_bus_volume("sfx", self._sfx_volume)
+        self._remix()
+
+    def set_music_volume(self, volume: float) -> None:
+        """Set the music volume."""
+        self._music_volume = max(0.0, min(1.0, volume))
+        self._bus_manager.set_bus_volume("music", self._music_volume)
+        self._remix()
+
+    def get_master_volume(self) -> float:
+        """Get the master volume."""
+        return self._master_volume
+
+    def get_sfx_volume(self) -> float:
+        """Get the sound effects volume."""
+        return self._sfx_volume
+
+    def get_music_volume(self) -> float:
+        """Get the music volume."""
+        return self._music_volume
+
+    def set_bus_volume(self, bus: AudioBusType, volume: float) -> None:
+        """Set a bus's volume; sounds already playing on it follow."""
+        name = self._bus_manager.get_bus_for_type(bus)
+        self._bus_manager.set_bus_volume(name, volume)
+        self._remix()
+
+    def get_bus_volume(self, bus: AudioBusType) -> float:
+        """Get a bus's own volume."""
+        found = self._bus_manager.get_bus(self._bus_manager.get_bus_for_type(bus))
+        return found.volume if found else 1.0
+
+    def set_bus_muted(self, bus: AudioBusType, muted: bool) -> None:
+        """Mute or unmute a bus; sounds already playing on it follow."""
+        name = self._bus_manager.get_bus_for_type(bus)
+        self._bus_manager.set_bus_muted(name, muted)
+        self._remix()
+
+    def is_bus_muted(self, bus: AudioBusType) -> bool:
+        """Whether a bus is muted."""
+        found = self._bus_manager.get_bus(self._bus_manager.get_bus_for_type(bus))
+        return found.muted if found else False
+
+    def set_bus_effects(
+        self, bus: AudioBusType, effects: Sequence[AudioEffect]
+    ) -> None:
+        """Decline a DSP chain; accept clearing one.
+
+        The mixer owns the device now, so a bus effect has somewhere to go;
+        none is written yet, and a chain this cannot apply is not stored,
+        or `get_bus_effects` would report an effect nobody hears.
+        """
+        if effects:
+            require_capability(self, AudioCapability.BUS_EFFECTS)
+
+    def get_bus_effects(self, bus: AudioBusType) -> tuple[AudioEffect, ...]:
+        """Return an empty chain."""
+        return ()
+
+    # ========== Listener ==========
+
+    def set_listener_position(self, position: Vector2) -> None:
+        """Set the listener position for spatial audio."""
+        self._listener_position = position
+
+    def get_listener_position(self) -> Vector2:
+        """Get the listener position."""
+        return self._listener_position
+
+    def set_spatial_config(self, config: SpatialAudioConfig) -> None:
+        """Set the spatial audio configuration."""
+        self._spatial_config = config
+
+    def get_spatial_config(self) -> SpatialAudioConfig:
+        """Get the spatial audio configuration."""
+        return self._spatial_config
 
     def shutdown(self) -> None:
-        """Stop all audio, release the mixer, and drop the rendered buffers."""
-        super().shutdown()
-        self._loops.clear()
-        self._cache.clear()
-        self._cached_bytes = 0
+        """Stop everything and release the device. Idempotent."""
+        if self._shut_down:
+            return
+        self._shut_down = True
+        self.mixer.close()
+        self._playing.clear()

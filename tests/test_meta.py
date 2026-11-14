@@ -634,3 +634,39 @@ class TestGetMetaLoader:
         loader1 = get_meta_loader()
         loader2 = get_meta_loader()
         assert loader1 is loader2
+
+
+class TestTextureFilterReachesTheTexture:
+    """The pygame loader keeps `filter` on the texture for the wgpu renderer.
+
+    It used to log a `linear` request and drop it, which was harmless while
+    only pygame read these textures. The wgpu renderer shares the loader,
+    so a dropped filter would draw an HD texture as pixel art.
+    """
+
+    @pytest.fixture
+    def image(self, tmp_path: Path) -> Path:
+        import pygame
+
+        path = tmp_path / "pixel.png"
+        surface = pygame.Surface((2, 2))
+        surface.fill((10, 20, 30))
+        pygame.image.save(surface, str(path))
+        return path
+
+    @pytest.mark.parametrize(
+        ("meta", "smooth"),
+        [
+            (None, False),
+            (TextureMeta(filter="nearest"), False),
+            (TextureMeta(filter="linear"), True),
+        ],
+    )
+    def test_the_texture_says_whether_to_smooth(
+        self, image: Path, meta: TextureMeta | None, smooth: bool
+    ) -> None:
+        from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
+
+        texture = PygameImageLoader().load_with_meta(str(image), meta)
+
+        assert texture.smooth is smooth  # type: ignore[attr-defined]

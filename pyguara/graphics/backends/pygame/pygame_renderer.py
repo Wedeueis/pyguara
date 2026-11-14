@@ -14,6 +14,7 @@ from pyguara.graphics.backends.surface_blending import (
     blit_blended_rect,
     render_text,
 )
+from pyguara.graphics.fonts import default_font_path
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 
@@ -279,7 +280,9 @@ class PygameBackend:
     def _get_font(self, size: int) -> pygame.font.Font:
         """Retrieve or create a font of the given size."""
         if size not in self._font_cache:
-            self._font_cache[size] = pygame.font.SysFont("arial", size)
+            # The engine's bundled face, so text matches the wgpu renderer
+            # and every platform; see `pyguara.graphics.fonts`.
+            self._font_cache[size] = pygame.font.Font(default_font_path(), size)
         return self._font_cache[size]
 
     def draw_text(

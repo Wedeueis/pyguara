@@ -69,6 +69,22 @@ class Window:
         """
         return self._backend.poll_events()
 
+    def post_event(self, event: object) -> None:
+        """Deliver an engine event with the next `poll_events`, as if real.
+
+        How a tool drives a game: `agent_view`'s clicks, a test's keys. The
+        event takes the path a real one does -- editor first, then input.
+
+        Args:
+            event: An engine event, such as a `KeyDownEvent`.
+        """
+        self._backend.post_event(event)
+
+    @property
+    def backend(self) -> IWindowBackend:
+        """The backend this window drives, for a tool that captures its frame."""
+        return self._backend
+
     @property
     def chrome(self) -> Any | None:
         """The backend's window controls, or None where it has none.

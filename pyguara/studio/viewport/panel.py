@@ -8,9 +8,8 @@ game shows.
 
 Two things make that work, and both were added for this:
 
-- `ModernGLImGuiRenderer.register_texture()`, because `_textures` was
-  populated only from ImGui's own atlas requests and `imgui.image()` with
-  any other id drew nothing, silently.
+- `register_texture()` on the editor's renderer, so that `imgui.image()`
+  can name a framebuffer and not only ImGui's own font atlas.
 - A docked ImGui layout, so the panel has somewhere to live.
 
 **The panel is not the framebuffer.** It shows a frame rendered at the
@@ -403,7 +402,7 @@ class ViewportPanel(EditorPanel):
             # context and so no texture to hand over. Saying so beats an
             # empty panel that looks like a broken render path.
             imgui.text_disabled(
-                "No rendered frame available. The viewport needs the ModernGL backend."
+                "No rendered frame available. The viewport needs a GPU backend."
             )
             return
 
@@ -432,20 +431,19 @@ class ViewportPanel(EditorPanel):
             imgui.ImVec2(float(self._state.image.x), float(self._state.image.y))
         )
 
-        # The framebuffer's origin is bottom-left and ImGui's is top-left,
-        # so the V coordinate is flipped here rather than the image being
-        # mirrored anywhere else. Getting this wrong renders a frame that
-        # looks plausible and picks upside down.
+        # The framebuffer's rows run top-down, as ImGui's do, so the image is
+        # drawn unflipped. (A ModernGL framebuffer ran bottom-up and was
+        # flipped here; getting that wrong picks upside down.)
         # `ImTextureRef`, not the bare int: ImGui 1.92 wraps a texture id
         # in one, and passing the int raises rather than drawing. The ref
         # carries the same id straight back out through `get_tex_id()`,
-        # which is what `ModernGLImGuiRenderer`'s draw loop resolves
-        # against the ids `register_texture()` minted.
+        # which is what the renderer's draw loop resolves against the ids
+        # `register_texture()` minted.
         imgui.image(
             imgui.ImTextureRef(texture_id),
             imgui.ImVec2(float(fit.width), float(fit.height)),
-            imgui.ImVec2(0.0, 1.0),
-            imgui.ImVec2(1.0, 0.0),
+            imgui.ImVec2(0.0, 0.0),
+            imgui.ImVec2(1.0, 1.0),
         )
         hovered = imgui.is_item_hovered()
 

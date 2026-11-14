@@ -1,66 +1,78 @@
-"""Resource bookkeeping for `BloomEffect`.
+"""`BloomEffect`'s passes, in order, against a recording device.
 
-Against a mock context, like `test_post_process_stack.py`: what the bloom
-*looks* like needs a live GL context and belongs with the ModernGL
-integration tests, but how many GL objects it creates per frame is
-countable here -- and was wrong.
+What the bloom *looks* like is held to ModernGL's on wgpu by
+`tests/integration/test_wgpu_graph.py`, and its tonemap by
+`tests/integration/test_bloom_tonemap_pixels.py`. This is the plumbing:
+which shader reads which buffer and writes which, and how many times.
+
+It used to count VAOs -- `apply()` rebuilt all three every frame and
+leaked one. A device compiles each shader once and owns it, so there is
+no longer anything per-frame for an effect to leak.
 """
 
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock
 
-from pyguara.graphics.vfx.effects.bloom import BloomEffect
+import pytest
 
-
-def make_effect() -> tuple[BloomEffect, MagicMock]:
-    """Build a bloom effect over a mock context, returning both."""
-    ctx = MagicMock()
-    ctx.program.side_effect = lambda *a, **k: MagicMock()
-    ctx.vertex_array.side_effect = lambda *a, **k: MagicMock()
-    with patch("builtins.open", mock_open(read_data="shader source")):
-        effect = BloomEffect(ctx, MagicMock())
-    return effect, ctx
+from pyguara.graphics.pipeline.framebuffer import FramebufferManager
+from pyguara.graphics.vfx.effects.bloom import BLUR, COMPOSITE, THRESHOLD, BloomEffect
+from tests.recording_device import RecordingDevice
 
 
-def test_the_vaos_are_built_once_at_construction() -> None:
-    """One VAO per program, and none of them per-frame."""
-    _, ctx = make_effect()
-
-    assert ctx.vertex_array.call_count == 3
+@pytest.fixture
+def device() -> RecordingDevice:
+    return RecordingDevice()
 
 
-def test_applying_the_effect_creates_no_gl_objects() -> None:
-    """`apply()` rebuilt all three VAOs on every frame -- two were released
-    each time, and the third was overwritten without being released at all,
-    leaking one VAO per frame for the life of the effect. A fullscreen-quad
-    VAO binds no buffers (the vertices come from `gl_VertexID`), so there
-    was never anything about it to rebuild."""
-    effect, ctx = make_effect()
-    before = ctx.vertex_array.call_count
-
-    for _ in range(3):
-        effect.apply(ctx, MagicMock(), MagicMock())
-
-    assert ctx.vertex_array.call_count == before
+def run_bloom(device: RecordingDevice, blur_passes: int) -> tuple[MagicMock, MagicMock]:
+    manager = FramebufferManager(device, 64, 32)
+    effect = BloomEffect(manager, threshold=0.7, intensity=1.5, blur_passes=blur_passes)
+    source, target = MagicMock(width=64, height=32), MagicMock(width=64, height=32)
+    effect.apply(device, source, target)
+    return source, target
 
 
-def test_release_drops_every_vao() -> None:
-    """Whatever `apply()` stops creating still has to be cleaned up once."""
-    effect, _ = make_effect()
-    vaos = [effect._threshold_vao, effect._blur_vao, effect._composite_vao]
+def test_the_passes_run_in_order(device: RecordingDevice) -> None:
+    run_bloom(device, blur_passes=2)
 
-    effect.release()
+    assert [run.shader for run in device.runs] == [
+        THRESHOLD, BLUR, BLUR, BLUR, BLUR, COMPOSITE,
+    ]  # fmt: skip
 
-    for vao in vaos:
-        assert vao is not None
-        vao.release.assert_called_once()
-    assert effect._threshold_vao is None
-    assert effect._blur_vao is None
-    assert effect._composite_vao is None
+
+def test_the_blur_ping_pongs_between_its_two_buffers(device: RecordingDevice) -> None:
+    source, target = run_bloom(device, blur_passes=1)
+    threshold, across, down, composite = device.runs
+
+    bright = threshold.output
+    assert threshold.inputs == {"u_texture": source}
+    assert across.inputs == {"u_texture": bright}
+    assert across.uniforms["u_direction"] == (1.0, 0.0)
+    assert down.inputs == {"u_texture": across.output}
+    assert down.uniforms["u_direction"] == (0.0, 1.0)
+    assert down.output is bright
+    assert composite.inputs == {"u_scene": source, "u_bloom": bright}
+    assert composite.output is target
+
+
+def test_the_parameters_reach_the_shaders(device: RecordingDevice) -> None:
+    run_bloom(device, blur_passes=1)
+
+    assert device.runs[0].uniforms == {"u_threshold": 0.7}
+    assert device.runs[1].uniforms["u_texel_size"] == (1 / 64, 1 / 32)
+    assert device.runs[-1].uniforms == {"u_intensity": 1.5}
+
+
+def test_its_scratch_buffers_are_hdr(device: RecordingDevice) -> None:
+    run_bloom(device, blur_passes=1)
+
+    assert device.runs[0].output.dtype == "f2"
+    assert device.runs[1].output.dtype == "f2"
 
 
 def test_release_is_idempotent() -> None:
     """A stack releasing an effect twice must not raise on the second."""
-    effect, _ = make_effect()
+    effect = BloomEffect(MagicMock())
 
     effect.release()
     effect.release()

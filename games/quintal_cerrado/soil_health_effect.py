@@ -12,7 +12,7 @@ the exact same number the evaluation screen already scores the plot on,
 so the shader's mood and the score screen's grade never disagree.
 
 Follows `pyguara.graphics.vfx.effects.vignette.VignetteEffect`'s shape
-exactly (a fullscreen-quad program compiled once, two uniforms set per
+exactly (one `FullscreenShader`, in GLSL and WGSL, two uniforms set per
 `apply()`), since this is the same kind of effect: a cheap, whole-frame
 colour operation, not a bloom/lighting feature needing the engine's
 lighting pipeline this game does not run.
@@ -20,23 +20,32 @@ lighting pipeline this game does not run.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
-    import moderngl
-
+    from pyguara.graphics.pipeline.device import GraphicsDevice
     from pyguara.graphics.pipeline.framebuffer import Framebuffer
 
-_SHADER_DIR = (
-    Path(__file__).parent.parent.parent
-    / "pyguara"
-    / "graphics"
-    / "backends"
-    / "moderngl"
-    / "shaders"
+SOIL_HEALTH = FullscreenShader(
+    "soil_health",
+    inputs=("u_texture",),
+    uniforms=(Uniform("u_health"), Uniform("u_strength")),
+    wgsl="""
+const SICK_TINT = vec3<f32>(0.95, 0.62, 0.45);      // dusty, chemical red-brown
+const THRIVING_TINT = vec3<f32>(0.65, 1.05, 0.72);  // warm, saturated green
+
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    let color = textureSample(u_texture, input_sampler, in.uv);
+    let tint = mix(SICK_TINT, THRIVING_TINT, clamp(params.u_health, 0.0, 1.0));
+    let graded = color.rgb * tint;
+    let result = mix(color.rgb, graded, clamp(params.u_strength, 0.0, 1.0));
+    return vec4<f32>(result, color.a);
+}
+""",
 )
 
 
@@ -55,70 +64,38 @@ class SoilHealthEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: moderngl.Context,
         *,
         health: float = 0.0,
         strength: float = 0.0,
         enabled: bool = True,
     ) -> None:
-        """Build the effect's shader program.
+        """Set the grade's starting values.
 
         Args:
-            ctx: The ModernGL context.
             health: Initial `health`.
             strength: Initial `strength`.
             enabled: Whether the effect is active.
         """
         super().__init__("soil_health", enabled=enabled)
-        self._ctx = ctx
-
         self.health = health
         self.strength = strength
 
-        self._program: moderngl.Program | None = None
-        self._vao: moderngl.VertexArray | None = None
-        self._create_resources()
-
-    def _create_resources(self) -> None:
-        """Compile the fullscreen-quad program."""
-        vert_source = (_SHADER_DIR / "fullscreen_quad.vert").read_text()
-        frag_source = (_SHADER_DIR / "soil_health.frag").read_text()
-
-        self._program = self._ctx.program(
-            vertex_shader=vert_source, fragment_shader=frag_source
-        )
-        self._vao = self._ctx.vertex_array(self._program, [])
-
     def apply(
         self,
-        ctx: moderngl.Context,
+        device: GraphicsDevice,
         input_fbo: Framebuffer,
         output_fbo: Framebuffer,
     ) -> None:
         """Grade the input frame towards `health`, by `strength`.
 
         Args:
-            ctx: The ModernGL context.
+            device: What to run the shader on.
             input_fbo: Source framebuffer.
             output_fbo: Destination framebuffer.
         """
-        if self._program is None or self._vao is None:
-            return
-
-        output_fbo.bind()
-        input_fbo.texture.use(0)
-
-        self._program["u_texture"] = 0
-        self._program["u_health"] = self.health
-        self._program["u_strength"] = self.strength
-
-        self._vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-
-    def release(self) -> None:
-        """Release GPU resources."""
-        if self._vao is not None:
-            self._vao.release()
-            self._vao = None
-        if self._program is not None:
-            self._program.release()
-            self._program = None
+        device.run(
+            SOIL_HEALTH,
+            {"u_texture": input_fbo},
+            {"u_health": self.health, "u_strength": self.strength},
+            output_fbo,
+        )

@@ -9,6 +9,8 @@
 
 mod core;
 mod socket;
+mod steam;
+mod steam_core;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -257,6 +259,7 @@ impl NativeNetEndpoint {
 /// Add the transport to the extension module.
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<NativeNetEndpoint>()?;
+    module.add_class::<steam::NativeSteamEndpoint>()?;
     module.add("NET_PROTOCOL_VERSION", PROTOCOL_VERSION)?;
     Ok(())
 }

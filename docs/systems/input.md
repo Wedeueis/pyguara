@@ -119,11 +119,23 @@ pad.rumble(0, low_frequency=0.4, high_frequency=0.4, duration_ms=200)
 ```
 
 `controller_id` is a **stable slot number** ("player 1" is `0`). It is pinned
-to one physical device by SDL instance id for as long as that device is
+to one physical device by its backend's device id (SDL's on pygame,
+gilrs's on wgpu) for as long as that device is
 plugged in, so unplugging one controller never renumbers the others. A slot is
 freed on disconnect and reused by the next controller to connect.
 `GamepadConfig` (constructor argument) tunes `deadzone`, `trigger_deadzone`,
 `axis_sensitivity` and `vibration_enabled`.
+
+**A game sees its gamepads only while its window has focus.** On the wgpu
+backend pads are read through gilrs, whose Windows backend (Windows.Gaming.Input)
+delivers input only to the process that owns the foreground window; pygame's
+SDL ignores an unfocused pad by default too, so this is not new. Alt-tabbed
+out, buttons read as released and sticks as centred.
+
+This bites a **test script**: one that reads `NativeGamepads` from a console
+with no window of its own sees nothing, and on Windows the focused terminal
+takes the input instead (Windows Terminal switches tabs on the bumpers). Open
+a window and keep it focused while probing a pad.
 
 ## Rebinding and persistence
 

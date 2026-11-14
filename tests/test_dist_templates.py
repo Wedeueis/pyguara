@@ -352,3 +352,72 @@ def test_the_group_is_registered_on_the_cli() -> None:
     assert result.exit_code == 0
     for subcommand in ("icons", "itch", "steam"):
         assert subcommand in result.output
+
+
+class TestSteamApi:
+    """`--steam-api`: Valve's library beside the game, for online play."""
+
+    def _invoke(self, content: Path, out: Path, *extra: str):
+        return CliRunner().invoke(
+            main,
+            [
+                "dist",
+                "steam",
+                "--app-id",
+                "480",
+                "--depot-id",
+                "481",
+                "--content",
+                str(content),
+                "--out",
+                str(out),
+                *extra,
+            ],
+        )
+
+    @pytest.mark.parametrize(
+        "name", ["steam_api64.dll", "libsteam_api.so", "libsteam_api.dylib"]
+    )
+    def test_it_is_copied_beside_the_game(
+        self, built_game: Path, tmp_path: Path, name: str
+    ) -> None:
+        library = tmp_path / "sdk" / name
+        library.parent.mkdir()
+        library.write_bytes(b"valve")
+
+        result = self._invoke(
+            built_game, tmp_path / "steam", "--steam-api", str(library)
+        )
+
+        assert result.exit_code == 0, result.output
+        assert (built_game / name).read_bytes() == b"valve"
+        assert "Note:" not in result.output
+
+    def test_a_file_that_is_not_steam_api_is_refused(
+        self, built_game: Path, tmp_path: Path
+    ) -> None:
+        wrong = tmp_path / "steam_api.dll"
+        wrong.write_bytes(b"32-bit")
+
+        result = self._invoke(built_game, tmp_path / "steam", "--steam-api", str(wrong))
+
+        assert result.exit_code != 0
+        assert "steam_api64.dll" in result.output
+        assert not (built_game / "steam_api.dll").exists()
+
+    def test_a_game_without_it_gets_a_note(
+        self, built_game: Path, tmp_path: Path
+    ) -> None:
+        result = self._invoke(built_game, tmp_path / "steam")
+
+        assert result.exit_code == 0
+        assert "has no steam_api" in result.output
+
+    def test_one_already_beside_the_game_needs_no_note(
+        self, built_game: Path, tmp_path: Path
+    ) -> None:
+        (built_game / "steam_api64.dll").write_bytes(b"valve")
+
+        result = self._invoke(built_game, tmp_path / "steam")
+
+        assert "Note:" not in result.output

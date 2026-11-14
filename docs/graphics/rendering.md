@@ -36,7 +36,7 @@ The rendering process within each pass follows these stages:
 3.  **Sorting**: The queue is sorted by **layer, sort group, depth, material**
     — in that order. See [Depth ordering](#depth-ordering).
 4.  **Batching**: The `Batcher` groups compatible draw calls (same material) into `RenderBatch` objects.
-5.  **Execution**: The backend (e.g., `ModernGLRenderer`) executes the batches.
+5.  **Execution**: The backend (e.g., `WgpuRenderer`) executes the batches.
 
 ## Depth ordering
 
@@ -93,56 +93,47 @@ actually comes from: a tilemap row, a crowd of identical particles.
 
 ## Material System
 
-Materials combine shader, texture, and uniforms. A `Shader` wraps an
-already-compiled `moderngl.Program`; `ShaderCache` is what turns source into
-one, keyed by name so the same shader compiles once:
+A material gives a sprite its own shader. Write it as a `SpriteShader`: one
+WGSL function, which runs on the wgpu backend.
 
 ```python
-from pyguara.graphics.materials import Material, ShaderCache
+from pyguara.graphics.materials import Material, SpriteShader, Uniform
 
-cache = ShaderCache(ctx)
-grayscale_shader = cache.get_or_compile("grayscale", vert_src, frag_src)
-material = Material(
-    shader=grayscale_shader,
-    texture=my_texture,
-    uniforms={"intensity": 0.8},
+HIT_FLASH = SpriteShader(
+    "hit_flash",
+    uniforms=(Uniform("amount"), Uniform("flash", "vec3")),
+    wgsl="""
+fn material(sprite: Sprite) -> vec4<f32> {
+    let texel = textureSample(sprite_texture, sprite_sampler, sprite.uv);
+    let lit = mix(texel.rgb, params.flash, params.amount);
+    return vec4<f32>(lit, texel.a) * sprite.color;
+}
+""",
 )
 
-# Assign to sprite
-sprite.material = material
+sprite.material = Material(HIT_FLASH, uniforms={"amount": 0.0, "flash": (1, 1, 1)})
+sprite.material.set_uniform("amount", 0.8)   # on a hit, then fade it back
 ```
 
-A material's `id` sorts the queue and breaks batches, and
-`ModernGLRenderer.render_batch()` then draws the batch through the material's
-program, feeding it the same projection the sprite path uses, the batch's
-texture on unit 0, and the material's own uniforms. Sprites without an
-explicit material sort together as material `0` and draw through the built-in
-sprite shader.
+What `material` sees:
 
-**The instance layout is fixed**, so a material's *vertex* shader has to
-consume it: `in_vert`, `in_uv` per vertex and `in_pos`, `in_rot`, `in_scale`,
-`in_size`, `in_color` per instance. For a fragment-only effect -- the common
-case -- reuse the default vertex stage:
+| Name | What it is |
+| --- | --- |
+| `sprite.uv` | Texture coordinate, atlas region and flips applied |
+| `sprite.color` | The per-sprite tint, 0-1. A plain sprite is `texel * color` |
+| `sprite_texture`, `sprite_sampler` | The sprite's own texture |
+| `params.<name>` | Each uniform, laid out as WGSL requires; `pack` does it |
+| `material_texture`, `material_sampler` | `Material.texture`, when `texture=True`: a mask, a ramp, noise |
 
-```python
-from pyguara.graphics.materials.defaults import DEFAULT_SPRITE_VERTEX
+The vertex stage is the engine's, so a material sprite is placed, sized,
+turned, flipped and batched exactly like any other, and draws in order with
+everything around it. Make one `SpriteShader` per kind of material, at module
+level: a renderer compiles each once, keyed on the object. A material that
+does not compile, or lacks a uniform's value, raises with the reason.
 
-shader = cache.get_or_compile("grayscale", DEFAULT_SPRITE_VERTEX, frag_src)
-```
-
-A vertex shader that consumes neither `in_vert` nor `in_pos` raises rather
-than drawing every sprite on top of each other. Attributes the GLSL linker
-drops because nothing downstream reads them -- `in_uv` and `in_color` in a
-fragment shader that ignores `v_uv`/`v_color` -- are fine and expected.
-
-**A material's own `texture` is a second sampler, not a replacement.** Unit 0
-belongs to the batch's texture, which is what the sprites *are*; a material
-texture binds to unit 1 as `u_material_texture`, for a mask, a ramp or a noise
-field. A uniform the shader does not declare is ignored, matching
-`Shader.set_uniform` everywhere else.
-
-Materials are a ModernGL-backend feature: the Pygame backend ignores them, as
-the comparison table below records.
+A material's `id` sorts the queue and breaks batches. Sprites without one sort
+together as material `0` and draw through the built-in sprite shader. On the
+Pygame backend materials are ignored, as the comparison table below records.
 
 ## 2D Lighting
 
@@ -386,7 +377,7 @@ Procedural shapes (`Box`, `Circle`) that lazy-generate their textures. This allo
 
 The engine uses the `IRenderer` protocol, allowing for different implementations:
 
-- **ModernGLRenderer** (Recommended): GPU-accelerated OpenGL 3.3+ with hardware instancing. Supports all advanced features (lighting, post-processing).
+- **WgpuRenderer** (Recommended): GPU-accelerated through wgpu (Vulkan, Metal, DirectX 12). Supports all advanced features (lighting, post-processing, materials). `display.backend: moderngl` was retired and raises `RetiredBackendError` at startup.
 - **PygameBackend**: CPU-based `pygame-ce` rendering. Uses stub implementations for advanced features (renders fully lit, no post-processing).
 - **HeadlessBackend**: Discards draw calls. Useful for CI/CD and server-side simulation.
 
@@ -394,13 +385,13 @@ The engine uses the `IRenderer` protocol, allowing for different implementations
 
 When using Pygame backend, advanced graphics features gracefully degrade:
 
-| Feature | ModernGL | Pygame |
-|---------|----------|--------|
-| Sprite rendering | Hardware instanced | Software blitting |
-| Per-sprite tint | Per-instance vertex attribute | `BLEND_RGBA_MULT` per sprite |
+| Feature | wgpu | Pygame |
+|---------|------|--------|
+| Sprite rendering | Native, one call a batch | Software blitting |
+| Per-sprite tint | Per-instance colour | `BLEND_RGBA_MULT` per sprite |
 | Lighting | Dynamic light maps | Fully lit (no shadows) |
 | Post-processing | Bloom, vignette, etc. | Pass-through (no effects) |
-| Materials | Custom shaders | Default only |
+| Materials | `SpriteShader` (WGSL) | Default only |
 
 Game code using these features runs unchanged on Pygame - stubs accept the API calls but skip the GPU operations.
 
@@ -552,7 +543,7 @@ The render path has been benchmarked; the figures live in
 before optimising anything here:
 
 - **At scale the bottleneck is the CPU, not the GPU.** A 20,000-sprite batch
-  costs about 16 ms end to end on the ModernGL backend, and four fifths of that
+  cost about 16 ms end to end on the (since retired) ModernGL backend, and four fifths of that
   is the Python loop that packs the instance array. The pack's share grows with
   sprite count -- 42% at 1,000, 81% at 20,000.
 - **`Batcher.create_batches` costs more than the draw does** — roughly 53 ms

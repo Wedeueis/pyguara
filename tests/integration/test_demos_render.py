@@ -10,9 +10,10 @@ flat colour. That is deliberately a low bar -- it catches "the render path
 produced nothing", not "the render path produced the wrong thing" -- but it is
 the bar nothing was holding.
 
-Scope: this exercises the pygame path only, and it reads the surface the
-renderer blitted onto. It says nothing about whether a window appears on
-screen; see docs/guides/agent-visual-inspection.md for why those differ.
+Scope: it reads the surface the renderer drew onto -- pygame's own, or
+the one the wgpu window copies each frame to. It says nothing about
+whether a window appears on screen; see
+docs/guides/agent-visual-inspection.md for why those differ.
 """
 
 from __future__ import annotations
@@ -27,26 +28,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.agent_view import DEMOS, is_blank  # noqa: E402
+from tools.agent_view import DEMOS, capture_frame, is_blank  # noqa: E402
 
 # boot_process only opens a window and draws nothing; that is its whole point
 # as tutorial module 1, so a flat frame there is correct rather than a defect.
 #
-# mourisco_ressonancia, true_coral, protocolo_bandeira and quintal_cerrado
-# (the fun-improvement roadmap's Phase 5) run on the ModernGL backend, and
-# these tests run under SDL's dummy video driver, which provides no OpenGL
-# at all -- none of them can even create a context, let alone draw. They
-# are covered instead by `tools/agent_view.py <demo> --gl`, which uses
-# SDL's offscreen driver and reads the GL framebuffer.
-GL_ONLY_DEMOS = {
-    "mourisco_ressonancia",
-    "true_coral",
-    "protocolo_bandeira",
-    "tamandua_murundus",
-    "guara_falcao",
-    "quintal_cerrado",
-}
-DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"} - GL_ONLY_DEMOS)
+DEMOS_THAT_DRAW = sorted(set(DEMOS) - {"boot_process"})
 
 FRAMES = 20
 
@@ -64,6 +51,7 @@ def render_demo(demo: str):
 
     from pyguara.application.application import Application
     from pyguara.events.dispatcher import EventDispatcher
+    from pyguara.graphics.window import Window
 
     bootstrap_mod, scenes_mod, scene_name = DEMOS[demo]
     configure = importlib.import_module(bootstrap_mod).configure_game_container
@@ -71,6 +59,7 @@ def render_demo(demo: str):
 
     container = configure()
     app = container.get(Application)
+    window = container.get(Window)
 
     tick = 0
     captured: list[pygame.Surface] = []
@@ -81,7 +70,7 @@ def render_demo(demo: str):
         original_render()
         tick += 1
         if tick >= FRAMES:
-            surface = pygame.display.get_surface()
+            surface = capture_frame(window)
             if surface is not None:
                 # Copy: the live surface keeps being drawn over after this.
                 captured.append(surface.copy())

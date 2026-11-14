@@ -7,26 +7,108 @@ composited with the world in the composite pass.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from pyguara.graphics.backends.moderngl.blend import BlendMode, blending
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.pipeline.buffers import LIGHT_FBO_NAME  # re-exported
+from pyguara.graphics.pipeline.device import Attribute, InstancedShader, Uniform
 from pyguara.graphics.pipeline.render_pass import BaseRenderPass
 from pyguara.graphics.pipeline.viewport import Viewport
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.lighting.light_system import LightingSystem
     from pyguara.graphics.pipeline.graph import RenderGraph
 
+LIGHTS = InstancedShader(
+    "lights",
+    # pos(2) + radius(1) + color(3) + intensity(1) + falloff(1) + kind(1)
+    # + spot_dir(1) + spot_cos_half(1) = 11 floats a light.
+    attributes=(
+        Attribute("pos", "vec2"),
+        Attribute("radius"),
+        Attribute("color", "vec3"),
+        Attribute("intensity"),
+        Attribute("falloff"),
+        Attribute("kind"),
+        Attribute("spot_dir"),
+        Attribute("spot_cos_half"),
+    ),
+    uniforms=(Uniform("u_projection", "mat4"),),
+    # A line-for-line port of light.vert and light.frag. The projection is
+    # the same matrix, so a light lands on the same pixels; and the quad's
+    # uv runs as in_uv does -- (0, 0) at the corner nearest the screen's
+    # top left -- so the spot cone's clockwise-from-+x convention holds.
+    wgsl="""
+struct Varying {
+    @builtin(position) position: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    @location(1) color: vec3<f32>,
+    @location(2) intensity: f32,
+    @location(3) falloff: f32,
+    // Flat: the type is a discriminant, not a quantity.
+    @location(4) @interpolate(flat) kind: f32,
+    @location(5) spot_dir: f32,
+    @location(6) spot_cos_half: f32,
+};
 
-# Shader file paths
-_SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
+@vertex
+fn vertex(@builtin(vertex_index) index: u32, light: Instance) -> Varying {
+    let corner = quad_corner(index);
+    let scaled = corner * light.radius * 2.0;
+    var out: Varying;
+    out.position = params.u_projection * vec4<f32>(scaled + light.pos, 0.0, 1.0);
+    out.uv = corner + vec2<f32>(0.5, 0.5);
+    out.color = light.color;
+    out.intensity = light.intensity;
+    out.falloff = light.falloff;
+    out.kind = light.kind;
+    out.spot_dir = light.spot_dir;
+    out.spot_cos_half = light.spot_cos_half;
+    return out;
+}
+
+const TYPE_DIRECTIONAL: f32 = 2.0;
+const TYPE_SPOT: f32 = 3.0;
+
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    let offset = in.uv - vec2<f32>(0.5, 0.5);
+    let dist = length(offset) * 2.0;
+    var attenuation = 1.0 - pow(clamp(dist, 0.0, 1.0), in.falloff);
+    attenuation = max(attenuation, 0.0);
+    attenuation = smoothstep(0.0, 1.0, attenuation);
+    if (in.kind == TYPE_DIRECTIONAL) {
+        attenuation = 1.0;
+    } else if (in.kind == TYPE_SPOT) {
+        let axis = vec2<f32>(cos(in.spot_dir), sin(in.spot_dir));
+        var aligned = 1.0;
+        if (dist > 0.0001) {
+            aligned = dot(normalize(offset), axis);
+        }
+        let edge = (1.0 - in.spot_cos_half) * 0.15 + 0.0001;
+        attenuation *= smoothstep(in.spot_cos_half - edge, in.spot_cos_half + edge, aligned);
+    }
+    return vec4<f32>(in.color * (attenuation * in.intensity), 1.0);
+}
+""",
+)
+"""A quad per light: radial falloff, an even directional fill, or a cone."""
+
+
+def projection(width: int, height: int) -> tuple[float, ...]:
+    """Return the orthographic projection from screen pixels, y down, to clip space.
+
+    Column by column, as GL and WGSL both store a matrix. The sprite
+    renderer's, so a light lands where a sprite at the same point does.
+    """
+    return (
+        2.0 / width, 0.0, 0.0, 0.0,
+        0.0, 2.0 / -height, 0.0, 0.0,
+        0.0, 0.0, -1.0, 0.0,
+        -1.0, 1.0, 0.0, 1.0,
+    )  # fmt: skip
 
 
 class LightPass(BaseRenderPass):
@@ -36,23 +118,16 @@ class LightPass(BaseRenderPass):
     1. Clears the light FBO to ambient color
     2. Renders each light as a radial gradient quad
     3. Uses additive blending so overlapping lights combine
+
+    `games/mourisco_ressonancia/pulse_pass.py` copies the shape of this
+    pass but is not bound to it: it draws its own rings into the same
+    light map, additively.
     """
 
-    # Instance data layout: pos(2) + radius(1) + color(3) + intensity(1)
-    # + falloff(1) + type(1) + spot_dir(1) + spot_cos_half(1) = 11 floats.
-    #
-    # `games/mourisco_ressonancia/pulse_pass.py` copies the *shape* of this
-    # layout but is not bound to it: it compiles its own program from
-    # `pulse_ring.vert/frag`, owns its own quad and instance buffers, and
-    # its eighth float is a ring thickness rather than a falloff. The two
-    # share the lightmap FBO and the additive blend, nothing else.
     INSTANCE_FLOATS = 11
-    INSTANCE_STRIDE = INSTANCE_FLOATS * 4  # 44 bytes
-    INITIAL_CAPACITY = 64
 
     def __init__(
         self,
-        ctx: moderngl.Context,
         lighting_system: LightingSystem,
         *,
         enabled: bool = True,
@@ -60,91 +135,14 @@ class LightPass(BaseRenderPass):
         """Initialize the light pass.
 
         Args:
-            ctx: The ModernGL rendering context.
             lighting_system: The system that provides light data.
             enabled: Whether this pass should execute.
         """
         super().__init__("light", enabled=enabled)
-        self._ctx = ctx
         self._lighting_system = lighting_system
-
         # Current frame's camera (set before execute)
         self._camera: Camera2D | None = None
         self._viewport: Viewport | None = None
-
-        # GPU resources
-        self._program: moderngl.Program | None = None
-        self._quad_vbo: moderngl.Buffer | None = None
-        self._instance_vbo: moderngl.Buffer | None = None
-        self._vao: moderngl.VertexArray | None = None
-        self._instance_capacity = self.INITIAL_CAPACITY
-
-        self._create_resources()
-
-    def _create_resources(self) -> None:
-        """Create shader program and buffers."""
-        # Load shaders
-        vert_path = _SHADER_DIR / "light.vert"
-        frag_path = _SHADER_DIR / "light.frag"
-
-        with open(vert_path) as f:
-            vert_source = f.read()
-        with open(frag_path) as f:
-            frag_source = f.read()
-
-        self._program = self._ctx.program(
-            vertex_shader=vert_source,
-            fragment_shader=frag_source,
-        )
-
-        # Create unit quad (same as sprite quad)
-        vertices = np.array(
-            [
-                -0.5,
-                -0.5,
-                0.0,
-                0.0,  # Bottom-left
-                0.5,
-                -0.5,
-                1.0,
-                0.0,  # Bottom-right
-                -0.5,
-                0.5,
-                0.0,
-                1.0,  # Top-left
-                0.5,
-                0.5,
-                1.0,
-                1.0,  # Top-right
-            ],
-            dtype="f4",
-        )
-        self._quad_vbo = self._ctx.buffer(vertices.tobytes())
-
-        # Create instance buffer
-        self._instance_vbo = self._ctx.buffer(
-            reserve=self._instance_capacity * self.INSTANCE_STRIDE
-        )
-
-        # Create VAO
-        self._vao = self._ctx.vertex_array(
-            self._program,
-            [
-                (self._quad_vbo, "2f 2f", "in_vert", "in_uv"),
-                (
-                    self._instance_vbo,
-                    "2f 1f 3f 1f 1f 1f 1f 1f/i",
-                    "in_pos",
-                    "in_radius",
-                    "in_color",
-                    "in_intensity",
-                    "in_falloff",
-                    "in_type",
-                    "in_spot_dir",
-                    "in_spot_cos_half",
-                ),
-            ],
-        )
 
     def set_camera(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
         """Set the camera and viewport for this frame.
@@ -156,164 +154,60 @@ class LightPass(BaseRenderPass):
         self._camera = camera
         self._viewport = viewport
 
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, graph: RenderGraph) -> None:
         """Execute the light pass.
 
         Args:
-            ctx: The ModernGL rendering context.
             graph: The RenderGraph providing access to framebuffers.
         """
-        if not self._enabled or self._program is None or self._vao is None:
+        if not self._enabled:
             return
-
-        # Get or create the light framebuffer
+        device = graph.device
         light_fbo = graph.fbo_manager.get_or_create(LIGHT_FBO_NAME)
+        viewport = self._viewport or Viewport(0, 0, light_fbo.width, light_fbo.height)
 
-        # Determine viewport
-        viewport = self._viewport
-        if viewport is None:
-            viewport = Viewport(0, 0, light_fbo.width, light_fbo.height)
-
-        # Bind light FBO
+        # Ambient in floats: the light map is HDR, and ambient may exceed 1.
+        ambient = self._lighting_system.get_ambient_normalized()
+        device.clear(light_fbo, (ambient[0], ambient[1], ambient[2], 1.0))
         light_fbo.bind()
 
-        # Clear to ambient color
-        ambient = self._lighting_system.get_ambient_normalized()
-        light_fbo.fbo.clear(ambient[0], ambient[1], ambient[2], 1.0)
-
-        # Get camera info for world->screen transform
         if self._camera is None:
-            # No camera, can't render lights
             return
-
         # World-to-screen offset -- the same definition the batcher and the
         # particle system use, so lit geometry lines up with drawn geometry.
-        screen_offset = self._camera.screen_offset(viewport)
-
-        # Get lights in screen space
         lights = self._lighting_system.collect_lights_screen_space(
-            self._camera.zoom,
-            screen_offset,
+            self._camera.zoom, self._camera.screen_offset(viewport)
         )
-
-        if not lights:
-            return
-
-        # Ensure buffer capacity
-        if len(lights) > self._instance_capacity:
-            self._grow_instance_buffer(len(lights))
-
-        # Pack instance data
-        instance_data = np.zeros((len(lights), self.INSTANCE_FLOATS), dtype="f4")
-        for i, light in enumerate(lights):
-            instance_data[i] = [
-                light.position.x,
-                light.position.y,
-                light.radius,
-                light.color[0],
-                light.color[1],
-                light.color[2],
-                light.intensity,
-                light.falloff,
-                light.light_type,
-                light.spot_direction,
-                light.spot_cos_half_angle,
-            ]
-
-        # Upload to GPU
-        if self._instance_vbo is not None:
-            self._instance_vbo.write(instance_data.tobytes())
-
-        # Set projection matrix
-        self._update_projection(viewport.width, viewport.height)
-
-        # Overlapping lights have to accumulate rather than occlude, so
-        # this pass is the one place that leaves the renderer's mode. The
-        # context manager puts it back.
-        with blending(ctx, BlendMode.ADDITIVE):
-            if self._vao is not None:
-                self._vao.render(mode=ctx.TRIANGLE_STRIP, instances=len(lights))
+        if lights:
+            rows = np.array(
+                [
+                    (
+                        light.position.x,
+                        light.position.y,
+                        light.radius,
+                        light.color[0],
+                        light.color[1],
+                        light.color[2],
+                        light.intensity,
+                        light.falloff,
+                        light.light_type,
+                        light.spot_direction,
+                        light.spot_cos_half_angle,
+                    )
+                    for light in lights
+                ],
+                dtype="<f4",
+            )
+            # Overlapping lights accumulate rather than occlude.
+            device.draw_instanced(
+                LIGHTS,
+                rows.tobytes(),
+                len(lights),
+                {"u_projection": projection(viewport.width, viewport.height)},
+                light_fbo,
+                blend="add",
+            )
 
         # Clear camera for next frame
         self._camera = None
         self._viewport = None
-
-    def _update_projection(self, width: int, height: int) -> None:
-        """Set up orthographic projection."""
-        # Same as sprite renderer projection
-        projection = np.array(
-            [
-                2.0 / width,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                2.0 / -height,
-                0.0,
-                0.0,  # Y-flipped
-                0.0,
-                0.0,
-                -1.0,
-                0.0,
-                -1.0,
-                1.0,
-                0.0,
-                1.0,
-            ],
-            dtype="f4",
-        )
-
-        if self._program is not None:
-            uniform = self._program["u_projection"]
-            if hasattr(uniform, "write"):
-                uniform.write(projection.tobytes())
-
-    def _grow_instance_buffer(self, required_capacity: int) -> None:
-        """Grow the instance buffer."""
-        new_capacity = self._instance_capacity
-        while new_capacity < required_capacity:
-            new_capacity *= 2
-
-        if self._instance_vbo is not None:
-            self._instance_vbo.release()
-        self._instance_vbo = self._ctx.buffer(
-            reserve=new_capacity * self.INSTANCE_STRIDE
-        )
-        self._instance_capacity = new_capacity
-
-        # Recreate VAO
-        if self._vao is not None:
-            self._vao.release()
-        self._vao = self._ctx.vertex_array(
-            self._program,
-            [
-                (self._quad_vbo, "2f 2f", "in_vert", "in_uv"),
-                (
-                    self._instance_vbo,
-                    "2f 1f 3f 1f 1f 1f 1f 1f/i",
-                    "in_pos",
-                    "in_radius",
-                    "in_color",
-                    "in_intensity",
-                    "in_falloff",
-                    "in_type",
-                    "in_spot_dir",
-                    "in_spot_cos_half",
-                ),
-            ],
-        )
-
-    def release(self) -> None:
-        """Release GPU resources."""
-        if self._vao is not None:
-            self._vao.release()
-            self._vao = None
-        if self._quad_vbo is not None:
-            self._quad_vbo.release()
-            self._quad_vbo = None
-        if self._instance_vbo is not None:
-            self._instance_vbo.release()
-            self._instance_vbo = None
-        if self._program is not None:
-            self._program.release()
-            self._program = None

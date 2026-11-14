@@ -156,22 +156,18 @@ def test_faded_ui_text_is_dimmer() -> None:
     assert 60 <= _brightest(surface) <= 68
 
 
-def test_faded_text_on_the_gpu_is_dimmer(gl_ctx: Any) -> None:
-    from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+def test_faded_text_on_the_gpu_is_dimmer(wgpu_frame: Any) -> None:
+    from pyguara.graphics.backends.wgpu import WgpuRenderer
 
-    fbo = gl_ctx.simple_framebuffer((_SIZE, _SIZE))
-    fbo.use()
-    renderer = ModernGLRenderer(gl_ctx, _SIZE, _SIZE)
-    try:
-        brightest = []
-        for alpha in (255, 64):
-            renderer.clear((0, 0, 0, 255))
-            renderer.draw_text("MM", Vector2(4, 4), Color(255, 255, 255, alpha), 30)
-            renderer.end_frame()
-            pixels = np.frombuffer(fbo.read(components=3), dtype=np.uint8)
-            brightest.append(int(pixels.max()))
-    finally:
-        renderer.release()
-        fbo.release()
+    brightest = []
+    for alpha in (255, 64):
+        frame = wgpu_frame(_SIZE, _SIZE)
+        frame.gpu.clear(0, 0, 0, 255)
+        WgpuRenderer(frame).draw_text(
+            "MM", Vector2(4, 4), Color(255, 255, 255, alpha), 30
+        )
+        frame.gpu.end_frame()
+        pixels = np.frombuffer(frame.gpu.read_pixels(), dtype=np.uint8)
+        brightest.append(int(pixels.reshape(-1, 4)[:, :3].max()))
     assert brightest[0] >= 250
     assert 55 <= brightest[1] <= 70

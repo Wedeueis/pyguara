@@ -14,6 +14,7 @@ from pyguara.graphics.backends.surface_blending import (
     render_text,
 )
 from pyguara.graphics.backends.surface_texture import as_surface, blit_texture
+from pyguara.graphics.fonts import default_font_path
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -45,7 +46,11 @@ class PygameUIRenderer:
         """Retrieve or create a font of the specified size and style."""
         key = (size, bold, italic)
         if key not in self._font_cache:
-            self._font_cache[key] = pygame.font.SysFont("arial", size, bold, italic)
+            # The engine's bundled face, in the asked-for style, so text
+            # matches the wgpu renderer; see `pyguara.graphics.fonts`.
+            self._font_cache[key] = pygame.font.Font(
+                default_font_path(bold, italic), size
+            )
         return self._font_cache[key]
 
     def _to_pygame_color(self, color: Color) -> tuple[int, int, int, int]:

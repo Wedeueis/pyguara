@@ -37,10 +37,59 @@ symphonia = { version = "0.5", features = ["mp3"] }
 # both MIT or Apache-2.0. Pinned exactly, because `rust/src/net/core.rs` guards
 # panics in these exact versions: re-run `tests/test_net_hostile.py` and re-read
 # the parsers before moving either. See `network_multiplayer.md`, section 3.
+# The renderer. Pure Rust: DX12 on Windows, Metal on macOS, Vulkan and GL
+# on Linux, from one code path. See `project/backlog/active/next_engine_plan.md`.
+wgpu = "30"
+# Blocks on wgpu's two async calls (adapter and device); nothing else here
+# is async.
+pollster = "1"
+# Casts the instance array to bytes for upload.
+bytemuck = { version = "1", features = ["derive"] }
 renet = "=2.0.1"
 renetcode = "=2.0.0"
+# The wgpu backend's window and its keyboard and mouse input, in place of SDL
+# through pygame. Pure Rust; on Linux it opens X11 and Wayland by dlopen, so
+# the wheel gains no link-time dependency. See `rust/src/window.rs`.
+winit = "0.30"
+# The desktop clipboard, which SDL provided through `pygame.scrap`.
+arboard = "3.7.0"
+# Decodes textures and writes captures for the wgpu backend, in place of
+# `pygame.image`. Pure Rust; only the formats the image loader advertises.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
+# Gamepads for the wgpu backend, in place of SDL's joysticks through pygame,
+# with SDL's controller database for the standard layout. Optional only so a
+# Linux machine without udev's headers can still build; the wheel is always
+# built with it. See `rust/src/gamepad.rs`.
+gilrs = { version = "0.11", optional = true }
+# Loads system libraries at run time rather than linking them, so their
+# absence is an error at use rather than a failed import: ALSA for Linux's
+# audio device (`rust/src/mixer.rs`) and Steam's `steam_api`, which the game
+# ships and the engine never does (`rust/src/steam.rs`).
+libloading = "0.8"
+# Text for the wgpu backend, in place of `pygame.font`: reads the font and
+# runs its TrueType hinting instructions as FreeType's v40 interpreter does,
+# so glyphs snap to the grid as they do under pygame. Pure Rust (Google's
+# fontations). See `rust/src/text.rs`.
+skrifa = "0.50.0"
+# Fills a hinted glyph outline by area coverage.
+ab_glyph_rasterizer = "0.1.10"
+
+# The native audio backend's output device on Windows and macOS. Not on
+# Linux: cpal links ALSA at load time there, so a machine without
+# `libasound.so.2` (a slim container, a server) could not import the
+# extension at all. See `rust/src/mixer.rs`.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+cpal = { version = "0.18", optional = true }
 
 [profile.release]
 lto = "fat"
 codegen-units = 1
 opt-level = 3
+
+[features]
+default = ["audio-output", "gamepads"]
+# The mixer writes to the sound card. Off, it plays to a silent real-time
+# clock instead, and says so when it opens.
+audio-output = ["dep:cpal"]
+# Gamepads are read. Off, none is ever connected.
+gamepads = ["dep:gilrs"]

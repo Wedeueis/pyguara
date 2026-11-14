@@ -12,9 +12,9 @@ Two things stop that recurring, and both matter more than the flag itself:
 
 1. **Nothing here reaches for a GL loader.** `imgui_bundle.imgui` is the
    C++ core; it needs no OpenGL binding to create a context or build a
-   frame. The draw data is rasterised by `ModernGLImGuiRenderer` through
-   the engine's own `moderngl` context -- already a hard dependency -- so
-   there is no second, undeclared GL stack to go missing.
+   frame. The draw data is rasterised by `WgpuImGuiRenderer` through
+   the engine's own native wgpu frame, so there is no second, undeclared
+   GL stack to go missing.
 2. **A test asserts this flag is `True`.**
    `tests/studio/test_editor_availability.py` fails if a dev install
    cannot import ImGui, so the editor cannot quietly switch itself off

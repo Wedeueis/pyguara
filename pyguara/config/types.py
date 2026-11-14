@@ -20,18 +20,45 @@ SectionT = TypeVar("SectionT")
 logger = get_logger(__name__)
 
 
+class RetiredBackendError(RuntimeError):
+    """A configuration names a rendering backend the engine no longer has.
+
+    Not a `ValueError` on purpose: an unknown enum value in a config file
+    falls back to the default with a warning, and a failed load is logged
+    and survived. A game asking for a backend that was removed should stop
+    at startup, saying what to choose instead, rather than quietly running
+    on another one.
+    """
+
+
 class RenderingBackend(Enum):
     """Available rendering backend options.
 
     PYGAME: Software rendering using Pygame's SDL2 backend.
             Compatible with all systems, lower performance.
 
-    MODERNGL: GPU-accelerated rendering using ModernGL.
-              Requires OpenGL 3.3+, higher performance with hardware instancing.
+    WGPU: GPU-accelerated rendering through the native extension, on
+          whichever of DX12, Metal, Vulkan or GL the machine has, with the
+          render graph -- lighting, post-processing -- and sprite materials.
+
+    ModernGL was the third, and was retired in stage E of
+    `project/backlog/active/next_engine_plan.md`; asking for it raises
+    `RetiredBackendError`.
     """
 
     PYGAME = "pygame"
-    MODERNGL = "moderngl"
+    WGPU = "wgpu"
+
+    @classmethod
+    def _missing_(cls, value: object) -> RenderingBackend | None:
+        """Refuse the retired ModernGL backend by name, loudly."""
+        if isinstance(value, str) and value.strip().lower() == "moderngl":
+            raise RetiredBackendError(
+                "display.backend is 'moderngl', which was retired: the "
+                "rendering backends are 'wgpu' (GPU, with lighting and "
+                "post-processing) and 'pygame' (software)."
+            )
+        return None
 
 
 @dataclass
@@ -73,10 +100,14 @@ class AudioBackend(Enum):
     capabilities on a machine without the extension, which is what
     `IAudioSystem.capabilities` exists to make impossible to miss.
 
-    PYGAME: `pygame.mixer` as it comes. Reports no optional capability.
+    NATIVE: The default. Decodes and mixes in Rust and owns the output
+        device, adding pitch and loop points. Fails at startup if the
+        extension cannot be imported; runs silent, and says so, if there is
+        no device.
 
-    NATIVE: Decodes and resamples in Rust, adding pitch and loop points. Fails
-        at startup if the extension cannot be imported.
+    PYGAME: `pygame.mixer` as it comes. Reports no optional capability. What
+        a checkout with no Rust toolchain needs, and what
+        `PYGUARA_AUDIO_BACKEND=pygame` selects to rule the native one out.
     """
 
     PYGAME = "pygame"
@@ -91,7 +122,7 @@ class AudioConfig:
     sfx_volume: float = 0.8
     music_volume: float = 0.6
     muted: bool = False
-    backend: AudioBackend = AudioBackend.PYGAME
+    backend: AudioBackend = AudioBackend.NATIVE
 
 
 @dataclass

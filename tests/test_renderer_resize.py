@@ -92,52 +92,37 @@ class TestProtocolConformance:
 
 
 @pytest.mark.integration
-class TestModernGLRenderer:
-    """The one whose projection actually depends on the size."""
+class TestWgpuRenderer:
+    """The size the world is drawn at, which is not the window's own target."""
 
-    def test_the_projection_follows_the_window(self, isolated_gl_ctx) -> None:
-        from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+    def test_it_adopts_the_render_size(self, wgpu_frame) -> None:
+        from pyguara.graphics.backends.wgpu import WgpuRenderer
 
-        renderer = ModernGLRenderer(isolated_gl_ctx, 1280, 720)
-        before = renderer._projection_bytes
+        renderer = WgpuRenderer(wgpu_frame(1280, 720))
 
         renderer.resize(1990, 820)
 
         assert (renderer.width, renderer.height) == (1990, 820)
-        assert renderer._projection_bytes != before, (
-            "The projection maps pixels one to one onto the framebuffer, so "
-            "it is only correct while the two agree. Unchanged, the original "
-            "rectangle is drawn stretched across the new one."
-        )
 
-    def test_an_unchanged_size_rebuilds_nothing(self, isolated_gl_ctx) -> None:
-        from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+    def test_it_leaves_the_window_target_alone(self, wgpu_frame) -> None:
+        """The main target is the window, sized by the render graph. The
+        renderer resizing it to the render size cut a letterboxed window --
+        editor included -- down to the game's frame."""
+        from pyguara.graphics.backends.wgpu import WgpuRenderer
 
-        renderer = ModernGLRenderer(isolated_gl_ctx, 1280, 720)
-        before = renderer._projection_bytes
+        frame = wgpu_frame(1980, 720)
+        renderer = WgpuRenderer(frame)
 
         renderer.resize(1280, 720)
 
-        assert renderer._projection_bytes is before
+        assert (frame.gpu.width, frame.gpu.height) == (1980, 720)
 
-    def test_a_zero_size_is_refused(self, isolated_gl_ctx) -> None:
-        from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
+    def test_a_zero_size_is_refused(self, wgpu_frame) -> None:
+        from pyguara.graphics.backends.wgpu import WgpuRenderer
 
-        renderer = ModernGLRenderer(isolated_gl_ctx, 1280, 720)
+        renderer = WgpuRenderer(wgpu_frame(1280, 720))
 
         renderer.resize(0, 0)
+        renderer.resize(-1, 100)
 
         assert (renderer.width, renderer.height) == (1280, 720)
-
-    def test_the_ui_surface_follows_the_window(self, isolated_gl_ctx) -> None:
-        """It is uploaded whole and composited as a fullscreen quad, so a
-        surface left at the original size is stretched across the new
-        window -- which is what distorted the HUD."""
-        from pyguara.graphics.backends.moderngl.ui_renderer import GLUIRenderer
-
-        renderer = GLUIRenderer(isolated_gl_ctx, 1280, 720)
-
-        renderer.resize(1990, 820)
-
-        assert renderer._surface.get_size() == (1990, 820)
-        assert renderer._texture.size == (1990, 820)

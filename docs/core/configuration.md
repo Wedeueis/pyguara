@@ -141,7 +141,7 @@ Values are coerced back to their declared types on load, which plain
 construction would not do:
 
 - `Color` is rebuilt from its `{"r": …, "g": …}` form.
-- Enums resolve from either a member name (`"DEBUG"`, `"moderngl"`) or a raw
+- Enums resolve from either a member name (`"DEBUG"`, `"wgpu"`) or a raw
   value (`10`, `"pygame"`).
 
 An unrecognised enum value falls back to the engine default and logs a warning
@@ -310,7 +310,7 @@ launch scripts and CI jobs set them:
 | Variable | Overrides |
 | --- | --- |
 | `PYGUARA_LOG_LEVEL` | `debug.log_level` — a name, e.g. `DEBUG` |
-| `PYGUARA_BACKEND` | `display.backend` — `pygame` or `moderngl` |
+| `PYGUARA_BACKEND` | `display.backend` — `pygame` or `wgpu`. `moderngl` was retired and raises `RetiredBackendError` |
 | `PYGUARA_AUDIO_BACKEND` | `audio.backend` — `pygame` or `native` |
 | `PYGUARA_WINDOW_WIDTH` | `display.screen_width` |
 | `PYGUARA_WINDOW_HEIGHT` | `display.screen_height` |
@@ -326,7 +326,7 @@ An unparseable value is reported and skipped:
 
 ```
 Ignoring PYGUARA_BACKEND='vulkan': not a valid RenderingBackend.
-Expected one of PYGAME, MODERNGL.
+Expected one of PYGAME, WGPU.
 ```
 
 A variable whose section matches but whose field does not is reported too — a

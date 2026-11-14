@@ -15,6 +15,9 @@ from dataclasses import dataclass, field
 from pyguara.common.random import RandomStream
 from pyguara.common.types import Rect, Vector2
 
+# `tuple.__new__`: see `pyguara.common.types._new_vector`.
+_new_vector = tuple.__new__
+
 # ===== Camera Effects Data Structures =====
 
 
@@ -411,7 +414,21 @@ class Camera2D:
             Vector2: The pixel coordinate on the screen.
         """
         vp = viewport if viewport is not None else self._default_viewport
-        return world_pos * self.zoom + self.screen_offset(vp)
+        zoom = self.zoom
+        view = self.view_position
+        if type(world_pos) is Vector2 and type(view) is Vector2:
+            # The line below, component by component: the same operations
+            # in the same order, so the same floats, without the four
+            # intermediate vectors it builds. Immediate-mode game code
+            # calls this once per thing it draws.
+            return _new_vector(
+                Vector2,
+                (
+                    world_pos[0] * zoom + (vp.centerx - view[0] * zoom),
+                    world_pos[1] * zoom + (vp.centery - view[1] * zoom),
+                ),
+            )
+        return world_pos * zoom + self.screen_offset(vp)
 
     def screen_to_world(
         self, screen_pos: Vector2, viewport: Rect | None = None

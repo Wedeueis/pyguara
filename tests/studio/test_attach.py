@@ -41,7 +41,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-os.environ.setdefault("SDL_VIDEODRIVER", "offscreen")
+os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 
@@ -161,13 +161,11 @@ class TestImgulIndependence:
 class TestAttachToARealApplication:
     """A whole engine, with Studio in it.
 
-    Run in a subprocess, one per scenario. `attach_studio` needs a real
-    SDL window with a GL context, and the suite's session-scoped `gl_ctx`
-    fixture already holds a standalone EGL context current -- creating the
-    second in the same process fails with `EGL_BAD_ACCESS`. Running these
-    in-process made them pass alone and *skip* in the full suite, and a
-    skip reads as a pass: the exact failure
-    `tests/test_gl_fixture_guard.py` exists to prevent.
+    Run in a subprocess, one per scenario: each boots a whole application,
+    window and native frame, and none of that should outlive it into the
+    suite. A scenario that finds no graphics adapter skips -- and fails
+    instead under `PYGUARA_REQUIRE_GPU=1`, where a skip would read as a
+    pass.
 
     Three scenarios rather than fourteen tests, because each costs a full
     engine boot. The assertions inside them carry their own messages, so a
@@ -191,12 +189,11 @@ class TestAttachToARealApplication:
     )
     def test_scenario(self, scenario: str) -> None:
         pytest.importorskip("imgui_bundle")
-        pytest.importorskip("moderngl")
 
-        from tests.conftest import REQUIRE_GL
+        from tests.conftest import REQUIRE_GPU
 
         environment = dict(os.environ)
-        environment["SDL_VIDEODRIVER"] = "offscreen"
+        environment["SDL_VIDEODRIVER"] = "dummy"
         environment["SDL_AUDIODRIVER"] = "dummy"
         environment["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
@@ -210,39 +207,22 @@ class TestAttachToARealApplication:
             env=environment,
         )
 
-        if completed.returncode != 0 and _is_missing_gl(completed.stderr):
-            if REQUIRE_GL:
+        if completed.returncode != 0 and _is_missing_gpu(completed.stderr):
+            if REQUIRE_GPU:
                 pytest.fail(
-                    "PYGUARA_REQUIRE_GL is set and no GL context was "
+                    "PYGUARA_REQUIRE_GPU is set and no graphics adapter was "
                     f"available, so this would have skipped silently.\n"
                     f"{completed.stderr}"
                 )
-            pytest.skip(f"no GL context available:\n{completed.stderr[-400:]}")
+            pytest.skip(f"no graphics adapter:\n{completed.stderr[-400:]}")
 
         assert completed.returncode == 0, (
             f"scenario '{scenario}' failed:\n{completed.stderr}"
         )
 
 
-def _is_missing_gl(stderr: str) -> bool:
-    """Whether a failure is the machine having no usable GL.
-
-    Distinguished from a real failure so that a broken attachment is a
-    failure and an absent GPU is a skip. Matching on the driver's own
-    words rather than on the exception type, because the failure surfaces
-    as a plain `Exception` from deep inside SDL.
-
-    Args:
-        stderr: The subprocess's stderr.
-
-    Returns:
-        True when the failure looks like missing GL support.
-    """
-    markers = (
-        "OpenGL support is either not configured",
-        "Could not create GL context",
-        "eglMakeCurrent",
-        "EGL_BAD_ACCESS",
-        "libGL",
+def _is_missing_gpu(stderr: str) -> bool:
+    """Whether a failure is the machine having no graphics adapter for wgpu."""
+    return "the graphics device could not be opened" in stderr or (
+        "no graphics adapter is available" in stderr
     )
-    return any(marker in stderr for marker in markers)

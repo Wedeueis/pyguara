@@ -29,11 +29,11 @@ from pyguara.studio.input import feed_event, wants_keyboard, wants_mouse
 from pyguara.studio.panels.base import EditorPanel, PanelContext
 from pyguara.studio.panels.hierarchy import HierarchyPanel
 from pyguara.studio.panels.inspector import InspectorPanel
-from pyguara.studio.renderer import ModernGLImGuiRenderer
 from pyguara.studio.selection import Selection
 from pyguara.studio.theme import apply_theme, scale_for
 from pyguara.studio.titlebar import TitleBar
 from pyguara.studio.toasts import ToastStack
+from pyguara.studio.wgpu_renderer import WgpuImGuiRenderer
 
 logger = get_logger(__name__)
 
@@ -90,6 +90,10 @@ def default_panels() -> list[EditorPanel]:
     return [HierarchyPanel(), InspectorPanel()]
 
 
+ImGuiRenderer = WgpuImGuiRenderer
+"""What draws the editor: the native frame's mesh step."""
+
+
 class EditorLayer:
     """Owns an ImGui context and draws the editor's panels over the game."""
 
@@ -97,7 +101,7 @@ class EditorLayer:
         self,
         container: DIContainer,
         *,
-        renderer_factory: Callable[[], ModernGLImGuiRenderer] | None = None,
+        renderer_factory: Callable[[], ImGuiRenderer] | None = None,
         panels: list[EditorPanel] | None = None,
     ) -> None:
         """Create the ImGui context and install the panels.
@@ -108,7 +112,7 @@ class EditorLayer:
             renderer_factory: Builds the renderer that rasterises the draw
                 data, called *after* this layer's ImGui context exists and
                 is current. It is a factory rather than a ready-made
-                renderer because `ModernGLImGuiRenderer.__init__` declares
+                renderer because `WgpuImGuiRenderer.__init__` declares
                 its capabilities on `imgui.get_io()`, which would otherwise
                 land on whichever context happened to be current when the
                 caller built it. `None` builds frames without drawing them,
@@ -162,7 +166,7 @@ class EditorLayer:
         # uploaded the font atlas itself. A layer with no renderer still
         # builds frames (that is how the panels are tested), and nothing
         # consumes the atlas in that mode, so claiming it here is both
-        # safe and necessary. `ModernGLImGuiRenderer` sets the same bit for
+        # safe and necessary. `WgpuImGuiRenderer` sets the same bit for
         # when it is driven on its own.
         io.backend_flags |= imgui.BackendFlags_.renderer_has_textures.value
         # Nothing is written unless a caller asks, through
@@ -193,7 +197,7 @@ class EditorLayer:
 
         # Built last, and only now: the context above is current, so the
         # renderer's `backend_flags` reach this layer's IO and not another's.
-        self._renderer: ModernGLImGuiRenderer | None = (
+        self._renderer: ImGuiRenderer | None = (
             renderer_factory() if renderer_factory is not None else None
         )
 
@@ -282,18 +286,14 @@ class EditorLayer:
         say so rather than draw an image with a meaningless id.
 
         Args:
-            texture: A `moderngl.Texture` on the renderer's context.
+            texture: The framebuffer to show, from the render graph.
 
         Returns:
             The id to hand `imgui.image()`, or None.
         """
         if self._renderer is None:
             return None
-        from typing import cast
-
-        import moderngl
-
-        return self._renderer.register_texture(cast(moderngl.Texture, texture))
+        return self._renderer.register_texture(texture)
 
     def process_event(self, event: object) -> bool:
         """Feed one engine event to ImGui and report whether it took it.

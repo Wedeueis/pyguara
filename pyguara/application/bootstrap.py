@@ -4,23 +4,17 @@ from collections.abc import Callable
 
 from pyguara import native
 from pyguara.application.application import Application
-from pyguara.application.clock import Clock, FixedClock
+from pyguara.application.clock import Clock, FixedClock, WallClock
 from pyguara.audio.audio_system import IAudioSystem
-from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
-from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 from pyguara.audio.manager import AudioManager
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import AudioBackend, GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
-from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
-from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
-from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer, TextureFactory, UIRenderer
 from pyguara.graphics.window import Window
-from pyguara.input.backends.pygame_backend import PygameInputBackend
 from pyguara.input.manager import InputManager
 from pyguara.input.protocols import IInputBackend
 from pyguara.log import LogManager, default_log_manager
@@ -56,7 +50,7 @@ reimplementing the wiring that follows:
 ```python
 def _configure(config: GameConfig) -> None:
     config.display.title = "My Game"
-    config.display.backend = RenderingBackend.MODERNGL
+    config.display.backend = RenderingBackend.WGPU
 ```
 """
 
@@ -181,8 +175,8 @@ def create_headless_application(
     any other SDL video call). Everything else -- ECS, physics, audio,
     persistence -- wires up exactly as `create_application()` does.
 
-    Not a third shipped rendering backend (the engine still ships pygame and
-    ModernGL only) -- this exists so the integration suite can boot a real
+    Not a third shipped rendering backend (the engine ships pygame and
+    wgpu) -- this exists so the integration suite can boot a real
     `Application` without an SDL video driver, dummy or otherwise.
 
     Args:
@@ -303,7 +297,6 @@ def _setup_container(
     win_config = disp_cfg
 
     # Select backend based on configuration
-    gl_texture_loader = None
     if headless:
         from pyguara.graphics.backends.headless_renderer import (
             HeadlessBackend,
@@ -335,72 +328,48 @@ def _setup_container(
         # No RenderGraph registered: Application's lookup gracefully falls
         # back to `_render_direct()` when the container has none at all,
         # which is exactly the single-pass path a headless test wants.
-    elif disp_cfg.backend == RenderingBackend.MODERNGL:
-        # ModernGL backend with hardware instancing
-        from pyguara.graphics.backends.moderngl import (
-            GLTextureFactory,
-            GLTextureLoader,
-            GLUIRenderer,
-            ModernGLRenderer,
-            PygameGLWindow,
+    elif disp_cfg.backend == RenderingBackend.WGPU:
+        # The native renderer, in a winit window (`NativeWindow`). A texture
+        # is RGBA bytes decoded in Rust (`ImageTexture`), uploaded to the GPU
+        # the first time it is drawn.
+        from pyguara.graphics.backends.wgpu import (
+            WgpuRenderer,
+            WgpuUIRenderer,
+            WgpuWindow,
         )
+        from pyguara.graphics.backends.wgpu.textures import ImageTextureFactory
 
-        gl_window_backend = PygameGLWindow()
-        window = Window(win_config, gl_window_backend)
+        wgpu_window_backend = WgpuWindow()
+        window = Window(win_config, wgpu_window_backend)
         window.create()
         container.register_instance(Window, window)
 
-        # Get the ModernGL context from the window
-        ctx = gl_window_backend.get_screen()
+        frame = wgpu_window_backend.frame
+        assert frame is not None  # `create()` opened it or raised
+        container.register_instance(IRenderer, WgpuRenderer(frame))  # type: ignore[type-abstract]
+        container.register_instance(UIRenderer, WgpuUIRenderer(frame))  # type: ignore[type-abstract]
+        container.register_instance(TextureFactory, ImageTextureFactory())  # type: ignore[type-abstract]
 
-        # World Renderer (GPU-accelerated)
-        gl_renderer = ModernGLRenderer(
-            ctx, disp_cfg.screen_width, disp_cfg.screen_height
-        )
-        container.register_instance(IRenderer, gl_renderer)  # type: ignore[type-abstract]
-
-        # UI Renderer (hybrid: pygame surface composited via OpenGL)
-        gl_ui_renderer = GLUIRenderer(
-            ctx, disp_cfg.screen_width, disp_cfg.screen_height
-        )
-        container.register_instance(UIRenderer, gl_ui_renderer)  # type: ignore[type-abstract]
-
-        # Texture Factory (for SpriteSheet and other texture creation)
-        gl_texture_factory = GLTextureFactory(ctx)
-        container.register_instance(TextureFactory, gl_texture_factory)  # type: ignore[type-abstract]
-
-        # Render Pipeline (FBO management and render graph)
+        # A real render graph, on the native device: the world is drawn
+        # into its buffer and blitted to the window, so a game can add
+        # passes -- lighting, post-processing -- between the two.
+        from pyguara.graphics.pipeline.device import WgpuDevice
         from pyguara.graphics.pipeline.passes import FinalPass
 
-        render_graph = RenderGraph(ctx, disp_cfg.screen_width, disp_cfg.screen_height)
-
-        # The graph's own manager, not a second one. `RenderGraph` builds a
-        # `FramebufferManager` internally and every pass resolves its buffers
-        # through that one, so registering a separately-constructed manager
-        # hands games an orphan: a buffer declared on it is invisible to the
-        # graph, silently. This is the same defect
-        # `tests/test_demo_bootstrap_conventions.py` has guarded the demos
-        # against since `mourisco_ressonancia` hit it -- the guard just never
-        # looked at the engine.
-        container.register_instance(FramebufferManager, render_graph.fbo_manager)
-
-        # Setup default render passes. There is no "world" pass: the world
-        # FBO is bound and cleared by `Application._render_with_graph`
-        # before the scenes draw into it, which a pass cannot do -- passes
-        # run *after* the scenes in that loop. `FinalPass` reads the buffer
-        # by name.
-        final_pass = FinalPass(ctx, input_fbo_name="world")
-
-        render_graph.add_pass(final_pass)
-
-        container.register_instance(RenderGraph, render_graph)
-
-        # Store texture loader for later registration
-        gl_texture_loader = GLTextureLoader(ctx)
+        wgpu_graph = RenderGraph(
+            WgpuDevice(frame), disp_cfg.screen_width, disp_cfg.screen_height
+        )
+        container.register_instance(FramebufferManager, wgpu_graph.fbo_manager)
+        wgpu_graph.add_pass(FinalPass(input_fbo_name="world"))
+        container.register_instance(RenderGraph, wgpu_graph)
     else:
-        # Default Pygame backend
+        # Default Pygame backend. Imported here, not at the top, so a game on
+        # wgpu never loads pygame at all.
+        from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
+        from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
         from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
         from pyguara.graphics.backends.pygame.types import PygameTextureFactory
+        from pyguara.graphics.backends.pygame.ui_renderer import PygameUIRenderer
 
         pygame_window_backend = PygameWindow()
         window = Window(win_config, pygame_window_backend)
@@ -427,16 +396,32 @@ def _setup_container(
         container.register_instance(RenderGraph, pygame_render_graph)
 
     # Frame-pacing clock. Headless runs advance by a fixed, reproducible
-    # delta (no wall-clock sleep); the real backends wrap `pygame.time.Clock`.
+    # delta (no wall-clock sleep); the software backend wraps
+    # `pygame.time.Clock`, and wgpu has the same contract without pygame.
     if headless:
         container.register_instance(Clock, FixedClock())  # type: ignore[type-abstract]
+    elif disp_cfg.backend == RenderingBackend.WGPU:
+        # pygame's contract without pygame: see `WallClock`.
+        container.register_instance(Clock, WallClock())  # type: ignore[type-abstract]
     else:
         from pyguara.graphics.backends.pygame.clock import PygameClock
 
         container.register_instance(Clock, PygameClock())  # type: ignore[type-abstract]
 
     # 5. Core Subsystems
-    container.register_instance(IInputBackend, PygameInputBackend())  # type: ignore[type-abstract]
+    # Gamepads: gilrs on the wgpu backend, SDL's joysticks through pygame
+    # on the software one. The headless backend keeps pygame's, which has
+    # no display to need.
+    input_backend: IInputBackend
+    if not headless and disp_cfg.backend == RenderingBackend.WGPU:
+        from pyguara.input.backends.native_backend import NativeInputBackend
+
+        input_backend = NativeInputBackend()
+    else:
+        from pyguara.input.backends.pygame_backend import PygameInputBackend
+
+        input_backend = PygameInputBackend()
+    container.register_instance(IInputBackend, input_backend)  # type: ignore[type-abstract]
     container.register_singleton(InputManager, InputManager)
     container.register_singleton(SceneManager, SceneManager)
     container.register_singleton(UIManager, UIManager)
@@ -467,9 +452,15 @@ def _setup_container(
         from pyguara.audio.backends.native.loaders import NativeSoundLoader
         from pyguara.audio.backends.native.native_audio import NativeAudioSystem
 
-        audio_system = NativeAudioSystem()
-        sound_loader = NativeSoundLoader()
+        native_audio_system = NativeAudioSystem()
+        audio_system = native_audio_system
+        # Clips are converted to the rate this mixer runs at, which on a
+        # device is the device's own.
+        sound_loader = NativeSoundLoader(native_audio_system.mixer)
     else:
+        from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
+        from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
+
         audio_system = PygameAudioSystem()
         sound_loader = PygameSoundLoader()
     container.register_instance(IAudioSystem, audio_system)  # type: ignore[type-abstract]
@@ -488,9 +479,13 @@ def _setup_container(
     # none: nothing exercises image loading under it today, and the real
     # PygameImageLoader documents needing pygame.display initialized for some
     # formats -- exactly the SDL video coupling headless mode exists to avoid.
-    if gl_texture_loader is not None:
-        res_manager.register_loader(gl_texture_loader)
-    elif not headless:
+    if headless:
+        pass
+    elif disp_cfg.backend == RenderingBackend.WGPU:
+        from pyguara.graphics.backends.wgpu.textures import NativeImageLoader
+
+        res_manager.register_loader(NativeImageLoader())
+    else:
         from pyguara.graphics.backends.pygame.loaders import PygameImageLoader
 
         res_manager.register_loader(PygameImageLoader())

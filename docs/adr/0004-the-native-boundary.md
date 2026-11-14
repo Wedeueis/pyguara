@@ -4,6 +4,13 @@ Status: **Accepted**. Supersedes RFC-0003's module-by-module sequencing
 (`project/backlog/active/rust_core.md`) and extends ADR 0003, which
 measured the first milestone without generalising from it.
 
+**Amended by [ADR 0011](0011-one-rust-engine-python-interface.md).**
+Decisions 1 to 3 and 6, the rule for what earns a port, are unchanged
+and are what 0011 runs on. Decisions 4 and 5 are amended for a subsystem
+that ends up with one implementation: its share of the switch is
+retired, and its parity suite is converted to golden vectors rather than
+deleted. Until a given store is retired, both stand as written for it.
+
 Decision 4 below is unchanged, but its *premise* has narrowed:
 [ADR 0006](0006-shipping-the-native-extension.md) ships the extension
 inside the wheel, so "a machine that built the extension and one that did

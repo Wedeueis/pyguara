@@ -8,20 +8,84 @@ Creates a glowing halo around bright areas by:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pyguara.graphics.pipeline.buffers import HDR_DTYPE
+from pyguara.graphics.pipeline.device import FullscreenShader, Uniform
 from pyguara.graphics.vfx.post_process import PostProcessEffect
 
 if TYPE_CHECKING:
-    import moderngl
-
+    from pyguara.graphics.pipeline.device import GraphicsDevice
     from pyguara.graphics.pipeline.framebuffer import Framebuffer, FramebufferManager
 
+THRESHOLD = FullscreenShader(
+    "bloom_threshold",
+    inputs=("u_texture",),
+    uniforms=(Uniform("u_threshold"),),
+    wgsl="""
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    let color = textureSample(u_texture, input_sampler, in.uv);
+    let luminance = dot(color.rgb, vec3<f32>(0.2126, 0.7152, 0.0722));
+    if (luminance > params.u_threshold) {
+        // Soft knee - gradual transition
+        let knee = params.u_threshold * 0.5;
+        var soft = clamp((luminance - params.u_threshold + knee) / (2.0 * knee), 0.0, 1.0);
+        soft = soft * soft;
+        return vec4<f32>(color.rgb * soft, 1.0);
+    }
+    return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+}
+""",
+)
 
-# Shader directory
-_SHADER_DIR = Path(__file__).parent.parent.parent / "backends" / "moderngl" / "shaders"
+BLUR = FullscreenShader(
+    "bloom_blur",
+    inputs=("u_texture",),
+    uniforms=(Uniform("u_direction", "vec2"), Uniform("u_texel_size", "vec2")),
+    # The kernel is symmetric, so a vertical pass blurs the same whichever
+    # way up the rows run.
+    wgsl="""
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    // 9-tap Gaussian weights (sigma ~= 2.0)
+    var weights = array<f32, 5>(0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+    var result = textureSample(u_texture, input_sampler, in.uv).rgb * weights[0];
+    let offset = params.u_direction * params.u_texel_size;
+    for (var i = 1; i < 5; i++) {
+        let sample_offset = offset * f32(i);
+        result += textureSample(u_texture, input_sampler, in.uv + sample_offset).rgb * weights[i];
+        result += textureSample(u_texture, input_sampler, in.uv - sample_offset).rgb * weights[i];
+    }
+    return vec4<f32>(result, 1.0);
+}
+""",
+)
+
+COMPOSITE = FullscreenShader(
+    "bloom_composite",
+    inputs=("u_scene", "u_bloom"),
+    uniforms=(Uniform("u_intensity"),),
+    # The tonemap is `bloom_composite.frag`'s: identity below the knee,
+    # asymptotic to 1.0 above it. See that file for why.
+    wgsl="""
+const KNEE: f32 = 0.8;
+
+fn tonemap(color: vec3<f32>) -> vec3<f32> {
+    let excess = max(color - vec3<f32>(KNEE), vec3<f32>(0.0));
+    let headroom = vec3<f32>(1.0 - KNEE);
+    return min(color, vec3<f32>(KNEE)) + headroom * (excess / (excess + headroom));
+}
+
+@fragment
+fn fragment(in: Varying) -> @location(0) vec4<f32> {
+    let scene_color = textureSample(u_scene, input_sampler, in.uv);
+    let bloom_color = textureSample(u_bloom, input_sampler, in.uv);
+    let result = scene_color.rgb + bloom_color.rgb * params.u_intensity;
+    return vec4<f32>(tonemap(result), scene_color.a);
+}
+""",
+)
 
 
 class BloomEffect(PostProcessEffect):
@@ -35,7 +99,6 @@ class BloomEffect(PostProcessEffect):
 
     def __init__(
         self,
-        ctx: moderngl.Context,
         fbo_manager: FramebufferManager,
         *,
         threshold: float = 0.8,
@@ -46,7 +109,6 @@ class BloomEffect(PostProcessEffect):
         """Initialize the bloom effect.
 
         Args:
-            ctx: The ModernGL context.
             fbo_manager: Manager for creating temp framebuffers.
             threshold: Brightness threshold (0.0-1.0).
             intensity: Bloom intensity multiplier.
@@ -54,24 +116,10 @@ class BloomEffect(PostProcessEffect):
             enabled: Whether the effect is active.
         """
         super().__init__("bloom", enabled=enabled)
-        self._ctx = ctx
         self._fbo_manager = fbo_manager
-
         self.threshold = threshold
         self.intensity = intensity
         self.blur_passes = blur_passes
-
-        # Shader programs
-        self._threshold_program: moderngl.Program | None = None
-        self._blur_program: moderngl.Program | None = None
-        self._composite_program: moderngl.Program | None = None
-
-        # One VAO per program, built once. A fullscreen-quad VAO binds no
-        # buffers at all (the vertices come from gl_VertexID), so there is
-        # nothing about it that changes between frames.
-        self._threshold_vao: moderngl.VertexArray | None = None
-        self._blur_vao: moderngl.VertexArray | None = None
-        self._composite_vao: moderngl.VertexArray | None = None
 
         # Internal FBO names
         self._bright_fbo_name = "_bloom_bright"
@@ -82,121 +130,50 @@ class BloomEffect(PostProcessEffect):
         fbo_manager.declare(self._bright_fbo_name, dtype=HDR_DTYPE)
         fbo_manager.declare(self._blur_fbo_name, dtype=HDR_DTYPE)
 
-        self._create_resources()
-
-    def _create_resources(self) -> None:
-        """Create shader programs."""
-        # Load fullscreen quad vertex shader
-        vert_path = _SHADER_DIR / "fullscreen_quad.vert"
-        with open(vert_path) as f:
-            vert_source = f.read()
-
-        # Threshold shader
-        threshold_path = _SHADER_DIR / "bloom_threshold.frag"
-        with open(threshold_path) as f:
-            threshold_source = f.read()
-        self._threshold_program = self._ctx.program(
-            vertex_shader=vert_source, fragment_shader=threshold_source
-        )
-
-        # Blur shader
-        blur_path = _SHADER_DIR / "blur.frag"
-        with open(blur_path) as f:
-            blur_source = f.read()
-        self._blur_program = self._ctx.program(
-            vertex_shader=vert_source, fragment_shader=blur_source
-        )
-
-        # Composite shader
-        composite_path = _SHADER_DIR / "bloom_composite.frag"
-        with open(composite_path) as f:
-            composite_source = f.read()
-        self._composite_program = self._ctx.program(
-            vertex_shader=vert_source, fragment_shader=composite_source
-        )
-
-        # Create the VAOs (fullscreen quad uses gl_VertexID)
-        self._threshold_vao = self._ctx.vertex_array(self._threshold_program, [])
-        self._blur_vao = self._ctx.vertex_array(self._blur_program, [])
-        self._composite_vao = self._ctx.vertex_array(self._composite_program, [])
-
     def apply(
         self,
-        ctx: moderngl.Context,
+        device: GraphicsDevice,
         input_fbo: Framebuffer,
         output_fbo: Framebuffer,
     ) -> None:
         """Apply the bloom effect.
 
         Args:
-            ctx: The ModernGL context.
+            device: What to run the shaders on.
             input_fbo: Source framebuffer.
             output_fbo: Destination framebuffer.
         """
-        if self._threshold_program is None or self._blur_program is None:
-            return
-        if self._composite_program is None or self._threshold_vao is None:
-            return
-        if self._blur_vao is None or self._composite_vao is None:
-            return
-
-        # Get temp framebuffers
         bright_fbo = self._fbo_manager.get_or_create(self._bright_fbo_name)
         blur_fbo = self._fbo_manager.get_or_create(self._blur_fbo_name)
-
         texel_size = (1.0 / input_fbo.width, 1.0 / input_fbo.height)
 
         # Pass 1: Extract bright pixels
-        bright_fbo.bind()
-        input_fbo.texture.use(0)
-        self._threshold_program["u_texture"] = 0
-        self._threshold_program["u_threshold"] = self.threshold
-        self._threshold_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
+        device.run(
+            THRESHOLD,
+            {"u_texture": input_fbo},
+            {"u_threshold": self.threshold},
+            bright_fbo,
+        )
 
         # Pass 2: Blur bright pixels (ping-pong horizontal/vertical)
-        self._blur_program["u_texel_size"] = texel_size
-
         for _ in range(self.blur_passes):
-            # Horizontal blur: bright -> blur
-            blur_fbo.bind()
-            bright_fbo.texture.use(0)
-            self._blur_program["u_texture"] = 0
-            self._blur_program["u_direction"] = (1.0, 0.0)
-            self._blur_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-
-            # Vertical blur: blur -> bright
-            bright_fbo.bind()
-            blur_fbo.texture.use(0)
-            self._blur_program["u_texture"] = 0
-            self._blur_program["u_direction"] = (0.0, 1.0)
-            self._blur_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
+            device.run(
+                BLUR,
+                {"u_texture": bright_fbo},
+                {"u_direction": (1.0, 0.0), "u_texel_size": texel_size},
+                blur_fbo,
+            )
+            device.run(
+                BLUR,
+                {"u_texture": blur_fbo},
+                {"u_direction": (0.0, 1.0), "u_texel_size": texel_size},
+                bright_fbo,
+            )
 
         # Pass 3: Composite bloom with original
-        output_fbo.bind()
-        input_fbo.texture.use(0)
-        bright_fbo.texture.use(1)
-        self._composite_program["u_scene"] = 0
-        self._composite_program["u_bloom"] = 1
-        self._composite_program["u_intensity"] = self.intensity
-        self._composite_vao.render(mode=ctx.TRIANGLE_STRIP, vertices=4)
-
-    def release(self) -> None:
-        """Release GPU resources."""
-        if self._threshold_vao is not None:
-            self._threshold_vao.release()
-            self._threshold_vao = None
-        if self._blur_vao is not None:
-            self._blur_vao.release()
-            self._blur_vao = None
-        if self._composite_vao is not None:
-            self._composite_vao.release()
-            self._composite_vao = None
-        if self._threshold_program is not None:
-            self._threshold_program.release()
-            self._threshold_program = None
-        if self._blur_program is not None:
-            self._blur_program.release()
-            self._blur_program = None
-        if self._composite_program is not None:
-            self._composite_program.release()
-            self._composite_program = None
+        device.run(
+            COMPOSITE,
+            {"u_scene": input_fbo, "u_bloom": bright_fbo},
+            {"u_intensity": self.intensity},
+            output_fbo,
+        )

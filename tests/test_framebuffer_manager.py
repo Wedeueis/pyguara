@@ -13,8 +13,6 @@ context and belongs with the pixel tests; which one you get back does not.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
@@ -22,10 +20,9 @@ from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 
 def make_manager(width: int = 800, height: int = 600) -> FramebufferManager:
     """A manager over a mock context."""
-    ctx = MagicMock()
-    ctx.texture.side_effect = lambda *a, **k: MagicMock()
-    ctx.framebuffer.side_effect = lambda *a, **k: MagicMock()
-    return FramebufferManager(ctx, width, height)
+    from tests.recording_device import RecordingDevice
+
+    return FramebufferManager(RecordingDevice(), width, height)
 
 
 class TestCreating:

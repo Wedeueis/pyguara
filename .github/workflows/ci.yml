@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
 
 jobs:
   quality:
@@ -30,6 +31,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      # gilrs, the gamepad backend, links libudev on Linux, and its build
+      # script finds it through pkg-config. ALSA needs no headers: it is
+      # opened at run time.
+      - name: Install udev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Install Dependencies
         run: make install
@@ -73,21 +82,21 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # Mesa's software rasteriser plus EGL, so
-      # `moderngl.create_standalone_context()` works with no display. Without
-      # it every GL test in this repository skips here and the pixel suites
-      # prove nothing in the pipeline -- which is what PYGUARA_REQUIRE_GL
-      # below turns from a silent skip into a failure.
-      - name: Install headless OpenGL
+      # Mesa's lavapipe, a software Vulkan driver, so wgpu finds an adapter
+      # on a runner with no GPU. Without it every wgpu test skips here and the
+      # pixel suites prove nothing in the pipeline -- which is what
+      # PYGUARA_REQUIRE_GPU below turns from a silent skip into a failure.
+      # udev's headers are for gilrs, as in the quality job.
+      - name: Install software Vulkan and udev headers
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libegl1 libgl1 libglx-mesa0 libgl1-mesa-dri libglvnd0
+            mesa-vulkan-drivers libvulkan1 libudev-dev pkg-config
 
       - name: Install Dependencies
         run: make install
 
-      # The same argument as PYGUARA_REQUIRE_GL, for the other half of the
+      # The same argument as PYGUARA_REQUIRE_GPU, for the other half of the
       # engine that skips itself into a green suite. Before maturin was the
       # build backend this pipeline never compiled the crate, so every
       # parity suite -- particles, sparks, the flow field, flocking, the
@@ -104,12 +113,13 @@ jobs:
 
       - name: Run Unit Tests
         run: make test-unit
+        env:
+          PYGUARA_REQUIRE_GPU: "1"
 
       - name: Run Integration Tests
         run: make test-integration
         env:
-          PYGUARA_REQUIRE_GL: "1"
-          LIBGL_ALWAYS_SOFTWARE: "1"
+          PYGUARA_REQUIRE_GPU: "1"
 
       # This runs coverage and fails if <85% (as defined in Makefile)
       - name: Check Coverage
@@ -144,6 +154,14 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      # gilrs, the gamepad backend, links libudev on Linux, and its build
+      # script finds it through pkg-config. ALSA needs no headers: it is
+      # opened at run time.
+      - name: Install udev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Install Dependencies
         run: make install
@@ -232,6 +250,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
+
+      - name: Install udev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Verify Build
         run: make build

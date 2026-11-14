@@ -481,8 +481,8 @@ class TestChromeProtocol:
 
         assert not isinstance(Bare(), IWindowChrome)
 
-    def test_the_moderngl_backend_offers_the_controls(self) -> None:
-        from pyguara.graphics.backends.moderngl.window import PygameGLWindow
+    def test_the_wgpu_backend_offers_the_controls(self) -> None:
+        from pyguara.graphics.backends.wgpu.window import WgpuWindow
 
         for name in (
             "minimize",
@@ -492,4 +492,4 @@ class TestChromeProtocol:
             "move_by",
             "is_maximized",
         ):
-            assert hasattr(PygameGLWindow, name), name
+            assert hasattr(WgpuWindow, name), name

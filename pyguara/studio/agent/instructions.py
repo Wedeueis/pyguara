@@ -34,6 +34,7 @@ the markers and leaves every other byte alone.
 from __future__ import annotations
 
 import re
+import tomllib
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -284,7 +285,7 @@ def discover_facts(
         commands.append(("Lint", f"{runner}ruff check ."))
         commands.append(("Format", f"{runner}ruff format ."))
     if _has_mypy(project_root):
-        commands.append(("Type-check", f"{runner}mypy ."))
+        commands.append(("Type-check", f"{runner}{_mypy_command(project_root)}"))
 
     return ProjectFacts(
         name=project_root.name,
@@ -312,8 +313,6 @@ def _declared_settings(project_root: Path) -> dict[str, Any]:
         `pyproject.toml` -- a project with a broken one still gets
         instructions.
     """
-    import tomllib
-
     pyproject = project_root / "pyproject.toml"
     try:
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
@@ -739,6 +738,38 @@ def _has_mypy(project_root: Path) -> bool:
         return True
     pyproject = _read(project_root / "pyproject.toml")
     return pyproject is not None and "[tool.mypy" in pyproject
+
+
+def _mypy_command(project_root: Path) -> str:
+    """Choose the mypy invocation that checks what the project means to check.
+
+    A project that names its targets -- `files`, `packages` or `modules`
+    under `[tool.mypy]` -- is checked by a bare `mypy`, which reads them.
+    `mypy .` would override that choice and check everything under the
+    root, which is a different gate from the one the project runs: in the
+    engine's own repository it type-checks the demos and tools that strict
+    mode was never applied to.
+
+    Args:
+        project_root: The project directory.
+
+    Returns:
+        `mypy` when the configuration names its own targets, `mypy .`
+        otherwise.
+    """
+    pyproject = _read(project_root / "pyproject.toml")
+    if pyproject is None:
+        return "mypy ."
+    try:
+        config = tomllib.loads(pyproject)
+    except tomllib.TOMLDecodeError:
+        return "mypy ."
+    section = config.get("tool", {}).get("mypy", {})
+    if isinstance(section, dict) and any(
+        section.get(key) for key in ("files", "packages", "modules")
+    ):
+        return "mypy"
+    return "mypy ."
 
 
 __all__ = [

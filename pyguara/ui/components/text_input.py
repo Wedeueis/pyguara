@@ -65,8 +65,8 @@ class TextInput(Widget):
                 `InMemoryClipboard`, which is process-local: copy between
                 two fields in the same game and it works, copy from the
                 browser and it does not. Pass
-                `pyguara.input.backends.PygameClipboard` for the real
-                one. The default is the smaller promise on purpose -- a
+                `pyguara.input.backends.NativeClipboard` (or
+                `PygameClipboard`) for the real one. The default is the smaller promise on purpose -- a
                 field constructed in a test or a headless tool needs a
                 clipboard that cannot fail.
         """

@@ -421,4 +421,4 @@ def attach_lighting(container: DIContainer, lighting: LightingSystem) -> None:
 
     # Index 1: after the world is drawn, before it is composited with the
     # light map it is about to be multiplied by.
-    graph.insert_pass(1, LightPass(graph.ctx, lighting))
+    graph.insert_pass(1, LightPass(lighting))

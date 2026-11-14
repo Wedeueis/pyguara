@@ -16,6 +16,7 @@ from pyguara.graphics.pipeline.buffers import (
 )
 from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.pipeline.viewport import Viewport
+from tests.recording_device import RecordingDevice
 
 WIDESCREEN = 16 / 9
 
@@ -100,7 +101,7 @@ class TestViewportDegenerateInput:
 
 class TestRenderGraphPasses:
     def test_passes_are_returned_in_insertion_order(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         first, second = make_pass("world"), make_pass("ui")
         graph.add_pass(first)
         graph.add_pass(second)
@@ -108,7 +109,7 @@ class TestRenderGraphPasses:
         assert graph.passes == [first, second]
 
     def test_insert_pass_positions_it(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         graph.add_pass(make_pass("world"))
         early = make_pass("shadow")
         graph.insert_pass(0, early)
@@ -118,7 +119,7 @@ class TestRenderGraphPasses:
     def test_the_returned_list_is_a_snapshot(self) -> None:
         """`passes` handed back the live list, so a caller could empty the
         pipeline without releasing a single pass."""
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         graph.add_pass(make_pass("world"))
 
         graph.passes.clear()
@@ -126,7 +127,7 @@ class TestRenderGraphPasses:
         assert len(graph.passes) == 1
 
     def test_get_and_remove_by_name(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         world = make_pass("world")
         graph.add_pass(world)
 
@@ -135,7 +136,7 @@ class TestRenderGraphPasses:
         assert graph.get_pass("world") is None
 
     def test_removing_an_unknown_name_returns_none(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
 
         assert graph.remove_pass("nope") is None
 
@@ -144,7 +145,7 @@ class TestRenderGraphPasses:
         first is reachable by name, so the ambiguity is said out loud."""
         import logging
 
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         graph.add_pass(make_pass("world"))
 
         with caplog.at_level(logging.WARNING):
@@ -156,7 +157,7 @@ class TestRenderGraphPasses:
     def test_a_unique_name_is_not_reported(self, caplog) -> None:
         import logging
 
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         graph.add_pass(make_pass("world"))
 
         with caplog.at_level(logging.WARNING):
@@ -167,7 +168,7 @@ class TestRenderGraphPasses:
 
 class TestRenderGraphExecution:
     def test_only_enabled_passes_execute(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         on, off = make_pass("on"), make_pass("off")
         off.enabled = False
         graph.add_pass(on)
@@ -179,13 +180,11 @@ class TestRenderGraphExecution:
         assert not off.execute.called
 
     def test_passes_execute_in_order(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         order: list[str] = []
         for name in ("first", "second", "third"):
             render_pass = make_pass(name)
-            render_pass.execute.side_effect = lambda _ctx, _graph, n=name: order.append(
-                n
-            )
+            render_pass.execute.side_effect = lambda _graph, n=name: order.append(n)
             graph.add_pass(render_pass)
 
         graph.execute()
@@ -193,7 +192,7 @@ class TestRenderGraphExecution:
         assert order == ["first", "second", "third"]
 
     def test_resize_notifies_every_pass(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         passes = [make_pass(n) for n in ("a", "b")]
         for render_pass in passes:
             graph.add_pass(render_pass)
@@ -204,7 +203,7 @@ class TestRenderGraphExecution:
             render_pass.on_resize.assert_called_once_with(1024, 768)
 
     def test_release_drops_and_releases_every_pass(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
         render_pass = make_pass("world")
         graph.add_pass(render_pass)
 
@@ -225,7 +224,7 @@ class TestTheGraphDeclaresTheHdrChain:
     """
 
     def test_every_standard_buffer_is_declared_hdr(self) -> None:
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
 
         declared = {
             name: graph.fbo_manager.declared_format(name) for name in STANDARD_CHAIN
@@ -236,17 +235,14 @@ class TestTheGraphDeclaresTheHdrChain:
     def test_a_pass_asking_by_name_gets_the_declared_format(self) -> None:
         """`WorldPass` and friends ask without a dtype; before this they
         got `f1` because they were the first to create the buffer."""
-        ctx = MagicMock()
-        ctx.texture.side_effect = lambda *a, **k: MagicMock()
-        ctx.framebuffer.side_effect = lambda *a, **k: MagicMock()
-        graph = RenderGraph(ctx, 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
 
         assert graph.fbo_manager.get_or_create(WORLD_FBO_NAME).dtype == HDR_DTYPE
 
     def test_declaring_does_not_allocate_the_chain(self) -> None:
         """Construction should not cost four framebuffers' worth of VRAM
         for a pipeline that may use two of them."""
-        graph = RenderGraph(MagicMock(), 800, 600)
+        graph = RenderGraph(RecordingDevice(), 800, 600)
 
         assert [graph.fbo_manager.get(name) for name in STANDARD_CHAIN] == [None] * 4
 
@@ -272,8 +268,8 @@ class TestNoPassIsRegisteredOnlyToBeSkipped:
         from pyguara.graphics.pipeline.buffers import WORLD_FBO_NAME
         from pyguara.graphics.pipeline.passes import FinalPass
 
-        graph = RenderGraph(MagicMock(), 320, 240)
-        graph.add_pass(FinalPass(MagicMock(), input_fbo_name=WORLD_FBO_NAME))
+        graph = RenderGraph(RecordingDevice(), 320, 240)
+        graph.add_pass(FinalPass(input_fbo_name=WORLD_FBO_NAME))
 
         assert [p.name for p in graph.passes] == ["final"]
         assert WORLD_FBO_NAME not in [p.name for p in graph.passes]

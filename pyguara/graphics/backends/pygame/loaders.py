@@ -3,7 +3,7 @@
 import pygame
 
 from pyguara.log import get_logger
-from pyguara.resources.meta import AssetMeta, TextureMeta
+from pyguara.resources.meta import AssetMeta, TextureFilter, TextureMeta
 from pyguara.resources.types import Resource
 
 from .types import PygameTexture
@@ -57,22 +57,30 @@ class PygameImageLoader:
         # Apply convert_alpha for proper alpha handling
         if pygame.display.get_surface() is not None:
             surface = surface.convert_alpha()
+        elif not surface.get_flags() & pygame.SRCALPHA:
+            # No display -- the wgpu backend opens none -- so convert_alpha
+            # is unavailable; an alpha copy is what premultiplying and the
+            # upload to the GPU both need.
+            with_alpha = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+            with_alpha.blit(surface, (0, 0))
+            surface = with_alpha
 
         # Apply premultiply alpha if requested
         if texture_meta.premultiply_alpha:
             surface = self._premultiply_alpha(surface)
 
-        # Note: Pygame doesn't support runtime texture filtering changes
-        # The filter setting is stored in the meta for backends that support it
-        # (like ModernGL). For pygame, we log a debug message.
-        if texture_meta.filter != "nearest":
+        # The pygame renderer scales nearest whatever the meta says; the
+        # filter travels on the texture for the wgpu renderer, which shares
+        # this loader and honours it.
+        smooth = texture_meta.get_filter_mode() is TextureFilter.LINEAR
+        if smooth:
             logger.debug(
-                "Texture filter '%s' requested for '%s' - pygame uses nearest by default",
-                texture_meta.filter,
+                "Texture filter 'linear' requested for '%s' - the pygame "
+                "renderer draws it nearest; the wgpu renderer honours it",
                 path,
             )
 
-        return PygameTexture(path, surface)
+        return PygameTexture(path, surface, smooth=smooth)
 
     def _premultiply_alpha(self, surface: pygame.Surface) -> pygame.Surface:
         """Premultiply RGB values by alpha for correct blending.

@@ -1,8 +1,10 @@
 name: Wheels
 
-# Called, never triggered on its own: `ci.yml` runs it on every pull
-# request and `release.yml` runs it on a tag, so what a release publishes
-# comes out of the same job that verified it on the branch.
+# Called: `ci.yml` runs it on every pull request and `release.yml` runs it
+# on a tag, so what a release publishes comes out of the same job that
+# verified it on the branch. It can also be started by hand
+# (`gh workflow run wheels.yml --ref <branch>`), for a branch neither caller
+# covers -- the fork's `next` -- after changing the build.
 #
 # The engine's wheel is no longer pure Python. `pyproject.toml` builds the
 # Rust accelerator through maturin and ships it inside the wheel, which is
@@ -15,6 +17,7 @@ name: Wheels
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,7 +40,10 @@ jobs:
         # dependencies have no 3.14t wheels either.
         platform:
           - { name: linux-x86_64, runner: ubuntu-22.04, target: x86_64 }
-          - { name: linux-aarch64, runner: ubuntu-22.04, target: aarch64 }
+          # Built natively on an ARM runner rather than cross-compiled:
+          # the crate links udev, and the cross images have no aarch64
+          # sysroot to install its headers into.
+          - { name: linux-aarch64, runner: ubuntu-22.04-arm, target: aarch64 }
           - { name: macos-x86_64, runner: macos-15-intel, target: x86_64 }
           - { name: macos-aarch64, runner: macos-latest, target: aarch64 }
           - { name: windows-x64, runner: windows-latest, target: x64 }
@@ -57,7 +63,20 @@ jobs:
           # current Ubuntu and a five-year-old distribution then all take
           # the same wheel. Ignored on macOS and Windows.
           manylinux: auto
-          args: --release --out dist
+          # The gamepad crate (gilrs) links udev on Linux for hot-plug; its
+          # headers go into the build container, whichever package manager
+          # its image has. ALSA is not linked: the audio device loads it
+          # with dlopen (rust/src/mixer.rs), so no wheel needs it to import.
+          before-script-linux: |
+            if command -v dnf >/dev/null; then dnf install -y systemd-devel
+            elif command -v yum >/dev/null; then yum install -y systemd-devel
+            else apt-get update && apt-get install -y libudev-dev; fi
+          # `warn`, not `repair`, on Linux: libudev is outside the manylinux
+          # whitelist, and repair would bundle the build image's copy where
+          # the host's must answer for the host's udev. Every distribution
+          # ships libudev.so.1 (Debian and Fedora's base images included);
+          # the wheel uses the system's. Ignored on macOS and Windows.
+          args: --release --out dist ${{ runner.os == 'Linux' && '--auditwheel warn' || '' }}
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
       # A wheel that quietly shipped without the extension would install,

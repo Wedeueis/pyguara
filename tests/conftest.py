@@ -9,115 +9,41 @@ import pytest
 from pyguara.di.container import DIContainer
 from pyguara.events.dispatcher import EventDispatcher
 
-# Set in CI, where a missing GL context means the environment is wrong
+# No test opens a real wgpu window unless it asks for one: the variable is
+# inherited by every subprocess a test starts, too. A test that wants a
+# window opens `NativeWindow` itself (`test_wgpu_window.py`).
+os.environ.setdefault("PYGUARA_WINDOW", "offscreen")
+
+# Set in CI, where a missing graphics adapter means the environment is wrong
 # rather than absent. Without it a machine with no GPU still runs the rest
-# of the suite green, which is what keeps these tests cheap to live with --
-# but it also let every GL test in this repository skip silently on CI.
-REQUIRE_GL = os.environ.get("PYGUARA_REQUIRE_GL") == "1"
-
-
-def create_standalone_context() -> Any:
-    """Create a standalone ModernGL context, trying each backend in turn.
-
-    **Never call `moderngl.create_standalone_context()` directly in a
-    test.** The default backend is GLX on Linux and wants a display; CI has
-    no display, so the bare call fails there with `XOpenDisplay: cannot
-    open display` while EGL would have worked. A test that rolls its own
-    context therefore skips (or fails) on CI for a reason that has nothing
-    to do with what it was testing -- which is how the five
-    `test_gl_blend_state.py` tests came to run on developer machines only.
-
-    Returns:
-        The ModernGL context.
-
-    Raises:
-        RuntimeError: If no backend worked, naming every attempt so a
-            broken runner is diagnosable.
-    """
-    moderngl = pytest.importorskip("moderngl")
-
-    failures = []
-    for kwargs in ({}, {"backend": "egl"}):
-        try:
-            return moderngl.create_standalone_context(**kwargs)
-        except Exception as exc:  # pragma: no cover - depends on the machine
-            failures.append(f"{kwargs or 'default'}: {exc}")
-    raise RuntimeError("; ".join(failures))  # pragma: no cover - ditto
-
-
-@pytest.fixture(scope="session")
-def gl_ctx() -> Iterator[Any]:
-    """A standalone ModernGL context, shared by every test that needs GL.
-
-    Standalone rather than SDL: no window, no display, no swap semantics.
-    `tools/agent_view.py --gl` uses SDL's offscreen driver instead, but
-    that exists to capture what a *demo* draws, which is a different job.
-
-    **Nothing is configured on it.** `ModernGLRenderer` applies the blend
-    mode it needs when it is constructed, so a test drawing through the
-    renderer gets the same state the engine runs with. A test drawing
-    without one -- the UI renderer, a raw pass -- sets up what it needs
-    itself, and should not assume it inherited it from a neighbour.
-
-    Yields:
-        The ModernGL context.
-    """
-    try:
-        ctx = create_standalone_context()
-    except RuntimeError as exc:  # pragma: no cover - depends on the machine
-        if REQUIRE_GL:
-            pytest.fail(
-                "PYGUARA_REQUIRE_GL is set and no standalone GL context could "
-                f"be created, so the GL suite would have skipped silently. {exc}"
-            )
-        pytest.skip(f"no standalone GL context available: {exc}")
-
-    try:
-        yield ctx
-    finally:
-        ctx.release()
+# of the suite green -- but every GPU test would then skip silently on CI.
+REQUIRE_GPU = os.environ.get("PYGUARA_REQUIRE_GPU") == "1"
 
 
 @pytest.fixture
-def isolated_gl_ctx(gl_ctx: Any) -> Iterator[Any]:
-    """A standalone GL context of one test's own, then the shared one back.
+def wgpu_frame() -> Any:
+    """Make native wgpu frames: `wgpu_frame(width, height)`, offscreen.
 
-    For a test that needs to change context-global state -- the blend mode,
-    say -- and so cannot use the session-scoped `gl_ctx` without leaking
-    into every later GL test.
-
-    **Do not create a standalone context by hand for this.** Creating one
-    makes it current, and releasing it leaves *no* context current, not the
-    one that was current before. The shared `gl_ctx` is then still a live
-    Python object whose every GL call fails: `cannot create renderbuffer`,
-    from a fixture that looks entirely unrelated. That is what this fixture
-    exists to prevent -- it re-asserts `gl_ctx` afterwards.
-
-    It went unnoticed because it depends on collection order. While the
-    only module with a private context happened to run *before* every other
-    GL module, `gl_ctx` did not exist yet when those contexts came and
-    went, so it was created afterwards and was current. Adding a GL test
-    file that sorts earlier in the directory was enough to break 28 tests
-    across seven modules that nothing had touched.
-
-    Yields:
-        A fresh standalone context, released when the test ends.
+    Skips when no graphics adapter can be opened -- unless
+    `PYGUARA_REQUIRE_GPU=1`, where that is a failure. Runs in-process:
+    the separate processes wgpu tests used to need were for a ModernGL
+    context in the same process, which no longer exists.
     """
-    # No skip guard, deliberately: `gl_ctx` is already built, so GL works
-    # on this machine and so does this. Guarding here is what silently
-    # dropped these tests on CI -- the bare `create_standalone_context()`
-    # this used to call fails on a headless runner even though `gl_ctx`
-    # reached the same hardware through EGL.
-    ctx = create_standalone_context()
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    import pygame
+
+    pygame.init()
+    if pygame.display.get_surface() is None:
+        pygame.display.set_mode((8, 8))
+    from pyguara.graphics.backends.wgpu import GpuFrame
+
     try:
-        yield ctx
-    finally:
-        ctx.release()
-        # moderngl offers no public "make current" other than the
-        # context-manager protocol, and nothing here wants to exit it: the
-        # shared context is session-scoped, and every later GL test expects
-        # to find it current.
-        gl_ctx.__enter__()
+        GpuFrame(8, 8)
+    except RuntimeError as error:
+        if REQUIRE_GPU:
+            pytest.fail(f"PYGUARA_REQUIRE_GPU is set and no adapter opened: {error}")
+        pytest.skip(f"no graphics adapter for wgpu: {error}")
+    return GpuFrame
 
 
 @pytest.fixture
@@ -196,3 +122,25 @@ def container():
 def event_dispatcher():
     """Provide an event dispatcher."""
     return EventDispatcher()
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """`--update-golden`: rewrite the stored golden images from this run.
+
+    For `tests/integration/golden.py`'s users. A golden image is the
+    approved output of a render path; when an intended change moves pixels,
+    rerun those tests with this flag and **look at the diff** of the images
+    before committing them, as with `--snapshot-update`.
+    """
+    parser.addoption(
+        "--update-golden",
+        action="store_true",
+        default=False,
+        help="rewrite golden images from this run's output",
+    )
+
+
+@pytest.fixture
+def update_golden(request: pytest.FixtureRequest) -> bool:
+    """Whether this run rewrites golden images rather than checking them."""
+    return bool(request.config.getoption("--update-golden"))

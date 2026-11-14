@@ -8,9 +8,8 @@
 //! the offline sink ADR 0004 asks of a backend with no reference is simply
 //! that the mix's inputs are bytes a test can read.
 //!
-//! Output stays with `pygame.mixer`, which takes these buffers as a
-//! `Sound(buffer=...)`. Owning the device instead is what `BUS_EFFECTS` would
-//! need, and it would link ALSA into a wheel with no system dependencies.
+//! The mixer that plays what this decodes, and owns the device, is
+//! `mixer.rs`.
 //!
 //! Resampling is **linear interpolation**, so a pitch above 1.0 aliases a
 //! little rather than being band-limited. Pitch here is SFX variation of a
@@ -36,7 +35,7 @@ const BYTES_PER_SAMPLE: usize = 2;
 /// Decode a whole file to interleaved signed 16-bit samples.
 ///
 /// Returns the samples with the file's own rate and channel count.
-fn decode_to_samples(path: &str) -> Result<(Vec<i16>, u32, usize), String> {
+pub(crate) fn decode_to_samples(path: &str) -> Result<(Vec<i16>, u32, usize), String> {
     let file = File::open(path).map_err(|error| format!("{path}: {error}"))?;
     let stream = MediaSourceStream::new(Box::new(file), Default::default());
 
@@ -126,7 +125,7 @@ fn map_frame(frame: &[i16], dst: usize, out: &mut [i32]) {
 /// Positions are computed from the output index rather than accumulated, so
 /// a long clip does not drift by the rounding of `step`. The output ends at
 /// the last position inside the input, so `step == 1.0` is the identity.
-fn resample(
+pub(crate) fn resample(
     input: &[i16],
     src_channels: usize,
     dst_channels: usize,

@@ -25,14 +25,9 @@ has a number to beat.
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 from pyguara.common.types import Color, Vector2
-from pyguara.graphics.backends.moderngl.instancing import (
-    INSTANCE_FLOATS,
-    pack_sprite_instances,
-)
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.components.sprite import Sprite
 from pyguara.graphics.pipeline.batch import Batcher
@@ -390,15 +385,13 @@ def test_sweep_cpu_frame(benchmark, count: int) -> None:
     camera = Camera2D(1280, 720)
     viewport = Viewport.create_fullscreen(1280, 720)
     batcher = Batcher()
-    instances = np.zeros((count, INSTANCE_FLOATS), dtype="f4")
 
     def frame() -> None:
         system._queue.clear()
         for sprite in sprites:
             system.submit(sprite)
         system._queue.sort()
-        for batch in batcher.create_batches(system._queue.commands, camera, viewport):
-            pack_sprite_instances(batch, instances)
+        batcher.create_batches(system._queue.commands, camera, viewport)
 
     benchmark.pedantic(frame, rounds=5, iterations=1)
 

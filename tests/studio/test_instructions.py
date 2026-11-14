@@ -15,6 +15,7 @@ own file, and Codex truncates at 32 KiB.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,8 @@ from pyguara.studio.agent.instructions import (
     merge_generated,
     write_instructions,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture
@@ -201,6 +204,33 @@ class TestDiscoveredCommands:
         assert not any(
             "mypy" in command for _, command in discover_facts(tmp_path).commands
         )
+
+    def test_mypy_checks_everything_when_no_target_is_named(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "pyproject.toml").write_text(
+            "[tool.mypy]\nstrict = true\n", encoding="utf-8"
+        )
+        commands = dict(discover_facts(tmp_path).commands)
+        assert commands["Type-check"] == "mypy ."
+
+    @pytest.mark.parametrize("key", ["files", "packages", "modules"])
+    def test_mypy_defers_to_the_targets_the_project_names(
+        self, tmp_path: Path, key: str
+    ) -> None:
+        """`mypy .` would override the project's own gate with a wider one."""
+        (tmp_path / "pyproject.toml").write_text(
+            f'[tool.mypy]\n{key} = ["game"]\n', encoding="utf-8"
+        )
+        commands = dict(discover_facts(tmp_path).commands)
+        assert commands["Type-check"] == "mypy"
+
+    def test_the_engine_writes_the_gate_it_actually_runs(self) -> None:
+        """The generated command must check `pyguara`, as `make type-check` does."""
+        commands = dict(discover_facts(REPO_ROOT).commands)
+        assert commands["Type-check"] == "uv run mypy"
+        config = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text("utf-8"))
+        assert config["tool"]["mypy"]["files"] == ["pyguara"]
 
     def test_tests_are_not_offered_without_a_tests_directory(
         self, tmp_path: Path

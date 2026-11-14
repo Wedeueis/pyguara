@@ -38,7 +38,6 @@ dependencies = [
     "pygame-ce>=2.5.6",
     "pillow>=12.1.0",
     "msgpack>=1.1.2",
-    "moderngl>=5.8.0",
     "numpy>=1.26.0",
     # Resolves the per-user data directory a shipped game must save into
     # (~/.local/share, %APPDATA%, ~/Library/Application Support). Small,
@@ -71,8 +70,8 @@ dev = [
     # isolated build environment, but cannot run it.
     "maturin>=1.9,<2.0",
 
-    # The editor layer and Studio (pyguara/studio): Dear ImGui panels over
-    # the ModernGL context. A dev extra, not a runtime dependency -- a
+    # The editor layer and Studio (pyguara/studio): Dear ImGui panels drawn
+    # through the wgpu frame. A dev extra, not a runtime dependency -- a
     # shipped game never attaches either, and the agent transport runs
     # without this installed. `tests/studio/test_editor_availability.py`
     # asserts it imports where it is expected, so it cannot silently go
@@ -213,7 +212,7 @@ summary = """\
 PyGuara is a code-first 2D game engine for Python 3.12+: an \
 Entity-Component-System core with inverted-index queries, a \
 reflection-based dependency-injection container, an event bus, and \
-backend-agnostic rendering over pygame-ce and ModernGL. This repository is \
+backend-agnostic rendering over pygame-ce and wgpu. This repository is \
 the engine itself, not a game built on it -- `games/` holds the demos and \
 tutorials."""
 
@@ -369,6 +368,11 @@ docstring-code-line-length = "dynamic"
 # error -- so ruff could ask for a modernisation that the type checker then
 # refused, and any new generic class was stuck between the two.
 python_version = "3.12"
+# What a bare `mypy` checks, so the gate is one spelling everywhere: this,
+# `make type-check`, CI, and the command `pyguara studio instructions`
+# writes into AGENTS.md. Without it that generated command was `mypy .`,
+# which is a different and wider gate than the one the project holds.
+files = ["pyguara"]
 exclude = ["tests"]
 warn_return_any = true
 warn_unused_configs = true
@@ -389,10 +393,6 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "pymunk.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "moderngl.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

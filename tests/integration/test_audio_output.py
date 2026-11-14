@@ -25,7 +25,7 @@ import math
 import os
 import struct
 import wave
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -38,10 +38,10 @@ from tools.audio_capture import (
     SEAM_FREQ,
     SEAM_PERIODS,
     capture_asset,
+    capture_native,
     capture_tone_loop,
     compare_with_sine,
     read_capture,
-    use_disk_driver,
 )
 
 pytestmark = pytest.mark.integration
@@ -180,27 +180,13 @@ def _write_seam_tone(path: Path, periods: int) -> Path:
     return path
 
 
-def _capture_native(output: Path, play: Callable[[Any, Any], Any]) -> None:
-    """Run `play(system, clip)` on the native backend until it falls silent."""
-    use_disk_driver(output)
-    import pygame
-
-    from pyguara.audio.backends.native.native_audio import NativeAudioSystem
-
-    if pygame.mixer.get_init() is not None:
-        pygame.mixer.quit()
-    system = NativeAudioSystem(frequency=RATE)
-    handle = play(system, None)
-    while system.is_sound_active(handle):
-        system.update()
-        pygame.time.wait(5)
-    pygame.time.wait(60)
-    system.shutdown()
-
-
 @pytest.mark.skipif(not _has_extension(), reason="extension not built")
 class TestTheNativeBackendReachesTheOutput:
-    """Decode to speaker with no device, against the same detector as above."""
+    """Decode to mix with no device, against the same detector as above.
+
+    Through the mixer's offline render (`capture_native`): the native
+    backend owns its device, so SDL's `disk` driver never sees it.
+    """
 
     def test_a_loop_between_two_points_has_no_seam(
         self, audio_env: None, tmp_path: Path
@@ -215,8 +201,8 @@ class TestTheNativeBackendReachesTheOutput:
         duration = SEAM_PERIODS / SEAM_FREQ
         laps = 3
 
-        def play(system: Any, _clip: Any) -> Any:
-            clip = NativeSoundLoader().load(str(source))
+        def play(system: Any) -> Any:
+            clip = NativeSoundLoader(system.mixer).load(str(source))
             return system.play_sfx(
                 clip,
                 loops=laps,
@@ -224,7 +210,7 @@ class TestTheNativeBackendReachesTheOutput:
                 loop_end=duration,
             )
 
-        _capture_native(output, play)
+        capture_native(output, play)
 
         total_frames = round(RATE * duration) + lap_frames * laps
         check = compare_with_sine(output, 1, total_frames)
@@ -240,11 +226,11 @@ class TestTheNativeBackendReachesTheOutput:
         source = _write_seam_tone(tmp_path / "tone.wav", SEAM_PERIODS)
         output = tmp_path / "pitched.raw"
 
-        def play(system: Any, _clip: Any) -> Any:
-            clip = NativeSoundLoader().load(str(source))
+        def play(system: Any) -> Any:
+            clip = NativeSoundLoader(system.mixer).load(str(source))
             return system.play_sfx(clip, pitch=2.0)
 
-        _capture_native(output, play)
+        capture_native(output, play)
 
         mono = np.frombuffer(output.read_bytes(), dtype="<i2")[::2].astype(float)
         sounding = mono[np.flatnonzero(mono)[0] : np.flatnonzero(mono)[-1] + 1]

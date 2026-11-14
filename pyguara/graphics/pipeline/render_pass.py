@@ -11,8 +11,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import moderngl
-
     from pyguara.graphics.pipeline.graph import RenderGraph
 
 
@@ -63,11 +61,10 @@ class BaseRenderPass(ABC):
         self._enabled = value
 
     @abstractmethod
-    def execute(self, ctx: moderngl.Context, graph: RenderGraph) -> None:
+    def execute(self, graph: RenderGraph) -> None:
         """Execute this render pass.
 
         Args:
-            ctx: The ModernGL rendering context.
             graph: The RenderGraph orchestrating this pass.
         """
         ...

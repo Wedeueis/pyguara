@@ -22,6 +22,19 @@ class PygameWindow:
         self._screen: Any = None
         self._default_color = Color(0, 0, 0)
         self._is_open = False
+        self._posted: list[object] = []
+
+    def display_flags(self, config: WindowConfig) -> int:
+        """Return the SDL display flags this window opens with.
+
+        Fullscreen only: the software window has no editor drawing its own
+        title bar, so it ignores `resizable` and `borderless`. The wgpu
+        window, which does, adds them.
+
+        Args:
+            config: The window configuration.
+        """
+        return pygame.FULLSCREEN if config.fullscreen else 0
 
     def open(self, config: WindowConfig) -> bool:
         """Create the display surface.
@@ -32,10 +45,8 @@ class PygameWindow:
         Returns:
             True once the surface exists.
         """
-        flags = 0
+        flags = self.display_flags(config)
         self._default_color = config.default_color
-        if config.fullscreen:
-            flags |= pygame.FULLSCREEN
 
         size = (config.screen_width, config.screen_height)
         screen: pygame.Surface = pygame.display.set_mode(
@@ -132,7 +143,16 @@ class PygameWindow:
             if event.type == pygame.QUIT:
                 self._is_open = False
 
-        return translate_events(raw_events)
+        posted, self._posted = self._posted, []
+        return posted + translate_events(raw_events)
+
+    def post_event(self, event: object) -> None:
+        """Deliver an engine event with the next `poll_events`.
+
+        Args:
+            event: An engine event, such as a `KeyDownEvent`.
+        """
+        self._posted.append(event)
 
     def get_screen(self) -> Any:
         """Return the native OS window."""

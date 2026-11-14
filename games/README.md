@@ -86,8 +86,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   the backdrop to alpha and stands every frame on one shared canvas, and
   checked in as PNGs; the demo loads files and knows nothing about sheets.
 * **Run:** `uv run python games/guara_falcao/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py guara_falcao --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all).
+* **Look at it headlessly:** `uv run python tools/agent_view.py guara_falcao`
   Walk the screens with
   `--click 640,314@20 --click 1199,681@60 --click 640,358@100`.
 
@@ -99,17 +98,16 @@ These modules correspond to the "Tutorial Series Roadmap".
 
 ### [mourisco_ressonancia](./mourisco_ressonancia) — Mourisco: Ressonância
 * **Genre:** Stealth exploration in a pitch-black cave, lit only by echolocation.
-* **Key Concepts:** the **ModernGL** backend and the full lighting pipeline
+* **Key Concepts:** the **wgpu** backend and the full lighting pipeline
   (`WorldPass → LightPass → PulsePass → CompositePass → PostProcessPass → FinalPass`),
   a custom wavefront-ring shader, DDA ray occlusion, `kits/echolocation`.
 * **Run:** `uv run python games/mourisco_ressonancia/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py mourisco_ressonancia --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py mourisco_ressonancia`
 * **Spec:** [`project/demos/mourisco_ressonancia_GDD.md`](../project/demos/mourisco_ressonancia_GDD.md)
 
 ### [protocolo_bandeira](./protocolo_bandeira) — Protocolo Bandeira
 * **Genre:** Twin-stick wave arena. A giant anteater holds a cerrado clearing against a swarm.
-* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+* **Key Concepts:** the **wgpu** backend with lighting and post-processing
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`), the
   engine's `HeatHazeEffect` shader for the afternoon shimmer and its dust, an
   HDR light map, `Sparks`/`Shaker`/`FloatingText`/`ScreenFlash` for the
@@ -119,13 +117,12 @@ These modules correspond to the "Tutorial Series Roadmap".
   when something is in the way — `kits/projectiles`,
   `kits/action_combat`, `kits/spawn` and `ecs/pool` for the waves.
 * **Run:** `uv run python games/protocolo_bandeira/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py protocolo_bandeira --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py protocolo_bandeira`
 
 ### [tamandua_murundus](./tamandua_murundus) — Tamanduá: O Guardião dos Murundus
 * **Genre:** Horde survivor / density showcase. A giant anteater holds one
   cerrado clearing from dusk to dawn against a rising swarm.
-* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+* **Key Concepts:** the **wgpu** backend with lighting and post-processing
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`),
   **per-instance sprite tint** on the GL sprite path (one texture, N colours,
   one draw call), the **ambient day/night cycle**, a genuine `SPOT` light for
@@ -136,21 +133,19 @@ These modules correspond to the "Tutorial Series Roadmap".
   layer, in one instanced draw call. The 700 is measured, not chosen — see the
   table in `swarm.py`.
 * **Run:** `uv run python games/tamandua_murundus/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py tamandua_murundus --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py tamandua_murundus`
 * **Spec:** [`project/demos/tamandua_murundus_GDD.md`](../project/demos/tamandua_murundus_GDD.md)
 
 ### [true_coral](./true_coral) — True Coral
 * **Genre:** Snake, on a rain-soaked forest floor at night.
-* **Key Concepts:** the **ModernGL** backend with lighting and post-processing
+* **Key Concepts:** the **wgpu** backend with lighting and post-processing
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`),
   the engine's `StormEffect` shader driving rain and forked lightning, an HDR
   light map, `kits/trail` for the body, `kits/action_combat` for lives,
   `kits/stats` + `kits/effects` for the star's speed boost, `kits/loot` and
   `kits/spawn` for the prey.
 * **Run:** `uv run python games/true_coral/main.py`
-* **Look at it headlessly:** `uv run python tools/agent_view.py true_coral --gl`
-  (the `--gl` flag is required — SDL's dummy driver has no OpenGL at all)
+* **Look at it headlessly:** `uv run python tools/agent_view.py true_coral`
 * **Spec:** [`project/demos/true_coral_GDD.md`](../project/demos/true_coral_GDD.md)
 
 ### [quintal_cerrado](./quintal_cerrado) — Quintal do Cerrado

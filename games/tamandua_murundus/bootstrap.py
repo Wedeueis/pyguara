@@ -1,6 +1,6 @@
 """Tamanduá: O Guardião dos Murundus - Bootstrap.
 
-Runs on the **ModernGL** backend. The demo's whole subject is a crowd of
+Runs on the **wgpu** backend. The demo's whole subject is a crowd of
 identically-textured insects that are *different colours*, which is a
 per-instance vertex attribute on the GL sprite path and nothing a blitter
 reproduces; and their bioluminescence is a threshold-crossing colour,
@@ -73,7 +73,7 @@ def _install_theme() -> None:
 
 
 def _configure(config: GameConfig) -> None:
-    """Select the ModernGL backend, and name the window.
+    """Select the wgpu backend, and name the window.
 
     Called before the window exists, which is the only point where
     `backend` still decides which one gets built.
@@ -84,7 +84,7 @@ def _configure(config: GameConfig) -> None:
     config.display.title = "Tamanduá: O Guardião dos Murundus"
     config.display.screen_width = WINDOW_WIDTH
     config.display.screen_height = WINDOW_HEIGHT
-    config.display.backend = RenderingBackend.MODERNGL
+    config.display.backend = RenderingBackend.WGPU
 
 
 def configure_game_container() -> DIContainer:
@@ -103,7 +103,6 @@ def configure_game_container() -> DIContainer:
     _install_theme()
 
     graph = container.get(RenderGraph)
-    ctx = graph.ctx
 
     # The graph owns the framebuffer manager and every pass resolves
     # through it; anything built here has to share it or it allocates a
@@ -116,20 +115,19 @@ def configure_game_container() -> DIContainer:
     # one this demo would have built, stays.
     graph.remove_pass("final")
 
-    stack = PostProcessStack(ctx, fbo_manager)
+    stack = PostProcessStack(fbo_manager)
     stack.add_effect(
         BloomEffect(
-            ctx,
             fbo_manager,
             threshold=BLOOM_THRESHOLD,
             intensity=BLOOM_INTENSITY,
             blur_passes=BLOOM_BLUR_PASSES,
         )
     )
-    stack.add_effect(VignetteEffect(ctx, intensity=0.52, radius=0.85, softness=0.6))
+    stack.add_effect(VignetteEffect(intensity=0.52, radius=0.85, softness=0.6))
 
-    graph.add_pass(CompositePass(ctx))
+    graph.add_pass(CompositePass())
     graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
-    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
+    graph.add_pass(FinalPass(input_fbo_name="post_processed"))
 
     return container

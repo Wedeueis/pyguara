@@ -639,7 +639,14 @@ the native crate is the likely home for it. **A Steamworks binding would be the 
 in the extension with a system-library dependency**, which ADR 0006 has so far avoided, so
 it may need to be optional or ship separately.
 
-**Open question for the owner:** is Steam the only store? See section 12. `pyguara dist` also
+**Decided 2026-11-13 (the owner's call): Steam only.** Online play goes through Steam's
+networking and its relay; no relay of our own. Direct IP (and Tailscale or similar) stays
+for development and playtests, and is what a build outside Steam has. Checked against
+Steam's docs the same day: Valve relays P2P traffic over its backbone and "IP addresses are
+never revealed"; the Steam Direct fee is $100 per app, recouped after $1,000 of revenue; no
+price is stated for the relay itself.
+
+**Was the open question for the owner:** is Steam the only store? See section 12. `pyguara dist` also
 targets itch.io, where Steam's relay isn't available. Supporting itch online would mean running
 your own relay, or accepting that some players can't host.
 

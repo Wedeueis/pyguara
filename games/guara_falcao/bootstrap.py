@@ -1,6 +1,6 @@
 """Guará & Falcão - Bootstrap.
 
-Runs on the **ModernGL** backend. The demo's subject is the UI system and
+Runs on the **wgpu** backend. The demo's subject is the UI system and
 the design system, and neither needs a GPU -- but the screens they draw sit
 over a Cerrado at the amber hour, and that does: the low sun, the glow off
 the fruit, and the way a checkpoint lifts the ground around it are light-map
@@ -84,7 +84,7 @@ def attach_lighting(container: DIContainer, lighting: LightingSystem) -> None:
 
     # Index 1: after the world is drawn, before it is composited with the
     # light map it is about to be multiplied by.
-    graph.insert_pass(1, LightPass(graph.ctx, lighting))
+    graph.insert_pass(1, LightPass(lighting))
 
 
 def begin_world(container: DIContainer) -> None:
@@ -124,7 +124,7 @@ def configure_pipeline(container: DIContainer, camera: Camera2D) -> None:
 
 
 def _configure(config: GameConfig) -> None:
-    """Select the ModernGL backend, and name the window.
+    """Select the wgpu backend, and name the window.
 
     Called before the window exists, which is the only point where
     `backend` still decides which one gets built.
@@ -135,7 +135,7 @@ def _configure(config: GameConfig) -> None:
     config.display.title = "Guará & Falcão - A Platformer Adventure"
     config.display.screen_width = WINDOW_WIDTH
     config.display.screen_height = WINDOW_HEIGHT
-    config.display.backend = RenderingBackend.MODERNGL
+    config.display.backend = RenderingBackend.WGPU
 
     # Platformer gravity -- set here rather than in the shared config file,
     # since config/game_config.json is on every demo's default load path.
@@ -159,7 +159,6 @@ def configure_game_container() -> DIContainer:
     _install_theme()
 
     graph = container.get(RenderGraph)
-    ctx = graph.ctx
 
     # The graph owns the framebuffer manager and every pass resolves
     # through it; anything built here has to share it or it allocates a
@@ -172,9 +171,8 @@ def configure_game_container() -> DIContainer:
     # one this demo would have built, stays.
     graph.remove_pass("final")
 
-    stack = PostProcessStack(ctx, fbo_manager)
+    stack = PostProcessStack(fbo_manager)
     bloom = BloomEffect(
-        ctx,
         fbo_manager,
         threshold=BLOOM_THRESHOLD,
         intensity=BLOOM_INTENSITY,
@@ -183,11 +181,11 @@ def configure_game_container() -> DIContainer:
     stack.add_effect(bloom)
     # Last, and gently: a vignette is a lens, not a light, and this one is
     # only here to stop the bright sky pulling the eye to the corners.
-    stack.add_effect(VignetteEffect(ctx, intensity=0.38, radius=0.92, softness=0.6))
+    stack.add_effect(VignetteEffect(intensity=0.38, radius=0.92, softness=0.6))
 
-    graph.add_pass(CompositePass(ctx))
+    graph.add_pass(CompositePass())
     graph.add_pass(PostProcessPass(stack, input_fbo_name="composite"))
-    graph.add_pass(FinalPass(ctx, input_fbo_name="post_processed"))
+    graph.add_pass(FinalPass(input_fbo_name="post_processed"))
 
     # Registered so the options panel can switch it off in front of you --
     # a toggle that changes the frame is worth more in a showcase than one

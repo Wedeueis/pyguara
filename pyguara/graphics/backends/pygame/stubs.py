@@ -1,7 +1,7 @@
-"""No-op stand-ins for the ModernGL-only graphics features, for pygame.
+"""No-op stand-ins for the render graph's features, for pygame.
 
 The pygame backend has no framebuffers, no dynamic lighting and no
-post-processing. These stubs let game code that uses those features run
+post-processing -- the wgpu backend has all three. These stubs let game code that uses those features run
 unchanged on it, rendering a fully lit scene instead of failing.
 
 Their entire value is interface parity: a method the real class has and the
@@ -92,6 +92,11 @@ class PygamePostProcessStack:
     def __init__(self) -> None:
         """Initialize the stub post-process stack."""
         self._effects: list[Any] = []
+
+    @property
+    def device(self) -> None:
+        """Return None: there is no GPU behind the pygame backend."""
+        return None
 
     @property
     def effects(self) -> list[Any]:
@@ -185,6 +190,11 @@ class PygameFramebufferManager:
         """
         self._width = width
         self._height = height
+
+    @property
+    def device(self) -> None:
+        """Return None: there is no GPU behind the pygame backend."""
+        return None
 
     @property
     def width(self) -> int:
@@ -286,13 +296,11 @@ class PygameRenderGraph:
         return self._fbo_manager
 
     @property
-    def ctx(self) -> None:
-        """Return None: there is no GL context behind the pygame backend.
+    def device(self) -> None:
+        """Return None: there is no GPU behind the pygame backend.
 
-        The real `RenderGraph` hands its `moderngl.Context` to each pass.
-        Nothing consumes this on pygame -- `Application` branches on
-        `isinstance(candidate, RenderGraph)` rather than on mere resolvability
-        -- but the attribute has to exist for the surfaces to match.
+        The real `RenderGraph` runs its passes through a `GraphicsDevice`.
+        Present here, like `ctx`, so the two surfaces match.
         """
         return None
 

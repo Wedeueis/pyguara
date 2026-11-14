@@ -182,10 +182,8 @@ class StudioHarness:
             The capture, or None when there is nothing to read -- a
             headless backend with no surface and no framebuffer.
         """
-        import pygame
-
-        surface = self._compose()
-        if surface is None:
+        image = self._compose()
+        if image is None:
             logger.warning(
                 "Nothing to capture: this backend exposes neither a display "
                 "surface nor a framebuffer."
@@ -194,52 +192,55 @@ class StudioHarness:
 
         self._out_dir.mkdir(parents=True, exist_ok=True)
         path = self._out_dir / f"{name or f'frame_{self._frame:04d}'}.png"
-        pygame.image.save(surface, str(path))
+        image.save(path)
 
-        world = self._world_surface()
-        width, height = surface.get_size()
+        world = self._world_image()
+        width, height = image.get_size()
         return Capture(
             path=path,
             width=width,
             height=height,
-            blank=is_flat(surface),
+            blank=is_flat(image),
             world_flat=None if world is None else is_flat(world),
         )
 
-    def _compose(self) -> Any:
-        """Return the composed frame as a pygame surface, or None.
+    def _compose(self) -> RgbaImage | None:
+        """Return the composed frame, UI included, or None.
 
-        `agent_view`'s logic, and its reasoning: the pygame backends draw
-        into the display surface, so reading it back is the whole job. A
-        ModernGL backend does not -- under an `OPENGL` display,
-        `get_surface()` hands back a surface the GPU never touched -- so
-        the offscreen buffer the final pass blits from is read instead.
-        The default framebuffer is no use: after the swap it is an
-        undefined back buffer, and before it reads back as solid zeros
-        under the offscreen driver.
+        The wgpu window renders into the device's own target, so the frame
+        is read back from the GPU. The pygame backend draws onto its display
+        surface, which is read instead -- the only branch that touches
+        pygame, and only because that backend is pygame.
 
         Returns:
-            The surface, or None.
+            The frame, or None.
         """
-        import pygame
+        from pyguara.graphics.window import Window
 
+        try:
+            backend = self._application.container.get(Window).backend
+        except Exception:  # noqa: BLE001 - no window registered: fall through
+            backend = None
+        read_pixels = getattr(backend, "read_pixels", None)
+        if read_pixels is not None:
+            return RgbaImage(*read_pixels())
         framebuffer = self._framebuffer(self._final_source())
         if framebuffer is not None:
-            return _to_surface(framebuffer)
-        return pygame.display.get_surface()
+            return _read_buffer(framebuffer)
+        return _display_surface()
 
-    def _world_surface(self) -> Any:
+    def _world_image(self) -> RgbaImage | None:
         """Return the world buffer alone, before any UI, or None.
 
         Returns:
-            The surface, or None when there is no separate world buffer.
+            The image, or None when there is no separate world buffer.
         """
         if self._final_source() == "world":
             # The composed frame already is the world buffer, so a second
             # read would say the same thing twice.
             return None
         framebuffer = self._framebuffer("world")
-        return None if framebuffer is None else _to_surface(framebuffer)
+        return None if framebuffer is None else _read_buffer(framebuffer)
 
     def _final_source(self) -> str:
         """Return the name of the buffer the finished frame is composed in.
@@ -359,21 +360,70 @@ def is_flat(surface: Any) -> bool:
     return True
 
 
-def _to_surface(framebuffer: Any) -> Any:
-    """Read a framebuffer into a pygame surface, the right way up.
+class RgbaImage:
+    """A captured frame: RGBA bytes, top row first.
 
-    Args:
-        framebuffer: A `Framebuffer` from the render graph.
-
-    Returns:
-        The surface.
+    Answers `get_size()` and `get_at()`, the two calls `is_flat` makes, so
+    a pygame surface and this are interchangeable there.
     """
+
+    def __init__(self, pixels: bytes, width: int, height: int) -> None:
+        """Hold a frame.
+
+        Args:
+            pixels: `width * height * 4` bytes.
+            width: Width in pixels.
+            height: Height in pixels.
+        """
+        self.pixels = bytes(pixels)
+        self.width = width
+        self.height = height
+
+    def get_size(self) -> tuple[int, int]:
+        """Return `(width, height)`."""
+        return self.width, self.height
+
+    def get_at(self, at: tuple[int, int]) -> tuple[int, int, int, int]:
+        """Return the RGBA of one pixel."""
+        start = (at[1] * self.width + at[0]) * 4
+        red, green, blue, alpha = self.pixels[start : start + 4]
+        return red, green, blue, alpha
+
+    def save(self, path: Path) -> None:
+        """Write the frame as a PNG.
+
+        Through the native extension where it is built, so a wgpu game's
+        capture loads no pygame; through pygame where it is not.
+        """
+        from pyguara import native
+
+        try:
+            extension = native.require_extension("PNG capture")
+        except RuntimeError:
+            extension = None
+        if extension is not None:
+            extension.encode_png(str(path), self.pixels, self.width, self.height)
+            return
+        import pygame
+
+        image = pygame.image.frombuffer(self.pixels, self.get_size(), "RGBA")
+        pygame.image.save(image, str(path))
+
+
+def _read_buffer(framebuffer: Any) -> RgbaImage:
+    """Read a render-graph buffer, which is top row first on wgpu."""
+    return RgbaImage(framebuffer.read_rgba(), framebuffer.width, framebuffer.height)
+
+
+def _display_surface() -> RgbaImage | None:
+    """Read the pygame backend's display surface, or None if it has none."""
     import pygame
 
-    size = (framebuffer.width, framebuffer.height)
-    frame = pygame.image.frombuffer(framebuffer.fbo.read(components=3), size, "RGB")
-    # GL's origin is bottom-left and pygame's is top-left.
-    return pygame.transform.flip(frame, False, True)
+    surface = pygame.display.get_surface()
+    if surface is None:
+        return None
+    width, height = surface.get_size()
+    return RgbaImage(pygame.image.tobytes(surface, "RGBA"), width, height)
 
 
 def open_headless(
@@ -382,7 +432,6 @@ def open_headless(
     project_root: Path | None = None,
     out_dir: Path | None = None,
     container_factory: Any = None,
-    gl: bool = False,
     seed: int | None = 0,
     fixed_clock: bool = True,
 ) -> StudioHarness:
@@ -396,9 +445,8 @@ def open_headless(
 
     So this boots the *normal* bootstrap under an SDL driver that needs no
     display -- the same arrangement `tools/agent_view.py` has used all
-    along. The driver choice matters too: `dummy` has no OpenGL
-    whatsoever, so a ModernGL scene cannot create its context under it and
-    needs `offscreen` instead, which is what `gl` selects.
+    along. `dummy` is enough for every backend: wgpu renders offscreen
+    and needs no GL context from SDL.
 
     Args:
         scene_factory: Called with the event dispatcher, returns the
@@ -409,8 +457,6 @@ def open_headless(
             with its own bootstrap. Demos in this repository expose
             `configure_game_container()` for exactly this. Defaults to
             `create_application()`'s container.
-        gl: Use the `offscreen` driver, which provides a real GL context,
-            instead of `dummy`. Required for a ModernGL scene.
         seed: Seed the engine's `RandomService` with this, so two runs
             draw the same numbers. None leaves whatever the bootstrap
             chose, which is a fresh seed per run.
@@ -420,7 +466,7 @@ def open_headless(
     Returns:
         The harness, with the scene active and no frame stepped yet.
     """
-    _force_headless_drivers(gl=gl)
+    _force_headless_drivers()
 
     from pyguara.application.application import Application
     from pyguara.events.dispatcher import EventDispatcher
@@ -461,7 +507,8 @@ def open_headless(
 def _install_fixed_clock(container: Any) -> None:
     """Make every frame exactly one sixtieth of a second.
 
-    The non-headless bootstrap registers `PygameClock`, which measures
+    The non-headless bootstrap registers a wall clock (`PygameClock` or
+    `WallClock`, by backend), which measures
     wall-clock time -- so two runs of the same script step different
     amounts of simulated time and produce different results. That is the
     right behaviour for a game and useless for "run it again and diff".
@@ -495,20 +542,15 @@ def _seed_random(container: Any, seed: int) -> None:
     container.register_instance(RandomService, RandomService(root_seed=seed))
 
 
-def _force_headless_drivers(*, gl: bool = False) -> None:
+def _force_headless_drivers() -> None:
     """Point SDL at drivers that need no display.
 
     `setdefault`, so a caller or a test module that has already chosen
     keeps their choice -- changing it after pygame has initialised its
     video subsystem would not take effect anyway.
-
-    Args:
-        gl: Prefer `offscreen`, which provides a real GL context
-            headlessly. `dummy` has no OpenGL at all ("OpenGL support is
-            either not configured in SDL or not available in current SDL
-            video driver"), so a ModernGL scene cannot create its context
-            under it.
     """
-    os.environ.setdefault("SDL_VIDEODRIVER", "offscreen" if gl else "dummy")
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    # The wgpu window's own switch; SDL's no longer reaches it.
+    os.environ.setdefault("PYGUARA_WINDOW", "offscreen")
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")

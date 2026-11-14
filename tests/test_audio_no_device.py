@@ -38,6 +38,7 @@ def test_the_engine_starts_and_plays_with_no_audio_output() -> None:
     result = run(
         """
         import os
+        os.environ["PYGUARA_AUDIO_BACKEND"] = "pygame"
         import pygame
         from pyguara.application.bootstrap import create_headless_application
 
@@ -59,11 +60,13 @@ def test_the_native_backend_starts_with_no_audio_output() -> None:
     pytest.importorskip("pyguara.pyguara_core_rs")
     result = run(
         """
-        import pygame
+        import sys
         from pyguara.audio.backends.native.native_audio import NativeAudioSystem
 
-        NativeAudioSystem()
-        assert pygame.mixer.get_init() is not None
+        system = NativeAudioSystem()
+        # The device, or the silent clock when there is none: never an error.
+        assert system.output.startswith(("device:", "silent:")), system.output
+        assert "pygame" not in sys.modules, "the native backend loaded pygame"
         print("started")
         """
     )

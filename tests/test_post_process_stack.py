@@ -21,7 +21,7 @@ def make_effect(name: str) -> MagicMock:
 
 
 def make_stack() -> PostProcessStack:
-    return PostProcessStack(MagicMock(), MagicMock())
+    return PostProcessStack(MagicMock())
 
 
 class TestEffectOrdering:

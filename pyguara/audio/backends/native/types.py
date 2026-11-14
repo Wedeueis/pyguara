@@ -1,38 +1,52 @@
 """The clip the native audio backend plays."""
 
-import pygame
+from __future__ import annotations
+
+from typing import Any
 
 from pyguara.resources.types import AudioClip
 
 
 class NativeAudioClip(AudioClip):
-    """A decoded clip, held as a `pygame.mixer.Sound` at the mixer's format.
+    """A decoded clip: stereo float at the mixer's rate, held by the mixer.
 
-    The samples live only in the `Sound`, which copies its buffer, so a clip
-    costs its decoded size once rather than twice. A pitched variant reads
-    them back with `get_raw()`, which is a copy, but only on a cache miss.
+    The samples live in a `MixerClip`, shared by reference with every voice
+    playing them, so a clip costs its decoded size once however many times
+    it is playing.
     """
 
-    def __init__(self, path: str, sound: pygame.mixer.Sound) -> None:
+    def __init__(self, path: str, samples: Any, rate: int) -> None:
         """Initialize the clip.
 
         Args:
             path: The source file path.
-            sound: The decoded sound, already at the mixer's format.
+            samples: The `MixerClip` holding the decoded audio.
+            rate: The mixer rate the samples are at.
         """
         super().__init__(path)
-        self._sound = sound
+        self._samples = samples
+        self._rate = rate
+        self.gain = 1.0
 
     @property
     def duration(self) -> float:
         """Return the duration in seconds."""
-        return float(self._sound.get_length())
+        return float(self._samples.frames) / self._rate
 
     @property
-    def native_handle(self) -> pygame.mixer.Sound:
-        """Return the sound the mixer plays."""
-        return self._sound
+    def frames(self) -> int:
+        """The length in mixer frames."""
+        return int(self._samples.frames)
+
+    @property
+    def native_handle(self) -> Any:
+        """Return the `MixerClip` the mixer plays."""
+        return self._samples
 
     def set_volume(self, volume: float) -> None:
-        """Set the volume for this specific clip (0.0 to 1.0)."""
-        self._sound.set_volume(volume)
+        """Scale every future play of this clip (0.0 to 1.0).
+
+        A play already under way keeps its loudness, as with pygame, where
+        a `Sound`'s volume applied to the channels it was started on.
+        """
+        self.gain = max(0.0, min(1.0, volume))

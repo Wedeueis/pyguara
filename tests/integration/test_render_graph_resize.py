@@ -36,7 +36,7 @@ class _RecordingPass(BaseRenderPass):
         self._order = order
         self.sizes: list[tuple[int, int]] = []
 
-    def execute(self, ctx: Any, graph: Any) -> None:
+    def execute(self, graph: Any) -> None:
         self._order.append(self.name)
 
     def on_resize(self, width: int, height: int) -> None:
@@ -118,23 +118,15 @@ class TestResizeReachesTheGraph:
     """With a real graph, a resize reaches every framebuffer and pass."""
 
     @pytest.fixture
-    def app(self, isolated_gl_ctx):
-        """A headless app with a hand-built graph standing in for the GL one.
-
-        `isolated_gl_ctx`, not a hand-rolled `create_standalone_context()`:
-        creating one makes it current and releasing it leaves *no* context
-        current, so the session-scoped `gl_ctx` every other GL test shares
-        starts failing with `cannot create renderbuffer` from a fixture
-        that looks unrelated. Doing it by hand here broke fifteen tests in
-        `test_perf_gl.py`, which is exactly what that fixture's docstring
-        warns about.
-        """
+    def app(self, wgpu_frame):
+        """A headless app with a hand-built graph on an offscreen wgpu frame."""
         import pygame
 
+        from pyguara.graphics.pipeline.device import WgpuDevice
         from pyguara.graphics.pipeline.graph import RenderGraph
 
         application = create_headless_application()
-        graph = RenderGraph(isolated_gl_ctx, 800, 600)
+        graph = RenderGraph(WgpuDevice(wgpu_frame(800, 600)), 800, 600)
         application._render_graph = graph
         application._container.register_instance(RenderGraph, graph)
 
@@ -230,14 +222,15 @@ class TestDrawOrder:
     """An `after_ui` pass runs after the game's UI is composited."""
 
     @pytest.fixture
-    def app(self, isolated_gl_ctx):
-        """A headless app with a graph, on a context of this test's own."""
+    def app(self, wgpu_frame):
+        """A headless app with a graph on an offscreen wgpu frame."""
         import pygame
 
+        from pyguara.graphics.pipeline.device import WgpuDevice
         from pyguara.graphics.pipeline.graph import RenderGraph
 
         application = create_headless_application()
-        graph = RenderGraph(isolated_gl_ctx, 320, 240)
+        graph = RenderGraph(WgpuDevice(wgpu_frame(320, 240)), 320, 240)
         application._render_graph = graph
 
         yield application

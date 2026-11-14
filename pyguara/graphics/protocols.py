@@ -227,10 +227,11 @@ class ShapeBatchRenderer(Protocol):
     satisfies it structurally, and one that cannot simply does not, which
     is what a caller tests with `isinstance`.
 
-    Only the ModernGL world renderer satisfies it today, because it is the
-    only backend where batching is free: its shape instances are already
-    accumulated per kind and drawn with one instanced call each, so a batch
-    is an `extend` of a list it is already holding. A software backend
+    The two GPU world renderers satisfy it, because batching is free there:
+    ModernGL already accumulates shape instances per kind and draws each
+    kind with one instanced call, so a batch is an `extend` of a list it is
+    holding; wgpu uploads the rows as they are and draws them in one
+    instanced step (`backends/wgpu/shapes.py`). A software backend
     would have to loop over the rows and draw them one at a time, which is
     what its caller was doing anyway -- so it gains nothing by claiming the
     capability, and claiming it would hide that fact.
@@ -531,6 +532,14 @@ class IWindowBackend(Protocol):
         """
         ...
 
+    def post_event(self, event: object) -> None:
+        """Deliver an engine event with the next `poll_events`.
+
+        Synthetic input -- a capture tool's click, a test's key press --
+        taking the same path as real input.
+        """
+        ...
+
     def get_screen(self) -> Any:
         """Return the native OS window."""
         ...
@@ -775,11 +784,6 @@ class IFramebuffer(Protocol):
         """Height of the framebuffer in pixels."""
         ...
 
-    @property
-    def texture(self) -> Any:
-        """The underlying texture that can be sampled from."""
-        ...
-
     def bind(self) -> None:
         """Bind this framebuffer as the current render target."""
         ...
@@ -820,11 +824,11 @@ class IRenderPass(Protocol):
         """Whether this pass should execute."""
         ...
 
-    def execute(self, ctx: Any, graph: Any) -> None:
+    def execute(self, graph: Any) -> None:
         """Execute this render pass.
 
         Args:
-            ctx: The rendering context (e.g., moderngl.Context).
-            graph: The RenderGraph orchestrating this pass (provides FBO access).
+            graph: The RenderGraph orchestrating this pass: its buffers, and
+                the device it runs shaders on.
         """
         ...

@@ -32,10 +32,17 @@
 //! store that is *worse* than Python at anything: an alternating
 //! insert/query loop rebuilds the grid per query, 0.13x over 4000 keys.
 //!
-//! **An audio backend's decoder and resampler** -- `audio`. The one thing
-//! here that is not an accelerator: nothing in Python does what it does, so
-//! it is chosen by `AudioConfig.backend` rather than by the switch below.
+//! **An audio backend** -- `audio` decodes and resamples, `mixer` mixes and
+//! owns the output device. Not an accelerator: nothing in Python does what
+//! it does, so it is chosen by `AudioConfig.backend` rather than by the
+//! switch below. `window`, `imaging` and `text` are the wgpu backend's
+//! platform layer -- window and input, images, fonts -- and the same kind.
 //! `net`, the network transport, is the same kind of thing.
+//!
+//! **A columnar world** -- `world`. The inverse of everything above: state
+//! that *lives* here and is lent to Python, rather than the other way
+//! round. A spike, wired into nothing yet; see ADR 0008. Like `audio` and
+//! `net` it has no Python counterpart.
 //!
 //! The extension is **optional** throughout. The pure-Python
 //! implementations are kept and used whenever it is absent, so the engine
@@ -54,11 +61,20 @@ use pyo3::prelude::*;
 mod audio;
 mod flocking;
 mod flowfield;
+mod gamepad;
+mod gpu;
 mod grid;
+mod imaging;
+mod mixer;
 mod net;
 mod particles;
+mod solids;
 mod sparks;
 mod spatialhash;
+mod steam;
+mod text;
+mod window;
+mod world;
 
 /// An RGBA tint as the renderer wants it.
 pub type Rgba = (u8, u8, u8, u8);
@@ -68,9 +84,27 @@ pub type Rgba = (u8, u8, u8, u8);
 fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<flocking::NativeFlockingSolver>()?;
     module.add_class::<flowfield::NativeFlowField>()?;
+    module.add_class::<gpu::NativeGpu>()?;
     module.add_class::<particles::NativeParticlePool>()?;
+    module.add_class::<solids::NativeSolids>()?;
     module.add_class::<sparks::NativeSparkPool>()?;
     module.add_class::<spatialhash::NativeSpatialHash>()?;
+    module.add_class::<world::NativeWorld>()?;
+    module.add_class::<world::ColumnView>()?;
+    module.add_class::<world::RowView>()?;
+    module.add_class::<world::FieldAccessor>()?;
+    module.add_class::<text::NativeFont>()?;
+    module.add_class::<mixer::NativeMixer>()?;
+    module.add_class::<mixer::MixerClip>()?;
+    module.add_class::<gamepad::NativeGamepads>()?;
+    module.add_class::<window::NativeWindow>()?;
+    module.add_class::<window::NativeClipboard>()?;
+    module.add_class::<steam::NativeSteam>()?;
+    module.add_function(wrap_pyfunction!(steam::steam_library_name, module)?)?;
+    module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;
+    module.add_function(wrap_pyfunction!(imaging::decode_image, module)?)?;
+    module.add_function(wrap_pyfunction!(imaging::premultiply_rgba, module)?)?;
+    module.add_function(wrap_pyfunction!(imaging::encode_png, module)?)?;
     net::register(module)?;
     module.add_function(wrap_pyfunction!(audio::decode_audio, module)?)?;
     module.add_function(wrap_pyfunction!(audio::resample_pcm, module)?)?;

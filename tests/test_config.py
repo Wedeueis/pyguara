@@ -123,14 +123,14 @@ def test_second_launch_loads_a_usable_default_color(tmp_path):
 def test_enums_survive_a_round_trip(tmp_path):
     path = tmp_path / "c.json"
     writer = ConfigManager(file_path=path)
-    writer.config.display.backend = RenderingBackend.MODERNGL
+    writer.config.display.backend = RenderingBackend.WGPU
     writer.config.debug.log_level = LogLevel.DEBUG
     writer.save()
 
     reader = ConfigManager(file_path=path)
     reader.load()
 
-    assert reader.config.display.backend is RenderingBackend.MODERNGL
+    assert reader.config.display.backend is RenderingBackend.WGPU
     assert reader.config.debug.log_level is LogLevel.DEBUG
 
 
@@ -385,14 +385,14 @@ def test_env_overrides_are_applied(tmp_path, monkeypatch):
     path = tmp_path / "c.json"
     path.write_text(json.dumps(GameConfig().to_dict()))
     monkeypatch.setenv("PYGUARA_WINDOW_WIDTH", "1920")
-    monkeypatch.setenv("PYGUARA_BACKEND", "moderngl")
+    monkeypatch.setenv("PYGUARA_BACKEND", "wgpu")
     monkeypatch.setenv("PYGUARA_LOG_LEVEL", "DEBUG")
 
     manager = ConfigManager(file_path=path)
     manager.load()
 
     assert manager.config.display.screen_width == 1920
-    assert manager.config.display.backend is RenderingBackend.MODERNGL
+    assert manager.config.display.backend is RenderingBackend.WGPU
     assert manager.config.debug.log_level is LogLevel.DEBUG
 
 
@@ -475,3 +475,56 @@ def test_file_path_is_configurable(tmp_path):
     assert manager.file_path == path
     assert manager.save()
     assert path.exists()
+
+
+class TestTheRetiredBackend:
+    """A config naming ModernGL stops the game at startup, saying what to use.
+
+    Not the usual treatment of a bad value -- which falls back to the default
+    with a warning -- because quietly running on another backend is not what
+    a game that asked for a GPU meant. See `RetiredBackendError`.
+    """
+
+    def test_a_config_file_naming_it_raises_at_load(self, tmp_path):
+        import json
+
+        from pyguara.config.types import RetiredBackendError
+
+        data = GameConfig().to_dict()
+        data["display"]["backend"] = "moderngl"
+        path = tmp_path / "c.json"
+        path.write_text(json.dumps(data))
+
+        with pytest.raises(RetiredBackendError, match="'wgpu'.*'pygame'"):
+            ConfigManager(file_path=path).load()
+
+    def test_the_environment_naming_it_raises_too(self, tmp_path, monkeypatch):
+        import json
+
+        from pyguara.config.types import RetiredBackendError
+
+        path = tmp_path / "c.json"
+        path.write_text(json.dumps(GameConfig().to_dict()))
+        monkeypatch.setenv("PYGUARA_BACKEND", "moderngl")
+
+        with pytest.raises(RetiredBackendError):
+            ConfigManager(file_path=path).load()
+
+    def test_any_capitalisation_is_caught(self):
+        from pyguara.config.types import RetiredBackendError
+
+        with pytest.raises(RetiredBackendError):
+            RenderingBackend("ModernGL")
+
+    def test_an_unknown_name_still_falls_back_quietly(self, tmp_path):
+        """Only the retired backend is loud; a typo keeps its old behaviour."""
+        import json
+
+        data = GameConfig().to_dict()
+        data["display"]["backend"] = "vulkan"
+        path = tmp_path / "c.json"
+        path.write_text(json.dumps(data))
+        manager = ConfigManager(file_path=path)
+
+        assert manager.load()
+        assert manager.config.display.backend is RenderingBackend.PYGAME

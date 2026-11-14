@@ -396,7 +396,7 @@ class StudioAttachment:
 
         graph = self._graph()
         if graph is None:
-            # No GL graph: `attach_editor` would already have declined, so
+            # No graph: `attach_editor` would already have declined, so
             # this is unreachable in practice and harmless if reached.
             return
 
@@ -446,8 +446,8 @@ class StudioAttachment:
 
         The flag cannot be added to a live window: SDL honours it at
         creation, and `pygame.Window.resizable` does not take on a window
-        the display module opened. Reopening would recreate the drawable
-        and every GL object with it.
+        the display module opened. Reopening would recreate the window
+        and the native surface drawn to it.
         """
         try:
             from pyguara.config.manager import ConfigManager
@@ -690,7 +690,7 @@ class StudioAttachment:
         if framebuffer is None:
             return None
 
-        texture_id = self._layer.register_texture(framebuffer.texture)
+        texture_id = self._layer.register_texture(framebuffer)
         if texture_id is None:
             return None
         return (texture_id, framebuffer.width, framebuffer.height)
@@ -722,17 +722,15 @@ def attach_editor(
     session, no command stack, no operation registry -- `attach_studio`
     adds those to this.
 
-    ModernGL-only by construction: it draws through the GL context the
-    render graph owns, and the Pygame backend has none -- its
-    `PygameRenderGraph` is a stub whose `ctx` is `None`, and the window it
-    opens is a software surface (`pygame_window.py` actively strips
-    `pygame.OPENGL` to keep it one). On that backend this returns `None`
+    wgpu-only by construction: it draws through the native frame the render
+    graph's device owns, and the Pygame backend has none -- its
+    `PygameRenderGraph` is a stub. On that backend this returns `None`
     rather than half-installing, and the `pyguara/tools` overlay remains
     the dev surface there.
 
     Args:
         container: The engine container. Must already have a `RenderGraph`
-            registered, which `create_application()` does for the ModernGL
+            registered, which `create_application()` does for the wgpu
             backend.
         panels: Panels for the layer. Defaults to Hierarchy and Inspector.
 
@@ -750,7 +748,7 @@ def attach_editor(
     Returns:
         The `EditorLayer`, registered in the container so game code can
         reach it, or `None` when the editor cannot run here -- ImGui
-        missing, or a backend with no GL context. The reason is logged.
+        missing, or a backend with no render graph. The reason is logged.
     """
     # Inside the function, with everything else ImGui-adjacent: importing
     # `availability` imports `imgui_bundle` when it is installed, and this
@@ -768,7 +766,7 @@ def attach_editor(
     from pyguara.graphics.pipeline.graph import RenderGraph
     from pyguara.studio.imgui_pass import ImGuiPass
     from pyguara.studio.layer import EditorLayer
-    from pyguara.studio.renderer import ModernGLImGuiRenderer
+    from pyguara.studio.wgpu_renderer import WgpuImGuiRenderer
 
     # Typed `object`: the container is declared to return a `RenderGraph`,
     # but the Pygame backend registers its non-subclass stub under the same
@@ -788,26 +786,24 @@ def attach_editor(
     # stub, which is registered under the same key but is not a subclass.
     if not isinstance(candidate, RenderGraph):
         logger.info(
-            "Editor not attached: this backend has no GL render graph "
-            f"({type(candidate).__name__}). The editor is ModernGL-only; "
+            "Editor not attached: this backend has no render graph "
+            f"({type(candidate).__name__}). The editor needs a GPU backend; "
             "use the pyguara/tools overlay on the Pygame backend."
         )
         return None
 
-    # A real `RenderGraph` is constructed with a context and exposes it
-    # non-optionally, so there is nothing further to guard here.
-    ctx = candidate.ctx
+    frame = getattr(candidate.device, "frame", None)
+    if frame is None:
+        logger.info("Editor not attached: this render graph has no GPU frame.")
+        return None
 
-    # The graph's own dimensions, not `ctx.screen.size`: `ctx.screen` is
-    # `None` on a standalone (offscreen) context, which is what the GL
-    # tests and `tools/agent_view.py --gl` run on. The graph knows its size
-    # either way, and `graph.resize()` already forwards changes to every
-    # pass's `on_resize()`.
+    # The graph's own dimensions: `graph.resize()` forwards every change to
+    # each pass's `on_resize()`.
     width = candidate.fbo_manager.width
     height = candidate.fbo_manager.height
     layer = EditorLayer(
         container,
-        renderer_factory=lambda: ModernGLImGuiRenderer(ctx),
+        renderer_factory=lambda: WgpuImGuiRenderer(frame),
         panels=panels,
     )
     # Appended, so it runs after `final` has blitted the scene to the
@@ -816,7 +812,7 @@ def attach_editor(
     container.register_instance(EditorLayer, layer)
     _install_title_bar(container, layer)
 
-    logger.info(f"Editor attached: {len(layer.panels)} panel(s) over ModernGL.")
+    logger.info(f"Editor attached: {len(layer.panels)} panel(s).")
     return layer
 
 
@@ -873,7 +869,7 @@ def attach_studio(
     Args:
         container: The engine container, which must already have a
             `RenderGraph` -- `create_application()` provides one on the
-            ModernGL backend.
+            wgpu backend.
         project_root: The project directory. Defaults to the working
             directory.
         operations: The operations to offer. Defaults to the built-in set.

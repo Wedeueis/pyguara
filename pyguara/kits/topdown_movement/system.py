@@ -17,7 +17,7 @@ from pyguara.common.types import Vector2
 from pyguara.ecs.manager import EntityManager
 from pyguara.kits.topdown_movement.body import TopDownBody
 from pyguara.physics.bounds import collider_bounds
-from pyguara.physics.character_mover import CharacterMover
+from pyguara.physics.character_mover import SKIN, CharacterMover
 from pyguara.physics.components import Collider
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.spatial.components import SpatialTracked
@@ -29,6 +29,9 @@ _DEFAULT_HALF_EXTENTS = Vector2(12.0, 12.0)
 # A pair exactly on top of each other has no direction to separate along;
 # push along an arbitrary fixed axis rather than divide by zero.
 _DEGENERATE_PUSH_DIRECTION = Vector2(1.0, 0.0)
+
+# The scalar types the native step computes exactly as Python would.
+_PLAIN_NUMBERS = frozenset((float, int))
 
 
 def step_body(
@@ -96,6 +99,10 @@ class TopDownSystem:
         self._entity_manager = entity_manager
         self._mover = CharacterMover(physics_engine)
         self._spatial_index = spatial_index
+        # An engine that can step many bodies in one call says so by having
+        # `step_bodies`, exactly as `sweep_box` is offered to the mover:
+        # optional, free to decline any body, and never the reference.
+        self._step_bodies = getattr(physics_engine, "step_bodies", None)
 
     def update(self, delta_time: float) -> None:
         """Move every `TopDownBody`, then separate overlapping actors.
@@ -103,24 +110,118 @@ class TopDownSystem:
         Args:
             delta_time: Time elapsed since last update (seconds).
         """
+        moving: list[tuple[str, TopDownBody, Transform, Collider | None]] = []
         for entity in self._entity_manager.get_entities_with(TopDownBody, Transform):
             body = entity.get_component(TopDownBody)
             if body.moved_elsewhere:
                 continue
-            step_body(
-                self._mover,
-                entity.id,
-                body,
-                entity.get_component(Transform),
+            moving.append(
                 (
-                    entity.get_component(Collider)
-                    if entity.has_component(Collider)
-                    else None
-                ),
-                delta_time,
+                    entity.id,
+                    body,
+                    entity.get_component(Transform),
+                    (
+                        entity.get_component(Collider)
+                        if entity.has_component(Collider)
+                        else None
+                    ),
+                )
             )
 
+        if self._step_bodies is not None and type(delta_time) is float:
+            moving = self._step_batched(moving, delta_time)
+        for entity_id, body, transform, collider in moving:
+            step_body(self._mover, entity_id, body, transform, collider, delta_time)
+
         self._separate_actors()
+
+    def _step_batched(
+        self,
+        moving: list[tuple[str, TopDownBody, Transform, Collider | None]],
+        delta_time: float,
+    ) -> list[tuple[str, TopDownBody, Transform, Collider | None]]:
+        """Step what the engine can in one call; return what it could not.
+
+        Exact, not approximate: each body the engine answers for ends where
+        `step_body` would have put it, to the bit. The engine only answers
+        while every solid is static, so no body's move depends on another's
+        and the order they are stepped in cannot matter -- which is what
+        lets the rest go through `step_body` afterwards.
+
+        A body whose centre is not a pair of floats is left out: the
+        ordinary path keeps an integer coordinate an integer, and a native
+        double cannot. So is one whose velocity or remainder is anything
+        but a plain `float` or `int` -- a NumPy scalar, say -- since the
+        ordinary path computes in that type and the engine's `sweep_box`
+        declines it for the same reason.
+
+        Args:
+            moving: `(entity_id, body, transform, collider)` per body to move.
+            delta_time: Length of the step in seconds.
+
+        Returns:
+            The bodies still to be stepped, in their original order.
+        """
+        rows = []
+        batched = []
+        rest = []
+        for entry in moving:
+            entity_id, body, transform, collider = entry
+            if collider is None:
+                centre_x, centre_y = transform.position
+                offset_x = offset_y = 0.0
+                half_x, half_y = _DEFAULT_HALF_EXTENTS
+            else:
+                position = transform.position
+                offset_x, offset_y = collider.offset
+                centre_x = position[0] + offset_x
+                centre_y = position[1] + offset_y
+                half_x = collider.dimensions[0] / 2.0
+                half_y = collider.dimensions[1] / 2.0
+            velocity = body.velocity
+            remainder = body._remainder
+            if (
+                type(centre_x) is not float
+                or type(centre_y) is not float
+                or type(velocity[0]) not in _PLAIN_NUMBERS
+                or type(velocity[1]) not in _PLAIN_NUMBERS
+                or type(remainder[0]) not in _PLAIN_NUMBERS
+                or type(remainder[1]) not in _PLAIN_NUMBERS
+            ):
+                rest.append(entry)
+                continue
+            rows.append(
+                (
+                    centre_x,
+                    centre_y,
+                    offset_x,
+                    offset_y,
+                    half_x,
+                    half_y,
+                    velocity[0],
+                    velocity[1],
+                    remainder[0],
+                    remainder[1],
+                    entity_id,
+                )
+            )
+            batched.append(entry)
+        if not rows:
+            return moving
+        assert self._step_bodies is not None
+        steps = self._step_bodies(rows, delta_time, SKIN)
+        # A list and nothing else: None is the engine declining, and a test
+        # double answers to any name with something that is not an answer.
+        if type(steps) is not list or len(steps) != len(rows):
+            return moving
+        for entry, step in zip(batched, steps, strict=True):
+            if step is None:
+                rest.append(entry)
+                continue
+            x, y, remainder_x, remainder_y = step
+            entry[2].position = Vector2(x, y)
+            entry[1]._remainder = Vector2(remainder_x, remainder_y)
+        return rest
 
     def _separate_actors(self) -> None:
         """Push every overlapping, separation-enabled actor pair apart.

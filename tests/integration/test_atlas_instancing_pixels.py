@@ -1,4 +1,4 @@
-"""An atlas draws its regions correctly, in one batch, on both backends.
+"""An atlas draws its regions correctly, in one batch.
 
 The capability this locks in: before per-instance UVs, the GL sprite path
 sampled the whole texture for every instance, so an atlas could only be
@@ -14,9 +14,10 @@ Two halves, and both matter:
 - the *batch count*, because getting the pixels right by slicing the sheet
   into separate textures would pass a pixel test and defeat the point.
 
-Run against both backends, deliberately. `docs/` promises parity, and a
-region is exactly the kind of thing one backend can silently do
-differently -- GL multiplies UVs in a shader, pygame blits a sub-rect.
+Here against pygame, which blits a sub-rect. The wgpu renderer is held to
+pygame's atlas pixels in `test_wgpu_pixels.py` (it multiplies UVs in a
+shader, which is the kind of thing that silently differs); its ModernGL half
+went with that backend.
 """
 
 from __future__ import annotations
@@ -132,90 +133,6 @@ def test_a_batch_mixing_regions_and_whole_sprites_stays_one_batch() -> None:
 
     assert len(batches) == 1
     assert batches[0].source_rects == [top_left, None, top_left]
-
-
-@pytest.fixture
-def gl_scene(gl_ctx: Any) -> Iterator[tuple[Any, Any, _Atlas]]:
-    """A GL framebuffer, a renderer drawing into it, and the atlas."""
-    from pyguara.graphics.backends.moderngl.renderer import ModernGLRenderer
-
-    fbo = gl_ctx.simple_framebuffer((_SIZE, _SIZE))
-    fbo.use()
-    renderer = ModernGLRenderer(gl_ctx, _SIZE, _SIZE)
-    native = gl_ctx.texture((_CELL * 2, _CELL * 2), 4, _atlas_pixels().tobytes())
-    try:
-        yield fbo, renderer, _Atlas(native)
-    finally:
-        native.release()
-        renderer.release()
-        fbo.release()
-
-
-def _gl_centre(fbo: Any) -> tuple[int, int, int]:
-    """Read the centre pixel of a GL framebuffer as (r, g, b)."""
-    raw = np.frombuffer(fbo.read(components=3), dtype=np.uint8)
-    image = raw.reshape((_SIZE, _SIZE, 3))
-    return tuple(int(c) for c in image[_SIZE // 2, _SIZE // 2])  # type: ignore[return-value]
-
-
-@pytest.mark.parametrize("name", sorted(_QUADRANTS))
-def test_gl_draws_the_region_it_was_given(
-    gl_scene: tuple[Any, Any, _Atlas], name: str
-) -> None:
-    """Each quadrant reads back as its own colour, on the GPU.
-
-    Parametrised over all four rather than testing one, because a UV rect
-    that is flipped vertically, or that uses the region's size as its
-    origin, still draws *a* quadrant -- just the wrong one. One region
-    cannot tell those apart; four can.
-    """
-    fbo, renderer, atlas = gl_scene
-    rect, expected = _QUADRANTS[name]
-    renderer.clear((0, 0, 0, 255))
-
-    renderer.render_batch(
-        RenderBatch(
-            texture=atlas,
-            destinations=[(_SIZE / 2, _SIZE / 2)],
-            source_rects=[rect],
-            source_rects_enabled=True,
-        )
-    )
-
-    assert _gl_centre(fbo) == expected
-
-
-def test_gl_draws_a_region_at_the_region_s_size(
-    gl_scene: tuple[Any, Any, _Atlas],
-) -> None:
-    """An atlas entry is the size of its rect, not of the sheet.
-
-    The half a UV rect alone would miss: sample the right texels, and
-    still draw them across the full 16x16 footprint of the whole atlas.
-    A region is 8x8, so a pixel 6px from the centre is outside it.
-    """
-    fbo, renderer, atlas = gl_scene
-    rect, expected = _QUADRANTS["top_left"]
-    renderer.clear((0, 0, 0, 255))
-
-    renderer.render_batch(
-        RenderBatch(
-            texture=atlas,
-            destinations=[(_SIZE / 2, _SIZE / 2)],
-            source_rects=[rect],
-            source_rects_enabled=True,
-        )
-    )
-
-    image = np.frombuffer(fbo.read(components=3), dtype=np.uint8).reshape(
-        (_SIZE, _SIZE, 3)
-    )
-    centre = _SIZE // 2
-    assert tuple(int(c) for c in image[centre, centre]) == expected
-    assert tuple(int(c) for c in image[centre, centre + 6]) == (0, 0, 0), (
-        "the region drew wider than its own rect -- 8x8 was stretched to "
-        "the atlas's 16x16"
-    )
 
 
 @pytest.fixture

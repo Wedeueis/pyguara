@@ -5,7 +5,7 @@ pipeline module, under headless SDL dummy drivers, to verify that all
 systems and resource managers function without runtime crashes or
 regressions.
 
-The ModernGL demos are deliberately absent -- see `main()` for why, and
+The render-graph demos are deliberately absent -- see `main()` for why, and
 for how to smoke them instead.
 """
 
@@ -98,11 +98,11 @@ def main() -> None:
     results = {}
 
     # guara_falcao, protocolo_bandeira, true_coral, mourisco_ressonancia and
-    # tamandua_murundus are not booted here. All five run on the ModernGL
-    # backend, and SDL's `dummy` video driver -- set at the top of this
-    # file -- provides no OpenGL at all, so none of them can create a
-    # context. Smoke them with, e.g.:
-    #     uv run python tools/agent_view.py guara_falcao --gl --frames 30
+    # tamandua_murundus are not booted here. All five run on the wgpu
+    # backend and need a graphics adapter, which this script does not
+    # assume. `tests/integration/test_wgpu_graph_demos.py` renders each
+    # against its golden frame; smoke one by hand with, e.g.:
+    #     uv run python tools/agent_view.py guara_falcao --frames 30
 
     # 3. Asset Pipeline Module (Flyweight Loader / .meta files)
     results["Asset Pipeline (Module 3)"] = validate_game(

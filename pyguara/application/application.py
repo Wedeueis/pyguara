@@ -143,15 +143,15 @@ class Application:
         self._world_renderer = container.get(IRenderer)  # type: ignore[type-abstract]
         self._ui_renderer = container.get(UIRenderer)  # type: ignore[type-abstract]
 
-        # Optional render graph for multi-pass rendering (ModernGL only).
+        # Optional render graph for multi-pass rendering (wgpu only).
         # Pygame backends register a `PygameRenderGraph` stub under this same
         # key so game code using lighting/post-processing degrades gracefully;
         # that stub is resolvable but is not a real RenderGraph, so branch on
         # backend identity (isinstance) rather than mere resolvability.
         self._render_graph: RenderGraph | None = None
         try:
-            # Imported here, not at module scope, because the ModernGL pipeline
-            # is an optional dependency. ServiceNotFoundException is imported
+            # Imported here, not at module scope, so a pygame-only game never
+            # loads the GPU pipeline. ServiceNotFoundException is imported
             # above: naming it in the `except` while importing it inside the
             # `try` meant an ImportError here would raise NameError instead.
             from pyguara.graphics.pipeline.graph import RenderGraph
@@ -936,7 +936,7 @@ class Application:
         self._window.present()
 
     def _render_with_graph(self, alpha: float) -> None:
-        """Draw through the multi-pass render graph (ModernGL backend).
+        """Draw through the multi-pass render graph (wgpu backend).
 
         The world is drawn into an offscreen buffer, every other registered
         pass then runs in registration order (light, composite,
@@ -988,7 +988,7 @@ class Application:
                 continue
             if render_pass.after_ui:
                 continue
-            render_pass.execute(self._render_graph.ctx, self._render_graph)
+            render_pass.execute(self._render_graph)
 
         # Render UI on top (directly to screen)
         self._ui_manager.render(self._ui_renderer)
@@ -1001,7 +1001,7 @@ class Application:
         # it -- which reads as the editor being *behind* the game.
         for render_pass in self._render_graph.passes:
             if render_pass.enabled and render_pass.after_ui:
-                render_pass.execute(self._render_graph.ctx, self._render_graph)
+                render_pass.execute(self._render_graph)
 
         # Present to display
         self._window.present()

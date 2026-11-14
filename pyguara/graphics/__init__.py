@@ -7,7 +7,7 @@ helpers were exported -- which made the whole package undiscoverable without
 reading it.
 
 Backends are deliberately absent: importing this must not pull in pygame or
-moderngl. Reach for `pyguara.graphics.backends.<name>` when you mean a
+the native renderer. Reach for `pyguara.graphics.backends.<name>` when you mean a
 specific one, and otherwise take `IRenderer` from the DI container.
 """
 

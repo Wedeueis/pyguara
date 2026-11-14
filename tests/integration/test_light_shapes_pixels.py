@@ -1,4 +1,4 @@
-"""Real-GL pixel readback for the three light shapes.
+"""Real-GPU pixel readback for the three light shapes.
 
 `LightType.SPOT` and `DIRECTIONAL` are shapes cut in `light.frag`, so
 there is nothing about them a CPU test can see -- `tests/test_lighting.py`
@@ -26,6 +26,7 @@ from pyguara.ecs.manager import EntityManager
 from pyguara.graphics.components.camera import Camera2D
 from pyguara.graphics.lighting.components import LightSource, LightType
 from pyguara.graphics.lighting.light_system import LightingSystem
+from pyguara.graphics.pipeline.device import WgpuDevice
 from pyguara.graphics.pipeline.framebuffer import FramebufferManager
 from pyguara.graphics.pipeline.passes.light_pass import LIGHT_FBO_NAME, LightPass
 from pyguara.graphics.pipeline.viewport import Viewport
@@ -37,13 +38,16 @@ _CENTRE = _SIZE // 2
 
 
 class _Graph:
-    """The one thing `LightPass.execute` reads off a render graph."""
+    """What `LightPass.execute` reads off a render graph: buffers, and a device."""
 
     def __init__(self, fbo_manager: FramebufferManager) -> None:
         self.fbo_manager = fbo_manager
+        self.device = fbo_manager.device
 
 
-def render_light(gl_ctx: Any, light: LightSource) -> np.ndarray:
+def render_light(
+    wgpu_frame: Any, light: LightSource, *others: LightSource
+) -> np.ndarray:
     """Draw one light into the lightmap and return the pixels.
 
     The light sits at the centre of the frame with the camera centred on
@@ -51,35 +55,35 @@ def render_light(gl_ctx: Any, light: LightSource) -> np.ndarray:
     world-to-screen transform does.
 
     Returns:
-        An `(H, W, 3)` uint8 image of the lightmap.
+        An `(H, W, 3)` uint8 image of the lightmap, top row first: the HDR
+        buffer clipped to 0-1, as the screen would show it.
     """
     entity_manager = EntityManager()
     entity = entity_manager.create_entity()
     entity.add_component(Transform(position=Vector2(_CENTRE, _CENTRE)))
     entity.add_component(light)
+    for other in others:
+        extra = entity_manager.create_entity()
+        extra.add_component(Transform(position=Vector2(_CENTRE, _CENTRE)))
+        extra.add_component(other)
 
     lighting = LightingSystem(entity_manager)
     lighting.update(0.0)
 
-    fbo_manager = FramebufferManager(gl_ctx, _SIZE, _SIZE)
-    light_pass = LightPass(gl_ctx, lighting)
+    frame = wgpu_frame(_SIZE, _SIZE)
+    fbo_manager = FramebufferManager(WgpuDevice(frame), _SIZE, _SIZE)
+    light_pass = LightPass(lighting)
     camera = Camera2D(_SIZE, _SIZE)
     camera.position = Vector2(_CENTRE, _CENTRE)
     light_pass.set_camera(camera, Viewport(0, 0, _SIZE, _SIZE))
 
     try:
-        light_pass.execute(gl_ctx, _Graph(fbo_manager))
+        light_pass.execute(_Graph(fbo_manager))
+        frame.gpu.end_frame()
         fbo = fbo_manager.get_or_create(LIGHT_FBO_NAME)
-        raw = np.frombuffer(fbo.fbo.read(components=3), dtype=np.uint8)
-        # Flipped on the way out: GL's origin is bottom-left, so a raw
-        # readback arrives with its rows upside down relative to the
-        # screen. Every other readback path in this tree pre-flips for the
-        # same reason (`loaders.py`, `draw_text`). Without it, a test of a
-        # *clockwise* angle convention would silently be testing an
-        # anticlockwise one.
-        return np.flipud(raw.reshape((_SIZE, _SIZE, 3))).copy()
+        raw = np.frombuffer(fbo.read_rgba(), dtype=np.uint8)
+        return raw.reshape((_SIZE, _SIZE, 4))[..., :3].copy()
     finally:
-        light_pass.release()
         fbo_manager.release_all()
 
 
@@ -96,26 +100,28 @@ def at_angle(image: np.ndarray, degrees: float, distance: int = 30) -> int:
 
 
 class TestPointLight:
-    def test_a_point_light_is_bright_at_its_centre(self, gl_ctx: Any) -> None:
+    def test_a_point_light_is_bright_at_its_centre(self, wgpu_frame: Any) -> None:
         image = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(color=Color(255, 0, 0), radius=60.0, intensity=1.0),
         )
 
         assert image[_CENTRE, _CENTRE, 0] > 200
 
-    def test_a_point_light_falls_off_with_distance(self, gl_ctx: Any) -> None:
+    def test_a_point_light_falls_off_with_distance(self, wgpu_frame: Any) -> None:
         image = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(color=Color(255, 0, 0), radius=60.0, intensity=1.0),
         )
 
         assert at_angle(image, 0, 10) > at_angle(image, 0, 40)
 
-    def test_a_point_light_is_the_same_in_every_direction(self, gl_ctx: Any) -> None:
+    def test_a_point_light_is_the_same_in_every_direction(
+        self, wgpu_frame: Any
+    ) -> None:
         """The baseline the cone tests are read against."""
         image = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(color=Color(255, 0, 0), radius=60.0, intensity=1.0),
         )
 
@@ -130,9 +136,9 @@ class TestSpotLight:
     """`spot_angle` is the full opening, so 60 degrees reaches 30 either
     side of `spot_direction`."""
 
-    def test_the_cone_lights_along_its_own_axis(self, gl_ctx: Any) -> None:
+    def test_the_cone_lights_along_its_own_axis(self, wgpu_frame: Any) -> None:
         image = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(
                 color=Color(255, 0, 0),
                 radius=60.0,
@@ -144,11 +150,11 @@ class TestSpotLight:
 
         assert at_angle(image, 0) > 100
 
-    def test_the_cone_excludes_what_is_outside_it(self, gl_ctx: Any) -> None:
+    def test_the_cone_excludes_what_is_outside_it(self, wgpu_frame: Any) -> None:
         """The half that mattered: before this, all three types drew the
         same disc, so a spot light lit everything behind it too."""
         image = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(
                 color=Color(255, 0, 0),
                 radius=60.0,
@@ -161,11 +167,11 @@ class TestSpotLight:
         assert at_angle(image, 90) < 10
         assert at_angle(image, 180) < 10
 
-    def test_the_cone_points_where_spot_direction_says(self, gl_ctx: Any) -> None:
+    def test_the_cone_points_where_spot_direction_says(self, wgpu_frame: Any) -> None:
         """Rotating the light rotates the lit wedge with it, clockwise --
         a sign error here would light the opposite side of the scene."""
         image = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(
                 color=Color(255, 0, 0),
                 radius=60.0,
@@ -178,9 +184,9 @@ class TestSpotLight:
         assert at_angle(image, 90) > 100
         assert at_angle(image, 270) < 10
 
-    def test_a_wider_angle_lights_more_of_the_disc(self, gl_ctx: Any) -> None:
+    def test_a_wider_angle_lights_more_of_the_disc(self, wgpu_frame: Any) -> None:
         narrow = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(
                 color=Color(255, 0, 0),
                 radius=60.0,
@@ -189,7 +195,7 @@ class TestSpotLight:
             ),
         )
         wide = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(
                 color=Color(255, 0, 0),
                 radius=60.0,
@@ -203,12 +209,12 @@ class TestSpotLight:
 
 class TestDirectionalLight:
     def test_a_directional_light_covers_evenly_rather_than_falling_off(
-        self, gl_ctx: Any
+        self, wgpu_frame: Any
     ) -> None:
         """Parallel rays have no point to fall away from, so the quad is
         lit flat -- `radius` bounds the area instead of shaping it."""
         image = render_light(
-            gl_ctx,
+            wgpu_frame,
             LightSource(
                 color=Color(255, 0, 0),
                 radius=60.0,
@@ -224,12 +230,14 @@ class TestDirectionalLight:
 
 
 class TestTypesDiffer:
-    def test_the_three_types_no_longer_render_identically(self, gl_ctx: Any) -> None:
+    def test_the_three_types_no_longer_render_identically(
+        self, wgpu_frame: Any
+    ) -> None:
         """The headline defect: `light_type` had zero consumers, so all
         three `LightType`s rendered as the same point disc."""
         images = {
             light_type: render_light(
-                gl_ctx,
+                wgpu_frame,
                 LightSource(
                     color=Color(255, 0, 0),
                     radius=60.0,
@@ -244,3 +252,24 @@ class TestTypesDiffer:
         point = images[LightType.POINT]
         assert not np.array_equal(point, images[LightType.SPOT])
         assert not np.array_equal(point, images[LightType.DIRECTIONAL])
+
+
+class TestLightsAccumulate:
+    """Overlapping lights add up; they do not paint over each other.
+
+    The blend mode is the pass's own choice, shared by every backend, so
+    the wgpu-against-ModernGL comparison cannot catch it changing: both
+    sides would change together. This is what does.
+    """
+
+    def test_two_half_lights_are_one_whole_light(self, wgpu_frame: Any) -> None:
+        half = dict(color=Color(255, 0, 0), radius=60.0, intensity=0.5)
+
+        whole = render_light(wgpu_frame, LightSource(**{**half, "intensity": 1.0}))
+        pair = render_light(wgpu_frame, LightSource(**half), LightSource(**half))
+
+        assert whole[_CENTRE, _CENTRE, 0] > 200
+        assert (
+            abs(int(pair[_CENTRE, _CENTRE, 0]) - int(whole[_CENTRE, _CENTRE, 0])) <= 2
+        )
+        assert abs(at_angle(pair, 0, 20) - at_angle(whole, 0, 20)) <= 2

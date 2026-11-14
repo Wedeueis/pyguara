@@ -7,32 +7,27 @@ decaying kick on top of the standing dust rather than a value the caller
 has to wind back down itself.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from pyguara.graphics.vfx.effects.heat_haze import GUST_DECAY, HeatHazeEffect
+from pyguara.graphics.vfx.effects.heat_haze import GUST_DECAY, HEAT_HAZE, HeatHazeEffect
+from tests.recording_device import RecordingDevice
 
 
 def make_effect(**kwargs) -> HeatHazeEffect:
-    """Build a HeatHazeEffect over a mock context, with no shader compiled."""
-    ctx = MagicMock()
-    ctx.program.return_value = MagicMock()
-    ctx.vertex_array.return_value = MagicMock()
-    return HeatHazeEffect(ctx, **kwargs)
+    """Build a HeatHazeEffect; it compiles nothing until it runs."""
+    return HeatHazeEffect(**kwargs)
 
 
 def apply_once(effect: HeatHazeEffect) -> dict[str, object]:
     """Apply the effect to mock framebuffers and return the uniforms set."""
-    ctx = MagicMock()
+    device = RecordingDevice()
     input_fbo, output_fbo = MagicMock(), MagicMock()
     input_fbo.width, input_fbo.height = 800, 600
 
-    uniforms: dict[str, object] = {}
-    program = MagicMock()
-    program.__setitem__ = lambda _self, key, value: uniforms.__setitem__(key, value)
-    effect._program = program
-
-    effect.apply(ctx, input_fbo, output_fbo)
-    return uniforms
+    effect.apply(device, input_fbo, output_fbo)
+    assert device.last.shader is HEAT_HAZE
+    assert device.last.output is output_fbo
+    return device.last.uniforms
 
 
 class TestUniforms:
@@ -65,15 +60,6 @@ class TestUniforms:
         effect.update(0.25)
 
         assert apply_once(effect)["u_time"] == 0.5
-
-    def test_nothing_is_drawn_without_a_program(self) -> None:
-        effect = make_effect()
-        effect._program = None
-        output_fbo = MagicMock()
-
-        effect.apply(MagicMock(), MagicMock(), output_fbo)
-
-        output_fbo.bind.assert_not_called()
 
 
 class TestGusts:
@@ -118,21 +104,12 @@ class TestGusts:
 
 
 class TestResources:
-    def test_the_shader_is_compiled_from_the_heat_haze_sources(self) -> None:
-        ctx = MagicMock()
-        with patch("pathlib.Path.read_text", return_value="// shader") as read_text:
-            HeatHazeEffect(ctx)
+    def test_the_shader_declares_its_uniforms(self) -> None:
+        assert "u_horizon: f32" in HEAT_HAZE.wgsl_source()
 
-        assert read_text.call_count == 2
-        ctx.program.assert_called_once()
-
-    def test_release_drops_both_gpu_objects(self) -> None:
+    def test_release_is_harmless(self) -> None:
+        """The device owns the compiled shader; an effect has nothing to free."""
         effect = make_effect()
-        program, vao = effect._program, effect._vao
 
         effect.release()
-
-        program.release.assert_called_once()
-        vao.release.assert_called_once()
-        assert effect._program is None
-        assert effect._vao is None
+        effect.release()

@@ -90,6 +90,10 @@ class CharacterMover:
             engine: Physics engine providing `overlap_box`.
         """
         self._engine = engine
+        # An engine that can run the whole swept move itself says so by
+        # having `sweep_box`. Optional, and it may decline any single move
+        # by returning None, so the loop below is always the reference.
+        self._sweep = getattr(engine, "sweep_box", None)
 
     def move(
         self,
@@ -115,6 +119,32 @@ class CharacterMover:
         Returns:
             The final position, the leftover remainder, and what stopped it.
         """
+        if self._sweep is not None:
+            swept = self._sweep(
+                position,
+                Vector2(
+                    max(half_extents.x - SKIN, 0.01), max(half_extents.y - SKIN, 0.01)
+                ),
+                delta,
+                remainder,
+                entity_id,
+            )
+            # A tuple and nothing else: None is the engine declining, and
+            # an engine that merely *appears* to have `sweep_box` -- a test
+            # double answers to any name -- returns something that is not
+            # an answer at all.
+            if type(swept) is tuple:
+                x, y, rem_x, rem_y, block_x, block_y = swept
+                return MoveResult(
+                    position=Vector2(x, y),
+                    remainder=Vector2(rem_x, rem_y),
+                    hit_x=block_x is not None,
+                    hit_y=block_y is not None,
+                    blocking_x=block_x,
+                    blocking_y=block_y,
+                    grounded=block_y is not None and delta.y > 0,
+                )
+
         x, rem_x, hit_x, block_x = self._move_axis(
             position.x,
             half_extents,

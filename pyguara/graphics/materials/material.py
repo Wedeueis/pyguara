@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from pyguara.graphics.materials.shader import Shader
+    from pyguara.graphics.pipeline.device import SpriteShader
     from pyguara.resources.types import Texture
 
 
@@ -30,15 +30,21 @@ class Material:
     """Defines the visual properties of a rendered object.
 
     Materials combine:
-    - A shader program for GPU processing
-    - A primary texture (for sprite materials)
-    - Custom uniform values
+    - A shader: a `SpriteShader`, one WGSL function
+    - An optional second texture -- a mask, a ramp, a noise field
+    - Uniform values, by name
 
     Materials are sorted by ID during batching to minimize
     shader/texture switches.
+
+    ```python
+    FLASH = SpriteShader("flash", uniforms=(Uniform("amount"),), wgsl=...)
+    sprite.material = Material(FLASH, uniforms={"amount": 0.0})
+    sprite.material.set_uniform("amount", 0.8)   # on a hit
+    ```
     """
 
-    shader: Shader
+    shader: SpriteShader
     texture: Texture | None = None
     uniforms: dict[str, Any] = field(default_factory=dict)
 
@@ -49,24 +55,6 @@ class Material:
     def id(self) -> int:
         """Unique material identifier for sorting."""
         return self._id
-
-    def bind(self) -> None:
-        """Bind this material for rendering.
-
-        Activates the shader and sets all uniforms.
-        """
-        self.shader.use()
-
-        # Set custom uniforms
-        for name, value in self.uniforms.items():
-            self.shader.set_uniform(name, value)
-
-        # Bind primary texture if present
-        if self.texture is not None:
-            gl_texture = self.texture.native_handle
-            if gl_texture is not None:
-                gl_texture.use(0)
-                self.shader.set_uniform("u_texture", 0)
 
     def set_uniform(self, name: str, value: Any) -> None:
         """Set a uniform value.

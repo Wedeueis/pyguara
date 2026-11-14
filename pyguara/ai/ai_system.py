@@ -14,20 +14,23 @@ class AISystem:
 
     def update(self, dt: float) -> None:
         """Update all AI components."""
-        # Query entities with AI
+        # Runs once per agent per tick, so the attribute reads are taken once
+        # each and compared with `is not None` (neither a machine nor a tree
+        # defines truthiness, so it is the same test as before, cheaper).
         for entity in self.manager.get_entities_with(AIComponent):
             ai = entity.get_component(AIComponent)
 
             if not ai.enabled:
                 continue
 
-            # Update FSM if present
-            if ai.fsm:
-                ai.fsm.update(dt)
+            fsm = ai.fsm
+            if fsm is not None:
+                fsm.update(dt)
 
             # Update Behavior Tree if present. Pass an AIContext, not the bare
             # entity: WaitNode and any timing node read context.dt, which an
             # Entity has not got -- they would silently run on a fixed step.
-            if ai.behavior_tree:
+            tree = ai.behavior_tree
+            if tree is not None:
                 context = AIContext(entity=entity, dt=dt, blackboard=ai.blackboard)
-                ai.behavior_tree.tick(context)
+                tree.tick(context)
