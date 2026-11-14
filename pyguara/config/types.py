@@ -34,12 +34,15 @@ class RetiredBackendError(RuntimeError):
 class RenderingBackend(Enum):
     """Available rendering backend options.
 
-    PYGAME: Software rendering using Pygame's SDL2 backend.
-            Compatible with all systems, lower performance.
+    WGPU: The default. GPU-accelerated rendering through the native
+          extension, on whichever of DX12, Metal, Vulkan or GL the machine
+          has, with the render graph -- lighting, post-processing -- and
+          sprite materials. A machine with no usable GPU fails at startup
+          with `NoGraphicsAdapterError`, never silently.
 
-    WGPU: GPU-accelerated rendering through the native extension, on
-          whichever of DX12, Metal, Vulkan or GL the machine has, with the
-          render graph -- lighting, post-processing -- and sprite materials.
+    PYGAME: Software rendering using Pygame's SDL2 backend: runs anywhere,
+            more slowly, without lighting or post-processing. Also the
+            reference the wgpu pixel tests are held to.
 
     ModernGL was the third, and was retired in stage E of
     `project/backlog/active/next_engine_plan.md`; asking for it raises
@@ -90,7 +93,7 @@ class WindowConfig:
     vsync: bool = True
     default_color: Color = field(default_factory=lambda: Color(0, 0, 0))
     title: str = "Pyguara Engine"
-    backend: RenderingBackend = RenderingBackend.PYGAME
+    backend: RenderingBackend = RenderingBackend.WGPU
 
 
 class AudioBackend(Enum):

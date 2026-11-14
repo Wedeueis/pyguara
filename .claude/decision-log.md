@@ -781,3 +781,10 @@
 - **Chose:** (b), on by default behind `PerformanceConfig.freeze_on_scene_change`, with `settle_memory()` public for loads the engine can't see. One check covers every path, and transitions settle only at the end because that's when the manager makes the target current. Cost: re-entering a scene under the same name isn't seen.
 - **Tags:** pyguara, performance, application
 - **Status:** Pending owner review.
+
+## The default wgpu renderer fails without a GPU instead of falling back
+- **Context:** phase 3 of `engine_completion_roadmap.md`, wgpu as the default `display.backend`. A machine with no usable GPU (no driver, a VM, a server) cannot open it.
+- **Alternatives:** fall back to the pygame renderer with a warning; fail at startup with an error saying how to choose pygame.
+- **Chose:** fail, with `NoGraphicsAdapterError` naming `display.backend = "pygame"` (the user's call). The renderers look different -- pygame has no lighting or post-processing -- so a silent switch would make the same game look different per machine, which the engine's no-silent-fallback rule exists to prevent. Only Rust's "no graphics adapter" failure is mapped; any other window failure propagates unchanged.
+- **Tags:** graphics, config, bootstrap
+- **Reviewed:** chosen by the user 2026-11-14.

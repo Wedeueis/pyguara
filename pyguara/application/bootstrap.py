@@ -38,6 +38,16 @@ from pyguara.ui.manager import UIManager
 
 from .sandbox import SandboxApplication
 
+
+class NoGraphicsAdapterError(RuntimeError):
+    """The wgpu renderer, the default, found no GPU to draw with.
+
+    Raised at startup rather than falling back to the software renderer:
+    the two look different -- pygame has no lighting or post-processing --
+    so a silent switch would change how the game looks on that machine.
+    """
+
+
 Configure = Callable[[GameConfig], None]
 """A hook to adjust configuration before anything is built from it.
 
@@ -341,7 +351,17 @@ def _setup_container(
 
         wgpu_window_backend = WgpuWindow()
         window = Window(win_config, wgpu_window_backend)
-        window.create()
+        try:
+            window.create()
+        except RuntimeError as error:
+            if "no graphics adapter" not in str(error):
+                raise
+            raise NoGraphicsAdapterError(
+                f"The wgpu renderer found no GPU it can use ({error}). Install "
+                f"or update the graphics driver, or set display.backend = "
+                f'"pygame" to run on the software renderer, which has no '
+                f"lighting or post-processing."
+            ) from error
         container.register_instance(Window, window)
 
         frame = wgpu_window_backend.frame
@@ -363,7 +383,7 @@ def _setup_container(
         wgpu_graph.add_pass(FinalPass(input_fbo_name="world"))
         container.register_instance(RenderGraph, wgpu_graph)
     else:
-        # Default Pygame backend. Imported here, not at the top, so a game on
+        # The software Pygame backend. Imported here, not at the top, so a game on
         # wgpu never loads pygame at all.
         from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
         from pyguara.graphics.backends.pygame.pygame_window import PygameWindow

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **wgpu is the default renderer.** `display.backend` defaults to `wgpu`, with the render graph, lighting and post-processing; `pygame` is the software renderer, chosen by name. A machine where wgpu finds no usable GPU now stops at startup with `NoGraphicsAdapterError`, which says to install a driver or set `display.backend = "pygame"`. It does not switch renderer silently, because the two look different. The repository's own `config/game_config.json` follows the new default.
+
 ### Added
 - **Game events over the network** (phase 4 of the plan). `ReplicationSchema.register_event` declares an event's fields, `EventRelay` sends what the host's game dispatches, and `ReplicationClient(on_event=)` dispatches it on each client when its delayed view reaches the event's tick, in order with spawns and despawns. `EntityRef` names a replicated entity and arrives as the client's own id, and `Choice` sends a string from a fixed list. See `docs/systems/networking.md`.
 - **`AudioManager.set_sfx_limit(path, max_voices=, min_interval=)`** caps how much of one sound plays at once, so a burst of hits in one frame doesn't start a dozen copies of one clip. A play over the limit is dropped and returns None. See `docs/systems/audio.md`.
