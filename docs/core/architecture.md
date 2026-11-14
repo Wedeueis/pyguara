@@ -19,8 +19,9 @@ for entity in manager.get_entities_with(Transform, RigidBody):
 
 Three details are load-bearing and easy to get wrong:
 
-- **Data-only components.** `StrictComponent` rejects logic methods at class
-  definition; `BaseComponent` only warns.
+- **Data-only components.** `BaseComponent` raises `TypeError` at class
+  definition if a component declares a logic method. `StrictComponent` is
+  an older name for the same behaviour.
 - **Terminal removal.** `remove_entity()` is immediate and irreversible;
   index cleanup is deferred to `flush_pending_removals()` at the frame
   boundary, which is what makes queries safe to iterate mid-destruction.

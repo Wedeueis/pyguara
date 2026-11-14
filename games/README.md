@@ -1,6 +1,6 @@
 # PyGuara Showcase & Tutorials
 
-This directory contains the iterative tutorial series and future capstone projects.
+This directory contains the tutorial series, seven capstone demos and a networking demo.
 
 ## Tutorial Series (The Learning Path)
 
@@ -124,7 +124,7 @@ These modules correspond to the "Tutorial Series Roadmap".
   cerrado clearing from dusk to dawn against a rising swarm.
 * **Key Concepts:** the **wgpu** backend with lighting and post-processing
   (`WorldPass → LightPass → CompositePass → PostProcessPass → FinalPass`),
-  **per-instance sprite tint** on the GL sprite path (one texture, N colours,
+  **per-instance sprite tint** on the GPU sprite path (one texture, N colours,
   one draw call), the **ambient day/night cycle**, a genuine `SPOT` light for
   the anteater's cone and `flicker_enabled` mounds, `kits/progression` for XP
   and the 1-of-3 upgrade pick (the first real consumer of `UIManager`'s focus

@@ -29,13 +29,14 @@ archived. This repository is the only one; issues live here.
 | `repo_cleanup_plan.md` | What moves, is archived or is deleted at true alpha |
 
 `REFACTOR_STATE.md` and `.scratch/engine-remediation/` record two
-**finished** efforts. Do not resume either.
+**finished** efforts. Do not resume either. `project/backlog/archive_*/`
+holds superseded plans; nothing in it describes the current code.
 
 ## Setup
 
 ```bash
-uv sync            # compiles the Rust extension; needs rustup (stable)
-make native        # rebuild it in place after editing Rust
+uv sync --all-extras   # compiles the Rust extension; needs rustup (stable)
+make native            # rebuild it in place after editing Rust
 ```
 
 On Linux a source build also needs `sudo apt install libudev-dev
@@ -87,6 +88,9 @@ Reasons and the full procedure: `docs/agents/branching.md`.
 | `pyguara/scene/`, `systems/` | Scenes, each owning its own `EntityManager` and `SystemManager` |
 | `pyguara/graphics/` | Render pipeline; backends are `wgpu` (GPU) and `pygame` (software reference) |
 | `pyguara/physics/`, `audio/`, `input/`, `ui/`, `ai/`, `animation/`, `tilemap/`, `resources/`, `persistence/`, `replay/`, `prefabs/` | Subsystems, each behind a protocol |
+| `pyguara/common/`, `config/`, `log/`, `scripting/`, `random/`, `spatial/` | Shared types, configuration, logging, coroutines, seeded randomness, non-physics spatial queries |
+| `pyguara/cli/`, `tools/`, `dev/` | The `pyguara` command, the in-game diagnostic overlay, asset hot reload |
+| `pyguara/columnar/` | A spike, not the ECS. See ADR 0008 |
 | `pyguara/net/` | Opt-in multiplayer: transport, replication, prediction |
 | `pyguara/kits/` | Gameplay building blocks: combat, movement, loot, procgen |
 | `pyguara/studio/` | The editor and the agent operation surface |

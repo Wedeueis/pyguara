@@ -35,6 +35,7 @@ nav:
   - Physics:
       - Simulation: physics/simulation.md
       - Spatial Queries: physics/queries.md
+      - Character Movement: physics/character-movement.md
   - AI:
       - Intelligence: ai/intelligence.md
   - Systems:
@@ -56,6 +57,23 @@ nav:
   - Decisions:
       - One mutation seam for Studio: adr/0001-one-mutation-seam-for-studio.md
       - Two transports for Studio's agent surface: adr/0002-studio-agent-transports.md
+      - The native core spike: adr/0003-native-core-spike.md
+      - The native boundary: adr/0004-the-native-boundary.md
+      - Fixed and variable step naming: adr/0005-fixed-and-variable-step-naming.md
+      - Shipping the native extension: adr/0006-shipping-the-native-extension.md
+      - The networking model: adr/0007-networking-model.md
+      - The columnar world spike: adr/0008-the-columnar-world-spike.md
+      - A native mirror of static solids: adr/0009-a-native-mirror-of-static-solids.md
+      - The container is a service registry (proposed): adr/0010-the-container-is-a-service-registry.md
+      - One Rust engine, Python as its interface: adr/0011-one-rust-engine-python-interface.md
   - Kits:
       - Overview: kits/index.md
       - Progression: kits/progression.md
+  - Contributing:
+      - Branching and pull requests: agents/branching.md
+      - The native extension: agents/native-extension.md
+      - Networking rules: agents/networking.md
+      - Capture tools: agents/capture-tools.md
+      - Issue tracker: agents/issue-tracker.md
+      - Triage labels: agents/triage-labels.md
+      - Domain docs: agents/domain.md

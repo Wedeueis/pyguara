@@ -1,6 +1,6 @@
 # Zero to Hero: Making your First PyGuara Game
 
-Welcome to the **Zero to Hero** tutorial series for the **PyGuara Game Engine**! This guide takes you step-by-step through the structure and concepts of PyGuara by utilizing the five educational modules located under the `games/` folder of the repository.
+Welcome to the **Zero to Hero** tutorial series for the **PyGuara Game Engine**! This guide takes you step-by-step through the structure and concepts of PyGuara using the tutorial modules under the `games/` folder of the repository.
 
 By the end of this guide, you will understand how the engine boots up, how to design code around the Entity-Component-System (ECS) mindset, how to hook up input maps and handle events, how to integrate physical simulation via Pymunk, how to construct constraint-based UI scene graphs, and finally, how to compile and distribute your game as a standalone binary.
 
@@ -8,13 +8,20 @@ By the end of this guide, you will understand how the engine boots up, how to de
 
 ## 🗺️ Tutorial Roadmap
 
-The tutorial is structured into six progressive modules:
+The tutorial is structured into six parts:
 1. **The Boot Sequence** (`games/boot_process`): Initializing the engine, Dependency Injection, and starting your first Scene.
 2. **The ECS Mindset** (`games/ecs_mental_model`): Composing game objects using pure data components and executing logic with Systems.
 3. **Input Mapping & Events** (`games/input_events`): Binding keyboard controls to logical actions and using the event queue for decoupled communication.
 4. **Physical Simulation** (`games/physics_integration`): Adding rigid bodies, colliders, and collision listeners.
 5. **UI & Scene graphs** (`games/ui_scene_graph`): Organizing menu layouts, panels, and responsive widgets.
 6. **Standalone Compilation**: Building and packaging the final game executable using `pyguara build`.
+
+`games/` has seven tutorial modules. The two this guide does not walk
+through are `games/asset_pipeline` (loading sprites with `.meta` files
+through `ResourceManager`) and `games/tilemap_authoring` (building a level
+from a Tiled map). Each is short enough to read directly, and
+[games/README.md](https://github.com/Wedeueis/pyguara/blob/main/games/README.md)
+describes both.
 
 ---
 
@@ -117,6 +124,22 @@ def configure_game_container() -> DIContainer:
     return container
 ```
 
+> **This module wires the engine by hand, on the software renderer, to show
+> what the container holds.** It is not how a game starts. A real game calls
+> `create_application()`, or `create_container()` when it needs to add its
+> own services first: both read `config/game_config.json` and build the
+> configured backend, which is **wgpu** by default. The capstone demos'
+> `bootstrap.py` files (for example `games/guara_falcao/bootstrap.py`) show
+> that form, and [Project Structure](PROJECT_STRUCTURE.md) has the template.
+>
+> ```python
+> from pyguara.application import create_application
+> from pyguara.events.dispatcher import EventDispatcher
+>
+> app = create_application()
+> app.run(BootScene(app.container.get(EventDispatcher)))
+> ```
+
 ---
 
 ## 🧩 Part 2: The ECS Mindset (`games/ecs_mental_model`)
@@ -124,7 +147,7 @@ def configure_game_container() -> DIContainer:
 Instead of writing classic Object-Oriented inheritance trees (like a `Player` class that inherits from `PhysicsObject` which inherits from `GameObject`), PyGuara leverages a strict **Entity-Component-System (ECS)** composition architecture.
 
 - **Entity**: A lightweight ID container (simply an identification number).
-- **Component**: Pure data container with no logic whatsoever. Inherits from `Component` and uses `__slots__` for cache/RAM optimization.
+- **Component**: Pure data container with no logic whatsoever.
 - **System**: Pure logic execution. Systems query entities containing specific components and manipulate their data.
 
 ### 1. Defining Components (`components.py`)
@@ -135,15 +158,19 @@ from pyguara.common.types import Vector2, Color
 
 @dataclass
 class Transform(Component):
-    __slots__ = ("position",)
     position: Vector2
 
 @dataclass
 class Sprite(Component):
-    __slots__ = ("color", "size")
     color: Color
     size: Vector2
 ```
+
+> This module defines its own tiny `Transform` and `Sprite` so nothing is
+> hidden. In a game, use the engine's (`pyguara.common.components.Transform`,
+> `pyguara.graphics.components.Sprite`), and write your own components as
+> `@dataclass(slots=True)` classes that inherit from `BaseComponent`, which
+> rejects a component that declares a method.
 
 ### 2. Creating a System (`systems.py`)
 To process movement logic, we create a `MovementSystem`. In its constructor, we register our query to enable high-performance $O(1)$ query caching:

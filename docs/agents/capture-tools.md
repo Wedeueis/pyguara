@@ -23,9 +23,10 @@ Read `docs/guides/agent-visual-inspection.md` before reporting on either.
 ## Hearing what the engine plays
 
 The same problem one sense over: an agent cannot listen to a speaker.
-`tools/audio_capture.py` opens the mixer on SDL's `disk` driver, which
-writes the mixed output to a file instead of handing it to a device, and
-reports what came out:
+`tools/audio_capture.py` captures the mixed output to a file instead of
+handing it to a device, and reports what came out. The pygame mixer is
+opened on SDL's `disk` driver; the native mixer, the default, owns its
+device, so it is rendered offline in the same format (`capture_native`):
 
 ```bash
 uv run python tools/audio_capture.py --asset games/quintal_cerrado/assets/audio/seed.wav --wav

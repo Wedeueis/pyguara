@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Can pymunk accept a `Vector2` that is not a `pymunk.Vec2d` subclass?
 
-RFC-0003 (`project/backlog/active/rust_core.md`) reimplements `Vector2` as a
+RFC-0003 (`project/backlog/archive_202611/rust_core.md`) reimplements `Vector2` as a
 PyO3 `#[pyclass]` wrapping `glam::Vec2`, and states that tuple unpacking
 keeps "compatibilidade total com o Pymunk CFFI". This answers that question
 by asking pymunk, because the answer decides whether the RFC's Marco 1 is a

@@ -163,10 +163,12 @@ what is left and in what order.
 ## Working on the engine
 
 ```bash
+uv sync --all-extras
 uv run pytest && uv run ruff check . && uv run mypy
 ```
 
-All three must pass. `make native` rebuilds the Rust extension after an
+`--all-extras` adds the test and lint tools, which a plain `uv sync` does
+not install. All three checks must pass. `make native` rebuilds the Rust extension after an
 edit. [AGENTS.md](AGENTS.md) has the rules for contributors, human or
 otherwise.
 
