@@ -3,456 +3,135 @@
 Instructions for coding agents working in this repository.
 
 This is the canonical file. `CLAUDE.md`, `GEMINI.md` and
-`.cursor/rules/pyguara.mdc` import it rather than repeating it -- they
-exist only because those tools do not read `AGENTS.md`.
+`.cursor/rules/pyguara.mdc` import it rather than repeating it.
 
-## Project Overview
+**Keep it short.** It is read at the start of every session. A rule
+belongs here; its reasons, numbers and history belong in the page it
+points to under `docs/`.
 
-PyGuara is a modern, modular 2D game engine for Python 3.12+ featuring:
-- Performance-optimized Entity-Component-System (ECS) architecture
-- Native Dependency Injection (DI) container
-- Decoupled event-driven design
-- Backend-agnostic rendering pipeline (currently pygame-ce)
-- Integrated physics (pymunk), AI (FSM, steering behaviors), and UI systems
+## What this is
 
-**Status**: Pre-Alpha - APIs are subject to change
+PyGuara is a code-first 2D game engine for Python 3.12+, with a Rust
+extension for the platform layer and the hot paths. **Alpha, version
+0.6.0**: it runs a real game (Reclaimer), and its APIs still change.
 
-## Development Commands
+**This checkout is `pyguara-next`, a temporary fork.** Work lands on the
+`next` branch. It merges back into `Wedeueis/pyguara` after the Steam
+playtest (workstream 5e), and issues live there already. See
+`project/backlog/active/next_engine_plan.md`.
 
-### Environment Setup
-```bash
-# Install dependencies (recommended)
-uv sync
+## What is being worked on
 
-# Or using pip
-pip install -e .[dev]
-```
-
-Either one **compiles the Rust accelerator**, because maturin is the build
-backend -- so a checkout needs a Rust toolchain (`rustup`, stable). An
-install from PyPI does not: the wheel ships the extension already. See
-`docs/adr/0006-shipping-the-native-extension.md`, and "The native
-extension" below for the rest of it.
-
-**On Linux it also needs udev's headers**, because gamepads (gilrs) link
-udev:
-
-```bash
-sudo apt install libudev-dev pkg-config
-```
-
-Without them, build with `maturin develop --release --no-default-features`:
-no gamepad is ever seen and the mixer runs silent, both of which say so at
-startup, and everything else -- tests included -- works. ALSA needs no
-headers: the audio device loads `libasound.so.2` with `dlopen` when a mixer
-opens it, so the extension never links it and imports on a machine without
-it (see `rust/src/mixer.rs`).
-
-### Testing
-```bash
-# Run all tests
-pytest
-
-# Run specific test markers
-pytest -m unit                    # Unit tests only
-pytest -m integration            # Integration tests only
-pytest -m performance            # Performance/benchmark tests
-pytest -m slow                   # Slow running tests
-pytest -m cli                    # CLI system tests
-
-# Run specific test file
-pytest tests/test_ecs.py
-
-# Run with coverage
-pytest --cov=pyguara --cov-report=html
-```
-
-### Code Quality
-```bash
-# Run linter
-ruff check .
-
-# Auto-fix linting issues
-ruff check --fix .
-
-# Format code
-ruff format .
-
-# Type checking
-mypy pyguara
-
-# Pre-commit hooks (runs ruff, mypy, and other checks)
-pre-commit run --all-files
-```
-
-### Running the Engine
-```bash
-# Run default example scene
-python main.py
-
-# Run a tutorial/capstone demo (see games/README.md for the full list)
-uv run python games/guara_falcao/main.py
-```
-
-### Seeing what the engine draws (for agents)
-
-An agent cannot look at a window. `tools/agent_view.py` boots a demo
-headlessly, drives it, and writes PNG frames to `.agent-view/`:
-
-```bash
-uv run python tools/agent_view.py --list
-uv run python tools/agent_view.py guara_falcao --frames 120 --shot 1 --shot 119
-uv run python tools/agent_view.py guara_falcao --click 400,265@30 --shot 80
-```
-
-A capture proves the **render path** works. It does **not** prove a window
-appears on screen -- those have already diverged here, when vsync silently
-promoted the display to an OpenGL surface that never presented software blits.
-Read `docs/guides/agent-visual-inspection.md` before reporting on either.
-
-### Hearing what the engine plays (for agents)
-
-The same problem one sense over: an agent cannot listen to a speaker.
-`tools/audio_capture.py` opens the mixer on SDL's `disk` driver, which
-writes the mixed output to a file instead of handing it to a device, and
-reports what came out:
-
-```bash
-uv run python tools/audio_capture.py --asset games/quintal_cerrado/assets/audio/seed.wav --wav
-uv run python tools/audio_capture.py --seam --laps 5 --stall 0.35
-```
-
-A capture proves the **output path** works -- the clip decoded, the bus
-volumes applied, and something other than silence reached the far end. It
-cannot hear an ALSA underrun or a muted system mixer, exactly as a frame
-capture cannot see a blank window. A wholly silent capture is flagged, for
-the reason a flat frame is.
-
-`--seam` measures whether a queued loop joins with no gap and no dropped
-sample, which is the assumption W28b's staging rests on and what
-`tests/integration/test_audio_output.py` pins.
-
-## Branching and Pull Requests
-
-**Every independent branch is cut from `main`.** Not from another feature
-branch, and not from whatever happens to be checked out.
-
-```bash
-git checkout main && git pull --ff-only
-git checkout -b <type>/<scope>-<subject>
-```
-
-### Stack only for a real dependency
-
-Base a branch on another one only when it genuinely cannot build or be
-reviewed without it — it edits the same functions, or relies on an API the
-parent introduces. "It came next chronologically" is not a dependency.
-
-When you do stack, say so in the PR body: name the parent, state the
-dependency, and note the merge order.
-
-Why this matters here: GitHub retargets a stacked PR only when its base branch
-is **deleted** on merge. `delete_branch_on_merge` is enabled on this
-repository, so that now happens automatically — but merging a stack out of
-order still lands children in the wrong place, and a stack more than two deep
-compounds every rebase. Independent branches have neither problem.
-
-### Merging
-
-- **Merge commits**, not squash and not rebase-and-merge. Commits are split
-  deliberately (`fix:` separately from `docs:` and large mechanical churn) so
-  they review independently, and squashing destroys that. Rebase rewrites the
-  SHAs that verification notes refer to.
-- Merge a stack **bottom-up**, so each child retargets before its own turn.
-- If a branch falls behind `main`, rebase it — `git rebase origin/main` —
-  rather than merging `main` into it.
-
-### Before opening a PR
-
-The full suite, the linter and the type checker must all pass:
-
-```bash
-pytest && ruff check . && mypy pyguara
-```
-
-When a branch carries several commits, each one should pass on its own, not
-merely the tip.
-
-### Once a PR is open, the branch is frozen
-
-Do not push more commits to a branch after its PR is up for review. The PR
-can merge at any moment — `delete_branch_on_merge` then removes the branch,
-and a later `git push` to that name **recreates it** as a zombie: commits
-that are not in `main`, sitting on a branch with no open PR, that nothing
-will ever merge. This has happened repeatedly.
-
-Anything that comes after — review feedback, an extra test, a tracker or docs
-fix, the next phase of an audit — goes on a **new branch cut from `main`**
-with its own PR (or a stacked branch if it is a genuine dependency, per
-above). Before pushing to any pre-existing branch, confirm its PR is still
-open:
-
-```bash
-gh pr view <branch> --json state,title   # MERGED / CLOSED -> new branch from main
-```
-
-On handoff, say which it is: "PR is final, nothing else coming" versus "still
-adding X, do not merge yet" — so a fast merge is never a gamble.
-
-### Cleaning up
-
-After a PR merges, delete any local branch that tracked it
-(`git fetch --prune` clears the remote-tracking ref; `git branch -d <branch>`
-the local one). Periodically reconcile: `git branch -a` against
-`gh pr list --state merged` — a branch with a merged PR and no follow-up work
-is dead weight, remote (`git push origin --delete <branch>`) and local both.
-
-## Architecture Overview
-
-### Core Design Principles
-
-**1. Protocol-Based Decoupling**
-PyGuara uses Protocol classes (structural subtyping) extensively to decouple interfaces from implementations. Key protocols include:
-- `IRenderer` and `UIRenderer` for rendering backends (pyguara/graphics/protocols.py)
-- `IPhysicsEngine` and `IPhysicsBody` for physics backends (pyguara/physics/protocols.py)
-- `Event` for event system (pyguara/events/protocols.py)
-- `Renderable` for anything that can be drawn
-
-**2. Dependency Injection**
-The DI container (pyguara/di/container.py) uses reflection-based auto-wiring:
-- Automatically resolves constructor dependencies via type hints
-- Supports three lifetimes: SINGLETON (shared app-wide), TRANSIENT (new instance), SCOPED (shared within context)
-- Detects circular dependencies at runtime
-- Application bootstrap (pyguara/application/bootstrap.py) handles all core service registration
-
-**3. Entity-Component-System (ECS)**
-- `EntityManager` uses **Inverted Indexes** for O(1) component queries (ComponentType -> Set[EntityID])
-- Components are pure data classes, typically dataclasses inheriting from `BaseComponent`
-- Query entities with: `entity_manager.get_entities_with(Transform, RigidBody)`
-- Entities support dynamic attribute access (e.g., `entity.transform`) via `__getattr__` caching
-
-**4. Event-Driven Communication**
-- `EventDispatcher` provides synchronous (`dispatch()`) and async (`queue_event()`) event handling
-- Queued events are processed at frame start from background threads
-- Supports handler priority and filtering
-- Events are typically dataclasses implementing the `Event` protocol
-
-### Module Organization
-
-```
-pyguara/
-├── ecs/              # Entity-Component-System core
-│   ├── entity.py     # Entity class with dynamic component access
-│   ├── component.py  # BaseComponent class
-│   └── manager.py    # EntityManager with inverted indexing
-├── di/               # Dependency Injection container
-│   └── container.py  # DIContainer with auto-wiring
-├── events/           # Event dispatching system
-│   └── dispatcher.py # EventDispatcher with queue support
-├── application/      # Application lifecycle
-│   ├── application.py  # Main game loop
-│   ├── bootstrap.py    # DI container setup
-│   └── sandbox.py      # Development tools
-├── scene/            # Scene management
-│   ├── base.py       # Scene abstract base class
-│   ├── manager.py    # SceneManager for transitions
-│   └── serializer.py # Scene persistence
-├── graphics/         # Rendering pipeline
-│   ├── protocols.py  # Renderable, IRenderer, UIRenderer protocols
-│   ├── backends/     # Backend implementations (pygame)
-│   └── window.py     # Window abstraction
-├── physics/          # Physics integration
-│   ├── protocols.py  # IPhysicsEngine, IPhysicsBody protocols
-│   └── backends/     # Backend implementations (pymunk)
-├── input/            # Input management
-├── ui/               # UI system with layout engine
-├── ai/               # AI systems (FSM, steering, pathfinding)
-├── resources/        # Resource loading and management
-├── persistence/      # Save/load system
-├── config/           # Configuration management
-├── editor/           # In-engine editor tools
-└── common/           # Shared types (Vector2, Color, Rect)
-```
-
-### Key Architectural Patterns
-
-**Scene Lifecycle**
-1. Application creates Scene with EventDispatcher
-2. SceneManager calls `scene.resolve_dependencies(container)` to inject DI container
-3. Scene's `on_enter()` is called when activated
-4. Scene's `update(dt)` is called each frame
-5. Scene's `render()` is called each frame (may be deprecated in favor of RenderSystem)
-6. Scene's `on_exit()` is called when switching away
-
-**Application Lifecycle**
-```python
-# Bootstrap creates and wires all services
-app = create_application()  # or create_sandbox_application()
-
-# Create scene (gets EventDispatcher from container)
-scene = MyScene("scene_name", event_dispatcher)
-
-# Run (handles scene registration and main loop)
-app.run(scene)
-```
-
-**Component Access Patterns**
-```python
-# EntityManager query
-for entity in entity_manager.get_entities_with(Transform, Sprite):
-    transform = entity.get_component(Transform)
-    sprite = entity.get_component(Sprite)
-    # OR use cached attribute access:
-    # transform = entity.transform
-
-# Adding components
-entity.add_component(Transform(position=Vector2(100, 100)))
-entity.add_component(Sprite(texture_path="assets/sprite.png"))
-```
-
-**Rendering Architecture**
-- Scenes submit `Renderable` objects to the renderer
-- `IRenderer` handles world/game rendering
-- `UIRenderer` handles UI overlay rendering
-- Backend implementations (e.g., `PygameBackend`) handle actual draw calls
-- Supports Z-ordering and batching for performance
-
-**Physics Integration**
-- Physics engine (IPhysicsEngine) is registered as singleton in DI
-- Entities with physics have a `RigidBody` component
-- Physics updates happen in `Application._fixed_update()`, which runs at a fixed rate
-  (default 60 Hz) independent of the variable-rate `_update()`
-- Collision callbacks use the event system
-
-## Important Implementation Notes
-
-### Testing
-- Tests are in `tests/` with separate `tests/integration/` for integration tests
-- Use pytest markers to categorize tests (unit, integration, performance, etc.)
-- Render pipeline snapshots live in `tests/visual/`, using Syrupy. They
-  record the ordered stream of backend calls one `RenderSystem.flush()`
-  produces -- sort order, batching, and the world-to-screen transform --
-  via a recording `IRenderer`. Nothing rasterises, so they are deterministic
-  and carry none of the platform brittleness of image snapshots. Update
-  them with `pytest tests/visual/ --snapshot-update`, and **read the diff**:
-  a changed snapshot is a changed frame.
-- `tests/integration/test_demos_render.py` complements them at the other
-  end, asserting each demo's real rendered frame is not a single flat colour.
-- Conftest fixtures are in `tests/conftest.py`
-
-### Type Checking
-- Mypy strict mode is enabled for the `pyguara/` package
-- Tests are excluded from type checking
-- pygame modules have `ignore_missing_imports = true`
-- All new code should include type hints for parameters and return types
-
-### Code Style
-- Line length: 88 characters (Black style)
-- Use double quotes for strings
-- Ruff handles linting and formatting
-- Pre-commit hooks enforce code quality
-
-### Common Gotchas
-
-1. **EntityManager Indexing**: The component index is automatically updated when components are added via `Entity.add_component()`. Direct manipulation of `entity._components` will break indexing.
-
-2. **Event Queue Threading**: Use `queue_event()` instead of `dispatch()` when emitting events from background threads (e.g., resource loaders, network callbacks).
-
-3. **Scene DI Access**: Scenes must call `self.container.get(SomeService)` only after `resolve_dependencies()` has been called (typically in or after `on_enter()`).
-
-4. **Protocol vs ABC**: This codebase prefers `Protocol` (structural subtyping) over `ABC` (nominal subtyping) for interfaces to avoid tight coupling.
-
-5. **Renderer Decoupling**: Game code should never import pygame directly. Use protocols and DI to access rendering services.
-
-### Python Version Requirements
-- Minimum: Python 3.12
-- Uses modern Python features (match/case, type hints, Protocol, dataclasses)
-
-## Ongoing Efforts
-
-### Subsystem audit — ACTIVE
-
-A systematic audit of the engine, one subsystem per iteration: code and
-architecture, then tests, then documentation.
-
-**Tracker: `REFACTOR_STATE.md` in the repository root.** Read it first. It
-carries the completed subsystems, the pending queue in dependency order, the
-cross-cutting concerns parked out of individual iterations, and a log of what
-each iteration found.
-
-To resume: open `REFACTOR_STATE.md`, read "How to resume" at the top, and take
-the next subsystem from the pending queue.
-
-### Engine remediation (wayfinder) — essentially complete
-
-An earlier effort, tracked via the `/wayfinder` skill:
-- Map: `.scratch/engine-remediation/map.md`
-- Tickets: `.scratch/engine-remediation/issues/`
-
-**All 49 tickets are resolved** -- the last, 49 (declarative UI builder), closed
-2026-10-05. Do not start here; the subsystem audit above is where active work
-happens, and the capability work that remains lives in GitHub issues.
-
-## Make targets
-
-`uv run ...` is the primary interface and what the rest of this file uses.
-The Makefile wraps the common ones:
-
-| Command | What it does |
+| File in `project/backlog/active/` | What it holds |
 | --- | --- |
-| `make run` | Run `main.py` |
-| `make native` | Rebuild the native extension (`maturin develop --release`) |
-| `make test` | Run the suite |
-| `make test-unit` | Unit tests only |
-| `make coverage` | Tests with a coverage report |
-| `make lint` | `ruff check` |
-| `make format` | `ruff format` |
-| `make type-check` | `mypy` |
-| `make ci` | Everything CI runs |
+| `engine_completion_roadmap.md` | **Start here.** What is left, in order |
+| `next_engine_plan.md` | Workstreams 1 to 7, their measurements, and the live status of each |
+| `network_multiplayer.md` | The networking plan, by phase |
+| `repo_cleanup_plan.md` | What moves, is archived or is deleted at true alpha |
 
-Only these exist. `GEMINI.md` previously advertised `make play`,
-`make test-cov` and `make dev-check`, none of which are targets -- which
-is the sort of thing a second, hand-maintained instruction file does, and
-the reason there is now only one.
+`REFACTOR_STATE.md` and `.scratch/engine-remediation/` record two
+**finished** efforts. Do not resume either.
 
-## Coding standards
+## Setup
 
-- **Type hints** on every function argument and return type. Mypy strict
-  mode is on for `pyguara/`.
-- **Google-style docstrings** on modules, classes and public methods.
-- **Absolute imports** (`from pyguara.x import y`), sorted by ruff.
-- **Ask before changing core systems** -- the ECS, the event bus and the
-  DI container are depended on by everything.
+```bash
+uv sync            # compiles the Rust extension; needs rustup (stable)
+make native        # rebuild it in place after editing Rust
+```
+
+On Linux a source build also needs `sudo apt install libudev-dev
+pkg-config`. Without them: `maturin develop --release
+--no-default-features`, which runs with no gamepads and a silent mixer.
+
+`make native` is `maturin develop --release`. Plain `maturin develop` is
+a debug build and slower than the Python it replaces; a bare `cargo
+build` is not picked up while an installed library exists.
+
+## Before you call something done
+
+```bash
+uv run pytest && uv run ruff check . && uv run mypy pyguara
+```
+
+All three must pass. With several commits, each must pass alone.
+
+- `pytest -m unit`, `-m integration`, `-m performance`, `-m slow` and
+  `-m cli` select by marker. The Makefile wraps the common runs; `make
+  help` lists the targets.
+- **The native parity suites skip when the extension is not built**, so
+  a green run without it has tested none of the accelerator.
+- `tests/visual/` snapshots record the renderer's call stream. Update
+  with `--snapshot-update` and **read the diff**: a changed snapshot is
+  a changed frame.
+- Reproduce a suspected defect with a throwaway probe before fixing it,
+  and keep the probe as the regression test.
+
+## Branching
+
+- This fork: commit to `next`. After the merge-back, every independent
+  branch is cut from `main`.
+- **Merge commits**, never squash or rebase-and-merge.
+- **A branch is frozen once its PR is open.** Follow-up work goes on a
+  new branch; check `gh pr view <branch> --json state` before pushing to
+  an old one.
+- Stack a branch on another only for a real dependency, and say so in
+  the PR.
+- Commit or push only when asked.
+
+Reasons and the full procedure: `docs/agents/branching.md`.
 
 ## Where things are
 
 | Path | What it is |
 | --- | --- |
-| `main.py` | Entry point: bootstraps the container, starts the application |
-| `pyguara/application/application.py` | The frame loop |
-| `pyguara/ecs/manager.py` | The ECS core -- read this to understand queries |
-| `pyguara/studio/` | The authoring app and the agent surface |
-| `config/game_config.json` | Default configuration |
-| `games/` | Demos and tutorials |
+| `pyguara/ecs/`, `di/`, `events/` | **The core. Ask before changing these**; everything depends on them |
+| `pyguara/application/` | The frame loop (`application.py`) and service wiring (`bootstrap.py`) |
+| `pyguara/scene/`, `systems/` | Scenes, each owning its own `EntityManager` and `SystemManager` |
+| `pyguara/graphics/` | Render pipeline; backends are `wgpu` (GPU) and `pygame` (software reference) |
+| `pyguara/physics/`, `audio/`, `input/`, `ui/`, `ai/`, `animation/`, `tilemap/`, `resources/`, `persistence/`, `replay/`, `prefabs/` | Subsystems, each behind a protocol |
+| `pyguara/net/` | Opt-in multiplayer: transport, replication, prediction |
+| `pyguara/kits/` | Gameplay building blocks: combat, movement, loot, procgen |
+| `pyguara/studio/` | The editor and the agent operation surface |
+| `pyguara/native.py`, `rust/src/` | The extension loader and the Rust crate |
+| `games/` | Tutorials and capstone demos. Tests use the capstones as a pixel corpus |
+| `docs/adr/` | Decisions that still constrain the code. Read the relevant one first |
+| `docs/guides/performance.md` | Every measured number |
 
-## Authoring through PyGuara Studio
+ModernGL is **retired**: `display.backend: moderngl` raises at startup.
+`display.backend` still defaults to `pygame`; Studio and the render
+graph need `wgpu`.
 
-Studio exposes the scene as a set of operations, so a scene can be read
-and edited without a window:
+## Rules the code does not enforce
+
+The generated block below has the engine conventions. In addition:
+
+- **Type hints everywhere**, Google-style docstrings on public API,
+  absolute imports. Mypy is strict on `pyguara/`.
+- **Protocols, not ABCs**, for a new interface.
+- **Emit with `queue_event()` from a background thread**, never
+  `dispatch()`.
+- **A scene has no container until `resolve_dependencies()` has run**,
+  so resolve services in `on_enter()` or later.
+- **A guard must not return a plausible wrong value.** `x or 1`, `if d
+  != 0 else 0` and a bare `except: pass` have each hidden a real defect
+  here; raising is easier to diagnose.
+- **Every performance claim carries a before and after number**, added
+  to `docs/guides/performance.md`.
+
+## Seeing and hearing the engine
+
+An agent cannot look at a window or listen to a speaker.
 
 ```bash
-pyguara studio ops    # JSON lines on stdio, no extra dependency
-pyguara studio mcp    # Model Context Protocol, needs the `studio` extra
+uv run python tools/agent_view.py --list
+uv run python tools/agent_view.py guara_falcao --frames 120 --shot 119
+uv run python tools/audio_capture.py --asset <file.wav> --wav
 ```
 
-Call `project_overview` first in an unfamiliar project, then
-`scene_summary`. Call `component_schema` before setting a field on a
-component type you have not used -- it carries the field types, the
-defaults and an enum's valid members. Every edit returns the diff it
-produced and is undoable through `history`; every action, including the
-failures, is in `journal`.
-
-See `docs/guides/agent-integration.md`.
+Frames land in `.agent-view/`. **A capture proves the render or output
+path works. It does not prove a window appeared or a speaker played**,
+and those have diverged here before. See `docs/agents/capture-tools.md`
+and `docs/guides/agent-visual-inspection.md` before reporting on either.
 
 <!-- BEGIN GENERATED BY PYGUARA STUDIO -- edit outside this block -->
 PyGuara is a code-first 2D game engine for Python 3.12+: an Entity-Component-System core with inverted-index queries, a reflection-based dependency-injection container, an event bus, and backend-agnostic rendering over pygame-ce and wgpu. This repository is the engine itself, not a game built on it -- `games/` holds the demos and tutorials.
@@ -527,215 +206,44 @@ Working rules, which the operations themselves enforce:
 
 ## The native extension
 
-Four subsystems and one shared primitive have a native implementation
-beside the Python one:
+Rust implements the wgpu renderer, the window, input, images, text and
+the audio mixer, plus an accelerated **store** for five things that also
+keep a Python implementation: `FlowFieldService`, `ParticleSystem`,
+`Sparks`, `FlockingSystem` and `SpatialHash`.
 
-| | native gain | |
-| --- | ---: | --- |
-| `FlowFieldService` | **26-32x** | 96x96 recompute, 52 ms -> 1.6 ms |
-| `ParticleSystem` | 15-20x | whole frame, update plus render pack |
-| `Sparks` | 13-24x | whole frame, via `ShapeBatch` |
-| `FlockingSystem` | 8-19x | whole tick, 1000 agents 16 ms -> 1.9 ms |
-| `SpatialHash` | 17x | the index; **1.3-4.3x** for its consumers |
+- The module is **`pyguara.pyguara_core_rs`**. `pyproject.toml` and
+  `pyguara/native.py` both spell that name and must agree.
+- **One engine-wide switch**: `PerformanceConfig.native_acceleration` is
+  `off`, `auto` or `required`. `PYGUARA_NO_NATIVE=1` forces the Python
+  stores. `pyguara.native.describe()` says which is in force.
+- **That switch governs stores, not backends.** It does not reach audio
+  (`PYGUARA_AUDIO_BACKEND=pygame`) or networking.
+- **The two stores must agree**, and how exactly depends on the
+  subsystem: the flow field and `SpatialHash` membership are bit-exact,
+  the pools compare within a tolerance, flocking has one permitted cause
+  of difference. Read the parity suite's docstring before touching one.
+- **`SpatialHash` results have no defined order.** Pick by distance or
+  id, never the first.
+- **A test's reference must pin the Python store explicitly**
+  (`accelerate=False`), or it compares native with itself.
 
-**Read the `SpatialHash` row carefully** -- it is the one entry that is a
-primitive rather than a subsystem, and the two numbers mean different
-things. The index itself goes 7.5 ms to 0.44 ms at 1000 keys. What its
-consumers feel is much less, because in each of them the broad-phase was
-only ever a fraction of the tick: 1.87x for `TopDownSystem`'s actor
-separation at 1000 clumped actors (which is still 104% of a frame down to
-56%, the row that justifies the port) and 1.32x for `ProjectileSystem`,
-which stays declined as a port of its own. `docs/guides/performance.md`
-has the whole table and ADR 0004 Decision 7 has why a primitive is priced
-differently.
-
-`SpatialHash` is also the first native store that is **worse** than
-Python at something. It rebuilds its grid on the first query after any
-write, which is free for the pattern every consumer has -- sync the index,
-then sweep it -- and quadratic for a caller that alternates `insert` and a
-query: 0.13x the Python speed over 4000 keys. Nothing in the engine does
-that; `accelerate=False` is the answer for a game that does.
-
-**The wheel ships it**, so an installed PyGuara runs native by default and
-nobody runs `cargo` to get the numbers above. maturin is the build
-backend, which means a *source* build -- `uv sync`, `uv build`, the sdist,
-a platform outside the wheel matrix -- now needs a Rust toolchain, where
-none was needed before. That is the price, and
-`docs/adr/0006-shipping-the-native-extension.md` has why it is worth
-paying.
-
-The pure-Python implementations are kept and still run: under
-`PYGUARA_NO_NATIVE=1`, under `native_acceleration = "off"`, on a platform
-with no wheel, and in a checkout with nothing built yet.
-
-```bash
-uv sync                              # maturin is the backend; this builds it
-make native                          # rebuild in place after editing Rust
-PYGUARA_NO_NATIVE=1 uv run pytest    # force the Python path
-```
-
-**`PYGUARA_NO_NATIVE=1` does not reach audio.** `NativeAudioSystem` is a
-*backend* with no Python counterpart, chosen by `AudioConfig.backend`, and is not
-one of the stores above: to rule it out, set `PYGUARA_AUDIO_BACKEND=pygame`. See
-`docs/systems/audio.md` and ADR 0004, Decision 4.
-
-`make native` is `maturin develop --release`, and the `--release` matters:
-`maturin develop` alone produces a *debug* build, which is slower than the
-Python it replaces. A bare `cargo build --release` still works and is
-still found, but it is the second place looked at -- an installed library
-wins, so after `uv sync` a plain `cargo build` leaves the new code
-silently unused.
-
-**The store is one engine-wide choice**, not a per-subsystem one:
-`PerformanceConfig.native_acceleration` is `off`, `auto` (the default) or
-`required`, resolved once at bootstrap by `pyguara.native.configure()` and
-reported in the boot log. `required` fails at *startup* without the
-extension, which is what a game depending on native performance should
-ship. `pyguara.native.describe()` says which store is in force and where
-it came from, `pyguara.native.status()` returns the same facts as fields,
-and Studio's `project_overview` reports it -- so an agent or an author
-who attached to a running session, and never saw the boot line, can still
-find out.
-
-It is engine-wide because a store picked silently from whether a `.so`
-happens to be on disk means the same game, with the same code and seed,
-behaves differently on a machine that built the extension and one that
-did not -- invisible for a particle, gameplay for a flock. See
-`docs/adr/0004-the-native-boundary.md`, Decision 4.
-
-`accelerate=True`/`False` on a pool or a service still overrides it,
-because the parity tests have to construct both stores side by side. That
-is what it is for, not a second place to configure the engine.
-
-Written outside the generated block above on purpose: `pyguara studio
-instructions` rewrites what is inside it, and an earlier version of this
-section was placed there and silently deleted on the next regeneration.
-
-The price of keeping two implementations is that they must agree, which is
-paid by `tests/test_native_particle_parity.py`,
-`tests/test_native_spark_parity.py`,
-`tests/test_native_flow_field_parity.py`,
-`tests/test_native_flocking_parity.py` and
-`tests/test_native_spatial_hash_parity.py` running the same operations
-against both, plus real-GPU pixel comparisons in
-`tests/integration/test_wgpu_pixels.py`. All of those **skip** when the
-extension is not built, so a contributor without Rust sees a green suite
-and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles, sparks, pathfinding, flocking or spatial
-queries.
-
-**Adding a native store to an existing class changes the meaning of every
-test that constructs it**, which `SpatialHash` demonstrated the hard way:
-the moment it defaulted to `auto`, the Python reference inside
-`tests/test_native_flocking_parity.py` became native and that suite's
-first tier compared the native grid with itself -- it passed all 69 tests
-with the grid's distance test deliberately broken. So a reference, a
-complexity guard and a subsystem's own `accelerate=False` path must each
-pin the Python store *explicitly*, and a unit suite for a two-store class
-should be parametrised over both. See ADR 0004 Decision 7.
-
-**How closely they have to agree depends on what the subsystem is for.**
-The pools compare with a tolerance, because they hold f32 where Python
-holds f64 and a spark half a pixel away is a spark. The flow field is
-**bit-exact** and tested with `==` on every cell, because a field steers
-enemies and one cell pointing elsewhere is a pack that goes the other way
-round a wall. Changing `1.414` to `SQRT_2` in `rust/src/flowfield.rs`, or
-reordering its neighbour table, breaks that on purpose -- both are
-sabotage-tested.
-
-Flocking is the one case where exactness is **not available**: a radius
-query yields each cell's members in CPython set iteration order, and
-`flock_force` sums over them, so the last bits differ. Its parity suite
-therefore has one permitted cause and pins everything else exactly --
-including a bit-exact tier on constructed geometry where no agent has
-more than one flockmate, because a tolerance loose enough to admit the
-ordering (6.4e-13) can never catch a transcription slip (one ulp). If
-you touch `rust/src/flocking.rs`, read that file's module docstring
-first. See `docs/adr/0004-the-native-boundary.md`, Decision 5.
-
-`SpatialHash` is **bit-exact** on membership, for the flow field's
-reason: an index decides which enemy a magnet pulls and who is a
-flockmate, and `query_radius` confirms every candidate against an exact
-squared distance, so being in range is a property of the positions alone.
-Exactly one thing diverges, and it is the result's **order** -- Python
-yields from a `set`, so for the string keys the engine uses
-`PYTHONHASHSEED` randomises it per process and the Python store is not
-reproducible against itself. Every comparison in its parity suite sorts,
-and a caller wanting a particular one of several results must pick it by
-distance or by id rather than taking the first.
-
-The flow field is also where to look for how a native boundary should be
-shaped: nothing outside `FlowFieldService` reads a cell, so the cost map
-and the field never come back to Python and only `vector_at` crosses --
-which is why it prices at 50x where flocking, whose agents are ECS
-entities, prices at 15x.
-
-`Sparks` also added `ShapeBatch` and the `ShapeBatchRenderer` capability
-(`pyguara/graphics/types.py`, `protocols.py`), because a spark is one
-primitive and 55-73% of a Python spark frame is `draw_circle`/`draw_line`
-call overhead. Only the wgpu world renderer takes a batch; every
-other renderer keeps the per-primitive path, and `tests/test_graphics_protocol_conformance.py`
-asserts both halves of that on purpose.
-
-The crate is wired into `pyproject.toml` through maturin, which puts the
-extension inside the package: it is importable as
-**`pyguara.pyguara_core_rs`**, not as a top-level `pyguara_core_rs`, since
-a mixed python/rust wheel requires it to live under the Python package.
-Two files spell that name -- `[tool.maturin] module-name` and
-`pyguara/native.py` -- and `tests/test_native_loader.py` asserts they
-agree, because a mismatch is silent: the import fails, the `target/`
-library answers in a checkout, and an installed PyGuara runs pure Python
-while reporting nothing wrong.
-
-One wheel per platform, not per platform and interpreter: `abi3-py312`
-means the 3.12 build runs natively under 3.13 as well. Five are built --
-Linux x86_64 and aarch64, macOS x86_64 and arm64, Windows x64 -- and
-`.github/workflows/wheels.yml` says why the omissions are omissions.
-
-See `docs/adr/0003-native-core-spike.md` for why this is an accelerator
-rather than a rewrite, and `0006-shipping-the-native-extension.md` for why
-it ships in the wheel and what that costs.
+Before editing anything under `rust/src/` or a two-store class, read
+`docs/agents/native-extension.md` and ADR 0004.
 
 ## Networking
 
-`pyguara.net` is opt-in: a single-player game imports none of it, and it imports
-fine with no extension. It is a backend, not a store, so `PYGUARA_NO_NATIVE=1`
-does not turn it off. The transport, session, replication, prediction and game
-events exist; projectiles are the rest of phase 4 of
-`project/backlog/active/network_multiplayer.md`.
+`pyguara.net` is opt-in and imports nothing into a single-player game.
 
-**Everything decoded from the network is untrusted, and that includes messages
-from an invited player.** The Rust core authenticates packets and survives hostile
-ones, but it does not make a value sensible. A decoder bounds-checks lengths, ids
-and enums, rejects non-finite floats, and never raises into the frame loop. Never
-unpickle network data.
+- **Everything decoded from the network is untrusted**, including from
+  an invited player. Bounds-check lengths, ids and enums, reject
+  non-finite floats, never raise into the frame loop, never unpickle.
+- **A host accepts commands from a client, never positions**, and one
+  per tick.
+- **`renet` and `renetcode` are pinned exactly**; both can be crashed
+  remotely as shipped and `rust/src/net/core.rs` guards those versions.
+  Run `tests/test_net_hostile.py` before moving either.
+- **Do not test a stall with `time.sleep` or a Python busy loop.**
+- After changing replication, capture `tools/agent_view.py net_horde`.
 
-**`renet` and `renetcode` are pinned exactly, because both can be crashed remotely
-as shipped**, and `rust/src/net/core.rs` guards the specific versions. Before moving
-either, re-read their parsers and run `tests/test_net_hostile.py`. ADR 0007 lists
-each problem and its guard.
-
-**Don't test a stall with `time.sleep` or a Python busy loop.** The first releases
-the GIL and the second offers it every 5 ms, so neither proves a thread is
-independent of Python. And watch round trip past the end of a stall: it only updates
-when an ack lands, so held-back acks leave it frozen at a good value. An earlier
-version of `tests/integration/test_net_udp.py` passed with the thread deliberately
-broken for both reasons.
-
-**A host never accepts a position from a client, only commands**, and one per tick
-however many arrive. `velocity_of` runs on untrusted commands on the host, so it has to
-limit what it returns. Velocity must be a pure function of the command, or a replay has
-nothing to re-run.
-
-```bash
-uv run python tools/net_probe.py simulate --latency-ms 50 --loss 0.02
-```
-
-**Capture `net_horde` after changing replication:** `tools/agent_view.py net_horde`
-draws the host and client side by side over a simulated bad network, with the state
-hash counts on screen. Its first capture found a desync that 121 passing tests had
-missed, because they all spawned entities after joining rather than before.
-
-A simulated network proves the logic, the way `agent_view` proves the render path.
-It cannot show how a real connection behaves, or whether playing over one feels
-good. See `docs/guides/network-probe.md`.
+Details: `docs/agents/networking.md`, `docs/systems/networking.md` and
+ADR 0007.
