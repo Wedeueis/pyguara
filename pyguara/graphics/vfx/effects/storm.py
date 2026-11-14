@@ -61,12 +61,26 @@ STORM = FullscreenShader(
     # mirroring the coordinates instead would mirror nothing -- it would
     # draw different noise.
     wgsl="""
-fn hash11(n: f32) -> f32 {
-    return fract(sin(n * 78.233) * 43758.5453);
+// An integer hash of the input's exact bits (PCG), so every GPU draws the
+// same noise. The usual fract(sin(x) * 43758.5453) depends on how precisely a
+// GPU computes sin of a large argument, which differs between vendors and
+// drivers: the same frame came out thousands of pixels apart on lavapipe.
+fn pcg(v: u32) -> u32 {
+    let state = v * 747796405u + 2891336453u;
+    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+fn unit(h: u32) -> f32 {
+    return f32(h >> 8u) / 16777216.0;
 }
 
 fn hash21(p: vec2<f32>) -> f32 {
-    return fract(sin(dot(p, vec2<f32>(127.1, 311.7))) * 43758.5453);
+    return unit(pcg(bitcast<u32>(p.x) ^ pcg(bitcast<u32>(p.y))));
+}
+
+fn hash11(n: f32) -> f32 {
+    return unit(pcg(bitcast<u32>(n)));
 }
 
 fn tri(x: f32) -> f32 {
