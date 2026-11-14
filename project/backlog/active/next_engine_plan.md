@@ -10,24 +10,25 @@ Where they conflict, **the profile and Reclaimer's plan win over the
 report**. The report led with columnar component storage; the profile showed
 that would not have moved any of Reclaimer's costs.
 
-## Where this ends: merged back into `pyguara` after 5e
+## Where this ends: merged back into `pyguara`
 
 Decided by the user 2026-11-14. **`Wedeueis/pyguara` is the final repository;
-this fork is temporary.** It exists so the rewrite could not destabilise the
-working engine, and it has done that job once Reclaimer plays online over
-Steam on this stack -- the 5e playtest across two machines.
+the `pyguara-next` fork was temporary.** It existed so the rewrite could not
+destabilise the working engine.
 
-Then:
+The merge was first to wait for the 5e playtest. The same day it was
+postponed for want of a second Steam account, and the user chose to merge
+without it: the Steam code is complete, Reclaimer passes its suite on this
+stack, and the playtest is a check, not code. It continues as
+[pyguara #402](https://github.com/Wedeueis/pyguara/issues/402).
 
-1. Open a PR from `next` into `pyguara`'s `main`, merged with a merge commit
-   as `pyguara`'s rules require. The fork kept the full history, so this is an
-   ordinary merge, not a port. Anything landed on `pyguara` in the meantime
-   comes across through `upstream` first.
-2. Point Reclaimer back at `pyguara` and drop the `reclaimer_v2-next` worktree.
-3. Archive `Wedeueis/pyguara-next` on GitHub; delete `pyguara-next-base` and
-   the Windows `*-next-verify` export folders.
-
-Until then, the rewrite stays here and `pyguara` gets none of it.
+1. A PR from `next` into `pyguara`'s `main`, merged with a merge commit as
+   `pyguara`'s rules require. `main` had nothing `next` lacked, so it is an
+   ordinary merge, not a port.
+2. Then Reclaimer points back at `pyguara` and the `reclaimer_v2-next`
+   worktree goes.
+3. Then `Wedeueis/pyguara-next` is archived, and `pyguara-next-base` and the
+   Windows `*-next-verify` export folders deleted.
 
 ## What Reclaimer's plan was waiting on, and where each stands
 
@@ -180,7 +181,7 @@ everything above it are the code the UDP path already runs and tests.
 | **5b** | The Steam binding: `steam_api` loaded with `dlopen`/`LoadLibrary` from beside the game, Steam's flat C API, manual callback dispatch. `SteamAPI_InitFlat`, the local Steam ID and name, `ISteamNetworkingMessages` (send, receive, accept a session, its failure callback), relay network init. Missing library or Steam not running is an error naming which, never an import failure | **Done 2026-11-14; run against real Steam on Windows (app 480).** `NativeSteam` (`rust/src/steam.rs`): `steam_api` opened by path, flat API, manual dispatch, session request and failure callbacks, send/receive on channel 0; struct offsets checked with `offset_of!` against the SDK's layouts for Linux and Windows. Tested without Steam: a missing library and a library that is not `steam_api` are errors naming which. Probe on Windows with Steam logged in: init succeeded, the Steam ID and persona name came back, relay access was requested, and reliable sends to the local user arrived intact (10 of 10). Each send *to yourself* makes Steam print one `Unlinking connection in state 1` assertion from its loopback path (0 with no self-sends, 1 per send); real play is always between two accounts, so it is noted, not worked around. Not yet seen: a session request or failure from another user, which needs 5e's second machine In 5c, real lobby callbacks showed that **no callback had ever been delivered**: `SteamAPI_ManualDispatch_Init` was called before `SteamAPI_InitFlat`, and `steam_api.h` requires it after. Fixed in 5c; the 5b probe could not see it, since sending to yourself raises no callback |
 | **5c** | Lobbies and the overlay: create a friends-only lobby on hosting, rich presence so friends see "Join game", accept an overlay invite or a `+connect_lobby` launch argument, admit only lobby members | **Done 2026-11-14; hosting run against real Steam on Windows.** `NativeSteam` gained `create_lobby`, `join_lobby`, `leave_lobby`, `lobby_owner`, `lobby_members`, lobby data, rich presence and `open_invite_dialog`; lobby results come back from `run_callbacks` as call results, membership changes and overlay joins as broadcasts. `SteamLobby` (`pyguara/net/steam_lobby.py`) is sans-IO over that: members entering and leaving become `MemberAdmitted`/`MemberRemoved` for the transport's `allow`/`revoke`, a guest's `LobbyJoined` names the owner to connect to, and an overlay or rich presence join is reported as `JoinRequested`, never acted on. `lobby_from_args` reads `+connect_lobby`. 29 tests against a fake Steam, sabotage-checked. On Windows with Steam: a lobby was created (the Windows `LobbyCreated_t` offset confirmed by the real ID), its owner and members were this account, lobby data read back, and joining a lobby that does not exist failed with "the lobby no longer exists". **Not yet seen:** another player entering (`lobby_member`), the overlay dialog itself (a console process has no overlay), a real invite, and Linux's `LobbyCreated_t` offset -- all 5e |
 | **5d** | `SteamTransport` in Python under `Transport`, and `pyguara dist` copying `steam_api` (and `steam_appid.txt` in a development build) beside the game | **Done 2026-11-14; run against real Steam on Windows.** `SteamTransport` (`pyguara/net/steam.py`) pumps Steam's messages through the Steam core each `poll`; a host accepts sessions only from admitted Steam IDs (requests that beat the lobby wait, at most 64), a client only from its host. `SteamNetwork` drains the callbacks once a frame, feeds lobby and transport, and turns lobby membership into `allow`/`revoke`. `find_steam_api` looks at an explicit path, `PYGUARA_STEAM_API`, beside the executable, PyInstaller's bundle, the working directory. `pyguara dist steam --steam-api` copies it into the built game (`steam_appid.txt` was already written to `dev/` and excluded from the depot). 16 end-to-end tests run the real `HostSession`/`ClientSession` over the Steam core and a fake Steam with Steam's session-request behaviour; sabotage-checked. On Windows: `SteamNetwork.open()` found the library through the environment, hosted, ran the host transport 5 s with no failures, and closed. **Not yet seen:** a second player -- 5e |
-| **5e** | Reclaimer hosts and joins through Steam; a playtest across two home connections | **Wiring done 2026-11-14, playtest postponed: no second Steam account yet** ([issue #1](https://github.com/Wedeueis/pyguara-next/issues/1)). Reclaimer (`reclaimer_v2-next`, `452c8c4` and the lobby-before-window fix after it, local) hosts with `--host --steam` and joins with `--join-lobby ID` or Steam's `+connect_lobby ID`; tested over the engine's `SimulatedSteam` (now public, `pyguara.net.simulated_steam`) and in the real application, and hosting run on Windows against real Steam. `SteamNetwork.flush()` sends a frame's messages after the fixed updates |
+| **5e** | Reclaimer hosts and joins through Steam; a playtest across two home connections | **Wiring done 2026-11-14, playtest postponed: no second Steam account yet** ([pyguara #402](https://github.com/Wedeueis/pyguara/issues/402)). Reclaimer (`reclaimer_v2-next`, `452c8c4` and the lobby-before-window fix after it, local) hosts with `--host --steam` and joins with `--join-lobby ID` or Steam's `+connect_lobby ID`; tested over the engine's `SimulatedSteam` (now public, `pyguara.net.simulated_steam`) and in the real application, and hosting run on Windows against real Steam. `SteamNetwork.flush()` sends a frame's messages after the fixed updates |
 
 Direct IP stays, for development, playtests and any build outside Steam.
 

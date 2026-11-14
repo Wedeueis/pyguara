@@ -512,3 +512,10 @@
 - **Chose:** `SteamNetwork.flush()`, run by Reclaimer's `SteamFrame.after` hook registered after the driver.
 - **Tags:** net, steam
 - **Reviewed:** approved by the user 2026-11-14.
+
+## The fork merges back before the 5e playtest
+- **Context:** 2026-11-14. The merge into `pyguara` was gated on 5e, and 5e is postponed indefinitely (no second Steam account).
+- **Alternatives:** keep waiting, continuing other work in the fork; merge now and carry the playtest as an issue on `pyguara`.
+- **Chose:** merge now (the user's call). The Steam code is complete and tested over SimulatedSteam and against one real account; the risks a merge carries (new defaults on untried machines) do not shrink by waiting. The playtest is pyguara #402.
+- **Tags:** repo, merge, steam
+- **Reviewed:** chosen by the user 2026-11-14.

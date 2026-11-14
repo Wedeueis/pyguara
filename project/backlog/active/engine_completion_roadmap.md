@@ -74,14 +74,17 @@ because it only matters once someone else can install the thing.
 | --- | --- | --- |
 | **5c** | Friends-only lobby on hosting, rich presence, overlay invite and `+connect_lobby`, admit only lobby members | **Done** (`0240300`) |
 | **5d** | `SteamTransport` under `Transport`; `pyguara dist` copies `steam_api` beside the game | **Done** (`64de9a9`) |
-| **5e** | Reclaimer hosts and joins through Steam across two home connections | two machines, two accounts |
+| **5e** | Reclaimer hosts and joins through Steam across two home connections | Wired; the playtest needs two accounts ([#402](https://github.com/Wedeueis/pyguara/issues/402)) |
 
 **Done when** two people on different home connections finish a
 Reclaimer session through a Steam invite.
 
-**Then the fork merges back**, as `next_engine_plan.md` already
-decides: a merge-commit PR from `next` into `pyguara`'s `main`, Reclaimer
-repointed, `pyguara-next` archived. Phases 2 onward happen in `pyguara`.
+**The fork merges back without waiting for 5e** (the user's call,
+2026-11-14: there is no second Steam account yet, and the playtest is a
+check, not code; it continues as
+[pyguara #402](https://github.com/Wedeueis/pyguara/issues/402)). A
+merge-commit PR from `next` into `pyguara`'s `main`, Reclaimer repointed,
+`pyguara-next` archived. Phases 2 onward happen in `pyguara`.
 
 ### Phase 2. What a store release needs
 
