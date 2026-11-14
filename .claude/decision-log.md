@@ -463,3 +463,27 @@
 - **Chose:** every member of the friends-only lobby is admitted (`MemberAdmitted`/`MemberRemoved` map to the core's `allow`/`revoke`), and guests set the same `connect` rich presence. That is Steam's friends-only policy ("allows those who join to invite their own friends"), which suits a co-op game for friends; a game wanting host-only invites can ignore guests' presence later.
 - **Tags:** net, steam, lobby, security
 - **Reviewed:** approved by the user 2026-11-14.
+
+## SteamNetwork hub owns the one callback stream
+- **Context:** 5d. Steam has one callback stream, and both the lobby (lobby results, membership) and the transport (session requests, failures) need it; the lobby exists before the transport, since a guest learns the host from it.
+- **Alternatives:** the transport drains callbacks in its `poll` and forwards lobby ones (but there is no transport yet while joining); the game drains and routes by hand; a hub that drains once per frame and routes to both.
+- **Chose:** `SteamNetwork.update()`, once a frame before the session. It also applies admission (lobby member in/out to `allow`/`revoke`), so a game cannot forget to.
+- **Tags:** net, steam, lobby
+
+## No native thread for Steam; pump from the frame
+- **Context:** 5d, `SteamTransport.poll` receives, ticks the core and sends. `UdpTransport` runs a Rust thread so a stalled frame does not stall acks.
+- **Alternatives:** a Rust thread calling Steam's networking functions while Python runs callbacks on the main thread; pump everything from the frame.
+- **Chose:** pump from the frame. Steam's API is not documented as safe across threads in manual dispatch mode, and the core's 10 s timeout dwarfs any frame stall. Can be revisited if the playtest shows acks lagging.
+- **Tags:** net, steam, native-extension
+
+## Session requests before admission wait, bounded
+- **Context:** 5d. A guest's first message can reach the host before the host sees the guest enter the lobby.
+- **Alternatives:** refuse and rely on Steam's auto-restart of a broken session; accept everyone and let the core refuse strangers; hold the request until the lobby admits them.
+- **Chose:** hold it (at most 64 strangers, oldest dropped), accept on `allow`. Accepting everyone would let any Steam user make the host open a relay session; refusing would cost each guest a failed session first.
+- **Tags:** net, steam, security
+
+## steam_api copied into the built game by `pyguara dist steam`
+- **Context:** 5d. Valve's library must sit beside the executable; the engine cannot ship it.
+- **Alternatives:** `pyguara build --add-binary` (PyInstaller puts it in `_internal` or a temp dir for onefile); copy it into the content root at `pyguara dist steam --steam-api`; leave it to the developer.
+- **Chose:** `dist steam --steam-api`, copying beside the executable where Valve expects it, refusing a file that is not a 64-bit steam_api, and printing a note when the content has none. At run time `find_steam_api` looks: explicit path, `PYGUARA_STEAM_API`, beside the executable, PyInstaller's bundle dir, the working directory.
+- **Tags:** net, steam, dist

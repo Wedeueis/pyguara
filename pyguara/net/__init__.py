@@ -47,6 +47,7 @@ from pyguara.net.session import (
     Versions,
 )
 from pyguara.net.simulated import LinkConditions, SimulatedNetwork
+from pyguara.net.steam import SteamNetwork, SteamTransport
 from pyguara.net.steam_lobby import SteamLobby, lobby_from_args
 from pyguara.net.transport import Channel, LinkStats, Transport, UdpTransport
 
@@ -86,6 +87,8 @@ __all__ = [
     "SessionFailed",
     "SimulatedNetwork",
     "SteamLobby",
+    "SteamNetwork",
+    "SteamTransport",
     "Transport",
     "UInt16",
     "UInt8",

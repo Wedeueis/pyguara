@@ -51,6 +51,50 @@ session's handshake can read that session. Make a new one per session. `repr(inv
 the key out, so it does not end up in a log by accident. Players also see each other's IP
 addresses on a direct connection, and a game should say so.
 
+## Over Steam
+
+Online play between friends goes through Steam rather than invites: no port forwarding,
+traffic is relayed through Valve's network, and no player sees another's IP address. The
+sessions are the same; only the transport differs.
+
+```python
+from pyguara.net import ClientSession, HostSession, SteamNetwork
+from pyguara.net.steam_lobby import JoinRequested, LobbyFailed, LobbyJoined, LobbyOpened
+
+network = SteamNetwork.open()        # finds steam_api, starts Steam, reaches the relays
+network.lobby.host(max_players=4)    # or: network.lobby.join(lobby_id)
+
+# Once a frame, before the session:
+for event in network.update():
+    if isinstance(event, LobbyOpened):
+        session = HostSession(network.host_transport(max_clients=3), versions)
+        network.lobby.invite()       # the overlay's invite dialog
+    elif isinstance(event, LobbyJoined):
+        session = ClientSession(network.join_transport(versions.encode()))
+    elif isinstance(event, JoinRequested):
+        ...                          # an invite accepted mid-game: the game decides
+    elif isinstance(event, LobbyFailed):
+        show(event.reason)
+```
+
+**Being in the host's friends-only lobby is what admits a player.** Members entering and
+leaving become `allow` and `revoke` on the host's transport, and a Steam session from anyone
+else is never accepted. A player who leaves the lobby is dropped from the game. Friends see
+"Join Game" on the host and on every guest, which is Steam's friends-only rule.
+
+A game Steam launches to join a lobby gets `+connect_lobby <id>` on its command line:
+`lobby_from_args(sys.argv)` reads it, and the game calls `network.lobby.join` with it.
+
+**`steam_api` is Valve's library and this engine cannot ship it.** Take `steam_api64.dll`
+(or `libsteam_api.so`) from the Steamworks SDK's `redistributable_bin` and put it beside the
+game: `pyguara dist steam --steam-api <path>` copies it into the built game, and in
+development `PYGUARA_STEAM_API` names it. During development Steam also needs the app ID,
+from `steam_appid.txt` in the working directory or `SteamAppId`; 480 is Valve's test app.
+Never ship `steam_appid.txt` -- `pyguara dist steam` keeps it out of the depot.
+
+There is no network thread on Steam: Steam's API is pumped from the frame. A stalled frame
+delays acknowledgements as well as game state, well inside the 10-second timeout.
+
 ## Channels
 
 | Channel | Delivery | Use it for |

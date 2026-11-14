@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 from pathlib import Path
 
@@ -49,6 +50,10 @@ _ITCH_PLATFORM_TOKENS = {
 }
 
 _STEAM_APPID_FILE = "steam_appid.txt"
+
+# Valve's library, by platform, as `pyguara.net.steam` loads it. Only the
+# 64-bit Windows one: the engine has no 32-bit build.
+_STEAM_API_NAMES = ("steam_api64.dll", "libsteam_api.so", "libsteam_api.dylib")
 
 
 def _relative_or_absolute(target: Path, start: Path) -> str:
@@ -419,6 +424,12 @@ def icons_command(source: Path, out: Path) -> None:
     help="Branch to set live after a successful upload (default: none)",
 )
 @click.option(
+    "--steam-api",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Valve's steam_api library to copy beside the game, for online play",
+)
+@click.option(
     "--preview/--no-preview",
     default=True,
     help="Validate without publishing the build (default: preview)",
@@ -431,6 +442,7 @@ def steam_command(
     build_output: Path | None,
     description: str,
     branch: str,
+    steam_api: Path | None,
     preview: bool,
 ) -> None:
     """Write a Steam content-builder script set for a built game.
@@ -439,7 +451,17 @@ def steam_command(
     a README with the manual steps, and the development-only
     `steam_appid.txt` -- outside the content root, because shipping it
     lets a customer bypass the Steam client.
+
+    `--steam-api` copies Valve's `steam_api` into the content root, beside
+    the executable, where `pyguara.net.steam` finds it. The engine cannot
+    ship it; it comes from the Steamworks SDK's `redistributable_bin`.
     """
+    if steam_api is not None and steam_api.name not in _STEAM_API_NAMES:
+        raise click.ClickException(
+            f"--steam-api must be one of {', '.join(_STEAM_API_NAMES)}; got "
+            f"{steam_api.name!r}. It is in the Steamworks SDK's "
+            f"redistributable_bin, one folder per platform."
+        )
     for name, value in (("--app-id", app_id), ("--depot-id", depot_id)):
         if not value.isdigit():
             raise click.ClickException(
@@ -471,6 +493,15 @@ def steam_command(
     _write(out / "upload.bat", _steam_upload_script(app_id, posix=False))
     _write(out / "dev" / _STEAM_APPID_FILE, f"{app_id}\n")
     _write(out / "README.md", _steam_readme(app_id, depot_id, content_root))
+
+    if steam_api is not None:
+        shutil.copy2(steam_api, content / steam_api.name)
+        click.echo(f"Copied {steam_api.name} beside the game in {content}")
+    elif not any((content / name).is_file() for name in _STEAM_API_NAMES):
+        click.echo(
+            f"Note: {content} has no steam_api. A game that plays online through "
+            f"Steam needs it beside the executable: pass --steam-api."
+        )
 
     click.echo(f"Steam scripts written to {out}")
     if preview:

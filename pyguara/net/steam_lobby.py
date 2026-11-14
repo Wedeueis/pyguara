@@ -211,6 +211,11 @@ class SteamLobby:
         return self._lobby if self._state in _IN_LOBBY else 0
 
     @property
+    def host_steam_id(self) -> int:
+        """The host's Steam ID once in a lobby (this player's if hosting), or 0."""
+        return self._host if self._state in _IN_LOBBY else 0
+
+    @property
     def admitted(self) -> frozenset[int]:
         """The members a host has admitted, itself excluded."""
         return frozenset(self._admitted)
