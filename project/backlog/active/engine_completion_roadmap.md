@@ -20,7 +20,8 @@ Checked on the day, with the native extension built:
   native images, text and audio. The wgpu path runs without pygame.
 - Workstream 5 (Steam) was done **through 5b** when this was written:
   the sans-IO core and the binding, run against real Steam on Windows.
-  5c (lobbies) landed the same day in `0240300`; 5d and 5e are open.
+  5c (lobbies, `0240300`) and 5d (the transport, `64de9a9`) landed the
+  same day; only 5e, the two-machine playtest, is open.
   `next_engine_plan.md` has the live status.
 
 **The verdict the roadmap is built on:** a professional 2D desktop game
@@ -72,7 +73,7 @@ because it only matters once someone else can install the thing.
 | Increment | What | Needs |
 | --- | --- | --- |
 | **5c** | Friends-only lobby on hosting, rich presence, overlay invite and `+connect_lobby`, admit only lobby members | **Done** (`0240300`) |
-| **5d** | `SteamTransport` under `Transport`; `pyguara dist` copies `steam_api` beside the game | 5a, 5b |
+| **5d** | `SteamTransport` under `Transport`; `pyguara dist` copies `steam_api` beside the game | **Done** (`64de9a9`) |
 | **5e** | Reclaimer hosts and joins through Steam across two home connections | two machines, two accounts |
 
 **Done when** two people on different home connections finish a
