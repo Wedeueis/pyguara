@@ -15,10 +15,9 @@ PyGuara is a code-first 2D game engine for Python 3.12+, with a Rust
 extension for the platform layer and the hot paths. **Alpha, version
 0.6.0**: it runs a real game (Reclaimer), and its APIs still change.
 
-**This checkout is `pyguara-next`, a temporary fork.** Work lands on the
-`next` branch. It merges back into `Wedeueis/pyguara` after the Steam
-playtest (workstream 5e), and issues live there already. See
-`project/backlog/active/next_engine_plan.md`.
+The rebuilt renderer, platform layer and networking were developed in a
+temporary fork, `pyguara-next`, merged back on 2026-11-14 (#404) and
+archived. This repository is the only one; issues live here.
 
 ## What is being worked on
 
@@ -68,8 +67,7 @@ All three must pass. With several commits, each must pass alone.
 
 ## Branching
 
-- This fork: commit to `next`. After the merge-back, every independent
-  branch is cut from `main`.
+- Every independent branch is cut from `main`.
 - **Merge commits**, never squash or rebase-and-merge.
 - **A branch is frozen once its PR is open.** Follow-up work goes on a
   new branch; check `gh pr view <branch> --json state` before pushing to
