@@ -1,10 +1,9 @@
-"""Steam end to end, over a fake Steam: lobby, admission, session, goodbye.
+"""Steam end to end, over a simulated Steam: lobby, admission, session, goodbye.
 
-`FakeCloud` stands in for Steam's servers and `FakeSteam` for one player's
-`NativeSteam`, with the behaviour the transport depends on: a message from
-someone new raises `session_request` and is held until accepted, a peer you
-have already sent to is accepted automatically, and lobby membership changes
-reach every member. Above it, everything is real -- the Steam core,
+`SimulatedSteam` stands in for Steam, with the behaviour the transport depends
+on: a message from someone new raises `session_request` and is held until
+accepted, a peer you have already sent to is accepted automatically, and lobby
+membership changes reach every member. Above it, everything is real -- the Steam core,
 `SteamTransport`, `SteamNetwork`, and the same `HostSession`/`ClientSession`
 a UDP game uses.
 
@@ -31,6 +30,7 @@ from pyguara.net.session import (
     SessionEvent,
     Versions,
 )
+from pyguara.net.simulated_steam import SimulatedSteamCloud
 from pyguara.net.steam import (
     STEAM_API_ENV,
     SteamNetwork,
@@ -60,121 +60,11 @@ class Clock:
         return self.now
 
 
-class FakeCloud:
-    """Steam's servers: who exists, which lobbies, and messages in flight."""
-
-    def __init__(self) -> None:
-        self.users: dict[int, FakeSteam] = {}
-        self.lobbies: dict[int, dict[str, Any]] = {}
-        self._next_lobby = 109775241000000001
-
-    def new_lobby(self, owner: int, size: int) -> int:
-        lobby = self._next_lobby
-        self._next_lobby += 1
-        self.lobbies[lobby] = {"owner": owner, "members": [owner], "size": size}
-        return lobby
-
-    def tell_members(self, lobby: int, about: int, joined: bool) -> None:
-        for member in self.lobbies[lobby]["members"]:
-            if member != about:
-                self.users[member].callbacks.append(
-                    ("lobby_member", lobby, about, joined)
-                )
-
-
-class FakeSteam:
-    """One player's `NativeSteam`."""
-
-    def __init__(self, cloud: FakeCloud, steam_id: int) -> None:
-        self.cloud = cloud
-        self.steam_id = steam_id
-        self.callbacks: list[tuple[Any, ...]] = []
-        self.inbox: list[tuple[int, bytes]] = []
-        self.accepted: set[int] = set()
-        self.sent_to: set[int] = set()
-        self.held: dict[int, list[bytes]] = {}
-        self.presence: dict[str, str] = {}
-        self.accepts: list[int] = []
-        self.is_shut_down = False
-        cloud.users[steam_id] = self
-
-    # Callbacks and messages.
-    def run_callbacks(self) -> list[tuple[Any, ...]]:
-        taken, self.callbacks = self.callbacks, []
-        return taken
-
-    def accept_session(self, steam_id: int) -> bool:
-        self.accepts.append(steam_id)
-        self.accepted.add(steam_id)
-        for data in self.held.pop(steam_id, []):
-            self.inbox.append((steam_id, data))
-        return True
-
-    def send(self, steam_id: int, data: bytes, reliable: bool = False) -> bool:
-        self.sent_to.add(steam_id)
-        peer = self.cloud.users.get(steam_id)
-        if peer is None:
-            return True
-        if self.steam_id in peer.accepted or self.steam_id in peer.sent_to:
-            peer.inbox.append((self.steam_id, data))
-        else:
-            if self.steam_id not in peer.held:
-                peer.callbacks.append(("session_request", self.steam_id))
-            peer.held.setdefault(self.steam_id, []).append(data)
-        return True
-
-    def receive(self) -> list[tuple[int, bytes]]:
-        taken, self.inbox = self.inbox, []
-        return taken
-
-    def shutdown(self) -> None:
-        self.is_shut_down = True
-
-    # Lobbies.
-    def create_lobby(self, max_members: int) -> None:
-        lobby = self.cloud.new_lobby(self.steam_id, max_members)
-        self.callbacks.append(("lobby_created", 1, lobby))
-
-    def join_lobby(self, lobby_id: int) -> None:
-        lobby = self.cloud.lobbies.get(lobby_id)
-        if lobby is None:
-            self.callbacks.append(("lobby_entered", lobby_id, 2))
-            return
-        if len(lobby["members"]) >= lobby["size"]:
-            self.callbacks.append(("lobby_entered", lobby_id, 4))
-            return
-        lobby["members"].append(self.steam_id)
-        self.callbacks.append(("lobby_entered", lobby_id, 1))
-        self.cloud.tell_members(lobby_id, self.steam_id, True)
-
-    def leave_lobby(self, lobby_id: int) -> None:
-        lobby = self.cloud.lobbies.get(lobby_id)
-        if lobby is not None and self.steam_id in lobby["members"]:
-            self.cloud.tell_members(lobby_id, self.steam_id, False)
-            lobby["members"].remove(self.steam_id)
-
-    def lobby_owner(self, lobby_id: int) -> int:
-        return int(self.cloud.lobbies[lobby_id]["owner"])
-
-    def lobby_members(self, lobby_id: int) -> list[int]:
-        return list(self.cloud.lobbies[lobby_id]["members"])
-
-    def set_rich_presence(self, key: str, value: str) -> bool:
-        self.presence[key] = value
-        return True
-
-    def clear_rich_presence(self) -> None:
-        self.presence.clear()
-
-    def open_invite_dialog(self, lobby_id: int) -> None:
-        pass
-
-
 class Player:
     """A player's frame: Steam's callbacks, then the session."""
 
-    def __init__(self, cloud: FakeCloud, steam_id: int, clock: Clock) -> None:
-        self.steam = FakeSteam(cloud, steam_id)
+    def __init__(self, cloud: SimulatedSteamCloud, steam_id: int, clock: Clock) -> None:
+        self.steam = cloud.add_player(steam_id)
         self.network = SteamNetwork(self.steam, clock=clock)
         self.session: HostSession | ClientSession | None = None
         self.lobby_events: list[object] = []
@@ -203,8 +93,8 @@ def of(kind: type, events: list[Any]) -> list[Any]:
     return [e for e in events if isinstance(e, kind)]
 
 
-def hosted_game() -> tuple[FakeCloud, Clock, Player, Player]:
-    cloud, clock = FakeCloud(), Clock()
+def hosted_game() -> tuple[SimulatedSteamCloud, Clock, Player, Player]:
+    cloud, clock = SimulatedSteamCloud(), Clock()
     host = Player(cloud, HOST, clock)
     host.network.lobby.host(4)
     run(clock, host, seconds=0.1)
@@ -237,14 +127,14 @@ def test_a_guest_joins_through_the_lobby_and_plays() -> None:
 def test_the_host_accepts_only_admitted_sessions() -> None:
     _, _, host, guest = hosted_game()
 
-    assert host.steam.accepts == [GUEST]
-    assert guest.steam.accepts == []
+    assert host.steam.accepted_sessions == [GUEST]
+    assert guest.steam.accepted_sessions == []
 
 
 @needs_core
 def test_a_stranger_outside_the_lobby_never_gets_a_session() -> None:
     cloud, clock, host, guest = hosted_game()
-    stranger = FakeSteam(cloud, STRANGER)
+    stranger = cloud.add_player(STRANGER)
     transport = SteamTransport.client(stranger, HOST, VERSIONS.encode(), clock=clock)
 
     for _ in range(60):
@@ -253,14 +143,14 @@ def test_a_stranger_outside_the_lobby_never_gets_a_session() -> None:
         guest.frame()
         transport.poll()
 
-    assert STRANGER not in host.steam.accepts
+    assert STRANGER not in host.steam.accepted_sessions
     assert STRANGER in host.steam.held
     assert len(of(PlayerJoined, host.events)) == 1
 
 
 @needs_core
 def test_a_session_asked_for_before_the_lobby_admits_waits_then_is_accepted() -> None:
-    cloud, clock = FakeCloud(), Clock()
+    cloud, clock = SimulatedSteamCloud(), Clock()
     host = Player(cloud, HOST, clock)
     host.network.lobby.host(4)
     run(clock, host, seconds=0.1)
@@ -273,12 +163,12 @@ def test_a_session_asked_for_before_the_lobby_admits_waits_then_is_accepted() ->
     host.steam.callbacks = [c for c in host.steam.callbacks if c[0] != "lobby_member"]
     run(clock, guest, seconds=0.2)
     run(clock, host, seconds=0.1)
-    assert host.steam.accepts == []
+    assert host.steam.accepted_sessions == []
 
     host.steam.callbacks.extend(entered)
     run(clock, host, guest, seconds=1.0)
 
-    assert host.steam.accepts == [GUEST]
+    assert host.steam.accepted_sessions == [GUEST]
     assert len(of(PlayerJoined, host.events)) == 1
 
 
@@ -330,12 +220,12 @@ def test_close_shuts_steam_down() -> None:
 
     assert host.steam.is_shut_down
     assert host.network.transport is None
-    assert host.steam.presence == {}
+    assert host.steam.rich_presence == {}
 
 
 @needs_core
 def test_transports_need_the_lobby_first() -> None:
-    cloud, clock = FakeCloud(), Clock()
+    cloud, clock = SimulatedSteamCloud(), Clock()
     player = Player(cloud, HOST, clock)
 
     with pytest.raises(RuntimeError, match="host a lobby first"):
@@ -373,8 +263,8 @@ def test_pending_strangers_are_bounded() -> None:
     transport.allow(STRANGER)
     transport.allow(STRANGER + 9_999)
 
-    assert STRANGER not in host.steam.accepts
-    assert STRANGER + 9_999 in host.steam.accepts
+    assert STRANGER not in host.steam.accepted_sessions
+    assert STRANGER + 9_999 in host.steam.accepted_sessions
 
 
 def test_the_library_name_matches_the_extension_s() -> None:
@@ -425,3 +315,25 @@ def test_a_missing_library_says_where_it_looked(
     assert "--steam-api" in message and STEAM_API_ENV in message
     for place in steam_api_candidates():
         assert str(place) in message
+
+
+@needs_core
+def test_flush_sends_the_frame_s_messages_without_waiting_for_the_next_poll() -> None:
+    _, clock, host, guest = hosted_game()
+    assert guest.session is not None
+
+    guest.session.send(Channel.EVENTS, b"now")
+    clock.now += DT
+    guest.network.flush()
+
+    assert any(b"now" in data for _, data in host.steam._inbox)
+
+
+@needs_core
+def test_shutting_down_leaves_the_lobby_so_the_host_drops_the_player() -> None:
+    _, clock, host, guest = hosted_game()
+
+    guest.steam.shutdown()
+    run(clock, host, seconds=0.2)
+
+    assert len(of(PlayerLeft, host.events)) == 1

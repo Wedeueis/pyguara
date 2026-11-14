@@ -20,6 +20,11 @@ Steam itself, the `SteamLobby`, and the transport once there is one. Call
             session = ClientSession(network.join_transport(versions.encode()))
     for event in session.poll():
         ...
+    ...  # the frame's fixed updates, which send
+    network.flush()
+
+`flush()` sends what the frame queued at once; without it, it leaves on the
+next `update()`, a frame later.
 
 **Being in the host's lobby is what admits a player.** The hub turns members
 entering and leaving the lobby into `allow` and `revoke` on the host's
@@ -286,6 +291,15 @@ class SteamTransport(NativeTransport):
         self._pump()
         return super().poll()
 
+    def flush(self) -> None:
+        """Send what was queued since `poll`, without waiting for the next one.
+
+        Call after the frame's sends -- `SteamNetwork.flush` does -- or they
+        leave on the next `poll`, a frame later. `UdpTransport` needs no such
+        call: its thread sends on its own.
+        """
+        self._pump()
+
     def close(self) -> None:
         """Say goodbye to every peer, sending it now; see `Transport.close`."""
         super().close()
@@ -380,6 +394,11 @@ class SteamNetwork:
                 self._admit(event)
                 events.append(event)
         return events
+
+    def flush(self) -> None:
+        """Send what the frame queued; call after the fixed updates."""
+        if self.transport is not None:
+            self.transport.flush()
 
     def host_transport(
         self,

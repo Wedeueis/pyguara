@@ -75,7 +75,13 @@ for event in network.update():
         ...                          # an invite accepted mid-game: the game decides
     elif isinstance(event, LobbyFailed):
         show(event.reason)
+# ... the session's poll, the fixed updates, the session's sends ...
+network.flush()                      # send them now rather than next frame
 ```
+
+`pyguara.net.simulated_steam.SimulatedSteamCloud` stands in for Steam in tests: give each
+player's `SimulatedSteam` to a `SteamNetwork` and the transport, lobby and sessions above it
+are the real code.
 
 **Being in the host's friends-only lobby is what admits a player.** Members entering and
 leaving become `allow` and `revoke` on the host's transport, and a Steam session from anyone
