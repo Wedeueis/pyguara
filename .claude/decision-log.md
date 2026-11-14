@@ -491,3 +491,21 @@
 - **Chose:** `dist steam --steam-api`, copying beside the executable where Valve expects it, refusing a file that is not a 64-bit steam_api, and printing a note when the content has none. At run time `find_steam_api` looks: explicit path, `PYGUARA_STEAM_API`, beside the executable, PyInstaller's bundle dir, the working directory.
 - **Tags:** net, steam, dist
 - **Reviewed:** approved by the user 2026-11-14.
+
+## Reclaimer opens the Steam lobby before the room starts
+- **Context:** 5e wiring. `HostGame`/`ClientGame` take a session at construction, and on Steam the transport needs an open lobby (host) or the lobby owner (guest), which arrive asynchronously.
+- **Alternatives:** make the scenes start without a session and attach one when the lobby answers (touches HostGame/ClientGame and every scene path); a lobby screen scene; wait for the lobby in `__main__` before the room, up to 15 s, failing with Steam's reason.
+- **Chose:** wait in `__main__`. The room and join scenes then receive a ready `SteamNetwork` and change only where the transport comes from. A lobby browser or in-game "host" menu can replace the wait later. The wall clock is passed in, since Reclaimer's gameplay modules may not read one.
+- **Tags:** net, steam, reclaimer
+
+## SimulatedSteam is public engine API, not a test helper
+- **Context:** Reclaimer needed to test its Steam path; the fake Steam lived in the engine's tests.
+- **Alternatives:** copy the fake into Reclaimer's tests; expose it in the engine beside `SimulatedNetwork`.
+- **Chose:** `pyguara.net.simulated_steam.SimulatedSteamCloud`, exported from `pyguara.net`, so every game tests its Steam path the same way and the engine's tests run on the same double.
+- **Tags:** net, steam, testing
+
+## Steam is flushed after the session's driver
+- **Context:** `HostDriver`/`ClientDriver` send in `after_fixed_updates`; Steam has no thread, so those sends waited for the next frame's pump.
+- **Alternatives:** flush inside `SteamTransport.send` (one Steam call per message, and renet only packs on tick); accept a frame of delay; a `flush()` the game calls after the fixed updates.
+- **Chose:** `SteamNetwork.flush()`, run by Reclaimer's `SteamFrame.after` hook registered after the driver.
+- **Tags:** net, steam
