@@ -98,8 +98,10 @@ Reasons and the full procedure: `docs/agents/branching.md`.
 | `docs/guides/performance.md` | Every measured number |
 
 ModernGL is **retired**: `display.backend: moderngl` raises at startup.
-`display.backend` still defaults to `pygame`; Studio and the render
-graph need `wgpu`.
+`display.backend` defaults to `wgpu`, which Studio and the render graph
+need; a machine with no usable GPU fails at startup with
+`NoGraphicsAdapterError` rather than switching renderer. `pygame` is the
+software renderer, chosen by name, and the reference the pixel tests use.
 
 ## Rules the code does not enforce
 

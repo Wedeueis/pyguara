@@ -44,6 +44,24 @@ def main() -> None:
 
     engine_random.RandomStream.__init__ = seed_zero  # type: ignore[method-assign]
 
+    # Saves go to a scratch folder, not the repository's `saves/`: a save
+    # left there by playing a demo was loaded and changed the frame (Quintal
+    # Cerrado drew a 4% different garden). Relative paths only; an absolute
+    # one is the demo's own choice.
+    import tempfile
+
+    from pyguara.persistence import storage
+
+    scratch = tempfile.mkdtemp(prefix="pyguara-capture-saves-")
+    opened = storage.FileStorageBackend.__init__
+
+    def isolated(self: object, base_path: str = "saves") -> None:
+        if not os.path.isabs(base_path):
+            base_path = os.path.join(scratch, base_path)
+        opened(self, base_path)  # type: ignore[arg-type]
+
+    storage.FileStorageBackend.__init__ = isolated  # type: ignore[method-assign]
+
     from pyguara.application import bootstrap
     from pyguara.config.types import RenderingBackend
 

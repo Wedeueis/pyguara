@@ -1,7 +1,7 @@
 """Regression tests for the composition root (BOOT-1, BOOT-2, BOOT-3).
 
 `_setup_container()`/`create_application()` never ran end to end before these
-fixes: the default (Pygame) backend crashed on the first render, the
+fixes: the Pygame backend, then the default, crashed on the first render, the
 documented `python main.py` entry point raised before a window opened, and
 the component registry silently lost every registration.
 """
@@ -16,10 +16,15 @@ import pytest
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 from games.boot_process.scenes import BootScene
-from pyguara.application.bootstrap import _setup_container, create_application
+from pyguara.application.bootstrap import (
+    NoGraphicsAdapterError,
+    _setup_container,
+    create_application,
+)
 from pyguara.common.spatial import SpatialHash
 from pyguara.common.types import Vector2
 from pyguara.config.manager import ConfigManager
+from pyguara.config.types import GameConfig, RenderingBackend
 from pyguara.prefabs.registry import ComponentRegistry
 from pyguara.random.service import RandomService
 
@@ -109,9 +114,60 @@ def test_spatial_hash_is_registered_and_resolvable():
 
 
 @pytest.mark.integration
-def test_default_pygame_backend_does_not_resolve_a_render_graph(app):
+def test_the_default_backend_is_wgpu_with_a_real_render_graph(app):
+    """wgpu is the default renderer, with the render graph behind it."""
+    from pyguara.graphics.pipeline.graph import RenderGraph
+
+    config = app._container.get(ConfigManager).config
+    assert config.display.backend is RenderingBackend.WGPU
+    assert isinstance(app._render_graph, RenderGraph)
+
+
+@pytest.mark.integration
+def test_pygame_by_name_does_not_resolve_a_render_graph():
     """BOOT-1: the Pygame stub is resolvable but is not a real RenderGraph."""
-    assert app._render_graph is None
+
+    def software(config: GameConfig) -> None:
+        config.display.backend = RenderingBackend.PYGAME
+
+    application = create_application(software)
+    try:
+        assert application._render_graph is None
+        application._render()
+    finally:
+        pygame.quit()
+
+
+@pytest.mark.integration
+def test_no_gpu_for_the_default_says_how_to_run_without_one(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """No silent fallback: the two renderers look different."""
+    from pyguara.graphics.backends.wgpu import window
+
+    def no_adapter(self: object, config: object) -> bool:
+        raise RuntimeError("no graphics adapter is available: none found")
+
+    monkeypatch.setattr(window.WgpuWindow, "open", no_adapter)
+
+    with pytest.raises(NoGraphicsAdapterError, match='display.backend = "pygame"'):
+        create_application()
+
+
+@pytest.mark.integration
+def test_other_window_failures_are_not_called_a_missing_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from pyguara.graphics.backends.wgpu import window
+
+    def broken(self: object, config: object) -> bool:
+        raise RuntimeError("the window cannot be drawn to")
+
+    monkeypatch.setattr(window.WgpuWindow, "open", broken)
+
+    with pytest.raises(RuntimeError, match="cannot be drawn to") as error:
+        create_application()
+    assert not isinstance(error.value, NoGraphicsAdapterError)
 
 
 @pytest.mark.integration

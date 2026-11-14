@@ -5,7 +5,7 @@
         "fps_target": 60,
         "fullscreen": false,
         "vsync": true,
-        "backend": "pygame",
+        "backend": "wgpu",
         "title": "PyGuara Game"
     },
     "audio": {
