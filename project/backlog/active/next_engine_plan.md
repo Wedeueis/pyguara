@@ -10,6 +10,25 @@ Where they conflict, **the profile and Reclaimer's plan win over the
 report**. The report led with columnar component storage; the profile showed
 that would not have moved any of Reclaimer's costs.
 
+## Where this ends: merged back into `pyguara` after 5e
+
+Decided by the user 2026-11-14. **`Wedeueis/pyguara` is the final repository;
+this fork is temporary.** It exists so the rewrite could not destabilise the
+working engine, and it has done that job once Reclaimer plays online over
+Steam on this stack -- the 5e playtest across two machines.
+
+Then:
+
+1. Open a PR from `next` into `pyguara`'s `main`, merged with a merge commit
+   as `pyguara`'s rules require. The fork kept the full history, so this is an
+   ordinary merge, not a port. Anything landed on `pyguara` in the meantime
+   comes across through `upstream` first.
+2. Point Reclaimer back at `pyguara` and drop the `reclaimer_v2-next` worktree.
+3. Archive `Wedeueis/pyguara-next` on GitHub; delete `pyguara-next-base` and
+   the Windows `*-next-verify` export folders.
+
+Until then, the rewrite stays here and `pyguara` gets none of it.
+
 ## What Reclaimer's plan was waiting on, and where each stands
 
 | Reclaimer's plan says | Section | Status here |
