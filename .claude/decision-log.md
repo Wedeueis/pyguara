@@ -519,3 +519,265 @@
 - **Chose:** merge now (the user's call). The Steam code is complete and tested over SimulatedSteam and against one real account; the risks a merge carries (new defaults on untried machines) do not shrink by waiting. The playtest is pyguara #402.
 - **Tags:** repo, merge, steam
 - **Reviewed:** chosen by the user 2026-11-14.
+
+
+# From the pyguara checkout's local log, before the merge
+
+## Keyed invites instead of renetcode's Unsecure mode
+- **Context:** Phase 1 handshake for networked multiplayer. Owner asked for no security issues; Unsecure mode lets anyone connect and seals tokens with an all-zero key.
+- **Alternatives:** (a) Unsecure mode, encryption added later, as the plan said. (b) A random 256-bit session key shared in an invite string; each client mints its own token under it, with a fixed placeholder as the token's server address so a host behind NAT need not know its public IP.
+- **Chose:** (b). It is the same code with one real key: strangers can't connect, so the renet panic path needs an invited player, and traffic is actually confidential. Cost: an invite is a long string to paste rather than an IP.
+- **Tags:** networking, security, handshake
+- **Status:** Approved by owner 2026-11-06.
+
+## Token time counts from zero instead of wall clock
+- **Context:** renetcode expires tokens by comparing a client-minted timestamp with the host's clock; a guest with a wrong clock would fail silently.
+- **Alternatives:** (a) wall clock plus a long expiry, tolerating skew up to that expiry. (b) Both cores start their netcode time at zero and tokens get a 10-year expiry, so no wall clock is involved.
+- **Chose:** (b). Skew stops being possible rather than merely tolerated, and tests need no clock faking. Expiry normally bounds token replay, but a replayer lacks the keys to finish a handshake, and renetcode refuses one token from a second address.
+- **Tags:** networking, security, handshake
+- **Status:** Approved by owner 2026-11-06.
+
+## Rate limit only after authentication
+- **Context:** plan section 5 said malformed input "counts against the peer".
+- **Alternatives:** (a) strike or throttle by source address before the MAC check, as the plan said. (b) Only authenticated traffic counts against a peer; unauthenticated traffic shares one global budget.
+- **Chose:** (b). UDP source addresses are spoofable, so (a) would let anyone get a real player kicked or throttled with forged packets.
+- **Tags:** networking, security, rate-limiting
+- **Status:** Approved by owner 2026-11-06.
+
+## One mutex-guarded core, not message queues between thread and Python
+- **Context:** the plan describes a Rust socket thread handing messages to Python through a queue.
+- **Alternatives:** (a) the thread owns the core, with command and event queues either way. (b) The sans-IO core sits behind one `Mutex`, locked briefly by the thread and by Python's send and poll; the thread never needs the GIL.
+- **Chose:** (b). It is less code, has no queue to keep bounded twice, and sans-IO and socket modes share every code path. The thread holds the lock for microseconds per datagram (a frame's core work measured 23 us), so Python can't stall on it noticeably. Revisit if contention measures badly.
+- **Tags:** networking, native-boundary, threading
+- **Status:** Approved by owner 2026-11-06.
+
+## Messages pumped into a bounded inbox each tick
+- **Context:** renet returns nothing from a connection once it is disconnected, so a refusal message could be lost if Python polled after the disconnect arrived.
+- **Alternatives:** (a) Python polls renet directly, with back-pressure but losing final messages. (b) The core moves messages into an inbox each tick, and stops pumping above a byte limit so reliable back-pressure still reaches renet.
+- **Chose:** (b). A refused guest must see why, per the plan's version check.
+- **Tags:** networking, handshake
+- **Status:** Approved by owner 2026-11-06.
+
+## Reliable sends capped at half the channel limit
+- **Context:** renet's sender counts actual bytes but its receiver charges each sliced message as whole 1,200-byte slices, against the same limit, and disconnects the peer when over. A test found a message the sender accepted that made the receiver disconnect.
+- **Alternatives:** (a) patch renet, which means a fork. (b) Reject only a single message whose rounded size exceeds the limit, which still fails with many small sliced messages. (c) Only accept a reliable send if used + rounded size fits in half the limit, since rounding can at most double the charge.
+- **Chose:** (c). It covers the worst case with no fork. Cost: the usable backlog is half the configured figure, so LEVEL's largest message is 8 MiB.
+- **Tags:** networking, reliability
+- **Status:** Approved by owner 2026-11-06.
+
+## Host holds a peer's traffic until the client confirms the handshake
+- **Context:** renetcode deadlocks a join: if the first keepalive is lost, the client ignores payloads while waiting for another, and each payload resets the host's keepalive timer. A seeded test found the host admitting a player whose client then timed out.
+- **Alternatives:** (a) patch renetcode to accept a payload as confirmation, which means a fork. (b) Host delays its first payload by a fixed time, which only narrows the race. (c) The client sends a one-byte confirmation (a byte renet never uses as a packet type) until it hears a payload, and the host sends no renet traffic and reports no connection until any authenticated payload arrives from that peer.
+- **Chose:** (c). It closes the deadlock with no fork, and "connected" now means both ends know, so the host's view can't desync from the client's. Cost: admission waits about one round trip longer.
+- **Tags:** networking, handshake, desync
+- **Status:** Approved by owner 2026-11-06.
+
+## Quick saves serialize on a worker thread and coalesce per key
+- **Context:** owner wants a guest's character saved as run events arrive, without hurting performance. `save_data` serializes and fsyncs on the calling thread.
+- **Alternatives:** (a) serialize on the main thread, write on a worker: safe against later mutation, but the serialization cost lands on the frame. (b) Hand over the value and do everything on a worker, keeping only the newest value per key and writing at most once per interval.
+- **Chose:** (b). `request` is O(1), and a burst of events costs one write. The cost is a rule: the caller must hand over a value it won't mutate. The GIL means a huge blob can still cost a frame; measured in docs.
+- **Tags:** persistence, performance
+- **Status:** Approved by owner 2026-11-02. Follow-up: add a form taking a function, called on the main thread only when a write is due, so a game doesn't build a copy per event.
+
+## Spawn and despawn run on the interpolation timeline
+- **Context:** Phase 2. Plan's desync rules say to hold records for unseen spawns and to apply events at their tick.
+- **Alternatives:** (a) apply on arrival, dropping records for unknown ids: a kill shows 100 ms before the death animation on screen. (b) Queue spawns and despawns in order, and apply when the render clock reaches their tick; a spawn known but not yet applied keeps its records.
+- **Chose:** (b). Things appear and vanish in step with the motion around them, and it gives the plan's "hold" rule for free. Records for a spawn that has not arrived at all are dropped, since the next snapshot repeats them.
+- **Tags:** networking, replication, desync
+- **Status:** Approved by owner 2026-11-02. Covers appearing and vanishing only; hit sparks and damage numbers are decided in Phase 4.
+
+## Network ids freed on a time quarantine rather than per-client acks
+- **Context:** plan said to hold a freed 16-bit id until every client acknowledged a newer snapshot.
+- **Alternatives:** (a) clients ack event sequence numbers, costing an upstream message and per-peer state. (b) Keep freed ids unusable for 30 seconds of ticks. Any peer that far behind on reliable traffic has already timed out, at 10 seconds of silence.
+- **Chose:** (b). No wire cost. Stale records are already dropped by the per-entity tick rule, so the worst case is one brief wrong position. Acks can come with delta encoding if that gets built.
+- **Tags:** networking, replication, desync
+- **Status:** Approved by owner 2026-11-02. Revisit if delta encoding is built, since that needs acks anyway.
+
+## Over-budget snapshots rotate instead of prioritising
+- **Context:** plan section 6 says send nearby and recently changed entities first when over budget.
+- **Alternatives:** (a) priority by distance now. (b) A per-client round-robin cursor, so every entity is sent within a few snapshots, with priority added once a measurement asks.
+- **Chose:** (b). Starvation is a desync (an entity that never updates), and rotation rules that out by construction. At 500 entities a snapshot is 6 KB against a 16 KB budget, so this path is rare today.
+- **Tags:** networking, replication, performance
+- **Status:** Approved by owner 2026-11-02. Follow-up: priority that builds with waiting when a real game goes over budget; adaptive sending in Phase 5, because a host's upload can saturate before the fixed budget applies.
+
+## Commands numbered by host tick, not by a client sequence
+- **Context:** Phase 3. The host has to know which input belongs to which step, and the client has to know which inputs a host state already includes.
+- **Alternatives:** (a) a sequence number, with the host applying one queued command per tick and acknowledging the sequence, as Quake and Source do. No shared clock, but the queue depth drifts and a tick has no shared meaning. (b) Commands name the host tick they apply to, as the plan says, and a state "at tick N" includes every command before N.
+- **Chose:** (b). Reconciling needs no separate ack, and Phase 4's projectile events and any later lag compensation can use the same numbers. Cost: the client has to run ahead of the host by the right amount.
+- **Tags:** networking, prediction
+- **Status:** Approved by owner 2026-11-05.
+
+## Client lead steered by how early commands arrive, not by round trip
+- **Context:** the client has to run ahead just enough for its commands to arrive in time. The plan said to estimate that from round-trip time.
+- **Alternatives:** (a) derive lead from RTT plus a margin, which needs jitter estimated separately and is wrong whenever the two directions differ. (b) The host measures the slack it actually saw when taking each command, and echoes the smallest; the client adds or skips ticks to hold a target. Each change starts a new epoch that commands carry and the host echoes. An earlier version compared tick numbers instead, and swung by 200 ticks after a rewind, because commands from before a rewind have the larger numbers. (c) Run the client's simulation slightly faster or slower. Smoothest, but the fixed step belongs to `Application`, which is core.
+- **Chose:** (b). It measures the only thing that matters and needs no transport stats. Cost: an adjustment moves the character one tick off the steady rhythm, which happens rarely and is small.
+- **Tags:** networking, prediction
+- **Status:** Approved by owner 2026-11-05.
+
+## Owner state is a separate message of exact doubles
+- **Context:** replay is only bit-exact from position and `_remainder`, and `QuantisedVector` rounds positions.
+- **Alternatives:** (a) add owner-only fields to the schema and records, which complicates the shared record and its digests. (b) A separate unreliable message per player, holding `PredictedBody.capture()` as doubles, with finiteness checked on arrival.
+- **Chose:** (b). Exact, independent of the snapshot budget, and a game with a dash timer just returns a longer tuple. Cost: about 50 bytes per player at 20 Hz.
+- **Tags:** networking, prediction, desync
+- **Status:** Approved by owner 2026-11-05.
+
+## Correction smoothing shown through the step hooks
+- **Context:** a correction should glide, but the mover reads `Transform.position`, so a visual offset must never reach the simulation.
+- **Alternatives:** (a) a separate render-position component, which every renderer and game would have to learn. (b) Add the offset to `Transform` after the fixed updates and restore the exact simulated state before the next ones.
+- **Chose:** (b). Rendering needs no changes, and the simulation only ever sees exact state. Cost: code running between `after_fixed_updates` and the next frame reads the shown position.
+- **Tags:** networking, prediction
+- **Status:** Approved by owner 2026-11-05.
+
+## No audio output falls back to SDL's dummy driver
+- **Context:** the Windows CI runner has no sound device, and `pygame.mixer.init` raising during bootstrap stopped every game from starting.
+- **Alternatives:** (a) set `SDL_AUDIODRIVER=dummy` in the failing test, as other tests do. It would pass CI and leave players affected. (b) A `NullAudioSystem` chosen at bootstrap, which is one more backend to keep in step, and bootstrap would have to probe the device. (c) Retry on the dummy driver inside the existing backend.
+- **Chose:** (c). Every caller, including the native backend that inherits from it, works unchanged, and it's a few lines. Cost: a mistyped `SDL_AUDIODRIVER` now gives silence and a warning rather than an error.
+- **Tags:** audio, windows, bootstrap
+- **Status:** Approved by owner 2026-11-05.
+
+## A projectile judges a hit from the target's Transform, not the index's copy
+- **Context:** pyguara ProjectileSystem swept hits (for Reclaimer's Precise Shot)
+- **Alternatives:** add `SpatialHash.position_of()` (a Rust API on the native store as well); read the target's `Transform`
+- **Chose:** `Transform`. No native change, and it is the entity's current position. Cost: a target must have one (anything tracked by `SpatialIndexSystem` already does); manual index users without one are now skipped.
+- **Tags:** projectiles, spatial hash, engine boundary
+- **Status:** Approved by owner 2026-11-05.
+
+## A declined hit is a pass, remembered per projectile
+- **Context:** `on_hit` returning False (a dodge)
+- **Alternatives:** stop the shot on any contact; let it fly on and re-offer the target next tick; fly on and remember the target as passed
+- **Chose:** remember it in `Projectile.passed`, so a dodge rolls once per shot rather than every tick it overlaps. Same mechanism a piercing shot would use later.
+- **Tags:** projectiles, dodge, determinism
+- **Status:** Approved by owner 2026-11-05.
+
+## The handler sees the shot at the impact point
+- **Context:** where `projectile.position` is when `on_hit` runs
+- **Alternatives:** the step's end; the closest point on the step to the target
+- **Chose:** the impact point, so hit sparks and damage numbers are placed right; a declined shot then continues to the step's end.
+- **Tags:** projectiles, feel
+- **Status:** Approved by owner 2026-11-05.
+
+## A sound over its limit is dropped, not queued and not stealing a voice
+- **Context:** `AudioManager.set_sfx_limit`, so ten hits in one frame don't start ten copies of one clip.
+- **Alternatives:** (a) drop the new play. (b) Stop the oldest copy and start the new one (FMOD's "steal oldest"). (c) Queue it for when a voice frees.
+- **Chose:** (a). The copies already playing are that moment's sound; a queued one is heard late, after the thing it was for, and stealing cuts a sound off mid-way, which is audible as a click on short clips. Stealing can be added as an option if a game wants a rapid-fire sound to restart.
+- **Tags:** audio
+- **Status:** Approved by owner 2026-11-06.
+
+## Sound limits keyed by clip path, timed by real time
+- **Context:** same feature.
+- **Alternatives:** (a) key by path, which `play_sfx_clip` reads from the clip. (b) A separate name a game chooses, so several clips share one limit. Timing: (i) `time.monotonic`, injectable. (ii) Frames or ticks, counted by whoever calls `update`.
+- **Chose:** (a) and (i). A path is what both play methods already have, with nothing new to name. Real time because the gap is heard in real time, and `AudioManager` has no tick of its own; a test passes a clock.
+- **Tags:** audio
+- **Status:** Approved by owner 2026-11-06.
+
+## Placeholder sounds: the demo's builders moved into the engine as they were
+- **Context:** Reclaimer needs placeholder sounds; the only builder was a script inside Quintal do Cerrado. Owner chose to move it into the engine.
+- **Alternatives:** (a) move the functions unchanged, standard library only, 22,050 Hz fixed. (b) Rewrite on numpy, which is already a dependency, and make the sample rate a parameter.
+- **Chose:** (a). The demo's files then rebuild byte for byte, which a test pins, and a few short clips build in well under a second without numpy. The rate stays a module constant because a placeholder doesn't need a choice of quality.
+- **Tags:** audio, tooling
+- **Status:** Approved by owner 2026-11-06.
+
+## Placeholder recipes are a tree of one-key nodes mirroring the functions
+- **Context:** a game keeps its tuning in data, so sounds need a data form too.
+- **Alternatives:** (a) a tree where each node names a function and holds its arguments (`{"envelope": {"of": {"mix": [...]}}}`). (b) A flat list of layers per sound, each with its own envelope, mixed together. (c) Python only, with games writing their own script.
+- **Chose:** (a). It says exactly what the functions do, so one page documents both, and anything the functions can build a recipe can too. (b) can't express a sequence of notes. Errors name the path down the tree and the closest valid name.
+- **Tags:** audio, tooling, data
+- **Status:** Approved by owner 2026-11-06.
+
+## Faded text: alpha baked into the glyph pixels, not set on the surface
+- **Context:** `Font.render` ignores a colour's alpha; fixing faded text on all four renderers.
+- **Alternatives:** (a) `surface.set_alpha(a)` after rendering. (b) Multiply the alpha into every pixel (`BLEND_RGBA_MULT`).
+- **Chose:** (b). Surface alpha applies only when blitting; the ModernGL world renderer uploads the pixels to a texture, where (a) would be lost. (b) works for both, from one shared helper.
+- **Tags:** graphics, rendering
+- **Status:** Approved by owner 2026-11-06.
+
+## Game events ride replication's reliable stream, declared on its schema
+- **Context:** network Phase 4, for Reclaimer M2: hits, kills and heals must agree on every screen.
+- **Alternatives:** (a) a separate event module with its own message kind, its own fingerprint check, and its own way to name entities. (b) Events registered on `ReplicationSchema` and sent by `ReplicationHost`, queued in the same per-peer outbox as spawns and despawns and applied on the same delayed timeline by `ReplicationClient`.
+- **Chose:** (b). Ordering against spawns and despawns comes for free (a kill always lands before that enemy's despawn), entity references use replication's own network ids, and the existing hello fingerprint covers events, so a client with different event layouts refuses rather than misreading. Cost: replication grows a little; a small `EventRelay` stays separate to forward a dispatcher's events.
+- **Tags:** networking, events, replication
+- **Status:** Approved by owner 2026-11-06.
+
+## An event is stamped with the first tick whose state includes it
+- **Context:** a client applies an event when its delayed view reaches the event's tick.
+- **Alternatives:** (a) the tick of the last snapshot, as despawns are. (b) `fixed_tick + 1` during the fixed update that produced it, the tick of the first snapshot that shows its result.
+- **Chose:** (b). A hit number appears with the snapshot where the health drops, not a frame before it. Spawns still go out before any event queued after them, since sending an event first announces pending spawns.
+- **Tags:** networking, events, ticks
+- **Status:** Approved by owner 2026-11-06.
+
+## No separate engine PR for projectiles in M2: shots ride game events
+- **Context:** Phase 4's second half, "projectile spawn events", for Reclaimer's M2.
+- **Alternatives:** (a) an engine projectile-replication module: shot ids, spawn and removal messages, fast-forwarding by latency. (b) The game registers its own `ShotFired` event (origin, velocity, skill, shot id) on the event schema just built; a client spawns it into a display-only `ProjectileSystem` (walls, no targets), and the host's hit event, carrying the shot id, switches it off.
+- **Chose:** (b) for now. Events already apply on the delayed timeline, so a shot spawned there is in step with the enemies and the Shell that fired it, and needs no fast-forward. That correction only matters for enemy bullets aimed at a player who sees their own Shell in the present; M2's only enemy is melee, so it waits for the first enemy that shoots (M3), which is when to build it in the engine if it proves general.
+- **Tags:** networking, projectiles, scope
+- **Status:** Approved by owner 2026-11-06.
+
+## Shots over the network live in the projectiles kit, not in `pyguara.net`
+- **Context:** Phase 4 projectile spawn events need `ProjectileSystem`; `tests/test_kit_layering.py` forbids core importing a kit.
+- **Alternatives:** (a) a generic shot relay in `pyguara.net` with no kit dependency, leaving the game to wire it to its pool. (b) `pyguara.kits.projectiles.net`, depending on core `pyguara.net`, not imported by the kit's `__init__`.
+- **Chose:** (b). The relay needs the pool's spawn and end hooks to be exact, and a single-player game still imports no networking.
+- **Tags:** networking, layering, projectiles
+- **Status:** Pending owner review.
+
+## A predicted shot is matched by (slot, tick, index), not by an id the host assigns
+- **Context:** M2 decision: a guest's own shots appear at once, the host decides hits.
+- **Alternatives:** (a) the client sends a shot id in its command, which the host echoes. (b) Both sides derive the key from who fired, the command's tick, and the order within that tick.
+- **Chose:** (b). Commands already name host ticks, so no command field or trust in a client-chosen id is needed. Cost: both sides must fire a tick's shots in the same order. A mismatch degrades visibly but safely (ghost removed after 30 ticks, or the host's copy shown late), and is counted.
+- **Tags:** networking, prediction, projectiles
+- **Status:** Pending owner review.
+
+## The host sends a shot's end only when it stops early
+- **Context:** clients must stop their copy where the host's stopped.
+- **Alternatives:** (a) an end event for every shot. (b) Only for a hit, a wall or a clear; expiry is computed identically on both sides.
+- **Chose:** (b). Halves the events for shots that miss, and the client's walls may not match the host's after quantisation, so walls are sent rather than recomputed.
+- **Tags:** networking, bandwidth, projectiles
+- **Status:** Pending owner review.
+
+## Client shots advance on the delayed view's clock, not the frame's
+- **Context:** first version used frame dt and drifted 11 px from the host over a 3 s flight under jitter.
+- **Alternatives:** (a) frame dt. (b) the change in `ReplicationClient.render_tick` each frame.
+- **Chose:** (b). Shots stay in step with the interpolated world they fly through. Own predicted shots move on the same clock, which runs at about real time.
+- **Tags:** networking, interpolation, projectiles
+- **Status:** Pending owner review.
+
+## Callbacks whose result is ignored return `object`, not `None` (#394)
+- **Context:** strict mypy refused `on_event=dispatcher.dispatch`, the documented call, since `dispatch` returns a bool.
+- **Alternatives:** (a) change only `on_event`. (b) every net callback whose result is discarded, plus the kit's `EndHandler`.
+- **Chose:** (b). The same trap waited in each of them. Callbacks whose result is read (`send`, `drop`, `HitHandler`) are unchanged.
+- **Tags:** networking, typing
+- **Status:** Pending owner review.
+
+## Prediction names the tick being simulated, as `PredictionClient.advancing` (#395)
+- **Context:** an own shot fired from inside `advance` needs the host tick, but one `step` can advance several and a replay re-runs past ones.
+- **Alternatives:** (a) pass the tick to `PredictedBody.advance`, changing the protocol for every body. (b) the game counts advances itself from `tick` before stepping. (c) a read-only property valid during `advance`.
+- **Chose:** (c). No protocol change and no game bookkeeping that mirrors engine internals.
+- **Tags:** networking, prediction
+- **Status:** Pending owner review.
+
+## Own shots are numbered per advance, via `PredictionClient.advances` (#396)
+- **Context:** a replay of the tick last fired on looked like more shots on that tick and showed twice.
+- **Alternatives:** (a) the game passes each shot's index itself. (b) a monotonic advance counter on prediction, which `ProjectileClient` reads when given `prediction`.
+- **Chose:** (b). The engine keeps owning the numbering both sides must agree on. Without `prediction` the old behaviour stays, for clients that fire outside prediction.
+- **Tags:** networking, prediction, projectiles
+- **Status:** Pending owner review.
+
+## Reclaimer: skill readiness rides in the prediction state, not in snapshots
+- **Context:** a guest must know when its skills are ready to show its own shots at once.
+- **Alternatives:** (a) read the replicated, delayed `Energy`/`Loadout` and accept mispredictions. (b) predict them in `ShellPrediction`, with the host capturing the same tuple (11 movement values plus 2 and 2 per skill: 23 of the 32 allowed).
+- **Chose:** (b). Exact, and corrected like position. Cost: a Shell with many more skills could reach the 32-value limit.
+- **Tags:** reclaimer, networking, prediction
+- **Status:** Pending owner review.
+
+## Reclaimer: a guest's own shot stops at the enemy as drawn, on the delayed view
+- **Context:** own shots fly in the present, enemies are drawn about 100 ms behind.
+- **Alternatives:** (a) never stop own shots until the host's end arrives. (b) stop at the first enemy the guest draws in the way.
+- **Chose:** (b). It matches what the player sees. The host still decides hits, so a drawn stop with no host hit is a cosmetic disagreement.
+- **Tags:** reclaimer, networking, feel
+- **Status:** Pending owner review.
+
+## PyGuara: settle memory when the scenes being run change (#397)
+- **Context:** full garbage collections walk everything a game loaded and stall a tick by 15-20 ms.
+- **Alternatives:** (a) hook each of the scene manager's entry paths (switch, push, pop, layers, with or without transitions). (b) check once a frame, in `Application.step()`, whether the current scene's name or the layers changed. (c) leave it to games to call `gc.freeze()`.
+- **Chose:** (b), on by default behind `PerformanceConfig.freeze_on_scene_change`, with `settle_memory()` public for loads the engine can't see. One check covers every path, and transitions settle only at the end because that's when the manager makes the target current. Cost: re-entering a scene under the same name isn't seen.
+- **Tags:** pyguara, performance, application
+- **Status:** Pending owner review.
