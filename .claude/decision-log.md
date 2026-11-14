@@ -441,3 +441,4 @@
 - **Alternatives:** Steam's automatic dispatch (`SteamAPI_RunCallbacks` into registered C++ objects: needs the C++ ABI, and would run code on whatever thread calls it); manual dispatch drained on one thread.
 - **Chose:** manual dispatch through the flat C API, drained by `NativeSteam.run_callbacks()` and returned as tuples, so no C++ ABI is involved and nothing Steam does runs Python behind the frame loop. Messages go unreliable + no-Nagle + auto-restart-broken-session on channel 0, since renet carries its own reliability (see the 5a entry). The class is `unsendable` and one per process, as Steam allows.
 - **Tags:** net, steam, native-extension
+- **Reviewed:** approved by the user 2026-11-14, after the binding ran against real Steam on Windows.
