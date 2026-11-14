@@ -368,6 +368,11 @@ docstring-code-line-length = "dynamic"
 # error -- so ruff could ask for a modernisation that the type checker then
 # refused, and any new generic class was stuck between the two.
 python_version = "3.12"
+# What a bare `mypy` checks, so the gate is one spelling everywhere: this,
+# `make type-check`, CI, and the command `pyguara studio instructions`
+# writes into AGENTS.md. Without it that generated command was `mypy .`,
+# which is a different and wider gate than the one the project holds.
+files = ["pyguara"]
 exclude = ["tests"]
 warn_return_any = true
 warn_unused_configs = true

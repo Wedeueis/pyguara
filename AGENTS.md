@@ -142,7 +142,7 @@ PyGuara is a code-first 2D game engine for Python 3.12+: an Entity-Component-Sys
 - Run the tests: `uv run pytest`
 - Lint: `uv run ruff check .`
 - Format: `uv run ruff format .`
-- Type-check: `uv run mypy .`
+- Type-check: `uv run mypy`
 
 ## Engine conventions
 
