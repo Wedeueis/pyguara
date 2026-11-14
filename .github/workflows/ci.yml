@@ -158,10 +158,13 @@ jobs:
       # gilrs, the gamepad backend, links libudev on Linux, and its build
       # script finds it through pkg-config. ALSA needs no headers: it is
       # opened at run time.
-      - name: Install udev headers
+      # A software GPU as well as udev's headers: tests that build a default
+      # application open the wgpu renderer, whichever store runs underneath.
+      - name: Install software Vulkan and udev headers
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libudev-dev pkg-config
 
       - name: Install Dependencies
         run: make install
@@ -176,6 +179,7 @@ jobs:
         run: make test-unit
         env:
           PYGUARA_NO_NATIVE: "1"
+          PYGUARA_REQUIRE_GPU: "1"
 
   wheels:
     name: Wheels
