@@ -442,3 +442,21 @@
 - **Chose:** manual dispatch through the flat C API, drained by `NativeSteam.run_callbacks()` and returned as tuples, so no C++ ABI is involved and nothing Steam does runs Python behind the frame loop. Messages go unreliable + no-Nagle + auto-restart-broken-session on channel 0, since renet carries its own reliability (see the 5a entry). The class is `unsendable` and one per process, as Steam allows.
 - **Tags:** net, steam, native-extension
 - **Reviewed:** approved by the user 2026-11-14, after the binding ran against real Steam on Windows.
+
+## Lobby results as call results only, not broadcast callbacks
+- **Context:** 5c, `NativeSteam.create_lobby`/`join_lobby`. Steam reports `LobbyCreated_t`/`LobbyEnter_t` as call results for the handle, and may also post them as broadcast callbacks.
+- **Alternatives:** handle the broadcasts (would also see lobby entries this object never asked for, and needs de-duplicating against the call results); handle both and de-duplicate by lobby ID; take only the call results for handles this object holds.
+- **Chose:** call results only. Each request yields exactly one event, and a result for a handle this object did not ask for is dropped. A failed or unreadable call result still yields its event (EResult 2 / enter response 5), so a request never hangs silently.
+- **Tags:** net, steam, native-extension
+
+## SteamLobby reports join requests instead of acting on them
+- **Context:** 5c, `pyguara/net/steam_lobby.py`. An overlay invite accepted, or "Join Game" clicked, while the game is already running.
+- **Alternatives:** leave the current lobby and join the new one automatically; report a `JoinRequested` event and let the game decide.
+- **Chose:** report it. Leaving mid-match is a game decision (confirm dialog, save, etc.), and the lobby ID comes from a friend's untrusted rich presence, so nothing is done with it beyond strict parsing.
+- **Tags:** net, steam, lobby
+
+## Lobby membership is admission, and guests show "Join Game" too
+- **Context:** 5c. Who the host allows on the Steam transport, and whether a guest advertises the lobby.
+- **Alternatives:** admit only players the host invited personally; admit every lobby member; guests advertise the lobby or not.
+- **Chose:** every member of the friends-only lobby is admitted (`MemberAdmitted`/`MemberRemoved` map to the core's `allow`/`revoke`), and guests set the same `connect` rich presence. That is Steam's friends-only policy ("allows those who join to invite their own friends"), which suits a co-op game for friends; a game wanting host-only invites can ignore guests' presence later.
+- **Tags:** net, steam, lobby, security

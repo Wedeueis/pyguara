@@ -12,13 +12,20 @@
 //! (`SteamAPI_ManualDispatch_*`): `run_callbacks` drains them on the caller's
 //! thread, so nothing Steam does ever runs Python behind the engine's back.
 //!
+//! Lobbies (5c) are friends-only Steam lobbies. Their asynchronous results
+//! (`LobbyCreated_t`, `LobbyEnter_t`) are taken as **call results** for the
+//! handles this object asked for, never from the broadcast copies Steam may
+//! also post, so each request yields exactly one event. Membership changes and
+//! overlay join requests are broadcast callbacks.
+//!
 //! Struct offsets read here (`SteamNetworkingMessage_t`, `CallbackMsg_t`,
 //! `SteamNetConnectionInfo_t`) were checked with `offset_of!` against the
 //! Steamworks SDK's own layouts for both Linux (pack 4) and Windows (pack 8),
 //! where they coincide. `SteamNetworkingIdentity` is 136 bytes, packed to 1,
 //! and only ever read or written through Steam's own accessors.
 
-use std::ffi::{CStr, c_char, c_int, c_void};
+use std::cell::RefCell;
+use std::ffi::{CStr, CString, c_char, c_int, c_void};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use libloading::Library;
@@ -47,6 +54,33 @@ const INFO_END_REASON: usize = 180;
 const INFO_END_DEBUG: usize = 184;
 const INFO_END_DEBUG_BYTES: usize = 128;
 const MAX_MESSAGES: usize = 256;
+/// `SteamAPICallCompleted_t`, `LobbyEnter_t`, `LobbyCreated_t`,
+/// `LobbyChatUpdate_t`, `GameLobbyJoinRequested_t` and
+/// `GameRichPresenceJoinRequested_t`.
+const CALL_COMPLETED: c_int = 703;
+const LOBBY_ENTER: c_int = 504;
+const LOBBY_CREATED: c_int = 513;
+const LOBBY_CHAT_UPDATE: c_int = 506;
+const LOBBY_JOIN_REQUESTED: c_int = 333;
+const RICH_PRESENCE_JOIN_REQUESTED: c_int = 337;
+/// `k_ELobbyTypeFriendsOnly`.
+const LOBBY_FRIENDS_ONLY: c_int = 1;
+/// `k_EChatMemberStateChangeEntered`, and every flag that means gone.
+const MEMBER_ENTERED: u32 = 0x1;
+const MEMBER_REMOVED: u32 = 0x2 | 0x4 | 0x8 | 0x10;
+/// `LobbyCreated_t::m_ulSteamIDLobby` follows a 4-byte `EResult`: callbacks
+/// are packed to 8 on Windows and to 4 elsewhere, so it moves.
+const CREATED_LOBBY: usize = if cfg!(target_os = "windows") { 8 } else { 4 };
+/// `LobbyEnter_t::m_EChatRoomEnterResponse`, after a u64, a u32 and a bool.
+const ENTER_RESPONSE: usize = 16;
+/// `k_cchMaxRichPresenceValueLength`, the connect string's buffer.
+const CONNECT_BYTES: usize = 256;
+/// Steam's own limits on rich presence and lobby data.
+const KEY_BYTES: usize = 64;
+const VALUE_BYTES: usize = 256;
+const LOBBY_DATA_BYTES: usize = 8192;
+/// Steam lobbies hold at most 250 members.
+const MAX_LOBBY_MEMBERS: c_int = 250;
 
 /// Steam allows one API instance per process.
 static OPEN: AtomicBool = AtomicBool::new(false);
@@ -90,6 +124,19 @@ struct Api {
     init_relay: unsafe extern "C" fn(Interface),
     set_id: unsafe extern "C" fn(*mut Identity, u64),
     get_id: unsafe extern "C" fn(*const c_void) -> u64,
+    call_result: unsafe extern "C" fn(c_int, u64, *mut c_void, c_int, c_int, *mut bool) -> bool,
+    matchmaking: unsafe extern "C" fn() -> Interface,
+    create_lobby: unsafe extern "C" fn(Interface, c_int, c_int) -> u64,
+    join_lobby: unsafe extern "C" fn(Interface, u64) -> u64,
+    leave_lobby: unsafe extern "C" fn(Interface, u64),
+    lobby_owner: unsafe extern "C" fn(Interface, u64) -> u64,
+    lobby_member_count: unsafe extern "C" fn(Interface, u64) -> c_int,
+    lobby_member: unsafe extern "C" fn(Interface, u64, c_int) -> u64,
+    get_lobby_data: unsafe extern "C" fn(Interface, u64, *const c_char) -> *const c_char,
+    set_lobby_data: unsafe extern "C" fn(Interface, u64, *const c_char, *const c_char) -> bool,
+    set_rich_presence: unsafe extern "C" fn(Interface, *const c_char, *const c_char) -> bool,
+    clear_rich_presence: unsafe extern "C" fn(Interface),
+    invite_dialog: unsafe extern "C" fn(Interface, u64),
 }
 
 impl Api {
@@ -128,6 +175,19 @@ impl Api {
                 init_relay: symbol!(b"SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess\0"),
                 set_id: symbol!(b"SteamAPI_SteamNetworkingIdentity_SetSteamID64\0"),
                 get_id: symbol!(b"SteamAPI_SteamNetworkingIdentity_GetSteamID64\0"),
+                call_result: symbol!(b"SteamAPI_ManualDispatch_GetAPICallResult\0"),
+                matchmaking: symbol!(b"SteamAPI_SteamMatchmaking_v009\0"),
+                create_lobby: symbol!(b"SteamAPI_ISteamMatchmaking_CreateLobby\0"),
+                join_lobby: symbol!(b"SteamAPI_ISteamMatchmaking_JoinLobby\0"),
+                leave_lobby: symbol!(b"SteamAPI_ISteamMatchmaking_LeaveLobby\0"),
+                lobby_owner: symbol!(b"SteamAPI_ISteamMatchmaking_GetLobbyOwner\0"),
+                lobby_member_count: symbol!(b"SteamAPI_ISteamMatchmaking_GetNumLobbyMembers\0"),
+                lobby_member: symbol!(b"SteamAPI_ISteamMatchmaking_GetLobbyMemberByIndex\0"),
+                get_lobby_data: symbol!(b"SteamAPI_ISteamMatchmaking_GetLobbyData\0"),
+                set_lobby_data: symbol!(b"SteamAPI_ISteamMatchmaking_SetLobbyData\0"),
+                set_rich_presence: symbol!(b"SteamAPI_ISteamFriends_SetRichPresence\0"),
+                clear_rich_presence: symbol!(b"SteamAPI_ISteamFriends_ClearRichPresence\0"),
+                invite_dialog: symbol!(b"SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialog\0"),
                 _library: library,
             })
         }
@@ -139,6 +199,37 @@ impl Api {
         unsafe { (self.set_id)(&mut identity, steam_id) };
         identity
     }
+}
+
+/// A string for Steam, refused if Steam's own limit or a NUL would cut it.
+fn c_string(what: &str, text: &str, limit: usize) -> PyResult<CString> {
+    if text.len() >= limit {
+        return Err(PyValueError::new_err(format!("{what} is at most {} bytes", limit - 1)));
+    }
+    CString::new(text).map_err(|_| PyValueError::new_err(format!("{what} contains a NUL")))
+}
+
+/// Read a u64 at `offset` of a callback's parameter.
+///
+/// # Safety
+/// `param` must hold at least `offset + 8` bytes.
+unsafe fn read_u64(param: *const u8, offset: usize) -> u64 {
+    unsafe { param.add(offset).cast::<u64>().read_unaligned() }
+}
+
+/// Read a 32-bit value at `offset` of a callback's parameter.
+///
+/// # Safety
+/// `param` must hold at least `offset + 4` bytes.
+unsafe fn read_u32(param: *const u8, offset: usize) -> u32 {
+    unsafe { param.add(offset).cast::<u32>().read_unaligned() }
+}
+
+/// What a call handle this object holds was asked for.
+#[derive(Clone, Copy)]
+enum Pending {
+    CreateLobby,
+    JoinLobby(u64),
 }
 
 /// What `SteamAPI_InitFlat`'s result means, for the error a player sees.
@@ -159,12 +250,80 @@ pub struct NativeSteam {
     api: Option<Api>,
     messages: Interface,
     friends: Interface,
+    matchmaking: Interface,
     steam_id: u64,
+    pending: RefCell<Vec<(u64, Pending)>>,
 }
 
 impl NativeSteam {
     fn api(&self) -> PyResult<&Api> {
         self.api.as_ref().ok_or_else(|| PyRuntimeError::new_err("Steam has been shut down"))
+    }
+
+    /// Remember a call handle, or refuse a request Steam would not make.
+    fn expect(&self, handle: u64, what: Pending) -> PyResult<()> {
+        if handle == 0 {
+            return Err(PyRuntimeError::new_err("Steam refused the request"));
+        }
+        self.pending.borrow_mut().push((handle, what));
+        Ok(())
+    }
+
+    /// Read the result of a call this object made, from the
+    /// `SteamAPICallCompleted_t` at `param`. Another caller's handle, or a
+    /// failed call, yields nothing.
+    ///
+    /// # Safety
+    /// Steam must be open and `param` the 16-byte completion message, read
+    /// before `FreeLastCallback`.
+    unsafe fn call_result<'p>(
+        &self,
+        py: Python<'p>,
+        api: &Api,
+        pipe: c_int,
+        param: *const u8,
+    ) -> PyResult<Option<Bound<'p, PyTuple>>> {
+        let handle = unsafe { read_u64(param, 0) };
+        let expected = unsafe { param.add(8).cast::<c_int>().read_unaligned() };
+        let size = unsafe { read_u32(param, 12) } as usize;
+        let what = {
+            let mut pending = self.pending.borrow_mut();
+            let Some(index) = pending.iter().position(|(h, _)| *h == handle) else {
+                return Ok(None);
+            };
+            pending.swap_remove(index).1
+        };
+        if size > 4096 {
+            return Ok(None);
+        }
+        let mut buffer = vec![0u64; size.div_ceil(8)];
+        let mut failed = false;
+        // SAFETY: `buffer` holds `size` bytes, as Steam asked for.
+        let read = unsafe {
+            (api.call_result)(pipe, handle, buffer.as_mut_ptr().cast(), size as c_int, expected, &mut failed)
+        };
+        let result = buffer.as_ptr().cast::<u8>();
+        let event = match what {
+            Pending::CreateLobby => {
+                if !read || failed || expected != LOBBY_CREATED || size < CREATED_LOBBY + 8 {
+                    ("lobby_created", 2u32, 0u64).into_pyobject(py)?
+                } else {
+                    // SAFETY: `size` covers both fields, checked above.
+                    let (code, lobby) = unsafe { (read_u32(result, 0), read_u64(result, CREATED_LOBBY)) };
+                    ("lobby_created", code, if code == RESULT_OK as u32 { lobby } else { 0 }).into_pyobject(py)?
+                }
+            }
+            Pending::JoinLobby(lobby) => {
+                if !read || failed || expected != LOBBY_ENTER || size < ENTER_RESPONSE + 4 {
+                    ("lobby_entered", lobby, 5u32).into_pyobject(py)?
+                } else {
+                    // SAFETY: as above.
+                    let response = unsafe { read_u32(result, ENTER_RESPONSE) };
+                    ("lobby_entered", lobby, response).into_pyobject(py)?
+                }
+            }
+        };
+        Ok(Some(event))
     }
 }
 
@@ -187,28 +346,30 @@ impl NativeSteam {
         let opened = (|| -> Result<Self, String> {
             let api = Api::load(library)?;
             let mut error = [0 as c_char; ERROR_BYTES];
-            // SAFETY: manual dispatch is set before Steam starts, as Steam
-            // requires; `error` is the buffer SteamAPI_InitFlat takes.
-            let code = unsafe {
-                (api.dispatch_init)();
-                (api.init_flat)(error.as_mut_ptr())
-            };
+            // SAFETY: `error` is the buffer SteamAPI_InitFlat takes.
+            let code = unsafe { (api.init_flat)(error.as_mut_ptr()) };
             if code != 0 {
                 // SAFETY: Steam writes a NUL-terminated message into `error`.
                 let detail = unsafe { CStr::from_ptr(error.as_ptr()) }.to_string_lossy();
                 return Err(format!("{}: {detail}", init_failure(code)));
             }
-            // SAFETY: Steam is started, so its interface accessors are valid.
-            let (messages, friends, steam_id) = unsafe {
+            // SAFETY: Steam is started, so manual dispatch may be chosen --
+            // only now: steam_api.h requires it *after* SteamAPI_Init, and
+            // before it no callback is ever delivered -- and the interface
+            // accessors are valid.
+            unsafe { (api.dispatch_init)() };
+            // SAFETY: as above.
+            let (messages, friends, matchmaking, steam_id) = unsafe {
                 let user = (api.user)();
-                ((api.messages)(), (api.friends)(), (api.user_steam_id)(user))
+                ((api.messages)(), (api.friends)(), (api.matchmaking)(), (api.user_steam_id)(user))
             };
-            if messages.is_null() || friends.is_null() {
+            if messages.is_null() || friends.is_null() || matchmaking.is_null() {
                 // SAFETY: Steam started above.
                 unsafe { (api.shutdown)() };
                 return Err("this steam_api lacks the networking interfaces".into());
             }
-            Ok(Self { api: Some(api), messages, friends, steam_id })
+            let pending = RefCell::new(Vec::new());
+            Ok(Self { api: Some(api), messages, friends, matchmaking, steam_id, pending })
         })();
         opened.map_err(|reason| {
             OPEN.store(false, Ordering::SeqCst);
@@ -242,9 +403,23 @@ impl NativeSteam {
     /// Drain Steam's callbacks.
     ///
     /// Returns:
-    ///     `("session_request", steam_id)` when someone new sends to us --
-    ///     accept or ignore it -- and `("session_failed", steam_id, reason,
-    ///     detail)` when a session could not be made or broke.
+    ///     Tuples, by their first item:
+    ///
+    ///     - `("session_request", steam_id)`: someone new sent to us; accept
+    ///       or ignore it.
+    ///     - `("session_failed", steam_id, reason, detail)`: a session could
+    ///       not be made, or broke.
+    ///     - `("lobby_created", result, lobby_id)`: `create_lobby` finished;
+    ///       `result` is an `EResult`, 1 on success, and the id 0 on failure.
+    ///     - `("lobby_entered", lobby_id, response)`: `join_lobby` finished;
+    ///       `response` is an `EChatRoomEnterResponse`, 1 on success.
+    ///     - `("lobby_member", lobby_id, steam_id, joined)`: someone entered
+    ///       (`True`) or left, was kicked or dropped (`False`).
+    ///     - `("join_requested", lobby_id)`: the player accepted an overlay
+    ///       invite while the game was running.
+    ///     - `("connect_requested", connect)`: the player joined a friend
+    ///       through their rich presence; `connect` is that friend's
+    ///       untrusted `connect` string.
     fn run_callbacks<'p>(&self, py: Python<'p>) -> PyResult<Bound<'p, PyList>> {
         let api = self.api()?;
         let mut events: Vec<Bound<'p, PyTuple>> = Vec::new();
@@ -269,6 +444,35 @@ impl NativeSteam {
                         let end = debug.iter().position(|&b| b == 0).unwrap_or(debug.len());
                         let detail = String::from_utf8_lossy(&debug[..end]).into_owned();
                         events.push(("session_failed", peer, reason, detail).into_pyobject(py)?);
+                    }
+                    CALL_COMPLETED if bytes >= 16 => {
+                        if let Some(event) = self.call_result(py, api, pipe, param)? {
+                            events.push(event);
+                        }
+                    }
+                    LOBBY_CHAT_UPDATE if bytes >= 28 => {
+                        let lobby = read_u64(param, 0);
+                        let member = read_u64(param, 8);
+                        let change = read_u32(param, 24);
+                        let joined = if change & MEMBER_ENTERED != 0 {
+                            Some(true)
+                        } else if change & MEMBER_REMOVED != 0 {
+                            Some(false)
+                        } else {
+                            None
+                        };
+                        if let Some(joined) = joined {
+                            events.push(("lobby_member", lobby, member, joined).into_pyobject(py)?);
+                        }
+                    }
+                    LOBBY_JOIN_REQUESTED if bytes >= 16 => {
+                        events.push(("join_requested", read_u64(param, 0)).into_pyobject(py)?);
+                    }
+                    RICH_PRESENCE_JOIN_REQUESTED if bytes >= 8 + CONNECT_BYTES => {
+                        let raw = std::slice::from_raw_parts(param.add(8), CONNECT_BYTES);
+                        let end = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+                        let connect = String::from_utf8_lossy(&raw[..end]).into_owned();
+                        events.push(("connect_requested", connect).into_pyobject(py)?);
                     }
                     _ => {}
                 }
@@ -333,6 +537,101 @@ impl NativeSteam {
             }
         }
         PyList::new(py, items)
+    }
+
+    /// Create a friends-only lobby; `run_callbacks` reports `lobby_created`.
+    fn create_lobby(&self, max_members: c_int) -> PyResult<()> {
+        if !(1..=MAX_LOBBY_MEMBERS).contains(&max_members) {
+            return Err(PyValueError::new_err(format!(
+                "max_members must be between 1 and {MAX_LOBBY_MEMBERS}"
+            )));
+        }
+        let api = self.api()?;
+        // SAFETY: Steam is open.
+        let handle = unsafe { (api.create_lobby)(self.matchmaking, LOBBY_FRIENDS_ONLY, max_members) };
+        self.expect(handle, Pending::CreateLobby)
+    }
+
+    /// Enter a lobby; `run_callbacks` reports `lobby_entered`.
+    fn join_lobby(&self, lobby_id: u64) -> PyResult<()> {
+        let api = self.api()?;
+        // SAFETY: Steam is open.
+        let handle = unsafe { (api.join_lobby)(self.matchmaking, lobby_id) };
+        self.expect(handle, Pending::JoinLobby(lobby_id))
+    }
+
+    /// Leave a lobby. Leaving one this player is not in does nothing.
+    fn leave_lobby(&self, lobby_id: u64) -> PyResult<()> {
+        let api = self.api()?;
+        // SAFETY: Steam is open.
+        unsafe { (api.leave_lobby)(self.matchmaking, lobby_id) };
+        Ok(())
+    }
+
+    /// The Steam ID owning a lobby this player is in, or 0.
+    fn lobby_owner(&self, lobby_id: u64) -> PyResult<u64> {
+        let api = self.api()?;
+        // SAFETY: Steam is open.
+        Ok(unsafe { (api.lobby_owner)(self.matchmaking, lobby_id) })
+    }
+
+    /// The members of a lobby this player is in.
+    fn lobby_members(&self, lobby_id: u64) -> PyResult<Vec<u64>> {
+        let api = self.api()?;
+        // SAFETY: Steam is open; indices are below the count it gave.
+        Ok(unsafe {
+            let count = (api.lobby_member_count)(self.matchmaking, lobby_id).clamp(0, MAX_LOBBY_MEMBERS);
+            (0..count).map(|i| (api.lobby_member)(self.matchmaking, lobby_id, i)).collect()
+        })
+    }
+
+    /// A lobby's value for `key`, empty if unset. Written by its owner, so
+    /// untrusted.
+    fn lobby_data(&self, lobby_id: u64, key: &str) -> PyResult<String> {
+        let api = self.api()?;
+        let key = c_string("a lobby data key", key, VALUE_BYTES)?;
+        // SAFETY: Steam returns a string it owns, valid until the next call.
+        let value = unsafe { (api.get_lobby_data)(self.matchmaking, lobby_id, key.as_ptr()) };
+        if value.is_null() {
+            return Ok(String::new());
+        }
+        // SAFETY: non-null, NUL-terminated.
+        Ok(unsafe { CStr::from_ptr(value) }.to_string_lossy().into_owned())
+    }
+
+    /// Set a lobby's value for `key` (its owner only).
+    fn set_lobby_data(&self, lobby_id: u64, key: &str, value: &str) -> PyResult<bool> {
+        let api = self.api()?;
+        let key = c_string("a lobby data key", key, VALUE_BYTES)?;
+        let value = c_string("a lobby data value", value, LOBBY_DATA_BYTES)?;
+        // SAFETY: Steam copies both strings.
+        Ok(unsafe { (api.set_lobby_data)(self.matchmaking, lobby_id, key.as_ptr(), value.as_ptr()) })
+    }
+
+    /// Set one rich presence key; `connect` makes "Join Game" appear for
+    /// friends.
+    fn set_rich_presence(&self, key: &str, value: &str) -> PyResult<bool> {
+        let api = self.api()?;
+        let key = c_string("a rich presence key", key, KEY_BYTES)?;
+        let value = c_string("a rich presence value", value, VALUE_BYTES)?;
+        // SAFETY: Steam copies both strings.
+        Ok(unsafe { (api.set_rich_presence)(self.friends, key.as_ptr(), value.as_ptr()) })
+    }
+
+    /// Clear every rich presence key.
+    fn clear_rich_presence(&self) -> PyResult<()> {
+        let api = self.api()?;
+        // SAFETY: Steam is open.
+        unsafe { (api.clear_rich_presence)(self.friends) };
+        Ok(())
+    }
+
+    /// Open the overlay's dialog for inviting friends to a lobby.
+    fn open_invite_dialog(&self, lobby_id: u64) -> PyResult<()> {
+        let api = self.api()?;
+        // SAFETY: Steam is open.
+        unsafe { (api.invite_dialog)(self.friends, lobby_id) };
+        Ok(())
     }
 
     /// Shut Steam down. Safe to call twice; the object is inert after.
