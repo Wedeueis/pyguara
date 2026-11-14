@@ -152,8 +152,10 @@ written in. Whatever in the backend is better in Rust is replaced,
 whether it is Python today or someone else's C.
 
 This goes further than ADR 0003, which made Rust "an accelerator, not a
-rewrite" and kept a Python twin of every native subsystem. It needs an
-ADR that supersedes that position before the first item below is built.
+rewrite" and kept a Python twin of every native subsystem.
+`docs/adr/0011-one-rust-engine-python-interface.md` supersedes that
+position and is the record of this one; read it before building any
+item below.
 
 #### Where the line already is
 
@@ -184,12 +186,12 @@ UI builder, the gameplay kits, Studio and the CLI. That is the interface.
 
 | Item | What | Why it makes sense | Size |
 | --- | --- | --- | --- |
-| **6a. Retire the Python stores** | The five two-store subsystems keep only their Rust implementation. The Python versions survive as test references outside the shipped package, or go | The wheel always ships the extension; the twins cost five parity suites and a second implementation of every change | M |
+| **6a. Retire the Python stores** | The five two-store subsystems keep only their Rust implementation, one at a time. Each parity suite is converted to golden vectors first, not deleted (ADR 0011, Decision 3) | The wheel always ships the extension; the twins cost five parity suites and a second implementation of every change | M |
 | **6b. pygame becomes an extra** | wgpu is the default (phase 3); `pip install pyguara` no longer pulls pygame; the software renderer is `pyguara[pygame]` and stays in `dev` as the pixel reference | The wgpu path already runs with pygame unimportable | S |
 | **6c. Replication in Rust** | Snapshot interpolation of replicated fields moves beside the transport | The plan names it the largest engine cost on a guest's machine | L |
 | **6d. Batched drawing** (workstream 2) | A scene hands over arrays of shapes in one call | 0.4 us of Python per primitive is the frame's largest drawing cost on wgpu | M |
 | **6e. Physics on Rapier** | A second `IPhysicsEngine` in the crate, then the default; pymunk retired | Removes the last third-party C engine, gives cross-machine determinism (rollback netcode), and is what unblocks 6f | XL |
-| **6f. `Vector2` in Rust** | A PyO3 value type in place of the `pymunk.Vec2d` subclass | Only possible after 6e: pymunk's C layer accepts tuples and nothing else (ADR 0003, finding 1) | L |
+| **6f. `Vector2` in Rust** | A PyO3 value type in place of the `pymunk.Vec2d` subclass, if the tuple-compatibility audit comes back cheap; otherwise a tuple subclass of the engine's own | Only possible after 6e: pymunk's C layer accepts tuples and nothing else (ADR 0003, finding 1) | L |
 | **6g. Columnar components** (workstream 7) | Component data that systems consume in bulk lives in Rust columns | The foundation the remaining ports stand on; first consumer is 6d | XL |
 | **6h. Pure pixel goldens, pygame dropped** | The wgpu pixel tests compare against golden images, as the render-graph tests already do | Removes pygame from `dev` too. Only once nothing but tests needs it | M |
 

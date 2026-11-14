@@ -1,5 +1,14 @@
 # ADR 0003: RFC-0003's native Rust core — what Marco 0 found
 
+> **Position superseded by
+> [ADR 0011](0011-one-rust-engine-python-interface.md).** This document
+> made the native core an accelerator kept beside a Python
+> implementation, shelved a Rust `Vector2` and set replacing pymunk
+> aside as a separate project. ADR 0011 makes the backend one Rust
+> engine with Python as its interface. Every measurement below stands,
+> and 0011 relies on them -- finding 1 and the `Vector2` traffic counts
+> in particular.
+>
 > **Packaging superseded by
 > [ADR 0006](0006-shipping-the-native-extension.md).** The crate is now
 > wired into `pyproject.toml` through maturin and the extension ships
