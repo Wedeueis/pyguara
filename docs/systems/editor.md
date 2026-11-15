@@ -143,7 +143,7 @@ class SpawnCounter(Tool):
 import pygame
 
 app = create_sandbox_application()
-app._tool_manager.register_tool(SpawnCounter(app._container), pygame.K_F10)
+app._tool_manager.register_tool(SpawnCounter(app.container), pygame.K_F10)
 ```
 
 Registering a name that is already taken **replaces** the old tool (its

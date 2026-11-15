@@ -128,7 +128,7 @@ class TestResizeReachesTheGraph:
         application = create_headless_application()
         graph = RenderGraph(WgpuDevice(wgpu_frame(800, 600)), 800, 600)
         application._render_graph = graph
-        application._container.register_instance(RenderGraph, graph)
+        application.container.register_instance(RenderGraph, graph)
 
         yield application
 

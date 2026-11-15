@@ -17,7 +17,6 @@ from pyguara.ui.base import UIElement
 from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
-from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UILayer
 
 PANEL_SIZE = Vector2(360, 340)
@@ -56,7 +55,7 @@ class PauseScene(OverlayScene):
 
     def _build(self) -> None:
         """Build the scrim, panel, title, message line and four buttons."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear(UILayer.OVERLAY)
         ui_manager.add_element(Scrim(self._width, self._height), UILayer.OVERLAY)
 

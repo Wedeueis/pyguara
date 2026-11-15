@@ -157,6 +157,14 @@ an unresolvable forward reference, say:
 | `LOG` | Log and register with no dependencies. |
 | `IGNORE` | Register with no dependencies, silently. |
 
+## From a scene, and from outside
+
+A scene does not call `container.get` for the common services: it has
+`self.scene_manager`, `self.ui_manager`, `self.input_manager` and
+`self.application` (see [Scenes](scenes.md)). `self.container.get(T)` is the
+escape hatch for the rest. Outside a scene, `app.container` is the public way
+in; nothing should read `app._container`. ADR 0012 records the decision.
+
 ## Rules of thumb
 
 1. Register everything during bootstrap; resolve, don't re-register, later.

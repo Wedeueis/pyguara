@@ -136,11 +136,9 @@ from pyguara.graphics.vfx.effects.storm import StormEffect
 from pyguara.graphics.vfx.effects.vignette import VignetteEffect
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, KEY_O, B, C, G, H, M, N, P, S, T, W, Z
-from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.persistence.manager import PersistenceManager
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
@@ -277,7 +275,7 @@ class TitleScene(Scene):
         self._build_menu()
 
     def _build_menu(self) -> None:
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         plate_width, plate_height = 440, 120
@@ -339,7 +337,7 @@ class TitleScene(Scene):
         self._start(load=False)
 
     def _start(self, *, load: bool) -> None:
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.register(GardenScene(self.event_dispatcher, load=load))
         scene_manager.push_scene("GardenScene")
 
@@ -411,7 +409,7 @@ class GardenScene(Scene):
 
     def on_enter(self) -> None:
         """Build the widgets and entities, wire input, own the systems."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
         self._audio = self.container.get(AudioManager)
         self._storm = self.container.get(StormEffect)
@@ -589,7 +587,7 @@ class GardenScene(Scene):
         return _handler
 
     def _setup_input(self) -> None:
-        input_manager = self.container.get(InputManager)
+        input_manager = self.input_manager
         for tool, key in _TOOL_KEYS.items():
             input_manager.register_action(tool, ActionType.PRESS)
             input_manager.bind_input(InputDevice.KEYBOARD, key, tool)
@@ -602,7 +600,7 @@ class GardenScene(Scene):
         self.event_dispatcher.subscribe(OnActionEvent, self._on_action)
 
     def _on_action(self, event: OnActionEvent) -> None:
-        if self.container.get(SceneManager).current_scene is not self:
+        if self.scene_manager.current_scene is not self:
             return
         if event.value <= 0:
             return
@@ -671,7 +669,7 @@ class GardenScene(Scene):
 
     def _open_pause(self) -> None:
         """Push the pause menu over the garden."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         if scene_manager.current_scene is not self:
             return
         scene_manager.register(
@@ -699,7 +697,7 @@ class GardenScene(Scene):
 
         Saved first, so what is scored is exactly what is on disk.
         """
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         if scene_manager.current_scene is not self:
             return
         self.save_now()
@@ -717,7 +715,7 @@ class GardenScene(Scene):
 
     def _quit_to_title(self) -> None:
         """Unwind to the title screen. Leaving this scene saves it."""
-        self.container.get(SceneManager).switch_to("TitleScene")
+        self.scene_manager.switch_to("TitleScene")
 
     def _on_outbreak_started(self, event: OutbreakStartedEvent) -> None:
         if self._canvas is not None:
@@ -750,7 +748,7 @@ class GardenScene(Scene):
 
     def _open_store(self) -> None:
         """Push the store over the garden, freezing it while the player shops."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         if scene_manager.current_scene is not self:
             return
         scene_manager.register(
@@ -1003,7 +1001,7 @@ class GardenScene(Scene):
 
     def _open_morning(self, report: DayReport) -> None:
         """Push the morning report over the sleeping garden."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         if scene_manager.current_scene is not self:
             return
         if self._audio is not None:

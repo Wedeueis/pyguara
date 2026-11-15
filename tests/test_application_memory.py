@@ -74,8 +74,8 @@ def app() -> Iterator[Any]:
 
 
 def scene(app: Any, name: str) -> Quiet:
-    made = Quiet(name, app._container.get(EventDispatcher))
-    app._container.get(SceneManager).register(made)
+    made = Quiet(name, app.container.get(EventDispatcher))
+    app.container.get(SceneManager).register(made)
     return made
 
 
@@ -126,7 +126,7 @@ def test_a_new_scene_settles_once_more(app: Any, settles: list[int]) -> None:
     app.begin(scene(app, "start"))
     app.step()
     scene(app, "next")
-    app._container.get(SceneManager).switch_to("next")
+    app.container.get(SceneManager).switch_to("next")
     for _ in range(3):
         app.step()
 
@@ -137,7 +137,7 @@ def test_a_layer_coming_or_going_settles(app: Any, settles: list[int]) -> None:
     app.begin(scene(app, "start"))
     app.step()
     scene(app, "hud")
-    manager = app._container.get(SceneManager)
+    manager = app.container.get(SceneManager)
 
     manager.add_layer("hud")
     app.step()
@@ -153,7 +153,7 @@ def test_nothing_settles_until_a_transition_is_over(
     app.begin(scene(app, "start"))
     app.step()
     scene(app, "next")
-    manager = app._container.get(SceneManager)
+    manager = app.container.get(SceneManager)
     manager.switch_to("next", FadeTransition(TransitionConfig(duration=0.5)))
 
     # A two-phase fade swaps the current scene at its midpoint, while still

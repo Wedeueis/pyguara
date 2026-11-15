@@ -9,7 +9,6 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.keys import SPACE, A, D, S, W
-from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.scene.base import Scene
 
@@ -33,7 +32,7 @@ class InputScene(Scene):
         print("InputScene entered! WASD to move, SPACE to dash.")
 
         # 1. Setup Input Bindings
-        input_manager = self.container.get(InputManager)
+        input_manager = self.input_manager
 
         # HOLD for the directions: they stay true while the key is down, and
         # the bridge keeps them as state. PRESS for the dash: it happens

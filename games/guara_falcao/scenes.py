@@ -84,12 +84,10 @@ from pyguara.physics.solid_mover import SolidMover
 from pyguara.physics.solid_system import SolidSystem
 from pyguara.resources.manager import ResourceManager
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
 from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.layout import BoxContainer
-from pyguara.ui.manager import UIManager
 from pyguara.ui.types import TextAlign, UILayer
 
 AMBIENT = Color(255, 236, 206)
@@ -175,7 +173,7 @@ class TitleScene(Scene):
 
     def _build_menu(self) -> None:
         """The wordmark plate, the button column and the badge."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         # A light touch of the same scrim the pause menu uses, so the
@@ -250,13 +248,13 @@ class TitleScene(Scene):
 
     def _on_play(self, _element: object) -> None:
         """Start a run."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.register(GameScene(self.event_dispatcher))
         scene_manager.push_scene("GameScene")
 
     def _on_options(self, _element: object) -> None:
         """Open the options panel over the title."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.register(
             OptionsScene(self.event_dispatcher, WINDOW_WIDTH, WINDOW_HEIGHT)
         )
@@ -384,10 +382,10 @@ class GameScene(Scene):
 
     def on_enter(self) -> None:
         """Initialize game systems and load level."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
-        self._input_manager = self.container.get(InputManager)
+        self._input_manager = self.input_manager
         self._coroutine_manager = self.container.get(CoroutineManager)
 
         self._setup_input()
@@ -567,7 +565,7 @@ class GameScene(Scene):
         reaches `_open_pause()` again while already paused, which re-registers
         and re-pushes a second `PauseScene` on top of the first.
         """
-        if self.container.get(SceneManager).current_scene is not self:
+        if self.scene_manager.current_scene is not self:
             return
 
         action = event.action_name
@@ -597,7 +595,7 @@ class GameScene(Scene):
         rendering, which is the whole trick: the menu sits over a frozen
         game rather than over a black screen.
         """
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.register(
             PauseScene(self.event_dispatcher, WINDOW_WIDTH, WINDOW_HEIGHT)
         )
@@ -613,7 +611,7 @@ class GameScene(Scene):
 
     def _setup_hud(self) -> None:
         """Build the HUD on its own layer."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear(UILayer.HUD)
 
         total = len(list(self.entity_manager.get_entities_with(Transform, Collectible)))
@@ -669,7 +667,7 @@ class GameScene(Scene):
 
     def _complete_sequence(self):
         """Level complete coroutine."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         banner_width = 420
         banner_x = (WINDOW_WIDTH - banner_width) // 2
         banner = BevelPanel(
@@ -692,7 +690,7 @@ class GameScene(Scene):
         yield wait_for_seconds(2.0)
 
         ui_manager.clear()
-        self.container.get(SceneManager).pop_scene()
+        self.scene_manager.pop_scene()
 
     def _on_collectible(self, event: CollectiblePickedEvent) -> None:
         """Handle collectible pickup."""
@@ -701,7 +699,7 @@ class GameScene(Scene):
         """Cleanup."""
         if self._physics_system:
             self._physics_system.cleanup()
-        self.container.get(UIManager).clear(UILayer.HUD)
+        self.ui_manager.clear(UILayer.HUD)
 
     def fixed_update(self, fixed_dt: float) -> None:
         """Run fixed timestep update for physics."""

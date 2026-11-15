@@ -23,12 +23,9 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
-from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.ui.base import UIElement
-from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UILayer
 
 
@@ -76,7 +73,7 @@ class OverlayScene(Scene):
 
     def on_enter(self) -> None:
         """Bind the close keys, listen for them, and build the overlay."""
-        input_manager = self.container.get(InputManager)
+        input_manager = self.input_manager
         input_manager.register_action(self._close_action, ActionType.PRESS)
         for key in self._close_keys:
             input_manager.bind_input(InputDevice.KEYBOARD, key, self._close_action)
@@ -97,10 +94,10 @@ class OverlayScene(Scene):
 
     def _close(self) -> None:
         """Hand control back to the garden. A no-op unless this is the top scene."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         if scene_manager.current_scene is not self:
             return
-        self.container.get(UIManager).clear(UILayer.OVERLAY)
+        self.ui_manager.clear(UILayer.OVERLAY)
         scene_manager.pop_scene()
 
     def update(self, dt: float) -> None:

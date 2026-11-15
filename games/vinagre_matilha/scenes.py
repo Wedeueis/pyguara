@@ -58,11 +58,9 @@ from pyguara.physics.physics_system import PhysicsSystem
 from pyguara.physics.protocols import IPhysicsEngine
 from pyguara.physics.trigger_system import TriggerSystem
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.spatial import SpatialIndexSystem
 from pyguara.ui.components.button import Button
 from pyguara.ui.layout import BoxContainer
-from pyguara.ui.manager import UIManager
 
 WINDOW_WIDTH = 960
 WINDOW_HEIGHT = 640
@@ -113,7 +111,7 @@ class MenuScene(Scene):
 
     def on_enter(self) -> None:
         """Build the stage-select UI."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         container = BoxContainer(
@@ -135,7 +133,7 @@ class MenuScene(Scene):
 
     def _make_stage_starter(self, stage: StageConfig):
         def _start(_element: object) -> None:
-            scene_manager = self.container.get(SceneManager)
+            scene_manager = self.scene_manager
             game_scene = GameScene(self.event_dispatcher, stage)
             scene_manager.register(game_scene)
             scene_manager.switch_to("GameScene")
@@ -225,10 +223,10 @@ class GameScene(Scene):
         # with its own shake camera, so nothing else writes that attribute
         # -- and Studio's viewport, picking and gizmo all read it.
         self.camera = self._shake_camera
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
-        self._input_manager = self.container.get(InputManager)
+        self._input_manager = self.input_manager
         self._setup_input()
 
         self._level = build_stage(self.entity_manager, self._stage)
@@ -378,7 +376,7 @@ class GameScene(Scene):
         elif action == "restart" and pressed:
             self._restart()
         elif action == "back" and pressed:
-            self.container.get(SceneManager).switch_to("MenuScene")
+            self.scene_manager.switch_to("MenuScene")
 
     def _issue(self, command: PackCommand) -> None:
         self._command = command
@@ -386,7 +384,7 @@ class GameScene(Scene):
         issue_command(self._level.blackboard, command)
 
     def _restart(self) -> None:
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.register(GameScene(self.event_dispatcher, self._stage))
         scene_manager.switch_to("GameScene")
 
