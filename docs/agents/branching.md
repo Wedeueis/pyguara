@@ -69,6 +69,36 @@ gh pr view <branch> --json state,title   # MERGED / CLOSED -> new branch from ma
 On handoff, say which it is: "PR is final, nothing else coming" versus "still
 adding X, do not merge yet" — so a fast merge is never a gamble.
 
+### The changelog is its own pull request
+
+A feature or fix PR **does not edit `CHANGELOG.md`**. Every PR used to add its
+entry at the top of `### Added`, the same lines every other open PR was
+adding to, so each merge put the rest in conflict. In November 2026, five
+PRs open at once needed eight replacement branches between them, for
+nothing but changelog lines.
+
+Instead:
+
+- **The PR body carries the entry**, drafted by whoever made the change, under
+  a `## Changelog` heading. Write it exactly as it should appear in the
+  changelog, with its section (`Added`, `Changed`, `Fixed`, `Removed`); the
+  changelog PR adds the PR number. Write `None` for a change nothing outside
+  the repository sees (tests, CI, internal refactors).
+- **A changelog PR collects them.** Cut a branch from `main` (`docs/changelog-<date>`).
+  List what merged since the last changelog PR, copy each `## Changelog`
+  section into `[Unreleased]`, and edit the result into one readable list.
+  Do this periodically, whenever several PRs have merged, and always before
+  tagging a release.
+
+```bash
+gh pr list --state merged --base main --search "merged:>YYYY-MM-DD" \
+  --json number,title,mergedAt --limit 100
+gh pr view <number> --json body -q .body   # the ## Changelog section
+```
+
+A PR that changes nothing but the changelog conflicts with nothing else, and
+since only one is open at a time, it never conflicts with itself.
+
 ### Cleaning up
 
 After a PR merges, delete any local branch that tracked it

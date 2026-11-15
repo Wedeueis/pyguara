@@ -378,7 +378,9 @@ accelerator disabled; the wheel build; and the network suites on Windows.
   `docs/adr/`, numbered in sequence. The existing records are the template:
   status and date, context, the decision, its consequences, and what was
   measured.
-- User-visible changes go in `CHANGELOG.md`.
+- User-visible changes go in `CHANGELOG.md`, through a separate changelog
+  PR: a feature PR drafts its entry in its body under `## Changelog`. See
+  `docs/agents/branching.md`.
 
 ## 7. Definition of Done
 
