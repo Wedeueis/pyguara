@@ -247,10 +247,12 @@ class Application:
     def container(self) -> DIContainer:
         """The service container this application was built on.
 
-        `create_application()` builds the container itself, so without a
-        public accessor anything that needs to resolve or register a
-        service afterwards -- `pyguara.studio.attach_editor()`, a game's
-        own systems -- has to reach for `app._container`.
+        The public way in: `create_application()` builds the container
+        itself, and anything that resolves or registers a service
+        afterwards -- `pyguara.studio.attach_editor()`, a game's own
+        systems, a test substituting a fake -- goes through this. A scene
+        has typed accessors for the common services and uses
+        `scene.container` only for the rest (ADR 0012).
 
         Returns:
             The DI container.

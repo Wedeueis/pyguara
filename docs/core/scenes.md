@@ -30,6 +30,38 @@ class Level(Scene):
 Only `on_enter`, `on_exit` and `update` are abstract. `fixed_update`,
 `on_pause`, `on_resume` and `render` have working defaults.
 
+## Reaching the engine's services
+
+A scene reads the four services nearly every scene needs through typed
+properties:
+
+| Property | Service | For |
+| --- | --- | --- |
+| `self.scene_manager` | `SceneManager` | switching, pushing and popping scenes |
+| `self.ui_manager` | `UIManager` | building and clearing the HUD and overlays |
+| `self.input_manager` | `InputManager` | actions, bindings and input contexts |
+| `self.application` | `Application` | step hooks, time scale, quitting |
+
+`self.event_dispatcher` is already an attribute. Anything else, such as an
+effect or the physics engine, is `self.container.get(T)`, the escape hatch.
+
+```python
+class Pause(Scene):
+    def on_enter(self) -> None:
+        panel = Panel(...)
+        self.ui_manager.add_element(panel, UILayer.OVERLAY)
+
+    def _resume(self) -> None:
+        self.ui_manager.clear(UILayer.OVERLAY)
+        self.scene_manager.pop_scene()
+```
+
+**Ask from `on_enter()` onwards.** The container arrives in
+`resolve_dependencies()`, after `__init__`, so an accessor read in the
+constructor raises `SceneNotReadyError` and says so. Each read is a lookup in
+the container, not a cached copy, so a service a test substitutes is the one
+the scene sees. ADR 0012 records why this, and not constructor injection.
+
 ## Registering
 
 ```python

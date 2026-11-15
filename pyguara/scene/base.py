@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pyguara.ai.ai_system import AISystem
 from pyguara.ai.steering_system import SteeringSystem
@@ -15,7 +15,11 @@ from pyguara.common.components import Transform
 from pyguara.di.container import DIContainer, DIScope  # Import Container
 
 if TYPE_CHECKING:
+    from pyguara.application.application import Application
+    from pyguara.input.manager import InputManager
+    from pyguara.scene.manager import SceneManager
     from pyguara.scripting.coroutines import Coroutine
+    from pyguara.ui.manager import UIManager
 from pyguara.ecs.entity import Entity
 from pyguara.ecs.events import EntityDestroyed
 from pyguara.ecs.manager import EntityManager
@@ -42,6 +46,17 @@ GAME_SYSTEM_PRIORITY_MIN = 500
 
 
 logger = get_logger(__name__)
+
+_T = TypeVar("_T")
+
+
+class SceneNotReadyError(RuntimeError):
+    """A scene asked for an engine service before it was given a container.
+
+    The container arrives in `Scene.resolve_dependencies()`, which runs when
+    the scene is registered with a `SceneManager`, so a service is there from
+    `on_enter()` onwards and never in `__init__`.
+    """
 
 
 class Scene(ABC):
@@ -241,19 +256,74 @@ class Scene(ABC):
             The `Coroutine`, for `stop()` or `on_complete()`.
 
         Raises:
-            RuntimeError: If called before `resolve_dependencies()`, since
-                there is no container to find the manager in.
+            SceneNotReadyError: If called before `resolve_dependencies()`,
+                since there is no container to find the manager in.
         """
-        if self.container is None:
-            raise RuntimeError(
-                f"Scene {self.name!r} cannot start a coroutine before "
-                "resolve_dependencies() has run -- there is no container yet. "
-                "Start sequences in on_enter() or later."
-            )
         from pyguara.scripting.coroutines import CoroutineManager
 
-        manager = self.container.get(CoroutineManager)
+        manager = self._service(CoroutineManager, "start a coroutine")
         return manager.start_coroutine(generator, owner=self)
+
+    # -- The engine's common services ------------------------------------
+    #
+    # The sanctioned way for a scene to reach them (ADR 0012). Anything not
+    # listed here is `self.container.get(T)`, the escape hatch. Each is a
+    # lookup, not a cached attribute: the container is the one place a test
+    # substitutes a service, and a copy taken at resolve time would miss it.
+
+    @property
+    def application(self) -> Application:
+        """The running `Application`: step hooks, time scale, quitting.
+
+        Raises:
+            SceneNotReadyError: Before `resolve_dependencies()` has run.
+        """
+        from pyguara.application.application import Application
+
+        return self._service(Application, "reach the application")
+
+    @property
+    def scene_manager(self) -> SceneManager:
+        """The `SceneManager` this scene is registered with.
+
+        Raises:
+            SceneNotReadyError: Before `resolve_dependencies()` has run.
+        """
+        from pyguara.scene.manager import SceneManager
+
+        return self._service(SceneManager, "reach the scene manager")
+
+    @property
+    def ui_manager(self) -> UIManager:
+        """The `UIManager` that owns the HUD and overlay layers.
+
+        Raises:
+            SceneNotReadyError: Before `resolve_dependencies()` has run.
+        """
+        from pyguara.ui.manager import UIManager
+
+        return self._service(UIManager, "reach the UI manager")
+
+    @property
+    def input_manager(self) -> InputManager:
+        """The `InputManager`: actions, bindings and contexts.
+
+        Raises:
+            SceneNotReadyError: Before `resolve_dependencies()` has run.
+        """
+        from pyguara.input.manager import InputManager
+
+        return self._service(InputManager, "reach the input manager")
+
+    def _service(self, service_type: type[_T], purpose: str) -> _T:
+        """Look `service_type` up in this scene's container, or say when to ask."""
+        if self.container is None:
+            raise SceneNotReadyError(
+                f"Scene {self.name!r} cannot {purpose} before "
+                "resolve_dependencies() has run -- there is no container yet. "
+                "Ask in on_enter() or later."
+            )
+        return self.container.get(service_type)
 
     @abstractmethod
     def on_exit(self) -> None:
