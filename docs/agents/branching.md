@@ -99,6 +99,26 @@ gh pr view <number> --json body -q .body   # the ## Changelog section
 A PR that changes nothing but the changelog conflicts with nothing else, and
 since only one is open at a time, it never conflicts with itself.
 
+### The decision log works the same way
+
+`.claude/decision-log.md` had the same problem: every PR appended to its end,
+and every merge put the next PR in conflict.
+
+- **While working, log choice points in `.claude/decision-log.local.md`**,
+  the moment each is resolved. That file is git-ignored, so writing to it
+  can't touch any PR.
+- **Copy the PR's entries into its body under `## Decisions`**, one `###`
+  heading per entry, with the same Context, Alternatives, Chose and Tags
+  lines. The reviewer approves or overrides them there.
+- **The same collecting PR appends them to `.claude/decision-log.md`**, with
+  the PR number and whether the user approved each one. A collecting PR may
+  carry both files, or each in its own PR; either way it is the only open PR
+  that edits them.
+
+```bash
+gh pr view <number> --json body -q .body   # the ## Decisions section
+```
+
 ### Cleaning up
 
 After a PR merges, delete any local branch that tracked it

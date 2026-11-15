@@ -76,9 +76,11 @@ All three must pass. With several commits, each must pass alone.
   an old one.
 - Stack a branch on another only for a real dependency, and say so in
   the PR.
-- **A feature or fix PR does not edit `CHANGELOG.md`.** It drafts its
-  entry in the PR body under `## Changelog`. A separate changelog PR
-  collects the merged entries, periodically and before each release.
+- **A feature or fix PR edits neither `CHANGELOG.md` nor
+  `.claude/decision-log.md`.** It drafts its entry in the PR body under
+  `## Changelog`, and its choice points under `## Decisions`, logged
+  while working in the untracked `.claude/decision-log.local.md`. A
+  separate PR collects both, periodically and before each release.
 - Commit or push only when asked.
 
 Reasons and the full procedure: `docs/agents/branching.md`.

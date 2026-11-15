@@ -1,5 +1,8 @@
 # Decision log -- choice points resolved during implementation
 
+Collected from merged PRs' `## Decisions` sections. A feature PR does not
+edit this file; see `docs/agents/branching.md`.
+
 ## Fork as a separate private repository with full history
 - **Context:** Isolating the columnar/native-runtime work from `Wedeueis/pyguara` so the original engine carries none of the risk.
 - **Alternatives:** (a) a long-lived branch in the original repo; (b) a GitHub fork (not possible into the same account); (c) a fresh repo seeded with a squashed snapshot; (d) a new repo carrying the full history, with the original as a push-disabled `upstream` remote.
