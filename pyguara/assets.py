@@ -30,6 +30,7 @@ from __future__ import annotations
 import builtins
 import io
 import os
+import sys
 import threading
 import zipfile
 from pathlib import Path
@@ -129,7 +130,38 @@ def _normal(path: PathLike) -> str:
     return os.path.normpath(text)
 
 
+_bundled_checked = threading.Event()
+
+
+def _mount_bundled() -> None:
+    """Mount the packs a frozen game was built with, once.
+
+    `pyguara build --pack` puts `<name>.pak` at the root of the bundle,
+    which is also where `--add-data` would have put the loose folders and
+    where the game's own code lives. Done on the first read rather than at
+    startup, so a game that reads its data before building the application
+    still finds it.
+    """
+    if _bundled_checked.is_set():
+        return
+    with _packs_lock:
+        if _bundled_checked.is_set():
+            return
+        _bundled_checked.set()
+        if not getattr(sys, "frozen", False):
+            return
+        bundle = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        for pack_path in sorted(bundle.glob("*.pak")):
+            _packs.append(_Pack(pack_path, bundle))
+
+
+def _reset_bundled_for_tests() -> None:
+    """Let the next read look for bundled packs again."""
+    _bundled_checked.clear()
+
+
 def _find(path: PathLike) -> tuple[_Pack, str] | None:
+    _mount_bundled()
     absolute = _normal(path)
     for pack in reversed(_packs):
         key = pack.key(absolute)
@@ -160,6 +192,7 @@ def mount_pack(path: PathLike, *, root: PathLike) -> None:
 
 def mounted_packs() -> tuple[Path, ...]:
     """Return the mounted packs' files, the one consulted first first."""
+    _mount_bundled()
     return tuple(pack.path for pack in reversed(_packs))
 
 
@@ -225,6 +258,7 @@ def is_file(path: PathLike) -> bool:
 
 def is_dir(path: PathLike) -> bool:
     """Whether a pack or the disk has a folder at `path`."""
+    _mount_bundled()
     absolute = _normal(path)
     for pack in _packs:
         key = pack.key(absolute)
@@ -265,6 +299,7 @@ def files_under(directory: PathLike, *, recursive: bool = True) -> list[str]:
         directory: The folder.
         recursive: Include subfolders.
     """
+    _mount_bundled()
     absolute = _normal(directory)
     found: set[str] = set()
     for pack in _packs:

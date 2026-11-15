@@ -835,3 +835,15 @@
 - **Alternatives:** change the loader protocol to take an opener or a bytes source; keep `load(path)` and have every loader read through `pyguara.assets`, a mount table consulted before the disk.
 - **Chose:** keep the protocol. The path is still the asset's identity (cache key, index entry, error message), a game's own loaders keep working for loose files, and the change to each engine loader is one line. A pack is mounted with a `root`, and a path is looked up in it only if it lies under that root, so the same path names the same asset loose or packed.
 - **Tags:** assets, resources, api
+
+## A frozen game mounts its bundled packs on its first asset read
+- **Context:** `pyguara build --pack`; how the shipped game finds the pack.
+- **Alternatives:** the game calls `assets.mount_pack()` itself; bootstrap mounts it in `create_application()`; `pyguara.assets` mounts every `.pak` at the bundle root, lazily, on the first read, only when frozen.
+- **Chose:** lazily on the first read. Nothing for a game to forget, and it works for a game that reads its data before building the application (Reclaimer checks its game data first). Unfrozen, nothing is mounted, so development reads loose files. The pack's root is the bundle, which is where `--add-data` would have put the folders and where the game's code lives, so code-built paths match.
+- **Tags:** assets, shipping, build
+
+## `--pack` is opt-in
+- **Context:** the same; whether `pyguara build` packs by default.
+- **Alternatives:** pack by default with `--loose` to opt out; keep loose by default with `--pack` to opt in.
+- **Chose:** opt-in, for now. A game whose own reads still call `open()` (Reclaimer, until its PR) would break silently when packed by default. The default can flip once the engine's demos and Reclaimer read through `pyguara.assets`.
+- **Tags:** assets, build, cli

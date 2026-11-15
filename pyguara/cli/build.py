@@ -18,6 +18,7 @@ from pathlib import Path
 
 import click
 
+from pyguara.cli.pack import bake_pack
 from pyguara.log import get_logger
 from pyguara.native import _MODULE_NAME
 
@@ -275,6 +276,12 @@ def _path_separator() -> str:
     help="macOS bundle identifier, e.g. com.studio.mygame",
 )
 @click.option(
+    "--pack",
+    is_flag=True,
+    default=False,
+    help="Bake the asset folders into one <name>.pak instead of loose files",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
@@ -293,6 +300,7 @@ def build(
     clean: bool,
     debug: bool,
     bundle_id: str | None,
+    pack: bool,
     dry_run: bool,
 ) -> None:  # noqa: D301  (\b is Click's no-wrap marker; r""" would defeat it)
     """Build a standalone executable from a PyGuara game.
@@ -309,6 +317,8 @@ def build(
       pyguara build main.py --onefile --icon assets/logo.png
       # Include multiple asset directories
       pyguara build main.py -a assets/ -a levels/
+      # Ship the assets as one pack rather than loose files
+      pyguara build main.py --pack
     """
     # Resolve paths to absolute paths to prevent PyInstaller --specpath resolution issues
     entry_point = entry_point.resolve().absolute()
@@ -329,6 +339,21 @@ def build(
     # Convert all asset paths to absolute paths
     assets_list = [a.resolve().absolute() for a in assets_list]
 
+    # A pack replaces the loose folders: baked here, bundled at the bundle's
+    # root, and mounted by `pyguara.assets` when the frozen game starts. It
+    # is baked on a dry run too, so it can be inspected.
+    data_specs = list(extra_data)
+    if pack and assets_list:
+        report = bake_pack(
+            assets_list, output / "build" / f"{name or entry_point.stem}.pak"
+        )
+        click.echo(
+            f"Packed {report.files} files, {report.source_bytes:,} bytes into "
+            f"{click.style(str(report.path), fg='cyan')} ({report.packed_bytes:,} bytes)"
+        )
+        data_specs.append(f"{report.path}{_path_separator()}.")
+        assets_list = []
+
     # Build command arguments
     args = _build_pyinstaller_args(
         entry_point=entry_point,
@@ -338,7 +363,7 @@ def build(
         windowed=windowed,
         icon=icon,
         assets_dirs=assets_list,
-        extra_data=list(extra_data),
+        extra_data=data_specs,
         hidden_imports=list(hidden_imports),
         clean=clean,
         debug=debug,

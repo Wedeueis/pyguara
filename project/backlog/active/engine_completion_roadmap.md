@@ -90,7 +90,7 @@ merge-commit PR from `next` into `pyguara`'s `main`, Reclaimer repointed,
 
 | Item | What | Size |
 | --- | --- | --- |
-| **Packed assets** (W30, workstream 6) | Loader protocol from path to opener, across every loader; a bake step in `pyguara build` | XL |
+| **Packed assets** (W30, workstream 6) | Loader protocol from path to opener, across every loader; a bake step in `pyguara build`. *Engine done: `pyguara.assets` (#418) and `pyguara build --pack` (this PR). Reclaimer's own data reads still have to go through `pyguara.assets`* | XL |
 | **Platform verification** | A macOS test job and a full Windows test job in `ci.yml`; native audio heard on a real Linux desktop; a wgpu frame seen on macOS. *CI part done: `Tests (windows-latest)` and `Tests (macos-latest)` run the suite with a real adapter (DX12 WARP, Metal) and found two engine bugs. Still needs a person: audio heard on Linux, a window seen on a Mac* | M |
 | **Crash capture** | An `excepthook` that writes a report (traceback, engine version, backend, `native.status()`) into the user data directory, and says where. *Done: `pyguara.crash`; Reclaimer still has to call it* | S |
 | **Localisation** | A string table keyed by id, a locale setting in config, font fallback for scripts outside Liberation Sans | L |
