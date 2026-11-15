@@ -35,6 +35,7 @@ was inserted.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 import wave
@@ -410,9 +411,22 @@ def capture_tone_loop(
         pygame.time.wait(2)
     while channel.get_busy():
         pygame.time.wait(5)
+    # "Not busy" means the last sample was handed to the mixer, not that the
+    # disk driver has written it: quitting now can cut the tail of the last
+    # lap, and a capture shorter than every lap has no seams to compare.
+    # Seen on Windows CI, whose coarser timer makes that window wider.
+    pygame.time.wait(_drain_ms(buffer))
     pygame.mixer.quit()
 
     return read_capture(output, RATE), compare_with_sine(output, laps, len(segment))
+
+
+def _drain_ms(buffer: int) -> int:
+    """Return how long to let a mixer of this buffer size write what it holds.
+
+    Four buffer periods, and at least 100 ms.
+    """
+    return max(100, math.ceil(4 * buffer / RATE * 1000))
 
 
 def compare_with_sine(path: Path, laps: int, segment_frames: int) -> SeamCheck:

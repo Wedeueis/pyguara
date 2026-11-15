@@ -6,6 +6,7 @@ import pygame
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.backends.clipping import ClipStack
+from pyguara.graphics.backends.pygame.fallback_font import FallbackFont
 from pyguara.graphics.backends.surface_blending import (
     blit_blended_circle,
     blit_blended_line,
@@ -14,7 +15,6 @@ from pyguara.graphics.backends.surface_blending import (
     render_text,
 )
 from pyguara.graphics.backends.surface_texture import as_surface, blit_texture
-from pyguara.graphics.fonts import default_font_path
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -29,7 +29,7 @@ class PygameUIRenderer:
     def __init__(self, target_surface: pygame.Surface) -> None:
         """Initialize the renderer."""
         self._surface = target_surface
-        self._font_cache: dict[tuple[int, bool, bool], pygame.font.Font] = {}
+        self._font_cache: dict[tuple[int, bool, bool], FallbackFont] = {}
         self._clips = ClipStack()
         self._warned_about_clips = False
 
@@ -42,15 +42,14 @@ class PygameUIRenderer:
 
     def _get_font(
         self, size: int, bold: bool = False, italic: bool = False
-    ) -> pygame.font.Font:
+    ) -> FallbackFont:
         """Retrieve or create a font of the specified size and style."""
         key = (size, bold, italic)
         if key not in self._font_cache:
             # The engine's bundled face, in the asked-for style, so text
-            # matches the wgpu renderer; see `pyguara.graphics.fonts`.
-            self._font_cache[key] = pygame.font.Font(
-                default_font_path(bold, italic), size
-            )
+            # matches the wgpu renderer, with the engine's fallback faces for
+            # what it lacks; see `pyguara.graphics.fonts`.
+            self._font_cache[key] = FallbackFont(size, bold, italic)
         return self._font_cache[key]
 
     def _to_pygame_color(self, color: Color) -> tuple[int, int, int, int]:

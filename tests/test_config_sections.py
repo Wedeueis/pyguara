@@ -240,6 +240,7 @@ def test_section_names_list_engine_sections_first():
         "physics",
         "performance",
         "debug",
+        "i18n",
         "balance",
     ]
 

@@ -20,6 +20,7 @@ import click
 from pyguara.cli.atlas_generator import atlas as atlas_command
 from pyguara.cli.build import build as build_command
 from pyguara.cli.dist import dist as dist_command
+from pyguara.cli.i18n import i18n as i18n_command
 from pyguara.cli.sounds import sounds as sounds_command
 from pyguara.cli.studio import studio as studio_command
 
@@ -38,6 +39,7 @@ main.add_command(dist_command)
 main.add_command(atlas_command)
 main.add_command(studio_command)
 main.add_command(sounds_command)
+main.add_command(i18n_command)
 
 # No `if __name__ == "__main__"` here: inside a package's `__init__`,
 # `__name__` is `pyguara.cli` and the block could never run. `__main__.py`
