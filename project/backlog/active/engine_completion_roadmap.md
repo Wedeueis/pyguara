@@ -110,7 +110,8 @@ far more than before.
 Small, and best done in the merge-back PR's wake so `pyguara` lands
 telling the truth about itself.
 
-1. **wgpu becomes the default `display.backend`.** pygame stays as the
+1. **wgpu becomes the default `display.backend`** (#406; no GPU raises
+   `NoGraphicsAdapterError`, never a silent fallback, the user's call). pygame stays as the
    reference renderer the pixel tests hold wgpu to, selected by name.
    Then decide whether `pygame-ce` can become an extra.
 2. **A public way to reach services.** `app.container` exists; fix
@@ -118,8 +119,11 @@ telling the truth about itself.
    (constructor injection or `self.container.get`) and make the demos
    agree. An ADR, since it touches the DI container.
 3. **Rewrite the README** from the code: backends, Studio in place of the
-   F12 editor, working links, an install line that is true.
+   F12 editor, working links, an install line that is true. *Rewritten
+   before the merge; its fork-era lines (banner, clone line, default
+   renderer, where CI runs) corrected after it.*
 4. **One status word** across `AGENTS.md`, README and the classifier.
+   *Done: "alpha, 0.6.0" in all three.*
 
 **Done when** a new reader's first ten minutes with the README contain
 no statement the code contradicts.

@@ -22,13 +22,13 @@ without it: the Steam code is complete, Reclaimer passes its suite on this
 stack, and the playtest is a check, not code. It continues as
 [pyguara #402](https://github.com/Wedeueis/pyguara/issues/402).
 
-1. A PR from `next` into `pyguara`'s `main`, merged with a merge commit as
-   `pyguara`'s rules require. `main` had nothing `next` lacked, so it is an
-   ordinary merge, not a port.
-2. Then Reclaimer points back at `pyguara` and the `reclaimer_v2-next`
-   worktree goes.
-3. Then `Wedeueis/pyguara-next` is archived, and `pyguara-next-base` and the
-   Windows `*-next-verify` export folders deleted.
+1. **Done 2026-11-14:** #404, merged with a merge commit (`18b59db`). Its
+   first attempt, #403, failed because `ci.yml` had never run on the fork;
+   fixing CI found the GPU-dependent noise hash in heat haze and the storm.
+2. **Opened 2026-11-14:** Reclaimer points back at `pyguara` in
+   reclaimer_v2 #35, which pins `18b59db` and renders with wgpu.
+3. **Done 2026-11-14:** `Wedeueis/pyguara-next` archived; the local
+   checkouts and the Windows `*-next-verify` export folders deleted.
 
 ## What Reclaimer's plan was waiting on, and where each stands
 

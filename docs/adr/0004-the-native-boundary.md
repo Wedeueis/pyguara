@@ -1,7 +1,7 @@
 # ADR 0004: The native boundary — what earns a Rust implementation, and how the engine picks one
 
 Status: **Accepted**. Supersedes RFC-0003's module-by-module sequencing
-(`project/backlog/active/rust_core.md`) and extends ADR 0003, which
+(`project/backlog/archive_202611/rust_core.md`) and extends ADR 0003, which
 measured the first milestone without generalising from it.
 
 **Amended by [ADR 0011](0011-one-rust-engine-python-interface.md).**

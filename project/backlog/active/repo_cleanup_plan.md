@@ -84,10 +84,10 @@ Content that outlived the file it is in.
 | From | To |
 | --- | --- |
 | `REFACTOR_STATE.md`, "Two patterns worth carrying forward" and the Phase A-D method | a `docs/guides/contributing.md`: probe before fixing, uniform-setup as the test smell, guards that return a wrong answer. Perhaps 150 lines of the 4,080 |
-| `project/backlog/active/rust_core.md` (RFC-0003) | already decided in ADRs 0003, 0004 and 0006. Check nothing is only in the RFC, then archive it |
+| `project/backlog/archive_202611/rust_core.md` (RFC-0003) | already decided in ADRs 0003, 0004 and 0006. Moved to the archive folder 2026-11-14; still owed: check nothing is only in the RFC |
 | `project/backlog/active/network_multiplayer.md` | when phase 5 of it closes: the design into `docs/systems/networking.md`, the decisions into ADR 0007. Until then it stays active |
 | `project/backlog/active/next_engine_plan.md` | its measurements into `docs/guides/performance.md`; the plan itself is archived when workstream 6 closes |
-| `project/DEPENDENCY_MAP.md` | dated January and predates the Rust core. Regenerate into `docs/core/architecture.md` or delete; do not carry it as is |
+| `project/backlog/archive_202611/DEPENDENCY_MAP.md` | dated January and predates the Rust core. Moved to the archive folder 2026-11-14. Regenerate into `docs/core/architecture.md` or delete; do not carry it as is |
 | `.claude/decision-log.md` | any entry that still constrains code becomes an ADR; the rest is archived |
 
 ### Moves to `pyguara-examples`
@@ -102,7 +102,8 @@ keep green. It depends on `pyguara` from PyPI like any game would.
   `asset_pipeline`, `input_events`, `physics_integration`,
   `tilemap_authoring`, `ui_scene_graph`.
 - `docs/guides/zero_to_hero.md`, which walks through them.
-- `project/backlog/future/tutorial_series_raodmap.md`.
+- `project/backlog/archive_202611/future/tutorial_series_raodmap.md` (in the archive folder since
+  2026-11-14).
 - The tests that are theirs (`test_demo_tilemap_authoring.py`).
 
 It needs the roadmap's phase 4 first: with `pyguara` on PyPI the
@@ -158,8 +159,9 @@ back; nothing is lost and a newcomer does not wade through it.
 | `REFACTOR_STATE.md` | the audit closed 2026-09-09; `AGENTS.md` still calls it ACTIVE and must stop |
 | `.scratch/engine-remediation/` | all 49 tickets resolved 2026-10-05 |
 | `project/backlog/archive_202601/` | 15 files from before the audit, already named an archive |
-| `project/backlog/active/Consolide uma versao completa de feedabcks, bugs....md` | the external audit; reconciled and closed in issue #305 |
-| `project/backlog/future/systems_improvement.md`, `technical_debt_cleanup.md` | check each line against open issues, open one for anything live, then archive |
+| `project/backlog/archive_202611/github_phase1/` | `BRANCHES.md` and the seven `IMPLEMENTATION_P0-*.md` plans from January, moved out of `.github/` 2026-11-14. They describe a `develop` branch the repository no longer has |
+| `project/backlog/archive_202611/external_audit_issue_305.md` (was `active/Consolide uma versao completa de feedabcks, bugs....md`) | the external audit; reconciled and closed in issue #305 |
+| `project/backlog/archive_202611/future/systems_improvement.md`, `technical_debt_cleanup.md` | moved to the archive folder 2026-11-14. Still owed before the tag: check each line against open issues and open one for anything live |
 | `tools/columnar_probe.py`, `count_vector_ops.py`, `net_phase0.py`, `preflight_pymunk_vector.py`, `wgpu_probe.py` | each answered a question an ADR now records |
 
 `tools/slice_spritesheet.py` is referenced by nothing. If it is useful
@@ -171,7 +173,7 @@ it becomes a `pyguara` CLI command beside `atlas`; if not it goes.
   roadmap's `pyguara new` and one-call entry point replace it.
 - `logs/`, `saves/`, `target/`, `games/__pycache__/` (17 GB on disk):
   untracked already. Confirm `saves/` is ignored.
-- `project/backlog/archive_202601/`, `future/` and `project/demos/`,
+- `project/backlog/archive_202601/`, `archive_202611/` and `project/demos/`,
   once empty. **`project/` itself stays until beta** (decided
   2026-11-14), holding `backlog/active/`. At beta the plans in it are
   finished or have become issues, and it goes with the capstones.

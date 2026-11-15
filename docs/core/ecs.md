@@ -271,7 +271,7 @@ selection, or a backend releasing a handle.
 
 ## Rules of thumb
 
-1. Components hold data. Systems hold logic. `StrictComponent` enforces it.
+1. Components hold data. Systems hold logic. `BaseComponent` enforces it.
 2. Query by type, never by scanning `get_all_entities()`.
 3. Register a cached query only for something that runs every frame.
 4. Never touch `entity._components` or `manager._component_index` directly —

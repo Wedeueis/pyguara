@@ -8,9 +8,13 @@ rebinding and works across devices.
 ## Pipeline
 
 1. **Backend** (`IInputBackend`) — abstracts the joystick subsystem so the
-   manager can run headless in tests. `PygameInputBackend` is the shipped one.
-2. **Raw events** — `InputManager.process_event()` ingests pygame keyboard and
-   mouse events; `InputManager.update()` polls gamepad state once per frame.
+   manager can run headless in tests. The bootstrap picks the one that
+   matches the renderer: `NativeInputBackend` (gamepads through gilrs) on
+   wgpu, the default, and `PygameInputBackend` on pygame.
+2. **Raw events** — `InputManager.process_event()` ingests the engine's own
+   keyboard, mouse and text events, which the window backend (winit on
+   wgpu, SDL on pygame) has already translated;
+   `InputManager.update()` polls gamepad state once per frame.
 3. **Binding lookup** — `KeyBindingManager` maps `(device, code)` in the active
    *context* to action names.
 4. **Action dispatch** — an `OnActionEvent` is published for game logic;
@@ -106,7 +110,7 @@ def on_action(self, event: OnActionEvent) -> None:
 `input_manager.gamepad`) that polls device state, applies deadzones, and
 publishes `GamepadButtonEvent` / `GamepadAxisEvent` on change. Bound
 `InputDevice.GAMEPAD` actions are driven off those events; gamepads are not
-read from the pygame event queue.
+read from the window's event queue.
 
 ```python
 from pyguara.input import GamepadAxis, GamepadButton

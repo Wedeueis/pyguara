@@ -26,7 +26,7 @@
 
 - **Status:** proposed — the decision in "Recommendation" is the one being asked for
 - **Date:** 2026-10-16
-- **Context:** `project/backlog/active/rust_core.md` (RFC-0003), [issue #305](https://github.com/Wedeueis/pyguara/issues/305)
+- **Context:** `project/backlog/archive_202611/rust_core.md` (RFC-0003), [issue #305](https://github.com/Wedeueis/pyguara/issues/305)
 
 ## Context
 

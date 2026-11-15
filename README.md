@@ -10,11 +10,6 @@ that ships inside the package.
 
 > **Status: alpha, 0.6.0.** It runs a real game in development, and its
 > APIs still change between versions. It is not on PyPI yet.
->
-> **This repository is `pyguara-next`,** a temporary fork where the
-> renderer, platform layer and networking were rebuilt. It merges back
-> into [`Wedeueis/pyguara`](https://github.com/Wedeueis/pyguara), where
-> issues already live. Work is on the `next` branch.
 
 ## What it is
 
@@ -54,8 +49,8 @@ From source, until there is a release on PyPI. You need Python 3.12 or
 extension.
 
 ```bash
-git clone -b next https://github.com/Wedeueis/pyguara-next
-cd pyguara-next
+git clone https://github.com/Wedeueis/pyguara
+cd pyguara
 uv sync
 ```
 
@@ -123,23 +118,28 @@ Save it as a file and run it with `uv run python your_file.py`.
 
 ## See it run
 
-`games/` holds seven tutorial modules and seven larger demos.
+`games/` holds seven tutorial modules, seven larger demos and a
+networking demo.
 [games/README.md](games/README.md) lists them.
 
 ```bash
-uv run python games/guara_falcao/main.py      # a platformer, on wgpu
+uv run python games/guara_falcao/main.py      # a platformer
 uv run python games/vinagre_matilha/main.py   # squad tactics
 uv run python tools/studio_demo.py            # a demo with Studio attached
 ```
 
 ## Good to know before you start
 
-- **The default renderer is still the software one.** Set
-  `display.backend` to `wgpu` for the GPU renderer; the render graph,
-  lighting and Studio need it.
-- **Where it has been run.** CI tests on Linux. The wgpu renderer,
-  native audio, gamepads and Steam have been run by hand on Windows.
-  macOS wheels build but have not been run.
+- **It needs a GPU by default.** The default renderer is wgpu; on a
+  machine with no usable GPU, startup stops and says so. Set
+  `display.backend` to `pygame` for the software renderer, which runs
+  anywhere but has no lighting or post-processing.
+- **Where it has been run.** CI runs the whole suite on Linux, the wgpu
+  renderer included on a software GPU, and the network suite on Windows.
+  The wgpu renderer, native audio, gamepads and Steam have been run by
+  hand on Windows; two players over Steam have not yet
+  ([#402](https://github.com/Wedeueis/pyguara/issues/402)). macOS wheels
+  build but have not been run.
 - **Not there yet:** packed asset archives, localisation, crash
   reporting, a project scaffold, and an Aseprite importer.
 
@@ -163,10 +163,12 @@ what is left and in what order.
 ## Working on the engine
 
 ```bash
+uv sync --all-extras
 uv run pytest && uv run ruff check . && uv run mypy
 ```
 
-All three must pass. `make native` rebuilds the Rust extension after an
+`--all-extras` adds the test and lint tools, which a plain `uv sync` does
+not install. All three checks must pass. `make native` rebuilds the Rust extension after an
 edit. [AGENTS.md](AGENTS.md) has the rules for contributors, human or
 otherwise.
 

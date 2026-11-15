@@ -161,7 +161,7 @@ The light pass renders all lights additively, then the composite pass multiplies
 
 ### Light types
 
-`LightType` picks the shape `light.frag` cuts:
+`LightType` picks the shape the light shader cuts:
 
 | Type | Shape |
 |------|-------|

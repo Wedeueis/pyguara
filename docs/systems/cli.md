@@ -9,7 +9,7 @@ script:
 pyguara = "pyguara.cli:main"
 ```
 
-`main` is a [Click](https://click.palletsprojects.com/) group with two
+`main` is a [Click](https://click.palletsprojects.com/) group with five
 sub-commands:
 
 | Command | What it does |
@@ -17,6 +17,8 @@ sub-commands:
 | `pyguara build`  | Package a game into a standalone executable (wraps PyInstaller). |
 | `pyguara dist`   | Generate per-store upload scripts and platform icons. |
 | `pyguara atlas`  | Pack a folder of sprites into one texture atlas + JSON metadata. |
+| `pyguara sounds` | Build placeholder sound effects from a JSON recipe file, one `.wav` each. |
+| `pyguara studio` | Studio's agent surface: `ops`, `mcp` and `instructions`. See [Studio](studio.md) and [Agent Integration](../guides/agent-integration.md). |
 
 ```bash
 pyguara --help
@@ -25,7 +27,7 @@ pyguara build --help
 pyguara atlas --help
 ```
 
-Both sub-commands exit non-zero on failure (`1` for a usage/tool error, the
+`build` and `atlas` exit non-zero on failure (`1` for a usage/tool error, the
 PyInstaller exit code for a failed build), so they compose in scripts and CI.
 
 ---
@@ -237,6 +239,24 @@ subtly wrong atlas:
 `pyguara atlas …` and `python -m pyguara.cli.atlas_generator …` run the same
 Click command with the same options — the module entry point delegates
 straight to it.
+
+---
+
+## `pyguara sounds`
+
+Builds placeholder sound effects, so a game has audio to wire up before
+it has real assets.
+
+```bash
+pyguara sounds data/sounds.json assets/audio/
+pyguara sounds data/sounds.json assets/audio/ --seed 7
+```
+
+`RECIPES` is a JSON object mapping each sound's name to its recipe: a tree
+of tones, noise and envelopes, in the format `pyguara.audio.placeholder`
+documents. Every recipe is checked before anything is written, and a bad
+one fails the command without leaving a partial set behind. `--seed` is
+shared by every sound; change it to reroll their noise.
 
 ---
 

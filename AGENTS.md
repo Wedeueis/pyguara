@@ -15,10 +15,9 @@ PyGuara is a code-first 2D game engine for Python 3.12+, with a Rust
 extension for the platform layer and the hot paths. **Alpha, version
 0.6.0**: it runs a real game (Reclaimer), and its APIs still change.
 
-**This checkout is `pyguara-next`, a temporary fork.** Work lands on the
-`next` branch. It merges back into `Wedeueis/pyguara` after the Steam
-playtest (workstream 5e), and issues live there already. See
-`project/backlog/active/next_engine_plan.md`.
+The rebuilt renderer, platform layer and networking were developed in a
+temporary fork, `pyguara-next`, merged back on 2026-11-14 (#404) and
+archived. This repository is the only one; issues live here.
 
 ## What is being worked on
 
@@ -30,13 +29,14 @@ playtest (workstream 5e), and issues live there already. See
 | `repo_cleanup_plan.md` | What moves, is archived or is deleted at true alpha |
 
 `REFACTOR_STATE.md` and `.scratch/engine-remediation/` record two
-**finished** efforts. Do not resume either.
+**finished** efforts. Do not resume either. `project/backlog/archive_*/`
+holds superseded plans; nothing in it describes the current code.
 
 ## Setup
 
 ```bash
-uv sync            # compiles the Rust extension; needs rustup (stable)
-make native        # rebuild it in place after editing Rust
+uv sync --all-extras   # compiles the Rust extension; needs rustup (stable)
+make native            # rebuild it in place after editing Rust
 ```
 
 On Linux a source build also needs `sudo apt install libudev-dev
@@ -68,8 +68,7 @@ All three must pass. With several commits, each must pass alone.
 
 ## Branching
 
-- This fork: commit to `next`. After the merge-back, every independent
-  branch is cut from `main`.
+- Every independent branch is cut from `main`.
 - **Merge commits**, never squash or rebase-and-merge.
 - **A branch is frozen once its PR is open.** Follow-up work goes on a
   new branch; check `gh pr view <branch> --json state` before pushing to
@@ -89,6 +88,9 @@ Reasons and the full procedure: `docs/agents/branching.md`.
 | `pyguara/scene/`, `systems/` | Scenes, each owning its own `EntityManager` and `SystemManager` |
 | `pyguara/graphics/` | Render pipeline; backends are `wgpu` (GPU) and `pygame` (software reference) |
 | `pyguara/physics/`, `audio/`, `input/`, `ui/`, `ai/`, `animation/`, `tilemap/`, `resources/`, `persistence/`, `replay/`, `prefabs/` | Subsystems, each behind a protocol |
+| `pyguara/common/`, `config/`, `log/`, `scripting/`, `random/`, `spatial/` | Shared types, configuration, logging, coroutines, seeded randomness, non-physics spatial queries |
+| `pyguara/cli/`, `tools/`, `dev/` | The `pyguara` command, the in-game diagnostic overlay, asset hot reload |
+| `pyguara/columnar/` | A spike, not the ECS. See ADR 0008 |
 | `pyguara/net/` | Opt-in multiplayer: transport, replication, prediction |
 | `pyguara/kits/` | Gameplay building blocks: combat, movement, loot, procgen |
 | `pyguara/studio/` | The editor and the agent operation surface |

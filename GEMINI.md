@@ -12,7 +12,7 @@ generated block; it will be preserved.
 This file previously held its own description of the project, which had
 drifted: it advertised three `make` targets that do not exist and
 described an architecture several refactors out of date. What was still
-true -- the Makefile table, the coding standards, the file map -- is in
-`AGENTS.md` now, corrected.
+true -- the coding standards and the file map -- is in `AGENTS.md` now,
+corrected; `make help` lists the Makefile targets.
 
 Add anything Gemini-specific below; it will be preserved.

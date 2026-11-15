@@ -26,7 +26,7 @@ bootstrap wires:
 | --- | --- | --- |
 | `JsonLoader` | `.json`, `.manifest`, `.config` | `DataResource` |
 | `PygameImageLoader` (pygame backend) / `NativeImageLoader` (wgpu, decoded in Rust) | `.png`, `.jpg`, `.jpeg`, `.bmp`, `.tga` | `Texture` (`PygameTexture` / `ImageTexture`) |
-| `PygameSoundLoader` | `.wav`, `.ogg`, `.mp3` | `AudioClip` |
+| `NativeSoundLoader` (native mixer, the default) / `PygameSoundLoader` (`audio.backend: pygame`) | `.wav`, `.ogg`, `.mp3`, and `.flac` on the native mixer | `AudioClip` |
 | `PrefabLoader` | `.prefab`, `.prefab.json`, `.prefab.yaml` | `PrefabData` (see [Prefabs](prefabs.md)) |
 
 Registering a second loader for an extension logs a warning and wins.

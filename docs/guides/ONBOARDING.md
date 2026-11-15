@@ -10,9 +10,9 @@ Before diving into individual systems, it's crucial to understand the three core
 
 ### 1.1. Dependency Injection (DI)
 
-*   **Architecture:** The engine is built around a central DI Container (`pyguara/di/container.py`). At startup (`main.py`), systems and managers are "registered" with this container. When a class is created, the container automatically provides (injects) the dependencies it asks for in its `__init__` method.
+*   **Architecture:** The engine is built around a central DI Container (`pyguara/di/container.py`). At startup the composition root (`pyguara/application/bootstrap.py`, reached through `create_application()`) registers every engine service with this container. When a class is created, the container automatically provides (injects) the dependencies it asks for in its `__init__` method.
 *   **Design Pattern (Inversion of Control):** Instead of a class creating its own dependencies (e.g., `self.resource_manager = ResourceManager()`), it declares them in its constructor (`def __init__(self, resource_manager: ResourceManager):`). This decouples the class from its dependencies, making the system modular, testable, and easier to manage.
-*   **How to Use:** When creating a new `System` or `Manager`, simply add other registered systems you need as arguments to `__init__`. The DI container will handle the rest.
+*   **How to Use:** When creating a new service, add the registered services it needs as arguments to `__init__`; the container handles the rest. A scene resolves services with `self.container.get(...)`, in `on_enter()` or later: a scene has no container before the engine has resolved it.
 
     ```python
     # Before DI: Tightly Coupled
@@ -28,14 +28,24 @@ Before diving into individual systems, it's crucial to understand the three core
             self.resource_manager = resource_manager
     ```
 
-### 1.2. Backend Abstraction (Hardware Abstraction Layer - HAL)
+### 1.2. Backend Abstraction
 
-*   **Architecture:** Systems that interact with low-level hardware or external libraries (Graphics, Physics, Audio, Input) are split into two parts:
-    1.  A high-level `Manager` or `System` that game code interacts with.
-    2.  A `protocol.py` file defining an interface (e.g., `IRenderer`, `IPhysicsEngine`).
-    3.  A `backends/` directory containing concrete implementations of that interface (e.g., `PygameRenderer`, `PymunkEngine`).
-*   **Design Pattern (Strategy/Bridge):** This decouples the engine's logic from any specific library. The `PhysicsSystem` doesn't know about "Pymunk"; it only knows about the `IPhysicsEngine` interface. This allows backends to be swapped (e.g., from Pygame to a future OpenGL renderer) without rewriting any game logic.
-*   **How to Use:** Always code against the high-level `Manager` or `System` (e.g., `AudioManager`, `RenderSystem`). Never interact directly with a backend implementation.
+*   **Architecture:** Systems that touch hardware or an external library (graphics, physics, audio, input) are split into:
+    1.  A `protocols.py` file defining the interface (e.g., `IRenderer`, `IPhysicsEngine`, `IAudioSystem`, `IInputBackend`).
+    2.  A `backends/` directory with the concrete implementations.
+    3.  A high-level manager or system that game code talks to.
+*   **What ships:**
+
+    | Subsystem | Default | Alternative |
+    | --- | --- | --- |
+    | Rendering and window | **wgpu** and winit, in the Rust extension. Needs a GPU | **pygame**, a software renderer (`display.backend: pygame`). No lighting or post-processing |
+    | Input | `NativeInputBackend` (winit, gamepads on gilrs) with wgpu | `PygameInputBackend` with pygame |
+    | Audio | The native mixer | pygame's mixer (`PYGUARA_AUDIO_BACKEND=pygame`) |
+    | Physics | pymunk (`PymunkEngine`) | none |
+
+    On a machine with no usable GPU the default renderer stops at startup with `NoGraphicsAdapterError`. It does not switch to the software renderer, because the two look different.
+*   **Design Pattern (Strategy/Bridge):** The `PhysicsSystem` does not know about pymunk; it knows `IPhysicsEngine`. The same game code runs on either renderer.
+*   **How to Use:** Code against the protocol or the manager (`IRenderer`, `AudioManager`, `InputManager`), resolved from the container. Never import a backend, and never `import pygame` in game code.
 
 ### 1.3. Event-Driven Communication
 
@@ -66,20 +76,26 @@ Before diving into individual systems, it's crucial to understand the three core
 
 ### How to Use
 
-1.  **Define Components:** Create new `dataclass`es in a `components.py` file for your feature.
+1.  **Define Components:** Create dataclasses in a `components.py` file for your feature.
 
     ```python
     from dataclasses import dataclass
+
     from pyguara.common.types import Vector2
+    from pyguara.ecs.component import BaseComponent
 
-    @dataclass
-    class Transform:
-        position: Vector2 = field(default_factory=Vector2.zero)
+    @dataclass(slots=True)
+    class Velocity(BaseComponent):
+        value: Vector2 = Vector2(0, 0)
 
-    @dataclass
-    class PlayerInput:
+    @dataclass(slots=True)
+    class PlayerInput(BaseComponent):
         move_speed: float = 100.0
     ```
+
+    A component inherits from `BaseComponent` and declares no methods; the
+    class raises `TypeError` at definition time if it does. `Transform`
+    already exists, in `pyguara.common.components`.
 
 2.  **Create Systems:** Create a class that operates on entities with those components.
 
@@ -94,8 +110,15 @@ Before diving into individual systems, it's crucial to understand the three core
                 transform = entity.get_component(Transform)
                 player_input = entity.get_component(PlayerInput)
 
-                # ... apply movement logic ...
+                # ... apply movement logic, then tell the engine the
+                # component changed, or anything mirroring it keeps the
+                # old value:
+                self.entity_manager.notify_component_changed(entity.id, Transform)
     ```
+
+    Register it on the scene, which owns its own `SystemManager`:
+    `self.system_manager.register(PlayerMovementSystem(self.entity_manager), priority=500)`.
+    Each scene also owns its own `EntityManager`; there is no global one.
 
 3.  **Create Entities:** In your scene, get the `EntityManager` and create entities.
 
@@ -113,29 +136,36 @@ Before diving into individual systems, it's crucial to understand the three core
 
 *   **Location:** `pyguara/graphics/`
 *   **Architecture:** A backend-agnostic, pipeline-based rendering system.
-    *   **Protocols (`IRenderer`)**: Define the abstract drawing commands.
-    *   **Backend (`PygameRenderer`)**: Implements the drawing commands using Pygame.
-    *   **RenderSystem (`pipeline/render_system.py`)**: The main system that orchestrates the rendering process. It collects all `Renderable` objects, sorts them for 2D layering, batches them for performance, and sends them to the backend.
+    *   **Protocols (`IRenderer`, `UIRenderer`)**: The drawing commands game code uses.
+    *   **Backends**: `wgpu` (the default, GPU) and `pygame` (software, the reference the pixel tests compare against).
+    *   **RenderSystem (`pipeline/render_system.py`)**: One per scene. It collects the submitted renderables, sorts them for 2D layering, batches them and sends them to the backend.
+    *   **RenderGraph (`pipeline/graph.py`)**: The multi-pass pipeline on wgpu: world, light, composite, post-process, final.
 *   **Features:**
-    *   Sprite rendering with position, rotation, and scale.
-    *   Layering and Z-sorting for correct 2D depth.
-    *   High-performance sprite batching (`pygame.Surface.blits`).
+    *   Sprite rendering with position, rotation, scale and per-sprite tint.
+    *   Layering, Z-sorting and Y-sorting for 2D depth.
+    *   Sprite batching: one draw call per batch on wgpu.
     *   Camera and viewport support.
-    *   Basic primitive drawing (rects, circles, lines) for debugging.
+    *   Primitive drawing (rects, circles, lines, polygons).
+    *   On wgpu only: 2D lighting, post-processing (bloom, vignette and others) and sprite materials in WGSL. On pygame the same calls are accepted and the scene renders fully lit with no effects.
 *   **How to Use:**
-    1.  Create an entity with a `Transform` component and a `Sprite` component. The `Sprite` component holds the texture, layer, and other render-specific data.
-    2.  The `RenderSystem` (which is managed by the `SystemManager`) will automatically find and draw this entity each frame. You do not need to call a `draw` method yourself.
+    1.  Create an entity with a `Transform` and a `Sprite`. The `Sprite` holds the texture, layer and other render data.
+    2.  The scene's default `render()` submits every visible `Sprite` each frame. Override `render()` only to add manual draws, and call `super().render(...)` first.
 
     ```python
     from pyguara.common.components import Transform
     from pyguara.graphics.components import Sprite
+    from pyguara.resources.manager import ResourceManager
+    from pyguara.resources.types import Texture
 
     # In a scene's on_enter method
-    texture = self.resource_manager.load("sprites/my_sprite.png", Texture)
+    resources = self.container.get(ResourceManager)
+    texture = resources.load("sprites/my_sprite.png", Texture)
     my_entity = self.entity_manager.create_entity()
     my_entity.add_component(Transform(position=Vector2(50, 50)))
     my_entity.add_component(Sprite(texture=texture, layer=10))
     ```
+
+    See `docs/graphics/rendering.md` for lighting, materials and the render graph.
 
 ---
 
@@ -294,16 +324,25 @@ Before diving into individual systems, it's crucial to understand the three core
 
 The following systems provide critical infrastructure for the rest of the engine. They follow the same high-quality design patterns.
 
-*   **Animation (`pyguara/animation`):** A powerful tweening engine for animating any numeric property over time with easing functions. Use `TweenManager` to create and manage `Tween` objects for UI effects, camera movement, etc.
+*   **Animation (`pyguara/animation`):** A tweening engine for animating any numeric property over time with easing functions (`TweenManager`, `Tween`), plus sprite animation clips and animation state machines.
+*   **Audio (`pyguara/audio`):** A native mixer with buses, pitch, sample-exact loop regions and streamed music with fades. Use `AudioManager` from the container, or an `AudioSource` component on an entity.
 *   **Input (`pyguara/input`):** A robust action-based input mapping system. Use the `InputManager` to `register_action` (e.g., "jump") and `bind_input` (e.g., spacebar to "jump"). Game code should listen for `OnActionEvent` and check the `action_name`, not for raw key presses.
 *   **Persistence (`pyguara/persistence`):** A complete save/load system. Use the `PersistenceManager`'s `save_data` and `load_data` methods. It automatically handles serialization, data integrity checksums, and versioning.
 *   **Resources (`pyguara/resources`):** A professional-grade asset management pipeline. Use the `ResourceManager` to `load` assets. It handles caching, type-safe loading, and automatic memory management via reference counting. The `index_directory` feature allows loading by simple name (e.g., `"player_idle"`).
 *   **Scripting (`pyguara/scripting`):** A coroutine system for writing sequential, time-based logic without complex state machines. Write a generator function and use `yield` with helpers like `wait_for_seconds()` and `wait_until()`. Start it with `CoroutineManager.start_coroutine()`.
 *   **Developer overlay (`pyguara/tools`):** An in-game *diagnostic* overlay drawn on the engine's own `UIRenderer`, so it runs on every backend. Press **F12** to toggle it, then **F1** frame timing, **F3** the event stream, **F4** collision wireframes, **F8** the help table. It reports; it does not author — selecting entities, editing components, dragging transform handles, editing the config and browsing resources used to live here and are now PyGuara Studio's, which has an undo stack and an audit journal to put them on. Studio needs the wgpu backend, so **on the Pygame backend this overlay is all there is**; `docs/systems/editor.md` has the whole trade, and #330 records the two capabilities Studio has not rebuilt yet.
-*   **Config (`pyguara/config`):** A centralized manager for `game_config.json`. It provides type-safe access to settings via the `GameConfig` dataclass, validates data on load, and fires events on changes.
-*   **Error (`pyguara/error`):** A structured exception hierarchy. All engine errors inherit from `EngineException` and carry a rich `ErrorContext` object for easier debugging.
-*   **Log (`pyguara/log`):** A clean configuration wrapper around Python's standard `logging` module. Use `setup_logging` once at startup, then get a logger in any module with `get_logger(__name__)`.
-*   **Systems (`pyguara/systems`):** The `SystemManager` orchestrates the execution order of all ECS systems based on a priority number. Systems are registered with the manager, which then calls their `update` method in the correct order each frame.
+*   **Config (`pyguara/config`):** A centralized manager for `config/game_config.json`. It provides type-safe access to settings via the `GameConfig` dataclass, validates data on load, and fires events on changes.
+*   **Errors (`pyguara/errors.py`):** `ErrorHandlingStrategy` (`RAISE`, `LOG`, `IGNORE`) is the one policy for what happens when user-supplied code raises, shared by `EventDispatcher` and `DIContainer`. Each subsystem defines its own exceptions next to its code (for example `pyguara/di/exceptions.py`).
+*   **Log (`pyguara/log`):** A wrapper around Python's standard `logging` that adds categories and structured fields. Get a logger in any module with `get_logger(__name__)`; `default_log_manager.configure(...)` sets level and outputs, and the bootstrap calls it for you from the config.
+*   **Systems (`pyguara/systems`):** Each scene's `SystemManager` runs its systems in ascending priority order, calling `update` each frame. The engine's own systems use 100 to 399; register game systems at 500 or above.
 *   **Tools infrastructure (`pyguara/tools`):** The `ToolManager` handles visibility, input routing, and keyboard shortcuts for every registered `Tool`. `SandboxApplication` registers the overlay above; a game can register its own `Tool` subclasses too.
 
-This guide should provide a solid foundation for getting started with the PyGuara Engine. By understanding and using these core patterns, you can build complex, maintainable, and high-performance games.
+*   **Prefabs (`pyguara/prefabs`):** Data-driven entity templates with inheritance and children. Every scene has a `prefab_factory`.
+*   **Tilemaps (`pyguara/tilemap`):** Loaders for Tiled (`.tmx`) and LDtk, with collision rectangles merged from solid tiles.
+*   **Replay (`pyguara/replay`):** Deterministic input recording and playback.
+*   **Kits (`pyguara/kits`):** Opt-in gameplay building blocks: action combat, top-down and platformer movement, projectiles, loot, progression, procedural generation. Nothing in the core imports a kit.
+*   **Networking (`pyguara/net`):** Opt-in multiplayer: an encrypted transport, replication, client prediction and Steam relay hosting. A single-player game imports none of it. See `docs/systems/networking.md`.
+*   **Studio (`pyguara/studio`):** The editor over a running game, with the same operations exposed to coding agents over `pyguara studio ops` and `pyguara studio mcp`. See `docs/systems/studio.md`.
+*   **Native extension (`pyguara/native.py`, `rust/src/`):** The Rust crate behind the wgpu renderer, the window, input, images, text and the mixer. It also accelerates five things that keep a Python implementation: `FlowFieldService`, `ParticleSystem`, `Sparks`, `FlockingSystem` and `SpatialHash`. `PerformanceConfig.native_acceleration` (`off`, `auto`, `required`) picks between them, and `pyguara.native.describe()` says which is in force.
+
+Every measured performance number is in `docs/guides/performance.md`, and the decisions that still constrain the code are in `docs/adr/`.

@@ -11,7 +11,7 @@ global one. A pause menu pushed over a level therefore cannot see or disturb
 the level's entities.
 
 `resolve_dependencies()` builds the rest — camera, render system, prefab
-factory, and the four engine systems (Steering, AI, AudioSource, Animation) —
+factory, and the five engine systems (Tween, Steering, AI, AudioSource, Animation) —
 before `on_enter()` ever runs.
 
 ```python
@@ -194,7 +194,7 @@ class Level(Scene):
         self.system_manager.register(CombatSystem(self.entity_manager), priority=500)
 ```
 
-`resolve_dependencies()` registers the four engine systems in the 100–399 band
+`resolve_dependencies()` registers the five engine systems in the 100–399 band
 and calls `initialize()`. Game systems should use **500 or above** to stay
 clear of it.
 
