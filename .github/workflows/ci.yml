@@ -237,6 +237,56 @@ jobs:
           wait
           cat host.log
 
+  # Every other full test job runs on Ubuntu, and the game ships on Windows
+  # first. A platform the suite never runs on is one where a path separator, a
+  # file lock or a missing GPU passes review and fails a player.
+  tests-platforms:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Dependencies
+        run: uv sync --all-extras
+
+      - name: Say which store and GPU this runner has
+        shell: bash
+        run: |
+          uv run python -c "
+          from pyguara.native import NativeAcceleration, configure, describe
+          configure(NativeAcceleration.REQUIRED)
+          print(describe())
+          from pyguara.native import native_module
+          try:
+              print('wgpu adapter:', native_module().NativeGpu(8, 8).adapter)
+          except RuntimeError as error:
+              print('wgpu adapter: none --', error)
+          "
+
+      - name: Run the tests
+        shell: bash
+        run: uv run pytest -m "not performance and not slow" -p no:cacheprovider
+
   build-check:
     name: Build Verification
     runs-on: ubuntu-latest
