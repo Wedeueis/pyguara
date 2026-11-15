@@ -169,6 +169,15 @@ means the 3.12 build runs natively under 3.13 as well. Five are built --
 Linux x86_64 and aarch64, macOS x86_64 and arm64, Windows x64 -- and
 `.github/workflows/wheels.yml` says why the omissions are omissions.
 
+**Each `NativeGpu` is a whole wgpu device**: its own instance, adapter and
+device. A game holds one. A process that opens applications and never shuts
+them down holds one per application until a full garbage collection, and a
+driver can segfault past its cap rather than refuse: Mesa's GL-on-D3D12
+under WSLg does at the tenth. `NativeGpu.live_devices()` counts them, and
+`tests/conftest.py` collects garbage after any test that leaves more than
+four alive. A test that crashes inside `present()` or during garbage
+collection, only in some orders, is this until shown otherwise.
+
 See `docs/adr/0003-native-core-spike.md` for why this is an accelerator
 rather than a rewrite, and `0006-shipping-the-native-extension.md` for why
 it ships in the wheel and what that costs.

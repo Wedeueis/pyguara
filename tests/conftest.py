@@ -1,6 +1,8 @@
 """Pytest configuration and fixtures."""
 
+import gc
 import os
+import sys
 from collections.abc import Iterator
 from typing import Any
 
@@ -18,6 +20,40 @@ os.environ.setdefault("PYGUARA_WINDOW", "offscreen")
 # rather than absent. Without it a machine with no GPU still runs the rest
 # of the suite green -- but every GPU test would then skip silently on CI.
 REQUIRE_GPU = os.environ.get("PYGUARA_REQUIRE_GPU") == "1"
+
+# How many wgpu devices a test may leave alive before the next one starts.
+# Each `NativeGpu` owns an instance, an adapter and a device, and a driver
+# can segfault past its cap instead of refusing: Mesa's GL-on-D3D12 under
+# WSLg does at the tenth. An application a test never shut down keeps its
+# device until a full garbage collection, which may not come for many
+# tests, so test order alone decided whether the cap was reached.
+_LIVE_DEVICE_BUDGET = 4
+
+
+def _live_devices() -> int:
+    """The process's live `NativeGpu` count.
+
+    Read from the extension only if something has imported it: until then no
+    device can exist. Not through `native.native_module()`, which answers
+    which *store* is in force and is None under `PYGUARA_NO_NATIVE=1`, a mode
+    in which the wgpu renderer still opens devices.
+    """
+    extension = sys.modules.get("pyguara.pyguara_core_rs")
+    if extension is None:
+        return 0
+    return int(extension.NativeGpu.live_devices())
+
+
+@pytest.fixture(autouse=True)
+def _free_leaked_gpu_devices() -> Iterator[None]:
+    """Collect garbage after a test that leaves too many devices alive.
+
+    Only then: a full collection after each of eight thousand tests would
+    cost minutes, and almost no test touches the GPU.
+    """
+    yield
+    if _live_devices() > _LIVE_DEVICE_BUDGET:
+        gc.collect()
 
 
 @pytest.fixture
