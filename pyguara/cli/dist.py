@@ -104,16 +104,16 @@ def write_icons(source: Path, out_dir: Path) -> dict[str, Path]:
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # RGBA throughout: an `.ico` from a palette image loses its alpha and
+    # a game icon with a white box around it is the usual symptom. Closed
+    # once converted, so the source is not held open (Windows locks it).
     try:
-        image = Image.open(source)
+        with Image.open(source) as image:
+            icon = image.convert("RGBA")
     except (UnidentifiedImageError, OSError) as error:
         raise click.ClickException(
             f"{source} could not be read as an image: {error}"
         ) from error
-
-    # RGBA throughout: an `.ico` from a palette image loses its alpha and
-    # a game icon with a white box around it is the usual symptom.
-    icon = image.convert("RGBA")
 
     if icon.width != icon.height:
         logger.warning(

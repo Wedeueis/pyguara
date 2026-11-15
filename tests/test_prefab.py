@@ -115,7 +115,7 @@ class TestPrefabLoader:
         loader = PrefabLoader()
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".prefab.json", delete=False
+            encoding="utf-8", mode="w", suffix=".prefab.json", delete=False
         ) as f:
             json.dump(
                 {
@@ -133,18 +133,24 @@ class TestPrefabLoader:
             assert prefab.data.version == 1
             assert "Transform" in prefab.data.components
 
+            f.close()  # Windows will not delete a file that is open
+
             Path(f.name).unlink()
 
     def test_load_prefab_file(self):
         """Test loading a .prefab file (auto-detect format)."""
         loader = PrefabLoader()
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".prefab", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            encoding="utf-8", mode="w", suffix=".prefab", delete=False
+        ) as f:
             json.dump({"name": "AutoDetect", "components": {}}, f)
             f.flush()
 
             prefab = loader.load(f.name)
             assert prefab.data.name == "AutoDetect"
+
+            f.close()  # Windows will not delete a file that is open
 
             Path(f.name).unlink()
 
@@ -153,7 +159,7 @@ class TestPrefabLoader:
         loader = PrefabLoader()
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".prefab.json", delete=False
+            encoding="utf-8", mode="w", suffix=".prefab.json", delete=False
         ) as f:
             json.dump({"components": {}}, f)
             f.flush()
@@ -161,6 +167,8 @@ class TestPrefabLoader:
             prefab = loader.load(f.name)
             # Name should be the stem without suffixes
             assert prefab.data.name == Path(f.name).stem
+
+            f.close()  # Windows will not delete a file that is open
 
             Path(f.name).unlink()
 
@@ -179,7 +187,7 @@ class TestPrefabCache:
         cache = PrefabCache()
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".prefab.json", delete=False
+            encoding="utf-8", mode="w", suffix=".prefab.json", delete=False
         ) as f:
             json.dump({"name": "Cached", "components": {}}, f)
             f.flush()
@@ -193,6 +201,8 @@ class TestPrefabCache:
             prefab2 = cache.load(f.name)
             assert prefab2 is prefab
 
+            f.close()  # Windows will not delete a file that is open
+
             Path(f.name).unlink()
 
     def test_cache_invalidate(self):
@@ -200,7 +210,7 @@ class TestPrefabCache:
         cache = PrefabCache()
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".prefab.json", delete=False
+            encoding="utf-8", mode="w", suffix=".prefab.json", delete=False
         ) as f:
             json.dump({"name": "ToInvalidate", "components": {}}, f)
             f.flush()
@@ -210,6 +220,8 @@ class TestPrefabCache:
 
             cache.invalidate(f.name)
             assert not cache.is_cached(f.name)
+
+            f.close()  # Windows will not delete a file that is open
 
             Path(f.name).unlink()
 
@@ -590,13 +602,16 @@ class TestPrefabLoaderRejectsMalformed:
     )
     def test_non_mapping_top_level_raises_valueerror(self, body, suffix):
         loader = PrefabLoader()
-        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            encoding="utf-8", mode="w", suffix=suffix, delete=False
+        ) as f:
             f.write(body)
             f.flush()
             try:
                 with pytest.raises(ValueError, match="mapping"):
                     loader.load(f.name)
             finally:
+                f.close()  # Windows will not delete a file that is open
                 Path(f.name).unlink()
 
 
@@ -605,7 +620,7 @@ class TestPrefabRoundTrip:
 
     def test_load_then_instantiate(self, prefab_factory):
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".prefab.json", delete=False
+            encoding="utf-8", mode="w", suffix=".prefab.json", delete=False
         ) as f:
             json.dump(
                 {
@@ -622,6 +637,7 @@ class TestPrefabRoundTrip:
                 data = PrefabLoader().load(f.name).data
                 entity = prefab_factory.create(data, source_path=f.name)
             finally:
+                f.close()  # Windows will not delete a file that is open
                 Path(f.name).unlink()
 
         assert entity.get_component(Transform).position.x == 12

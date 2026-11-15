@@ -183,6 +183,24 @@ def test_atlas_generator_load_images():
 
 
 @pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
+def test_loading_leaves_no_source_image_open(tmp_path: Path) -> None:
+    """Pillow opens lazily, so an image used as loaded keeps its file open.
+
+    On Windows an open file cannot be deleted or overwritten, so the sprites
+    stayed locked while their images lived (seen on the Windows CI job).
+    Checked through Pillow's own file handle so it fails on any platform.
+    """
+    Image.new("RGBA", (8, 8), (255, 0, 0, 255)).save(tmp_path / "rgba.png")
+    Image.new("RGB", (8, 8), (0, 255, 0)).save(tmp_path / "rgb.png")
+
+    images = AtlasGenerator().load_images(tmp_path)
+
+    assert [getattr(image, "fp", None) for _, image in images] == [None, None]
+    for path in tmp_path.glob("*.png"):
+        path.unlink()  # what Windows refused
+
+
+@pytest.mark.skipif(not PIL_AVAILABLE, reason="PIL not available")
 def test_atlas_generator_load_images_empty_dir():
     """Atlas generator should raise error for empty directory."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -338,7 +356,7 @@ def test_atlas_generator_generate_excludes_own_output():
         generator.generate(tmpdir_path, out_img, out_meta)
         generator.generate(tmpdir_path, out_img, out_meta)  # must not raise
 
-        with open(out_meta) as f:
+        with open(out_meta, encoding="utf-8") as f:
             metadata = json.load(f)
         assert metadata["sprite_count"] == 2
         assert set(metadata["regions"]) == {"s0", "s1"}
@@ -375,7 +393,7 @@ def test_atlas_generator_generate():
         assert atlas_img.size == (256, 256)
 
         # Verify metadata
-        with open(output_metadata) as f:
+        with open(output_metadata, encoding="utf-8") as f:
             metadata = json.load(f)
 
         assert metadata["sprite_count"] == 3
@@ -458,7 +476,7 @@ def test_resource_manager_load_atlas_success(tmp_path, pygame_init):
         },
     }
 
-    with open(metadata_path, "w") as f:
+    with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(metadata, f)
 
     # Load atlas

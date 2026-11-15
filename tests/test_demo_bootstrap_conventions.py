@@ -30,7 +30,7 @@ CONSTRUCTS_A_MANAGER = re.compile(r"\bFramebufferManager\s*\(")
 
 @pytest.mark.parametrize("bootstrap", BOOTSTRAPS, ids=lambda p: str(p.parent.name))
 def test_no_demo_builds_its_own_framebuffer_manager(bootstrap: Path) -> None:
-    source = bootstrap.read_text()
+    source = bootstrap.read_text(encoding="utf-8")
 
     assert not CONSTRUCTS_A_MANAGER.search(source), (
         f"{bootstrap.parent.name}/bootstrap.py constructs its own "
@@ -104,7 +104,7 @@ def test_a_demo_builds_its_container_through_the_engine(bootstrap: Path) -> None
     if demo in HAND_WIRED_ON_PURPOSE:
         pytest.skip(f"{demo} is hand-wired on purpose; see the set above")
 
-    assert _calls_engine_bootstrap(bootstrap.read_text()), (
+    assert _calls_engine_bootstrap(bootstrap.read_text(encoding="utf-8")), (
         f"{demo}/bootstrap.py wires its own container. Call "
         "`pyguara.application.bootstrap.create_container()` and add only "
         "what is specific to this demo on top of it."
@@ -139,7 +139,7 @@ def _builds_a_framebuffer_manager(path: Path) -> bool:
     Returns:
         True if the constructor is called anywhere in it.
     """
-    for node in ast.walk(ast.parse(path.read_text())):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.Call):
             func = node.func
             name = (
@@ -209,7 +209,7 @@ def test_a_scene_with_its_own_camera_assigns_it(scenes: Path) -> None:
     quietly: `guara_falcao` drew the gizmo hundreds of pixels from the
     entity it belonged to, which is a confusing way to find out.
     """
-    source = scenes.read_text()
+    source = scenes.read_text(encoding="utf-8")
     if not CONSTRUCTS_A_CAMERA.search(source):
         return
 

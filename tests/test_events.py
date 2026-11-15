@@ -394,8 +394,9 @@ def test_process_queue_mixed_limits():
     for i in range(100):
         dispatcher.queue_event(CustomEvent(data=f"event_{i}"))
 
-    # Process with both limits (should hit whichever comes first)
-    processed = dispatcher.process_queue(max_time_ms=20.0, max_events=5)
+    # Both limits set; the time budget is generous so the event limit binds.
+    # A 20 ms budget ran out first on macOS, where sleep(0.001) is coarse.
+    processed = dispatcher.process_queue(max_time_ms=1000.0, max_events=5)
 
     # Should have hit the max_events limit
     assert processed == 5

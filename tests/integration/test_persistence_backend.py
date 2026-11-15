@@ -478,11 +478,25 @@ class TestSaveMenuAPI:
 # --------------------------------------------------------------------------- #
 # User data directory                                                          #
 # --------------------------------------------------------------------------- #
+def _data_dir_in(root: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point platformdirs' per-user data directory at `root`, on any OS.
+
+    `XDG_DATA_HOME` steered it on Linux only; on Windows and macOS these
+    tests wrote into the machine's real data directory.
+    """
+    import platformdirs
+
+    def user_data_dir(name: str, author: str | None = None, **_: object) -> str:
+        return str(root / name)
+
+    monkeypatch.setattr(platformdirs, "user_data_dir", user_data_dir)
+
+
 class TestUserDataDirectory:
     def test_it_resolves_under_the_platform_data_dir(self, tmp_path, monkeypatch):
         """The whole point: not relative to the working directory, which is
         wrong for anything installed."""
-        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        _data_dir_in(tmp_path, monkeypatch)
         path = user_data_path("MyGame", subdir="saves")
 
         assert pathlib.Path(path).is_dir()
@@ -490,7 +504,7 @@ class TestUserDataDirectory:
         assert "MyGame" in path
 
     def test_the_subdir_is_optional(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        _data_dir_in(tmp_path, monkeypatch)
         assert not user_data_path("MyGame").endswith("saves")
 
     def test_an_empty_app_name_is_rejected(self):
@@ -502,7 +516,7 @@ class TestUserDataDirectory:
     def test_the_backend_roundtrips_there_and_not_in_the_cwd(
         self, tmp_path, monkeypatch
     ):
-        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        _data_dir_in(tmp_path, monkeypatch)
         monkeypatch.chdir(tmp_path / "..")
 
         manager = PersistenceManager(FileStorageBackend.in_user_data_dir("MyGame"))
