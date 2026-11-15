@@ -25,7 +25,7 @@ from typing import Any, Protocol, runtime_checkable
 from pyguara.config.validation import ValidationIssue
 
 ENGINE_SECTION_NAMES = frozenset(
-    {"display", "audio", "input", "physics", "performance", "debug"}
+    {"display", "audio", "input", "physics", "performance", "debug", "i18n"}
 )
 """Section names `GameConfig` declares as real dataclass fields."""
 

@@ -27,6 +27,7 @@ archived. This repository is the only one; issues live here.
 | `next_engine_plan.md` | Workstreams 1 to 7, their measurements, and the live status of each |
 | `network_multiplayer.md` | The networking plan, by phase |
 | `repo_cleanup_plan.md` | What moves, is archived or is deleted at true alpha |
+| `localisation_plan.md` | The ten languages Reclaimer ships in, and the four PRs that get it there |
 
 `REFACTOR_STATE.md` and `.scratch/engine-remediation/` record two
 **finished** efforts. Do not resume either. `project/backlog/archive_*/`

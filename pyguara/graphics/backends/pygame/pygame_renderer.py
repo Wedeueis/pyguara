@@ -7,6 +7,7 @@ from pyguara.graphics.backends.pygame.conversions import (
     to_pygame_color,
     to_pygame_rect,
 )
+from pyguara.graphics.backends.pygame.fallback_font import FallbackFont
 from pyguara.graphics.backends.surface_blending import (
     RGBA,
     blit_blended_circle,
@@ -14,7 +15,6 @@ from pyguara.graphics.backends.surface_blending import (
     blit_blended_rect,
     render_text,
 )
-from pyguara.graphics.fonts import default_font_path
 from pyguara.graphics.types import RenderBatch
 from pyguara.resources.types import Texture
 
@@ -49,7 +49,7 @@ class PygameBackend:
     def __init__(self, window_surface: pygame.Surface):
         """Initialize the backend with a target surface."""
         self._screen = window_surface
-        self._font_cache: dict[int, pygame.font.Font] = {}
+        self._font_cache: dict[int, FallbackFont] = {}
         if not pygame.font.get_init():
             pygame.font.init()
 
@@ -277,12 +277,13 @@ class PygameBackend:
             width,
         )
 
-    def _get_font(self, size: int) -> pygame.font.Font:
+    def _get_font(self, size: int) -> FallbackFont:
         """Retrieve or create a font of the given size."""
         if size not in self._font_cache:
             # The engine's bundled face, so text matches the wgpu renderer
-            # and every platform; see `pyguara.graphics.fonts`.
-            self._font_cache[size] = pygame.font.Font(default_font_path(), size)
+            # and every platform, with the engine's fallback faces for what
+            # it lacks; see `pyguara.graphics.fonts`.
+            self._font_cache[size] = FallbackFont(size)
         return self._font_cache[size]
 
     def draw_text(
