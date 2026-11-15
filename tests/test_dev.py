@@ -220,7 +220,9 @@ class TestAssetReloadWatcher:
 
         for v in (2, 3, 4):
             asset.write_text(json.dumps({"v": v}))
-            time.sleep(0.01)
+            # Same size each time: move the mtime on, as real saves would.
+            later = asset.stat().st_mtime + 2 * v
+            os.utime(asset, (later, later))
             watcher._watcher.check_now()
 
         assert watcher.drain() == [key]
@@ -274,6 +276,11 @@ class TestAssetReloadWatcher:
         watcher.start()
         try:
             asset.write_text(json.dumps({"n": 2}))
+            # Same size, and on Windows possibly inside the clock tick the
+            # watcher took its first look in, so neither size nor mtime would
+            # differ. A real save comes seconds later; say so.
+            later = asset.stat().st_mtime + 2
+            os.utime(asset, (later, later))
 
             deadline = time.monotonic() + 3.0
             while watcher.pending_count == 0 and time.monotonic() < deadline:
