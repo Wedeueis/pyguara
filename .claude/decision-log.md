@@ -883,3 +883,15 @@
 - **Alternatives:** parse `cmap` tables in Python; depend on fontTools; ask the extension's `NativeFace.covers()`, the same answer the wgpu path uses, and render each run with its own `pygame.font.Font` on the default face's baseline.
 - **Chose:** the extension. The two renderers then agree on which face draws each character by construction, and with no fallbacks set the default face renders exactly as before, so existing pixel goldens are untouched. Without the extension, fallbacks are inert and one warning is logged.
 - **Tags:** i18n, text, pygame
+
+## CJK line breaking is a hand-written subset of UAX #14
+- **Context:** localisation L3, wrapping Chinese and Japanese, which have no spaces between words.
+- **Alternatives:** the full Unicode line-breaking algorithm through a Rust crate (`unicode-linebreak`) exposed by the extension; ICU through PyICU; break between CJK characters, between CJK and other text, and nowhere else, with the kinsoku tables for what may not start or end a line.
+- **Chose:** the subset. It is what the ten target languages need (Korean and the rest wrap on spaces), it stays in the pure-Python layout that both renderers share and the tests drive with a fake measure, and it adds no dependency. The full algorithm can replace `break_offsets()` behind the same signature if Thai or Khmer, which need dictionaries, are ever added.
+- **Tags:** i18n, text, layout
+
+## Case changes take an engine-wide case language
+- **Context:** the same; the design system's `uppercase` buttons, wrong in Turkish with `str.upper()`.
+- **Alternatives:** pass a locale to every case change; read the translator's locale from the container where the case changes; one engine-wide case language in `pyguara.ui.text_case`, set from the locale.
+- **Chose:** the engine-wide setting. A button's draw has no container, threading a locale through every widget would touch every call site, and a game has one text language at a time. Wiring it to `Translator`'s locale changes waits for L1 (#415) to merge; until then a game calls `set_case_language()`.
+- **Tags:** i18n, text, ui
