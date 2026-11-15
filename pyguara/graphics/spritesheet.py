@@ -1,5 +1,4 @@
-"""
-Utilities for handling sprite sheet assets.
+"""Utilities for handling sprite sheet assets.
 
 This module provides the logic to slice a single large texture into multiple
 smaller sub-textures (frames) that can be played back by the animation system.

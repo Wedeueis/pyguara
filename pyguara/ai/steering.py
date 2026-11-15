@@ -38,8 +38,7 @@ class SteeringBehavior:
         panic_distance: float = 200.0,
         rng: RandomStream | None = None,
     ) -> Vector2:
-        """
-        Calculate steering force to flee from a threat.
+        """Calculate steering force to flee from a threat.
 
         Args:
             transform: Entity transform.
@@ -75,8 +74,7 @@ class SteeringBehavior:
         current_velocity: Vector2,
         slowing_radius: float = 100.0,
     ) -> Vector2:
-        """
-        Calculate steering force to arrive at a target and stop.
+        """Calculate steering force to arrive at a target and stop.
 
         Args:
             transform: Entity transform.
@@ -111,8 +109,7 @@ class SteeringBehavior:
         wander_target: Vector2 | None = None,
         rng: RandomStream | None = None,
     ) -> tuple[Vector2, Vector2]:
-        """
-        Calculate steering force for random wandering behavior.
+        """Calculate steering force for random wandering behavior.
 
         Uses a circle projected in front of the entity with a random target
         on its circumference.
@@ -178,8 +175,7 @@ class SteeringBehavior:
         max_speed: float,
         current_velocity: Vector2,
     ) -> Vector2:
-        """
-        Calculate steering force to intercept a moving target.
+        """Calculate steering force to intercept a moving target.
 
         Args:
             transform: Entity transform.
@@ -218,8 +214,7 @@ class SteeringBehavior:
         panic_distance: float = 200.0,
         rng: RandomStream | None = None,
     ) -> Vector2:
-        """
-        Calculate steering force to evade a moving threat.
+        """Calculate steering force to evade a moving threat.
 
         Args:
             transform: Entity transform.
@@ -262,8 +257,7 @@ class SteeringBehavior:
         max_speed: float,
         current_velocity: Vector2,
     ) -> Vector2:
-        """
-        Calculate steering force toward the average position of nearby flockmates.
+        """Calculate steering force toward the average position of nearby flockmates.
 
         Args:
             transform: Entity transform.
@@ -288,8 +282,7 @@ class SteeringBehavior:
         max_speed: float,
         current_velocity: Vector2,
     ) -> Vector2:
-        """
-        Calculate steering force to match the average heading of nearby flockmates.
+        """Calculate steering force to match the average heading of nearby flockmates.
 
         Args:
             neighbor_velocities: Velocities of nearby flock members (self excluded).
@@ -316,8 +309,7 @@ class SteeringBehavior:
         separation_radius: float,
         max_speed: float,
     ) -> Vector2:
-        """
-        Calculate steering force pushing away from nearby flockmates.
+        """Calculate steering force pushing away from nearby flockmates.
 
         Each neighbor within `separation_radius` contributes a push
         proportional to how close it is -- a neighbor right on top of the

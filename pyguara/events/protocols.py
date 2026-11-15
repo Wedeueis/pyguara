@@ -48,8 +48,7 @@ class IEventDispatcher(Protocol):
         ...
 
     def queue_event(self, event: Event) -> None:
-        """
-        Thread-Safe: Queue an event to be dispatched on the next frame.
+        """Thread-Safe: Queue an event to be dispatched on the next frame.
 
         Use this when firing events from background threads (e.g., Network, Loader)
         to ensure handlers run on the Main Thread.
@@ -62,8 +61,7 @@ class IEventDispatcher(Protocol):
     def process_queue(
         self, max_time_ms: float | None = None, max_events: int | None = None
     ) -> int:
-        """
-        Flush the event queue and dispatch pending events with optional limits.
+        """Flush the event queue and dispatch pending events with optional limits.
 
         This should be called once per frame by the Application main loop.
 

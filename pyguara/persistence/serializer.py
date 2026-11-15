@@ -13,8 +13,7 @@ from pyguara.persistence.types import SerializationFormat
 
 
 def prepare_for_json(o: Any) -> Any:
-    """
-    Recursively convert game objects into JSON-friendly dicts.
+    """Recursively convert game objects into JSON-friendly dicts.
 
     This bypasses json.dumps treating iterables (Vector2) as lists,
     and avoids dataclasses.asdict() deepcopy issues with C-types.

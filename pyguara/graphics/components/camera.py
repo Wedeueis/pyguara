@@ -1,5 +1,4 @@
-"""
-Defines the Camera component for 2D coordinate transformations.
+"""Defines the Camera component for 2D coordinate transformations.
 
 This module provides the `Camera2D` class, which is responsible for converting
 coordinates between World Space (game logic) and Screen Space (pixels).
@@ -23,8 +22,7 @@ _new_vector = tuple.__new__
 
 @dataclass
 class CameraShake:
-    """
-    Camera shake effect for impact feedback.
+    """Camera shake effect for impact feedback.
 
     Attributes:
         duration (float): Total shake duration in seconds.
@@ -42,8 +40,7 @@ class CameraShake:
     rng: RandomStream = field(default_factory=RandomStream)
 
     def update(self, dt: float) -> Vector2:
-        """
-        Calculate shake offset for current frame.
+        """Calculate shake offset for current frame.
 
         Args:
             dt (float): Delta time in seconds.
@@ -70,8 +67,7 @@ class CameraShake:
 
 @dataclass
 class CameraZoomTransition:
-    """
-    Smooth zoom transition with easing.
+    """Smooth zoom transition with easing.
 
     Attributes:
         target_zoom (float): Target zoom level.
@@ -88,8 +84,7 @@ class CameraZoomTransition:
     easing: str = "smooth"
 
     def update(self, dt: float) -> float | None:
-        """
-        Calculate zoom for current frame.
+        """Calculate zoom for current frame.
 
         Args:
             dt (float): Delta time in seconds.
@@ -123,8 +118,7 @@ class CameraZoomTransition:
 
 @dataclass
 class CameraFollowConstraints:
-    """
-    Constraints for smooth camera following.
+    """Constraints for smooth camera following.
 
     Attributes:
         deadzone (Rect): Rectangle where target can move without camera moving.
@@ -176,8 +170,7 @@ class CameraFraming:
 
 
 class Camera2D:
-    """
-    A 2D Camera component that defines the viewable area of the game world.
+    """A 2D Camera component that defines the viewable area of the game world.
 
     It handles Zoom and Panning math. It does NOT render anything; it simply
     provides the transformation the renderer applies.
@@ -196,8 +189,7 @@ class Camera2D:
     """
 
     def __init__(self, width: int, height: int):
-        """
-        Initialize the Camera with a default viewport size.
+        """Initialize the Camera with a default viewport size.
 
         Args:
             width (int): Width of the target viewport/screen, used as the
@@ -360,8 +352,7 @@ class Camera2D:
         self._zoom = value
 
     def set_viewport_size(self, width: int, height: int) -> None:
-        """
-        Update the fallback viewport used when no explicit one is passed.
+        """Update the fallback viewport used when no explicit one is passed.
 
         Call this when the window is resized. Render-path callers pass the
         real viewport to ``screen_offset`` directly and are unaffected.
@@ -398,8 +389,7 @@ class Camera2D:
     def world_to_screen(
         self, world_pos: Vector2, viewport: Rect | None = None
     ) -> Vector2:
-        """
-        Transform a point from World Space to Screen Space.
+        """Transform a point from World Space to Screen Space.
 
         Formula: ``world_pos * zoom + screen_offset(viewport)``.
 
@@ -433,8 +423,7 @@ class Camera2D:
     def screen_to_world(
         self, screen_pos: Vector2, viewport: Rect | None = None
     ) -> Vector2:
-        """
-        Transform a point from Screen Space (e.g., Mouse) to World Space.
+        """Transform a point from Screen Space (e.g., Mouse) to World Space.
 
         The exact inverse of `world_to_screen`:
         ``(screen_pos - screen_offset(viewport)) / zoom``.
@@ -451,8 +440,7 @@ class Camera2D:
         return (screen_pos - self.screen_offset(vp)) * (1.0 / self.zoom)
 
     def get_view_bounds(self, viewport: Rect | None = None) -> Rect:
-        """
-        Calculate the visible rectangle of the world in World Coordinates.
+        """Calculate the visible rectangle of the world in World Coordinates.
 
         Useful for Culling (not rendering objects outside this rect) or
         keeping the player inside bounds.
@@ -475,8 +463,7 @@ class Camera2D:
     # ===== Camera Effects API =====
 
     def shake(self, magnitude: float, duration: float, frequency: float = 20.0) -> None:
-        """
-        Trigger a camera shake effect.
+        """Trigger a camera shake effect.
 
         Args:
             magnitude (float): Maximum shake offset in pixels.
@@ -493,8 +480,7 @@ class Camera2D:
     def zoom_to(
         self, target_zoom: float, duration: float = 0.5, easing: str = "smooth"
     ) -> None:
-        """
-        Start a smooth zoom transition.
+        """Start a smooth zoom transition.
 
         Args:
             target_zoom (float): Target zoom level. Must be positive.
@@ -526,8 +512,7 @@ class Camera2D:
         target: Vector2,
         constraints: CameraFollowConstraints | None = None,
     ) -> None:
-        """
-        Set the camera to follow a target position with optional constraints.
+        """Set the camera to follow a target position with optional constraints.
 
         Args:
             target (Vector2): Target position to follow.
@@ -737,8 +722,7 @@ class Camera2D:
         return target + self._follow_target_velocity * constraints.lookahead
 
     def update(self, dt: float) -> None:
-        """
-        Update all camera effects.
+        """Update all camera effects.
 
         Call this every frame to apply shake, zoom transitions, and follow behavior.
 

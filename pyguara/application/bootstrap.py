@@ -129,8 +129,7 @@ def create_application(
     configure: Configure | None = None,
     register_sections: RegisterSections | None = None,
 ) -> Application:
-    """
-    Construct and configure the Application instance.
+    """Construct and configure the Application instance.
 
     This factory function handles the Dependency Injection wiring:
     1. Creates the container.
@@ -156,8 +155,7 @@ def create_sandbox_application(
     configure: Configure | None = None,
     register_sections: RegisterSections | None = None,
 ) -> SandboxApplication:
-    """
-    Construct and configure the SandboxApplication instance.
+    """Construct and configure the SandboxApplication instance.
 
     Includes developer tools.
 

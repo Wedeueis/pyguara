@@ -1,5 +1,4 @@
-"""
-Core abstract definitions for the Resource domain.
+"""Core abstract definitions for the Resource domain.
 
 This module defines the foundational data structures and contracts for the
 resource system. It relies on the 'Dependency Inversion Principle':
@@ -14,8 +13,7 @@ from pyguara.resources.meta import AssetMeta
 
 
 class Resource(ABC):
-    """
-    The base abstract class for all assets loaded from the filesystem.
+    """The base abstract class for all assets loaded from the filesystem.
 
     Attributes:
         path (str): The original file path or unique identifier of the resource.
@@ -71,8 +69,7 @@ class Resource(ABC):
     @property
     @abstractmethod
     def native_handle(self) -> Any:
-        """
-        Returns the underlying engine-specific object.
+        """Returns the underlying engine-specific object.
 
         This is an 'escape hatch' allowing low-level systems (like a Renderer)
         to access the raw data (e.g., pygame.Surface) needed for drawing.

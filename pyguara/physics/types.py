@@ -7,8 +7,7 @@ from pyguara.common.types import Vector2
 
 
 class BodyType(Enum):
-    """
-    Defines how a physics body behaves.
+    """Defines how a physics body behaves.
 
     Attributes:
         DYNAMIC: Fully simulated, affected by forces and collisions.
@@ -54,8 +53,7 @@ class JointType(Enum):
 
 @dataclass
 class CollisionLayer:
-    """
-    Configuration for collision filtering.
+    """Configuration for collision filtering.
 
     Args:
         category: Bitmask representing what this object IS.
@@ -70,8 +68,7 @@ class CollisionLayer:
 
 @dataclass(frozen=True)
 class PhysicsMaterial:
-    """
-    Physical properties of a surface.
+    """Physical properties of a surface.
 
     Frozen: the presets in `pyguara.physics.materials` are shared instances,
     and `Materials.ICE.friction = 0.9` must not rewrite ice for the whole
@@ -90,8 +87,7 @@ class PhysicsMaterial:
 
 @dataclass
 class RaycastHit:
-    """
-    Result of a raycast query.
+    """Result of a raycast query.
 
     Args:
         position: World coordinates of the hit point.

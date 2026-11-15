@@ -1,5 +1,4 @@
-"""
-High-performance Particle System logic.
+"""High-performance Particle System logic.
 
 This module implements a specialized rendering system for transient visual effects
 (smoke, fire, sparks). It prioritizes raw throughput (count) over individual
@@ -46,8 +45,7 @@ def _particle_color(p: Particle) -> tuple[int, int, int, int]:
 
 @dataclass
 class Particle:
-    """
-    A single particle instance with physics and visual effects.
+    """A single particle instance with physics and visual effects.
 
     Attributes:
         position (Vector2): Current world position.
@@ -102,8 +100,7 @@ class Particle:
 
 
 class ParticleSystem:
-    """
-    Manager for all particle effects in the game.
+    """Manager for all particle effects in the game.
 
     Acts as a self-contained mini-engine that handles the lifecycle (Update)
     and batching (Render) of thousands of small entities.
@@ -116,8 +113,7 @@ class ParticleSystem:
         *,
         accelerate: bool | None = None,
     ):
-        """
-        Initialize the particle pool.
+        """Initialize the particle pool.
 
         Args:
             capacity (int): Maximum number of concurrent particles.
@@ -213,8 +209,7 @@ class ParticleSystem:
         color_start: tuple[int, int, int, int] | None = None,
         color_end: tuple[int, int, int, int] | None = None,
     ) -> None:
-        """
-        Spawn new particles with optional physics and visual effects.
+        """Spawn new particles with optional physics and visual effects.
 
         Args:
             texture (Texture): The image to use.
@@ -426,8 +421,7 @@ class ParticleSystem:
         texture: Texture,
         position: Vector2,
     ) -> None:
-        """
-        Emit particles using a pre-configured preset.
+        """Emit particles using a pre-configured preset.
 
         Args:
             preset_name (str): Name of the preset ("fire", "smoke", "explosion", etc.).
@@ -463,8 +457,7 @@ class ParticleSystem:
         )
 
     def update(self, dt: float) -> None:
-        """
-        Advance the simulation with physics and visual effects.
+        """Advance the simulation with physics and visual effects.
 
         Updates positions, applies physics (acceleration, damping),
         visual effects (rotation, scale), and color animation.
@@ -562,8 +555,7 @@ class ParticleSystem:
 
 @dataclass
 class ParticleEmitterConfig:
-    """
-    Configuration preset for particle effects.
+    """Configuration preset for particle effects.
 
     Stores all parameters needed to emit a specific particle effect style.
     """

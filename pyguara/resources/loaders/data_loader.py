@@ -8,8 +8,7 @@ from pyguara.resources.types import Resource
 
 
 class JsonLoader:
-    """
-    Loader strategy for parsing JSON files into DataResources.
+    """Loader strategy for parsing JSON files into DataResources.
 
     Implements the IResourceLoader protocol.
     """
@@ -20,8 +19,7 @@ class JsonLoader:
         return [".json", ".manifest", ".config"]
 
     def load(self, path: str) -> Resource:
-        """
-        Read a JSON file and return a DataResource.
+        """Read a JSON file and return a DataResource.
 
         Args:
             path: The full path to the file.

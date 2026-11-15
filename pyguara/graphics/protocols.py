@@ -1,5 +1,4 @@
-"""
-Core protocols for the Rendering system.
+"""Core protocols for the Rendering system.
 
 This module defines the essential contracts (interfaces) that decouple the
 "What" (Renderable objects) from the "How" (The Renderer backend).
@@ -23,8 +22,7 @@ from pyguara.resources.types import Texture
 
 @runtime_checkable
 class Renderable(Protocol):
-    """
-    An object that provides all necessary data to be drawn on screen.
+    """An object that provides all necessary data to be drawn on screen.
 
     Any class implementing this protocol (Game Entities, UI Widgets, Particles)
     can be submitted to the RenderPipeline. This effectively acts as the
@@ -39,8 +37,7 @@ class Renderable(Protocol):
 
     @property
     def texture(self) -> Texture:
-        """
-        The visual resource to be rendered.
+        """The visual resource to be rendered.
 
         Returns:
             Texture: The loaded image/texture resource.
@@ -49,8 +46,7 @@ class Renderable(Protocol):
 
     @property
     def position(self) -> Vector2:
-        """
-        The World Space position of the object.
+        """The World Space position of the object.
 
         Returns:
             Vector2: The (x, y) coordinates where the center of the texture
@@ -60,8 +56,7 @@ class Renderable(Protocol):
 
     @property
     def layer(self) -> int:
-        """
-        The sorting layer index.
+        """The sorting layer index.
 
         Lower numbers are drawn first (background). Higher numbers are drawn
         last (foreground/UI).
@@ -73,8 +68,7 @@ class Renderable(Protocol):
 
     @property
     def z_index(self) -> float:
-        """
-        Manual depth key within the layer, used when `y_sort` is False.
+        """Manual depth key within the layer, used when `y_sort` is False.
 
         Set it by hand to decide what covers what among things that do not
         move -- a floor decal under a wall shadow. Anything that *does*
@@ -88,8 +82,7 @@ class Renderable(Protocol):
 
     @property
     def y_sort(self) -> bool:
-        """
-        Whether world Y decides this object's depth instead of `z_index`.
+        """Whether world Y decides this object's depth instead of `z_index`.
 
         The 2.5D rule: objects lower on the screen (higher Y) cover objects
         higher up, so a character walking down past a tree ends up in front
@@ -102,8 +95,7 @@ class Renderable(Protocol):
 
     @property
     def sort_offset(self) -> float:
-        """
-        Added to world Y before comparing, when `y_sort` is True.
+        """Added to world Y before comparing, when `y_sort` is True.
 
         An object's depth is its contact point with the ground, not its
         centre: without this a tall tree whose centre sits above a short
@@ -117,8 +109,7 @@ class Renderable(Protocol):
 
     @property
     def sort_group(self) -> int:
-        """
-        Coarse ordering within the layer, compared before depth.
+        """Coarse ordering within the layer, compared before depth.
 
         What a "sorting group" is for: a character and the sword they are
         holding must stay together relative to the scenery however their
@@ -134,8 +125,7 @@ class Renderable(Protocol):
 
     @property
     def rotation(self) -> float:
-        """
-        Rotation angle in degrees.
+        """Rotation angle in degrees.
 
         Returns:
             float: Angle (0.0 to 360.0).
@@ -144,8 +134,7 @@ class Renderable(Protocol):
 
     @property
     def scale(self) -> Vector2:
-        """
-        Scale factor.
+        """Scale factor.
 
         Returns:
             Vector2: (1.0, 1.0) for normal size.
@@ -154,8 +143,7 @@ class Renderable(Protocol):
 
     @property
     def material(self) -> Any:
-        """
-        Optional material for custom rendering.
+        """Optional material for custom rendering.
 
         When None (the default), the renderer uses the default sprite material.
 
@@ -166,8 +154,7 @@ class Renderable(Protocol):
 
     @property
     def color(self) -> Color:
-        """
-        Tint multiplied into the texture at draw time.
+        """Tint multiplied into the texture at draw time.
 
         `Color(255, 255, 255, 255)` (the default every implementer uses)
         draws the texture unmodified -- a backend only needs to touch its
@@ -255,8 +242,7 @@ class ShapeBatchRenderer(Protocol):
 
 @runtime_checkable
 class IRenderer(Protocol):
-    """
-    The Hardware Abstraction Layer (HAL) for rendering.
+    """The Hardware Abstraction Layer (HAL) for rendering.
 
     This protocol defines the low-level operations that a Backend
     (e.g., PygameBackend, HeadlessBackend) must implement. The `RenderSystem`
@@ -275,8 +261,7 @@ class IRenderer(Protocol):
         ...
 
     def clear(self, color: Color) -> None:
-        """
-        Clear the entire screen/buffer with a specific color.
+        """Clear the entire screen/buffer with a specific color.
 
         Args:
             color (Color): The background color to fill.
@@ -284,8 +269,7 @@ class IRenderer(Protocol):
         ...
 
     def set_viewport(self, viewport: Rect) -> None:
-        """
-        Set the clipping region for subsequent draw calls.
+        """Set the clipping region for subsequent draw calls.
 
         All draw operations after this call should be constrained to the
         specified rectangle. Used for split-screen, minimaps, or UI windows.
@@ -314,8 +298,7 @@ class IRenderer(Protocol):
         rotation: float = 0.0,
         scale: Vector2 = Vector2(1, 1),
     ) -> None:
-        """
-        Draw a texture **centred** on the given Screen Coordinate.
+        """Draw a texture **centred** on the given Screen Coordinate.
 
         Centred, not top-left: a rotation is about the texture's own
         middle, which is what a caller drawing a character or a spinning
@@ -339,8 +322,7 @@ class IRenderer(Protocol):
         ...
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
-        """
-        Draw a simple primitive rectangle (useful for Debugging/UI).
+        """Draw a simple primitive rectangle (useful for Debugging/UI).
 
         Args:
             rect (Rect): The rectangle bounds.
@@ -352,8 +334,7 @@ class IRenderer(Protocol):
     def draw_circle(
         self, center: Vector2, radius: float, color: Color, width: int = 0
     ) -> None:
-        """
-        Draw a circle primitive.
+        """Draw a circle primitive.
 
         Args:
             center (Vector2): Center position.
@@ -366,8 +347,7 @@ class IRenderer(Protocol):
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
-        """
-        Draw a line between two points.
+        """Draw a line between two points.
 
         Args:
             start (Vector2): Start point.
@@ -380,8 +360,7 @@ class IRenderer(Protocol):
     def draw_text(
         self, text: str, position: Vector2, color: Color, size: int = 16
     ) -> None:
-        """
-        Draw a text string, like the other primitives, in screen space.
+        """Draw a text string, like the other primitives, in screen space.
 
         "World-space" text (a floating damage number, a "press E" prompt
         tracking an entity) is the caller's responsibility, exactly as it
@@ -419,8 +398,7 @@ class IRenderer(Protocol):
         ...
 
     def present(self) -> None:
-        """
-        Swap the buffers and display the rendered frame to the user.
+        """Swap the buffers and display the rendered frame to the user.
 
         This should be called exactly once at the end of the render loop.
         """

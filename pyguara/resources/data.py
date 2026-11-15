@@ -11,8 +11,7 @@ T = TypeVar("T")
 
 
 class DataResource(Resource):
-    """
-    A generic resource representing structured game data.
+    """A generic resource representing structured game data.
 
     This class serves as a base for specific game assets like 'ItemData',
     'EnemyData', or 'LevelConfig'. It allows these data structures to be
@@ -50,8 +49,7 @@ class DataResource(Resource):
         return self._data
 
     def to_object(self, cls: type[T]) -> T:
-        """
-        Convert the raw data into a strong-typed Dataclass instance.
+        """Convert the raw data into a strong-typed Dataclass instance.
 
         Args:
             cls: The target Dataclass type to convert into.

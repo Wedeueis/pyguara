@@ -1,5 +1,4 @@
-"""
-Headless graphics backend.
+"""Headless graphics backend.
 
 Used for server-side logic, unit tests, or CI/CD pipelines where no display
 exists. Unlike the Pygame backend under `SDL_VIDEODRIVER=dummy`, none of these
@@ -102,8 +101,7 @@ class HeadlessBackend:
         return self._height
 
     def clear(self, color: Color) -> None:
-        """
-        Clear the entire screen/buffer with a specific color.
+        """Clear the entire screen/buffer with a specific color.
 
         Args:
             color (Color): The background color to fill.
@@ -111,8 +109,7 @@ class HeadlessBackend:
         ...
 
     def set_viewport(self, viewport: Rect) -> None:
-        """
-        Set the clipping region for subsequent draw calls.
+        """Set the clipping region for subsequent draw calls.
 
         All draw operations after this call should be constrained to the
         specified rectangle. Used for split-screen, minimaps, or UI windows.
@@ -141,8 +138,7 @@ class HeadlessBackend:
         rotation: float = 0.0,
         scale: Vector2 = Vector2(1, 1),
     ) -> None:
-        """
-        Draw a texture at the given Screen Coordinate.
+        """Draw a texture at the given Screen Coordinate.
 
         Note:
             This method receives coordinates that have *already* been transformed
@@ -158,8 +154,7 @@ class HeadlessBackend:
         ...
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
-        """
-        Draw a simple primitive rectangle (useful for Debugging/UI).
+        """Draw a simple primitive rectangle (useful for Debugging/UI).
 
         Args:
             rect (Rect): The rectangle bounds.
@@ -171,8 +166,7 @@ class HeadlessBackend:
     def draw_circle(
         self, center: Vector2, radius: float, color: Color, width: int = 0
     ) -> None:
-        """
-        Draw a circle primitive.
+        """Draw a circle primitive.
 
         Args:
             center (Vector2): Center position.
@@ -185,8 +179,7 @@ class HeadlessBackend:
     def draw_line(
         self, start: Vector2, end: Vector2, color: Color, width: int = 1
     ) -> None:
-        """
-        Draw a line between two points.
+        """Draw a line between two points.
 
         Args:
             start (Vector2): Start point.
@@ -218,8 +211,7 @@ class HeadlessBackend:
         self._height = height
 
     def present(self) -> None:
-        """
-        Swap the buffers and display the rendered frame to the user.
+        """Swap the buffers and display the rendered frame to the user.
 
         This should be called exactly once at the end of the render loop.
         """

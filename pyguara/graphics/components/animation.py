@@ -182,8 +182,7 @@ class TransitionCondition(Enum):
 
 @dataclass
 class AnimationTransition:
-    """
-    Defines a transition from one animation state to another.
+    """Defines a transition from one animation state to another.
 
     Attributes:
         from_state (str): Source state name.
@@ -200,8 +199,7 @@ class AnimationTransition:
 
 @dataclass
 class AnimationState:
-    """
-    Represents a single state in the animation state machine.
+    """Represents a single state in the animation state machine.
 
     Attributes:
         name (str): Unique identifier for this state.
@@ -232,8 +230,7 @@ class AnimationStateMachine(StrictComponent):
     """
 
     def __init__(self, sprite: Sprite, animator: Animator):
-        """
-        Initialize the state machine.
+        """Initialize the state machine.
 
         Args:
             sprite (Sprite): The sprite to animate.

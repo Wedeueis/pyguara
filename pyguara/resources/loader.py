@@ -1,5 +1,4 @@
-"""
-Interface definition for Resource Loaders.
+"""Interface definition for Resource Loaders.
 
 This module uses Python Protocols to define the Strategy Pattern for
 loading files. Any class that implements this protocol can be registered
@@ -18,8 +17,7 @@ class IResourceLoader(Protocol):
 
     @property
     def supported_extensions(self) -> list[str]:
-        """
-        A list of file extensions that this loader can handle.
+        """A list of file extensions that this loader can handle.
 
         Example:
             return ['.png', '.jpg', '.jpeg']
@@ -30,8 +28,7 @@ class IResourceLoader(Protocol):
         ...
 
     def load(self, path: str) -> Resource:
-        """
-        Read the file at the given path and returns a concrete Resource instance.
+        """Read the file at the given path and returns a concrete Resource instance.
 
         Args:
             path (str): The full path to the file.
@@ -55,8 +52,7 @@ class IMetaAwareLoader(IResourceLoader, Protocol):
     """
 
     def load_with_meta(self, path: str, meta: AssetMeta | None) -> Resource:
-        """
-        Load a resource with optional metadata settings.
+        """Load a resource with optional metadata settings.
 
         If meta is None, uses default settings. Otherwise applies the
         settings from the meta object.

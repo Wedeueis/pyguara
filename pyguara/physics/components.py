@@ -10,8 +10,7 @@ from pyguara.physics.types import BodyType, CollisionLayer, PhysicsMaterial, Sha
 
 @dataclass
 class Collider(BaseComponent):
-    """
-    Component defining the collision shape.
+    """Component defining the collision shape.
 
     Attributes:
         shape_type: Geometric shape.
@@ -43,8 +42,7 @@ class Collider(BaseComponent):
 
 @dataclass
 class RigidBody(BaseComponent):
-    """
-    Component representing a physical object.
+    """Component representing a physical object.
 
     Attributes:
         mass: The mass of the body (default 1.0).

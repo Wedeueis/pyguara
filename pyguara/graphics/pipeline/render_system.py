@@ -10,16 +10,14 @@ from pyguara.graphics.types import RenderCommand
 
 
 class RenderSystem:
-    """
-    Manages the rendering pipeline: Sorting, Batching, and Drawing.
+    """Manages the rendering pipeline: Sorting, Batching, and Drawing.
 
     Coordinates the submission of renderables, sorting by Z-index,
     batching for performance, and dispatching to the backend.
     """
 
     def __init__(self, backend: IRenderer):
-        """
-        Initialize with a specific backend.
+        """Initialize with a specific backend.
 
         Args:
             backend: The concrete renderer implementation (e.g., PygameRenderer).
@@ -32,8 +30,7 @@ class RenderSystem:
         self._default_viewport: Viewport | None = None
 
     def submit(self, item: Renderable, position: Vector2 | None = None) -> None:
-        """
-        Add a renderable object to the current frame's queue.
+        """Add a renderable object to the current frame's queue.
 
         Args:
             item: An entity or component that complies with the Renderable protocol.
@@ -68,8 +65,7 @@ class RenderSystem:
         )
 
     def flush(self, camera: Camera2D, viewport: Viewport | None = None) -> None:
-        """
-        Process the frame: Sort -> Batch -> Draw.
+        """Process the frame: Sort -> Batch -> Draw.
 
         Args:
             camera: The active camera for the scene.

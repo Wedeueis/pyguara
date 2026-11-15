@@ -15,8 +15,7 @@ class RenderQueue:
         self._commands.append(cmd)
 
     def sort(self) -> None:
-        """
-        Sorts the queue in-place to ensure correct visual stacking.
+        """Sorts the queue in-place to ensure correct visual stacking.
 
         Sorting order:
 

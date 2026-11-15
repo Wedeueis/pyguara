@@ -4,8 +4,7 @@ from typing import Any
 
 
 class Blackboard:
-    """
-    A shared memory container for AI decision making.
+    """A shared memory container for AI decision making.
 
     Allows different parts of an AI (e.g., nodes in a Behavior Tree or states
     in an FSM) to read and write shared data without tight coupling.

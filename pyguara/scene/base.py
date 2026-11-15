@@ -61,9 +61,7 @@ class SceneNotReadyError(RuntimeError):
 
 
 class Scene(ABC):
-    """
-
-    Abstract base class for all game scenes.
+    """Abstract base class for all game scenes.
 
     Manages the lifecycle of a specific game state (Menu, Gameplay, etc).
 
@@ -115,8 +113,7 @@ class Scene(ABC):
         self._teardown_callbacks: list[Callable[[], None]] = []
 
     def resolve_dependencies(self, container: DIContainer) -> None:
-        """
-        Call by the Application/SceneManager to inject the container.
+        """Call by the Application/SceneManager to inject the container.
 
         Builds this scene's engine systems, camera, render system, prefab
         factory, and DI scope (`self.scope`, for resolving `SCOPED`
