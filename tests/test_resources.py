@@ -142,7 +142,7 @@ def test_index_directory_recursive(tmp_path: Path) -> None:
 
     manager.index_directory(str(tmp_path))
 
-    assert manager.load("hero", MockRes).path.endswith("a/hero.mock")
+    assert Path(manager.load("hero", MockRes).path).parts[-2:] == ("a", "hero.mock")
     assert manager.load("sword.mock", MockRes).path.endswith("sword.mock")
 
 
@@ -174,7 +174,7 @@ def test_index_directory_ambiguous_stem_is_dropped_with_warning(
     assert "goblin" not in manager._path_index
     # ...but each unambiguous full name still resolves to its own file.
     g1 = manager.load(str(tmp_path / "enemies" / "goblin.mock"), MockRes)
-    assert Path(g1.path).read_text() == "enemy"
+    assert Path(g1.path).read_text(encoding="utf-8") == "enemy"
 
 
 def test_index_directory_same_file_twice_is_not_ambiguous(tmp_path: Path) -> None:

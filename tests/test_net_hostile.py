@@ -366,14 +366,16 @@ def test_hostile_traffic_under_a_bad_network_still_leaves_the_player_connected()
 
 def test_the_release_profile_unwinds() -> None:
     """`panic = "abort"` would turn every guarded panic back into a host crash."""
-    manifest = tomllib.loads(Path("Cargo.toml").read_text())
+    manifest = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))
 
     assert manifest["profile"]["release"].get("panic", "unwind") == "unwind"
 
 
 def test_the_guarded_crates_are_pinned_exactly() -> None:
     """A new version needs the parsers re-read and this suite re-run."""
-    dependencies = tomllib.loads(Path("Cargo.toml").read_text())["dependencies"]
+    dependencies = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))[
+        "dependencies"
+    ]
 
     assert dependencies["renet"].startswith("=")
     assert dependencies["renetcode"].startswith("=")

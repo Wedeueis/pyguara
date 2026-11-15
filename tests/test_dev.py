@@ -1,6 +1,7 @@
 """Tests for pyguara.dev -- the file watcher and asset hot-reload."""
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -178,7 +179,7 @@ class TestPollingFileWatcher:
 
 
 def _manager_with_json(path: Path, payload: dict) -> tuple[ResourceManager, str]:
-    path.write_text(json.dumps(payload))
+    path.write_text(json.dumps(payload), encoding="utf-8")
     rm = ResourceManager()
     rm.register_loader(JsonLoader())
     key = str(path)
@@ -194,6 +195,11 @@ class TestAssetReloadWatcher:
         watcher.refresh()
 
         asset.write_text(json.dumps({"hp": 99}))
+        # Same size, and on Windows inside the same ~15 ms clock tick as the
+        # first write, so neither size nor mtime would differ. A real save
+        # comes seconds later; say so.
+        later = asset.stat().st_mtime + 2
+        os.utime(asset, (later, later))
         watcher._watcher.check_now()  # simulate one poll cycle
 
         # Detected, queued -- but not yet reloaded.

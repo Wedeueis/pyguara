@@ -256,39 +256,38 @@ def test_process_queue_max_events_limit():
     assert len(received) == 10
 
 
-def test_process_queue_time_budget():
-    """Test that max_time_ms parameter enforces time budget."""
-    import time
+def test_process_queue_time_budget(monkeypatch):
+    """`max_time_ms` stops processing once the budget is spent.
 
+    On a fake clock each handler advances by exactly 2 ms, so a 10 ms budget
+    processes exactly five events. A real `sleep(0.002)` overslept on a
+    loaded macOS runner and made the count a matter of luck.
+    """
+    import types
+
+    from pyguara.events import dispatcher as dispatcher_module
     from pyguara.events.dispatcher import EventDispatcher
+
+    now = [0.0]
+    fake_time = types.SimpleNamespace(perf_counter=lambda: now[0])
+    monkeypatch.setattr(dispatcher_module, "time", fake_time)
 
     dispatcher = EventDispatcher()
     received = []
 
     def slow_handler(e: CustomEvent) -> None:
-        # Each event takes ~2ms to process
-        time.sleep(0.002)
+        now[0] += 0.002
         received.append(e.data)
 
     dispatcher.subscribe(CustomEvent, slow_handler)
-
-    # Queue 20 events (would take ~40ms total)
     for i in range(20):
         dispatcher.queue_event(CustomEvent(data=f"event_{i}"))
 
-    # Process with 10ms budget (should process ~5 events)
     processed = dispatcher.process_queue(max_time_ms=10.0)
 
-    # Should have processed fewer than all events
-    assert processed < 20
-    assert len(received) == processed
-
-    # Should have at least processed a few
-    assert processed >= 2
-
-    # Remaining events still in queue
-    queue_size = dispatcher._event_queue.qsize()
-    assert queue_size == 20 - processed
+    assert processed == 5
+    assert received == [f"event_{i}" for i in range(5)]
+    assert dispatcher._event_queue.qsize() == 15
 
 
 def test_process_queue_no_limits():
@@ -394,8 +393,9 @@ def test_process_queue_mixed_limits():
     for i in range(100):
         dispatcher.queue_event(CustomEvent(data=f"event_{i}"))
 
-    # Process with both limits (should hit whichever comes first)
-    processed = dispatcher.process_queue(max_time_ms=20.0, max_events=5)
+    # Both limits set; the time budget is generous so the event limit binds.
+    # A 20 ms budget ran out first on macOS, where sleep(0.001) is coarse.
+    processed = dispatcher.process_queue(max_time_ms=1000.0, max_events=5)
 
     # Should have hit the max_events limit
     assert processed == 5

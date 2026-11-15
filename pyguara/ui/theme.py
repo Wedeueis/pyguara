@@ -209,7 +209,7 @@ class UITheme:
         """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(self.to_json())
 
     @classmethod
@@ -230,7 +230,7 @@ class UITheme:
         if not path.exists():
             raise FileNotFoundError(f"Theme file not found: {path}")
 
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return cls.from_json(f.read())
 
 
