@@ -25,6 +25,7 @@ from collections import OrderedDict
 from typing import Any
 
 from pyguara import native
+from pyguara.graphics import fonts
 from pyguara.graphics.backends.wgpu.textures import ImageTexture
 from pyguara.log import get_logger
 
@@ -195,6 +196,7 @@ class GpuFrame:
         self._text: OrderedDict[tuple[FontKey, str], GlyphRun] = OrderedDict()
         self._images: dict[tuple[int, bool], tuple[weakref.ref[object], ImageRun]] = {}
         self._doomed: list[int] = []
+        self._font_generation = fonts.fallback_generation()
         self._white: int | None = None
 
     # -- fonts and text ----------------------------------------------------
@@ -206,12 +208,31 @@ class GpuFrame:
         rasterised in Rust; see `rust/src/text.rs` for how it follows
         FreeType and SDL_ttf.
         """
+        self._follow_fallbacks()
         key = (size, bold, italic)
         font = self._fonts.get(key)
         if font is None:
             font = self._extension.NativeFont(max(1, size), bold, italic)
+            faces = fonts.native_fallback_faces()
+            if faces:
+                font.set_fallbacks(faces)
             self._fonts[key] = font
         return font
+
+    def _follow_fallbacks(self) -> None:
+        """Drop every font and cached string when the fallback faces change.
+
+        A string rasterised before a fallback was set holds missing-glyph
+        boxes; it must be drawn again, not served from the cache.
+        """
+        generation = fonts.fallback_generation()
+        if generation == self._font_generation:
+            return
+        self._font_generation = generation
+        self._fonts.clear()
+        for texture, _, _ in self._text.values():
+            self._doomed.append(texture)
+        self._text.clear()
 
     def text(
         self, text: str, size: int, bold: bool = False, italic: bool = False
@@ -228,6 +249,7 @@ class GpuFrame:
             `(texture, width, height)`, or None for a string with no
             pixels -- empty, or all of it zero-width.
         """
+        self._follow_fallbacks()
         key = ((size, bold, italic), text)
         found = self._text.get(key)
         if found is not None:
