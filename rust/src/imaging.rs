@@ -32,6 +32,33 @@ pub fn decode_image<'py>(py: Python<'py>, path: &str) -> PyResult<(Bound<'py, Py
     Ok((PyBytes::new(py, decoded.as_raw()), width, height))
 }
 
+/// Decode an image held in memory to RGBA, top row first.
+///
+/// What a packed asset is decoded with: `pyguara.assets` reads the bytes,
+/// wherever they live, and this decodes them without touching the disk.
+///
+/// Args:
+///     data: The file's contents. The format is read from them.
+///     name: The asset's path, for error messages.
+///
+/// Returns:
+///     `(pixels, width, height)`.
+///
+/// Raises:
+///     OSError: If the bytes are not an image this decodes.
+#[pyfunction]
+pub fn decode_image_bytes<'py>(
+    py: Python<'py>,
+    data: &[u8],
+    name: &str,
+) -> PyResult<(Bound<'py, PyBytes>, u32, u32)> {
+    let decoded = py
+        .detach(|| image::load_from_memory(data).map(|image| image.into_rgba8()))
+        .map_err(|error| PyOSError::new_err(format!("{name}: {error}")))?;
+    let (width, height) = decoded.dimensions();
+    Ok((PyBytes::new(py, decoded.as_raw()), width, height))
+}
+
 /// Multiply each pixel's colour by its alpha.
 ///
 /// Rounds down, as the pygame loader's `uint8` cast did.

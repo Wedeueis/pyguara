@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 import pygame
 
+from pyguara import assets
 from pyguara.audio.audio_system import require_capability, resolve_loop_points
 from pyguara.audio.types import (
     AudioBusManager,
@@ -513,7 +514,11 @@ class PygameAudioSystem:
     def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
         """Stream background music from disk."""
         try:
-            pygame.mixer.music.load(path)
+            if assets.in_pack(path):
+                # From memory, the format named by the extension.
+                pygame.mixer.music.load(assets.open(path), path.rsplit(".", 1)[-1])
+            else:
+                pygame.mixer.music.load(path)  # streamed from disk
             loops = -1 if loop else 0
             pygame.mixer.music.play(loops=loops, fade_ms=fade_ms)
             pygame.mixer.music.set_volume(self._get_effective_music_volume())

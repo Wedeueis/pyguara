@@ -37,7 +37,19 @@ const BYTES_PER_SAMPLE: usize = 2;
 /// Returns the samples with the file's own rate and channel count.
 pub(crate) fn decode_to_samples(path: &str) -> Result<(Vec<i16>, u32, usize), String> {
     let file = File::open(path).map_err(|error| format!("{path}: {error}"))?;
-    let stream = MediaSourceStream::new(Box::new(file), Default::default());
+    decode_source(Box::new(file), path)
+}
+
+/// Decode audio held in memory, as `decode_to_samples` decodes a file.
+pub(crate) fn decode_bytes_to_samples(data: Vec<u8>, name: &str) -> Result<(Vec<i16>, u32, usize), String> {
+    decode_source(Box::new(std::io::Cursor::new(data)), name)
+}
+
+fn decode_source(
+    source: Box<dyn symphonia::core::io::MediaSource>,
+    path: &str,
+) -> Result<(Vec<i16>, u32, usize), String> {
+    let stream = MediaSourceStream::new(source, Default::default());
 
     let mut hint = Hint::new();
     if let Some(extension) = Path::new(path).extension().and_then(|e| e.to_str()) {
@@ -198,6 +210,34 @@ pub fn decode_audio<'py>(
 ) -> PyResult<(Bound<'py, PyBytes>, u32, usize)> {
     let (samples, rate, channels) = py
         .detach(|| decode_to_samples(path))
+        .map_err(PyOSError::new_err)?;
+    let bytes = py.detach(|| samples_to_bytes(&samples));
+    Ok((PyBytes::new(py, &bytes), rate, channels))
+}
+
+/// Decode audio held in memory to interleaved signed 16-bit PCM.
+///
+/// What a packed asset is decoded with; see `decode_audio`.
+///
+/// Args:
+///     data: The file's contents.
+///     name: The asset's path: its extension is a hint to the format
+///         probe, and it names the asset in errors.
+///
+/// Returns:
+///     `(pcm, rate, channels)`, as `decode_audio`.
+///
+/// Raises:
+///     OSError: If the bytes hold no decodable audio.
+#[pyfunction]
+pub fn decode_audio_bytes<'py>(
+    py: Python<'py>,
+    data: Vec<u8>,
+    name: &str,
+) -> PyResult<(Bound<'py, PyBytes>, u32, usize)> {
+    let name = name.to_owned();
+    let (samples, rate, channels) = py
+        .detach(|| decode_bytes_to_samples(data, &name))
         .map_err(PyOSError::new_err)?;
     let bytes = py.detach(|| samples_to_bytes(&samples));
     Ok((PyBytes::new(py, &bytes), rate, channels))

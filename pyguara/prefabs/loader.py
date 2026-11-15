@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from pyguara import assets
 from pyguara.log import get_logger
 from pyguara.prefabs.types import PrefabChild, PrefabData
 from pyguara.resources.types import Resource
@@ -80,7 +81,7 @@ class PrefabLoader:
         """
         file_path = Path(path)
 
-        if not file_path.exists():
+        if not assets.is_file(file_path):
             raise FileNotFoundError(f"Prefab file not found: {path}")
 
         # Determine format by extension
@@ -109,19 +110,17 @@ class PrefabLoader:
 
     def _load_json(self, path: Path) -> dict[str, Any]:
         """Load JSON file."""
-        with open(path, encoding="utf-8") as f:
-            result: dict[str, Any] = json.load(f)
-            return result
+        result: dict[str, Any] = json.loads(assets.read_text(path))
+        return result
 
     def _load_yaml(self, path: Path) -> dict[str, Any]:
         """Load YAML file."""
-        with open(path, encoding="utf-8") as f:
-            result: dict[str, Any] = yaml.safe_load(f)
-            return result
+        result: dict[str, Any] = yaml.safe_load(assets.read_text(path))
+        return result
 
     def _load_auto(self, path: Path) -> dict[str, Any]:
         """Auto-detect format and load."""
-        content = path.read_text(encoding="utf-8").strip()
+        content = assets.read_text(path).strip()
 
         # Try JSON first (starts with { or [)
         if content.startswith(("{", "[")):

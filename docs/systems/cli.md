@@ -68,6 +68,31 @@ A default set of hidden imports (`pygame`, `pymunk`, `numpy`,
 `PIL`, `msgpack`, …) is always passed so the frozen build finds the engine's
 backends; add project-specific ones with `--hidden-import`.
 
+### Asset packs
+
+`--pack` bakes the asset folders (auto-detected or given with `-a`) into one
+file, `<name>.pak`, and bundles that instead of the folders. An install then
+holds one asset file rather than hundreds:
+
+```bash
+pyguara build main.py --pack
+```
+
+- Each folder keeps its own name inside the pack (`assets/sprites/hero.png`),
+  the path `--add-data` would have given the loose file. Paths the game's
+  code builds, such as `Path(__file__).parent / "assets" / ...`, find it
+  unchanged.
+- **The frozen game mounts every `.pak` in its bundle on its first asset
+  read**, through `pyguara.assets`. There is nothing to call. Run from
+  source, nothing is mounted and the loose files are read.
+- Already-compressed files (PNG, JPEG, OGG, MP3, FLAC) are stored as they
+  are; everything else is deflated. Hidden files and `__pycache__` are left
+  out; `.meta` sidecars are kept.
+- The pack is reproducible: the same folders bake to the same bytes.
+- A game's own file reads must go through `pyguara.assets` too
+  (`assets.read_text(path)` rather than `open(path)`), or they will not find
+  packed files. See `docs/systems/resources.md`, "Packed assets".
+
 ### Crash reports
 
 A build is `--windowed` by default, so it has no console: an unhandled
@@ -111,6 +136,7 @@ machine, home directory included, so it is theirs to send.
 | `--hidden-import` | — | Repeatable. Extra modules to force-include. |
 | `--clean` | off | Wipe the PyInstaller cache first. |
 | `--debug` | off | `--debug=all`. |
+| `--pack` | off | Bake the asset folders into one `<name>.pak` instead of bundling them loose. |
 | `--dry-run` | off | Print the PyInstaller command and stop. |
 
 After a successful build, the generated `build/` work directory and the

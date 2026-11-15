@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pyguara import assets
 from pyguara.resources.blob import BlobResource, TextResource
 from pyguara.resources.types import Resource
 
@@ -54,8 +55,7 @@ class BlobLoader:
             FileNotFoundError: If the path does not exist.
             OSError: If the file is unreadable.
         """
-        with open(path, "rb") as handle:
-            return BlobResource(path, handle.read())
+        return BlobResource(path, assets.read_bytes(path))
 
 
 class TextLoader:
@@ -101,5 +101,6 @@ class TextLoader:
                 character fails to compile with a message about the wrong
                 line.
         """
-        with open(path, encoding=self._encoding) as handle:
-            return TextResource(path, handle.read(), self._encoding)
+        return TextResource(
+            path, assets.read_text(path, self._encoding), self._encoding
+        )

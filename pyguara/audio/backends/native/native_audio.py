@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from pyguara import native
+from pyguara import assets, native
 from pyguara.audio.audio_system import require_capability, resolve_loop_points
 from pyguara.audio.types import (
     AudioBusManager,
@@ -383,7 +383,14 @@ class NativeAudioSystem:
         A file that cannot be decoded plays nothing and is reported; the
         game carries on, as it did when `pygame.mixer.music` failed.
         """
-        self.mixer.play_music(path, loop, max(0, fade_ms), self._music_gain())
+        try:
+            data = assets.read_bytes(path)
+        except OSError as error:
+            logger.error("Failed to play music '%s': %s", path, error)
+            return
+        self.mixer.play_music_bytes(
+            data, path, loop, max(0, fade_ms), self._music_gain()
+        )
 
     def stop_music(self, fade_ms: int = 1000) -> None:
         """Fade the music out, then stop it."""

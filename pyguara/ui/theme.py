@@ -8,6 +8,7 @@ from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Any
 
+from pyguara import assets
 from pyguara.common.types import Color
 from pyguara.ui.types import (
     BorderScheme,
@@ -227,11 +228,10 @@ class UITheme:
             ThemeValidationError: If file content is invalid.
         """
         path = Path(path)
-        if not path.exists():
+        if not assets.is_file(path):
             raise FileNotFoundError(f"Theme file not found: {path}")
 
-        with open(path, encoding="utf-8") as f:
-            return cls.from_json(f.read())
+        return cls.from_json(assets.read_text(path))
 
 
 # Global default (can be swapped at runtime)

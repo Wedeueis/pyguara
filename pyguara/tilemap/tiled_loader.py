@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import os
 import struct
 import zlib
 from collections.abc import Callable
@@ -39,6 +40,7 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
+from pyguara import assets
 from pyguara.log import get_logger
 from pyguara.tilemap.layer import TileLayer
 from pyguara.tilemap.objects import MapObject, ObjectLayer, ObjectShape
@@ -91,7 +93,7 @@ def load_tmx(path: str | Path) -> Tilemap:
             resolve.
     """
     map_path = Path(path)
-    root = ElementTree.parse(map_path).getroot()
+    root = ElementTree.fromstring(assets.read_bytes(map_path))
 
     tile_width = int(root.attrib["tilewidth"])
     tile_height = int(root.attrib["tileheight"])
@@ -165,13 +167,13 @@ def _parse_tileset(element: ElementTree.Element, base_dir: Path) -> Tileset:
     if source is None:
         return _tileset_from(element, first_gid)
 
-    tileset_path = (base_dir / source).resolve()
-    if not tileset_path.is_file():
+    tileset_path = Path(os.path.normpath(base_dir / source))
+    if not assets.is_file(tileset_path):
         raise FileNotFoundError(
             f"external tileset '{source}' referenced by the map does not exist "
             f"at {tileset_path}"
         )
-    external_root = ElementTree.parse(tileset_path).getroot()
+    external_root = ElementTree.fromstring(assets.read_bytes(tileset_path))
     if external_root.tag != "tileset":
         raise ValueError(
             f"'{source}' is not a tileset file: its root element is "

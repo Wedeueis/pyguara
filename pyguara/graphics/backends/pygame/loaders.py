@@ -2,6 +2,7 @@
 
 import pygame
 
+from pyguara import assets
 from pyguara.log import get_logger
 from pyguara.resources.meta import AssetMeta, TextureFilter, TextureMeta
 from pyguara.resources.types import Resource
@@ -52,7 +53,9 @@ class PygameImageLoader:
             texture_meta = TextureMeta()
 
         # Load the surface
-        surface = pygame.image.load(path)
+        # Through the asset layer, so a packed image loads; the name hints
+        # the format, as the extension did when SDL opened the file itself.
+        surface = pygame.image.load(assets.open(path), path)
 
         # Apply convert_alpha for proper alpha handling
         if pygame.display.get_surface() is not None:
