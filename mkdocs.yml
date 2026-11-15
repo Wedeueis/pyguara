@@ -66,6 +66,7 @@ nav:
       - A native mirror of static solids: adr/0009-a-native-mirror-of-static-solids.md
       - The container is a service registry (proposed): adr/0010-the-container-is-a-service-registry.md
       - One Rust engine, Python as its interface: adr/0011-one-rust-engine-python-interface.md
+      - How a scene reaches services: adr/0012-how-a-scene-reaches-services.md
   - Kits:
       - Overview: kits/index.md
       - Progression: kits/progression.md
