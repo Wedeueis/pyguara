@@ -823,3 +823,31 @@
 - **Chose:** main thread, `KeyboardInterrupt` skipped. A background thread's exception does not end the game, so reporting it as a crash would mislabel it and fill the 20-report limit with noise; Ctrl+C is the player stopping the game.
 - **Tags:** crash
 - **Reviewed:** approved by the user 2026-11-14.
+
+## CI runs in two tiers, chosen by what a pull request changes
+- **Context:** CI took about 16 minutes per push, with 14 jobs, and runs queued behind each other when several PRs were open.
+- **Alternatives:** keep everything on every push; move the slow platforms to a nightly schedule; a `full-ci` label that turns the full tier on; a tier chosen by the changed paths.
+- **Chose:** changed paths. Every pull request push runs quality, Linux 3.12 with coverage, the Python store and Windows. Python 3.13, macOS and the wheels run on a push to main, on `workflow_dispatch`, and on a PR that touches `rust/`, `Cargo.*`, `pyproject.toml`, `uv.lock`, `pyguara/native.py` or the workflows, which is what those jobs exist to check. A label would need someone to remember it, and adding any label would restart the run. A nightly schedule would find breakage hours after a merge, not on the merge.
+- **Tags:** ci
+- **Reviewed:** not yet.
+
+## Windows stays on every pull request; macOS does not
+- **Context:** which platform jobs belong in the fast tier.
+- **Alternatives:** both on every PR; neither (Linux only).
+- **Chose:** Windows on every PR, because the game ships there first and this suite's Windows failures (encoding, file locks, timers) came from plain Python changes. macOS failures so far came from the native side, which puts a PR in the full tier anyway, and every merge runs it.
+- **Tags:** ci, platforms
+- **Reviewed:** not yet.
+
+## Duplicate CI work removed rather than kept as belt and braces
+- **Context:** three jobs repeated work another job already did.
+- **Alternatives:** keep them; remove them.
+- **Chose:** removed. The 3.12 job ran unit and integration tests and then the whole suite again for coverage, so coverage is now the one run. Build Verification's `uv build` repeats what the wheels and sdist jobs build. Network (Windows) ran 449 network tests that the Windows test job also runs, so only its loopback measurement moves into the Windows job.
+- **Tags:** ci
+- **Reviewed:** not yet.
+
+## Parallel tests (pytest-xdist) wait for a native crash fix
+- **Context:** `-n auto` halved the local suite (204 s to 102 s), but with coverage one worker aborts in `WgpuWindow.present()` or segfaults during garbage collection.
+- **Alternatives:** ship xdist now with `--dist loadfile`; ship it with the failing test excluded; fix the crash first.
+- **Chose:** fix first, on its own branch. Replaying that worker's test order serially crashes too, so it is an engine defect that the default order hides, not an xdist problem. Hiding it would make CI fail at random on whichever order a run gets.
+- **Tags:** ci, native, wgpu
+- **Reviewed:** not yet.
