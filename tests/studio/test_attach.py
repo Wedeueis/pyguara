@@ -196,9 +196,19 @@ class TestAttachToARealApplication:
         environment["SDL_VIDEODRIVER"] = "dummy"
         environment["SDL_AUDIODRIVER"] = "dummy"
         environment["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+        # A native crash (#405) otherwise ends the process with -11 and an
+        # empty stderr; these make it print the Python and Rust stacks.
+        environment["RUST_BACKTRACE"] = "1"
 
         completed = subprocess.run(
-            [sys.executable, "-m", "tests.studio._attach_scenarios", scenario],
+            [
+                sys.executable,
+                "-X",
+                "faulthandler",
+                "-m",
+                "tests.studio._attach_scenarios",
+                scenario,
+            ],
             capture_output=True,
             text=True,
             timeout=300,

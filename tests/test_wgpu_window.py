@@ -157,9 +157,14 @@ class _Extension:
     NativeWindow = _Recorder
 
 
+class _Gpu:
+    def detach_window(self) -> None: ...
+
+
 class _Frame:
     def __init__(self, *args: Any) -> None:
         self.args = args
+        self.gpu: Any = _Gpu()
 
 
 @pytest.fixture
@@ -319,3 +324,63 @@ def test_a_real_window_opens_presents_and_reopens() -> None:
     finally:
         second.close()
     assert list(second.pump()) == []
+
+
+class TestCloseReleasesTheSurfaceFirst:
+    """#405: the surface must not outlive the window it draws to.
+
+    `NativeGpu.for_window` requires the window to stay open while the GPU
+    object lives, and the renderer, the UI renderer and Studio's renderer
+    all hold `frame.gpu`. Dropping the window's own reference released
+    nothing, so the surface outlived its window until garbage collection
+    at exit, which is where CI saw a segfault.
+    """
+
+    def test_the_gpu_lets_go_of_the_window_before_it_closes(
+        self, monkeypatch: pytest.MonkeyPatch, recorded: type[_Recorder]
+    ) -> None:
+        order: list[str] = []
+        monkeypatch.setattr(_Gpu, "detach_window", lambda self: order.append("detach"))
+        monkeypatch.setattr(_Recorder, "close", lambda self: order.append("close"))
+        window = WgpuWindow()
+        window.open(WindowConfig(screen_width=64, screen_height=48))
+        held_elsewhere = window.frame.gpu  # type: ignore[union-attr]  # as a renderer does
+
+        window.close()
+
+        assert order == ["detach", "close"]
+        assert held_elsewhere is not None
+
+
+@needs_extension
+def test_detaching_an_offscreen_gpu_is_a_no_op() -> None:
+    try:
+        gpu = extension.NativeGpu(32, 32)  # type: ignore[union-attr]
+    except RuntimeError as error:
+        pytest.skip(f"no graphics adapter for wgpu: {error}")
+    gpu.detach_window()
+    gpu.detach_window()
+    assert gpu.has_surface is False
+
+
+@needs_extension
+@pytest.mark.integration
+def test_a_detached_gpu_draws_offscreen_after_its_window_is_gone() -> None:
+    try:
+        window = extension.NativeWindow("pyguara test", 64, 48)  # type: ignore[union-attr]
+    except RuntimeError as error:
+        pytest.skip(f"no window system: {error}")
+    try:
+        try:
+            gpu = extension.NativeGpu.for_window(*window.native_handles(), 64, 48)  # type: ignore[union-attr]
+        except (RuntimeError, ValueError) as error:
+            pytest.skip(f"no surface for this window: {error}")
+        assert gpu.has_surface
+        gpu.detach_window()
+        assert gpu.has_surface is False
+    finally:
+        window.close()
+    # The window is gone and the GPU still works, offscreen.
+    gpu.clear(0, 0, 0, 255)
+    pixels = gpu.read_pixels()
+    assert len(pixels) == 64 * 48 * 4
