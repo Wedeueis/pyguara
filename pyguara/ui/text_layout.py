@@ -24,10 +24,79 @@ two agree.
 
 from collections.abc import Callable
 
-__all__ = ["caret_index_at", "split_oversized_word", "wrap_text"]
+__all__ = ["break_offsets", "caret_index_at", "split_oversized_word", "wrap_text"]
 
 MeasureWidth = Callable[[str], int]
 """Returns the pixel width a string would be drawn at."""
+
+
+# -- Breaking without spaces -------------------------------------------------
+#
+# Chinese and Japanese are written without spaces between words, so a line
+# may break between any two of their characters -- except where the kinsoku
+# rules forbid it: a line may not start with closing punctuation, a small
+# kana or a prolonged-sound mark, nor end with an opening bracket. Korean
+# puts spaces between words and wraps on them, as Latin does. This is the
+# part of Unicode's line breaking (UAX #14) those languages need, not all
+# of it.
+
+_CJK_RANGES = (
+    (0x2E80, 0x2FDF),  # CJK radicals, Kangxi radicals
+    (0x3000, 0x30FF),  # CJK symbols and punctuation, hiragana, katakana
+    (0x3100, 0x312F),  # bopomofo
+    (0x31F0, 0x31FF),  # katakana phonetic extensions
+    (0x3400, 0x4DBF),  # CJK extension A
+    (0x4E00, 0x9FFF),  # CJK unified ideographs
+    (0xF900, 0xFAFF),  # CJK compatibility ideographs
+    (0xFE30, 0xFE4F),  # CJK compatibility forms
+    (0xFF00, 0xFFEF),  # half-width and full-width forms
+    (0x20000, 0x3FFFF),  # CJK extensions B and later
+)
+
+_NO_LINE_START = frozenset(
+    "、。，．・：；？！ー）」』】〕〉》〙〗］｝〟’”〜～…‥々〻ゝゞヽヾ゛゜"
+    "ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ"
+    "ㇰㇱㇲㇳㇴㇵㇶㇷㇸㇹㇺㇻㇼㇽㇾㇿｧｨｩｪｫｬｭｮｯｰ"
+    "!%),.:;?]}"
+)
+_NO_LINE_END = frozenset("（「『【〔〈《〘〖［｛〝‘“([{")
+
+
+def _is_cjk(character: str) -> bool:
+    code = ord(character)
+    return any(low <= code <= high for low, high in _CJK_RANGES)
+
+
+def break_offsets(word: str) -> list[int]:
+    """Return where `word`, which has no spaces, may break across lines.
+
+    Between two Chinese or Japanese characters, or between one of them and
+    Latin text, unless the kinsoku rules forbid it. Never inside a Latin or
+    Korean word.
+
+    Args:
+        word: A run of text with no spaces in it.
+
+    Returns:
+        The indices `i`, `0 < i < len(word)`, where a line may end before
+        `word[i]`, in order.
+    """
+    return [
+        index
+        for index in range(1, len(word))
+        if (_is_cjk(word[index - 1]) or _is_cjk(word[index]))
+        and word[index] not in _NO_LINE_START
+        and word[index - 1] not in _NO_LINE_END
+    ]
+
+
+def _pieces(word: str) -> list[str]:
+    """Split a space-free word at its break offsets."""
+    offsets = break_offsets(word)
+    if not offsets:
+        return [word]
+    bounds = [0, *offsets, len(word)]
+    return [word[start:end] for start, end in zip(bounds, bounds[1:], strict=False)]
 
 
 def split_oversized_word(
@@ -109,27 +178,45 @@ def _wrap_paragraph(paragraph: str, width: int, measure: MeasureWidth) -> list[s
 
     # Split on single spaces rather than `str.split()`, which collapses
     # runs of whitespace -- "10  20" is a column alignment somebody meant.
+    # Chinese and Japanese words are cut further into the pieces a line may
+    # break between, which join with nothing rather than a space.
     for word in paragraph.split(" "):
-        candidate = f"{current} {word}" if current else word
-        if measure(candidate) <= width:
-            current = candidate
-            continue
-
-        if current:
-            lines.append(current)
-            current = ""
-
-        # The word now starts a line of its own. If it still does not fit,
-        # it is broken mid-word: the alternative is one line overflowing
-        # the label, which is the behaviour being fixed.
-        head, tail = split_oversized_word(word, width, measure)
-        while tail:
-            lines.append(head)
-            head, tail = split_oversized_word(tail, width, measure)
-        current = head
+        for index, piece in enumerate(_pieces(word)):
+            joiner = " " if index == 0 else ""
+            current = _place(piece, joiner, current, lines, width, measure)
 
     lines.append(current)
     return lines
+
+
+def _place(
+    piece: str,
+    joiner: str,
+    current: str,
+    lines: list[str],
+    width: int,
+    measure: MeasureWidth,
+) -> str:
+    """Add `piece` to the line being built, or start a new one with it.
+
+    Returns:
+        The line now being built; finished lines are appended to `lines`.
+    """
+    candidate = f"{current}{joiner}{piece}" if current else piece
+    if measure(candidate) <= width:
+        return candidate
+
+    if current:
+        lines.append(current)
+
+    # The piece now starts a line of its own. If it still does not fit, it
+    # is broken mid-word: the alternative is one line overflowing the label,
+    # which is the behaviour being fixed.
+    head, tail = split_oversized_word(piece, width, measure)
+    while tail:
+        lines.append(head)
+        head, tail = split_oversized_word(tail, width, measure)
+    return head
 
 
 def caret_index_at(text: str, offset: int, measure: MeasureWidth) -> int:

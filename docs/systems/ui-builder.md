@@ -161,6 +161,30 @@ keeps the style on both sides. A line is as tall as its largest run, and runs of
 different sizes share a bottom edge, which is close to a shared baseline but not
 exact, because a renderer reports a line's height and not a font's ascent.
 
+### Languages written without spaces
+
+`Label` and `RichLabel` break Chinese and Japanese between characters, since
+neither puts spaces between words, and Latin text inside them stays whole.
+They follow the kinsoku rules: a line never starts with closing punctuation
+(`。`, `」`, `！`), a small kana (`ッ`, `ょ`) or `ー`, and never ends with an
+opening bracket (`「`, `（`). Korean puts spaces between words and wraps on
+them, as English does. `pyguara.ui.text_layout.break_offsets(word)` says where
+a space-free word may break.
+
+### Upper case in Turkish
+
+`str.upper()` turns `i` into `I`, which is wrong in Turkish and Azerbaijani,
+where it is `İ` (and `ı` is the one that becomes `I`). The design system's
+`uppercase` buttons go through `pyguara.ui.text_case`, which gets it right once
+told the language:
+
+```python
+from pyguara.ui import text_case
+
+text_case.set_case_language("tr")
+text_case.upper("iptal")    # "İPTAL"
+```
+
 `Label` is unchanged and is the one to use for plain text. Every run in a
 `RichLabel` is its own text draw, so a line of five styles costs five.
 
