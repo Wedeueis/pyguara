@@ -802,3 +802,24 @@
 - **Chose:** a named subclass. Optional types would push a `None` check into all ~100 call sites and invite a plausible wrong value, which AGENTS.md forbids; subclassing `RuntimeError` keeps `start_coroutine`'s existing callers working.
 - **Tags:** scene, errors
 - **Reviewed:** approved by the user 2026-11-14.
+
+## Crash reporting is opt-in, by game name
+- **Context:** roadmap phase 2, crash capture (`pyguara.crash`).
+- **Alternatives:** install the hook automatically in `create_application()`, naming the folder after `display.title` or the engine; make the game call `install_crash_reporter(app_name)`.
+- **Chose:** the explicit call, as `user_data_path` already does: the engine cannot invent the game's name, and a folder named "Pyguara Engine" shared by every game mixes their reports. An explicit call can also be made before `create_application()`, which is where startup failures such as `NoGraphicsAdapterError` happen; an automatic install inside it would miss anything raised earlier.
+- **Tags:** crash, shipping, bootstrap
+- **Reviewed:** approved by the user 2026-11-14.
+
+## Facts reach the report through module-level notes
+- **Context:** the report should say which renderer and GPU were running, which the hook, installed before the app exists, cannot ask for.
+- **Alternatives:** pass the `Application` to the reporter; have the reporter search for a running app; let the engine `note(key, value)` facts as it learns them into a module dict the reporter reads.
+- **Chose:** notes. They work before an application exists, let a game add its own (the level, a build id), and need nothing from the reporter but a dict. Bootstrap notes `renderer` and, on wgpu, `gpu`.
+- **Tags:** crash, bootstrap
+- **Reviewed:** approved by the user 2026-11-14.
+
+## Only the main thread's crashes are reported, and Ctrl+C is not one
+- **Context:** which exceptions the hook writes a report for.
+- **Alternatives:** also hook `threading.excepthook`; report every `BaseException` that reaches `sys.excepthook`.
+- **Chose:** main thread, `KeyboardInterrupt` skipped. A background thread's exception does not end the game, so reporting it as a crash would mislabel it and fill the 20-report limit with noise; Ctrl+C is the player stopping the game.
+- **Tags:** crash
+- **Reviewed:** approved by the user 2026-11-14.

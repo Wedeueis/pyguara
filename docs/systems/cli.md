@@ -68,6 +68,34 @@ A default set of hidden imports (`pygame`, `pymunk`, `numpy`,
 `PIL`, `msgpack`, …) is always passed so the frozen build finds the engine's
 backends; add project-specific ones with `--hidden-import`.
 
+### Crash reports
+
+A build is `--windowed` by default, so it has no console: an unhandled
+exception closes the window and the player sees nothing else. Install the
+crash reporter first thing in the entry script, before the application is
+built, so a failure at startup is caught too:
+
+```python
+from pyguara.crash import install_crash_reporter
+
+install_crash_reporter("Guara & Falcao")
+app = create_application()
+```
+
+A crash then writes `crash-<date>-<time>-<pid>.txt` under `crashes/` in
+the player's data directory: `~/.local/share/<game>` on Linux, under
+`%LOCALAPPDATA%` on Windows, `~/Library/Application Support/<game>` on
+macOS. It holds the traceback, the pyguara and Python versions, the
+platform, whether the build is frozen, the native store, the renderer and
+the GPU, and anything the game added with `pyguara.crash.note(key, value)`,
+such as the level. The newest 20 are kept. Where there is a console, the
+report's path is printed and the traceback still follows.
+
+It is opt-in because the folder is named after the game. Ctrl+C is not a
+crash, and an exception in a background thread, which does not end the
+program, is not reported. A report contains paths from the player's
+machine, home directory included, so it is theirs to send.
+
 ### Options
 
 | Option | Default | Notes |
