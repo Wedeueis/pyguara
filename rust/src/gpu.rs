@@ -31,6 +31,7 @@
 //! `display.backend` chooses it, not the native-acceleration switch.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use bytemuck::{Pod, Zeroable};
 use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
@@ -432,6 +433,15 @@ fn unit(channel: u8) -> f32 {
     f32::from(channel) / 255.0
 }
 
+/// How many `NativeGpu` devices are alive in this process.
+///
+/// Each one owns its own wgpu instance, adapter and device. Drivers cap how
+/// many of those can coexist, and some segfault past the cap rather than
+/// refusing: Mesa's GL-on-D3D12 under WSLg does at the tenth. A game holds
+/// one; a process that creates applications without shutting them down
+/// (a test suite) can reach the cap before the garbage collector frees them.
+static LIVE_DEVICES: AtomicUsize = AtomicUsize::new(0);
+
 /// A wgpu device, one offscreen target and the frame being built for it.
 // `unsendable`: wgpu's handles are not all `Sync` on every backend, and
 // the engine only ever draws from the thread that made the window.
@@ -787,6 +797,8 @@ impl NativeGpu {
             presenter: None,
             presented: 0,
         };
+        // Counted from here: a failure below drops `gpu`, and `Drop` uncounts it.
+        LIVE_DEVICES.fetch_add(1, Ordering::Relaxed);
         let white = gpu.upload_image(1, 1, &[255, 255, 255, 255], false)?;
         gpu.images.insert(WHITE, white);
         if let Some(surface) = surface {
@@ -1290,6 +1302,14 @@ impl NativeGpu {
     ) -> PyResult<Self> {
         Self::check_size(width, height)?;
         Self::guarded(width, height, Some((kind, window, display, vsync)))
+    }
+
+    /// How many devices are alive in this process, this one included.
+    ///
+    /// A diagnostic: see `LIVE_DEVICES` for why the number matters.
+    #[staticmethod]
+    fn live_devices() -> usize {
+        LIVE_DEVICES.load(Ordering::Relaxed)
     }
 
     /// Whether frames can be presented to a window.
@@ -2619,5 +2639,11 @@ impl NativeGpu {
             }
             Ok(())
         })
+    }
+}
+
+impl Drop for NativeGpu {
+    fn drop(&mut self) {
+        LIVE_DEVICES.fetch_sub(1, Ordering::Relaxed);
     }
 }
