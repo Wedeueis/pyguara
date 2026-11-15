@@ -829,33 +829,39 @@
 - **Alternatives:** gettext `.po` files (English text as the key); Mozilla Fluent `.ftl`; Android-style XML; one flat JSON object per locale, keys like `hud.salvage`, a plural entry being an object of CLDR forms.
 - **Chose:** flat JSON. Python reads it with no dependency, Crowdin, Weblate and Lokalise all import it, a key survives the English text changing (gettext's does not), and plural forms are just an object. Nested namespaces were left out because a nested object would be ambiguous with a plural entry.
 - **Tags:** i18n, data-format
+- **Reviewed:** approved by the user 2026-11-15.
 
 ## Placeholders are plain names only, checked at load
 - **Context:** the same; filling `{player}` and `{count}` in translated text.
 - **Alternatives:** `str.format` as is; `string.Template` (`$name`); `str.format` restricted to `{name}` and `{name:spec}`, refusing attribute, index, positional, conversion and nested fields when the file loads.
 - **Chose:** restricted `str.format`. Translation files come from outside the code, and unrestricted `format` can walk the attributes of a passed object (`{player.__class__}`). Keeping `{name:spec}` lets a translator format numbers (`{ratio:.0%}`); `$name` would lose that.
 - **Tags:** i18n, security
+- **Reviewed:** approved by the user 2026-11-15.
 
 ## A missing translation shows English; a missing English string raises
 - **Context:** the same; what a lookup does when a key is absent.
 - **Alternatives:** show the key itself; raise always; fall back to the source locale and log once per key and locale, but raise `MissingStringError` when the source has no such key.
 - **Chose:** the split. A gap in a translation is expected mid-project and English is the readable answer; a key missing from English is code asking for text nobody wrote, and showing the key would be a plausible wrong value. A missing plural form falls back to `other`.
 - **Tags:** i18n, errors
+- **Reviewed:** approved by the user 2026-11-15.
 
 ## Plural rules are hand-transcribed from CLDR for the supported languages
 - **Context:** the same; choosing `one`/`few`/`many`/`other` for a count.
 - **Alternatives:** depend on Babel, which carries all of CLDR (tens of MB); transcribe the integer rules for the languages the engine supports and refuse any other.
 - **Chose:** transcribe. Eleven small functions cover the ten target languages (plus Italian), tested against CLDR's examples; an unknown language is refused rather than given English's rule. Babel can replace them if the list grows.
 - **Tags:** i18n, dependencies
+- **Reviewed:** approved by the user 2026-11-15.
 
 ## Scenes translate with `self.tr(key, ...)`; other code takes the `Translator`
 - **Context:** localisation L1; how game code reaches the translator.
 - **Alternatives:** a module-level `tr()` bound to a global current translator, as gettext's `_()` is; `self.container.get(Translator)` only; a `Scene.translator` property in the ADR 0012 style plus a `Scene.tr()` shorthand, with systems and UI builders handed the `Translator`.
 - **Chose:** the property and the shorthand. A global would make two applications in one process (as the tests run) share a language, and ADR 0012 already makes scene accessors the way in; `tr` is there because a translated screen calls it on nearly every line. A game with no locales folder gets a `RuntimeError` naming the folder, not a lookup failure.
 - **Tags:** i18n, scene, di
+- **Reviewed:** approved by the user 2026-11-15.
 
 ## The locale is chosen once at startup, from config, then the system
 - **Context:** the same; which language a game starts in.
 - **Alternatives:** require the game to choose; read only the config; read config, else the operating system's locale, narrowed to the closest available file (`pt-PT` to `pt-BR`, Chinese by script, else the source).
 - **Chose:** config, then system, narrowed. A player sees their language without a settings screen, and a game on Steam overrides it with Steam's language (`locale_from_steam`). The folder is optional: without `locales/` no translator is registered, so a game that is not localised pays nothing.
 - **Tags:** i18n, config, bootstrap
+- **Reviewed:** approved by the user 2026-11-15.
