@@ -31,12 +31,10 @@ from pyguara.common.types import Color, Rect, Vector2
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import UIRenderer
 from pyguara.input.keys import ESCAPE, RETURN, SPACE
-from pyguara.scene.manager import SceneManager
 from pyguara.ui.base import UIElement
 from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, Skins
 from pyguara.ui.design_system.tokens import Sand, Verdant
-from pyguara.ui.manager import UIManager
 from pyguara.ui.types import TextAlign, UILayer
 
 CARD_WIDTH = 460
@@ -229,7 +227,7 @@ class MorningScene(OverlayScene):
 
     def _build(self) -> None:
         """Build the card: a title, the two skies, the rows, and a button."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear(UILayer.OVERLAY)
         ui_manager.add_element(Scrim(self._width, self._height), UILayer.OVERLAY)
 
@@ -275,7 +273,7 @@ class MorningScene(OverlayScene):
 
     def _close(self) -> None:
         """Dismiss the report, and let the garden wake up."""
-        was_current = self.container.get(SceneManager).current_scene is self
+        was_current = self.scene_manager.current_scene is self
         super()._close()
         if was_current:
             self._on_closed()

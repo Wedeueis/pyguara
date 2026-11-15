@@ -36,7 +36,6 @@ from pyguara.graphics.pipeline.graph import RenderGraph
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import ESCAPE, LEFT, RIGHT, SPACE, A, D, R, S, W
-from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.kits.echolocation import (
     PulseEmitter,
@@ -141,7 +140,7 @@ class CaveScene(Scene):
         self.event_dispatcher.unsubscribe(OnActionEvent, self._on_action)
 
     def _setup_input(self) -> None:
-        im = self.container.get(InputManager)
+        im = self.input_manager
         for action in ("left", "right"):
             im.register_action(action, ActionType.HOLD)
         for action in ("jump", "chirp", "scream", "restart", "quit"):

@@ -25,7 +25,6 @@ from pyguara.input.keys import ESCAPE, KEY_O
 from pyguara.ui.base import UIElement
 from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
-from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UILayer
 
 PANEL_WIDTH = 620
@@ -67,7 +66,7 @@ class StoreOverlayScene(OverlayScene):
 
     def _build(self) -> None:
         """Build the store's panel, one card per structure, and Close."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear(UILayer.OVERLAY)
         ui_manager.add_element(Scrim(self._width, self._height), UILayer.OVERLAY)
 

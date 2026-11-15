@@ -144,7 +144,7 @@ def test_default_render_submits_visible_sprites_and_flushes(factory) -> None:
     # HeadlessTexture for the headless one) via the same DI-registered
     # TextureFactory the engine itself uses -- a texture built for one
     # backend's native_handle expectations won't satisfy the other's.
-    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture_factory = app.container.get(TextureFactory)  # type: ignore[type-abstract]
     texture = texture_factory.create_from_bytes(
         "test", bytes(8 * 8 * 4), width=8, height=8
     )
@@ -212,7 +212,7 @@ def test_default_render_combines_transform_and_sprite_offset() -> None:
     app = create_headless_application()
     scene = _boot(app)
 
-    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture_factory = app.container.get(TextureFactory)  # type: ignore[type-abstract]
     texture = texture_factory.create_from_bytes(
         "test", bytes(8 * 8 * 4), width=8, height=8
     )
@@ -239,7 +239,7 @@ def test_default_render_uses_sprite_position_when_no_transform() -> None:
     app = create_headless_application()
     scene = _boot(app)
 
-    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture_factory = app.container.get(TextureFactory)  # type: ignore[type-abstract]
     texture = texture_factory.create_from_bytes(
         "test", bytes(8 * 8 * 4), width=8, height=8
     )
@@ -263,7 +263,7 @@ def test_default_render_reflects_live_transform_changes_between_frames() -> None
     app = create_headless_application()
     scene = _boot(app)
 
-    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture_factory = app.container.get(TextureFactory)  # type: ignore[type-abstract]
     texture = texture_factory.create_from_bytes(
         "test", bytes(8 * 8 * 4), width=8, height=8
     )
@@ -292,7 +292,7 @@ def test_interpolated_transform_lerps_by_render_alpha() -> None:
     app = create_headless_application()
     scene = _boot(app)
 
-    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture_factory = app.container.get(TextureFactory)  # type: ignore[type-abstract]
     texture = texture_factory.create_from_bytes(
         "test", bytes(8 * 8 * 4), width=8, height=8
     )
@@ -327,7 +327,7 @@ def test_non_interpolated_transform_ignores_render_alpha() -> None:
     app = create_headless_application()
     scene = _boot(app)
 
-    texture_factory = app._container.get(TextureFactory)  # type: ignore[type-abstract]
+    texture_factory = app.container.get(TextureFactory)  # type: ignore[type-abstract]
     texture = texture_factory.create_from_bytes(
         "test", bytes(8 * 8 * 4), width=8, height=8
     )

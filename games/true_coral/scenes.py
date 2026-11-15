@@ -53,10 +53,8 @@ from pyguara.kits.effects import EffectContainer, EffectSystem
 from pyguara.kits.stats import StatBlock, get_stat
 from pyguara.kits.trail import Trail, contains, reset
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.ui.components.button import Button
 from pyguara.ui.layout import BoxContainer
-from pyguara.ui.manager import UIManager
 
 GRID_WIDTH = 20
 GRID_HEIGHT = 15
@@ -152,7 +150,7 @@ class MenuScene(_AtmosphericScene):
         print("True Coral - Menu")
         self.build_atmosphere()
 
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         container = BoxContainer(
@@ -173,7 +171,7 @@ class MenuScene(_AtmosphericScene):
 
     def _on_start_click(self, el) -> None:
         """Start the game."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         game_scene = GameScene(self.event_dispatcher)
         scene_manager.register(game_scene)
         scene_manager.push_scene("GameScene")
@@ -307,10 +305,10 @@ class GameScene(_AtmosphericScene):
 
         self.build_atmosphere()
 
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
-        self._input_manager = self.container.get(InputManager)
+        self._input_manager = self.input_manager
         self._setup_input()
 
         self._snake = self._create_snake()
@@ -389,7 +387,7 @@ class GameScene(_AtmosphericScene):
 
         action = event.action_name
         if action == "back":
-            self.container.get(SceneManager).pop_scene()
+            self.scene_manager.pop_scene()
             return
 
         if self._is_game_over or not self._movement_system:
@@ -461,7 +459,7 @@ class GameScene(_AtmosphericScene):
     def _on_game_over(self, event: GameOverEvent) -> None:
         """Handle the snake running out of lives."""
         self._is_game_over = True
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         game_over_scene = GameOverScene(
             self.event_dispatcher, final_score=event.final_score
         )
@@ -686,7 +684,7 @@ class GameOverScene(_AtmosphericScene):
         print(f"Game Over! Score: {self._final_score}")
         self.build_atmosphere()
 
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         container = BoxContainer(
@@ -707,14 +705,14 @@ class GameOverScene(_AtmosphericScene):
 
     def _on_retry_click(self, el) -> None:
         """Retry the game."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         game_scene = GameScene(self.event_dispatcher)
         scene_manager.register(game_scene)
         scene_manager.switch_to("GameScene")
 
     def _on_menu_click(self, el) -> None:
         """Return to menu."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.pop_scene()
 
     def on_exit(self) -> None:

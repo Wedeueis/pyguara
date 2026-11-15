@@ -56,7 +56,7 @@ class TestBootstrapWiring:
         """No pygame clock, no wall-clock sleep in a headless run."""
         app = create_headless_application()
         try:
-            resolved = app._container.get(Clock)  # type: ignore[type-abstract]
+            resolved = app.container.get(Clock)  # type: ignore[type-abstract]
             assert isinstance(resolved, FixedClock)
             assert app._clock is resolved
         finally:

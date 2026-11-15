@@ -3,7 +3,8 @@
 - **Status:** proposed
 - **Date:** 2026-11-14
 
-Not accepted, and nothing here is built. It changes the DI container,
+Not accepted, and nothing here is built, except decisions 3 and 4 below:
+ADR 0012 settled and built those on their own, for phase 3. It changes the DI container,
 which `AGENTS.md` lists among the core systems to ask about first, and it
 deletes public API. It is scheduled after the fork merges back into
 `pyguara`; see `project/backlog/active/engine_completion_roadmap.md`,

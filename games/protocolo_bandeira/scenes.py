@@ -64,12 +64,10 @@ from pyguara.input.types import ActionType, InputDevice
 from pyguara.kits.action_combat import DamageDealt, Health, HealthSystem, Hurtbox
 from pyguara.kits.projectiles import ProjectileSystem
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.scripting.coroutines import CoroutineManager, wait_for_seconds
 from pyguara.spatial import SpatialIndexSystem, SpatialTracked
 from pyguara.ui.components.button import Button
 from pyguara.ui.layout import BoxContainer
-from pyguara.ui.manager import UIManager
 
 # The play area, with an arcade bezel above and below it.
 ARENA = Rect(26, 104, WINDOW_WIDTH - 52, WINDOW_HEIGHT - 104 - 72)
@@ -163,7 +161,7 @@ class MenuScene(_ClearingScene):
 
     def on_enter(self) -> None:
         """Create menu UI and the clearing behind it."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         self.build_fx(seed=7)
@@ -196,7 +194,7 @@ class MenuScene(_ClearingScene):
 
     def _on_start_click(self, el) -> None:
         """Start the game."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         arena_scene = ArenaScene(self.event_dispatcher)
         scene_manager.register(arena_scene)
         scene_manager.push_scene("ArenaScene")
@@ -329,12 +327,12 @@ class ArenaScene(_ClearingScene):
 
     def on_enter(self) -> None:
         """Initialize game systems and start the first wave."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         self.build_fx()
 
-        self._input_manager = self.container.get(InputManager)
+        self._input_manager = self.input_manager
         self._coroutine_manager = self.container.get(CoroutineManager)
 
         self._setup_input()
@@ -446,7 +444,7 @@ class ArenaScene(_ClearingScene):
         elif action == "fire":
             self._fire_held = is_pressed
         elif action == "back" and is_pressed:
-            self.container.get(SceneManager).pop_scene()
+            self.scene_manager.pop_scene()
 
     def _create_player(self) -> None:
         """Create the player entity."""
@@ -485,7 +483,7 @@ class ArenaScene(_ClearingScene):
         frame. Nothing to build here; the method stays as the place that
         explains why.
         """
-        self.container.get(UIManager).clear()
+        self.ui_manager.clear()
 
     # ---- feedback --------------------------------------------------
 
@@ -592,7 +590,7 @@ class ArenaScene(_ClearingScene):
         if self.fx is not None:
             self.fx.flash.trigger(Color(255, 120, 60, 210), duration=0.6)
             self.fx.shaker.add(22.0, duration=0.7)
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         game_over_scene = GameOverScene(
             self.event_dispatcher,
             final_score=event.final_score,
@@ -989,7 +987,7 @@ class GameOverScene(_ClearingScene):
         global _high_score
         _high_score = max(_high_score, self._final_score)
 
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
 
         self.build_fx(seed=3)
@@ -1010,14 +1008,14 @@ class GameOverScene(_ClearingScene):
 
     def _on_retry_click(self, el) -> None:
         """Retry the game."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         arena_scene = ArenaScene(self.event_dispatcher)
         scene_manager.register(arena_scene)
         scene_manager.switch_to("ArenaScene")
 
     def _on_menu_click(self, el) -> None:
         """Return to menu."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.pop_scene()
 
     def on_exit(self) -> None:

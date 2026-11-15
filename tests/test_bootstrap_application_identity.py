@@ -24,6 +24,6 @@ def test_a_scene_finds_the_application_that_is_actually_running(factory: Any) ->
     """A hook registered on another instance would silently never run."""
     application = factory()
     try:
-        assert application._container.get(Application) is application
+        assert application.container.get(Application) is application
     finally:
         application.shutdown()

@@ -24,7 +24,6 @@ from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.vfx.effects.bloom import BloomEffect
 from pyguara.graphics.window import Window
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.ui.base import UIElement
 from pyguara.ui.components.checkbox import Checkbox
 from pyguara.ui.components.slider import Slider
@@ -37,7 +36,6 @@ from pyguara.ui.design_system import (
     cerrado_dusk,
 )
 from pyguara.ui.layout import BoxContainer
-from pyguara.ui.manager import UIManager
 from pyguara.ui.theme import set_theme
 from pyguara.ui.types import LayoutAlignment, LayoutDirection, UILayer
 
@@ -160,7 +158,7 @@ class PauseScene(Scene):
 
     def _build(self) -> None:
         """Put the scrim, the panel and the buttons on the overlay layer."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear(UILayer.OVERLAY)
         ui_manager.add_element(Scrim(self._width, self._height), UILayer.OVERLAY)
 
@@ -199,12 +197,12 @@ class PauseScene(Scene):
 
     def _resume(self, _element: UIElement) -> None:
         """Close the menu and hand control back to the game."""
-        self.container.get(UIManager).clear(UILayer.OVERLAY)
-        self.container.get(SceneManager).pop_scene()
+        self.ui_manager.clear(UILayer.OVERLAY)
+        self.scene_manager.pop_scene()
 
     def _options(self, _element: UIElement) -> None:
         """Open the options panel over this menu."""
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.register(
             OptionsScene(self.event_dispatcher, self._width, self._height)
         )
@@ -212,15 +210,15 @@ class PauseScene(Scene):
 
     def _quit_to_title(self, _element: UIElement) -> None:
         """Unwind back to the title screen."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.pop_scene()  # this menu
         scene_manager.pop_scene()  # the game under it
 
     def on_exit(self) -> None:
         """Take the menu off the overlay layer."""
-        self.container.get(UIManager).clear(UILayer.OVERLAY)
+        self.ui_manager.clear(UILayer.OVERLAY)
 
     def update(self, dt: float) -> None:
         """Nothing ticks in a pause menu."""
@@ -258,7 +256,7 @@ class OptionsScene(Scene):
 
     def _build(self) -> None:
         """Assemble every section, row and control."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear(UILayer.OVERLAY)
         ui_manager.add_element(Scrim(self._width, self._height), UILayer.OVERLAY)
 
@@ -399,12 +397,12 @@ class OptionsScene(Scene):
 
     def _close(self, _element: UIElement) -> None:
         """Return to whichever scene pushed this one."""
-        self.container.get(UIManager).clear(UILayer.OVERLAY)
-        self.container.get(SceneManager).pop_scene()
+        self.ui_manager.clear(UILayer.OVERLAY)
+        self.scene_manager.pop_scene()
 
     def on_exit(self) -> None:
         """Take the panel off the overlay layer."""
-        self.container.get(UIManager).clear(UILayer.OVERLAY)
+        self.ui_manager.clear(UILayer.OVERLAY)
 
     def update(self, dt: float) -> None:
         """Nothing ticks in an options panel."""

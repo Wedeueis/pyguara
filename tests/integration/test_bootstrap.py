@@ -118,7 +118,7 @@ def test_the_default_backend_is_wgpu_with_a_real_render_graph(app):
     """wgpu is the default renderer, with the render graph behind it."""
     from pyguara.graphics.pipeline.graph import RenderGraph
 
-    config = app._container.get(ConfigManager).config
+    config = app.container.get(ConfigManager).config
     assert config.display.backend is RenderingBackend.WGPU
     assert isinstance(app._render_graph, RenderGraph)
 

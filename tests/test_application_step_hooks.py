@@ -53,7 +53,7 @@ def app() -> Any:
 
 
 def begin(app: Any, log: list[str]) -> None:
-    dispatcher = app._container.get(EventDispatcher)
+    dispatcher = app.container.get(EventDispatcher)
     app._clock = FixedClock(1000.0 / 60.0)
     app.begin(RecordingScene(dispatcher, log))
     log.clear()
