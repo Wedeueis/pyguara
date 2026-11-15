@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 
-from pyguara import native
+from pyguara import crash, native
 from pyguara.application.application import Application
 from pyguara.application.clock import Clock, FixedClock, WallClock
 from pyguara.audio.audio_system import IAudioSystem
@@ -305,6 +305,7 @@ def _setup_container(
     disp_cfg = config_manager.config.display
 
     win_config = disp_cfg
+    crash.note("renderer", "headless" if headless else disp_cfg.backend.value)
 
     # Select backend based on configuration
     if headless:
@@ -366,6 +367,7 @@ def _setup_container(
 
         frame = wgpu_window_backend.frame
         assert frame is not None  # `create()` opened it or raised
+        crash.note("gpu", frame.gpu.adapter)
         container.register_instance(IRenderer, WgpuRenderer(frame))  # type: ignore[type-abstract]
         container.register_instance(UIRenderer, WgpuUIRenderer(frame))  # type: ignore[type-abstract]
         container.register_instance(TextureFactory, ImageTextureFactory())  # type: ignore[type-abstract]

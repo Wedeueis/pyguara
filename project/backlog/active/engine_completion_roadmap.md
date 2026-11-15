@@ -92,7 +92,7 @@ merge-commit PR from `next` into `pyguara`'s `main`, Reclaimer repointed,
 | --- | --- | --- |
 | **Packed assets** (W30, workstream 6) | Loader protocol from path to opener, across every loader; a bake step in `pyguara build` | XL |
 | **Platform verification** | A macOS test job and a full Windows test job in `ci.yml`; native audio heard on a real Linux desktop; a wgpu frame seen on macOS | M |
-| **Crash capture** | An `excepthook` that writes a report (traceback, engine version, backend, `native.status()`) into the user data directory, and says where | S |
+| **Crash capture** | An `excepthook` that writes a report (traceback, engine version, backend, `native.status()`) into the user data directory, and says where. *Done: `pyguara.crash`; Reclaimer still has to call it* | S |
 | **Localisation** | A string table keyed by id, a locale setting in config, font fallback for scripts outside Liberation Sans | L |
 | **Windows version resource** (#354) | Blocked on validating it off Windows; decide whether to build it on the Windows runner instead | S |
 | **Source protection** (W29) | Nuitka, only if the game asks for it | M |
