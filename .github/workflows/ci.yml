@@ -283,9 +283,14 @@ jobs:
               print('wgpu adapter: none --', error)
           "
 
+      # Both runners have an adapter (Windows: DX12's software Microsoft
+      # Basic Render Driver; macOS: Metal on the paravirtual device), so a
+      # wgpu test that skips here is a failure, as on Linux.
       - name: Run the tests
         shell: bash
         run: uv run pytest -m "not performance and not slow" -p no:cacheprovider
+        env:
+          PYGUARA_REQUIRE_GPU: "1"
 
   build-check:
     name: Build Verification
