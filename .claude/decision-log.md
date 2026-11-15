@@ -794,9 +794,11 @@
 - **Alternatives:** resolve the four once in `resolve_dependencies()` and store them as attributes; look each up in `self.container` on every read.
 - **Chose:** look up on read. Resolving eagerly would make every scene fail to resolve in a container that lacks one of the four (tests build such containers), and a copy taken at resolve time would miss a service a test substitutes later. A container `get` of a registered instance is a dict hit, and these are read in event handlers, not per entity.
 - **Tags:** scene, di
+- **Reviewed:** approved by the user 2026-11-14.
 
 ## Not-ready accessors raise `SceneNotReadyError(RuntimeError)`
 - **Context:** the same accessors, read before `resolve_dependencies()` (typically from `__init__`).
 - **Alternatives:** return `None` and type the accessors `X | None`; raise a plain `RuntimeError` as `start_coroutine` did; raise a named subclass of it.
 - **Chose:** a named subclass. Optional types would push a `None` check into all ~100 call sites and invite a plausible wrong value, which AGENTS.md forbids; subclassing `RuntimeError` keeps `start_coroutine`'s existing callers working.
 - **Tags:** scene, errors
+- **Reviewed:** approved by the user 2026-11-14.
