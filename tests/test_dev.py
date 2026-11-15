@@ -1,6 +1,7 @@
 """Tests for pyguara.dev -- the file watcher and asset hot-reload."""
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -178,12 +179,26 @@ class TestPollingFileWatcher:
 
 
 def _manager_with_json(path: Path, payload: dict) -> tuple[ResourceManager, str]:
-    path.write_text(json.dumps(payload))
+    path.write_text(json.dumps(payload), encoding="utf-8")
     rm = ResourceManager()
     rm.register_loader(JsonLoader())
     key = str(path)
     rm.load(key, DataResource)
     return rm, key
+
+
+def _save(path: Path, payload: dict, *, seconds_later: float = 2.0) -> None:
+    """Rewrite a watched file as an editor would, seconds after the last look.
+
+    These tests rewrite a file at the same size, and on Windows the rewrite
+    can land in the same ~15 ms clock tick as the watcher's previous look,
+    so neither size nor mtime would differ. A real save comes seconds later:
+    the mtime is moved on to say so.
+    """
+    before = path.stat().st_mtime
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    later = before + seconds_later
+    os.utime(path, (later, later))
 
 
 class TestAssetReloadWatcher:
@@ -193,7 +208,7 @@ class TestAssetReloadWatcher:
         watcher = AssetReloadWatcher(rm)
         watcher.refresh()
 
-        asset.write_text(json.dumps({"hp": 99}))
+        _save(asset, {"hp": 99})
         watcher._watcher.check_now()  # simulate one poll cycle
 
         # Detected, queued -- but not yet reloaded.
@@ -213,8 +228,7 @@ class TestAssetReloadWatcher:
         watcher.refresh()
 
         for v in (2, 3, 4):
-            asset.write_text(json.dumps({"v": v}))
-            time.sleep(0.01)
+            _save(asset, {"v": v}, seconds_later=2.0 * v)
             watcher._watcher.check_now()
 
         assert watcher.drain() == [key]
@@ -227,7 +241,7 @@ class TestAssetReloadWatcher:
         watcher = AssetReloadWatcher(rm)
         watcher.refresh()
 
-        asset.write_text(json.dumps({"hp": 2}))
+        _save(asset, {"hp": 2})
         watcher._watcher.check_now()
         assert watcher.pending_count == 1
 
@@ -267,7 +281,7 @@ class TestAssetReloadWatcher:
         watcher = AssetReloadWatcher(rm, poll_interval=0.05)
         watcher.start()
         try:
-            asset.write_text(json.dumps({"n": 2}))
+            _save(asset, {"n": 2})
 
             deadline = time.monotonic() + 3.0
             while watcher.pending_count == 0 and time.monotonic() < deadline:
@@ -320,7 +334,7 @@ class TestResourceReloadedEvent:
 
         watcher = AssetReloadWatcher(rm)
         watcher.refresh()
-        asset.write_text(json.dumps({"hp": 99}))
+        _save(asset, {"hp": 99})
         watcher._watcher.check_now()
 
         # Exactly what Application._update does with drain()'s return.

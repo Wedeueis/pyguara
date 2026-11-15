@@ -33,7 +33,7 @@ def temp_assets() -> Generator[Path, None, None]:
         # Create a valid JSON file
         data = {"name": "Test", "value": 42}
         json_path = path / "test.json"
-        with open(json_path, "w") as f:
+        with open(json_path, "w", encoding="utf-8") as f:
             json.dump(data, f)
 
         yield path
@@ -64,7 +64,7 @@ def test_json_loader_invalid_json(temp_assets: Path) -> None:
     """JsonLoader should raise JSONDecodeError for invalid content."""
     loader = JsonLoader()
     file_path = temp_assets / "bad.json"
-    with open(file_path, "w") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         f.write("{ invalid json")
 
     with pytest.raises(json.JSONDecodeError):

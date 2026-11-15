@@ -143,7 +143,13 @@ class TestKeyboard:
         """Modifier state is derived from the modifier keys themselves, not
         from the event's `modifiers` field -- that carries SDL KMOD masks,
         and reading them would mean hardcoding pygame constants in a module
-        that must not import pygame."""
+        that must not import pygame.
+
+        ImGui swaps Cmd and Ctrl on macOS by default, so Ctrl reports as
+        `key_super` there -- which is right, it makes Cmd+Z undo. That is
+        ImGui's own mapping, not this module's, so it is turned off here.
+        """
+        imgui_ctx.config_mac_osx_behaviors = False
         editor_input.feed_event(KeyDownEvent(key_code=keys.L_CTRL))
         _frame(imgui_ctx)
         assert imgui_ctx.key_ctrl is True

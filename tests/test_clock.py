@@ -117,5 +117,7 @@ class TestWallClock:
         clock = WallClock()
         clock.tick()
         elapsed = clock.tick(100)
-        # Asleep for about 10 ms; generous on a loaded machine.
-        assert 9.0 <= elapsed < 60.0
+        # Asleep for about 10 ms. The lower bound is the claim: it really
+        # sleeps. The upper one only catches a hang -- a shared macOS runner
+        # overslept to 69 ms -- since `FixedClock` is what pins exact times.
+        assert 9.0 <= elapsed < 500.0

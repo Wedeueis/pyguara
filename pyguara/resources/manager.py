@@ -977,7 +977,7 @@ class ResourceManager:
 
         # Load and parse the metadata JSON with detailed error reporting
         try:
-            with open(metadata_file) as f:
+            with open(metadata_file, encoding="utf-8") as f:
                 metadata = json.load(f)
         except json.JSONDecodeError as e:
             raise InvalidMetadataError(

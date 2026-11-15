@@ -38,7 +38,7 @@ def _kit_imports(path: Path) -> list[str]:
         The imported kit module names, in source order.
     """
     found: list[str] = []
-    for node in ast.walk(ast.parse(path.read_text())):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
         if isinstance(node, ast.ImportFrom):
             if node.module and node.module.startswith("pyguara.kits"):
                 found.append(node.module)
