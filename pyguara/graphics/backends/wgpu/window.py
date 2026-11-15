@@ -264,7 +264,15 @@ class WgpuWindow:
         return bytes(gpu.read_pixels()), int(gpu.width), int(gpu.height)
 
     def close(self) -> None:
-        """Release the device, then the window."""
+        """Release the surface, then the window.
+
+        The GPU object is shared: the renderers hold `frame.gpu` too, so
+        dropping this window's reference does not free it. It is told to let
+        go of the window explicitly, before the window is destroyed, because
+        a surface must not outlive its window (#405).
+        """
+        if self.frame is not None:
+            self.frame.gpu.detach_window()
         self.frame = None
         if self._window is not None:
             self._window.close()
