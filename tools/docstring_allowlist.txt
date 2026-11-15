@@ -1,0 +1,8 @@
+# Docstrings that tools/check_docstrings.py should not flag, because the
+# rule's pattern matches something the rule is not about.
+#
+# One per line, in the form the check prints, followed by two spaces, a
+# hash and the reason:
+#     DS005 pyguara/some/module.py Class.method  # the 16.67 ms is the contract
+#
+# An entry that matches nothing fails the check, so this cannot go stale.

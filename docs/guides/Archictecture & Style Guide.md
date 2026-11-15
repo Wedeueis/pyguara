@@ -90,12 +90,15 @@ class Renderable(Protocol):
 
 ### 2.4. Docstring Format (Google Style)
 
+The full standard, and what does not belong in a docstring, is in
+[Docstrings](../agents/docstrings.md). `make lint` checks both.
+
 ```python
 def complex_function(param1: int, param2: str) -> dict[str, Any]:
     """Brief one-line summary.
 
-    Longer description if needed. Explain the "why" not the "what".
-    The "what" should be obvious from the code.
+    Longer description if needed: what a caller cannot see from the
+    signature. At most 8 lines.
 
     Args:
         param1: Description of param1.

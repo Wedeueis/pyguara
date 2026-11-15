@@ -73,6 +73,7 @@ nav:
       - Progression: kits/progression.md
   - Contributing:
       - Branching and pull requests: agents/branching.md
+      - Docstrings: agents/docstrings.md
       - The native extension: agents/native-extension.md
       - Networking rules: agents/networking.md
       - Capture tools: agents/capture-tools.md

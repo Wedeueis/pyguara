@@ -60,8 +60,9 @@ coverage-check:  ## Fail if coverage is below 60%
 	uv run pytest -m "not performance" --cov=pyguara --cov-report=term --cov-report=xml --cov-fail-under=60
 
 # --- Code Quality ---
-lint:  ## Check code style
+lint:  ## Check code style and docstring content
 	uv run ruff check pyguara tests
+	uv run python tools/check_docstrings.py
 
 format:  ## Format code
 	uv run ruff format pyguara tests
