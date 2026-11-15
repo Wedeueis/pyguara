@@ -16,6 +16,7 @@ from pyguara.di.container import DIContainer, DIScope  # Import Container
 
 if TYPE_CHECKING:
     from pyguara.application.application import Application
+    from pyguara.i18n import Translator
     from pyguara.input.manager import InputManager
     from pyguara.scene.manager import SceneManager
     from pyguara.scripting.coroutines import Coroutine
@@ -314,6 +315,37 @@ class Scene(ABC):
         from pyguara.input.manager import InputManager
 
         return self._service(InputManager, "reach the input manager")
+
+    @property
+    def translator(self) -> Translator:
+        """The `Translator` for the game's locales; see `tr()`.
+
+        Raises:
+            SceneNotReadyError: Before `resolve_dependencies()` has run.
+            RuntimeError: If the game has no locales folder, so none was
+                registered.
+        """
+        from pyguara.i18n import Translator
+
+        if self.container is not None and not self.container.is_registered(Translator):
+            raise RuntimeError(
+                "No translator: the game has no locales folder (config "
+                "i18n.directory, 'locales' by default) holding an en.json, "
+                "so there is no text to look keys up in."
+            )
+        return self._service(Translator, "translate text")
+
+    def tr(self, key: str, /, **values: Any) -> str:
+        """Return `key`'s text in the player's language.
+
+        `self.tr("hud.salvage", count=3)`. See `pyguara.i18n.Translator`.
+
+        Raises:
+            SceneNotReadyError: Before `resolve_dependencies()` has run.
+            RuntimeError: If the game has no locales folder.
+            MissingStringError: If the source locale has no such key.
+        """
+        return self.translator(key, **values)
 
     def _service(self, service_type: type[_T], purpose: str) -> _T:
         """Look `service_type` up in this scene's container, or say when to ask."""
