@@ -884,26 +884,14 @@
 - **Chose:** the extension. The two renderers then agree on which face draws each character by construction, and with no fallbacks set the default face renders exactly as before, so existing pixel goldens are untouched. Without the extension, fallbacks are inert and one warning is logged.
 - **Tags:** i18n, text, pygame
 
-## Packs are ZIP files
-- **Context:** packed assets (roadmap phase 2), the pack format `pyguara build` will write.
-- **Alternatives:** a custom archive (an index plus concatenated blobs, possibly obfuscated); one SQLite file; a ZIP.
-- **Chose:** ZIP. The standard library reads it with random access and no dependency, already-compressed PNG and OGG can be stored and text deflated, and any tool can open one for debugging. Hiding assets from players is not a goal here: the point is an install with one file instead of hundreds, and source protection is a separate item (Nuitka, W29).
-- **Tags:** assets, shipping, data-format
+## CJK line breaking is a hand-written subset of UAX #14
+- **Context:** localisation L3, wrapping Chinese and Japanese, which have no spaces between words.
+- **Alternatives:** the full Unicode line-breaking algorithm through a Rust crate (`unicode-linebreak`) exposed by the extension; ICU through PyICU; break between CJK characters, between CJK and other text, and nowhere else, with the kinsoku tables for what may not start or end a line.
+- **Chose:** the subset. It is what the ten target languages need (Korean and the rest wrap on spaces), it stays in the pure-Python layout that both renderers share and the tests drive with a fake measure, and it adds no dependency. The full algorithm can replace `break_offsets()` behind the same signature if Thai or Khmer, which need dictionaries, are ever added.
+- **Tags:** i18n, text, layout
 
-## Loaders keep `load(path)`; one module serves the bytes
-- **Context:** the same; how loaders reach packed files ("loader protocol from path to opener" in the roadmap).
-- **Alternatives:** change the loader protocol to take an opener or a bytes source; keep `load(path)` and have every loader read through `pyguara.assets`, a mount table consulted before the disk.
-- **Chose:** keep the protocol. The path is still the asset's identity (cache key, index entry, error message), a game's own loaders keep working for loose files, and the change to each engine loader is one line. A pack is mounted with a `root`, and a path is looked up in it only if it lies under that root, so the same path names the same asset loose or packed.
-- **Tags:** assets, resources, api
-
-## A frozen game mounts its bundled packs on its first asset read
-- **Context:** `pyguara build --pack`; how the shipped game finds the pack.
-- **Alternatives:** the game calls `assets.mount_pack()` itself; bootstrap mounts it in `create_application()`; `pyguara.assets` mounts every `.pak` at the bundle root, lazily, on the first read, only when frozen.
-- **Chose:** lazily on the first read. Nothing for a game to forget, and it works for a game that reads its data before building the application (Reclaimer checks its game data first). Unfrozen, nothing is mounted, so development reads loose files. The pack's root is the bundle, which is where `--add-data` would have put the folders and where the game's code lives, so code-built paths match.
-- **Tags:** assets, shipping, build
-
-## `--pack` is opt-in
-- **Context:** the same; whether `pyguara build` packs by default.
-- **Alternatives:** pack by default with `--loose` to opt out; keep loose by default with `--pack` to opt in.
-- **Chose:** opt-in, for now. A game whose own reads still call `open()` (Reclaimer, until its PR) would break silently when packed by default. The default can flip once the engine's demos and Reclaimer read through `pyguara.assets`.
-- **Tags:** assets, build, cli
+## Case changes take an engine-wide case language
+- **Context:** the same; the design system's `uppercase` buttons, wrong in Turkish with `str.upper()`.
+- **Alternatives:** pass a locale to every case change; read the translator's locale from the container where the case changes; one engine-wide case language in `pyguara.ui.text_case`, set from the locale.
+- **Chose:** the engine-wide setting. A button's draw has no container, threading a locale through every widget would touch every call site, and a game has one text language at a time. Wiring it to `Translator`'s locale changes waits for L1 (#415) to merge; until then a game calls `set_case_language()`.
+- **Tags:** i18n, text, ui
