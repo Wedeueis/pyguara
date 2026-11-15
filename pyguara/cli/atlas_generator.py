@@ -163,10 +163,12 @@ class AtlasGenerator:
             if file_path.resolve() in excluded:
                 continue
             try:
-                img: Image.Image = Image.open(file_path)
-                # Convert to RGBA to ensure consistent format
-                if img.mode != "RGBA":
-                    img = img.convert("RGBA")
+                # Closed here, not when the image is collected: Pillow
+                # reads lazily, and an open file cannot be replaced or
+                # deleted on Windows. `convert` returns a loaded copy even
+                # when the mode already matches.
+                with Image.open(file_path) as opened:
+                    img: Image.Image = opened.convert("RGBA")
                 name = file_path.stem  # Filename without extension
                 stems.setdefault(name, []).append(file_path.name)
                 images.append((name, img))
@@ -335,7 +337,7 @@ class AtlasGenerator:
         if metadata_path:
             metadata_path.parent.mkdir(parents=True, exist_ok=True)
             print(f"Saving metadata to: {metadata_path}")
-            with open(metadata_path, "w") as f:
+            with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2)
 
         print(f"Atlas generation complete: {metadata['sprite_count']} sprites packed")

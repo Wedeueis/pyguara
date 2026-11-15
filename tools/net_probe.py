@@ -225,7 +225,7 @@ def _print(report: Report, path: str | None) -> None:
         print(f"  disconnects: {report.disconnects}")
     print(f"  guards: {report.guard_counters}")
     if path:
-        Path(path).write_text(json.dumps(asdict(report), indent=2))
+        Path(path).write_text(json.dumps(asdict(report), indent=2), encoding="utf-8")
         print(f"  wrote {path}")
 
 

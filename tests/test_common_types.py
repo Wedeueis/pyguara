@@ -6,6 +6,7 @@ dedicated test file existed for `common/types.py` before this ticket.
 """
 
 import math
+import platform
 
 import pytest
 
@@ -274,6 +275,11 @@ class TestVector2LengthIsSpelledExactly:
     ) -> None:
         assert Vector2(x, y).length == math.sqrt(x * x + y * y)
 
+    @pytest.mark.skipif(
+        platform.libc_ver()[0] != "glibc",
+        reason="the divergent inputs are glibc's: macOS and Windows round pow "
+        "correctly, so all three spellings agree there",
+    )
     @pytest.mark.parametrize(("x", "y"), DIVERGENT)
     def test_and_differs_from_the_other_two_spellings(self, x: float, y: float) -> None:
         """Guards the guard: these inputs have to stay divergent.

@@ -279,7 +279,7 @@ class TestThemeFileIO:
             theme.save(path)
 
             assert path.exists()
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
                 assert data["name"] == "saved_theme"
 
@@ -333,7 +333,7 @@ class TestThemeFileIO:
                 },
             }
 
-            with open(path, "w") as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(theme_data, f)
 
             # Load theme

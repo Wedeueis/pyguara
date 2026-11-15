@@ -195,7 +195,10 @@ def test_the_peer_keeps_acknowledging_while_python_is_stalled() -> None:
             time.sleep(0.01)
 
         assert resumed_at is not None
-        assert resumed_at - began > 1.5, "the stall did not happen"
+        # The peer stalls for 2.0 s, but `began` starts only once its
+        # "stalling" line has crossed a pipe, which on a loaded macOS runner
+        # was 0.55 s late. Half the stall still proves it happened.
+        assert resumed_at - began > 1.0, "the stall did not happen"
         assert worst_rtt < 0.2, f"acks waited on Python: rtt {worst_rtt:.3f}s"
         assert player in host.players
 

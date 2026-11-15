@@ -45,7 +45,8 @@ class SpriteSheet:
         self._frames: list[Texture] = []
 
         # Load the image using Pillow
-        self._image = Image.open(image_path).convert("RGBA")
+        with Image.open(image_path) as opened:
+            self._image = opened.convert("RGBA")
 
     @classmethod
     def from_image(

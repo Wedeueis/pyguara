@@ -55,6 +55,8 @@ struct Glyph {
     /// The hinted advance, whole pixels.
     advance: f32,
     coverage: Vec<u8>,
+    /// Which face drew it: 0 the font's own, then its fallbacks in order.
+    face: usize,
 }
 
 /// One path command, in pixels, y up.
@@ -160,10 +162,81 @@ fn rasterise(path: &Path, left: f32, bottom: f32, width: usize, height: usize) -
 ///
 /// Rasterised glyphs are cached, so a HUD redrawing the same digits costs a
 /// lookup per character.
+/// A font file's bytes, read once and shared by every size made of it.
+///
+/// A fallback face for CJK is tens of megabytes; a `NativeFont` per size
+/// holds a reference to these bytes rather than a copy.
+#[pyclass(frozen)]
+pub struct NativeFace {
+    data: Arc<[u8]>,
+    index: u32,
+}
+
+#[pymethods]
+impl NativeFace {
+    /// A face from a font file's bytes.
+    ///
+    /// Args:
+    ///     data: The contents of a `.ttf`, `.otf`, `.ttc` or `.otc`.
+    ///     index: Which face of a collection; 0 for a single font.
+    ///
+    /// Raises:
+    ///     OSError: If the bytes are not a font, or the collection has no
+    ///         such face.
+    #[new]
+    #[pyo3(signature = (data, index = 0))]
+    fn new(data: &[u8], index: u32) -> PyResult<Self> {
+        FontRef::from_index(data, index).map_err(|error| PyOSError::new_err(format!("not a font: {error}")))?;
+        Ok(Self { data: Arc::from(data), index })
+    }
+
+    /// The engine's default face for a style.
+    #[staticmethod]
+    #[pyo3(signature = (bold = false, italic = false))]
+    fn default(bold: bool, italic: bool) -> Self {
+        let index = usize::from(bold) | (usize::from(italic) << 1);
+        Self { data: defaults()[index].clone(), index: 0 }
+    }
+
+    /// For each character, whether this face has a glyph for it.
+    fn covers(&self, text: &str) -> Vec<bool> {
+        let font = FontRef::from_index(&self.data, self.index).expect("checked when the face was made");
+        let charmap = font.charmap();
+        text.chars().map(|character| charmap.map(character).is_some()).collect()
+    }
+}
+
+/// One face at one size: what a glyph is drawn from.
+struct Face {
+    data: Arc<[u8]>,
+    index: u32,
+    hinting: HintingInstance,
+}
+
+impl Face {
+    fn font(&self) -> FontRef<'_> {
+        FontRef::from_index(&self.data, self.index).expect("checked when the face was made")
+    }
+
+    fn at(data: Arc<[u8]>, index: u32, px: f32) -> PyResult<Self> {
+        let font =
+            FontRef::from_index(&data, index).map_err(|error| PyOSError::new_err(format!("not a font: {error}")))?;
+        let hinting = HintingInstance::new(
+            &font.outline_glyphs(),
+            Size::new(px),
+            LocationRef::default(),
+            HintingOptions::default(),
+        )
+        .map_err(|error| PyOSError::new_err(format!("the font cannot be hinted: {error}")))?;
+        drop(font);
+        Ok(Self { data, index, hinting })
+    }
+}
+
 #[pyclass(unsendable)]
 pub struct NativeFont {
-    data: Arc<[u8]>,
-    hinting: HintingInstance,
+    /// The font's own face first, then its fallbacks in order.
+    faces: Vec<Face>,
     px: f32,
     /// Font units to pixels, for kerning.
     scale: f32,
@@ -175,7 +248,7 @@ pub struct NativeFont {
 
 impl NativeFont {
     fn font(&self) -> FontRef<'_> {
-        FontRef::new(&self.data).expect("checked when the face was made")
+        self.faces[0].font()
     }
 
     fn at(data: Arc<[u8]>, size: u32) -> PyResult<Self> {
@@ -183,15 +256,9 @@ impl NativeFont {
             return Err(PyValueError::new_err("a font size must be at least 1"));
         }
         let px = size as f32;
-        let font = FontRef::new(&data).map_err(|error| PyOSError::new_err(format!("not a font: {error}")))?;
+        let face = Face::at(data, 0, px)?;
+        let font = face.font();
         let metrics = font.metrics(Size::new(px), LocationRef::default());
-        let hinting = HintingInstance::new(
-            &font.outline_glyphs(),
-            Size::new(px),
-            LocationRef::default(),
-            HintingOptions::default(),
-        )
-        .map_err(|error| PyOSError::new_err(format!("the font cannot be hinted: {error}")))?;
         // SDL_ttf's FT_CEIL on the ascent; the height is the whole extent
         // rounded up once, not the two halves each rounded: `ascent -
         // descent` below is what `TTF_FontHeight` returns.
@@ -200,37 +267,49 @@ impl NativeFont {
         let line = (metrics.ascent - metrics.descent + metrics.leading).ceil() as i32;
         let scale = px / f32::from(metrics.units_per_em.max(1));
         drop(font);
-        Ok(Self { data, hinting, px, scale, ascent, descent, line, glyphs: HashMap::new() })
+        Ok(Self { faces: vec![face], px, scale, ascent, descent, line, glyphs: HashMap::new() })
     }
 
     fn glyph_id(&self, character: char) -> GlyphId {
         self.font().charmap().map(character).unwrap_or_default()
     }
 
+    /// The first face with a glyph for `character`, and that glyph; the
+    /// font's own `.notdef` box when none has one.
+    fn face_for(&self, character: char) -> (usize, GlyphId) {
+        for (index, face) in self.faces.iter().enumerate() {
+            if let Some(id) = face.font().charmap().map(character) {
+                return (index, id);
+            }
+        }
+        (0, GlyphId::default())
+    }
+
     fn rasterise_glyph(&self, character: char) -> Glyph {
-        let font = self.font();
-        let id = font.charmap().map(character).unwrap_or_default();
+        let (face_index, id) = self.face_for(character);
+        let face = &self.faces[face_index];
+        let font = face.font();
         let advance_unhinted = font
             .glyph_metrics(Size::new(self.px), LocationRef::default())
             .advance_width(id)
             .unwrap_or(0.0);
         let Some(outline) = font.outline_glyphs().get(id) else {
-            return Glyph { advance: advance_unhinted.round(), ..Glyph::default() };
+            return Glyph { advance: advance_unhinted.round(), face: face_index, ..Glyph::default() };
         };
         let mut path = Path::default();
-        let adjusted = outline.draw(DrawSettings::hinted(&self.hinting, false), &mut path).ok();
+        let adjusted = outline.draw(DrawSettings::hinted(&face.hinting, false), &mut path).ok();
         let advance = adjusted
             .and_then(|metrics| metrics.advance_width)
             .unwrap_or(advance_unhinted)
             .round();
         if !path.any {
-            return Glyph { advance, ..Glyph::default() };
+            return Glyph { advance, face: face_index, ..Glyph::default() };
         }
         let (left, bottom) = (path.min.0.floor(), path.min.1.floor());
         let (right, top) = (path.max.0.ceil(), path.max.1.ceil());
         let (width, height) = ((right - left) as usize, (top - bottom) as usize);
         if width == 0 || height == 0 {
-            return Glyph { advance, ..Glyph::default() };
+            return Glyph { advance, face: face_index, ..Glyph::default() };
         }
         Glyph {
             xmin: left as i32,
@@ -239,6 +318,7 @@ impl NativeFont {
             height,
             advance,
             coverage: rasterise(&path, left, bottom, width, height),
+            face: face_index,
         }
     }
 
@@ -251,7 +331,11 @@ impl NativeFont {
     }
 
     /// Kerning between two characters, in pixels, from the `kern` table.
-    fn kerning(&self, left: char, right: char) -> f32 {
+    fn kerning(&mut self, left: char, right: char) -> f32 {
+        // Kerning pairs are per face: none across a change of face.
+        if self.glyph(left).face != 0 || self.glyph(right).face != 0 {
+            return 0.0;
+        }
         let (left, right) = (self.glyph_id(left), self.glyph_id(right));
         let font = self.font();
         let Ok(kern) = font.kern() else {
@@ -327,6 +411,31 @@ impl NativeFont {
     #[staticmethod]
     fn from_bytes(data: &[u8], size: u32) -> PyResult<Self> {
         Self::at(Arc::from(data), size)
+    }
+
+    /// Faces to draw a character from when this font has no glyph for it.
+    ///
+    /// Tried in order; the first with a glyph draws it. Line metrics stay
+    /// this font's own, so a string's height does not change with the
+    /// characters in it. Replaces any earlier fallbacks.
+    ///
+    /// Raises:
+    ///     OSError: If a face cannot be hinted at this size.
+    fn set_fallbacks(&mut self, faces: Vec<PyRef<'_, NativeFace>>) -> PyResult<()> {
+        let mut built = Vec::with_capacity(faces.len());
+        for face in &faces {
+            built.push(Face::at(face.data.clone(), face.index, self.px)?);
+        }
+        self.faces.truncate(1);
+        self.faces.extend(built);
+        self.glyphs.clear();
+        Ok(())
+    }
+
+    /// For each character, which face draws it: 0 this font, then each
+    /// fallback in order.
+    fn faces_used(&mut self, text: &str) -> Vec<usize> {
+        text.chars().map(|character| self.glyph(character).face).collect()
     }
 
     /// The pixel height of any string: ascent minus descent.

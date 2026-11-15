@@ -148,13 +148,20 @@ def test_uninstall_puts_the_previous_hook_back(chained: list[BaseException]) -> 
 def test_the_default_directory_is_the_users_data_directory(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
-    if sys.platform != "linux":
-        pytest.skip("XDG_DATA_HOME steers platformdirs on Linux only")
+    import platformdirs
+
+    asked: list[tuple[str, str | None]] = []
+
+    def user_data_dir(name: str, author: str | None = None, **_: object) -> str:
+        asked.append((name, author))
+        return str(tmp_path / name)
+
+    monkeypatch.setattr(platformdirs, "user_data_dir", user_data_dir)
 
     reporter = crash.install_crash_reporter("Test Game")
 
     assert reporter.directory == tmp_path / "Test Game" / "crashes"
+    assert asked == [("Test Game", None)]
 
 
 def test_an_empty_game_name_is_refused() -> None:

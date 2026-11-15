@@ -271,7 +271,14 @@ target-version = "py312"
 #        it reported D103 "missing docstring" against docstrings that were
 #        plainly present -- and because pre-commit only fed it *changed*
 #        files, so 12 D401 violations sat in the tree unreported.
-select = ["E4", "E7", "E9", "F", "UP", "B", "I", "SIM", "D"]
+# PLW1514 - text-mode `open()` / `read_text()` without an `encoding`. The
+#        default is the locale's, which is cp1252 on Windows: a theme or
+#        atlas named in anything but ASCII round-tripped wrongly there, and
+#        nothing ran on Windows to notice. A preview rule, enabled alone by
+#        `explicit-preview-rules` below.
+select = ["E4", "E7", "E9", "F", "UP", "B", "I", "SIM", "D", "PLW1514"]
+preview = true
+explicit-preview-rules = true
 ignore = [
     # Nesting often reads better than an `and` chain when the outer condition
     # is a guard and the inner one is the real test; leaving this to judgement.
