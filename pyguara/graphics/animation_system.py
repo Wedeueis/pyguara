@@ -1,5 +1,4 @@
-"""
-Animation System for automatic animation updates.
+"""Animation System for automatic animation updates.
 
 This system automatically updates all Animator and AnimationStateMachine components
 in the scene, eliminating the need for manual update() calls in game code.
@@ -17,8 +16,7 @@ from pyguara.graphics.events import AnimationFrameEvent
 
 
 class AnimationSystem:
-    """
-    System that automatically updates all animation components.
+    """System that automatically updates all animation components.
 
     Processes all entities with Animator or AnimationStateMachine components,
     advancing each one every frame. Both components are pure data; the
@@ -42,8 +40,7 @@ class AnimationSystem:
         self._dispatcher = dispatcher
 
     def update(self, dt: float) -> None:
-        """
-        Update all animation components.
+        """Update all animation components.
 
         Args:
             dt: Delta time in seconds.

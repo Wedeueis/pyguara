@@ -38,8 +38,7 @@ class PackedSprite:
         width: int,
         height: int,
     ):
-        """
-        Initialize packed sprite data.
+        """Initialize packed sprite data.
 
         Args:
             name (str): Sprite identifier (filename without extension).
@@ -61,8 +60,7 @@ class Shelf:
     """Represents a horizontal shelf in the shelf-packing algorithm."""
 
     def __init__(self, y: int, height: int, max_width: int):
-        """
-        Initialize a shelf.
+        """Initialize a shelf.
 
         Args:
             y (int): Y position of the shelf.
@@ -75,8 +73,7 @@ class Shelf:
         self.current_x = 0
 
     def can_fit(self, width: int, height: int) -> bool:
-        """
-        Check if a sprite can fit on this shelf.
+        """Check if a sprite can fit on this shelf.
 
         Args:
             width (int): Sprite width.
@@ -88,8 +85,7 @@ class Shelf:
         return self.current_x + width <= self.max_width and height <= self.height
 
     def add(self, width: int) -> int:
-        """
-        Add a sprite to this shelf and return its X position.
+        """Add a sprite to this shelf and return its X position.
 
         Args:
             width (int): Sprite width.
@@ -103,8 +99,7 @@ class Shelf:
 
 
 class AtlasGenerator:
-    """
-    Generates sprite atlases using a shelf-packing algorithm.
+    """Generates sprite atlases using a shelf-packing algorithm.
 
     The algorithm sorts sprites by height (descending) and packs them
     into horizontal shelves, creating new shelves as needed.
@@ -115,8 +110,7 @@ class AtlasGenerator:
         atlas_size: int = 2048,
         padding: int = 2,
     ):
-        """
-        Initialize the atlas generator.
+        """Initialize the atlas generator.
 
         Args:
             atlas_size (int): Maximum atlas dimension (width and height).
@@ -130,8 +124,7 @@ class AtlasGenerator:
         input_path: Path,
         exclude: set[Path] | None = None,
     ) -> list[tuple[str, Image.Image]]:
-        """
-        Load all images from a directory.
+        """Load all images from a directory.
 
         Args:
             input_path (Path): Directory containing sprite images.
@@ -195,8 +188,7 @@ class AtlasGenerator:
     def pack(
         self, images: list[tuple[str, Image.Image]]
     ) -> tuple[Image.Image, dict[str, Any]]:
-        """
-        Pack images into an atlas using shelf-packing algorithm.
+        """Pack images into an atlas using shelf-packing algorithm.
 
         Args:
             images (List[Tuple[str, Image.Image]]): List of (name, image) tuples.
@@ -305,8 +297,7 @@ class AtlasGenerator:
         output_path: Path,
         metadata_path: Path | None = None,
     ) -> None:
-        """
-        Generate atlas from input directory.
+        """Generate atlas from input directory.
 
         Args:
             input_path (Path): Directory containing sprite images.

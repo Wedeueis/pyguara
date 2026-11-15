@@ -28,6 +28,7 @@ archived. This repository is the only one; issues live here.
 | `network_multiplayer.md` | The networking plan, by phase |
 | `repo_cleanup_plan.md` | What moves, is archived or is deleted at true alpha |
 | `localisation_plan.md` | The ten languages Reclaimer ships in, and the four PRs that get it there |
+| `docstring_standard_plan.md` | The docstring cleanup, by PR, and the baseline it shrinks |
 
 `REFACTOR_STATE.md` and `.scratch/engine-remediation/` record two
 **finished** efforts. Do not resume either. `project/backlog/archive_*/`
@@ -117,6 +118,10 @@ The generated block below has the engine conventions. In addition:
 
 - **Type hints everywhere**, Google-style docstrings on public API,
   absolute imports. Mypy is strict on `pyguara/`.
+- **A docstring describes the code as it is**: no history, issue
+  numbers, benchmark figures or test names, and at most 8 lines of
+  prose. `make lint` checks it; the standard is
+  `docs/agents/docstrings.md`.
 - **Protocols, not ABCs**, for a new interface.
 - **Emit with `queue_event()` from a background thread**, never
   `dispatch()`.

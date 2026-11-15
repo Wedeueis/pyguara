@@ -1,5 +1,4 @@
-"""
-Defines the Viewport logic for screen-space rendering management.
+"""Defines the Viewport logic for screen-space rendering management.
 
 This module provides the `Viewport` class, which defines the specific rectangular
 region of the OS window where the game world is drawn. While the `Camera` controls
@@ -18,8 +17,7 @@ from pyguara.common.types import Rect, Vector2
 
 
 class Viewport(Rect):
-    """
-    Represents the drawing area on the screen.
+    """Represents the drawing area on the screen.
 
     Inherits from `pyguara.common.types.Rect`, a plain backend-agnostic value
     type -- convert via a backend's own conversion helper (e.g.
@@ -33,8 +31,7 @@ class Viewport(Rect):
     """
 
     def __init__(self, x: int, y: int, width: int, height: int):
-        """
-        Initialize a new Viewport.
+        """Initialize a new Viewport.
 
         Args:
             x (int): X position on the window.
@@ -46,8 +43,7 @@ class Viewport(Rect):
 
     @property
     def aspect_ratio(self) -> float:
-        """
-        Get the aspect ratio (width / height) of this viewport.
+        """Get the aspect ratio (width / height) of this viewport.
 
         Returns:
             float: The aspect ratio. Returns 0.0 if height is 0.
@@ -56,8 +52,7 @@ class Viewport(Rect):
 
     @property
     def center_vec(self) -> Vector2:
-        """
-        Get the center point of the viewport as a Vector2.
+        """Get the center point of the viewport as a Vector2.
 
         Useful for the RenderPipeline to calculate camera offsets relative
         to the viewport center rather than the window center.
@@ -68,8 +63,7 @@ class Viewport(Rect):
         return Vector2(self.centerx, self.centery)
 
     def get_relative_mouse_pos(self, global_mouse_pos: Vector2) -> Vector2:
-        """
-        Convert global window mouse coordinates to viewport-relative coordinates.
+        """Convert global window mouse coordinates to viewport-relative coordinates.
 
         If your viewport has a top-left offset (e.g., in split-screen or
         due to black bars), a mouse click at (100, 100) on the window might
@@ -84,8 +78,7 @@ class Viewport(Rect):
         return Vector2(global_mouse_pos.x - self.x, global_mouse_pos.y - self.y)
 
     def contains_mouse(self, global_mouse_pos: Vector2) -> bool:
-        """
-        Check if the mouse is currently hovering over this viewport.
+        """Check if the mouse is currently hovering over this viewport.
 
         Essential for split-screen games to know which player/camera should
         receive input.
@@ -100,8 +93,7 @@ class Viewport(Rect):
 
     @staticmethod
     def create_fullscreen(window_width: int, window_height: int) -> Viewport:
-        """
-        Create a viewport that covers the entire window.
+        """Create a viewport that covers the entire window.
 
         Args:
             window_width (int): Window width.
@@ -116,8 +108,7 @@ class Viewport(Rect):
     def create_best_fit(
         window_width: int, window_height: int, target_aspect_ratio: float
     ) -> Viewport:
-        """
-        Create a viewport that maintains a target aspect ratio within the window.
+        """Create a viewport that maintains a target aspect ratio within the window.
 
         This automatically calculates the size and position for "Letterboxing"
         (black bars top/bottom) or "Pillarboxing" (black bars left/right).

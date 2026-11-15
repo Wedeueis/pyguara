@@ -29,8 +29,7 @@ class SfxLimit:
 
 
 class AudioManager:
-    """
-    High-level audio manager that coordinates the audio system.
+    """High-level audio manager that coordinates the audio system.
 
     Provides:
     - Convenient resource loading and playback
@@ -53,8 +52,7 @@ class AudioManager:
         event_dispatcher: EventDispatcher | None = None,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        """
-        Initialize the audio manager.
+        """Initialize the audio manager.
 
         Args:
             audio_system: The underlying audio system implementation.
@@ -105,8 +103,7 @@ class AudioManager:
         loop_start: float | None = None,
         loop_end: float | None = None,
     ) -> SoundHandle | None:
-        """
-        Play a sound effect by path.
+        """Play a sound effect by path.
 
         Automatically loads the clip if not already loaded.
 
@@ -149,8 +146,7 @@ class AudioManager:
         loop_start: float | None = None,
         loop_end: float | None = None,
     ) -> SoundHandle | None:
-        """
-        Play a pre-loaded sound effect clip.
+        """Play a pre-loaded sound effect clip.
 
         Args:
             clip: The audio clip to play.
@@ -241,8 +237,7 @@ class AudioManager:
         return len(playing) < limit.max_voices
 
     def stop_sfx(self, sound: SoundHandle) -> None:
-        """
-        Stop one playing sound effect.
+        """Stop one playing sound effect.
 
         Args:
             sound: The handle returned by play_sfx.
@@ -260,8 +255,7 @@ class AudioManager:
     # ========== Music Methods ==========
 
     def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
-        """
-        Play background music from a file.
+        """Play background music from a file.
 
         Args:
             path: Path to the music file.
@@ -272,8 +266,7 @@ class AudioManager:
         self._current_music = path
 
     def stop_music(self, fade_ms: int = 1000) -> None:
-        """
-        Stop the currently playing music.
+        """Stop the currently playing music.
 
         Args:
             fade_ms: Fade-out duration in milliseconds.
@@ -300,8 +293,7 @@ class AudioManager:
     # ========== Volume Control ==========
 
     def set_master_volume(self, volume: float) -> None:
-        """
-        Set the master volume (affects both SFX and music).
+        """Set the master volume (affects both SFX and music).
 
         Args:
             volume: Volume level (0.0 to 1.0).
@@ -309,8 +301,7 @@ class AudioManager:
         self._audio_system.set_master_volume(volume)
 
     def set_sfx_volume(self, volume: float) -> None:
-        """
-        Set the sound effects volume.
+        """Set the sound effects volume.
 
         Args:
             volume: Volume level (0.0 to 1.0).
@@ -318,8 +309,7 @@ class AudioManager:
         self._audio_system.set_sfx_volume(volume)
 
     def set_music_volume(self, volume: float) -> None:
-        """
-        Set the music volume.
+        """Set the music volume.
 
         Args:
             volume: Volume level (0.0 to 1.0).
@@ -341,8 +331,7 @@ class AudioManager:
     # ========== Resource Management ==========
 
     def preload_sfx(self, path: str) -> AudioClip | None:
-        """
-        Preload a sound effect into memory.
+        """Preload a sound effect into memory.
 
         Args:
             path: Path to the sound file.
@@ -353,8 +342,7 @@ class AudioManager:
         return self._get_clip(path)
 
     def unload_sfx(self, path: str) -> None:
-        """
-        Unload a previously loaded sound effect.
+        """Unload a previously loaded sound effect.
 
         Args:
             path: Path to the sound file to unload.
@@ -363,8 +351,7 @@ class AudioManager:
             del self._loaded_clips[path]
 
     def _get_clip(self, path: str) -> AudioClip | None:
-        """
-        Get an audio clip, loading it if necessary.
+        """Get an audio clip, loading it if necessary.
 
         Args:
             path: Path to the audio file.

@@ -6,15 +6,13 @@ from pyguara.resources.types import AudioClip
 
 
 class PygameAudioClip(AudioClip):
-    """
-    Concrete wrapper for a pygame.mixer.Sound object.
+    """Concrete wrapper for a pygame.mixer.Sound object.
 
     Used for Sound Effects (SFX) that need low latency and polyphony.
     """
 
     def __init__(self, path: str, sound: pygame.mixer.Sound):
-        """
-        Initialize the Pygame sound.
+        """Initialize the Pygame sound.
 
         Args:
             path (str): The source file path.

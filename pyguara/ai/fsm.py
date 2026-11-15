@@ -33,8 +33,7 @@ class State(ABC):
 
     @abstractmethod
     def update(self, dt: float) -> str | None:
-        """
-        Update the state logic.
+        """Update the state logic.
 
         Returns:
             Name of the next state to transition to, or None to stay.

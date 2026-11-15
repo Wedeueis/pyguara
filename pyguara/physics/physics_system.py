@@ -12,8 +12,7 @@ from pyguara.physics.types import BodyType
 
 
 class PhysicsSystem:
-    """
-    The bridge between the ECS world and the Physics Backend (Pymunk).
+    """The bridge between the ECS world and the Physics Backend (Pymunk).
 
     It synchronizes the state of ECS 'Transform' components with the
     underlying physics simulation bodies.
@@ -30,8 +29,7 @@ class PhysicsSystem:
         event_dispatcher: EventDispatcher,
         gravity: Vector2 | None = None,
     ) -> None:
-        """
-        Initialize the physics system.
+        """Initialize the physics system.
 
         Args:
             engine: The physics engine backend.
@@ -65,8 +63,7 @@ class PhysicsSystem:
         self._pending_teardown.append(rb._body_handle)
 
     def sync_kinematic_transforms(self) -> None:
-        """
-        Push ECS state into the engine, ahead of anything that queries it.
+        """Push ECS state into the engine, ahead of anything that queries it.
 
         Drains pending teardowns, creates bodies for entities new to the
         engine, and mirrors a kinematic body's position/rotation from its
@@ -100,8 +97,7 @@ class PhysicsSystem:
                 rb._body_handle.rotation = transform.rotation
 
     def update(self, dt: float) -> None:
-        """
-        Advance the physics simulation and sync transforms.
+        """Advance the physics simulation and sync transforms.
 
         Args:
             dt: Delta time in seconds.
@@ -127,8 +123,7 @@ class PhysicsSystem:
     def _create_physics_entity(
         self, entity: Entity, transform: Transform, rb: RigidBody
     ) -> None:
-        """
-        Register ECS entity with the physics backend.
+        """Register ECS entity with the physics backend.
 
         Internal helper that handles the specific sequence of body creation
         and shape attachment.

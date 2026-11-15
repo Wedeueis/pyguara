@@ -1,5 +1,4 @@
-"""
-Input subsystem.
+"""Input subsystem.
 
 Handles hardware input (keyboard, mouse, gamepad) and translates it into
 semantic Actions, with runtime rebinding and per-context bindings.

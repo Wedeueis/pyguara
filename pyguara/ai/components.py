@@ -32,8 +32,7 @@ class SteeringBehaviorType(str, Enum):
 
 @dataclass
 class AIComponent(BaseComponent):
-    """
-    Component that holds the AI brain (FSM or Behavior Tree).
+    """Component that holds the AI brain (FSM or Behavior Tree).
 
     Attributes:
         blackboard: Shared memory for this agent.
@@ -54,8 +53,7 @@ class AIComponent(BaseComponent):
 
 @dataclass
 class SteeringAgent(BaseComponent):
-    """
-    Component that defines movement capabilities for autonomous agents.
+    """Component that defines movement capabilities for autonomous agents.
 
     Attributes:
         max_speed: Maximum movement speed.

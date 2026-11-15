@@ -264,13 +264,8 @@ target-version = "py312"
 #        raise-without-from, unused loop variables).
 # I    - isort: one canonical import order, so import blocks stop churning.
 # SIM  - flake8-simplify.
-# D    - pydocstyle, under the same `pep257` convention the standalone
-#        pydocstyle hook ran with, so this is the same standard enforced by
-#        one tool instead of two. It replaced that hook because pydocstyle
-#        6.3.0 is unmaintained and cannot parse PEP 695 type parameters --
-#        it reported D103 "missing docstring" against docstrings that were
-#        plainly present -- and because pre-commit only fed it *changed*
-#        files, so 12 D401 violations sat in the tree unreported.
+# D    - pydocstyle, on the package only (see per-file-ignores). The content
+#        rules ruff has no code for are in tools/check_docstrings.py.
 # PLW1514 - text-mode `open()` / `read_text()` without an `encoding`. The
 #        default is the locale's, which is cp1252 on Windows: a theme or
 #        atlas named in anything but ASCII round-tripped wrongly there, and
@@ -299,11 +294,8 @@ unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.lint.pydocstyle]
-# The convention the standalone pydocstyle hook enforced (its default), so
-# swapping tools kept the standard identical rather than quietly raising it.
-# `google` would have been a different, stricter standard -- 190 findings
-# against this tree rather than 14.
-convention = "pep257"
+# The standard is docs/agents/docstrings.md.
+convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 # Docstring rules cover the engine package only, which is exactly the scope

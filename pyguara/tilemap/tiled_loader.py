@@ -363,8 +363,8 @@ def _parse_object(element: ElementTree.Element) -> MapObject:
         element: The `<object>` element.
 
     Returns:
-        The object, with its shape resolved from whichever child element
-        Tiled used to express it.
+        The object, with its shape resolved from the child element that
+        describes it.
     """
     shape = ObjectShape.RECTANGLE
     points: tuple[tuple[float, float], ...] = ()

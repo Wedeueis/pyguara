@@ -12,8 +12,7 @@ class AStarPathfinder:
     def find_path(
         self, graph: Graph[Node], start: Node, goal: Node, heuristic: Heuristic[Node]
     ) -> list[Node] | None:
-        """
-        Calculate the shortest path from start to goal.
+        """Calculate the shortest path from start to goal.
 
         Optimized to reduce heap operations.
         """

@@ -18,8 +18,7 @@ from pyguara.resources.types import AudioClip
 
 @runtime_checkable
 class IAudioSystem(Protocol):
-    """
-    The main contract for playing audio in the engine.
+    """The main contract for playing audio in the engine.
 
     Abstracts away the concept of 'Channels' and 'Streams'.
 
@@ -61,8 +60,7 @@ class IAudioSystem(Protocol):
         loop_start: float | None = None,
         loop_end: float | None = None,
     ) -> SoundHandle | None:
-        """
-        Play a sound effect.
+        """Play a sound effect.
 
         Args:
             clip: The resource loaded via ResourceManager.
@@ -103,8 +101,7 @@ class IAudioSystem(Protocol):
         loop_start: float | None = None,
         loop_end: float | None = None,
     ) -> SoundHandle | None:
-        """
-        Play a sound effect with spatial positioning.
+        """Play a sound effect with spatial positioning.
 
         Calculates volume attenuation based on distance and stereo panning
         based on relative position to the listener.
@@ -142,8 +139,7 @@ class IAudioSystem(Protocol):
         ...
 
     def stop_sfx(self, sound: SoundHandle) -> None:
-        """
-        Stop one playing sound.
+        """Stop one playing sound.
 
         A handle whose sound has already ended is a no-op, which is what
         makes this safe to call from teardown without checking first.
@@ -154,8 +150,7 @@ class IAudioSystem(Protocol):
         ...
 
     def is_sound_active(self, sound: SoundHandle) -> bool:
-        """
-        Check whether the sound a handle refers to is still playing.
+        """Check whether the sound a handle refers to is still playing.
 
         A one-shot sound finishes on its own with no callback, so a caller
         holding a handle cannot otherwise tell "still playing" from
@@ -180,8 +175,7 @@ class IAudioSystem(Protocol):
         ...
 
     def play_music(self, path: str, loop: bool = True, fade_ms: int = 1000) -> None:
-        """
-        Stream background music from disk.
+        """Stream background music from disk.
 
         Args:
             path: File path to the music file.
@@ -191,8 +185,7 @@ class IAudioSystem(Protocol):
         ...
 
     def stop_music(self, fade_ms: int = 1000) -> None:
-        """
-        Stop the currently playing music.
+        """Stop the currently playing music.
 
         Args:
             fade_ms: Fade-out duration in milliseconds.
@@ -212,8 +205,7 @@ class IAudioSystem(Protocol):
         ...
 
     def set_master_volume(self, volume: float) -> None:
-        """
-        Set the global master volume (0.0 to 1.0).
+        """Set the global master volume (0.0 to 1.0).
 
         Args:
             volume: Master volume level.
@@ -221,8 +213,7 @@ class IAudioSystem(Protocol):
         ...
 
     def set_sfx_volume(self, volume: float) -> None:
-        """
-        Set the sound effects volume (0.0 to 1.0).
+        """Set the sound effects volume (0.0 to 1.0).
 
         Args:
             volume: SFX volume level.
@@ -230,8 +221,7 @@ class IAudioSystem(Protocol):
         ...
 
     def set_music_volume(self, volume: float) -> None:
-        """
-        Set the music volume (0.0 to 1.0).
+        """Set the music volume (0.0 to 1.0).
 
         Args:
             volume: Music volume level.
@@ -253,8 +243,7 @@ class IAudioSystem(Protocol):
     # ========== Bus Management ==========
 
     def set_bus_volume(self, bus: AudioBusType, volume: float) -> None:
-        """
-        Set volume for a specific audio bus.
+        """Set volume for a specific audio bus.
 
         Args:
             bus: The bus to adjust.
@@ -263,8 +252,7 @@ class IAudioSystem(Protocol):
         ...
 
     def get_bus_volume(self, bus: AudioBusType) -> float:
-        """
-        Get the volume of a specific audio bus.
+        """Get the volume of a specific audio bus.
 
         Args:
             bus: The bus to query.
@@ -275,8 +263,7 @@ class IAudioSystem(Protocol):
         ...
 
     def set_bus_muted(self, bus: AudioBusType, muted: bool) -> None:
-        """
-        Mute or unmute a specific audio bus.
+        """Mute or unmute a specific audio bus.
 
         Args:
             bus: The bus to mute/unmute.
@@ -285,8 +272,7 @@ class IAudioSystem(Protocol):
         ...
 
     def is_bus_muted(self, bus: AudioBusType) -> bool:
-        """
-        Check if a bus is muted.
+        """Check if a bus is muted.
 
         Args:
             bus: The bus to check.
@@ -299,8 +285,7 @@ class IAudioSystem(Protocol):
     def set_bus_effects(
         self, bus: AudioBusType, effects: Sequence[AudioEffect]
     ) -> None:
-        """
-        Replace the DSP chain on a bus.
+        """Replace the DSP chain on a bus.
 
         The chain is applied in order, so `[LowPassFilter(800), Reverb()]`
         reverberates a signal that has already been muffled. An empty
@@ -319,8 +304,7 @@ class IAudioSystem(Protocol):
         ...
 
     def get_bus_effects(self, bus: AudioBusType) -> tuple[AudioEffect, ...]:
-        """
-        Get the DSP chain installed on a bus.
+        """Get the DSP chain installed on a bus.
 
         Args:
             bus: The bus to query.
@@ -332,8 +316,7 @@ class IAudioSystem(Protocol):
         ...
 
     def set_sound_mix(self, sound: SoundHandle, attenuation: float, pan: float) -> None:
-        """
-        Update volume attenuation and stereo pan for an already-playing sound.
+        """Update volume attenuation and stereo pan for an already-playing sound.
 
         Used to keep spatial audio in sync as a sound source or the listener moves
         during playback, without restarting the sound.
@@ -348,8 +331,7 @@ class IAudioSystem(Protocol):
     # ========== Listener Management ==========
 
     def set_listener_position(self, position: Vector2) -> None:
-        """
-        Set the listener position for spatial audio.
+        """Set the listener position for spatial audio.
 
         All spatial sounds will be calculated relative to this position.
 
@@ -359,8 +341,7 @@ class IAudioSystem(Protocol):
         ...
 
     def shutdown(self) -> None:
-        """
-        Stop all audio and release the underlying device.
+        """Stop all audio and release the underlying device.
 
         Idempotent: a second call is a no-op. After this, playback methods
         must not raise but need not produce sound.

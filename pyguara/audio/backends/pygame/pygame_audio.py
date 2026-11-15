@@ -89,8 +89,7 @@ class PygameAudioSystem:
         buffer: int = 512,
         num_channels: int = 32,
     ):
-        """
-        Initialize the Pygame mixer with advanced audio features.
+        """Initialize the Pygame mixer with advanced audio features.
 
         Args:
             frequency: Sample rate (44100 Hz is CD quality).

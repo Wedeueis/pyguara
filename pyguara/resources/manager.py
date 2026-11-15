@@ -1,5 +1,4 @@
-"""
-Central Asset Management System.
+"""Central Asset Management System.
 
 This module provides the `ResourceManager`, which acts as the single source
 of truth for all game assets. It handles:
@@ -101,8 +100,7 @@ class ResourceManager:
         self._queue: list[LoadRequest] = []
 
     def register_loader(self, loader: IResourceLoader) -> None:
-        """
-        Register a new loader strategy into the manager.
+        """Register a new loader strategy into the manager.
 
         This method updates the internal lookup table, mapping the loader's
         supported extensions to the loader instance for O(1) access.
@@ -120,8 +118,7 @@ class ResourceManager:
             self._extension_map[clean_ext] = loader
 
     def index_directory(self, root_path: str, recursive: bool = True) -> None:
-        """
-        Scan a directory and maps filenames to their full paths without loading them.
+        """Scan a directory and maps filenames to their full paths without loading them.
 
         This allows requesting assets by name (e.g., 'hero') instead of full path
         (e.g., 'assets/chars/hero.png'), mimicking Godot's resource system.
@@ -173,8 +170,7 @@ class ResourceManager:
             self._path_index.pop(stem, None)
 
     def load(self, path_or_name: str, resource_type: type[T]) -> T:
-        """
-        Retrieve a resource from the cache or loads it from disk if necessary.
+        """Retrieve a resource from the cache or loads it from disk if necessary.
 
         This method guarantees type safety: if you request a Texture but the
         file is a Sound, it raises a TypeError immediately.
@@ -629,8 +625,7 @@ class ResourceManager:
         return resource
 
     def acquire(self, path_or_name: str) -> None:
-        """
-        Increment the reference count for a resource.
+        """Increment the reference count for a resource.
 
         Use this when you want to explicitly hold a reference to prevent
         automatic unloading. Must be balanced with release() calls.
@@ -687,8 +682,7 @@ class ResourceManager:
             self._reference_counts.pop(key, None)
 
     def release(self, path_or_name: str) -> None:
-        """
-        Decrement the reference count for a resource.
+        """Decrement the reference count for a resource.
 
         When the reference count reaches zero, the resource is automatically
         unloaded from the cache to free memory.
@@ -724,8 +718,7 @@ class ResourceManager:
             logger.debug("Auto-unloaded resource (ref count 0): %s", actual_path)
 
     def unload(self, path_or_name: str, force: bool = False) -> None:
-        """
-        Remove a resource from the cache, allowing the garbage collector to free memory.
+        """Remove a resource from the cache, allowing the garbage collector to free memory.
 
         By default, this decrements the reference count and only removes the resource
         when the count reaches zero. Use force=True to bypass reference counting.
@@ -766,8 +759,7 @@ class ResourceManager:
                     )
 
     def unload_unused(self) -> int:
-        """
-        Batch-unload all resources with zero reference count.
+        """Batch-unload all resources with zero reference count.
 
         This is useful for cleanup between scenes or game states.
 
@@ -896,8 +888,7 @@ class ResourceManager:
         return evicted
 
     def get_cache_stats(self) -> dict[str, Any]:
-        """
-        Get statistics about the current resource cache state.
+        """Get statistics about the current resource cache state.
 
         Returns:
             A dict with ``resource_count`` (int), ``total_references`` (int),
@@ -943,8 +934,7 @@ class ResourceManager:
         yield from list(self._cache.items())
 
     def load_atlas(self, atlas_path: str, metadata_path: str) -> Atlas:
-        """
-        Load a sprite atlas with its metadata.
+        """Load a sprite atlas with its metadata.
 
         This method loads both the atlas texture and its JSON metadata file,
         parsing the sprite regions and creating an Atlas object for convenient

@@ -1,5 +1,4 @@
-"""
-Sprite atlas (texture packing) data structures for optimized rendering.
+"""Sprite atlas (texture packing) data structures for optimized rendering.
 
 A sprite atlas combines multiple small textures into a single large texture,
 reducing draw calls and improving GPU batching efficiency. This is essential
@@ -16,8 +15,7 @@ from pyguara.resources.types import Texture
 
 @dataclass
 class AtlasRegion:
-    """
-    Represents a sub-region within a sprite atlas.
+    """Represents a sub-region within a sprite atlas.
 
     Attributes:
         name (str): Unique identifier for this region (typically filename without extension).
@@ -31,8 +29,7 @@ class AtlasRegion:
 
 
 class Atlas:
-    """
-    A collection of packed sprites within a single texture.
+    """A collection of packed sprites within a single texture.
 
     Provides fast lookup of sprite regions by name and supports
     sub-texture extraction for rendering.
@@ -43,8 +40,7 @@ class Atlas:
     """
 
     def __init__(self, texture: Texture, regions: dict[str, AtlasRegion]):
-        """
-        Initialize the atlas.
+        """Initialize the atlas.
 
         Args:
             texture (Texture): The packed atlas texture.
@@ -54,8 +50,7 @@ class Atlas:
         self.regions = regions
 
     def get_region(self, name: str) -> AtlasRegion | None:
-        """
-        Get a sprite region by name.
+        """Get a sprite region by name.
 
         Args:
             name (str): The sprite name to look up.
@@ -66,8 +61,7 @@ class Atlas:
         return self.regions.get(name)
 
     def get_rect(self, name: str) -> Rect | None:
-        """
-        Get the rectangle for a sprite region.
+        """Get the rectangle for a sprite region.
 
         Args:
             name (str): The sprite name to look up.
@@ -79,8 +73,7 @@ class Atlas:
         return region.rect if region else None
 
     def has_region(self, name: str) -> bool:
-        """
-        Check if the atlas contains a sprite region.
+        """Check if the atlas contains a sprite region.
 
         Args:
             name (str): The sprite name to check.
@@ -91,8 +84,7 @@ class Atlas:
         return name in self.regions
 
     def list_regions(self) -> list[str]:
-        """
-        Get a list of all sprite names in this atlas.
+        """Get a list of all sprite names in this atlas.
 
         Returns:
             list[str]: List of sprite region names.
@@ -101,8 +93,7 @@ class Atlas:
 
     @property
     def region_count(self) -> int:
-        """
-        Get the number of sprites packed in this atlas.
+        """Get the number of sprites packed in this atlas.
 
         Returns:
             int: Number of regions.

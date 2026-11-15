@@ -277,8 +277,7 @@ class InputManager:
     def register_action(
         self, name: str, action_type: ActionType, deadzone: float = 0.1
     ) -> None:
-        """
-        Register a new action definition.
+        """Register a new action definition.
 
         Args:
             name: Unique name (e.g., "Jump").
@@ -294,8 +293,7 @@ class InputManager:
         action: str,
         context: InputContext = InputContext.GAMEPLAY,
     ) -> None:
-        """
-        Bind a physical key/button to an action.
+        """Bind a physical key/button to an action.
 
         Args:
             device: KEYBOARD, MOUSE, GAMEPAD.

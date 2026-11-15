@@ -9,8 +9,7 @@ class PygameTexture(Texture):
     """A concrete implementation of Texture using pygame.Surface."""
 
     def __init__(self, path: str, surface: pygame.Surface, smooth: bool = False):
-        """
-        Initialize the Pygame texture.
+        """Initialize the Pygame texture.
 
         Args:
             path (str): The source file path.

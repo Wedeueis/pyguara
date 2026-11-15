@@ -15,8 +15,7 @@ if TYPE_CHECKING:
 
 
 class Layer(IntEnum):
-    """
-    Defines the rendering order (Z-Layer).
+    """Defines the rendering order (Z-Layer).
 
     Lower numbers are drawn first (background).
     Higher numbers are drawn last (on top of everything).
@@ -37,8 +36,7 @@ class Layer(IntEnum):
 
 @dataclass(slots=True)  # slots=True reduces memory usage significantly
 class RenderCommand:
-    """
-    A single atomic instruction to draw something.
+    """A single atomic instruction to draw something.
 
     Created every frame for every visible object.
     """
@@ -77,8 +75,7 @@ class RenderCommand:
 
 @dataclass
 class RenderBatch:
-    """
-    A collection of draw calls that share a common state (Texture + Material).
+    """A collection of draw calls that share a common state (Texture + Material).
 
     This allows backends to use optimized bulk-drawing methods.
 

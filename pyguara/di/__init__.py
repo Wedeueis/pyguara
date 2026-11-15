@@ -1,5 +1,4 @@
-"""
-Dependency Injection package.
+"""Dependency Injection package.
 
 Provides a lightweight, type-safe container with support for lifecycle
 management (Singleton, Scoped, Transient), circular dependency detection,
