@@ -167,7 +167,7 @@ it becomes a `pyguara` CLI command beside `atlas`; if not it goes.
 
 ### Deleted outright
 
-- `main.py`: it runs a tutorial scene through `app._container`. The
+- `main.py`: a second, undocumented way to start a tutorial scene. The
   roadmap's `pyguara new` and one-call entry point replace it.
 - `logs/`, `saves/`, `target/`, `games/__pycache__/` (17 GB on disk):
   untracked already. Confirm `saves/` is ignored.

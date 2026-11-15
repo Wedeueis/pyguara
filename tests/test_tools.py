@@ -616,7 +616,7 @@ class TestTheOverlayDiagnosesAndDoesNotAuthor:
 
         app = create_sandbox_application()
         try:
-            manager = app._container.get(ToolManager)
+            manager = app.container.get(ToolManager)
             assert [
                 (keys.key_name(code).upper(), name)
                 for code, name in manager.iter_shortcuts()

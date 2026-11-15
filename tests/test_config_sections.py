@@ -474,7 +474,7 @@ def test_the_bootstrap_hook_runs_early_enough_for_file_values_to_survive(
         )
     )
     try:
-        manager = app._container.get(ConfigManager)
+        manager = app.container.get(ConfigManager)
         assert manager.section(BalanceConfig).boss_waves == 12
     finally:
         app.shutdown()

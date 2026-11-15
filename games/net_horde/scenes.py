@@ -26,7 +26,6 @@ from games.net_horde.world import (
     make_spawners,
     velocity_of,
 )
-from pyguara.application.application import Application
 from pyguara.common.components import Transform
 from pyguara.common.types import Color, Vector2
 from pyguara.ecs.entity import Entity
@@ -35,7 +34,6 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.input.events import OnActionEvent
 from pyguara.input.keys import DOWN, LEFT, RIGHT, UP, A, D, S, W
-from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.kits.topdown_movement import TopDownPrediction
 from pyguara.net import (
@@ -86,7 +84,7 @@ class HeldMove:
             scene: Has the container and dispatcher, and must have entered.
         """
         self._held: dict[str, bool] = {}
-        inputs = scene.container.get(InputManager)
+        inputs = scene.input_manager
         for action, keys in _BINDINGS:
             inputs.register_action(action, ActionType.HOLD)
             for key in keys:
@@ -193,7 +191,7 @@ class SideBySideScene(Scene):
             predicted_components=(Transform,),
             on_controlled=self._player.on_controlled,
         )
-        app = self.container.get(Application)
+        app = self.application
 
         def on_host_event(event: object) -> None:
             if isinstance(event, PlayerJoined):
@@ -225,7 +223,7 @@ class SideBySideScene(Scene):
 
     def on_exit(self) -> None:
         """Stop both sides."""
-        app = self.container.get(Application)
+        app = self.application
         for hook in self._hooks:
             app.remove_step_hook(hook)
 
@@ -233,7 +231,7 @@ class SideBySideScene(Scene):
         """Run the host's simulation, and the client's own character."""
         assert self._simulation is not None
         assert self._keys is not None and self._player is not None
-        tick = self.container.get(Application).fixed_tick
+        tick = self.application.fixed_tick
         self._simulation.fixed_update(tick)
         self._player.prediction.step(self._keys.command())
 
@@ -328,7 +326,7 @@ class HostScene(Scene):
         replication = ReplicationHost(
             self.entity_manager, make_schema(), self._session.send, digest_every=4
         )
-        app = self.container.get(Application)
+        app = self.application
         self._driver = HostDriver(
             app, self._session, replication, self._on_event, self._prediction
         )
@@ -350,13 +348,13 @@ class HostScene(Scene):
     def on_exit(self) -> None:
         """Stop hosting."""
         assert self._driver is not None and self._session is not None
-        self.container.get(Application).remove_step_hook(self._driver)
+        self.application.remove_step_hook(self._driver)
         self._session.close()
 
     def fixed_update(self, fixed_dt: float) -> None:
         """Run the simulation, with the host's own player on the keys."""
         assert self._simulation is not None and self._keys is not None
-        tick = self.container.get(Application).fixed_tick
+        tick = self.application.fixed_tick
         self._simulation.fixed_update(tick, self._keys.command())
 
     def update(self, dt: float) -> None:
@@ -420,7 +418,7 @@ class JoinScene(Scene):
         self._driver = ClientDriver(
             self._session, self._replication, self._on_event, self._player.prediction
         )
-        self.container.get(Application).add_step_hook(self._driver)
+        self.application.add_step_hook(self._driver)
 
     def _on_event(self, event: object) -> None:
         if isinstance(event, Joined):
@@ -432,7 +430,7 @@ class JoinScene(Scene):
     def on_exit(self) -> None:
         """Leave."""
         assert self._driver is not None and self._session is not None
-        self.container.get(Application).remove_step_hook(self._driver)
+        self.application.remove_step_hook(self._driver)
         self._session.close()
 
     def fixed_update(self, fixed_dt: float) -> None:

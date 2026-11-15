@@ -156,8 +156,8 @@ def test_the_scene_builds_one_static_body_per_merged_rect():
 
     app = create_headless_application()
     try:
-        scene = TilemapScene(app._container.get(EventDispatcher))
-        scene.resolve_dependencies(app._container)
+        scene = TilemapScene(app.container.get(EventDispatcher))
+        scene.resolve_dependencies(app.container)
         scene.on_enter()
 
         assert scene.tilemap is not None
@@ -178,8 +178,8 @@ def test_the_player_spawns_at_the_marker():
 
     app = create_headless_application()
     try:
-        scene = TilemapScene(app._container.get(EventDispatcher))
-        scene.resolve_dependencies(app._container)
+        scene = TilemapScene(app.container.get(EventDispatcher))
+        scene.resolve_dependencies(app.container)
         scene.on_enter()
 
         assert scene.tilemap is not None

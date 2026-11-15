@@ -31,7 +31,7 @@ pytestmark = pytest.mark.integration
 def start(scene_factory: object) -> tuple[Application, Scene]:
     app = create_headless_application()
     app._clock = FixedClock()
-    dispatcher = app._container.get(EventDispatcher)
+    dispatcher = app.container.get(EventDispatcher)
     scene = scene_factory(dispatcher)  # type: ignore[operator]
     app.begin(scene)
     return app, scene

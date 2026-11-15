@@ -10,11 +10,8 @@ def main() -> None:
     # 1. Bootstrap (wires everything automatically)
     app = create_application()
 
-    # 2. Get dependencies for the scene manually if needed,
-    # or let the scene resolve them itself.
-    # Accessing internal container for scene injection:
-    container = app._container
-    dispatcher = container.get(EventDispatcher)
+    # 2. A scene is built with the application's event dispatcher.
+    dispatcher = app.container.get(EventDispatcher)
 
     # 3. Create Scene
     start_scene = BootScene(dispatcher)

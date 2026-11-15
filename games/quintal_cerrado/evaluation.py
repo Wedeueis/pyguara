@@ -20,7 +20,6 @@ from pyguara.ui.components.progress_bar import ProgressBar
 from pyguara.ui.components.text import Label
 from pyguara.ui.design_system import BevelButton, BevelPanel, Skins
 from pyguara.ui.design_system.tokens import Guara, Verdant, Water
-from pyguara.ui.manager import UIManager
 from pyguara.ui.types import UILayer
 
 PANEL_SIZE = Vector2(520, 420)
@@ -56,7 +55,7 @@ class EvaluationScene(OverlayScene):
 
     def _build(self) -> None:
         """Build the panel: grade, total, four bars, and two buttons."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear(UILayer.OVERLAY)
         ui_manager.add_element(Scrim(self._width, self._height), UILayer.OVERLAY)
 

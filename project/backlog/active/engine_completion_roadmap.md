@@ -117,6 +117,9 @@ telling the truth about itself.
    `main.py`, then decide the one sanctioned pattern for a scene
    (constructor injection or `self.container.get`) and make the demos
    agree. An ADR, since it touches the DI container.
+   *Done: ADR 0012. Scenes use `self.scene_manager`, `ui_manager`,
+   `input_manager` and `application`, with `self.container.get(T)` as the
+   escape hatch; `main.py` and the tests use `app.container`.*
 3. **Rewrite the README** from the code: backends, Studio in place of the
    F12 editor, working links, an install line that is true.
 4. **One status word** across `AGENTS.md`, README and the classifier.

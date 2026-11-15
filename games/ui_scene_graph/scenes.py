@@ -8,11 +8,9 @@ from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.graphics.window import Window
 from pyguara.scene.base import Scene
-from pyguara.scene.manager import SceneManager
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.text import Label
 from pyguara.ui.layout import BoxContainer
-from pyguara.ui.manager import UIManager
 
 
 class GameScene(Scene):
@@ -25,7 +23,7 @@ class GameScene(Scene):
     def on_enter(self) -> None:
         """Create UI."""
         print("GameScene entered!")
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
 
         # Clear previous UI (Tutorial simplification)
         ui_manager.clear()
@@ -43,7 +41,7 @@ class GameScene(Scene):
     def on_back_click(self, el) -> None:
         """Handle back button."""
         print("Back clicked!")
-        self.container.get(SceneManager).pop()
+        self.scene_manager.pop()
 
     def on_exit(self) -> None:
         """Cleanup."""
@@ -68,7 +66,7 @@ class MenuScene(Scene):
     def on_enter(self) -> None:
         """Create menu UI."""
         print("MenuScene entered!")
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
 
         # Clear previous UI
         ui_manager.clear()
@@ -94,7 +92,7 @@ class MenuScene(Scene):
     def on_start_click(self, el) -> None:
         """Handle start button."""
         print("Start Game clicked!")
-        scene_manager = self.container.get(SceneManager)
+        scene_manager = self.scene_manager
         scene_manager.push(GameScene(self.event_dispatcher))
 
     def on_quit_click(self, el) -> None:

@@ -64,7 +64,6 @@ from pyguara.input.keys import (
     S,
     W,
 )
-from pyguara.input.manager import InputManager
 from pyguara.input.types import ActionType, InputDevice
 from pyguara.kits.progression import (
     Experience,
@@ -80,7 +79,6 @@ from pyguara.kits.progression import (
 )
 from pyguara.scene.base import Scene
 from pyguara.spatial.system import SpatialIndexSystem
-from pyguara.ui.manager import UIManager
 
 # The clearing, inset from the window so the vignette has something to
 # darken that is not gameplay.
@@ -248,7 +246,7 @@ class ClearingScene(Scene):
         `InputManager` offers and what the replay layer records -- a
         scene that read the keyboard directly would not replay.
         """
-        inputs = self.container.get(InputManager)
+        inputs = self.input_manager
         for action in ("move_up", "move_down", "move_left", "move_right"):
             inputs.register_action(action, ActionType.HOLD)
         inputs.register_action("back", ActionType.PRESS)
@@ -327,7 +325,7 @@ class ClearingScene(Scene):
         outlives it.
         """
 
-        self.container.get(UIManager).clear()
+        self.ui_manager.clear()
 
     # ---- events ----------------------------------------------------
 
@@ -393,7 +391,7 @@ class ClearingScene(Scene):
             self._spend_level()
             return
 
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.clear()
         self._cards = [
             CardElement(card, position)
@@ -409,7 +407,7 @@ class ClearingScene(Scene):
 
     def _take_card(self) -> None:
         """Take the focused card, close the pick, and resume the run."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         focused = ui_manager.focused_element
         chosen = next((element for element in self._cards if element is focused), None)
         if chosen is None:
@@ -435,7 +433,7 @@ class ClearingScene(Scene):
 
     def _close_pick(self) -> None:
         """Take the cards down and give focus back to nothing."""
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         ui_manager.set_focus(None)
         ui_manager.clear()
         self._cards = []
@@ -822,7 +820,7 @@ class ClearingScene(Scene):
         if not self._cards:
             return
 
-        ui_manager = self.container.get(UIManager)
+        ui_manager = self.ui_manager
         views = card_views(self._cards, ui_manager.focused_element)
 
         # Every box first, then a flush, then every label. The GL backend
