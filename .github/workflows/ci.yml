@@ -5,9 +5,47 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  # `gh workflow run ci.yml --ref <branch>` runs the full tier on a branch.
   workflow_dispatch:
 
+# A new push to a pull request makes the run on the old commit worthless.
+# Pushes to main are left to finish, so every merge has a result.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Two tiers. Every pull request push runs the fast one: quality, the Linux
+  # suite with coverage, the Python store, and Windows, the platform the game
+  # ships on first. The full tier adds Python 3.13, macOS and the five wheels,
+  # and runs on a push to main, by hand, and on a pull request that touches
+  # what those jobs exist to check: the crate, the build, or this pipeline.
+  scope:
+    name: Scope
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.decide.outputs.full }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # The pull request's checkout is its merge commit: parent 1 is the base.
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          if echo "$changed" | grep -qE '^(rust/|Cargo\.(toml|lock)$|pyproject\.toml$|uv\.lock$|pyguara/native\.py$|\.github/workflows/)'; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "$changed"
+
   quality:
     name: Code Quality
     runs-on: ubuntu-latest
@@ -53,17 +91,8 @@ jobs:
         run: make type-check
 
   tests:
-    name: Tests & Coverage (py${{ matrix.python-version }})
+    name: Tests & Coverage (py3.12)
     runs-on: ubuntu-latest
-    needs: quality
-    strategy:
-      fail-fast: false
-      matrix:
-        # 3.13 as well as 3.12 because the wheel is `abi3-py312`: one
-        # build is claimed to run on both, and a claim nothing exercises
-        # is how this repository has been bitten before. Coverage is
-        # gated on 3.12 only, below, so the threshold is one number.
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +104,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -111,32 +140,64 @@ jobs:
           print(describe())
           "
 
-      - name: Run Unit Tests
-        run: make test-unit
-        env:
-          PYGUARA_REQUIRE_GPU: "1"
-
-      - name: Run Integration Tests
-        run: make test-integration
-        env:
-          PYGUARA_REQUIRE_GPU: "1"
-
-      # This runs coverage and fails if <85% (as defined in Makefile)
-      - name: Check Coverage
-        if: matrix.python-version == '3.12'
+      # One run of the whole suite, slow tests included.
+      # It used to run unit and integration first and then all of it again
+      # for coverage: the same tests twice. The floor is in the Makefile.
+      - name: Run the tests with coverage
         run: make coverage-check
+        env:
+          PYGUARA_REQUIRE_GPU: "1"
 
       - name: Upload Coverage XML
-        if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # Optional: if you use Codecov
           file: ./coverage.xml
 
+  # 3.13 as well as 3.12 because the wheel is `abi3-py312`: one build is
+  # claimed to run on both, and a claim nothing exercises is how this
+  # repository has been bitten before. Full tier: what breaks it is the
+  # crate or the build, which is what puts a pull request in that tier.
+  tests-py313:
+    name: Tests (py3.13)
+    runs-on: ubuntu-latest
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install software Vulkan and udev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libudev-dev pkg-config
+
+      - name: Install Dependencies
+        run: make install
+
+      - name: Run the tests
+        run: uv run pytest -m "not performance" -p no:cacheprovider
+        env:
+          PYGUARA_REQUIRE_GPU: "1"
+
   python-fallback:
     name: Python store (no accelerator)
     runs-on: ubuntu-latest
-    needs: quality
     steps:
       - uses: actions/checkout@v4
 
@@ -176,78 +237,29 @@ jobs:
       # `native_acceleration = "off"` is a supported setting, and a
       # platform the wheel matrix does not cover falls back to them.
       - name: Run Unit Tests with the accelerator disabled
-        run: make test-unit
+        run: uv run pytest tests/ -m "not slow and not integration"
         env:
           PYGUARA_NO_NATIVE: "1"
           PYGUARA_REQUIRE_GPU: "1"
 
   wheels:
     name: Wheels
-    needs: quality
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
     uses: ./.github/workflows/wheels.yml
 
 
-  # Windows is the main platform for networked games, and every other test job
-  # here runs on Ubuntu, so without this the transport only ever compiles there.
-  # Sockets are where the platforms differ: an ICMP port-unreachable fails a
-  # later `recv_from`, and timers are coarser, which the socket thread relies on.
-  network-windows:
-    name: Network (Windows)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v1
-        with:
-          version: "latest"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        run: uv sync --all-extras
-
-      - name: Run the network suites
-        run: >-
-          uv run pytest tests/test_net_transport.py tests/test_net_hostile.py
-          tests/test_net_session.py tests/test_net_replication.py
-          tests/test_net_prediction.py tests/integration/test_net_udp.py
-          tests/integration/test_net_demo.py
-
-      # Reports, rather than asserts: on Linux this link reads about 7 ms, and
-      # coarse Windows timers would show here as a much higher figure.
-      - name: Measure a real socket on loopback
-        shell: bash
-        run: |
-          uv run python tools/net_probe.py host --port 7791 --seconds 8 --wait 60 > host.log 2>&1 &
-          for _ in $(seq 60); do
-            invite=$(grep -o 'pyguara://[^"]*' host.log || true)
-            [ -n "$invite" ] && break
-            sleep 1
-          done
-          uv run python tools/net_probe.py join "$invite" --seconds 8
-          wait
-          cat host.log
-
-  # Every other full test job runs on Ubuntu, and the game ships on Windows
-  # first. A platform the suite never runs on is one where a path separator, a
-  # file lock or a missing GPU passes review and fails a player.
+  # The game ships on Windows first, and a path separator, a file lock or a
+  # coarse timer passes review on Linux and fails a player there, so Windows
+  # runs on every pull request. macOS is the full tier.
   tests-platforms:
     name: Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: quality
+    needs: scope
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: ${{ fromJSON(needs.scope.outputs.full == 'true' && '["windows-latest", "macos-latest"]' || '["windows-latest"]') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -292,28 +304,20 @@ jobs:
         env:
           PYGUARA_REQUIRE_GPU: "1"
 
-  build-check:
-    name: Build Verification
-    runs-on: ubuntu-latest
-    needs: tests
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v1
-        with:
-            version: "latest"
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install udev headers
+      # Windows is the main platform for networked games. The suite above
+      # covers the transport; this reports, rather than asserts, a real
+      # socket on loopback: on Linux it reads about 7 ms, and coarse
+      # Windows timers would show here as a much higher figure.
+      - name: Measure a real socket on loopback
+        if: runner.os == 'Windows'
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
-
-      - name: Verify Build
-        run: make build
+          uv run python tools/net_probe.py host --port 7791 --seconds 8 --wait 60 > host.log 2>&1 &
+          for _ in $(seq 60); do
+            invite=$(grep -o 'pyguara://[^"]*' host.log || true)
+            [ -n "$invite" ] && break
+            sleep 1
+          done
+          uv run python tools/net_probe.py join "$invite" --seconds 8
+          wait
+          cat host.log
