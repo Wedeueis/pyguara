@@ -244,10 +244,26 @@ class DebugConfig:
 
 
 @dataclass
+class I18nConfig:
+    """Which language player-visible text is shown in. See `pyguara.i18n`."""
+
+    locale: str = ""
+    """A BCP 47 tag such as `"pt-BR"`. Empty picks the closest locale to the
+    operating system's; a game on Steam sets the one Steam reports."""
+
+    directory: str = "locales"
+    """The folder of `<locale>.json` files. Without it, no translator is
+    registered and a game shows the text its code holds."""
+
+    source: str = "en"
+    """The locale the game is written in, which every other falls back to."""
+
+
+@dataclass
 class GameConfig:
     """Master configuration container.
 
-    The six engine sections are declared fields. Sections a *game* defines
+    The seven engine sections are declared fields. Sections a *game* defines
     live in `custom`, keyed by the name they were registered under, and are
     read, written, coerced and validated by exactly the same machinery --
     see `pyguara.config.sections`. Reach for them through
@@ -261,6 +277,7 @@ class GameConfig:
     physics: PhysicsConfig = field(default_factory=PhysicsConfig)
     performance: PerformanceConfig = field(default_factory=PerformanceConfig)
     debug: DebugConfig = field(default_factory=DebugConfig)
+    i18n: I18nConfig = field(default_factory=I18nConfig)
 
     # Metadata
     version: str = "1.0"

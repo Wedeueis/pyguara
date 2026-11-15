@@ -45,6 +45,7 @@ nav:
       - Dev Tools: systems/dev.md
       - Editor Tools: systems/editor.md
       - Input: systems/input.md
+      - Localisation: systems/localisation.md
       - Networking: systems/networking.md
       - Persistence: systems/persistence.md
       - Prefabs: systems/prefabs.md
