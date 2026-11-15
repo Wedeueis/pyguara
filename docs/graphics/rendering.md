@@ -395,6 +395,38 @@ When using Pygame backend, advanced graphics features gracefully degrade:
 
 Game code using these features runs unchanged on Pygame - stubs accept the API calls but skip the GPU operations.
 
+### Text and fallback fonts
+
+Both renderers draw text in the bundled Liberation Sans, which covers
+Latin, Greek and Cyrillic. For other scripts -- Chinese, Japanese, Korean --
+a game ships the faces it needs and sets them as fallbacks:
+
+```python
+from pyguara.graphics import fonts
+
+fonts.set_fallback_fonts([
+    "assets/fonts/NotoSansJP-Regular.otf",   # first: the player's language
+    "assets/fonts/NotoSansSC-Regular.otf",
+    "assets/fonts/NotoSansKR-Regular.otf",
+])
+```
+
+- **A character Liberation Sans lacks is drawn from the first fallback
+  that has it.** Characters it has never use a fallback, so Latin text
+  looks the same with or without them.
+- **Put the face for the player's language first.** Chinese and Japanese
+  share Han characters but draw some of them differently, so `直` from the
+  Chinese face looks wrong to a Japanese reader. Set the list again when
+  the language changes; both renderers redraw their cached text.
+- **Line height stays Liberation Sans's**, so a label does not grow
+  because it holds a CJK character. Noto Sans CJK fits inside it.
+- **Single-face `.ttf` or `.otf` files only**, not `.ttc` collections: the
+  pygame renderer opens fonts by path. Noto publishes per-region files
+  (`NotoSansSC`, `NotoSansJP`, `NotoSansKR`) under the SIL Open Font
+  License.
+- The pygame renderer reads the faces' character maps through the native
+  extension. Without it, fallbacks have no effect and a warning is logged.
+
 ---
 
 # UI System

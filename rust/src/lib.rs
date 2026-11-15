@@ -94,6 +94,7 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<world::RowView>()?;
     module.add_class::<world::FieldAccessor>()?;
     module.add_class::<text::NativeFont>()?;
+    module.add_class::<text::NativeFace>()?;
     module.add_class::<mixer::NativeMixer>()?;
     module.add_class::<mixer::MixerClip>()?;
     module.add_class::<gamepad::NativeGamepads>()?;

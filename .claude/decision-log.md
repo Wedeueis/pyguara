@@ -865,3 +865,21 @@
 - **Chose:** config, then system, narrowed. A player sees their language without a settings screen, and a game on Steam overrides it with Steam's language (`locale_from_steam`). The folder is optional: without `locales/` no translator is registered, so a game that is not localised pays nothing.
 - **Tags:** i18n, config, bootstrap
 - **Reviewed:** approved by the user 2026-11-15.
+
+## Fallback faces are engine-wide, set by the game, tried per character
+- **Context:** localisation L2, drawing CJK text that Liberation Sans lacks.
+- **Alternatives:** bundle Noto Sans CJK in the engine (about 16 MB per region and weight in the wheel); make fallbacks a per-font or per-label option; one engine-wide ordered list the game sets with `set_fallback_fonts()`, tried per character, which both renderers read.
+- **Chose:** the engine-wide list set by the game. The game knows its languages and ships only the faces it needs; one list keeps the two renderers in agreement; the order is how a game picks Japanese or Chinese Han forms for the player's language. Single-face files only, because pygame opens fonts by path and cannot pick a face from a collection.
+- **Tags:** i18n, text, fonts
+
+## Line metrics stay the default face's when a fallback draws
+- **Context:** the same; how tall a string with a CJK character is.
+- **Alternatives:** take ascent and descent from every face in use, so a line grows when a CJK glyph appears; keep the default face's metrics always.
+- **Chose:** the default face's. A label must not change height because of which characters it holds, and Noto Sans CJK's box fits inside Liberation's at the same size (ascent 0.88 em against 0.905, descent 0.12 against 0.21). Kerning applies only between glyphs of the same face.
+- **Tags:** i18n, text, layout
+
+## The pygame renderer splits text into runs using the native character maps
+- **Context:** the same, on the software renderer, where SDL_ttf draws one file and does not report missing glyphs.
+- **Alternatives:** parse `cmap` tables in Python; depend on fontTools; ask the extension's `NativeFace.covers()`, the same answer the wgpu path uses, and render each run with its own `pygame.font.Font` on the default face's baseline.
+- **Chose:** the extension. The two renderers then agree on which face draws each character by construction, and with no fallbacks set the default face renders exactly as before, so existing pixel goldens are untouched. Without the extension, fallbacks are inert and one warning is logged.
+- **Tags:** i18n, text, pygame
