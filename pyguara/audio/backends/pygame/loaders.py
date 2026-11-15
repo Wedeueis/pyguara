@@ -2,6 +2,7 @@
 
 import pygame
 
+from pyguara import assets
 from pyguara.log import get_logger
 from pyguara.resources.meta import AssetMeta, AudioLoadMode, AudioMeta
 from pyguara.resources.types import Resource
@@ -50,5 +51,5 @@ class PygameSoundLoader:
                 path,
             )
 
-        sound = pygame.mixer.Sound(path)
+        sound = pygame.mixer.Sound(file=assets.open(path))
         return PygameAudioClip(path, sound)

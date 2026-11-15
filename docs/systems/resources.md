@@ -189,6 +189,39 @@ pile of bytes.
     that would have to be unified first. That is a design, not a loader, and
     it is still open on #272.
 
+## Packed assets: `pyguara.assets`
+
+Every engine loader reads files through `pyguara.assets`, never `open()`, so
+a shipped game can keep its assets in one pack (a ZIP) instead of hundreds of
+loose files:
+
+```python
+from pyguara import assets
+
+assets.mount_pack("Reclaimer.pak", root=game_dir)
+```
+
+- **A path keeps its meaning.** The pack holds paths relative to `root`. A
+  path asked for, absolute or relative to the working directory, is looked
+  up in the pack only if it lies under that root. So `load("assets/hero.png")`,
+  the folder index and `.meta` files work the same, loose or packed, and
+  `index_directory()` lists packed files under the paths they would have on
+  disk.
+- **Packs are consulted before the disk**, the last mounted first. A file in
+  no pack is read from disk, so a development checkout needs no pack at all,
+  and a patch pack can override files in a base pack.
+- **Packs are read-only.** Saves, settings and logs are written to disk.
+- **Pygame's music player keeps streaming a loose track from disk.** A packed
+  track is read into memory first. The native mixer decodes whole tracks
+  either way.
+- **What goes through it:** every `ResourceManager` loader (images on both
+  renderers, sounds, JSON, text, blobs), `.meta` files, the folder index,
+  atlases, prefabs, sprite sheets, Tiled and LDtk maps, themes and music.
+
+A loader of your own should read with `assets.read_bytes(path)`,
+`assets.read_text(path)` or `assets.open(path)`. One that calls `open()`
+itself still works for loose files, but not packed ones.
+
 ## Introspection
 
 `get_cache_stats()` returns `{"resource_count", "total_references",

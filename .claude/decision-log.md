@@ -823,3 +823,15 @@
 - **Chose:** main thread, `KeyboardInterrupt` skipped. A background thread's exception does not end the game, so reporting it as a crash would mislabel it and fill the 20-report limit with noise; Ctrl+C is the player stopping the game.
 - **Tags:** crash
 - **Reviewed:** approved by the user 2026-11-14.
+
+## Packs are ZIP files
+- **Context:** packed assets (roadmap phase 2), the pack format `pyguara build` will write.
+- **Alternatives:** a custom archive (an index plus concatenated blobs, possibly obfuscated); one SQLite file; a ZIP.
+- **Chose:** ZIP. The standard library reads it with random access and no dependency, already-compressed PNG and OGG can be stored and text deflated, and any tool can open one for debugging. Hiding assets from players is not a goal here: the point is an install with one file instead of hundreds, and source protection is a separate item (Nuitka, W29).
+- **Tags:** assets, shipping, data-format
+
+## Loaders keep `load(path)`; one module serves the bytes
+- **Context:** the same; how loaders reach packed files ("loader protocol from path to opener" in the roadmap).
+- **Alternatives:** change the loader protocol to take an opener or a bytes source; keep `load(path)` and have every loader read through `pyguara.assets`, a mount table consulted before the disk.
+- **Chose:** keep the protocol. The path is still the asset's identity (cache key, index entry, error message), a game's own loaders keep working for loose files, and the change to each engine loader is one line. A pack is mounted with a `root`, and a path is looked up in it only if it lies under that root, so the same path names the same asset loose or packed.
+- **Tags:** assets, resources, api

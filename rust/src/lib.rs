@@ -103,10 +103,12 @@ fn pyguara_core_rs(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(steam::steam_library_name, module)?)?;
     module.add_function(wrap_pyfunction!(window::keycode_table, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::decode_image, module)?)?;
+    module.add_function(wrap_pyfunction!(imaging::decode_image_bytes, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::premultiply_rgba, module)?)?;
     module.add_function(wrap_pyfunction!(imaging::encode_png, module)?)?;
     net::register(module)?;
     module.add_function(wrap_pyfunction!(audio::decode_audio, module)?)?;
+    module.add_function(wrap_pyfunction!(audio::decode_audio_bytes, module)?)?;
     module.add_function(wrap_pyfunction!(audio::resample_pcm, module)?)?;
     Ok(())
 }
