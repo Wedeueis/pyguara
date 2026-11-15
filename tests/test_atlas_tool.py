@@ -389,8 +389,8 @@ def test_atlas_generator_generate():
         assert output_metadata.exists()
 
         # Verify image
-        atlas_img = Image.open(output_image)
-        assert atlas_img.size == (256, 256)
+        with Image.open(output_image) as atlas_img:
+            assert atlas_img.size == (256, 256)
 
         # Verify metadata
         with open(output_metadata, encoding="utf-8") as f:
