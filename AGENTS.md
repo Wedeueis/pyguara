@@ -27,6 +27,7 @@ archived. This repository is the only one; issues live here.
 | `next_engine_plan.md` | Workstreams 1 to 7, their measurements, and the live status of each |
 | `network_multiplayer.md` | The networking plan, by phase |
 | `repo_cleanup_plan.md` | What moves, is archived or is deleted at true alpha |
+| `localisation_plan.md` | The ten languages Reclaimer ships in, and the four PRs that get it there |
 
 `REFACTOR_STATE.md` and `.scratch/engine-remediation/` record two
 **finished** efforts. Do not resume either. `project/backlog/archive_*/`
@@ -75,6 +76,9 @@ All three must pass. With several commits, each must pass alone.
   an old one.
 - Stack a branch on another only for a real dependency, and say so in
   the PR.
+- **A feature or fix PR does not edit `CHANGELOG.md`.** It drafts its
+  entry in the PR body under `## Changelog`. A separate changelog PR
+  collects the merged entries, periodically and before each release.
 - Commit or push only when asked.
 
 Reasons and the full procedure: `docs/agents/branching.md`.

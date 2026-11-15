@@ -61,6 +61,22 @@ def _imports_in(source: str) -> list[tuple[str, tuple[str, ...]]]:
     return found
 
 
+def _importable_from(module: object, module_name: str, name: str) -> bool:
+    """Whether `from module_name import name` would succeed, as Python does it.
+
+    A submodule is not an attribute of its package until something imports
+    it, but `from pyguara.graphics import fonts` imports it. Checking only
+    `hasattr` made the result depend on which tests had run first.
+    """
+    if hasattr(module, name):
+        return True
+    try:
+        importlib.import_module(f"{module_name}.{name}")
+    except ImportError:
+        return False
+    return True
+
+
 @pytest.mark.parametrize("path", _markdown_files(), ids=lambda p: p.name)
 def test_documented_imports_resolve(path: Path) -> None:
     """Every `from pyguara... import X` in the docs must actually import."""
@@ -78,7 +94,7 @@ def test_documented_imports_resolve(path: Path) -> None:
             for name in names:
                 if name == "*":
                     continue
-                if not hasattr(module, name):
+                if not _importable_from(module, module_name, name):
                     failures.append(f"{module_name} has no attribute {name!r}")
 
     assert not failures, f"{path.relative_to(DOCS_DIR.parent)}:\n  " + "\n  ".join(
@@ -121,3 +137,28 @@ def test_inline_dotted_references_resolve(path: Path) -> None:
     assert not failures, f"{path.relative_to(DOCS_DIR.parent)}:\n  " + "\n  ".join(
         failures
     )
+
+
+def test_a_submodule_imported_by_name_resolves_before_anything_imports_it() -> None:
+    """`from package import submodule` resolves in a fresh interpreter.
+
+    Run in a subprocess, because in this process another test may already
+    have imported the submodule, which is how the defect stayed hidden.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import importlib, sys\n"
+        "sys.path.insert(0, 'tests')\n"
+        "import test_docs_api as t\n"
+        "pkg = importlib.import_module('pyguara.graphics')\n"
+        "assert 'pyguara.graphics.fonts' not in sys.modules\n"
+        "assert t._importable_from(pkg, 'pyguara.graphics', 'fonts')\n"
+        "assert not t._importable_from(pkg, 'pyguara.graphics', 'no_such_thing')\n"
+    )
+    root = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        [sys.executable, "-c", probe], cwd=root, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr

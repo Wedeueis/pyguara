@@ -824,30 +824,74 @@
 - **Tags:** crash
 - **Reviewed:** approved by the user 2026-11-14.
 
-## CI runs in two tiers, chosen by what a pull request changes
-- **Context:** CI took about 16 minutes per push, with 14 jobs, and runs queued behind each other when several PRs were open.
-- **Alternatives:** keep everything on every push; move the slow platforms to a nightly schedule; a `full-ci` label that turns the full tier on; a tier chosen by the changed paths.
-- **Chose:** changed paths. Every pull request push runs quality, Linux 3.12 with coverage, the Python store and Windows. Python 3.13, macOS and the wheels run on a push to main, on `workflow_dispatch`, and on a PR that touches `rust/`, `Cargo.*`, `pyproject.toml`, `uv.lock`, `pyguara/native.py` or the workflows, which is what those jobs exist to check. A label would need someone to remember it, and adding any label would restart the run. A nightly schedule would find breakage hours after a merge, not on the merge.
-- **Tags:** ci
-- **Reviewed:** not yet.
+## String tables are flat JSON per locale
+- **Context:** localisation L1, `pyguara.i18n`, the format translators and the game write.
+- **Alternatives:** gettext `.po` files (English text as the key); Mozilla Fluent `.ftl`; Android-style XML; one flat JSON object per locale, keys like `hud.salvage`, a plural entry being an object of CLDR forms.
+- **Chose:** flat JSON. Python reads it with no dependency, Crowdin, Weblate and Lokalise all import it, a key survives the English text changing (gettext's does not), and plural forms are just an object. Nested namespaces were left out because a nested object would be ambiguous with a plural entry.
+- **Tags:** i18n, data-format
+- **Reviewed:** approved by the user 2026-11-15.
 
-## Windows stays on every pull request; macOS does not
-- **Context:** which platform jobs belong in the fast tier.
-- **Alternatives:** both on every PR; neither (Linux only).
-- **Chose:** Windows on every PR, because the game ships there first and this suite's Windows failures (encoding, file locks, timers) came from plain Python changes. macOS failures so far came from the native side, which puts a PR in the full tier anyway, and every merge runs it.
-- **Tags:** ci, platforms
-- **Reviewed:** not yet.
+## Placeholders are plain names only, checked at load
+- **Context:** the same; filling `{player}` and `{count}` in translated text.
+- **Alternatives:** `str.format` as is; `string.Template` (`$name`); `str.format` restricted to `{name}` and `{name:spec}`, refusing attribute, index, positional, conversion and nested fields when the file loads.
+- **Chose:** restricted `str.format`. Translation files come from outside the code, and unrestricted `format` can walk the attributes of a passed object (`{player.__class__}`). Keeping `{name:spec}` lets a translator format numbers (`{ratio:.0%}`); `$name` would lose that.
+- **Tags:** i18n, security
+- **Reviewed:** approved by the user 2026-11-15.
 
-## Duplicate CI work removed rather than kept as belt and braces
-- **Context:** three jobs repeated work another job already did.
-- **Alternatives:** keep them; remove them.
-- **Chose:** removed. The 3.12 job ran unit and integration tests and then the whole suite again for coverage, so coverage is now the one run. Build Verification's `uv build` repeats what the wheels and sdist jobs build. Network (Windows) ran 449 network tests that the Windows test job also runs, so only its loopback measurement moves into the Windows job.
-- **Tags:** ci
-- **Reviewed:** not yet.
+## A missing translation shows English; a missing English string raises
+- **Context:** the same; what a lookup does when a key is absent.
+- **Alternatives:** show the key itself; raise always; fall back to the source locale and log once per key and locale, but raise `MissingStringError` when the source has no such key.
+- **Chose:** the split. A gap in a translation is expected mid-project and English is the readable answer; a key missing from English is code asking for text nobody wrote, and showing the key would be a plausible wrong value. A missing plural form falls back to `other`.
+- **Tags:** i18n, errors
+- **Reviewed:** approved by the user 2026-11-15.
 
-## Parallel tests (pytest-xdist) wait for a native crash fix
-- **Context:** `-n auto` halved the local suite (204 s to 102 s), but with coverage one worker aborts in `WgpuWindow.present()` or segfaults during garbage collection.
-- **Alternatives:** ship xdist now with `--dist loadfile`; ship it with the failing test excluded; fix the crash first.
-- **Chose:** fix first, on its own branch. Replaying that worker's test order serially crashes too, so it is an engine defect that the default order hides, not an xdist problem. Hiding it would make CI fail at random on whichever order a run gets.
-- **Tags:** ci, native, wgpu
-- **Reviewed:** not yet.
+## Plural rules are hand-transcribed from CLDR for the supported languages
+- **Context:** the same; choosing `one`/`few`/`many`/`other` for a count.
+- **Alternatives:** depend on Babel, which carries all of CLDR (tens of MB); transcribe the integer rules for the languages the engine supports and refuse any other.
+- **Chose:** transcribe. Eleven small functions cover the ten target languages (plus Italian), tested against CLDR's examples; an unknown language is refused rather than given English's rule. Babel can replace them if the list grows.
+- **Tags:** i18n, dependencies
+- **Reviewed:** approved by the user 2026-11-15.
+
+## Scenes translate with `self.tr(key, ...)`; other code takes the `Translator`
+- **Context:** localisation L1; how game code reaches the translator.
+- **Alternatives:** a module-level `tr()` bound to a global current translator, as gettext's `_()` is; `self.container.get(Translator)` only; a `Scene.translator` property in the ADR 0012 style plus a `Scene.tr()` shorthand, with systems and UI builders handed the `Translator`.
+- **Chose:** the property and the shorthand. A global would make two applications in one process (as the tests run) share a language, and ADR 0012 already makes scene accessors the way in; `tr` is there because a translated screen calls it on nearly every line. A game with no locales folder gets a `RuntimeError` naming the folder, not a lookup failure.
+- **Tags:** i18n, scene, di
+- **Reviewed:** approved by the user 2026-11-15.
+
+## The locale is chosen once at startup, from config, then the system
+- **Context:** the same; which language a game starts in.
+- **Alternatives:** require the game to choose; read only the config; read config, else the operating system's locale, narrowed to the closest available file (`pt-PT` to `pt-BR`, Chinese by script, else the source).
+- **Chose:** config, then system, narrowed. A player sees their language without a settings screen, and a game on Steam overrides it with Steam's language (`locale_from_steam`). The folder is optional: without `locales/` no translator is registered, so a game that is not localised pays nothing.
+- **Tags:** i18n, config, bootstrap
+- **Reviewed:** approved by the user 2026-11-15.
+
+## Fallback faces are engine-wide, set by the game, tried per character
+- **Context:** localisation L2, drawing CJK text that Liberation Sans lacks.
+- **Alternatives:** bundle Noto Sans CJK in the engine (about 16 MB per region and weight in the wheel); make fallbacks a per-font or per-label option; one engine-wide ordered list the game sets with `set_fallback_fonts()`, tried per character, which both renderers read.
+- **Chose:** the engine-wide list set by the game. The game knows its languages and ships only the faces it needs; one list keeps the two renderers in agreement; the order is how a game picks Japanese or Chinese Han forms for the player's language. Single-face files only, because pygame opens fonts by path and cannot pick a face from a collection.
+- **Tags:** i18n, text, fonts
+
+## Line metrics stay the default face's when a fallback draws
+- **Context:** the same; how tall a string with a CJK character is.
+- **Alternatives:** take ascent and descent from every face in use, so a line grows when a CJK glyph appears; keep the default face's metrics always.
+- **Chose:** the default face's. A label must not change height because of which characters it holds, and Noto Sans CJK's box fits inside Liberation's at the same size (ascent 0.88 em against 0.905, descent 0.12 against 0.21). Kerning applies only between glyphs of the same face.
+- **Tags:** i18n, text, layout
+
+## The pygame renderer splits text into runs using the native character maps
+- **Context:** the same, on the software renderer, where SDL_ttf draws one file and does not report missing glyphs.
+- **Alternatives:** parse `cmap` tables in Python; depend on fontTools; ask the extension's `NativeFace.covers()`, the same answer the wgpu path uses, and render each run with its own `pygame.font.Font` on the default face's baseline.
+- **Chose:** the extension. The two renderers then agree on which face draws each character by construction, and with no fallbacks set the default face renders exactly as before, so existing pixel goldens are untouched. Without the extension, fallbacks are inert and one warning is logged.
+- **Tags:** i18n, text, pygame
+
+## CJK line breaking is a hand-written subset of UAX #14
+- **Context:** localisation L3, wrapping Chinese and Japanese, which have no spaces between words.
+- **Alternatives:** the full Unicode line-breaking algorithm through a Rust crate (`unicode-linebreak`) exposed by the extension; ICU through PyICU; break between CJK characters, between CJK and other text, and nowhere else, with the kinsoku tables for what may not start or end a line.
+- **Chose:** the subset. It is what the ten target languages need (Korean and the rest wrap on spaces), it stays in the pure-Python layout that both renderers share and the tests drive with a fake measure, and it adds no dependency. The full algorithm can replace `break_offsets()` behind the same signature if Thai or Khmer, which need dictionaries, are ever added.
+- **Tags:** i18n, text, layout
+
+## Case changes take an engine-wide case language
+- **Context:** the same; the design system's `uppercase` buttons, wrong in Turkish with `str.upper()`.
+- **Alternatives:** pass a locale to every case change; read the translator's locale from the container where the case changes; one engine-wide case language in `pyguara.ui.text_case`, set from the locale.
+- **Chose:** the engine-wide setting. A button's draw has no container, threading a locale through every widget would touch every call site, and a game has one text language at a time. Wiring it to `Translator`'s locale changes waits for L1 (#415) to merge; until then a game calls `set_case_language()`.
+- **Tags:** i18n, text, ui

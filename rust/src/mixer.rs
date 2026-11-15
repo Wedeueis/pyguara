@@ -729,49 +729,23 @@ impl NativeMixer {
     ///     gain: Its loudness.
     #[pyo3(signature = (path, looping=true, fade_ms=0, gain=1.0))]
     fn play_music(&self, path: String, looping: bool, fade_ms: u64, gain: f32) {
-        let generation = {
-            let mut state = self.state();
-            state.voices.retain(|v| v.group != GROUP_MUSIC);
-            state.music_generation += 1;
-            state.music_pending = true;
-            state.music_generation
-        };
-        let shared = self.shared.clone();
-        let rate = self.rate;
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        thread::spawn(move || {
-            let decoded = audio::decode_to_samples(&path)
-                .map(|(samples, from_rate, channels)| to_stereo_float(&samples, channels, from_rate, rate));
-            let mut state = lock(&shared);
-            if state.music_generation != generation {
-                return;
-            }
-            state.music_pending = false;
-            let samples = match decoded {
-                Ok(samples) if !samples.is_empty() => samples,
-                Ok(_) => return,
-                Err(error) => {
-                    eprintln!("pyguara audio: music {error}");
-                    return;
-                }
-            };
-            let frames = (samples.len() / 2) as f64;
-            let fade_frames = fade_ms * u64::from(rate) / 1000;
-            state.voices.push(Voice {
-                id,
-                group: GROUP_MUSIC,
-                samples: Arc::new(samples),
-                cursor: 0.0,
-                step: 1.0,
-                loop_start: 0.0,
-                loop_end: frames,
-                loops: if looping { -1 } else { 0 },
-                gain_left: gain,
-                gain_right: gain,
-                fade: (fade_frames > 0).then(|| Fade::new(0.0, 1.0, fade_frames, false)),
-                finished: false,
-            });
-        });
+        self.start_music(MusicSource::File(path), looping, fade_ms, gain);
+    }
+
+    /// Play music held in memory, as `play_music` plays a file.
+    ///
+    /// What a packed track is played with: `pyguara.assets` reads the
+    /// bytes, and they are decoded on a worker thread like a file.
+    ///
+    /// Args:
+    ///     data: The file's contents.
+    ///     name: The track's path, a hint to the format probe.
+    ///     looping: Play it forever rather than once.
+    ///     fade_ms: The fade in.
+    ///     gain: Its loudness.
+    #[pyo3(signature = (data, name, looping=true, fade_ms=0, gain=1.0))]
+    fn play_music_bytes(&self, data: Vec<u8>, name: String, looping: bool, fade_ms: u64, gain: f32) {
+        self.start_music(MusicSource::Bytes(data, name), looping, fade_ms, gain);
     }
 
     /// Fade the music out over `fade_ms`, then stop it.
@@ -861,5 +835,63 @@ fn open_device(shared: &Shared, rate: u32) -> (Output, u32, String) {
             rate,
             "silent: this build has no audio output (the audio-output feature is off)".to_owned(),
         )
+    }
+}
+
+/// Where a track's encoded audio comes from.
+enum MusicSource {
+    File(String),
+    Bytes(Vec<u8>, String),
+}
+
+impl NativeMixer {
+    /// Replace the music with a track, decoded on a worker thread.
+    fn start_music(&self, source: MusicSource, looping: bool, fade_ms: u64, gain: f32) {
+        let generation = {
+            let mut state = self.state();
+            state.voices.retain(|v| v.group != GROUP_MUSIC);
+            state.music_generation += 1;
+            state.music_pending = true;
+            state.music_generation
+        };
+        let shared = self.shared.clone();
+        let rate = self.rate;
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        thread::spawn(move || {
+            let decoded = match source {
+                MusicSource::File(path) => audio::decode_to_samples(&path),
+                MusicSource::Bytes(data, name) => audio::decode_bytes_to_samples(data, &name),
+            }
+                .map(|(samples, from_rate, channels)| to_stereo_float(&samples, channels, from_rate, rate));
+            let mut state = lock(&shared);
+            if state.music_generation != generation {
+                return;
+            }
+            state.music_pending = false;
+            let samples = match decoded {
+                Ok(samples) if !samples.is_empty() => samples,
+                Ok(_) => return,
+                Err(error) => {
+                    eprintln!("pyguara audio: music {error}");
+                    return;
+                }
+            };
+            let frames = (samples.len() / 2) as f64;
+            let fade_frames = fade_ms * u64::from(rate) / 1000;
+            state.voices.push(Voice {
+                id,
+                group: GROUP_MUSIC,
+                samples: Arc::new(samples),
+                cursor: 0.0,
+                step: 1.0,
+                loop_start: 0.0,
+                loop_end: frames,
+                loops: if looping { -1 } else { 0 },
+                gain_left: gain,
+                gain_right: gain,
+                fade: (fade_frames > 0).then(|| Fade::new(0.0, 1.0, fade_frames, false)),
+                finished: false,
+            });
+        });
     }
 }

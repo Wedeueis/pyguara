@@ -18,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, TypeVar
 
+from pyguara import assets
 from pyguara.common.types import Rect
 from pyguara.graphics.atlas import Atlas, AtlasRegion
 from pyguara.log import get_logger
@@ -135,39 +136,38 @@ class ResourceManager:
             root_path (str): The directory to scan.
             recursive (bool): If True, scans subdirectories as well.
         """
-        path_obj = Path(root_path)
-        if not path_obj.exists():
+        if not assets.is_dir(root_path):
             logger.warning("Directory does not exist: %s", root_path)
             return
 
-        iterator = path_obj.rglob("*") if recursive else path_obj.glob("*")
-
         ambiguous_stems: set[str] = set()
 
-        for file_path in iterator:
-            if file_path.is_file():
-                extension = file_path.suffix.lower()
-                # Only index files we know how to load
-                if extension not in self._extension_map:
-                    continue
+        # Through the asset layer: a mounted pack's files are indexed under
+        # the same paths they would have on disk.
+        for listed in assets.files_under(root_path, recursive=recursive):
+            file_path = Path(listed)
+            extension = file_path.suffix.lower()
+            # Only index files we know how to load
+            if extension not in self._extension_map:
+                continue
 
-                str_path = str(file_path)
-                stem = file_path.stem  # e.g., 'hero' from 'hero.png'
-                existing = self._path_index.get(stem)
-                if existing is not None and existing != str_path:
-                    logger.warning(
-                        "Ambiguous asset name '%s': both '%s' and '%s' claim it; "
-                        "load one by its full name or path.",
-                        stem,
-                        existing,
-                        str_path,
-                    )
-                    ambiguous_stems.add(stem)
-                elif stem not in ambiguous_stems:
-                    self._path_index[stem] = str_path
+            str_path = str(file_path)
+            stem = file_path.stem  # e.g., 'hero' from 'hero.png'
+            existing = self._path_index.get(stem)
+            if existing is not None and existing != str_path:
+                logger.warning(
+                    "Ambiguous asset name '%s': both '%s' and '%s' claim it; "
+                    "load one by its full name or path.",
+                    stem,
+                    existing,
+                    str_path,
+                )
+                ambiguous_stems.add(stem)
+            elif stem not in ambiguous_stems:
+                self._path_index[stem] = str_path
 
-                # The full filename is unambiguous; always index it.
-                self._path_index[file_path.name] = str_path
+            # The full filename is unambiguous; always index it.
+            self._path_index[file_path.name] = str_path
 
         for stem in ambiguous_stems:
             self._path_index.pop(stem, None)
@@ -971,14 +971,12 @@ class ResourceManager:
             region = atlas.get_region("player_idle")
         """
         # Check metadata file exists first (fail fast)
-        metadata_file = Path(metadata_path)
-        if not metadata_file.exists():
+        if not assets.is_file(metadata_path):
             raise InvalidMetadataError(metadata_path, "File not found")
 
         # Load and parse the metadata JSON with detailed error reporting
         try:
-            with open(metadata_file, encoding="utf-8") as f:
-                metadata = json.load(f)
+            metadata = json.loads(assets.read_text(metadata_path))
         except json.JSONDecodeError as e:
             raise InvalidMetadataError(
                 metadata_path,

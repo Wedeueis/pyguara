@@ -18,11 +18,20 @@ from dataclasses import dataclass
 
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.graphics.protocols import UIRenderer
+from pyguara.ui import text_case
 from pyguara.ui.components.button import Button
 from pyguara.ui.components.panel import Panel
 from pyguara.ui.design_system.skin import draw_bevel, draw_stamp_shadow
 from pyguara.ui.design_system.tokens import Guara, Rock, Sand, Verdant, Wood
 from pyguara.ui.types import UIElementState
+
+
+def case_label(text: str, *, uppercase: bool) -> str:
+    """Return a label as drawn: upper-cased for the language when asked.
+
+    Through `pyguara.ui.text_case`, so a Turkish `iptal` reads `İPTAL`.
+    """
+    return text_case.upper(text) if uppercase else text
 
 
 @dataclass(frozen=True)
@@ -198,7 +207,7 @@ class BevelButton(Button):
             renderer: The UI renderer to draw through.
             face: The (possibly offset) rectangle actually drawn.
         """
-        label = self.text.upper() if self.uppercase else self.text
+        label = case_label(self.text, uppercase=self.uppercase)
         size = self.theme.fonts.size_normal
         w, h = renderer.get_text_size(label, size)
 

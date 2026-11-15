@@ -25,8 +25,12 @@ the result is blitted or uploaded to the GPU.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import pygame
+
+if TYPE_CHECKING:
+    from pyguara.graphics.backends.pygame.fallback_font import FallbackFont
 
 RGBA = tuple[int, int, int, int]
 
@@ -183,7 +187,9 @@ def blit_blended_polygon(
     blit_blended(surface, bounds, draw)
 
 
-def render_text(font: pygame.font.Font, text: str, rgba: RGBA) -> pygame.Surface:
+def render_text(
+    font: pygame.font.Font | FallbackFont, text: str, rgba: RGBA
+) -> pygame.Surface:
     """Rasterise text in a colour, its alpha included.
 
     `Font.render` draws antialiased glyphs onto a per-pixel-alpha surface but

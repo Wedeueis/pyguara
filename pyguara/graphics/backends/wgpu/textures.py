@@ -12,7 +12,7 @@ device -- the window closed and reopened -- has to be uploadable again.
 
 from __future__ import annotations
 
-from pyguara import native
+from pyguara import assets, native
 from pyguara.log import get_logger
 from pyguara.resources.meta import AssetMeta, TextureFilter, TextureMeta
 from pyguara.resources.types import Resource, Texture
@@ -103,7 +103,7 @@ class NativeImageLoader:
         """
         texture_meta = meta if isinstance(meta, TextureMeta) else TextureMeta()
         module = native.require_extension("The wgpu image loader")
-        pixels, width, height = module.decode_image(path)
+        pixels, width, height = module.decode_image_bytes(assets.read_bytes(path), path)
         if texture_meta.premultiply_alpha:
             pixels = module.premultiply_rgba(pixels)
         smooth = texture_meta.get_filter_mode() is TextureFilter.LINEAR

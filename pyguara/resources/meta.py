@@ -25,12 +25,14 @@ Example:
     ```
 """
 
+import io
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, TypeVar
 
+from pyguara import assets
 from pyguara.log import get_logger
 
 logger = get_logger(__name__)
@@ -177,7 +179,7 @@ class MetaLoader:
         self._cache: dict[str, AssetMeta] = {}
         # mtime of the `.meta` file each cache entry was parsed from, so a
         # file changed on disk (hot reload) is re-read instead of served stale.
-        self._cache_mtime: dict[str, float] = {}
+        self._cache_mtime: dict[str, object] = {}
 
     def get_meta_path(self, asset_path: str) -> Path:
         """Get the `.meta` file path for an asset.
@@ -199,7 +201,7 @@ class MetaLoader:
         Returns:
             True if a `.meta` file exists.
         """
-        return self.get_meta_path(asset_path).exists()
+        return assets.is_file(self.get_meta_path(asset_path))
 
     def load_meta(
         self, asset_path: str, expected_type: type[M] | None = None
@@ -217,10 +219,9 @@ class MetaLoader:
             The loaded AssetMeta, or None if no meta file exists.
         """
         meta_path = self.get_meta_path(asset_path)
-        try:
-            current_mtime: float | None = meta_path.stat().st_mtime
-        except OSError:
-            current_mtime = None
+        # A loose file's modification time, or its pack's: either changes
+        # when the file could have.
+        current_mtime = assets.stamp(meta_path)
 
         # Serve from cache only if the file is unchanged since it was parsed.
         if (
@@ -238,7 +239,10 @@ class MetaLoader:
             return None
 
         try:
-            with open(meta_path, encoding="utf-8") as f:
+            with (
+                assets.open(meta_path) as raw,
+                io.TextIOWrapper(raw, encoding="utf-8") as f,
+            ):
                 data = json.load(f)
         except json.JSONDecodeError as e:
             logger.warning("Invalid JSON in meta file '%s': %s", meta_path, e.msg)
@@ -352,10 +356,11 @@ class MetaLoader:
             # Update cache, pinning it to the file we just wrote so a
             # subsequent load_meta() does not treat it as stale.
             self._cache[asset_path] = meta
-            try:
-                self._cache_mtime[asset_path] = meta_path.stat().st_mtime
-            except OSError:
+            stamp = assets.stamp(meta_path)
+            if stamp is None:
                 self._cache_mtime.pop(asset_path, None)
+            else:
+                self._cache_mtime[asset_path] = stamp
             logger.debug("Saved meta for '%s'", asset_path)
             return True
 

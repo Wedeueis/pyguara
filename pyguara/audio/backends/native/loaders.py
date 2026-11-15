@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pyguara import native
+from pyguara import assets, native
 from pyguara.log import get_logger
 from pyguara.resources.meta import AssetMeta, AudioLoadMode, AudioMeta
 from pyguara.resources.types import Resource
@@ -62,6 +62,6 @@ class NativeSoundLoader:
                 path,
             )
         module = native.require_extension("the native audio backend")
-        pcm, rate, channels = module.decode_audio(path)
+        pcm, rate, channels = module.decode_audio_bytes(assets.read_bytes(path), path)
         samples = self._mixer.clip(pcm, rate, channels)
         return NativeAudioClip(path, samples, int(self._mixer.rate))

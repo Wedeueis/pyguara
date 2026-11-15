@@ -33,10 +33,12 @@ them are an editor concern), and entity references between levels.
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
+from pyguara import assets
 from pyguara.log import get_logger
 from pyguara.tilemap.layer import EMPTY_GID, TileLayer
 from pyguara.tilemap.objects import MapObject, ObjectLayer, ObjectShape
@@ -143,8 +145,7 @@ def _read_json(path: Path) -> dict[str, Any]:
     Raises:
         ValueError: The file does not hold a JSON object.
     """
-    with path.open(encoding="utf-8") as handle:
-        data = json.load(handle)
+    data = json.loads(assets.read_text(path))
     if not isinstance(data, dict):
         raise ValueError(f"{path} holds {type(data).__name__}, not a JSON object")
     return data
@@ -179,8 +180,8 @@ def _levels(project: Mapping[str, Any], project_path: Path) -> list[dict[str, An
         if not external:
             levels.append(level)
             continue
-        external_path = (project_path.parent / external).resolve()
-        if not external_path.is_file():
+        external_path = Path(os.path.normpath(project_path.parent / external))
+        if not assets.is_file(external_path):
             raise ValueError(
                 f"level '{level.get('identifier')}' is saved to a separate file "
                 f"'{external}', which does not exist at {external_path}"

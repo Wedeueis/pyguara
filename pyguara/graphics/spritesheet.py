@@ -10,6 +10,7 @@ and a TextureFactory protocol for creating backend-specific textures.
 
 from PIL import Image
 
+from pyguara import assets
 from pyguara.graphics.components.animation import AnimationClip, PlaybackMode
 from pyguara.graphics.protocols import TextureFactory
 from pyguara.resources.meta import SpritesheetMeta
@@ -45,7 +46,7 @@ class SpriteSheet:
         self._frames: list[Texture] = []
 
         # Load the image using Pillow
-        with Image.open(image_path) as opened:
+        with Image.open(assets.open(image_path)) as opened:
             self._image = opened.convert("RGBA")
 
     @classmethod

@@ -2,6 +2,7 @@
 
 import json
 
+from pyguara import assets
 from pyguara.resources.data import DataResource
 from pyguara.resources.types import Resource
 
@@ -32,7 +33,6 @@ class JsonLoader:
             FileNotFoundError: If the file does not exist.
             json.JSONDecodeError: If the file contains invalid JSON.
         """
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
+        data = json.loads(assets.read_text(path))
 
         return DataResource(path, data)

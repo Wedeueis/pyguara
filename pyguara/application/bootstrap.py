@@ -294,6 +294,14 @@ def _setup_container(
     container.register_instance(RandomService, rng_service)
     logger.debug(f"RandomService initialized (root_seed={rng_service.root_seed}).")
 
+    # 3.6 Text in the player's language, if the game has a locales folder.
+    from pyguara.i18n import Translator, install_translator
+
+    translator = install_translator(config_manager.config.i18n, event_dispatcher)
+    if translator is not None:
+        container.register_instance(Translator, translator)
+        crash.note("locale", translator.locale)
+
     # 3.6 Non-physics spatial index
     from pyguara.common.spatial import SpatialHash
 
