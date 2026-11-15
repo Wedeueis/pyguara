@@ -23,6 +23,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 
 from pyguara.common.types import Color
+from pyguara.ui.text_layout import break_offsets
 
 __all__ = [
     "MarkupError",
@@ -303,7 +304,33 @@ def _words(paragraph: Sequence[Span]) -> list[tuple[Span | None, list[Span]]]:
         for part in rest:
             pieces = [Span(part, span.style)] if part else []
             words.append((Span(" ", span.style), pieces))
-    return words
+    return [piece for space, word in words for piece in _cjk_pieces(space, word)]
+
+
+def _cjk_pieces(
+    space: Span | None, word: list[Span]
+) -> list[tuple[Span | None, list[Span]]]:
+    """Cut a word where Chinese or Japanese may break, as `text_layout` does.
+
+    The first piece keeps the word's space; the rest join with an empty run,
+    which `_merged` drops, so a break between them adds no space.
+    """
+    offsets = set(break_offsets("".join(run.text for run in word)))
+    if not offsets:
+        return [(space, word)]
+    pieces: list[tuple[Span | None, list[Span]]] = [(space, [])]
+    position = 0
+    for run in word:
+        for character in run.text:
+            if position in offsets:
+                pieces.append((Span("", run.style), []))
+            runs = pieces[-1][1]
+            if runs and runs[-1].style == run.style:
+                runs[-1] = Span(runs[-1].text + character, run.style)
+            else:
+                runs.append(Span(character, run.style))
+            position += 1
+    return pieces
 
 
 def _wrap_paragraph(

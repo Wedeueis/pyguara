@@ -823,3 +823,15 @@
 - **Chose:** main thread, `KeyboardInterrupt` skipped. A background thread's exception does not end the game, so reporting it as a crash would mislabel it and fill the 20-report limit with noise; Ctrl+C is the player stopping the game.
 - **Tags:** crash
 - **Reviewed:** approved by the user 2026-11-14.
+
+## CJK line breaking is a hand-written subset of UAX #14
+- **Context:** localisation L3, wrapping Chinese and Japanese, which have no spaces between words.
+- **Alternatives:** the full Unicode line-breaking algorithm through a Rust crate (`unicode-linebreak`) exposed by the extension; ICU through PyICU; break between CJK characters, between CJK and other text, and nowhere else, with the kinsoku tables for what may not start or end a line.
+- **Chose:** the subset. It is what the ten target languages need (Korean and the rest wrap on spaces), it stays in the pure-Python layout that both renderers share and the tests drive with a fake measure, and it adds no dependency. The full algorithm can replace `break_offsets()` behind the same signature if Thai or Khmer, which need dictionaries, are ever added.
+- **Tags:** i18n, text, layout
+
+## Case changes take an engine-wide case language
+- **Context:** the same; the design system's `uppercase` buttons, wrong in Turkish with `str.upper()`.
+- **Alternatives:** pass a locale to every case change; read the translator's locale from the container where the case changes; one engine-wide case language in `pyguara.ui.text_case`, set from the locale.
+- **Chose:** the engine-wide setting. A button's draw has no container, threading a locale through every widget would touch every call site, and a game has one text language at a time. Wiring it to `Translator`'s locale changes waits for L1 (#415) to merge; until then a game calls `set_case_language()`.
+- **Tags:** i18n, text, ui
