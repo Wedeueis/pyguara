@@ -24,6 +24,7 @@ import numpy as np
 import pytest
 
 from tools.audio_capture import (
+    IDLE_POLLS,
     RATE,
     SEAM_AMPLITUDE,
     SEAM_FREQ,
@@ -33,6 +34,7 @@ from tools.audio_capture import (
     capture_tone_loop,
     compare_with_sine,
     read_capture,
+    wait_until_idle,
 )
 
 pytestmark = pytest.mark.integration
@@ -153,6 +155,32 @@ def test_queued_loop_is_sample_contiguous(audio_env: None, tmp_path: Path) -> No
         f"loop seam is not sample-exact: max |delta| {seam.max_delta} "
         f"of amplitude {SEAM_AMPLITUDE}, per seam {seam.seam_deltas}"
     )
+
+
+class _FlickeringChannel:
+    """A channel that reads idle for one poll between two sounds."""
+
+    def __init__(self, readings: list[bool]) -> None:
+        self._readings = readings
+        self.polls = 0
+
+    def get_busy(self) -> bool:
+        busy = self._readings[self.polls] if self.polls < len(self._readings) else False
+        self.polls += 1
+        return busy
+
+
+def test_one_idle_reading_between_laps_does_not_end_the_wait() -> None:
+    """A channel reads idle until the mixer thread starts the queued sound.
+
+    A wait that believed the first idle reading ended the capture a lap
+    early, with no silence in it to show for it.
+    """
+    channel = _FlickeringChannel([True, False, True, True, False, True])
+
+    wait_until_idle(channel)
+
+    assert channel.polls == 6 + IDLE_POLLS
 
 
 def test_the_seam_check_catches_a_dropped_sample(tmp_path: Path) -> None:
