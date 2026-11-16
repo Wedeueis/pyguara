@@ -191,7 +191,7 @@ jobs:
         run: make install
 
       - name: Run the tests
-        run: uv run pytest -m "not performance" -p no:cacheprovider
+        run: uv run pytest -n auto --dist loadgroup -m "not performance" -p no:cacheprovider
         env:
           PYGUARA_REQUIRE_GPU: "1"
 
@@ -237,7 +237,7 @@ jobs:
       # `native_acceleration = "off"` is a supported setting, and a
       # platform the wheel matrix does not cover falls back to them.
       - name: Run Unit Tests with the accelerator disabled
-        run: uv run pytest tests/ -m "not slow and not integration"
+        run: uv run pytest -n auto --dist loadgroup tests/ -m "not slow and not integration"
         env:
           PYGUARA_NO_NATIVE: "1"
           PYGUARA_REQUIRE_GPU: "1"
@@ -300,7 +300,7 @@ jobs:
       # wgpu test that skips here is a failure, as on Linux.
       - name: Run the tests
         shell: bash
-        run: uv run pytest -m "not performance and not slow" -p no:cacheprovider
+        run: uv run pytest -n auto --dist loadgroup -m "not performance and not slow" -p no:cacheprovider
         env:
           PYGUARA_REQUIRE_GPU: "1"
 

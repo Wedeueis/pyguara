@@ -45,6 +45,24 @@ def _live_devices() -> int:
 
 
 @pytest.fixture(autouse=True)
+def _restore_ui_theme() -> Iterator[None]:
+    """Put the global UI theme back after each test.
+
+    A game installs its own theme, as it should, so a test that runs one
+    (the demo render tests do) leaves it behind: `cerrado_dusk` turns on
+    shadows, and the next test's button draws one more rectangle. Serially
+    the next test was never a UI one; under xdist it can be.
+    """
+    theme = sys.modules.get("pyguara.ui.theme")
+    previous = theme.get_theme() if theme is not None else None
+    yield
+    theme = sys.modules.get("pyguara.ui.theme")
+    if theme is None:
+        return
+    theme.set_theme(previous if previous is not None else theme.UITheme())
+
+
+@pytest.fixture(autouse=True)
 def _free_leaked_gpu_devices() -> Iterator[None]:
     """Collect garbage after a test that leaves too many devices alive.
 

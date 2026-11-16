@@ -69,6 +69,7 @@ class _Cycle:
         self.me = self
 
 
+@pytest.mark.xdist_group("wgpu-device-budget")
 def test_leaks_devices_the_way_an_application_left_running_does() -> None:
     device_class = _device_class()
     for _ in range(LEAKED):
@@ -78,6 +79,7 @@ def test_leaks_devices_the_way_an_application_left_running_does() -> None:
     assert device_class.live_devices() >= LEAKED
 
 
+@pytest.mark.xdist_group("wgpu-device-budget")
 def test_the_next_test_starts_within_the_budget() -> None:
     device_class = _device_class()
     # `_device_class` opened and dropped one of its own; nothing else ran.
