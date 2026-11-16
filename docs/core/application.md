@@ -58,7 +58,23 @@ dispatcher.subscribe(QuitEvent, save_before_exit)
 
 `ApplicationStartEvent` fires once, after the starting scene is active and
 before the first frame. `QuitEvent` fires when the window reports a close
-request, before `shutdown()` runs, so handlers can still touch live state.
+request or the game calls `quit()`, before `shutdown()` runs, so handlers can
+still touch live state.
+
+## Quitting
+
+```python
+self.application.quit()   # from a scene, on_enter() or later
+```
+
+`Application.quit()` ends the loop once the frame in progress is done: that
+frame is still drawn, then `run()` returns through `shutdown()`. It dispatches
+`QuitEvent`, so a game saves in one handler whether the player used the menu
+or the window's close button.
+
+Closing the `Window` from game code also ends the loop, without drawing the
+frame it happened in. `quit()` is the one to use: it says what is meant, and
+it is the only one of the two that announces itself.
 
 ## Shutdown
 
