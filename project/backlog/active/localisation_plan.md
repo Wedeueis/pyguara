@@ -28,12 +28,14 @@ development and playtests, not for release.
 
 | # | Repository | What |
 | --- | --- | --- |
-| L1 (this PR) | pyguara | `pyguara.i18n`: string tables per locale, `{name}` placeholders, CLDR plural forms for the ten, English fallback, a `locale` setting, and `pyguara i18n check`, which finds missing keys, stray keys, placeholder mismatches and missing plural forms |
-| L2 | pyguara | Font fallback in both renderers: a character the main face lacks is drawn from the next face that has it, chosen per locale for Han (Japanese forms for `ja`, Simplified for `zh-Hans`) |
-| L3 | pyguara | Line breaking for CJK in `wrap_text` and rich text, with the kinsoku rules (no line starts with `。` or `」`); locale-aware upper and lower case for Turkish |
-| L4 | reclaimer_v2 | Every player-visible string to `locales/en.json`; drafts for the other nine; the Noto Sans CJK fonts; the language from Steam, else the system, else English |
+| L1 (#415, done) | pyguara | `pyguara.i18n`: string tables per locale, `{name}` placeholders, CLDR plural forms for the ten, English fallback, a `locale` setting, and `pyguara i18n check`, which finds missing keys, stray keys, placeholder mismatches and missing plural forms |
+| L2 (#424, done) | pyguara | Font fallback in both renderers: a character the main face lacks is drawn from the next face that has it, chosen per locale for Han (Japanese forms for `ja`, Simplified for `zh-Hans`) |
+| L3 (#425, done) | pyguara | Line breaking for CJK in `wrap_text` and rich text, with the kinsoku rules (no line starts with `。` or `」`); locale-aware upper and lower case for Turkish |
+| L4 (reclaimer_v2#40, #41, done) | reclaimer_v2 | Every player-visible string to `locales/en.json`; drafts for the other nine; the Noto Sans CJK fonts; the language from Steam, else the system, else English |
 
-Then packed assets, which will carry the fonts.
+Packed assets now carry the locale files and the fonts (#439, #440).
+
+**Still open:** native speakers review the nine drafts (each is `"reviewed": false`), and the language from Steam ([#446](https://github.com/Wedeueis/pyguara/issues/446)); until then Reclaimer follows the system's language.
 
 **Done when** Reclaimer can be switched to each of the ten, every screen
 reads in that language with nothing clipped or missing a glyph, and the

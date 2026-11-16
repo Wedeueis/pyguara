@@ -898,3 +898,148 @@ edit this file; see `docs/agents/branching.md`.
 - **Alternatives:** pass a locale to every case change; read the translator's locale from the container where the case changes; one engine-wide case language in `pyguara.ui.text_case`, set from the locale.
 - **Chose:** the engine-wide setting. A button's draw has no container, threading a locale through every widget would touch every call site, and a game has one text language at a time. Wiring it to `Translator`'s locale changes waits for L1 (#415) to merge; until then a game calls `set_case_language()`.
 - **Tags:** i18n, text, ui
+
+## Packs are ZIP files (#430)
+- **Context:** packed assets (roadmap phase 2), the pack format `pyguara build` will write.
+- **Alternatives:** a custom archive (an index plus concatenated blobs, possibly obfuscated); one SQLite file; a ZIP.
+- **Chose:** ZIP. The standard library reads it with random access and no dependency, already-compressed PNG and OGG can be stored and text deflated, and any tool can open one for debugging. Hiding assets from players is not a goal here: the point is an install with one file instead of hundreds, and source protection is a separate item (Nuitka, W29).
+- **Tags:** assets, shipping, data-format
+
+## Loaders keep `load(path)`; one module serves the bytes (#430)
+- **Context:** the same; how loaders reach packed files ("loader protocol from path to opener" in the roadmap).
+- **Alternatives:** change the loader protocol to take an opener or a bytes source; keep `load(path)` and have every loader read through `pyguara.assets`, a mount table consulted before the disk.
+- **Chose:** keep the protocol. The path is still the asset's identity (cache key, index entry, error message), a game's own loaders keep working for loose files, and the change to each engine loader is one line. A pack is mounted with a `root`, and a path is looked up in it only if it lies under that root, so the same path names the same asset loose or packed.
+- **Tags:** assets, resources, api
+
+## A frozen game mounts its bundled packs on its first asset read (#431)
+- **Context:** `pyguara build --pack`; how the shipped game finds the pack.
+- **Alternatives:** the game calls `assets.mount_pack()` itself; bootstrap mounts it in `create_application()`; `pyguara.assets` mounts every `.pak` at the bundle root, lazily, on the first read, only when frozen.
+- **Chose:** lazily on the first read. Nothing for a game to forget, and it works for a game that reads its data before building the application (Reclaimer checks its game data first). Unfrozen, nothing is mounted, so development reads loose files. The pack's root is the bundle, which is where `--add-data` would have put the folders and where the game's code lives, so code-built paths match.
+- **Tags:** assets, shipping, build
+
+## `--pack` is opt-in (#431)
+- **Context:** the same; whether `pyguara build` packs by default.
+- **Alternatives:** pack by default with `--loose` to opt out; keep loose by default with `--pack` to opt in.
+- **Chose:** opt-in, for now. A game whose own reads still call `open()` (Reclaimer, until its PR) would break silently when packed by default. The default can flip once the engine's demos and Reclaimer read through `pyguara.assets`.
+- **Tags:** assets, build, cli
+
+## CI runs in two tiers, chosen by what a pull request changes (#432)
+- **Context:** CI took about 16 minutes per push, with 14 jobs, and runs queued behind each other when several PRs were open.
+- **Alternatives:** keep everything on every push; move the slow platforms to a nightly schedule; a `full-ci` label that turns the full tier on; a tier chosen by the changed paths.
+- **Chose:** changed paths. Every pull request push runs quality, Linux 3.12 with coverage, the Python store and Windows. Python 3.13, macOS and the wheels run on a push to main, on `workflow_dispatch`, and on a PR that touches `rust/`, `Cargo.*`, `pyproject.toml`, `uv.lock`, `pyguara/native.py` or the workflows, which is what those jobs exist to check. A label would need someone to remember it, and adding any label would restart the run. A nightly schedule would find breakage hours after a merge, not on the merge.
+- **Tags:** ci
+
+## Windows stays on every pull request; macOS does not (#432)
+- **Context:** which platform jobs belong in the fast tier.
+- **Alternatives:** both on every PR; neither (Linux only).
+- **Chose:** Windows on every PR, because the game ships there first and this suite's Windows failures (encoding, file locks, timers) came from plain Python changes. macOS failures so far came from the native side, which puts a PR in the full tier anyway, and every merge runs it.
+- **Tags:** ci, platforms
+
+## Duplicate CI work removed rather than kept as belt and braces (#432)
+- **Context:** three jobs repeated work another job already did.
+- **Alternatives:** keep them; remove them.
+- **Chose:** removed. The 3.12 job ran unit and integration tests and then the whole suite again for coverage, so coverage is now the one run. Build Verification's `uv build` repeats what the wheels and sdist jobs build. Network (Windows) ran 449 network tests that the Windows test job also runs, so only its loopback measurement moves into the Windows job.
+- **Tags:** ci
+
+## Parallel tests (pytest-xdist) wait for a native crash fix (#432)
+- **Context:** `-n auto` halved the local suite (204 s to 102 s), but with coverage one worker aborts in `WgpuWindow.present()` or segfaults during garbage collection.
+- **Alternatives:** ship xdist now with `--dist loadfile`; ship it with the failing test excluded; fix the crash first.
+- **Chose:** fix first, on its own branch. Replaying that worker's test order serially crashes too, so it is an engine defect that the default order hides, not an xdist problem. Hiding it would make CI fail at random on whichever order a run gets.
+- **Tags:** ci, native, wgpu
+
+## Docstring baseline keyed by dotted name, not line number (#434)
+- **Context:** the check needs to ignore the 732 findings that exist today and fail on new ones.
+- **Alternatives:** (a) `path:line` keys, as ruff prints; every edit above a docstring would make the entry stale. (b) `# noqa`-style markers in 500 docstrings, which adds noise to the files being cleaned. (c) `RULE path dotted.name` in one text file, which the check also fails on when an entry matches nothing.
+- **Chose:** (c). Entries survive unrelated edits, the file can only shrink, and `--prune-baseline` only removes. Cost: two objects with the same dotted name in a file share an entry.
+- **Tags:** tooling, docstrings, ci
+
+## History and benchmark rules narrowed to phrasings, at the cost of misses (#434)
+- **Context:** the first scan flagged "used to", "no longer", "previously" and any `N ms`; about half the hits were reference text ("the key used to load it", "waits 100 ms").
+- **Alternatives:** (a) broad patterns and a long allowlist. (b) Narrow patterns: "used to" only after a subject that makes it past tense, a figure only with a decimal point or as a speed-up.
+- **Chose:** (b). A CI rule that flags correct text gets allowlisted by reflex. Cost: it misses some history (131 hits broad, 50 narrow); `DS001`'s length cap catches most of those docstrings anyway.
+- **Tags:** tooling, docstrings
+
+## The docstring check also runs inside pytest (#434)
+- **Context:** the documented gate is `pytest && ruff check . && mypy pyguara`; `make lint` is what CI's Code Quality job runs.
+- **Alternatives:** (a) `make lint` only, so the documented gate would not see a finding until CI. (b) A fourth command in the gate. (c) One test that runs the check on the repository.
+- **Chose:** (c), with `make lint` as well. The gate stays three commands.
+- **Tags:** tooling, ci
+
+## Leaked wgpu devices are bounded by the test suite, not shared by the engine (#437)
+- **Context:** the 10th live `NativeGpu` segfaults on Mesa GL-on-D3D12 (WSLg). Tests that never shut down an application kept its device alive until a full GC, so test order decided whether the suite crashed.
+- **Alternatives:**
+  - share one wgpu instance, adapter and device per process across `NativeGpu` objects;
+  - raise a clear error past a fixed count;
+  - make every test shut its applications down;
+  - collect garbage from a conftest fixture when too many devices are alive.
+- **Chose:** the fixture, plus the `live_devices()` counter for it to read.
+  - A game holds one device. Sharing would restructure `gpu.rs`, and GL needs the display handle when an instance is created, all for a case only tests reach.
+  - A fixed error count would be wrong on every driver but this one.
+  - Fixing each test fixes today's tests, not the next one.
+- **Tags:** native, wgpu, tests
+
+## DOC502 left off; only DOC501 enabled (#441)
+- **Context:** the plan proposed enabling ruff's DOC502 (a documented exception is not raised) and called its 100 findings false docstrings.
+- **Alternatives:** (a) enable it and delete the 100 `Raises:` entries. (b) Enable it with 100 `noqa`s. (c) Leave it off and enable only DOC501.
+- **Chose:** (c). Nearly all 100 document an exception raised by a callee, which ruff cannot see; (a) would delete true contracts.
+- **Tags:** tooling, docstrings, ruff
+
+## DOC501 exempts Click commands and Studio's operation handlers (#441)
+- **Context:** DOC501 flagged 7 Click commands and 11 handlers in `studio/ops/builtin.py`.
+- **Alternatives:** (a) add `Raises:` to each. (b) Per-file ignores.
+- **Chose:** (b). A Click docstring is the `--help` text; every operation handler raises `OperationError` for a bad argument, which the protocol states once.
+- **Tags:** tooling, docstrings, cli, studio
+
+## Removed measurements go to `performance.md` only when they were nowhere else (#442)
+- **Context:** about 22 docstrings carried benchmark figures.
+- **Alternatives:** (a) move every figure into `docs/guides/performance.md`. (b) Check each against the docs and move only the missing ones.
+- **Chose:** (b). Most were already in the guide or an ADR under another rounding (63x there is 56.3x; 30.9 ms is 30.87 ms). Three were not, and are now in one table.
+- **Tags:** docs, performance
+
+## Module examples move under an `Example:` section (#442)
+- **Context:** many module docstrings held a code sample in the middle of their prose, which counts toward the 8-line limit.
+- **Alternatives:** (a) drop the samples. (b) Keep them under `Example:`, which ends the prose.
+- **Chose:** (b). The sample is usually the most useful part of the docstring.
+- **Tags:** docs, docstrings
+
+## Bold removed mechanically; length fixed by hand (#444)
+- **Context:** 63 test docstrings used `**bold**` and 110 were over the prose limit.
+- **Alternatives:** (a) rewrite all by hand. (b) Strip bold with a script, since removing the markers cannot change meaning, and rewrite only the long ones.
+- **Chose:** (b).
+- **Tags:** docs, tests, docstrings
+
+## An unverifiable claim in a test docstring is cut, not restated (#444)
+- **Context:** many long test docstrings narrated a past defect in a backend or code path that has since been retired or rewritten.
+- **Alternatives:** (a) keep the narrative, shortened. (b) Keep only what the test asserts today and why, and drop statements about code I could not confirm still exists.
+- **Chose:** (b). A shortened story about ModernGL is still a statement about code that is gone.
+- **Tags:** docs, tests
+
+## Comment findings are named after the enclosing definition (#445)
+- **Context:** an allowlist entry for a comment needs a key that survives line moves.
+- **Alternatives:** (a) `path:line`. (b) The dotted name of the definition around the comment, plus `#comment`.
+- **Chose:** (b), the same key shape docstrings use. Cost: all comments in one function share an entry per rule.
+- **Tags:** tooling, docstrings
+
+## The baseline file is deleted; the mechanism stays (#445)
+- **Context:** the baseline reached zero entries.
+- **Alternatives:** (a) delete the file and the baseline code. (b) Delete the file, keep `--write-baseline` and `--prune-baseline`.
+- **Chose:** (b). Extending the check to `games/` and `tools/` (#267) will need a baseline again.
+- **Tags:** tooling, docstrings
+
+## Parallel tests are opt-in per command, not in addopts (#438)
+- **Context:** enabling pytest-xdist.
+- **Alternatives:** `-n auto` in `pyproject.toml`'s `addopts`; or in the Makefile targets and CI steps only.
+- **Chose:** the Makefile (`PARALLEL ?= -n auto --dist loadgroup`) and CI. A single test run stays serial, performance timings are never skewed by sibling workers, and `make test PARALLEL=` runs serially.
+- **Tags:** testing, ci
+
+## A test's leaked UI theme is restored by an autouse conftest fixture (#438)
+- **Context:** the demo render tests run games that install their own theme as the global, and under xdist a UI test could follow one.
+- **Alternatives:** restore the theme in `test_demos_render.py` only; an autouse fixture for every test.
+- **Chose:** the fixture. Any test that runs a game can install a theme, and it costs one identity read per test.
+- **Tags:** testing, ui
+
+## The engine sets the case language from the locale, not each game (#440)
+- **Context:** the roadmap had wiring `text_case` to the locale as Reclaimer's job.
+- **Alternatives:** each game calls `set_case_language` on a locale change; `install_translator` does it at startup and on every change.
+- **Chose:** the engine. Every game with a translator needs it, and leaving it out gives a plausible wrong answer: English casing that looks right until a Turkish player sees it.
+- **Tags:** i18n, text

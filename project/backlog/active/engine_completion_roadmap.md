@@ -50,7 +50,7 @@ Every finding from the evaluation, and the phase that answers it.
 | Status disagrees: `AGENTS.md` says Pre-Alpha, README and classifier say Alpha | coherence | 3 |
 | No `pyguara new`; every demo opens with a `sys.path.append` | DevEx | 4 |
 | No one-call entry point; a scene is handed the dispatcher by hand, and module 1 hand-wires 94 lines of bootstrap | DevEx | 4 |
-| Not on PyPI; no hosted docs site or API reference | DevEx | 4 |
+| No hosted docs site or API reference (PyPI: 0.6.0 is published) | DevEx | 4 |
 | No Aseprite or skeletal import; the animation editor is #53 | DevEx | 5 |
 | Studio lost its config editor and resource browser (#330) | DevEx | 5 |
 | No in-game profiler suitable for a shipped build | DevEx | 5 |
@@ -90,10 +90,10 @@ merge-commit PR from `next` into `pyguara`'s `main`, Reclaimer repointed,
 
 | Item | What | Size |
 | --- | --- | --- |
-| **Packed assets** (W30, workstream 6) | Loader protocol from path to opener, across every loader; a bake step in `pyguara build`. *Engine done: `pyguara.assets` (#418) and `pyguara build --pack` (this PR). Reclaimer's own data reads still have to go through `pyguara.assets`* | XL |
+| **Packed assets** (W30, workstream 6) | Loader protocol from path to opener, across every loader; a bake step in `pyguara build`. *Done: `pyguara.assets` (#430), `pyguara build --pack` (#431), locales and fonts from a pack (#439, #440). Reclaimer reads through it and builds with `--pack` (reclaimer_v2#38); a real packed Linux build ran with no loose files* | XL |
 | **Platform verification** | A macOS test job and a full Windows test job in `ci.yml`; native audio heard on a real Linux desktop; a wgpu frame seen on macOS. *CI part done: `Tests (windows-latest)` and `Tests (macos-latest)` run the suite with a real adapter (DX12 WARP, Metal) and found two engine bugs. Still needs a person: audio heard on Linux, a window seen on a Mac* | M |
-| **Crash capture** | An `excepthook` that writes a report (traceback, engine version, backend, `native.status()`) into the user data directory, and says where. *Done: `pyguara.crash`; Reclaimer still has to call it* | S |
-| **Localisation** | A string table keyed by id, a locale setting in config, font fallback for scripts outside Liberation Sans. *In progress: see `localisation_plan.md`; L1, the string table, is `pyguara.i18n`* | L |
+| **Crash capture** | An `excepthook` that writes a report (traceback, engine version, backend, `native.status()`) into the user data directory, and says where. *Done: `pyguara.crash` (#411); Reclaimer installs it (reclaimer_v2#36)* | S |
+| **Localisation** | A string table keyed by id, a locale setting in config, font fallback for scripts outside Liberation Sans. *Done in code: L1 to L4 (#415, #424, #425, reclaimer_v2#40 and #41), all ten languages rendered and checked. Still open: native speakers review the nine drafts; the language from Steam (#446)* | L |
 | **Windows version resource** (#354) | Blocked on validating it off Windows; decide whether to build it on the Windows runner instead | S |
 | **Source protection** (W29) | Nuitka, only if the game asks for it | M |
 
@@ -138,7 +138,7 @@ no statement the code contradicts.
 | **`pyguara new <name>`** | A project that runs: `pyproject.toml`, a scene, config, an assets folder, `AGENTS.md` from `pyguara studio instructions`. No `sys.path` edits | M |
 | **A one-call entry point** | `pyguara.run(MyScene)`, with the scene's dispatcher supplied by the engine. The explicit bootstrap stays for those who want it | S |
 | **Demos as installed code** | Drop the `sys.path.append` from every `games/*/main.py`; run them as modules | S |
-| **PyPI release** | The wheels already build; publish them through `release.yml` | S |
+| **PyPI release** | 0.6.0 is published (2026-11-01). *Next: 0.7.0 at the end of phase 2, with the merged engine; phase 6 ends in its own 0.8.0 (the user's call, 2026-11-16)* | S |
 | **Hosted docs with an API reference** | Deploy the mkdocs site; generate the reference from docstrings, which are already there | M |
 
 **Done when** `pip install pyguara && pyguara new demo && cd demo &&
