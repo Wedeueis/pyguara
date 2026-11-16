@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-16
+
 ### Changed
 - **Upgrading from 0.6.0:** the renderer, the window, text and audio change backend (below). A game that names `display.backend: moderngl` stops at startup; one that relied on the system's Arial gets Liberation Sans, which has Arial's metrics; a machine with no usable GPU needs `display.backend = "pygame"`.
 - **wgpu is the default renderer.** `display.backend` defaults to `wgpu`, with the render graph, lighting and post-processing; `pygame` is the software renderer, chosen by name. A machine where wgpu finds no usable GPU now stops at startup with `NoGraphicsAdapterError`, which says to install a driver or set `display.backend = "pygame"`. It does not switch renderer silently, because the two look different. The repository's own `config/game_config.json` follows the new default.
@@ -545,6 +547,7 @@ issues rather than fixed in place — #16, #19, #28, #37, #40, #43, #46, #49,
 
 ---
 
+[0.7.0]: https://github.com/wedeueis/pyguara/compare/v0.6.0-alpha...v0.7.0-alpha
 [0.6.0]: https://github.com/wedeueis/pyguara/compare/v0.5.0-alpha...v0.6.0-alpha
 [0.5.0]: https://github.com/wedeueis/pyguara/compare/v0.4.0-alpha...v0.5.0-alpha
 [0.4.0]: https://github.com/wedeueis/pyguara/compare/v0.3.2...v0.4.0
