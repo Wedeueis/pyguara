@@ -150,7 +150,8 @@ uv run python tools/studio_demo.py            # a demo with Studio attached
 - **It needs a GPU by default.** The default renderer is wgpu; on a
   machine with no usable GPU, startup stops and says so. Set
   `display.backend` to `pygame` for the software renderer, which runs
-  anywhere but has no lighting or post-processing.
+  anywhere but has no lighting or post-processing. pygame is not
+  installed by default: `pip install 'pyguara[pygame]'`.
 - **Where it has been run.** CI runs the whole suite on Linux, the wgpu
   renderer included on a software GPU, and the network suite on Windows.
   The wgpu renderer, native audio, gamepads and Steam have been run by

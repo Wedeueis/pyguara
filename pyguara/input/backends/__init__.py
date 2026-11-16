@@ -15,6 +15,7 @@ _WHERE = {
     "NativeClipboard": "pyguara.input.backends.native_backend",
     "NativeInputBackend": "pyguara.input.backends.native_backend",
     "NativeJoystick": "pyguara.input.backends.native_backend",
+    "NullInputBackend": "pyguara.input.backends.null_backend",
 }
 
 __all__ = sorted(_WHERE)

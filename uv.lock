@@ -1695,7 +1695,6 @@ dependencies = [
     { name = "numpy" },
     { name = "pillow" },
     { name = "platformdirs" },
-    { name = "pygame-ce" },
     { name = "pymunk" },
 ]
 
@@ -1715,6 +1714,7 @@ dev = [
     { name = "mcp" },
     { name = "mypy" },
     { name = "pre-commit" },
+    { name = "pygame-ce" },
     { name = "pytest" },
     { name = "pytest-benchmark" },
     { name = "pytest-cov" },
@@ -1733,6 +1733,9 @@ docs = [
     { name = "mkdocs-mermaid2-plugin" },
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pymdown-extensions" },
+]
+pygame = [
+    { name = "pygame-ce" },
 ]
 studio = [
     { name = "mcp" },
@@ -1761,7 +1764,8 @@ requires-dist = [
     { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "py-spy", marker = "extra == 'benchmark'", specifier = ">=0.3.0" },
-    { name = "pygame-ce", specifier = ">=2.5.6" },
+    { name = "pygame-ce", marker = "extra == 'dev'", specifier = ">=2.5.6" },
+    { name = "pygame-ce", marker = "extra == 'pygame'", specifier = ">=2.5.6" },
     { name = "pyinstaller", marker = "extra == 'build'", specifier = ">=6.0.0" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.0.0" },
     { name = "pymunk", specifier = ">=7.2.0" },
@@ -1776,7 +1780,7 @@ requires-dist = [
     { name = "tox", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "twine", marker = "extra == 'dev'", specifier = ">=4.0.0" },
 ]
-provides-extras = ["dev", "studio", "docs", "benchmark", "build"]
+provides-extras = ["pygame", "dev", "studio", "docs", "benchmark", "build"]
 
 [[package]]
 name = "pyinstaller"

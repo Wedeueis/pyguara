@@ -53,7 +53,9 @@ uv run python games/guara_falcao/main.py     # a platformer
   one, startup stops with `NoGraphicsAdapterError`.
 - **pygame**, chosen with `display.backend: pygame`: a software renderer
   that runs anywhere, with no lighting or post-processing. It is the
-  reference the GPU renderer is tested against.
+  reference the GPU renderer is tested against. It needs the `pygame`
+  extra, `pip install 'pyguara[pygame]'`; without it startup stops with
+  `MissingExtraError`.
 
 ## Physics and AI
 

@@ -323,7 +323,8 @@ for the `master` / `sfx` / `music` buses.
 missing or disabled, both backends log a warning and fall back to SDL's dummy driver. Everything
 keeps working and nothing is heard, so a game doesn't need to handle this itself.
 
-`PygameAudioSystem` wraps `pygame.mixer` (pygame-ce). It allocates 32
+`PygameAudioSystem` wraps `pygame.mixer` (pygame-ce), which
+`pip install 'pyguara[pygame]'` installs. It allocates 32
 channels by default. `shutdown()` stops all audio and releases the device;
 it is idempotent and is called from `Application.shutdown()`.
 

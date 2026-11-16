@@ -11,6 +11,7 @@ Usage:
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -168,8 +169,6 @@ def _build_pyinstaller_args(
         # tick. Taken from `native.py`'s own constant rather than spelled
         # again, because a third spelling is a third thing to keep in step.
         _MODULE_NAME,
-        "pygame",
-        "pygame.locals",
         "pymunk",
         "numpy",
         "PIL",
@@ -177,6 +176,11 @@ def _build_pyinstaller_args(
         "dataclasses_json",
         "msgpack",
     ]
+
+    # Only when the game's environment has it: pygame is an extra, and a
+    # hidden import PyInstaller cannot find is a warning on every build.
+    if importlib.util.find_spec("pygame") is not None:
+        default_hidden_imports += ["pygame", "pygame.locals"]
 
     for hidden in default_hidden_imports + hidden_imports:
         args.extend(["--hidden-import", hidden])
