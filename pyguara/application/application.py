@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Protocol, cast, runtime_checkable
 
 from pyguara import native
 from pyguara.application.clock import Clock
+from pyguara.application.frame_profile import FrameProfiler, draw_frame_profile
 from pyguara.application.memory import settle_memory
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.config.manager import ConfigManager
@@ -121,6 +122,7 @@ class Application:
         self._is_running = False
         self._has_shut_down = False
         self._step_hooks: list[StepHook] = []
+        self._frame_profiler: FrameProfiler | None = None
         self._fixed_tick = 0
         self._event_queue_time_budget_ms = event_queue_time_budget_ms
 
@@ -307,6 +309,35 @@ class Application:
         if hook in self._step_hooks:
             self._step_hooks.remove(hook)
 
+    @property
+    def frame_profiler(self) -> FrameProfiler | None:
+        """The frame profiler, or None while profiling is off."""
+        return self._frame_profiler
+
+    def enable_frame_profiler(self, visible: bool = True) -> FrameProfiler:
+        """Start recording where each frame's time goes.
+
+        `debug.enable_profiler` in the configuration calls this at startup.
+        Calling it again returns the profiler already running and applies
+        `visible` to it.
+
+        Args:
+            visible: Whether the overlay is drawn. A game binds a key to
+                the returned profiler's `visible` to toggle it.
+
+        Returns:
+            The profiler.
+        """
+        if self._frame_profiler is None:
+            self._frame_profiler = FrameProfiler(visible)
+        else:
+            self._frame_profiler.visible = visible
+        return self._frame_profiler
+
+    def disable_frame_profiler(self) -> None:
+        """Stop recording and drop what was recorded."""
+        self._frame_profiler = None
+
     def quit(self) -> None:
         """End the loop once the frame in progress is done.
 
@@ -384,6 +415,8 @@ class Application:
         # every frame, and re-reading them mid-loop would let a config edit
         # change the timestep underneath the accumulator.
         self._target_fps = self._config_manager.config.display.fps_target
+        if self._config_manager.config.debug.enable_profiler:
+            self.enable_frame_profiler()
         self._fixed_dt = physics_config.fixed_dt  # also lets _render() get alpha
         self._max_frame_time = physics_config.max_frame_time
         self._freeze_on_scene_change = (
@@ -421,8 +454,16 @@ class Application:
         if not (self._is_running and self._window.is_open):
             return False
 
+        # Read once: a profiler enabled partway through a frame starts
+        # with the next one, and never sees half of this one.
+        profiler = self._frame_profiler
+        if profiler is not None:
+            profiler.begin_frame()
+
         # 1. Measure frame time
         frame_time = self._clock.tick(self._target_fps) / 1000.0
+        if profiler is not None:
+            profiler.mark("wait")
 
         # Clamp frame time to prevent spiral of death
         # (when updates take longer than real time, causing ever-growing backlog)
@@ -447,6 +488,8 @@ class Application:
         # internal joystick device list current.
         self._input_manager.update()
         self._process_input(frame_time)
+        if profiler is not None:
+            profiler.mark("input")
 
         # 3. Drain queued events once per frame, before the fixed
         # updates that consume them. Not inside the accumulator loop:
@@ -471,8 +514,11 @@ class Application:
         # so a pending `dispatch_after` waits out a pause instead of
         # firing into a frozen world.
         self._event_dispatcher.advance(simulated_time)
+        if profiler is not None:
+            profiler.mark("events")
 
         self._accumulator += simulated_time
+        first_tick = self._fixed_tick
 
         for hook in self._step_hooks:
             hook.before_fixed_updates(simulated_time)
@@ -485,9 +531,13 @@ class Application:
 
         for hook in self._step_hooks:
             hook.after_fixed_updates(simulated_time)
+        if profiler is not None:
+            profiler.mark("fixed")
 
         # 5. Variable-rate update (UI, animations that should be smooth)
         self._update(simulated_time)
+        if profiler is not None:
+            profiler.mark("update")
 
         # 6. Render at display framerate, interpolating between the
         # last two fixed steps. Not when game code closed the window during
@@ -495,6 +545,9 @@ class Application:
         if self._window_closed_during_frame():
             return False
         self._render()
+        if profiler is not None:
+            profiler.mark("render")
+            profiler.end_frame(self._fixed_tick - first_tick)
 
         # 7. After the first whole frame of new scenes, keep what they loaded
         # out of the garbage collector's way.
@@ -914,6 +967,17 @@ class Application:
         top of the game's UI and is still composited by the backend.
         """
 
+    def _render_frame_profile(self) -> None:
+        """Draw the frame profiler's overlay, above everything else.
+
+        Separate from `_render_overlays()` so a subclass that overrides that
+        hook keeps the profiler.
+        """
+        if self._frame_profiler is None:
+            return
+        budget_ms = 1000.0 / self._target_fps if self._target_fps > 0 else None
+        draw_frame_profile(self._frame_profiler, self._ui_renderer, budget_ms)
+
     def _render_direct(self, alpha: float) -> None:
         """Draw straight to the window, for backends with no render graph.
 
@@ -924,6 +988,7 @@ class Application:
         self._scene_manager.render(self._world_renderer, self._ui_renderer, alpha)
         self._ui_manager.render(self._ui_renderer)
         self._render_overlays()
+        self._render_frame_profile()
         self._ui_renderer.present()
         self._window.present()
 
@@ -971,6 +1036,7 @@ class Application:
         # Render UI on top (directly to screen)
         self._ui_manager.render(self._ui_renderer)
         self._render_overlays()
+        self._render_frame_profile()
         self._ui_renderer.present()
 
         # Passes that must sit on top of everything the game drew, the
