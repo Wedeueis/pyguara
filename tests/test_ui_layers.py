@@ -1,15 +1,11 @@
 """Layers, focus state and value callbacks in the UI system.
 
-Three gaps that only show up once a screen has more than one thing on it:
-
-- `UIManager` held one flat list with **no removal API**, so every demo in
-  the repository cleared its private `_root_elements`, and a HUD rebuilt
-  mid-game jumped in front of the pause menu over it.
-- `UIElementState.FOCUSED` and `DISABLED` were read by `Button`, `Checkbox`
-  and the design-system components but never assigned, so Tab moved the
-  focus ring invisibly.
-- `Slider`, `Checkbox` and `TextInput` had no `on_change`, so an options
-  screen had to poll every control every frame.
+- `UIManager` keeps layers and can remove elements, so a HUD rebuilt
+  mid-game stays behind the pause menu over it.
+- `UIElementState.FOCUSED` and `DISABLED` are assigned, so the focus
+  ring is visible as Tab moves it.
+- `Slider`, `Checkbox` and `TextInput` have `on_change`, so an options
+  screen need not poll its controls.
 """
 
 from __future__ import annotations

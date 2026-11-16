@@ -1,15 +1,11 @@
-"""The guará is a sprite now, played by the engine's own animation components.
+"""The guará is a sprite, played by the engine's animation components.
 
-Every demo in this repository used to animate by drawing primitives on a
-sine wave, which left `Animator` and `AnimationStateMachine` with no
-reference usage anywhere (#201). These pin the wiring: a clip per
-movement state, a recoil that a movement state cannot interrupt and that
-gets out of the way on its own, and a companion on the plain animator
-path with no state machine over it.
+These pin the wiring: a clip per movement state, a recoil that a
+movement state cannot interrupt and that ends on its own, and a
+companion on the plain animator path with no state machine.
 
-No textures are loaded here. `AnimationClip` needs frames but never looks
-at them, so the clips are built from stand-ins -- what is under test is
-the state logic, not the art.
+No textures are loaded. `AnimationClip` needs frames but never looks
+at them, so the clips are built from stand-ins.
 """
 
 from __future__ import annotations

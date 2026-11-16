@@ -242,25 +242,13 @@ class TestVector2Geometry:
 class TestVector2LengthIsSpelledExactly:
     """`length` is `sqrt(x * x + y * y)`, and the spelling is the contract.
 
-    `Vector2` overrides `pymunk.Vec2d.length`, which spells it
-    `sqrt(x**2 + y**2)`. That is not a style preference. `x**2` goes
-    through the platform's `pow`, which glibc does not promise to round
-    correctly, so it disagrees with `x * x` for about 0.08% of inputs --
-    and `math.hypot`, which is a different algorithm again, disagrees
-    with both.
+    `sqrt(x**2 + y**2)` and `math.hypot` each differ from it in the last
+    bit for a small share of inputs. None is more accurate; one has to be
+    fixed because `normalized()` divides by it and the native code must
+    reproduce it bit for bit. See `docs/adr/0004-the-native-boundary.md`,
+    Decision 5.
 
-    Three spellings, three answers, all within an ulp. None is more
-    accurate: over 200k random vectors the `pow` form is closer 34 times
-    and the multiplication form 36. So the reason to fix one is that
-    `normalized()` divides by it, everything derived from a heading
-    inherits it, and a native implementation has to reproduce it
-    bit-for-bit -- see `docs/adr/0004-the-native-boundary.md`,
-    Decision 5. A length that depends on which libm is underneath is one
-    no other implementation can match.
-
-    The vectors below are chosen so that all three spellings differ, so
-    this test fails if the override is reverted *or* rewritten as
-    `hypot`. A test on `Vector2(3, 4)` would catch neither.
+    The vectors below are chosen so that all three spellings differ.
     """
 
     DIVERGENT = [
@@ -536,7 +524,7 @@ class TestVector2GameMath:
     """The helpers `steering.py`, `CharacterMover` and camera-follow each
     reimplemented subsets of (#64).
 
-    Several of the ones that issue listed as missing were **already there**
+    Several of the ones that issue listed as missing were already there
     under pymunk names -- `project` is `projection()`, `angle_to` is
     `get_angle_between()`, and `angle`/`perpendicular` are inherited. Only
     the genuinely absent ones are added, so there is one spelling of each
@@ -605,7 +593,7 @@ class TestVector2GameMath:
         assert Vector2(13, 27).snapped(0) == Vector2(13, 27)
 
     def test_from_angle_degrees_takes_degrees(self) -> None:
-        """pymunk's inherited `from_polar()` takes **radians**, which is the
+        """pymunk's inherited `from_polar()` takes radians, which is the
         easy mistake: `from_polar(1, 90)` is 90 radians, not a quarter
         turn."""
         quarter = Vector2.from_angle_degrees(90)

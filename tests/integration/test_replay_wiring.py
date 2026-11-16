@@ -1,15 +1,13 @@
-"""Regression test for replay recording/playback wiring (wayfinder ticket 18).
+"""Regression test for replay recording and playback wiring.
 
-Builds two independent Application instances from the real
-`create_application()` bootstrap, records a short deterministic session
-against the first (fixed seed, scripted key presses), saves it via
-`ReplaySerializer`, then feeds the saved replay into the second and asserts
-the resulting entity state matches what recording produced. Both runs are
-seeded from the same template `Entity` via `Entity.clone()` (not
-`copy.deepcopy`, which `Entity` rejects outright).
+Builds two `Application` instances from the real
+`create_application()`, records a short deterministic session on the
+first (fixed seed, scripted key presses), saves it through
+`ReplaySerializer`, feeds it to the second and asserts the entity
+state matches. Both runs start from one template `Entity` via
+`Entity.clone()`.
 
-Deliberately left unmarked, like `test_bootstrap_smoke.py`, so it runs under
-`make test-unit`/`make ci` rather than only the opt-in `-m integration` gate.
+Left unmarked, so it runs under `make test-unit` and `make ci`.
 """
 
 import os
@@ -295,16 +293,14 @@ def test_a_replay_reproduces_the_random_draws_of_the_run(tmp_path):
 def test_playback_refuses_a_replay_from_the_other_store(tmp_path):
     """A replay only reproduces under the store that recorded it.
 
-    `docs/adr/0004-the-native-boundary.md`, Decision 4. The two stores are
-    each deterministic and cannot be made identical to each other, so this
-    replay would drift rather than reproduce -- and a playback that
-    matches for a few seconds and then quietly stops is far harder to
-    diagnose than an error at load. Hence the refusal.
+    `docs/adr/0004-the-native-boundary.md`, Decision 4: the two stores are
+    not identical, so the replay would drift, and a refusal at load is
+    easier to diagnose than a playback that goes wrong after a few
+    seconds.
 
-    Driven by rewriting the saved metadata rather than by building the
-    other store, because the point under test is the comparison, and a
-    test that needed a Rust toolchain to exercise the refusal would skip
-    on exactly the machines the refusal protects.
+    Driven by rewriting the saved metadata, not by building the other
+    store: the comparison is what is under test, and it must not need a
+    Rust toolchain to run.
     """
     from pyguara import native
     from pyguara.replay.serializer import load_replay, save_replay
@@ -342,16 +338,12 @@ def test_playback_refuses_a_replay_from_the_other_store(tmp_path):
 def test_playback_accepts_a_genuine_pre_field_replay(tmp_path):
     """Versions 1 and 2 predate the field, so absence is not a mismatch.
 
-    Reading a missing `native_store` as "python" would refuse every
-    pre-existing replay on a native build, to guard against a divergence
-    nobody can confirm happened.
+    Reading a missing `native_store` as "python" would refuse every older
+    replay on a native build.
 
-    The file here is rewritten to be a **real v2 file** -- the key removed
-    and the version lowered -- rather than a v3 file carrying an empty
-    string. The difference matters: setting the field exercises the
-    comparison but not the decoding, and it was a sabotage check that
-    showed the weaker version of this test passing with
-    `from_dict` defaulting the field to "python".
+    The file is rewritten into a real v2 file, with the key removed and
+    the version lowered. A v3 file carrying an empty string would exercise
+    the comparison but not the decoding.
     """
     import gzip
     import json

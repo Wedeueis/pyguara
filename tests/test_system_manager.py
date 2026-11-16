@@ -763,16 +763,9 @@ class TestPerSystemEnabling:
     def test_re_registering_the_same_system_comes_back_enabled(self) -> None:
         """The flag must not outlive the registration it was set on.
 
-        Registering the *same object* again, deliberately: the flags are
-        keyed by object identity, so this is the case where a stale one is
-        guaranteed to still match rather than merely likely to. A scene
-        that tears down and rebuilds while holding its system handles does
-        exactly this, and would find the system silently mute.
-
-        An earlier version of this test used a second, fresh `MockSystem`
-        and relied on CPython reusing the dead object's id. It passed
-        against a manager that never cleared the flag at all, because the
-        id was not in fact reused -- a test that could only fail by luck.
+        The same object is registered again on purpose: the flags are keyed
+        by object identity, so a stale one is certain to match. A scene that
+        tears down and rebuilds while holding its system handles does this.
         """
         manager = SystemManager()
         system = MockSystem()

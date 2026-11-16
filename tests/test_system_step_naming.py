@@ -1,23 +1,14 @@
 """Guards the docstrings that carry ADR 0005's fixed/variable step naming.
 
-`Scene.update` is the **variable** step and `Scene.fixed_update` the fixed
-one. `System.update` is the **fixed** step and `System.variable_update` the
-variable one. Exactly inverted, kept that way deliberately, and argued in
+`Scene.update` is the variable step and `Scene.fixed_update` the fixed
+one. `System.update` is the fixed step and `System.variable_update`
+the variable one; see
 `docs/adr/0005-fixed-and-variable-step-naming.md`.
 
-**The wiring is not tested here.** `tests/integration/test_scene_owned_systems.py`
-already pins it, with a system that records each channel separately and a
-deliberate three-frames-to-one-tick ratio so neither channel can stand in
-for the other. Restating that would be a second copy of a guard that
-already exists.
-
-What is tested here is the part the ADR costs: the names cannot say which
-step they are, so the **docstrings** have to, on every protocol a reader
-might meet first. `System.update` carried "Update system logic. Args: dt:
-Delta time in seconds since last update" -- equally true of either
-channel, and so no help at all to the one reader who needs to know. The
-fixed meaning was documented only on `VariableStepSystem`, which is the
-one protocol a system need not implement to get `update` called.
+The names cannot say which step they are, so the docstrings must, on
+every protocol a reader might meet first. That is what is tested
+here. The wiring is pinned by
+`tests/integration/test_scene_owned_systems.py`.
 """
 
 from __future__ import annotations

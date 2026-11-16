@@ -1,28 +1,13 @@
 """The seam that decides whether the engine runs native or Python.
 
-Worth its own file because **every failure here is silent by design**.
-`native_module()` returning None is how the engine stays installable
-without a Rust toolchain, so a broken lookup, a stale build or a wrong
-search path all present identically to "no extension here", the suite goes
-green, and nobody has tested the accelerator.
+Every failure here is silent by design: `native_module()` returning
+None is how the engine runs without the extension, so a broken lookup
+or a wrong search path looks the same as "no extension here", and
+every native test skips.
 
-That is not hypothetical. This module moved from
-`pyguara/graphics/components/_native.py` to `pyguara/native.py` and its
-`parents[3]` became wrong by two levels; the whole suite passed, with every
-native test skipped.
-
-Note which test below catches that, because it is not the obvious one.
-With a wrong root, no candidate path exists, so every test that asks "is
-there a library?" skips -- including
-`test_a_library_on_disk_is_actually_loaded`, which was written for this
-and does not catch it. The one that fails is
-`test_the_repository_root_is_the_repository_root`, which asserts the
-derived root is a PyGuara checkout and never asks about the extension at
-all. Re-introducing the bug was how that was established, rather than
-assumed.
-
-See `docs/adr/0004-the-native-boundary.md`, Decision 4, for why the store
-is one engine-wide choice rather than a per-subsystem one.
+`test_the_repository_root_is_the_repository_root` is the test that
+catches a wrong root: it asserts the derived root is a PyGuara
+checkout and never asks about the extension. See ADR 0004, Decision 4.
 """
 
 from __future__ import annotations
@@ -42,18 +27,13 @@ from pyguara.native import NativeAcceleration
 def _isolated_mode(monkeypatch: pytest.MonkeyPatch) -> object:
     """Give each test a known mode and a clean environment.
 
-    Two separate hazards, both real.
-
     The mode is module state, so a test that configures it would decide
-    the store for every test that ran afterwards.
+    the store for every test after it.
 
-    And the environment has to be *cleared*, not merely restored: this
-    file asserts about the override machinery itself, so inheriting a
-    developer's `PYGUARA_NO_NATIVE` would make it assert about an
-    environment it did not choose. Three tests here failed exactly that
-    way under `PYGUARA_NO_NATIVE=1 uv run pytest` -- the one command the
-    override exists for. The tests that are *about* the override set it
-    themselves, after this.
+    The environment is cleared, not just restored: this file asserts
+    about the override itself, so it must not inherit a developer's
+    `PYGUARA_NO_NATIVE`. The tests about the override set it themselves,
+    after this.
     """
     monkeypatch.delenv("PYGUARA_NO_NATIVE", raising=False)
     native.reset_for_tests()
@@ -124,7 +104,7 @@ class TestTheSearchPath:
         failed to use it" (fail) -- a stale build, an ABI mismatch, a
         rename in the crate.
 
-        It does **not** catch a wrong search root: nothing exists at a
+        It does not catch a wrong search root: nothing exists at a
         wrong path, so this skips. The module docstring says which test
         does.
         """

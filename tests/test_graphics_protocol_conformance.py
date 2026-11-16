@@ -157,24 +157,15 @@ def _world_renderers() -> list[type]:
 
 
 class TestEveryRendererKeepsItsProtocolSignature:
-    """`isinstance` against a runtime-checkable Protocol checks method
-    *names*, so every conformance assertion above stays green when a
-    backend's parameters drift from the ones the protocol advertises.
+    """Every renderer's methods take the parameters its protocol names.
 
-    That is not hypothetical, and it is not cheap to find by hand:
-    `UIRenderer` has three implementations in three separate packages, so
-    a parameter added to one of its methods can be forgotten in two
-    places that still pass `isinstance`, still type-check (mypy does not
-    check a class against a Protocol it never annotates), and fail only
-    at the first call that passes the new argument.
+    `isinstance` against a runtime-checkable Protocol checks method names
+    only, and mypy does not check a class against a Protocol it never
+    annotates. So a parameter renamed or added in one backend fails only
+    at the first call that passes it by keyword.
 
-    `IRenderer.draw_texture` had already drifted in exactly that way, and
-    this check is what found it: the protocol named its second parameter
-    `destination` while both shipped backends called it `position`, so a
-    keyword the protocol advertised raised `TypeError` on every real
-    renderer. Nothing noticed, because every caller in the engine, the
-    demos and the tests passes it positionally -- which is also why
-    correcting the two backends changed no behaviour.
+    This compares the signatures of every implementation with the
+    protocol's.
     """
 
     @pytest.mark.parametrize(

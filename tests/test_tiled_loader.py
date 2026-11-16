@@ -253,7 +253,7 @@ class TestTileFlipFlags:
 
     Unmasked, a horizontally flipped tile 1 arrives as 2147483649, no
     tileset's range contains it, and `properties_for` returns `{}` -- so
-    **a flipped wall silently stops being solid**, and only in the places
+    a flipped wall silently stops being solid, and only in the places
     the author happened to mirror a tile. Nothing in the loader
     acknowledged the flags existed.
     """

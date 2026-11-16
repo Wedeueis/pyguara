@@ -1,14 +1,10 @@
 """Tests for the 2D lighting system.
 
-The world-to-screen transform is the part worth pinning down. `LightPass`
-hands `collect_lights_screen_space` the camera's `screen_offset`, which
-already has the camera position subtracted out of it; subtracting the
-position a second time inside displaced every light by a whole camera
-position. On a camera centred on its viewport -- the ordinary case for a
-fixed, screen-space scene -- that threw the entire light map off the left
-edge of the frame, so no light lit anything and only the ambient clear
-survived. The demo it was found in looked exactly like a scene with
-lighting disabled.
+The world-to-screen transform is the part most worth pinning.
+`LightPass` hands `collect_lights_screen_space` the camera's
+`screen_offset`, which already has the camera position subtracted.
+Subtracting it again displaces every light by a camera position, and
+on a centred camera that moves the whole light map off the frame.
 """
 
 import math

@@ -1,15 +1,10 @@
 """The text-input path: composed characters, not guessed ones.
 
-`TextInput.handle_event` used to build characters with `chr(key_code)`.
-That cannot work. A key code is a *physical* key, so SDL reports `SDLK_a`
-whether or not shift is held -- **typing a capital letter was impossible**,
-every non-US layout produced the wrong letter, and accented or IME input
-was out of reach entirely.
-
-`TextInputEvent` carries what the platform actually composed, after layout,
-modifiers and IME. `UIManager` routes it to the focused widget through the
-`TextInsertable` capability, so `handle_event`'s signature is untouched and
-widgets that do not take text are unaffected.
+A key code names a physical key, so it cannot give a capital letter,
+a non-US layout's letter or IME input. `TextInputEvent` carries what
+the platform composed. `UIManager` routes it to the focused widget
+through the `TextInsertable` capability, and `handle_event`'s
+signature is unchanged.
 """
 
 from __future__ import annotations

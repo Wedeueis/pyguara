@@ -107,7 +107,7 @@ class TestPlanMode:
     ) -> None:
         """The world ends where it started, but observers used to see the
         edit and its undo go past on the way. Harmless for a field change;
-        a planned **delete** dropped the entity from the spatial index and
+        a planned delete dropped the entity from the spatial index and
         queued its physics body for teardown, and the revert has no
         `entity_created` hook to put either back."""
         removed: list[str] = []

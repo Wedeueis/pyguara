@@ -1,16 +1,12 @@
 """Tests for `SpatialHash` (pyguara/common/spatial.py).
 
-Every test runs against **both stores**. That is not thoroughness for its
-own sake: `SpatialHash` grew a native implementation behind the same
-methods, and an unparametrised file would have gone on passing while
-testing only whichever store the contributor running it happened to have
-built. The Python store is always exercised; the native one skips when
-the extension is absent, which `test_the_stores_are_both_reached` makes
-visible rather than silent.
+Every test runs against both stores. The Python store is always
+exercised; the native one skips when the extension is absent, which
+`test_the_stores_are_both_reached` makes visible.
 
-The behavioural parity suite is `tests/test_native_spatial_hash_parity.py`
--- this file is the unit suite, and it earns its keep by stating what each
-operation means rather than only that the two agree on it.
+This is the unit suite: it states what each operation means.
+`tests/test_native_spatial_hash_parity.py` checks that the two stores
+agree.
 """
 
 from __future__ import annotations
@@ -180,18 +176,14 @@ def test_the_index_can_be_mutated_from_inside_a_loop_over_a_query(
 ) -> None:
     """A query result is a materialised list, not a live view.
 
-    This is the engine's actual pattern and it is native-only hazardous:
-    `ProjectileSystem` iterates `query_radius` and applies damage, which
-    dispatches an event, which can destroy an entity, which brings
-    `SpatialIndexSystem._on_entity_destroyed` round to `remove()` -- all
-    while the `for` loop is still running. The native methods take
-    `&mut self`, so if a query ever handed back something lazy the
-    re-entry would raise `RuntimeError: Already borrowed` instead of
-    working.
+    The engine relies on it: `ProjectileSystem` iterates `query_radius`
+    and applies damage, which can destroy an entity, which calls
+    `remove()` while the loop is still running. On the native store a lazy
+    result would make that re-entry raise `RuntimeError: Already
+    borrowed`.
 
-    Pinned rather than assumed, because the natural optimisation -- return
-    an iterator, skip building the list -- would break it, and nothing
-    else in the suite would notice.
+    Pinned because returning an iterator is the natural optimisation, and
+    nothing else would notice it.
     """
     grid = SpatialHash[str](cell_size=64.0, accelerate=accelerate)
     for index in range(8):

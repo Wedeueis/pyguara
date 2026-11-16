@@ -1,22 +1,13 @@
 """Does a sample actually come out? -- the audio path, measured.
 
-`test_audio_backend.py` next door asserts the audio *API*: a handle comes
-back, volumes clamp, the mixer reports itself initialised. None of it would
-notice a backend that returned a handle and played nothing, because the
-dummy audio driver discards every sample it is given.
+`test_audio_backend.py` asserts the audio API under the dummy driver,
+which discards every sample. These tests use SDL's `disk` driver,
+which writes the mixed output to a file, and assert on the samples.
 
-These tests use SDL's `disk` driver instead, which writes the mixed output
-to a file, and assert on the samples. They are the audio half of what
-`tests/integration/test_demos_render.py` does for frames: a rendered frame
-that is a single flat colour and an audio capture that is pure silence are
-the same failure, and both pass every API-level assertion.
-
-The seam test pins an assumption a design decision rests on. W28b's staging
-(issue #72) puts `LOOP_POINTS` on the existing pygame output path because
-`Channel.queue` starts the queued sound on the next *sample*, not the next
-buffer boundary. That is SDL's behaviour, not a documented pyguara contract,
-so a pygame-ce or SDL upgrade could take it away -- and would do so
-silently, as an 11-23 ms hole in every loop. This test is the alarm.
+The seam test pins SDL behaviour that loop points on the pygame path
+depend on: `Channel.queue` starts the queued sound on the next sample,
+not the next buffer boundary. An SDL or pygame-ce upgrade that changed
+it would put a gap in every loop.
 """
 
 from __future__ import annotations

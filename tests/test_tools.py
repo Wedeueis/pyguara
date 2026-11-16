@@ -592,21 +592,15 @@ class TestEventMonitorTeardown:
 
 @pytest.mark.unit
 class TestTheOverlayDiagnosesAndDoesNotAuthor:
-    """What `pyguara/tools` is for, pinned as a list rather than a claim.
+    """What `pyguara/tools` is for, pinned as a list.
 
-    The overlay used to carry a hierarchy, an entity inspector, a
-    transform gizmo, a config editor and an assets browser, drawn with
-    the same `UIRenderer` primitives as the diagnostics. Three of those
-    were a second, weaker copy of a Studio panel -- a second way to
-    change the world, and the one that kept no record of having done so.
-    They are gone, and the two that had no Studio counterpart went with
-    them (issue #330), because all five were built on a widget layer
-    that could not scroll and stepped numbers by a hard-coded 1.0.
+    The overlay holds diagnostics only. Editing tools (a hierarchy, an
+    inspector, a gizmo, a config editor, an assets browser) belong in
+    Studio, which records what it changes.
 
-    Nothing stops them coming back one import at a time, which is what
-    this asserts against. A new *diagnostic* tool is expected to fail the
-    first test here and be added to the list; a new editing one should
-    make someone ask whether it belongs in Studio.
+    A new diagnostic tool is expected to fail the first test here and be
+    added to the list. A new editing one should make someone ask whether
+    it belongs in Studio.
     """
 
     def test_the_sandbox_registers_exactly_the_diagnostic_tools(self) -> None:

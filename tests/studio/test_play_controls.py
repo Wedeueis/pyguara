@@ -1,7 +1,7 @@
 """`PlayControlsPanel`: pausing and single-stepping from the editor.
 
 The design point worth testing is how a single step is implemented. It
-**unpauses for one frame** rather than calling `Application.step()`,
+unpauses for one frame rather than calling `Application.step()`,
 because the panel draws inside the editor's frame, which is inside the
 application's frame -- stepping there would re-enter the loop, integrate
 physics twice and draw the editor from inside itself. The first symptom

@@ -1,20 +1,12 @@
 """The wgpu renderer's pixels against the pygame renderer's.
 
-The pygame backend is what games run on today, so it is the reference: the
-same calls are made on both and the two frames compared. Nothing here is a
-snapshot. A changed pixel is a disagreement between two live renderers,
-which is why this can run on any machine with a graphics adapter and needs
-no stored images.
+The same calls are made on both renderers and the two frames compared.
+Nothing here is a stored snapshot.
 
-**Two regimes, stated per test.** Rectangles, lines up to the widths games
-use, text and polygons are **exact** -- every pixel within 2/255, which is
-the rounding of an alpha blend done in bytes on one side and floats on the
-other. Circles and rounded corners are **bounded**: a GPU tests each pixel
-centre against a distance where pygame walks a midpoint algorithm, so a few
-edge pixels differ, and the bound is on how many.
-
-Skips when no adapter can be opened, so a runner with no GPU and no
-software rasteriser sees a skip rather than a failure.
+Rectangles, lines, text and polygons are exact: every pixel within
+2/255. Circles and rounded corners are bounded: the two rasterise an
+edge by different rules, so a few edge pixels differ, and the bound is
+on how many. Skips when no graphics adapter can be opened.
 """
 
 from __future__ import annotations

@@ -1,19 +1,12 @@
 """Every demo must actually draw something.
 
-`games/validate_demos.py` boots four demos and checks they do not crash. Not
-crashing is a weaker property than rendering: a renderer that silently
-submitted nothing, or cleared to a colour and drew no entities, passes it
-comfortably.
+Each demo is booted headlessly and its frame must not be a single flat
+colour. That is a low bar: it catches "the render path produced
+nothing", not "it produced the wrong thing".
 
-These tests boot each demo headlessly and assert the frame is not a single
-flat colour. That is deliberately a low bar -- it catches "the render path
-produced nothing", not "the render path produced the wrong thing" -- but it is
-the bar nothing was holding.
-
-Scope: it reads the surface the renderer drew onto -- pygame's own, or
-the one the wgpu window copies each frame to. It says nothing about
+It reads the surface the renderer drew onto. It says nothing about
 whether a window appears on screen; see
-docs/guides/agent-visual-inspection.md for why those differ.
+docs/guides/agent-visual-inspection.md.
 """
 
 from __future__ import annotations

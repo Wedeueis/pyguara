@@ -1,15 +1,8 @@
 """The editor must not be able to disable itself silently.
 
-The previous `pyguara/editor` was deleted because it had never executed
-once: `layer.py` imported pyimgui's pygame integration, which transitively
-needed PyOpenGL, which was a dependency nowhere. `HAS_IMGUI` was therefore
-unconditionally `False` in every install configuration, every panel method
-early-returned, and nothing noticed -- because no test ever asserted the
-flag was `True`.
-
-These do. A dev install that cannot import ImGui, or an editor that grows a
-PyOpenGL dependency, fails here rather than shipping a working-looking
-editor that draws nothing.
+A dev install that cannot import ImGui, or an editor that grows an
+undeclared dependency, fails here. An availability flag that no test
+asserts on can be false in every install without anyone noticing.
 """
 
 from __future__ import annotations

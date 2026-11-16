@@ -1,23 +1,13 @@
 """Snapshot the whole backend call stream a frame produces.
 
-The pipeline already has unit tests: the batcher's grouping, the viewport's
-letterbox maths, the queue's ordering. Each asserts its own slice. None
-captures what a *frame* actually turns into -- the ordered sequence of calls
-`RenderSystem.flush()` makes on the backend, with the world-to-screen
-transform already applied.
+The snapshot is the ordered sequence of calls `RenderSystem.flush()`
+makes on the backend, with the world-to-screen transform applied. It
+catches what unit tests of one stage miss: an unstable sort, a camera
+transform off by half a pixel, a batch that splits in two.
 
-That sequence is where a refactor's cross-cutting mistakes show up: a sort
-that stops being stable, a camera transform that drifts by half a pixel, a
-batch that silently splits in two, a viewport recomputed when it should be
-reused. A unit test asserting `len(batches) == 1` sails past most of those.
-
-The recording backend below implements `IRenderer` structurally, so these
-also fail if the protocol and the pipeline drift apart.
-
-Why this is deterministic, and safe to snapshot: nothing here rasterises.
-There is no font, no SDL surface, no GPU -- only Python float arithmetic on
-fixed inputs. Positions are rounded to three decimals so a last-bit
-difference cannot flip a snapshot red on its own.
+Nothing here rasterises, so it is deterministic: Python float
+arithmetic on fixed inputs, with positions rounded to three decimals.
+The recording backend implements `IRenderer` structurally.
 """
 
 from __future__ import annotations

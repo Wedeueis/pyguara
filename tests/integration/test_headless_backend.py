@@ -1,21 +1,14 @@
-"""Headless backend smoke test (wayfinder ticket 19).
+"""Headless backend smoke test.
 
-`create_headless_application()`/`create_headless_sandbox_application()` swap
-the window/renderer/UI-renderer/texture-factory quartet for the no-op
-`pyguara.graphics.backends.headless_renderer` implementations, which never
-touch `pygame.display` (or any other SDL video call) -- unlike the real
-Pygame backend under `SDL_VIDEODRIVER=dummy`. No SDL video driver, dummy or
-otherwise, is set anywhere in this module.
+`create_headless_application()` and
+`create_headless_sandbox_application()` swap the window, renderer, UI
+renderer and texture factory for the no-op ones in
+`pyguara.graphics.backends.headless_renderer`, which make no SDL video
+call. No SDL video driver is set anywhere in this module.
 
-This is deliberately a separate file from `test_bootstrap_smoke.py`: that
-test's whole point is exercising the *real* pygame/ModernGL backend-selection
-branch in `_setup_container()` (the exact code path BOOT-1/2/3 broke), so it
-keeps using the real Pygame backend rather than switching to headless -- doing
-so would bypass that branch entirely and reopen the coverage gap those bugs
-exploited. This file proves the headless path itself works, standalone.
-
-Deliberately left unmarked, like `test_bootstrap_smoke.py`, so it runs under
-`make test-unit`/`make ci`.
+Separate from `test_bootstrap_smoke.py`, which must keep exercising
+the real backend-selection branch. Left unmarked, so it runs under
+`make test-unit` and `make ci`.
 """
 
 from games.boot_process.scenes import BootScene

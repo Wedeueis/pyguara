@@ -5,7 +5,7 @@ property is held to is stated in its test: the object ECS's ordering
 rules for removal, Python's own float arithmetic for `add_scaled`, and
 memory safety for everything about arrays.
 
-**Setup is varied on purpose.** The audit's recurring finding was that a
+Setup is varied on purpose. The audit's recurring finding was that a
 suite building its subject one way hides every bug that needs another, so
 the ordering tests below remove from the front, the middle and the end,
 before and after a flush, with and without a re-add.

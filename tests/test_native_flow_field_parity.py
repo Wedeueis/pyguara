@@ -1,34 +1,13 @@
-"""The two flow-field stores must agree **exactly**, not approximately.
+"""The two flow-field stores must agree exactly, not approximately.
 
-The third parity file, and the first one that can assert `==`. Its
-siblings -- `test_native_particle_parity.py` and
-`test_native_spark_parity.py` -- compare with a tolerance, because the
-native pools hold f32 where Python holds f64 and a spark half a pixel to
-the left is a spark. A flow field is not cosmetic: it is what an enemy
-steers along, so one cell whose descent neighbour differs is a pack that
-goes the other way round a wall, and "close" is not a property worth
-having.
+A flow field steers enemies, so one cell whose descent neighbour
+differs sends a pack the other way round a wall. Exactness holds
+because the arithmetic is f64 on both sides, the neighbour order of
+`GridGraph.get_neighbors` is replicated (it is the tie-break), and a
+Dijkstra cost map does not depend on pop order given non-negative
+weights.
 
-Three things make exactness reachable, and all three are load-bearing
-rather than lucky:
-
-1. **The arithmetic is f64 on both sides.** No conversion, no rounding.
-2. **`GridGraph.get_neighbors`' order is replicated**, corner-cut refusal
-   included, because `flow_field` keeps the *first* strictly-cheaper
-   neighbour and the order is therefore the tie-break. Reorder
-   `_NEIGHBORS_8` in either implementation and the diagonals disagree.
-3. **A Dijkstra cost map is order-independent** given non-negative
-   weights: a node is popped with its final cost, so every node's value is
-   a `min` over its predecessors of a sum of the same floats added in the
-   same order. The frontier carries the same `(cost, insertion)` total
-   order as `heapq` anyway, so the pop sequence is identical too -- but it
-   is point 3 that means the test may demand equality instead of hoping
-   for it.
-
-Skipped wholesale when the extension is not built, which is the normal
-state for a contributor without a Rust toolchain. A green suite therefore
-proves nothing about the accelerator; `cargo build --release` makes these
-run.
+Skipped when the extension is not built.
 """
 
 from __future__ import annotations
@@ -447,19 +426,13 @@ class TestTheGraphIsRereadWhenItChanges:
 class TestTheMembershipOfTheCostMap:
     """`cell in cost_map` is not the same question as `cost_at(cell) < inf`.
 
-    `dijkstra_map` returns a dict and the native field is a flat array, so
-    the array needs a separate `reached` flag to answer the membership
-    question. The tempting shortcut is to infer it -- a cell is in the map
-    if its cost is finite -- and the shortcut is *almost* right: every
-    reachable cell has a finite cost unless a terrain weight is infinite,
-    and a goal is seeded at 0.0, so nothing above distinguishes the two.
+    `dijkstra_map` returns a dict and the native field is a flat array
+    with a separate `reached` flag. Inferring membership from a finite
+    cost is right unless a terrain weight is infinite or a goal is seeded
+    at a non-zero cost.
 
-    Which is exactly why this class exists and compares the field's own
-    membership rather than only what the service exposes. Without it the
-    shortcut would be untested rather than merely unobserved, and a later
-    change that seeds a goal at a non-zero cost, or adds an infinite wall
-    weight instead of a wall, would turn an unobservable difference into a
-    wrong field with nothing to catch it.
+    This class compares the field's own membership, so that shortcut is
+    tested and not just unobserved.
     """
 
     def test_a_cell_reached_at_infinity_is_in_the_map(self) -> None:

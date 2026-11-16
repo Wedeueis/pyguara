@@ -1,15 +1,9 @@
 """The MCP SDK must be importable in a dev install, and say so when not.
 
-The same guard `tests/studio/test_editor_availability.py` provides, for the same
-reason and after the same lesson. The engine's first optional dependency
-was pyimgui's PyOpenGL requirement, which was declared nowhere: the
-editor's `HAS_IMGUI` was unconditionally `False` in every install, every
-method early-returned, and 705 lines of subsystem never executed once
-before being deleted. Nothing asserted on the flag, which is how it hid
-for its whole life.
-
-So this asserts on the flag. If a dev install cannot import `mcp`, the
-suite fails rather than quietly running without an MCP front end.
+The same guard as `tests/studio/test_editor_availability.py`: an
+availability flag that no test asserts on can be false in every
+install unnoticed. If a dev install cannot import `mcp`, the suite
+fails.
 """
 
 from __future__ import annotations

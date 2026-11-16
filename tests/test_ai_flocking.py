@@ -333,16 +333,13 @@ class TestFusedForceMatchesTheSeparateBehaviours:
 class TestStaggeredSteering:
     """`groups` spreads steering across ticks without stopping motion.
 
-    The trade is decision *rate*, not movement: every agent integrates its
-    position every tick regardless, so a staggered flock looks the same
-    and simply commits to a heading for a few frames longer.
+    The trade is decision rate, not movement: every agent integrates its
+    position every tick, so a staggered flock looks the same and commits
+    to a heading for a few frames longer.
 
-    Every assertion here is deliberately order-independent -- "how many
-    agents steered", never "which ones". `get_entities_with_cached` yields
-    from a set of uuid4 ids, so processing order varies between runs, and
-    flocking is Gauss-Seidel: an agent steering later in a tick sees the
-    already-moved positions of those ahead of it. A test that named
-    particular agents would pass or fail on the hash of a uuid.
+    Every assertion here is order-independent: "how many agents steered",
+    never "which ones". Flocking is Gauss-Seidel, so which agent steers
+    first changes the result.
     """
 
     @staticmethod

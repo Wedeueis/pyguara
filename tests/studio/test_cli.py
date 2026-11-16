@@ -1,6 +1,6 @@
 """`pyguara studio`: the terminal front door.
 
-The test that earns its keep here is the one about **stdout discipline**.
+The test that earns its keep here is the one about stdout discipline.
 Both servers speak a line protocol on stdout, and a plain engine boot
 writes five lines of prose into it: pygame prints a version banner on
 import, and `EngineLogger` builds its console handler around `sys.stdout`.

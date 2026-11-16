@@ -1,25 +1,13 @@
 """Every component reports `entity` as None before it is attached.
 
-`BaseComponent.__slots__` declares `entity` and `BaseComponent.__init__`
-assigns it -- but almost every component is a `@dataclass`, and the
-generated `__init__` never chains to the base. So the slot stays unset and
-reading `entity` raises `AttributeError` instead of returning None.
+`BaseComponent.__init__` assigns the `entity` slot, but a `@dataclass`
+component's generated `__init__` does not chain to it. So each
+component calls the base `__init__` from its `__post_init__`; one that
+forgets raises `AttributeError` on the first read of `entity`.
 
-The engine's answer is a `__post_init__` in each component that calls the
-base `__init__` by name, which ~35 modules do in two different spellings.
-Nothing enforced it, and four components shipped without it: `LightSource`,
-`AmbientLight`, `Navigator` and `PrefabInstance`.
-
-Fixing it centrally was measured and rejected. A `__new__` on the base cost
-~190ns on *every* component construction; a `__getattr__` was free to
-construct but disabled CPython's generic-attribute fast path for every
-component instance, making ordinary reads 27% slower and property reads 90%
-slower -- and components are read thousands of times a frame. See
+This test finds every component by reflection, so a new one that
+forgets fails here. A central fix was measured and costs more; see
 `docs/guides/performance.md`.
-
-So the guard is this test rather than a runtime cost: it finds every
-component by reflection, so a new one that forgets the call fails here
-instead of at whatever line first reads `entity`.
 """
 
 import dataclasses

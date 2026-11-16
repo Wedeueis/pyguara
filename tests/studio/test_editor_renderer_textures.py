@@ -1,15 +1,11 @@
 """`WgpuImGuiRenderer.register_texture`: showing a framebuffer in a panel.
 
-What this unlocks is the standard editor arrangement -- the scene rendered
-into a framebuffer and displayed inside a dockable panel. Under ModernGL it
-first did not work, and failed silently: the renderer's texture table was
-populated only from ImGui's own atlas requests, so a draw command carrying
-any other id was skipped and the image simply did not appear.
+The scene is rendered into a framebuffer and shown inside a dockable
+panel, so the renderer must draw a texture id that is not ImGui's own
+atlas.
 
-The ownership rule is the fiddly part and is what most of these assert. A
-framebuffer belongs to its `FramebufferManager`; if `release()` freed it
-along with the atlas, the manager's own release would free it a second
-time.
+Most of these assert the ownership rule: a framebuffer belongs to its
+`FramebufferManager`, and the renderer's `release()` must not free it.
 """
 
 from __future__ import annotations

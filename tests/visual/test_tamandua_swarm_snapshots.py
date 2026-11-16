@@ -1,19 +1,12 @@
 """Snapshot the batch the Revoada draws itself in.
 
-Tamanduá runs on ModernGL, so it is excluded from `DEMOS_THAT_DRAW` --
-SDL's dummy video driver provides no OpenGL and the scene cannot boot
-headlessly at all. The per-instance tint is the capability the whole demo
-exists to prove, and without something like this it would ship covered by
-a manual smoke test and nothing else.
+`build_batch()` is pure, so the snapshot is the batch's own contents:
+instance count, `colors_enabled` and the tint values. That is data,
+not pixels, and deterministic on any machine.
 
-`build_batch()` is pure precisely so that this is possible (GDD §4.2).
-Nothing here rasterises: the snapshot is the batch's own contents --
-instance count, `colors_enabled`, and the actual tint values -- which is
-data, not pixels, and therefore deterministic on any machine.
-
-**Read the diff when one of these changes.** A changed snapshot here is a
-changed swarm: a different tint curve, a layer that stopped being tinted,
-or a batch that quietly split.
+Read the diff when one of these changes. A changed snapshot is a
+changed swarm: a different tint curve, a layer that stopped being
+tinted, or a batch that split.
 """
 
 from __future__ import annotations

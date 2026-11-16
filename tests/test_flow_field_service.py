@@ -126,27 +126,14 @@ def test_cost_at_is_infinite_for_an_unreached_cell(accelerate: bool) -> None:
 class TestRecomputeSkipsIdenticalWork:
     """A recompute that would produce the field already held is skipped.
 
-    `FlowFieldService`'s first line calls itself a cache, and until now it
-    was not one: `recompute()` always ran a full multi-source Dijkstra plus
-    a full descent pass. That invited exactly one bug, and
-    `games/vinagre_matilha` has it -- `FlankerAssignmentSystem.update`
-    recomputes every fixed tick toward the jaguar's cell, which is 5.0 ms
-    on its 30x20 grid, 30% of a frame budget sixty times a second, while
-    the goal cell changes once per twelve ticks at a dead sprint.
+    The skip is keyed on the goals and a fingerprint of the graph's
+    contents. The graph is mutated at runtime (a gate opening removes
+    cells from `GridGraph.walls`), so a key covering only the goals would
+    serve a field for walls that have changed.
 
-    The skip is keyed on a **fingerprint of the graph**, not on the goals
-    alone, and that distinction is the whole safety argument. The graph is
-    mutable and really does change at runtime -- `PressurePlateSystem`
-    removes a log's cells from `GridGraph.walls` mid-level, and a cache
-    keyed on goals would then steer the pack through a wall that is no
-    longer there, or into one that still is. Hashing the walls and weights
-    costs 0.03-0.06% of a recompute (measured; see
-    `docs/guides/performance.md`), which buys soundness for free and means
-    there is no invalidation contract for a caller to forget.
-
-    The native store makes the skip *more* than a saving, not less: it also
-    decides whether the graph is re-uploaded, so a fingerprint that missed
-    a change would serve a field computed over the previous walls.
+    On the native store the same key decides whether the graph is
+    uploaded again, so a fingerprint that missed a change would serve a
+    field computed over the previous walls.
     """
 
     def test_a_repeat_recompute_is_skipped(self, accelerate: bool) -> None:

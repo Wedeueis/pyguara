@@ -900,7 +900,7 @@ class TestModifiableValue:
 class TestSpatialTransformParenting:
     """`Transform` parenting round-trips, which it used not to.
 
-    The engine has **two** kinds of parent and only one of them survived a
+    The engine has two kinds of parent and only one of them survived a
     save. `ChildOf` is ownership and cascades on destroy; `Transform`
     parenting is spatial, and it is what makes a child's stored position
     *local*. So losing it does not merely flatten a hierarchy -- it

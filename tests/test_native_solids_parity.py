@@ -1,24 +1,13 @@
 """Does the native mirror of static solids answer exactly as Chipmunk does?
 
-`PymunkEngine` may answer box overlaps, whole swept moves and ray misses
-from `NativeSolids` instead of building probe shapes for Chipmunk. This
-suite holds an engine with the mirror off beside one with it on, over the
-same geometry, and compares with `==` -- including the *types* of the
-numbers, because a position that was an int in one path and a float in the
-other encodes differently on the wire.
+An engine with the mirror off is held beside one with it on, over the
+same geometry, and compared with `==`, including the types of the
+numbers. There is no tolerance: the mirror answers only when it is
+certain and defers to Chipmunk otherwise.
 
-There is no tolerance to state, and the reason is the mirror's contract
-rather than luck: it answers only when it is certain and defers to
-Chipmunk for anything within a millionth of a pixel of touching, and for
-which of several overlapping boxes to name. So a disagreement here is
-never a rounding difference. It is a bug.
-
-**The geometry is built to be awkward.** Uniform random boxes almost never
-touch a probe edge-on, and would leave the deferral path untested. Half
-the worlds here are tile grids whose edges land exactly where a skinned
-probe's edges do, and `TestTheFastPathIsActuallyTaken` counts deferrals so
-that a mirror declining everything -- which would pass every comparison --
-fails.
+Half the worlds are tile grids whose edges land exactly on a probe's
+edges, to exercise the deferral path. `TestTheFastPathIsActuallyTaken`
+counts deferrals, so a mirror that declined everything would fail.
 """
 
 from __future__ import annotations

@@ -1,19 +1,14 @@
 """Collide-and-slide movement: the character is never inside the world.
 
-The dynamic-body controller lets the solver resolve penetration after the
-fact, so a character pressed into geometry is briefly inside it -- measured
-at 8px in guara_falcao, recovering at 0.04px a tick. A swept mover cannot
-produce that state: it stops flush at the surface instead of passing through
-it and being pushed back.
+A swept mover stops flush at a surface; it does not pass through and
+get pushed back out.
 
-Movement is Celeste's model: whole pixels only, with a float remainder
-carrying whatever didn't add up to one yet. That means a resting position is
-never approximate -- most of these assertions are exact pixel equalities,
-not `pytest.approx(..., abs=0.1)`, because there is no bisection settling
-near the answer; the last free whole pixel *is* the answer.
+Movement is in whole pixels with a float remainder, so a resting
+position is exact. Most assertions here are exact pixel equalities,
+not `pytest.approx`.
 
-Every test here asserts the same underlying property in a different
-situation: after the move, the character does not overlap anything.
+Every test asserts the same property in a different situation: after
+the move, the character does not overlap anything.
 """
 
 from __future__ import annotations

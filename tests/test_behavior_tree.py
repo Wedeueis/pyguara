@@ -833,17 +833,13 @@ class TestBehaviorTreeIntegration:
 class TestReactiveComposites:
     """Guards that keep being checked, and children that get aborted.
 
-    `SequenceNode`/`SelectorNode` have *memory*: once a composite advances
-    past a child it resumes at the one that was RUNNING and never re-ticks
-    the earlier ones. That silently breaks the commonest way a behaviour
-    tree is written -- a guard at the front of a sequence stops being
-    evaluated the moment the sequence moves on, so the enemy keeps
-    attacking after the player breaks line of sight, and nothing reports a
-    problem (#46).
+    `SequenceNode` and `SelectorNode` have memory: they resume at the
+    child that was RUNNING and do not re-tick the earlier ones, so a guard
+    at the front is checked once. The reactive variants re-tick from the
+    start.
 
-    These tests pin the bug as well as the fix: the memory variants must
-    keep behaving exactly as before, because changing their default would
-    silently alter every tree already written against them.
+    These pin both: the memory variants must keep behaving as they do,
+    because trees are written against them.
     """
 
     @staticmethod

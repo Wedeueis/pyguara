@@ -1,18 +1,12 @@
 """Every demo the pygame backend draws, the wgpu backend draws the same.
 
-`test_wgpu_pixels.py` holds the renderer to pygame one call at a time. This
-holds it to pygame over whole frames of real games: each demo is rendered
-on both backends and the frames compared, every pixel within 2/255.
+`test_wgpu_pixels.py` holds the renderer to pygame one call at a time.
+This does it over whole frames of real games: each demo is rendered on
+both backends and every pixel must be within 2/255.
 
-A frame is only comparable if the scene is in the same state, so each
-render pins the clock (see `_demo_frame.py`) and runs with a fixed hash
-seed. The pygame frame is rendered twice, and a demo whose two pygame
-frames differ fails as unreproducible, rather than being compared and
-blamed on the renderer.
-
-The demos built on the render graph -- lighting, post-processing -- are not
-here. That is stage D of `project/backlog/active/next_engine_plan.md`; the
-wgpu backend registers the same stand-in graph as pygame until then.
+Each render pins the clock (see `_demo_frame.py`) and the hash seed.
+The pygame frame is rendered twice, and a demo whose two pygame frames
+differ fails as unreproducible.
 """
 
 from __future__ import annotations

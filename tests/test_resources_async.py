@@ -1,15 +1,12 @@
 """Asynchronous resource loading: the queue, the budget, and thread affinity.
 
-The design is measured rather than assumed -- see "Resource loading, and the
-GIL" in `docs/guides/performance.md`. Image decode releases the GIL and
-scales ~3x on four threads; `json` holds it and runs 0.71x threaded, i.e.
-*slower* than inline. So threading is opt-in per loader, and these tests
-pin both halves of that: a loader that opts in decodes on a worker, and one
-that does not is never handed to a thread at all.
+Threading is opt-in per loader, since only a decode that releases the
+GIL gains from a worker; see `docs/guides/performance.md`. A loader
+that opts in decodes on a worker, and one that does not is never
+handed to a thread.
 
-The invariant that matters most is thread affinity. `upload()` touches the
-device context, so it must only ever run on the pumping thread -- a test
-asserts that directly rather than trusting the code to be read correctly.
+`upload()` touches the device, so it must run only on the pumping
+thread, and a test asserts that directly.
 """
 
 from __future__ import annotations

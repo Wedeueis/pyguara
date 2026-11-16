@@ -1,15 +1,12 @@
 """The render graph follows the window, and overlays draw last.
 
-Two engine-level defects behind one symptom: maximising the window left
-the editor drawing its panels into a corner of the screen, with the game's
-HUD composited on top of them.
+Two defects once showed as one symptom: maximising the window left the
+editor's panels in a corner of the screen, with the game's HUD on top
+of them.
 
-Neither was Studio's. `WindowResizeEvent` was dispatched to its
-subscribers -- the UI manager -- and the render graph, which is not a
-subscriber, never heard: its framebuffers kept the size they were created
-at for the life of the process, and every pass's `on_resize` was dead
-code. And an overlay registered as an ordinary pass ran mid-chain, so
-`UIRenderer.present()` composited the game's UI over it afterwards.
+The render graph did not hear `WindowResizeEvent`, so its framebuffers
+kept their first size. And an overlay registered as an ordinary pass
+ran mid-chain, before the game's UI was composited.
 """
 
 from __future__ import annotations

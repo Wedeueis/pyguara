@@ -1,16 +1,11 @@
 """Tests for the feedback layer: `Sparks` and `Shaker`.
 
-Both were demo code before they were engine code, and both have one
-property worth pinning: they are bounded. A pool that quietly grew, or a
-shake list that never retired an entry, would be a leak in exactly the
-situation they exist for -- a busy frame.
+Both must stay bounded: a pool that grew, or a shake list that never
+retired an entry, would leak on a busy frame.
 
-Every `Sparks` test runs against both stores, the Python pool and the
-native one, because a contributor without a Rust toolchain only ever sees
-the first and the engine ships both. The native cases skip when the
-extension is not built. `tests/test_native_spark_parity.py` is the other
-half of that: this file asks whether each store behaves, that one asks
-whether they agree.
+Every `Sparks` test runs against both stores; the native cases skip
+when the extension is not built. This file asks whether each store
+behaves, and `tests/test_native_spark_parity.py` whether they agree.
 """
 
 from __future__ import annotations

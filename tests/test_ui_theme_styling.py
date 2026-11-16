@@ -1,15 +1,11 @@
 """Theme styling fields that widgets actually consume.
 
-`BorderScheme.radius` was declared, serialized, and set by presets while
-reaching **no widget at all** -- a theme could ask for rounded corners and
-every widget drew square ones, silently. The protocol and all three UI
-renderers already accepted `border_radius`; the only missing link was that
-no widget passed it. #49 calls this out as a shipped surface that is
-quietly wrong rather than a missing feature.
+A theme's `BorderScheme.radius` has to reach the renderer as
+`border_radius`; a widget that does not pass it draws square corners
+whatever the theme says.
 
-These tests assert on the call the widget makes to the renderer rather
-than on pixels: what went wrong was a value never being *passed*, and a
-recording renderer is the shortest path to catching that again.
+These assert on the call the widget makes to a recording renderer,
+not on pixels.
 """
 
 from __future__ import annotations

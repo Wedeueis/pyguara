@@ -1,15 +1,11 @@
-"""Parity tests for the pygame stand-ins for ModernGL-only features.
+"""Parity tests for the pygame stand-ins for the render graph's features.
 
-`graphics/backends/pygame/stubs.py` exists so game code using framebuffers,
-lighting or post-processing runs unchanged on the pygame backend. Its entire
-value is interface parity: a method the real class has and the stub does not is
-an `AttributeError` that surfaces only after switching backend, in someone
-else's game.
+`graphics/backends/pygame/stubs.py` exists so game code using
+framebuffers, lighting or post-processing runs unchanged on the pygame
+backend. A method the real class has and the stub lacks is an
+`AttributeError` that appears only after switching backend.
 
-Nothing tested it, and it had drifted -- `PygameLightingSystem` was missing
-`collect_lights_screen_space` (which `light_pass.py` calls) and
-`PygameRenderGraph` was missing `ctx` (which `application.py` reads). These
-tests compare the public surfaces directly, so the next divergence fails here.
+These tests compare the public surfaces directly.
 """
 
 import inspect

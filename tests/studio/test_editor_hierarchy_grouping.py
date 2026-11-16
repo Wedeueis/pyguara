@@ -1,16 +1,11 @@
 """Filtering and grouping in the Hierarchy panel.
 
-A generated level arrives as hundreds of flat siblings -- `tile_0_0`
-through `tile_19_11` -- because an ECS scene has none of the pressure a
-Godot scene has to hang them off a parent. Listing them one per row is
-unreadable: the demo this was reported from put 252 rows in the panel, of
-which 232 were tiles.
+A generated level arrives as hundreds of flat siblings, `tile_0_0` to
+`tile_19_11`. The panel offers a filter box, and folds runs of
+same-prefix siblings into one row.
 
-Two answers, both from Godot's Scene dock: a filter box, and folding runs
-of same-prefix siblings into one row. The folding is display only -- no
-entity is named `tile` and nothing is reparented -- which the tests below
-pin as carefully as the folding itself, because a row that looked like a
-parent and was not would be worse than the list it replaced.
+The folding is display only: no entity is named `tile` and nothing is
+reparented. The tests pin that as carefully as the folding.
 """
 
 from __future__ import annotations

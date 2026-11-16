@@ -1,16 +1,12 @@
 """Picking: what is under the cursor, and what a marquee caught.
 
-The bug this module exists to not repeat is worth stating, because the
-code looked reasonable: `pyguara/tools/gizmos.py` was the only picking
-code in the tree, and it compared a **world** position against a
-**screen** position with no camera transform, against a hardcoded 32x32
-box it invented rather than measured. It worked in a demo whose camera sat
-at the origin and nothing else.
+The tests are mostly about two things picking must get right:
+measuring an entity's real bounds, and agreeing with the camera's
+transform. A pick that compares a world position with a screen
+position works only while the camera sits at the origin.
 
-So the tests here are mostly about the two things that went wrong there --
-measuring real bounds, and agreeing with the camera -- plus the depth
-ordering, without which clicking overlapping sprites selects whichever the
-ECS happened to iterate first.
+The rest cover depth ordering, without which clicking overlapping
+sprites selects whichever the ECS iterates first.
 """
 
 from __future__ import annotations

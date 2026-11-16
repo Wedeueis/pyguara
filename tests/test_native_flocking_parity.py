@@ -1,55 +1,13 @@
 """Do the two flocking stores agree, and in what sense?
 
-The third parity suite, and the first that cannot simply assert `==`.
-`tests/test_native_flow_field_parity.py` compares 9216 cells exactly;
-this one cannot, and the reason is worth stating precisely because it
-decides what these tests are allowed to claim.
+Not with `==` on a real flock: a radius query yields neighbours in a
+different order on each store, and float addition is not associative.
+So three things are asserted separately:
 
-`SpatialHash._cells` is a `dict[Cell, set[int]]`, and a radius query
-yields each cell's members in **CPython set iteration order** -- a
-function of the slot numbers, the table size and the insertion history.
-`flock_force` then sums over them, and float addition is not
-associative, so a different order gives a different last bit. Measured
-over 1000 agents: 46% of agents get a different force, worst relative
-difference 6.4e-13.
-
-That is not "Python is right and the native store is close". Both sum
-the same numbers correctly; the Python answer is not canonical, because
-it is whatever CPython's set internals happen to produce. The sharper
-version of the same fact: a seeded flock does not even tick the same way
-twice *in Python*, because `EntityManager` hands out random uuid4 ids
-and `get_entities_with_cached` iterates a set of them, so the
-Gauss-Seidel sweep order differs between processes. There is no single
-Python answer to be bit-exact to.
-
-So this file asserts three different things, and keeping them apart is
-the point:
-
-1. **The neighbourhoods agree exactly.** Order is free; membership is
-   not. `query_radius` confirms every candidate against an exact squared
-   distance, so who is a flockmate is a property of the positions alone.
-   A tolerance on forces could hide a wrong neighbourhood; comparing
-   `neighbour_counts()` cannot.
-2. **The arithmetic agrees exactly, where ordering cannot intrude.**
-   A transcription slip -- `dx * (s / len)` for `(dx / len) * s` -- moves
-   a result about one ulp, three orders of magnitude *below* the
-   ordering noise, so no tolerance wide enough for the ordering could
-   ever catch one. These tests therefore use constructed geometry in
-   which no agent has more than one flockmate, where the sum has no
-   order to differ in, and assert `==` through every branch: clamping,
-   coincident agents, seek, staggering, 40 ticks.
-3. **The forces agree within summation noise**, on real flocks, with the
-   tolerance stated and one permitted cause.
-
-Note what (2) is *not*: picking the agents with one neighbour out of a
-random flock. That leaks, because a lone agent reads its neighbour's
-live position, and that neighbour may itself have been perturbed --
-measured at 47 of 48 agreeing, with the one exception inheriting a
-flockmate's divergence. The geometry has to be built so that nothing in
-the world is perturbed at all.
-
-All of it skips when the extension is absent, so a contributor without
-Rust sees a green suite having tested none of it.
+1. The neighbourhoods agree exactly.
+2. The arithmetic agrees exactly, on geometry where no agent has more
+   than one flockmate, so the sum has no order.
+3. The forces agree within a stated tolerance, on real flocks.
 """
 
 from __future__ import annotations
@@ -187,7 +145,7 @@ def _both(
 ) -> tuple[
     list[tuple[float, float, float, float]], list[tuple[float, float, float, float]]
 ]:
-    """Tick **one** world each way, and return the two end states.
+    """Tick one world each way, and return the two end states.
 
     One world, not two built from the same seed. Two managers hand out
     different uuid4 ids, so `get_entities_with_cached` enumerates them in
@@ -227,16 +185,10 @@ def _assert_close(
 class TestThePythonPathIsPythonAllTheWayDown:
     """`accelerate=False` has to mean it in what the system builds too.
 
-    `FlockingSystem`'s Python path constructs its own `SpatialHash` every
-    tick. That hash grew a native store, so unless the system passes
-    `accelerate=False` down, `FlockingSystem(accelerate=False)` indexes
-    natively -- which is not the Python path, measures 9.8 ms where the
-    Python tick is 16.4 ms, and puts native code inside the reference
-    `_python_counts` builds for this very file.
-
-    It happened, and nothing caught it: of 23 sabotages run against this
-    increment, removing that one argument was the only survivor. This is
-    the test that was missing.
+    `FlockingSystem`'s Python path builds its own `SpatialHash` every
+    tick. Unless it passes `accelerate=False` down, the Python path would
+    index natively, and the reference this file compares against would
+    contain native code.
     """
 
     def test_the_index_the_python_path_builds_is_python(self) -> None:
@@ -370,19 +322,15 @@ class TestTheNeighbourhoodsAgreeExactly:
         self._assert_counts_agree(layout)
 
     def test_a_flockmate_exactly_on_the_radius(self) -> None:
-        """`<=`, not `<`, and the one boundary that is observable.
+        """`<=`, not `<`, at the neighbour radius.
 
-        Chosen so "exactly" means it: 64 and 80 are exact in binary, and
-        so are 64*64 and 80*80, so the squared comparison is against
-        equal values rather than nearly-equal ones.
+        64 and 80 are exact in binary, and so are their squares, so the
+        squared comparison is between equal values.
 
-        Most boundary slips in this algorithm turn out not to be
-        observable at all -- a flockmate exactly on the *separation*
-        radius contributes `(1 - d/r) * max_speed`, which is exactly
-        zero, and a clamp triggered exactly at its threshold scales by
-        exactly 1.0. This one is different, because including or
-        excluding a flockmate changes `count`, and `count` divides the
-        cohesion and alignment means.
+        This boundary is observable where most are not: including or
+        excluding a flockmate changes `count`, which divides the cohesion and
+        alignment means. A flockmate exactly on the separation radius
+        contributes exactly zero either way.
         """
         layout = [
             (Vector2(0.0, 0.0), Vector2(1.0, 2.0)),
@@ -473,20 +421,14 @@ class TestTheArithmeticIsExact:
     def test_a_seek_direction_that_distinguishes_the_length_spellings(self) -> None:
         """Pins `length` as `sqrt(x * x + y * y)` inside the native solver.
 
-        The three spellings of a length -- `x * x + y * y`, `x**2 +
-        y**2` and `math.hypot` -- disagree by an ulp for about 0.03% of
-        inputs, so a solver that reached for `hypot` would pass every
-        other test in this class. It did, until this one existed.
+        `x * x + y * y`, `x**2 + y**2` and `math.hypot` disagree in the last
+        bit for a small share of inputs, so a solver using `hypot` would pass
+        every other test in this class.
 
-        The seek target is the one input that reaches `length` directly
-        and unmodified, so it is aimed at a vector where all three
-        spellings are known to differ, measured rather than guessed. The
-        tiny mass is also deliberate: it multiplies the force by 100
-        before `velocity + acceleration * dt`, so the ulp lands well
-        above the ulp of the result instead of rounding away.
-
-        `tests/test_common_types.py::TestVector2LengthIsSpelledExactly`
-        pins the Python half of the same contract.
+        The seek target reaches `length` unmodified, so it is aimed at a
+        vector where all three differ. The tiny mass multiplies the force
+        before integration, so the difference does not round away.
+        `tests/test_common_types.py` pins the Python half.
         """
         divergent = Vector2(263.9070523968903, -295.2001492494054)
         self._assert_identical(
@@ -554,17 +496,10 @@ class TestTheArithmeticIsExact:
     def test_each_weight_can_be_switched_off(self, weights: dict[str, float]) -> None:
         """A zero weight contributes nothing, through either store.
 
-        What this does *not* test, despite an earlier version of this
-        docstring claiming it: that the native side branches on the
-        weight rather than accumulating and multiplying by zero at the
-        end. Those two are indistinguishable for finite inputs -- a
-        force term scaled by 0.0 is 0.0, and `+= 0.0` is exact -- so the
-        `want_cohesion` flags in both implementations are an
-        optimisation with no observable behaviour. The sabotage round
-        established that by removing one and watching all 63 tests pass.
-
-        It does catch a port that used a hardcoded 1.0 where the weight
-        belongs, which is the likelier slip.
+        This catches a port that used a hardcoded 1.0 where the weight
+        belongs. It does not test that the native side branches on a zero
+        weight: branching and multiplying by zero give the same result for
+        finite inputs.
         """
         self._assert_identical(_pairs(4, separation=20.0), **weights)
 

@@ -1,6 +1,6 @@
 """Every engine loader reads from a mounted pack, with no loose files left.
 
-The game folder is baked into a pack and then **deleted**, so a loader that
+The game folder is baked into a pack and then deleted, so a loader that
 still opens files itself fails here rather than in a player's install.
 """
 

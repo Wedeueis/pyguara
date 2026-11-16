@@ -104,16 +104,12 @@ def wgpu_frame() -> Any:
 def imgui_ctx() -> Iterator[Any]:
     """A Dear ImGui context with no GL behind it, for the editor panels.
 
-    ImGui's C++ core needs no OpenGL to create a context or build a frame
-    -- only to *rasterise* the draw data it produces. That is what makes
-    the editor's panels testable at all, and it is the seam the previous
-    `pyguara/editor` lacked: every one of its panel methods early-returned
-    behind a dead GL import, so 705 lines of it were never executed by a
-    test or by a game.
+    ImGui's core needs no GPU to create a context or build a frame, only
+    to rasterise the draw data, so panels can be tested without one.
 
-    `renderer_has_textures` is declared because ImGui 1.92 asserts in
-    `new_frame()` otherwise -- it expects a legacy backend to have uploaded
-    the font atlas itself, and this fixture has no backend at all.
+    `renderer_has_textures` is declared because ImGui asserts in
+    `new_frame()` otherwise: with no backend, nothing uploads the font
+    atlas.
 
     Yields:
         The ImGui IO for the fresh context, already sized.
@@ -183,7 +179,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
     For `tests/integration/golden.py`'s users. A golden image is the
     approved output of a render path; when an intended change moves pixels,
-    rerun those tests with this flag and **look at the diff** of the images
+    rerun those tests with this flag and look at the diff of the images
     before committing them, as with `--snapshot-update`.
     """
     parser.addoption(

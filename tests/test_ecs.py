@@ -1299,7 +1299,7 @@ class TestQueryOperators:
     """`without` and `any_of`, resolved through the index.
 
     The point is not expressiveness alone -- a caller can always filter the
-    results -- but that "every enemy that is **not** stunned" becomes one
+    results -- but that "every enemy that is not stunned" becomes one
     set difference instead of a `has_component` call per enemy per frame,
     at every call site that wanted it.
     """
@@ -1332,7 +1332,7 @@ class TestQueryOperators:
     def test_without_is_a_no_op_when_nothing_carries_the_type(self) -> None:
         """An unused exclusion must not empty the result.
 
-        The excluded type is one **no entity in the world has**, so its
+        The excluded type is one no entity in the world has, so its
         index is missing entirely -- not merely absent from the matches.
         That is the case where subtracting a missing index is easy to get
         backwards, and the symptom -- a query silently returning nothing --

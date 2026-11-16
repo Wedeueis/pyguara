@@ -1,20 +1,14 @@
-"""The two particle stores must agree, or the accelerator is a bug factory.
+"""The two particle stores must agree.
 
-Keeping a native pool alongside the Python one buys an installable
-pure-Python engine and costs two implementations that have to behave the
-same. This is where that cost is paid: the same operations run against
-both and the results are compared.
+The same operations run against the native pool and the Python one,
+and the results are compared.
 
-Skipped wholesale when the extension is not built, which is the normal
-state for a contributor without a Rust toolchain -- `cargo build --release`
-makes these run.
+Floats are compared with a tolerance, because the native pool stores
+f32 where Python uses f64. A particle is a visual effect, so sub-pixel
+disagreement over a lifetime is acceptable. If a tolerance ever has to
+be loosened, that is a finding.
 
-Floats are compared with a tolerance because the native pool stores f32
-where Python uses f64. That is a deliberate trade for memory and SIMD, and
-the drift it produces is the thing this file bounds: a particle is a
-visual effect, not a simulation anyone replays, so sub-pixel disagreement
-over a lifetime is acceptable. If these tolerances ever have to be
-loosened, that is a finding rather than a maintenance chore.
+Skipped when the extension is not built.
 """
 
 from __future__ import annotations
