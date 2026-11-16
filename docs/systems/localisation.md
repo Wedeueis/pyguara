@@ -80,6 +80,11 @@ The `i18n` config section:
 | `directory` | `"locales"` | The folder of locale files. Without it, nothing is loaded |
 | `source` | `"en"` | The language the game is written in |
 
+`directory` is read through `pyguara.assets`, so `locales/` can ship in a
+pack. A relative path is relative to the working directory, which a
+player's shortcut decides, so a built game should set it from where its own
+files are, as it does for any other asset.
+
 The locale asked for is narrowed to the closest one there is a file for:
 an exact match, then (for Chinese) the same script, then the same language
 in another region (`pt-PT` gets `pt-BR`), and otherwise the source.

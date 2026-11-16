@@ -216,7 +216,8 @@ assets.mount_pack("Reclaimer.pak", root=game_dir)
   either way.
 - **What goes through it:** every `ResourceManager` loader (images on both
   renderers, sounds, JSON, text, blobs), `.meta` files, the folder index,
-  atlases, prefabs, sprite sheets, Tiled and LDtk maps, themes and music.
+  atlases, prefabs, sprite sheets, Tiled and LDtk maps, themes, music,
+  locale files (`pyguara.i18n` and `pyguara i18n check`) and fallback fonts.
 
 A loader of your own should read with `assets.read_bytes(path)`,
 `assets.read_text(path)` or `assets.open(path)`. One that calls `open()`

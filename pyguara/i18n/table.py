@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from pyguara import assets
 from pyguara.i18n.plurals import PLURAL_FORMS, required_plural_forms
 
 __all__ = ["META_KEY", "Entry", "LocaleTable", "UnsafePlaceholderError", "placeholders"]
@@ -136,14 +137,14 @@ class LocaleTable:
 
     @classmethod
     def from_file(cls, path: Path) -> LocaleTable:
-        """Read `<locale>.json`, UTF-8.
+        """Read `<locale>.json`, UTF-8, through `pyguara.assets`.
 
         Raises:
             ValueError: If it is not valid JSON or not a valid table; the
                 message names the file.
         """
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(assets.read_text(path))
             if not isinstance(data, dict):
                 raise ValueError("the top level must be an object")
             return cls.from_mapping(path.stem, data)
@@ -151,6 +152,15 @@ class LocaleTable:
             raise UnsafePlaceholderError(f"{path.name}: {error}") from error
         except ValueError as error:  # JSONDecodeError included
             raise ValueError(f"{path.name}: {error}") from error
+
+
+def locale_files(directory: Path) -> list[Path]:
+    """Return the `<locale>.json` files in a folder, packed or loose, sorted."""
+    return [
+        Path(name)
+        for name in assets.files_under(directory, recursive=False)
+        if name.endswith(".json")
+    ]
 
 
 def _plural_entry(key: str, forms: dict[str, Any]) -> dict[str, str]:

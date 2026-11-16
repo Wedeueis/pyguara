@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pyguara.i18n.plurals import required_plural_forms
-from pyguara.i18n.table import Entry, LocaleTable, placeholders
+from pyguara.i18n.table import Entry, LocaleTable, locale_files, placeholders
 
 __all__ = ["CheckReport", "check_directory"]
 
@@ -50,7 +50,7 @@ def check_directory(directory: str | Path, *, source: str = "en") -> CheckReport
     directory = Path(directory)
     report = CheckReport()
     tables: dict[str, LocaleTable] = {}
-    for path in sorted(directory.glob("*.json")):
+    for path in locale_files(directory):
         try:
             tables[path.stem] = LocaleTable.from_file(path)
         except (OSError, ValueError) as error:
