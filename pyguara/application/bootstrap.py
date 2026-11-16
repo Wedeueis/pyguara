@@ -31,6 +31,7 @@ from pyguara.resources.loaders.blob_loader import BlobLoader, TextLoader
 from pyguara.resources.loaders.data_loader import JsonLoader
 from pyguara.resources.manager import ResourceManager
 from pyguara.resources.types import Texture
+from pyguara.scene.base import Scene
 from pyguara.scene.manager import SceneManager
 from pyguara.scene.serializer import SceneSerializer
 from pyguara.scripting.coroutines import CoroutineManager
@@ -64,6 +65,22 @@ def _configure(config: GameConfig) -> None:
 ```
 """
 
+Setup = Callable[[DIContainer], None]
+"""A hook to add to the wired container, before the application is built.
+
+Called once, after the engine has registered its services and **before**
+`Application` exists. A game uses it to register services of its own or to
+add passes to the `RenderGraph`:
+
+```python
+def _setup(container: DIContainer) -> None:
+    container.register_instance(Inventory, Inventory())
+
+
+pyguara.run(TitleScene, setup=_setup)
+```
+"""
+
 RegisterSections = Callable[[ConfigManager], None]
 """A hook to register game-defined config sections, before anything loads.
 
@@ -80,8 +97,7 @@ def _sections(config_manager: ConfigManager) -> None:
     config_manager.register_section("balance", BalanceConfig)
 
 
-app = create_application(configure=_configure, register_sections=_sections)
-app.run(MyScene("game", app.container.get(EventDispatcher)))
+pyguara.run(MyScene, configure=_configure, register_sections=_sections)
 ```
 """
 
@@ -149,6 +165,46 @@ def create_application(
         A fully configured Application ready to run.
     """
     return create_container(configure, register_sections).get(Application)
+
+
+def run(
+    scene: Scene | type[Scene],
+    *,
+    configure: Configure | None = None,
+    register_sections: RegisterSections | None = None,
+    setup: Setup | None = None,
+) -> None:
+    """Build the engine, run `scene` until the window closes, and shut down.
+
+    The whole of a game's entry point when it needs nothing unusual. The
+    explicit form is `create_container()` followed by `Application.run()`.
+
+    Args:
+        scene: The first scene: an instance, or a `Scene` subclass that is
+            built with no arguments.
+        configure: Optional hook to adjust configuration before the window
+            and backends are built from it. See `Configure`.
+        register_sections: Optional hook to register game-defined config
+            sections before the configuration loads. See
+            `RegisterSections`.
+        setup: Optional hook to add to the container before the
+            application is built from it. See `Setup`.
+
+    Raises:
+        TypeError: If `scene` is neither a `Scene` nor a subclass of it.
+    """
+    is_scene_class = isinstance(scene, type) and issubclass(scene, Scene)
+    if not (is_scene_class or isinstance(scene, Scene)):
+        raise TypeError(
+            "pyguara.run() takes a Scene or a Scene subclass, "
+            f"not {type(scene).__name__}: {scene!r}"
+        )
+
+    container = create_container(configure, register_sections)
+    if setup is not None:
+        setup(container)
+    starting_scene = scene() if isinstance(scene, type) else scene
+    container.get(Application).run(starting_scene)
 
 
 def create_sandbox_application(

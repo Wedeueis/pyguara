@@ -45,9 +45,9 @@ The demos in `games/` use the accessors throughout.
 - A scene subclass that defines its own attribute named `application`,
   `scene_manager`, `ui_manager` or `input_manager` now collides with a
   read-only property. None in `games/` or Reclaimer does.
-- The scene constructor still takes the event dispatcher. Supplying it from
-  the engine belongs with the one-call entry point, roadmap phase 4, which
-  needs the same change.
+- The scene constructor still took the event dispatcher when this was
+  accepted. It is optional now: the engine supplies the application's own
+  in `resolve_dependencies()`, which is what `pyguara.run(MyScene)` needs.
 
 ## Alternatives considered
 

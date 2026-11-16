@@ -93,10 +93,30 @@ reports through it.
 wired before the game starts.
 
 ```python
+import pyguara
+
+pyguara.run(MyScene)
+```
+
+`pyguara.run()` is the whole entry point of a game that needs nothing
+unusual: it builds the engine, runs the scene until the window closes, and
+shuts down. It takes a `Scene` subclass, which it builds with no arguments,
+or a scene the game built itself, and three optional hooks:
+
+| Hook | Called | For |
+| --- | --- | --- |
+| `register_sections` | before the configuration loads | declaring the game's own config sections |
+| `configure` | after the load, before the window exists | the window title, the backend, the resolution |
+| `setup` | with the wired container, before the application is built | registering the game's services, adding render passes |
+
+The explicit form is the same three steps by hand, for a game that needs the
+application before the loop starts:
+
+```python
 from pyguara.application.bootstrap import create_application
 
 app = create_application()
-app.run(MyScene("game", dispatcher))
+app.run(MyScene())
 ```
 
 | Entry point | Backend |

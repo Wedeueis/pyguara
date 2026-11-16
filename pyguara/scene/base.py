@@ -73,10 +73,22 @@ class Scene(ABC):
     `render_system`, all live before `on_enter()` ever runs.
     """
 
-    def __init__(self, name: str, event_dispatcher: EventDispatcher) -> None:
-        """Initialize the scene."""
-        self.name = name
-        self.event_dispatcher = event_dispatcher
+    def __init__(
+        self,
+        name: str | None = None,
+        event_dispatcher: EventDispatcher | None = None,
+    ) -> None:
+        """Initialize the scene.
+
+        Args:
+            name: What the `SceneManager` registers the scene under. Defaults
+                to the class name.
+            event_dispatcher: The dispatcher to publish and subscribe on.
+                When omitted, the engine supplies the application's own in
+                `resolve_dependencies()`, so it is there from `on_enter()`.
+        """
+        self.name = name if name is not None else type(self).__name__
+        self._event_dispatcher = event_dispatcher
         self.entity_manager = EntityManager()
         self.system_manager = SystemManager()
 
@@ -125,6 +137,8 @@ class Scene(ABC):
         """
         self.container = container
         self.scope = container.create_scope()
+        if self._event_dispatcher is None:
+            self._event_dispatcher = container.get(EventDispatcher)
 
         # EntityManager stays decoupled from the event system; this scene
         # subscribes to its removals and republishes them as EntityDestroyed.
@@ -254,6 +268,29 @@ class Scene(ABC):
     # listed here is `self.container.get(T)`, the escape hatch. Each is a
     # lookup, not a cached attribute: the container is the one place a test
     # substitutes a service, and a copy taken at resolve time would miss it.
+
+    @property
+    def event_dispatcher(self) -> EventDispatcher:
+        """The dispatcher this scene publishes and subscribes on.
+
+        The one passed to the constructor, or else the application's own,
+        which arrives with the container.
+
+        Raises:
+            SceneNotReadyError: If none was passed to the constructor and
+                `resolve_dependencies()` has not run yet.
+        """
+        if self._event_dispatcher is None:
+            raise SceneNotReadyError(
+                f"Scene {self.name!r} has no event dispatcher before "
+                "resolve_dependencies() has run. Subscribe in on_enter() or "
+                "later, or pass a dispatcher to the constructor."
+            )
+        return self._event_dispatcher
+
+    @event_dispatcher.setter
+    def event_dispatcher(self, dispatcher: EventDispatcher) -> None:
+        self._event_dispatcher = dispatcher
 
     @property
     def application(self) -> Application:

@@ -42,8 +42,9 @@ properties:
 | `self.input_manager` | `InputManager` | actions, bindings and input contexts |
 | `self.application` | `Application` | step hooks, time scale, quitting |
 
-`self.event_dispatcher` is already an attribute. Anything else, such as an
-effect or the physics engine, is `self.container.get(T)`, the escape hatch.
+`self.event_dispatcher` is the application's dispatcher, supplied with the
+container. Anything else, such as an effect or the physics engine, is
+`self.container.get(T)`, the escape hatch.
 
 ```python
 class Pause(Scene):
@@ -61,6 +62,19 @@ class Pause(Scene):
 constructor raises `SceneNotReadyError` and says so. Each read is a lookup in
 the container, not a cached copy, so a service a test substitutes is the one
 the scene sees. ADR 0012 records why this, and not constructor injection.
+
+**A scene's constructor takes nothing it has to be handed.** The name
+defaults to the class name, and the dispatcher arrives with the container:
+
+```python
+class Level(Scene):
+    def __init__(self, number: int) -> None:
+        super().__init__(f"level-{number}")
+        self.number = number
+```
+
+A scene that passes a dispatcher of its own, `super().__init__(name,
+dispatcher)`, keeps it, and can then subscribe in its constructor.
 
 ## Registering
 
