@@ -127,3 +127,52 @@ def test_a_game_without_locales_is_told_how_to_add_them(
 def test_tr_before_the_scene_is_ready_says_so() -> None:
     with pytest.raises(SceneNotReadyError):
         _Probe("early", EventDispatcher()).tr("title")
+
+
+@pytest.fixture
+def english_case_after():
+    yield
+    from pyguara.ui.text_case import set_case_language
+
+    set_case_language("en")
+
+
+def test_a_packed_locales_folder_is_found(tmp_path: Path, locales: Path) -> None:
+    import shutil
+
+    from pyguara import assets
+    from pyguara.cli.pack import bake_pack
+
+    game = tmp_path / "game"
+    game.mkdir()
+    bake_pack([locales], game / "Game.pak")
+    shutil.rmtree(locales)
+    assets.mount_pack(game / "Game.pak", root=game)
+    try:
+        translator = install_translator(
+            I18nConfig(locale="ru", directory=str(game / "locales")),
+            EventDispatcher(),
+        )
+    finally:
+        assets.unmount_all()
+    assert translator is not None
+    assert translator("title") == "Рекламатор"
+
+
+def test_case_changes_follow_the_locale(
+    tmp_path: Path, english_case_after: None
+) -> None:
+    from pyguara.ui import text_case
+
+    directory = tmp_path / "locales"
+    directory.mkdir()
+    for code in ("en", "tr"):
+        (directory / f"{code}.json").write_text('{"title": "x"}', encoding="utf-8")
+    translator = install_translator(
+        I18nConfig(locale="tr", directory=str(directory)), EventDispatcher()
+    )
+    assert translator is not None
+    assert text_case.upper("i") == "İ"
+
+    translator.locale = "en"
+    assert text_case.upper("i") == "I"

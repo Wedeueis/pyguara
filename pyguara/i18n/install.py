@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pyguara import assets
 from pyguara.config.types import I18nConfig
 from pyguara.events.dispatcher import EventDispatcher
 from pyguara.i18n.events import LocaleChanged
 from pyguara.i18n.locales import best_locale, system_locale
 from pyguara.i18n.translator import Translator
 from pyguara.log import get_logger
+from pyguara.ui.text_case import set_case_language
 
 __all__ = ["install_translator"]
 
@@ -24,7 +26,9 @@ def install_translator(
     The locale is `config.locale`, or the system's when that is empty,
     narrowed to the closest one there is a file for (`pt-PT` gets `pt-BR`,
     an unsupported language gets the source). A change of locale later is
-    dispatched as `LocaleChanged`.
+    dispatched as `LocaleChanged`. Case changes (`pyguara.ui.text_case`)
+    follow the locale, now and on every change, so Turkish upper-cases
+    `i` to `İ`. The folder may be in a mounted pack.
 
     Args:
         config: The `i18n` section.
@@ -39,7 +43,7 @@ def install_translator(
         ValueError: If a locale file is not a valid table.
     """
     directory = Path(config.directory)
-    if not directory.is_dir():
+    if not assets.is_dir(directory):
         return None
     probe = Translator.from_directory(
         directory, locale=config.source, source=config.source
@@ -48,8 +52,10 @@ def install_translator(
     probe.locale = best_locale(wanted, probe.available, source=config.source)
 
     def announce(locale: str) -> None:
+        set_case_language(locale)
         dispatcher.dispatch(LocaleChanged(locale=locale))
 
+    set_case_language(probe.locale)
     probe.on_change(announce)
     logger.info(
         f"Text in {probe.locale!r} (asked for {wanted or 'the source'!r}; "

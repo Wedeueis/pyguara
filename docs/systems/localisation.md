@@ -99,7 +99,9 @@ translator.locale = best_locale(steam_locale or "", translator.available, source
 ```
 
 Setting `translator.locale` while the game runs dispatches `LocaleChanged`;
-a screen built from keys rebuilds its text when it hears it.
+a screen built from keys rebuilds its text when it hears it. Case changes
+in `pyguara.ui.text_case` follow the locale from startup and on every
+change, so `upper("i")` is `"İ"` in Turkish.
 
 Outside a scene, take the `Translator` from the container,
 `app.container.get(Translator)`, and pass it to what needs it.
