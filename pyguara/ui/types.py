@@ -277,16 +277,13 @@ def _derived_roles(
 class ColorScheme:
     """Standardized color palette using Color objects.
 
-    Two layers. The **base** five plus two overlays are the shorthand a
-    theme has always been written in. The **semantic roles** below them --
-    surfaces, a text hierarchy, edges, action states -- are what components
-    actually read, so a design system can say "this is the pressed colour
-    of a primary action" rather than overloading `secondary` to mean it.
+    Two layers. The base five colours plus two overlays are the shorthand
+    a theme is written in. The semantic roles below them (surfaces, a text
+    hierarchy, edges, action states) are what components read.
 
     Every semantic role the caller does not name is derived from the base
-    colours, so a theme that sets only the base five is coherent whichever
-    way it is built. `derive()` differs only in refusing an unknown role by
-    name, and is how the presets and `pyguara.ui.design_system` build theirs.
+    colours. `derive()` also refuses an unknown role by name; the presets
+    and `pyguara.ui.design_system` build theirs with it.
     """
 
     # --- Base ---
@@ -436,13 +433,8 @@ class ShadowScheme:
     `Widget.draw_shadow()` (and so by `Button` and `Panel`) and by the
     design system's `BevelButton`.
 
-    `blur` is **not** honoured by anything, and cannot be: a soft shadow is
-    not reachable through the UI renderer's rectangle primitives, which is
-    why the shadows that exist are hard-edged. It is left declared rather
-    than removed because themes serialize it, so dropping it would
-    invalidate saved theme JSON -- but nothing reads it. Implementing a
-    layered approximation, or retiring the field, is an open decision
-    (see #49).
+    `blur` is not honoured: shadows are hard-edged rectangles. The field
+    stays because themes serialize it.
 
     Attributes:
         enabled: Whether widgets draw a shadow at all. Off in every preset.

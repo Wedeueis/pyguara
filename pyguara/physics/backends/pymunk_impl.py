@@ -323,20 +323,12 @@ class PymunkEngine:
         """Return the native mirror of this space's solids, if it is exact.
 
         The mirror holds the boxes of static, unrotated, non-sensor box
-        shapes. It exists only while those are the *only* solids in the
-        space: one dynamic or kinematic body, one circle, one rotated
-        wall, and this returns None and every query goes to Chipmunk as
-        before. So it serves a world of level geometry -- which is what a
-        character mover sweeps against -- and steps aside for anything
-        richer rather than approximating it.
+        shapes. It exists only while those are the only solids in the space;
+        with any other solid this returns None and queries go to Chipmunk.
 
-        Rebuilt lazily after anything that can change static geometry:
-        `initialize`, `cleanup`, `create_body`, `destroy_body`,
-        `add_shape`, and a static body being repositioned through its
-        adapter. Geometry is read from each shape's cached bounding box,
-        which is what Chipmunk's own queries test against, so a static
-        body moved without a reindex is mirrored where Chipmunk still
-        believes it is.
+        Rebuilt lazily after anything that can change static geometry. Boxes
+        are read from each shape's cached bounding box, which is what
+        Chipmunk's own queries test against. See ADR 0009.
 
         Returns:
             The mirror, or None when the space cannot be mirrored exactly

@@ -66,15 +66,10 @@ class PhysicsSystem:
         """Push ECS state into the engine, ahead of anything that queries it.
 
         Drains pending teardowns, creates bodies for entities new to the
-        engine, and mirrors a kinematic body's position/rotation from its
-        Transform. Split out of `update()` so it can run before systems
-        that query the engine this same tick (`SolidSystem`, a character's
-        ground/wall probes) -- otherwise those queries would see last
-        tick's kinematic positions, since `update()` used to only sync
-        kinematic transforms immediately before stepping the simulation.
-
-        `update()` still calls this itself, so nothing that only calls
-        `update()` needs to change.
+        engine, and mirrors a kinematic body's position and rotation from its
+        Transform. Call it before a system that queries the engine in the
+        same tick (`SolidSystem`, a character's probes), so the query sees
+        this tick's kinematic positions. `update()` also calls it.
         """
         # Drain pending teardowns before anything else touches the engine,
         # so destroyed bodies never participate in this tick.

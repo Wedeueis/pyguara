@@ -19,19 +19,14 @@ from pyguara.ui.types import TextAlign
 class RichLabel(Widget):
     """Displays text with inline bold, italic, colour and size.
 
-    ```python
-    RichLabel("[b]Tamanduá[/b] takes [color=#e2621f]12 fire[/color] damage")
-    ```
+    See `pyguara.ui.rich_text` for the markup. A string that does not
+    parse raises `MarkupError` when it is set, not when it is drawn, so
+    pass anything a player typed through `escape_markup` first.
 
-    See `pyguara.ui.rich_text` for the markup. Its own widget, not a mode on
-    `Label`, because the plain label is in every demo and has no use for a parser.
+    On a line of mixed sizes, runs share a bottom edge, not a baseline.
 
-    A string that does not parse raises `MarkupError` when it is set, not when it
-    is first drawn. Anything a player typed goes through `escape_markup` first.
-
-    On a line of mixed sizes, runs share a bottom edge, which is close to a shared
-    baseline but not the same: the renderer reports a line's height, not a font's
-    ascent.
+    Example:
+        RichLabel("[b]Tamanduá[/b] takes [color=#e2621f]12 fire[/color] damage")
     """
 
     def __init__(

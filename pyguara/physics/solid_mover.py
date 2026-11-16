@@ -1,24 +1,14 @@
 """Move a solid, carrying and pushing whatever it touches.
 
-`CharacterMover` is how a character moves under its own control. This is
-the other half of Celeste's model: how the *world* moves a character that
-isn't driving -- riding a platform, or being shoved by one closing in from
-the side or above.
+`CharacterMover` moves a character under its own control. This moves
+one that is not driving: riding a platform, or shoved by one.
 
-A rider or a pushed actor is placed directly at the position the solid's
-own motion dictates, not swept there: the solid has already decided exactly
-where the actor is going, so there is nothing to search for. What has to be
-checked afterwards is whether that position is actually clear of everything
-*except* the solid that moved it -- if not, the actor has been squished
-between it and something else, which is reported rather than silently
-resolved, since what a squish should do (damage, death, nothing) is a game
-decision, not a physics one.
-
-This mirrors Celeste's `Solid.MoveHExact`/`MoveVExact`: riders are found by
-their position *before* the solid moves (an actor resting flush on top),
-carried by the exact same delta, then checked; anything not riding that the
-solid's *new* footprint now overlaps is pushed clear along whichever axis
-the solid is actually moving, then checked the same way.
+Riders are found by their position before the solid moves and carried
+by the same delta. Anything else the solid's new footprint overlaps is
+pushed clear along the axis the solid is moving. An actor is placed,
+not swept, and then checked against everything but that solid; one
+that is not clear has been squished, which is reported for the game to
+decide. This mirrors Celeste's `Solid.MoveHExact`/`MoveVExact`.
 """
 
 from __future__ import annotations

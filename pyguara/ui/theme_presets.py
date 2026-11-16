@@ -204,7 +204,7 @@ def _create_retro_theme() -> UITheme:
 class ThemeConstants:
     """Accessor for the pre-built theme presets.
 
-    Each attribute access returns a **fresh copy** of the preset, so callers
+    Each attribute access returns a fresh copy of the preset, so callers
     cannot corrupt the canonical definition for the rest of the process:
 
         >>> my_theme = Themes.DARK          # already a private copy

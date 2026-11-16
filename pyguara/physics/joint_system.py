@@ -33,16 +33,11 @@ logger = get_logger(__name__)
 class JointSystem:
     """Creates and destroys physics constraints for ``Joint`` components.
 
-    A ``Joint`` lives on one entity (call it the owner) and names a second
-    entity by id. The constraint is created only once both entities have a
-    ``RigidBody`` whose backend body exists; until then the joint is left
-    pending and retried on the next ``update()``. This makes the system
-    order-independent with respect to body creation -- a joint added the
-    same tick as its bodies simply links up one tick later.
-
-    The backend handle is stored on ``Joint._joint_handle`` (so the same
-    component is never built twice) and mirrored in an internal table keyed
-    by owner id, which is what teardown and reconciliation walk.
+    A ``Joint`` lives on one entity and names a second by id. The
+    constraint is created once both entities have a ``RigidBody`` whose
+    backend body exists; until then the joint is pending and retried on
+    the next ``update()``. The backend handle is stored on
+    ``Joint._joint_handle`` and in a table keyed by owner id.
 
     Attributes:
         _engine: The physics engine backend.

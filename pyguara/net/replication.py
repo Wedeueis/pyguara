@@ -1,35 +1,14 @@
 """Keeping every client's world matching the host's.
 
-The host owns the simulation. Each snapshot it reads the replicated fields of every
-tracked entity and sends them, and clients draw what they receive, about 100 ms behind
-so there is always a newer snapshot to interpolate toward.
+The host owns the simulation. Each snapshot it reads the replicated
+fields of every tracked entity and sends them, and clients draw what
+they receive, about 100 ms behind, interpolating toward the newest.
+Snapshots are complete states, so a client's world converges after any
+loss. Spawns, despawns and game events registered on the schema travel
+reliably and are applied on the same delayed timeline.
 
-Snapshots are complete states, so a lost one costs nothing and the next corrects any
-error. That makes a client's world converge on its own after any loss, which is the
-property this module exists for. The ways a client could stay wrong instead are each
-handled here on purpose:
-
-- **A snapshot names an entity whose spawn hasn't arrived.** The record is dropped and
-  no entity is invented. The next snapshot repeats it.
-- **An old snapshot arrives late.** Each entity keeps the newest tick it has seen, and
-  anything older is dropped, so a dead enemy's stale record can't move a new one.
-- **A despawn overtakes the motion.** Spawns and despawns run on the same delayed
-  timeline as interpolation, in order.
-- **A network id gets reused.** Freed ids wait out a quarantine far longer than any peer
-  can lag and still be connected.
-- **The two sides disagree about the layout.** The host sends a fingerprint of its
-  schema, and a client that differs stops applying anything and says so.
-
-Game events registered on the schema (`register_event`) travel the same way: reliably,
-in order with spawns and despawns, and applied on the same delayed timeline, so a kill
-lands while the enemy is still there and a client's screen never shows a hit before the
-snapshot it belongs to. `EventRelay` sends a dispatcher's events as they happen.
-
-`notify_component_changed` is not used: no movement system calls it, which Phase 0
-measured, so a snapshot reads the fields directly.
-
-Replication's reliable messages share `Channel.EVENTS` with the game's, and their first
-byte is at or above `FIRST_RESERVED_KIND`. A game's own messages use lower values.
+Replication's reliable messages share `Channel.EVENTS` with the
+game's; their first byte is at or above `FIRST_RESERVED_KIND`.
 """
 
 from __future__ import annotations

@@ -1,23 +1,15 @@
 """A stand-in for Steam, so a game can test its Steam path with no Steam.
 
-`SimulatedSteamCloud` plays Steam's servers and `SimulatedSteam` one player's
-`NativeSteam`. Hand a `SimulatedSteam` to `SteamNetwork` and everything above
-it -- the Steam core, the transport, the lobby, the sessions -- is the real
-code::
+`SimulatedSteamCloud` plays Steam's servers and `SimulatedSteam` one
+player's `NativeSteam`. Everything above it (the Steam core, the
+transport, the lobby, the sessions) is the real code. It keeps session
+requests, friends-only capped lobbies and member events. Delivery is
+instant, lossless and in order.
 
+Example:
     cloud = SimulatedSteamCloud()
     host = SteamNetwork(cloud.add_player(1001), clock=clock)
     guest = SteamNetwork(cloud.add_player(1002), clock=clock)
-
-What it keeps of Steam is what the transport and lobby depend on:
-
-- A message from someone new raises `session_request` and is held until
-  accepted; a peer already sent to is accepted without asking.
-- Lobbies are friends-only and capped; entering and leaving reach every
-  other member as `lobby_member`; a missing or full lobby is refused with
-  Steam's enter response.
-- Delivery is instant and lossless, in order. Relay latency and loss are
-  what the two-machine playtest is for, not this.
 """
 
 from __future__ import annotations

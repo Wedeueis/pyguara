@@ -357,17 +357,11 @@ class UIManager:
     def focus_ring(self) -> list[UIElement]:
         """Every focusable element, in traversal order.
 
-        Order is a depth-first walk of the element tree in the order roots
-        were added and children were parented -- which is the order a
-        reader's eye takes through a declared layout, and needs no
-        geometry. A hidden or disabled element is skipped along with its
-        whole subtree: a collapsed panel's contents are not reachable by
-        Tab just because they still exist.
+        Order is a depth-first walk of the element tree, in the order roots
+        were added and children were parented. A hidden or disabled element is
+        skipped along with its whole subtree.
 
-        Rebuilt per call rather than cached. A cache would have to be
-        invalidated by every `add_child`, every `visible` flip and every
-        `enabled` flip, and traversal happens on a keypress -- human-speed,
-        not frame-speed.
+        Rebuilt on each call, not cached.
 
         Returns:
             The focusable elements of the topmost layer that has any.
@@ -495,18 +489,11 @@ class UIManager:
     def _activate_focused(self) -> None:
         """Fire the focused element's click callback.
 
-        What makes a menu keyboard-complete: Tab to a button, press Enter.
-        Without it the ring could move but never choose, and a showcase
-        that needs a mouse to press a button is not showing much.
+        This is what Enter and Space do on a focused button.
 
-        Gated by `focus_ring()` membership, not just `enabled`/`visible` --
-        the same "topmost layer wins" rule that keeps Tab from wandering
-        into the HUD frozen behind a modal. Without it, a focused element
-        left behind by a layer that closed over top of it (a mouse click
-        focuses on press, the click's own handler can tear its layer down
-        before that focus is applied) still fires on the next Enter/Space,
-        which is a menu button activating itself from underneath whatever
-        is now actually on top.
+        Gated by `focus_ring()` membership, not just `enabled` and `visible`,
+        so an element still holding focus under a layer that opened over it
+        does not fire.
         """
         element = self._focused_element
         if element is None or not element.enabled or not element.visible:

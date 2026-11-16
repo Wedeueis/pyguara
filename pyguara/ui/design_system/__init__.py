@@ -1,23 +1,19 @@
 """The PyGuara design system: brand tokens, themes, and the Cerrado look.
 
-Three layers, deliberately separable:
+- `tokens`: the brand palette, raw colours.
+- `themes`: `cerrado_dusk()` and `cerrado_day()`, ordinary `UITheme`s
+  mapping those tokens onto the engine's semantic colour roles.
+- `components` and `skin`: a bevelled edge, a stamp shadow and the
+  brand's button colourways.
 
-- `tokens` -- the brand palette. Raw colours, no opinion about use.
-- `themes` -- `cerrado_dusk()` / `cerrado_day()`, ordinary `UITheme`s that
-  map those tokens onto the engine's semantic colour roles.
-- `components` / `skin` -- the little that a theme cannot express: a
-  bevelled edge, a stamp shadow, and the brand's button colourways.
+Setting the theme re-skins every stock component. Use `BevelButton`
+or `BevelPanel` only where the raised edge is wanted.
 
-The usual way in is the theme alone::
-
+Example:
     from pyguara.ui import set_theme
     from pyguara.ui.design_system import cerrado_dusk
 
     set_theme(cerrado_dusk())
-
-which re-skins every stock component -- panels, buttons, sliders, fields --
-because they read the same roles the theme defines. Reach for `BevelButton`
-or `BevelPanel` only where you want the raised edge as well.
 """
 
 from pyguara.ui.design_system.components import (

@@ -1,29 +1,14 @@
 """Your own character responding at once, while the host stays in charge.
 
-The client runs its own character immediately and sends what it did as commands, each
-naming the host tick it applies to. The host applies one command per tick and sends back
-the exact state, and the client checks that against what it predicted for that tick. If
-they differ, it goes back to the host's state and replays the newer commands. The host
-never accepts a position from a client, only commands, so a modified client can't move
-faster than its commands allow.
+The client runs its own character immediately and sends what it did as
+commands, each naming the host tick it applies to. The host applies
+one command per tick and sends back the exact state. A state "at tick
+N" includes every command before N. If the client's prediction for
+that tick differs, it takes the host's state and replays the newer
+commands. The host accepts commands, never positions.
 
-A state "at tick N" includes every command before N. That one rule is what lines the
-two machines up, and it's why no separate acknowledgement is needed.
-
-The ways this could go wrong, and what handles each:
-
-- **The command the client simulated differs from the one the host received**, because
-  sending rounds it. The client simulates the decoded copy.
-- **A command arrives late.** The host repeats the last one for a short time and then uses
-  `neutral`, so a stalled player doesn't keep running. The client corrects from the next
-  state.
-- **The client runs too far ahead or behind.** The host reports how early commands actually
-  arrived, and the client adds or skips ticks to hold a target. Each change starts a new
-  epoch, which commands carry and the host echoes, so the client never acts twice on
-  measurements from before its change arrived. Comparing ticks can't tell it that: commands
-  from before a rewind have the larger numbers.
-- **A correction would be a visible jump.** It's shown as an offset that fades, added after
-  the fixed updates and removed before the next, so the simulation never sees it.
+Lateness, clock lead and the smoothing of corrections are described in
+`docs/systems/networking.md`.
 """
 
 from __future__ import annotations

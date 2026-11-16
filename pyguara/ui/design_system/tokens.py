@@ -1,21 +1,12 @@
 """The PyGuara brand palette: raw colour values, no semantics.
 
-These are the design team's named colours, one family per block, each with
-the hex the palette was specified in. Nothing here says what a colour is
-*for* -- `themes.py` does that, mapping these onto the semantic roles in
-`ColorScheme` (a surface, an edge, a pressed action). Keeping the two apart
-is what lets a colour be renamed or re-tuned in one place, and what stops a
-component from reaching for "the orange one".
+The design team's named colours, one family per block, each with the
+hex it was specified in. Nothing here says what a colour is for;
+`themes.py` maps these onto the semantic roles in `ColorScheme`.
 
-Identifiers are ASCII: the family is Guará, but `GUARA_500` is what you can
-type, grep and import without an encoding accident. (The palette arrived
-with the accent inside the identifier, which is why this note exists.)
-
-Component *dimensions* deliberately live nowhere near here. The palette
-originally carried a metrics block -- 120x40 buttons, 20px checkboxes,
-200x20 progress bars, a 50px navbar -- and every number in it already
-matched the corresponding engine component's default. Two copies of the
-same number is a drift waiting to happen, so the components keep theirs.
+Identifiers are ASCII: the family is Guará, and the name is
+`GUARA_500`. Component dimensions are not tokens; each component keeps
+its own defaults.
 """
 
 from __future__ import annotations

@@ -1,36 +1,19 @@
 """Declarative construction of UI trees.
 
-Opt-in sugar over the imperative API, not a replacement for it. Every demo
-in this repository builds its UI by constructing elements and calling
-`add_child()`, and all of that keeps working untouched -- the builder
-*is* those calls, with the parent threaded through a context manager
-instead of a local variable:
+Opt-in sugar over the imperative API: the builder makes the same
+`add_child()` calls, with the parent threaded through a context
+manager. `on_click=` assigns `UIElement.on_click`. `add()` and
+`nest()` take any `UIElement` subclass and keep its type, so custom
+widgets work in a builder.
 
-```python
-with UIBuilder(ui_manager) as ui:
-    with ui.box(Vector2(80, 288), Vector2(260, 220), spacing=14) as column:
-        ui.label("Main Menu", font_size=44)
-        ui.button("Start Game", on_click=self._on_start)
-        ui.button("Quit", on_click=self._on_quit)
+Example:
+    with UIBuilder(ui_manager) as ui:
+        with ui.box(Vector2(80, 288), Vector2(260, 220), spacing=14) as column:
+            ui.label("Main Menu", font_size=44)
+            ui.button("Start Game", on_click=self._on_start)
+            ui.button("Quit", on_click=self._on_quit)
 
-ui_manager.set_focus(column.children[0])
-```
-
-Three things it deliberately does *not* do, settled when the architecture
-was decided rather than discovered here:
-
-- **No callback mechanism of its own.** `UIElement.on_click` is a bare
-  attribute that every demo assigns after construction; `on_click=` here
-  does exactly that assignment and nothing more.
-- **No theme wiring.** `UIElement.__init__` calls `get_theme()`
-  unconditionally, so an element themes itself the moment it exists,
-  builder or not.
-- **No fixed widget vocabulary.** The factory methods below cover the
-  engine's own components, but a game's custom elements are the normal
-  case -- `guara_falcao` builds its screens out of `BevelPanel`,
-  `BevelButton` and `Scrim`. `add()` and `nest()` take any `UIElement`
-  subclass and keep its type, so a builder is never the reason a custom
-  widget cannot be used.
+    ui_manager.set_focus(column.children[0])
 """
 
 from __future__ import annotations
@@ -84,17 +67,11 @@ class UIBuilderError(RuntimeError):
 class _Nested[E: UIElement]:
     """Makes an already-attached element the parent for a `with` block.
 
-    Deliberately a class rather than a `@contextmanager` generator. The
-    element is attached by the factory that created this, *before* any
-    `with` -- so `ui.panel(...)` on its own still adds a childless panel,
-    rather than silently adding nothing.
+    The element is attached by the factory that created this, before any
+    `with`, so `ui.panel(...)` on its own still adds a childless panel.
 
-    A generator-based version also made correctness depend on reference
-    counting: calling `__enter__()` without a matching `__exit__()` left
-    the parent stack pushed until the unreferenced generator happened to be
-    collected, at which point `GeneratorExit` ran its `finally` and popped
-    it. Whether a tree came out right then depended on when the garbage
-    collector ran.
+    A class, not a `@contextmanager` generator: a generator would pop the
+    parent stack whenever it happened to be collected.
     """
 
     __slots__ = ("_builder", "_element")
@@ -188,9 +165,7 @@ class UIBuilder:
     ) -> None:
         """Close the builder, mounting the tree if the block succeeded.
 
-        A tree built by a block that raised is **not** mounted: half a menu
-        on screen is harder to diagnose than no menu, and the exception
-        already says what went wrong.
+        A tree built by a block that raised is not mounted.
         """
         self._finished = True
         self._stack.clear()

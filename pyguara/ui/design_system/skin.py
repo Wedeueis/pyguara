@@ -1,20 +1,11 @@
 """The two drawing tricks the Cerrado look needs, over `UIRenderer`.
 
-Everything else in this design system is theme values. These two are not
-expressible that way -- a bevel is two extra edges and a stamp shadow is a
-rectangle behind the element -- so they live here as functions any
-component can call, rather than as a second widget hierarchy.
+A bevel is two extra edges and a stamp shadow is a rectangle behind
+the element. They are functions any component can call.
 
-**Why the highlights are opaque rather than alpha overlays.** The obvious
-bevel is white at ~18% alpha over the top edge and black over the bottom.
-It does not work here: both UI backends draw through `pygame.draw`, which
-*replaces* the destination pixel including its alpha rather than blending
-into it. On the pygame backend the surface is opaque, so a 45/255 white
-lands as solid white; on the ModernGL backend the overlay is `SRCALPHA`,
-so the same call punches a nearly transparent hole in the element instead
-of lightening it. Mixing the highlight into the base colour on the CPU --
-which `Color.lerp` already does -- gives the same result on both, and is
-deterministic enough to assert on in a test.
+The highlights are opaque colours, mixed into the base colour with
+`Color.lerp`, not translucent overlays, so they come out the same on
+every renderer.
 """
 
 from __future__ import annotations
