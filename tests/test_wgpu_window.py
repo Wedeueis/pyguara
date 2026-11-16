@@ -353,7 +353,7 @@ class TestCloseReleasesTheSurfaceFirst:
 
 
 @needs_extension
-def test_detaching_an_offscreen_gpu_is_a_no_op() -> None:
+def test_detaching_an_offscreen_gpu_is_safe_to_repeat() -> None:
     try:
         gpu = extension.NativeGpu(32, 32)  # type: ignore[union-attr]
     except RuntimeError as error:
@@ -361,6 +361,28 @@ def test_detaching_an_offscreen_gpu_is_a_no_op() -> None:
     gpu.detach_window()
     gpu.detach_window()
     assert gpu.has_surface is False
+
+
+@needs_extension
+def test_detaching_waits_for_an_offscreen_gpu_to_finish_its_frame() -> None:
+    """Nothing is still rendering once the window has been let go of.
+
+    A software driver renders on its own threads, and a process that
+    exits while one is still running a submitted frame crashes in the
+    driver. So the wait cannot depend on there being a surface.
+    """
+    try:
+        gpu = extension.NativeGpu(1024, 1024)  # type: ignore[union-attr]
+    except RuntimeError as error:
+        pytest.skip(f"no graphics adapter for wgpu: {error}")
+    # Enough overdraw that the frame outlasts the call that submits it.
+    for index in range(4000):
+        gpu.rect(float(index % 900), float(index % 700), 300.0, 300.0, 255, 0, 0, 120)
+    gpu.end_frame()
+
+    gpu.detach_window()
+
+    assert gpu.idle
 
 
 @needs_extension

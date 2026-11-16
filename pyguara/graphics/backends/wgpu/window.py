@@ -267,7 +267,9 @@ class WgpuWindow:
         The GPU object is shared: the renderers hold `frame.gpu` too, so
         dropping this window's reference does not free it. It is told to let
         go of the window explicitly, before the window is destroyed, because
-        a surface must not outlive its window.
+        a surface must not outlive its window. That call also waits for the
+        GPU to finish its last frame, with or without a surface, so the
+        process does not exit under a driver thread that is still rendering.
         """
         if self.frame is not None:
             self.frame.gpu.detach_window()

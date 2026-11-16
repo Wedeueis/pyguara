@@ -1323,18 +1323,27 @@ impl NativeGpu {
     /// `for_window` requires the window to outlive the surface, but the
     /// renderers hold this object, so it outlives the window unless the
     /// surface is dropped first. Waits for the GPU to finish what it was
-    /// given, so nothing in flight still targets the surface. Idempotent,
-    /// and a no-op offscreen. (#405: a surface dropped at interpreter exit,
-    /// after its window, segfaulted.)
+    /// given, so nothing in flight still targets the surface. Idempotent.
+    ///
+    /// The wait happens offscreen too. A software driver renders on its
+    /// own threads, and a process that exits while one is still running a
+    /// submitted frame crashes in the driver.
     fn detach_window(&mut self) -> PyResult<()> {
-        if self.presenter.is_none() {
-            return Ok(());
-        }
         self.device
             .poll(wgpu::PollType::wait_indefinitely())
             .map_err(|error| runtime_error("waiting for the GPU before closing the window failed", error))?;
         self.presenter = None;
         Ok(())
+    }
+
+    /// Whether the GPU has finished everything submitted to it.
+    ///
+    /// A diagnostic: false while a submitted frame is still being rendered.
+    #[getter]
+    fn idle(&self) -> bool {
+        self.device
+            .poll(wgpu::PollType::Poll)
+            .is_ok_and(|status| status.is_queue_empty())
     }
 
     /// How many frames have reached the window.
