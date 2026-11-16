@@ -1,16 +1,8 @@
 """A generic ECS entity pool: acquire/release without garbage-collector churn.
 
-The question every genre with high-frequency spawn/despawn asks (pooled
-bullets, particles-as-entities, wave-spawned enemies, an RTS unit pool) --
-answered once here, mechanism only. What a pooled entity actually *is*
-(its components, its reset logic) is entirely the caller's `factory`; this
-module knows nothing about bullets, enemies, or any other game vocabulary.
-
-Mined from `games/protocolo_bandeira`'s own `ObjectPool` -- its
-`BulletPool`/`EnemyPool` subclasses turned out to be trivial factory
-closures around the exact same acquire/release pattern, the same
-"second/third consumer" signal that earlier promoted
-`kits.loot.weighted_choice` to `pyguara.common.random`.
+For anything that spawns and despawns often: bullets, wave-spawned
+enemies, particles as entities. Mechanism only: what a pooled entity
+is (its components, its reset logic) is the caller's `factory`.
 """
 
 from __future__ import annotations
@@ -56,32 +48,14 @@ class Poolable(StrictComponent):
 class EntityPool:
     """Pre-allocates entities once, then hands them out and takes them back.
 
-    Every entity is created exactly once, at construction, via `factory` --
-    never during gameplay. `acquire()`/`release()` toggle `Poolable.is_active`
-    and move an entity between the available and active sets; nothing is
-    ever destroyed. Fixed capacity: `acquire()` returns `None` once
-    exhausted rather than growing on demand, so a caller with a bursty
-    spawn rate picks `size` deliberately instead of discovering an
-    unbounded pool the hard way.
+    Every entity is created once, at construction, via `factory`.
+    `acquire()` and `release()` toggle `Poolable.is_active` and move an
+    entity between the available and active sets; nothing is destroyed.
+    Capacity is fixed: `acquire()` returns `None` once exhausted.
 
-    **An idle entity is disabled, not stripped.** It keeps every
-    component, and `EntityManager` excludes it from every query until it
-    is acquired again. That matters because a pooled entity is never
-    destroyed: without it, a pool of 700 insects each carrying a
-    `FlockingAgent` costs `FlockingSystem` all 700 every tick whether ten
-    are in play or seven hundred -- measured in `games/tamandua_murundus`
-    as the difference between ~60 and ~18 frames per second. A factory may
-    therefore attach everything an entity will ever need, which is the
-    obvious way to write one.
-
-    The active set is a dict keyed on entity id, not a list, and that is
-    load-bearing rather than incidental. A list costs two O(n) scans per
-    `release()` -- one to check membership, one to remove -- so putting a
-    whole pool away is quadratic in its size. Measured before the change,
-    draining 3000 entities took 74 ms, or four and a half frames at 60 Hz,
-    from a structure whose entire purpose is high-frequency spawn and
-    despawn. Dicts preserve insertion order, so `get_active()`'s
-    acquisition-order guarantee survives the change for free.
+    An idle entity is disabled, not stripped. It keeps every component,
+    and `EntityManager` excludes it from every query until it is acquired
+    again. `get_active()` returns entities in acquisition order.
     """
 
     def __init__(

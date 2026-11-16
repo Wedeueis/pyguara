@@ -1,17 +1,12 @@
 """Entity-to-entity relations: who owns whom.
 
-Distinct from `Transform`'s parenting, and deliberately so. A `Transform`
-parent is *spatial* -- it says "my position is expressed relative to
-yours", and a turret bolted to a moving ship needs it. `ChildOf` is
-*ownership* -- it says "when you are destroyed, so am I", which is a
-different question with a different answer. A health bar floating above an
-enemy wants both; a dropped item that should outlive the enemy that
-carried it wants neither; a spawner's minions that should die with it want
-ownership without any spatial relationship at all.
+Distinct from `Transform` parenting. A `Transform` parent is spatial:
+"my position is expressed relative to yours". `ChildOf` is ownership:
+"when you are destroyed, so am I". A health bar above an enemy wants
+both; a spawner's minions want ownership with no spatial relationship.
 
-Keeping them separate is what lets each be used alone. They are composed,
-not conflated: an entity that wants both attaches a `ChildOf` and sets its
-`Transform` parent, and the two happen to name the same entity.
+An entity that wants both attaches a `ChildOf` and sets its
+`Transform` parent.
 """
 
 from __future__ import annotations

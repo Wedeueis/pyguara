@@ -134,25 +134,12 @@ class EntityManager:
     def create_entities(self, count: int) -> list[Entity]:
         """Create and register `count` empty entities in one call.
 
-        For spawning a wave at once -- a burst of projectiles, a room's
-        worth of props from a generator -- where the caller then attaches
-        components to each.
+        For spawning a wave at once (a burst of projectiles, a room's props),
+        where the caller then attaches components to each.
 
-        **This is convenience, not a speed-up.** Measured against a
-        `create_entity()` loop it is within noise (1.06x at 20,000), and it
-        deliberately goes through `add_entity()` rather than inlining the
-        registration: a hand-rolled copy of that body measured 1.21x, which
-        does not buy a second path to keep in step with the first.
-
-        The entities also come back live and queryable rather than behind a
-        deferred index. A half-registered entity is a far worse thing to
-        hand a caller than a few microseconds.
-
-        What actually made bulk spawning expensive was neither -- it was
-        `QueryCache` copying a whole result set for every component added,
-        which is quadratic across a wave: 4000 entities cost 214ms with one
-        cached query registered against 40ms with none. That is fixed in
-        the cache, so every spawn benefits and not only this call.
+        A convenience, not a speed-up: it costs the same as a
+        `create_entity()` loop. The entities come back registered and
+        queryable.
 
         Args:
             count: How many entities to create. Zero returns an empty list.
@@ -206,22 +193,14 @@ class EntityManager:
     def remove_entity(self, entity_id: str) -> None:
         """Soft-destroy an entity: immediate, terminal, not reusable.
 
-        The entity is gone from the registry and its manager callbacks detached
-        before this method returns, so nothing can see or resurrect it from
-        that instant on; further mutation of it raises. Physical index cleanup
-        is deferred to `flush_pending_removals()`.
+        The entity leaves the registry and its manager callbacks are detached
+        before this returns; further mutation of it raises. Physical index
+        cleanup is deferred to `flush_pending_removals()`. Subscribers from
+        `subscribe_entity_removed()` are notified here, while the entity's
+        components can still be read.
 
-        Subscribers registered via `subscribe_entity_removed()` are notified
-        synchronously here, after soft-death but before the deferred cleanup,
-        so they can still read the entity's components.
-
-        **Destruction cascades.** Every entity owning a `ChildOf` pointing
-        at this one is removed too, depth first, and so are theirs. That is
-        what stops a despawned enemy leaking the health bar, weapon and
-        aura its prefab attached: nothing else in the engine knows those
-        entities were only ever meaningful as part of it.
-
-        Removing an unknown id is a no-op.
+        Destruction cascades: every entity whose `ChildOf` points at this one
+        is removed too, depth first. Removing an unknown id is a no-op.
 
         Args:
             entity_id: The id of the entity to destroy.
@@ -352,14 +331,11 @@ class EntityManager:
         """Register a callback for when a component type is detached.
 
         Fires synchronously from `Entity.remove_component()`, with the
-        component that was removed -- which is why the callback is handed
-        both: by then the entity no longer carries it.
+        component that was removed, since the entity no longer carries it.
 
-        **Not fired when the whole entity is removed.** That is
-        `subscribe_entity_removed()`, which hands over an entity with its
-        components still intact; raising a removal per component as well
-        would make every despawn N notifications where one carries strictly
-        more information.
+        Not fired when the whole entity is removed; use
+        `subscribe_entity_removed()`, which hands over the entity with its
+        components intact.
 
         Args:
             component_type: The class to watch.
@@ -374,17 +350,10 @@ class EntityManager:
     ) -> None:
         """Register a callback for when a component's data is changed.
 
-        Unlike added and removed, this one **cannot be detected**. A
-        component is a plain dataclass and `health.current -= 10` is an
-        ordinary attribute write; catching it would mean a descriptor or a
-        proxy on every field of every component, which is a real cost on
-        the hot path to serve the few types anything observes.
-
-        So the writer says so, through `notify_component_changed()`. That
-        is honest about what it is -- a convention, not a guarantee -- and
-        it is also what makes it useful: a system mutating twenty fields
-        reports once, when the change is complete, rather than twenty times
-        through inconsistent intermediate states.
+        A change is not detected: a component is a plain dataclass and a
+        field write is an ordinary attribute write. The writer reports it
+        through `notify_component_changed()`, once, when its change is
+        complete.
 
         Args:
             component_type: The class to watch.
@@ -497,23 +466,12 @@ class EntityManager:
     def suppress_notifications(self) -> Iterator[None]:
         """Run a block without telling observers anything changed.
 
-        For an edit that is going to be undone before anyone could act on
-        it. PyGuara Studio's plan and ask modes apply a command, diff the
-        result and revert it, which is the only way to show a *real* diff
-        rather than a predicted one -- but every observer saw the edit and
-        its undo go past. A planned **delete** was the sharp end: the
-        spatial index dropped the entry and the physics system queued the
-        body for teardown, for an edit that never happened, and the revert
-        has no `entity_created` hook to undo that with.
+        For an edit that is undone inside the same block, such as Studio's
+        plan mode, which applies a command, diffs the result and reverts it.
+        Observers end up holding the world they were last told about.
 
-        Safe precisely because the block is a matched pair. Suppressing one
-        half would leave observers holding a stale world; suppressing an
-        apply *and* its revert leaves them holding the world they already
-        had, which is the one they were last told about.
-
-        Not for muting an edit that stands. An observer that misses a real
-        change stays wrong until something else happens to correct it --
-        that is the bug class `notify_component_changed` exists to prevent.
+        Not for muting an edit that stands: an observer that misses a real
+        change stays wrong.
 
         Yields:
             None. Notifications resume on exit, including after an
@@ -535,23 +493,11 @@ class EntityManager:
         """Include or exclude an entity from every query, without changing it.
 
         A disabled entity still exists, still answers `get_entity()`, and
-        **keeps every component it had** -- it simply stops matching
-        `get_entities_with()` and friends. Re-enabling it brings it back
-        exactly as it was.
+        keeps every component it had. It stops matching `get_entities_with()`
+        and the other queries until it is enabled again.
 
-        This is what `EntityPool` uses to park an idle entity. A pooled
-        entity is never destroyed, so anything still attached to it goes
-        on matching queries for the life of the scene: a pool of 700
-        insects carrying a `FlockingAgent` each costs `FlockingSystem` all
-        700 every tick whether ten are in play or seven hundred. Measured
-        in `games/tamandua_murundus`, that alone was the difference
-        between ~60 and ~18 frames per second.
-
-        The alternative games reached for first -- attaching and detaching
-        the query-visible components by hand on acquire and release --
-        works, but it destroys component state that pooling exists to
-        preserve, and it silently stops working the moment someone adds a
-        component and forgets to add it to both lists.
+        `EntityPool` uses this to park an idle entity, so systems do not pay
+        for pooled entities that are not in play.
 
         Args:
             entity_id: The entity to enable or disable. Unknown ids are
@@ -676,7 +622,7 @@ class EntityManager:
         """Drop whatever relation `child_id` had, if any.
 
         Args:
-            child_id: The formerly owned entity.
+            child_id: The entity to release from its owner.
         """
         previous = self._parent_of.pop(child_id, None)
         if previous is None:
@@ -714,18 +660,12 @@ class EntityManager:
     ) -> Iterator[Entity]:
         """Iterate entities matching a component query.
 
-        The positional types are an **all-of**: an entity must carry every
-        one. `without` and `any_of` narrow that further, and each is
-        resolved through the same inverted index rather than by filtering
-        the results, so "every enemy that is not stunned" costs one set
-        difference instead of a `has_component` call per enemy per frame.
+        The positional types are an all-of: an entity must carry every one.
+        `without` and `any_of` narrow that further. Each term is resolved
+        through the inverted index, not by filtering the results.
 
-        ```python
-        for enemy in manager.get_entities_with(Enemy, without=(Stunned,)):
-            ...
-        for burning in manager.get_entities_with(any_of=(OnFire, Scalded)):
-            ...
-        ```
+        `without` on its own has no positive term to start from, so it scans
+        every entity.
 
         Args:
             *component_types: Classes the entity must all carry.
@@ -738,10 +678,11 @@ class EntityManager:
             Each matching entity. Yields nothing when no term is given at
             all.
 
-        Note:
-            `without` on its own -- "everything that is not X" -- has no
-            positive term to start from, so it scans every entity. Every
-            other shape starts from an index set.
+        Example:
+            for enemy in manager.get_entities_with(Enemy, without=(Stunned,)):
+                ...
+            for burning in manager.get_entities_with(any_of=(OnFire, Scalded)):
+                ...
         """
         if not component_types and not without and not any_of:
             return
@@ -938,13 +879,10 @@ class EntityManager:
     ) -> Iterator[str]:
         """Iterate live entity ids carrying every given component type.
 
-        Unlike `get_entities_with()`, this does **not** skip disabled
-        entities. It backs the query cache, which mirrors the component
-        index: dormancy is applied when a query is iterated, never when
-        its cache is built. Building the cache with disabled entities
-        filtered out would strand them -- they are added to a cache by
-        `add_component`, and nothing re-adds an entity that was merely
-        parked.
+        Unlike `get_entities_with()`, this does not skip disabled entities.
+        It backs the query cache, which mirrors the component index;
+        dormancy is applied when a query is iterated, not when its cache is
+        built.
 
         Args:
             component_types: Classes an entity must all carry.
@@ -969,21 +907,14 @@ class EntityManager:
     ) -> Collection[str]:
         """Resolve a query against the inverted index, in a reproducible order.
 
-        Smallest index first, so each step scans as few ids as possible, and
-        the result keeps that index's insertion order. So the same sequence of
-        operations gives the same order in any process.
+        Smallest index first, and the result keeps that index's insertion
+        order, so the same sequence of operations gives the same order in any
+        process.
 
         For a single component type and no other terms the result is the live
-        index itself, not a copy. That is safe only because index cleanup is
-        deferred to `flush_pending_removals()`, so it cannot change mid-frame;
-        callers must still skip ids whose entity is already soft-removed. Any
-        additional term produces a new collection, built eagerly so that a
-        caller may add components while iterating a multi-term query, which
-        has always been allowed.
-
-        **A caller must therefore never mutate what this returns.** Doing so
-        could delete ids from the component index itself, and the entities
-        would simply stop matching any query from then on.
+        index itself, not a copy, so a caller must never mutate what this
+        returns, and must skip ids whose entity is already soft-removed. Any
+        additional term produces a new collection.
 
         Args:
             component_types: Classes an entity must all carry. May be empty

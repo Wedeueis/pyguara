@@ -1,14 +1,8 @@
 """Resource lifecycle events.
 
-`ResourceManager.reload()` swaps the *cache entry*; it does not mutate the
-instance anything already holds. So a system that loaded a texture once and
-kept the object keeps the stale one, and hot-reloading a sprite changes
-nothing on screen -- `AssetReloadWatcher`'s own docstring records that, and
-told callers to re-`load()` without giving them any way to know when.
-
-This is that way. #40 asked for either a `Handle<T>` indirection or an
-event; the event is the smaller change and needs nothing from existing
-callers, who keep holding plain resources.
+`ResourceManager.reload()` swaps the cache entry; it does not mutate
+the instance a caller already holds. The event here tells such a
+caller when to `load()` again.
 """
 
 import time

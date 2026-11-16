@@ -226,13 +226,9 @@ class Entity:
         Only reached when normal attribute lookup fails, so components attached
         via `add_component()` resolve without entering this method.
 
-        Reads `_property_cache` via `__dict__` rather than
-        `self._property_cache`: on a blank instance built by `cls.__new__(cls)`
-        (e.g. during copy/pickle reconstruction, before `__init__` has run)
-        `_property_cache` does not exist yet, and attribute access would
-        re-enter `__getattr__` for that name too, recursing infinitely. A
-        `__dict__` lookup never triggers `__getattr__`, so this is safe either
-        way.
+        Reads `_property_cache` through `__dict__`: on a blank instance built
+        by `cls.__new__(cls)` (during copy or unpickling) the attribute does
+        not exist yet, and ordinary access would re-enter this method.
 
         Args:
             name: The snake_case name of a component type.

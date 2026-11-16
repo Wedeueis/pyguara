@@ -24,16 +24,13 @@ _QueryKey = frozenset["type[Component]"]
 class QueryCache:
     """Maintains materialised entity-id sets for registered component queries.
 
-    Caches stay synchronised with the world through the two hooks
-    `EntityManager` calls on every component change. Entity removal reuses the
-    same path: when `EntityManager.flush_pending_removals()` cleans up a
-    removed entity's index entries at the frame boundary, it calls
-    `on_component_removed()` once per component type that entity carried, which
-    drops it from every cache it belonged to.
+    Caches stay synchronised through the two hooks `EntityManager` calls
+    on every component change. Entity removal uses the same path: when
+    `flush_pending_removals()` cleans up a removed entity, it calls
+    `on_component_removed()` once per component type the entity carried.
 
-    This caches final intersection results rather than implementing archetypes.
-    PyGuara's inverted index is already a good fit for component lookup; only
-    the repeated intersection needed eliminating.
+    This caches final intersection results; it does not implement
+    archetypes.
 
     Example:
         ```python

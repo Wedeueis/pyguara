@@ -1227,6 +1227,9 @@ choice in the code.
 | Uploading a 96x96 grid's walls and weights to the native flow field | 0.18 ms, against a 1.36 ms recompute | `FlowFieldService` uploads the whole graph when its contents change, with no incremental path |
 | A circular wipe's cover at 1280x720, as a fan of 68 quads | 1.04 ms, with every seam blended twice under a translucent cover | `circular_cover_points` returns one self-touching polygon: 0.3 ms, and no seams |
 | The same cover as two scanline rectangles per row | 1,440 draw calls; 2.62 ms opaque, 5.89 ms translucent | As above |
+| `EntityManager.create_entities(20000)` against a `create_entity()` loop | 1.06x, within noise; an inlined copy of the registration measured 1.21x | `create_entities` goes through `add_entity()`; it is a convenience, not a fast path |
+| Spawning 4,000 entities with one cached query registered, before `QueryCache` stopped copying its result set per component added | 214 ms, against 40 ms with no cached query | The cache updates in place |
+| A pool of 700 entities each carrying a `FlockingAgent`, all matching queries while idle, in `games/tamandua_murundus` | about 18 frames per second, against about 60 once idle entities were disabled | `EntityPool` disables an idle entity, so it matches no query |
 
 ## What the test suite guarantees
 

@@ -46,11 +46,9 @@ class DIContainer:
     SINGLETON (one per container), SCOPED (one per `DIScope`) and TRANSIENT
     (a fresh instance per request).
 
-    Thread safety:
-        Registration and resolution are guarded by a reentrant lock, so a
-        service is constructed at most once even under contention. Cycle
-        detection state is thread-local, so concurrent resolutions on
-        different threads cannot see each other's partial chains.
+    Registration and resolution are guarded by a reentrant lock, so a
+    service is constructed at most once even under contention. Cycle
+    detection state is thread-local.
     """
 
     def __init__(
@@ -498,18 +496,16 @@ class DIScope:
     """A resolution context owning one instance of each scoped service.
 
     Scoped services are created once per scope and disposed when it closes.
-    Singletons and transients resolve as usual through the container.
+    Singletons and transients resolve as usual through the container. Use
+    it as a context manager so disposal always runs.
 
-    Use it as a context manager so disposal always runs:
+    Example:
+        container.register_scoped(IDatabase, DatabaseConnection)
 
-    ```python
-    container.register_scoped(IDatabase, DatabaseConnection)
-
-    with container.create_scope() as scope:
-        db = scope.get(IDatabase)
-        assert scope.get(IDatabase) is db
-    # scope disposed; db.dispose() called
-    ```
+        with container.create_scope() as scope:
+            db = scope.get(IDatabase)
+            assert scope.get(IDatabase) is db
+        # scope disposed; db.dispose() called
     """
 
     def __init__(self, container: DIContainer) -> None:
