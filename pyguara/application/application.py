@@ -307,6 +307,19 @@ class Application:
         if hook in self._step_hooks:
             self._step_hooks.remove(hook)
 
+    def quit(self) -> None:
+        """End the loop once the frame in progress is done.
+
+        The frame finishes and is drawn, `step()` returns False, and `run()`
+        goes on to `shutdown()`. Dispatches `QuitEvent` with this application
+        as its source, as a window's close button does. Does nothing when the
+        loop is not running.
+        """
+        if not self._is_running:
+            return
+        self._is_running = False
+        self._event_dispatcher.dispatch(QuitEvent(source=self))
+
     def run(self, starting_scene: Scene) -> None:
         """Execute the main game loop with a fixed timestep, until the window closes.
 
@@ -477,7 +490,10 @@ class Application:
         self._update(simulated_time)
 
         # 6. Render at display framerate, interpolating between the
-        # last two fixed steps.
+        # last two fixed steps. Not when game code closed the window during
+        # this frame: there is nothing left to draw to.
+        if self._window_closed_during_frame():
+            return False
         self._render()
 
         # 7. After the first whole frame of new scenes, keep what they loaded
@@ -485,6 +501,14 @@ class Application:
         self._settle_memory_if_scenes_changed()
 
         return self._is_running and self._window.is_open
+
+    def _window_closed_during_frame(self) -> bool:
+        """Whether the window, open when this frame began, has been closed.
+
+        A method so the type checker does not carry the frame's opening
+        check down to here and conclude the window must still be open.
+        """
+        return not self._window.is_open
 
     def _settle_memory_if_scenes_changed(self) -> None:
         """Settle memory once the scenes being run differ from last time.
