@@ -178,8 +178,17 @@ Type rules are stricter than `isinstance` in one place and looser in another:
   `isinstance(True, int)`.
 - An `int` **is** accepted where a `float` is declared, the one widening both
   JSON and Python expect.
+- `None` is accepted only where the field is declared optional, and a field
+  currently holding `None` still takes only its declared type.
 
-A rejected change mutates nothing and dispatches no event.
+A rejected change mutates nothing and dispatches no event. The reason is
+logged; `check_setting()` returns the same reason without changing anything,
+for a caller that has someone to show it to:
+
+```python
+manager.check_setting("audio", "master_volume", 99.0)   # "Rejected 'audio.master_volume' = 99.0: ..."
+manager.check_setting("audio", "master_volume", 0.5)    # None
+```
 
 Direct assignment (`manager.config.audio.master_volume = 99.0`) bypasses all of
 this. It is legal, and occasionally what you want during bootstrap, but nothing
