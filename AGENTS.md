@@ -224,9 +224,10 @@ Working rules, which the operations themselves enforce:
 ## The native extension
 
 Rust implements the wgpu renderer, the window, input, images, text and
-the audio mixer, plus an accelerated **store** for five things that also
-keep a Python implementation: `FlowFieldService`, `ParticleSystem`,
-`Sparks`, `FlockingSystem` and `SpatialHash`.
+the audio mixer, and `FlowFieldService`, which has no Python
+implementation. It is also an accelerated **store** for four things that
+still keep one: `ParticleSystem`, `Sparks`, `FlockingSystem` and
+`SpatialHash`. Each is to lose it in turn (ADR 0011, Decision 3).
 
 - The module is **`pyguara.pyguara_core_rs`**. `pyproject.toml` and
   `pyguara/native.py` both spell that name and must agree.
@@ -234,11 +235,15 @@ keep a Python implementation: `FlowFieldService`, `ParticleSystem`,
   `off`, `auto` or `required`. `PYGUARA_NO_NATIVE=1` forces the Python
   stores. `pyguara.native.describe()` says which is in force.
 - **That switch governs stores, not backends.** It does not reach audio
-  (`PYGUARA_AUDIO_BACKEND=pygame`) or networking.
+  (`PYGUARA_AUDIO_BACKEND=pygame`), networking or the flow field.
 - **The two stores must agree**, and how exactly depends on the
-  subsystem: the flow field and `SpatialHash` membership are bit-exact,
-  the pools compare within a tolerance, flocking has one permitted cause
-  of difference. Read the parity suite's docstring before touching one.
+  subsystem: `SpatialHash` membership is bit-exact, the pools compare
+  within a tolerance, flocking has one permitted cause of difference.
+  Read the parity suite's docstring before touching one.
+- **A Rust-only subsystem is held to recorded values**: the flow field
+  to `tests/golden/flow_field.json`, bit for bit, and to the Python
+  reference in `tests/reference/`. Regenerating a golden file changes
+  what "correct" means; read the diff.
 - **`SpatialHash` results have no defined order.** Pick by distance or
   id, never the first.
 - **A test's reference must pin the Python store explicitly**

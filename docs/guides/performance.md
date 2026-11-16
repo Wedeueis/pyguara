@@ -655,6 +655,19 @@ upload is paid rather than skipped:
 | 64x64 | 4096 | 36.449 | **0.739** | 49x | 219% -> 4.4% |
 | 96x96 | 9216 | 85.586 | **1.629** | 53x | 513% -> 9.8% |
 
+`FlowFieldService` has since lost its Python store (ADR 0011, Decision
+3), so the "Python" column is now what `tests/reference/flow_field.py`
+costs. One ratio moved with it. The fingerprint that decides whether to
+skip is still Python, and the sweep it is weighed against is Rust:
+
+| Grid | fingerprint and skip | recompute | skip as a share |
+| --- | ---: | ---: | ---: |
+| 64x64, both in Python (before) | 0.012 ms | 36.449 ms | 0.03% |
+| 64x64, sweep in Rust (now) | 0.012 ms | 0.745 ms | 1.6% |
+
+Still fifty times cheaper than what it avoids, and
+`tests/performance/test_perf_pathfinding.py` guards it at 10%.
+
 The five-frame hitch is a tenth of a frame. Note what that does *not*
 change: the guard above is still what keeps a per-tick caller off the
 recompute path at all, because 1.6 ms sixty times a second is still 10% of
@@ -687,7 +700,7 @@ whole method is one crossing.
 
 **Bit-exact, not close.** The pools compare with a tolerance because they
 hold f32 and a spark half a pixel off is a spark. A flow field steers
-gameplay, so `tests/test_native_flow_field_parity.py` asserts equality on
+gameplay, so `tests/test_flow_field_reference.py` asserts equality on
 every cell of every grid it builds. Three things make that reachable: f64
 on both sides, `GridGraph.get_neighbors`' order replicated exactly
 (the descent pass takes the first strictly-cheaper neighbour, so the order
@@ -815,7 +828,7 @@ solver, not this one made faster.
 **`GridGraph.get_neighbors` itself is a real Python target** -- it is
 also the Python flow field's hot path -- but its yield order is
 replicated bit-exactly by `rust/src/flowfield.rs` and pinned by
-`tests/test_native_flow_field_parity.py`, so it is its own careful piece
+`tests/test_flow_field_reference.py`, so it is its own careful piece
 of work rather than a line in this one.
 
 

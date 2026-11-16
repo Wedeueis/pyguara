@@ -1,13 +1,12 @@
-"""The two flow-field stores must agree exactly, not approximately.
+"""The Rust flow field must agree exactly with the Python reference.
 
-A flow field steers enemies, so one cell whose descent neighbour
-differs sends a pack the other way round a wall. Exactness holds
-because the arithmetic is f64 on both sides, the neighbour order of
-`GridGraph.get_neighbors` is replicated (it is the tie-break), and a
-Dijkstra cost map does not depend on pop order given non-negative
-weights.
+A flow field steers enemies, so one differing cell sends a pack the
+other way round a wall. "Python" below is `tests.reference.flow_field`,
+the implementation the Rust-only `FlowFieldService` replaced.
 
-Skipped when the extension is not built.
+Exactness holds because the arithmetic is f64 on both sides, the
+neighbour order of `GridGraph.get_neighbors` is replicated (it is the
+tie-break), and a Dijkstra cost map does not depend on pop order.
 """
 
 from __future__ import annotations
@@ -21,26 +20,14 @@ from pyguara.ai.pathfinding.flow_field import dijkstra_map, flow_field
 from pyguara.ai.pathfinding.flow_field_service import FlowFieldService
 from pyguara.ai.pathfinding.grid import GridGraph
 from pyguara.common.types import Vector2
+from tests.reference.flow_field import ReferenceFlowField
 
 CELL_SIZE = 32.0
 
 
-def _available() -> bool:
-    """Whether the native extension is present."""
-    return FlowFieldService(GridGraph(1, 1)).accelerated
-
-
-pytestmark = pytest.mark.skipif(
-    not _available(), reason="native extension not built; `cargo build --release`"
-)
-
-
-def _both(graph: GridGraph) -> tuple[FlowFieldService, FlowFieldService]:
-    """A Python-backed and a native-backed service over the same graph."""
-    return (
-        FlowFieldService(graph, accelerate=False),
-        FlowFieldService(graph, accelerate=True),
-    )
+def _both(graph: GridGraph) -> tuple[ReferenceFlowField, FlowFieldService]:
+    """The Python reference and the Rust service over the same graph."""
+    return ReferenceFlowField(graph), FlowFieldService(graph)
 
 
 def _assert_fields_agree(
@@ -438,7 +425,7 @@ class TestTheMembershipOfTheCostMap:
     def test_a_cell_reached_at_infinity_is_in_the_map(self) -> None:
         graph = GridGraph(6, 6, allow_diagonal=False)
         graph.weights[(3, 3)] = math.inf
-        native = FlowFieldService(graph, accelerate=True)
+        native = FlowFieldService(graph)
         native.recompute([(0, 0)])
 
         cost_map = dijkstra_map(graph, [(0, 0)])
@@ -451,7 +438,7 @@ class TestTheMembershipOfTheCostMap:
         graph = GridGraph(6, 6, allow_diagonal=False)
         for y in range(6):
             graph.walls.add((3, y))
-        native = FlowFieldService(graph, accelerate=True)
+        native = FlowFieldService(graph)
         native.recompute([(0, 0)])
 
         assert (5, 5) not in dijkstra_map(graph, [(0, 0)])
@@ -477,7 +464,7 @@ class TestTheMembershipOfTheCostMap:
                 elif rng.random() < 0.2:
                     graph.weights[(x, y)] = rng.choice([0.5, 2.0, 3.7])
         graph.walls.discard((12, 12))
-        native = FlowFieldService(graph, accelerate=True)
+        native = FlowFieldService(graph)
         native.recompute([(12, 12)])
 
         cost_map = dijkstra_map(graph, [(12, 12)])
@@ -498,30 +485,39 @@ class TestTheMembershipOfTheCostMap:
         assert not differing, f"{len(differing)} differ: {differing[:5]}"
 
 
-class TestTheStoreIsOptional:
-    def test_the_python_service_keeps_its_dicts_and_the_native_one_does_not(
-        self,
-    ) -> None:
-        """Opacity, asserted rather than described.
+class TestThereIsOneImplementation:
+    """The service has no Python path left to fall back to."""
 
-        The whole reason this port is cheap is that nothing outside reads a
-        cell: the native field never materialises `_cost_map` or `_field`,
-        so a consumer that reached past `cost_at`/`vector_at` would be
-        silently reading an empty dict. Nothing does today, and this is
-        what notices when something starts.
+    def test_the_field_is_not_held_in_python(self) -> None:
+        """Nothing outside the service may read a cell.
+
+        The port is cheap because the cost map and the field never come
+        back to Python. A consumer reaching past `cost_at`/`vector_at`
+        would have nothing to read, and this notices if that changes.
         """
-        graph = GridGraph(8, 8)
-        python, native = _both(graph)
-        python.recompute([(0, 0)])
-        native.recompute([(0, 0)])
+        service = FlowFieldService(GridGraph(8, 8))
+        service.recompute([(0, 0)])
 
-        assert python._cost_map and python._field
-        assert not native._cost_map and not native._field
+        assert not hasattr(service, "_cost_map")
+        assert not hasattr(service, "_field")
 
-    def test_forcing_the_python_store_is_honoured_even_with_the_extension(
-        self,
+    def test_the_store_cannot_be_chosen(self) -> None:
+        with pytest.raises(TypeError):
+            FlowFieldService(GridGraph(4, 4), accelerate=False)  # type: ignore[call-arg]
+
+    def test_the_engine_wide_switch_does_not_reach_it(
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """`accelerate=False` is what the whole file depends on."""
-        service = FlowFieldService(GridGraph(4, 4), accelerate=False)
+        """`PYGUARA_NO_NATIVE` picks between two stores; here there is one."""
+        from pyguara import native
 
-        assert service.accelerated is False
+        monkeypatch.setenv("PYGUARA_NO_NATIVE", "1")
+        native.reset_for_tests()
+        try:
+            assert native.native_module() is None
+            service = FlowFieldService(GridGraph(4, 4))
+            service.recompute([(0, 0)])
+            assert service.cost_at((3, 0)) == 3.0
+        finally:
+            monkeypatch.delenv("PYGUARA_NO_NATIVE")
+            native.reset_for_tests()
