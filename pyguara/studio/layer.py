@@ -1,15 +1,9 @@
 """The editor layer: ImGui context lifecycle, panels, and per-frame input.
 
-Deliberately separable from GL. `EditorLayer` builds a frame -- feeds IO,
-runs `new_frame()`, draws every visible panel, calls `render()` -- and only
-then hands the resulting draw data to a renderer, which may be `None`. That
-split is what makes the panels testable: `imgui.create_context()` needs no
-OpenGL at all, so a test runs real frames against a real world and asserts
-on what the panels did, with no window, no context sharing and no GPU.
-
-The previous editor had no such seam -- every panel method early-returned
-behind a dead GL import -- which is how 705 lines of it stayed untested and
-unexecuted until it was deleted.
+`EditorLayer` builds a frame (feeds IO, runs `new_frame()`, draws
+every visible panel, calls `render()`) and then hands the draw data to
+a renderer, which may be `None`. An ImGui context needs no GPU, so a
+test can run real frames against a real world with no window.
 """
 
 from __future__ import annotations
@@ -228,16 +222,10 @@ class EditorLayer:
     def add_frame_hook(self, hook: Callable[[], None]) -> None:
         """Call `hook` at the start of every frame, before any panel draws.
 
-        The seam something needs when it must react to the world changing
-        but owns no panel of its own. PyGuara Studio uses it to notice a
-        scene becoming active: its session is per-scene and resolved
-        lazily, and without a per-frame nudge nothing ever asks for one --
-        so its panels were never installed under `app.run()`, which is the
-        only way a game actually starts.
+        For something that must react to the world changing but owns no
+        panel. Studio uses it to notice a scene becoming active.
 
-        A hook that raises is logged and dropped rather than taking the
-        frame down with it; an editor that stops drawing is a worse
-        failure than one component of it going quiet.
+        A hook that raises is logged and dropped.
 
         Args:
             hook: Called once per frame, with no arguments.
@@ -444,16 +432,12 @@ class EditorLayer:
     def _apply_ui_scale(self, width: int, height: int) -> None:
         """Keep the chrome legible at this window size.
 
-        ImGui's built-in font is a 13px bitmap meant for a debug overlay,
-        and every size in the style is in pixels -- so an editor that is
-        comfortable at 1280 wide is a squint at 4K. The scale is derived
-        from the window and applied to the font and to every spacing,
-        padding and rounding at once.
+        The scale is derived from the window and applied to the font and to
+        every spacing, padding and rounding at once.
 
-        Re-derived per frame but applied only on a change, because
-        `scale_all_sizes` multiplies the style it is called on: applying
-        it twice compounds. The style is rebuilt from a pristine copy each
-        time rather than scaled again from where it already is.
+        It is applied only when it changes, and the style is rebuilt from a
+        pristine copy each time: `scale_all_sizes` multiplies the style it is
+        called on, so applying it twice would compound.
 
         Args:
             width: The window width in pixels.
@@ -589,9 +573,7 @@ class EditorLayer:
             layout: Which panel titles belong in which region.
             offset: How much of the window the dockspace does not cover,
                 because the editor's own title bar is above it. The tree
-                is built against the space the panels actually get, or
-                every ratio is measured against a window that is taller
-                than the one they are in.
+                is built against the space the panels actually get.
         """
         internal = imgui.internal
         root = _DOCKSPACE_ID
@@ -681,14 +663,12 @@ class EditorLayer:
     def set_settings_file(self, path: Path | None) -> None:
         """Remember the panel arrangement in `path` between runs.
 
-        ImGui's own settings mechanism, which already stores each window's
-        dock node, size and collapsed state, and restores them by window
-        title. Writing a second one on top of it would be a worse version
-        of something that works.
+        Uses ImGui's own settings file, which stores each window's dock node,
+        size and collapsed state and restores them by window title.
 
-        Must be called **before the first frame**: ImGui reads the file at
-        the start of the next `new_frame`, and a layout the dock builder
-        has already arranged would be overwritten by what it loads.
+        Must be called before the first frame: ImGui reads the file at the
+        start of the next `new_frame`, and what it loads would overwrite a
+        layout the dock builder has already arranged.
 
         Args:
             path: Where to keep it. The parent directory is created.

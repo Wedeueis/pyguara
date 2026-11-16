@@ -1,19 +1,11 @@
 """Turning component field values into JSON, and back.
 
-Four places in the engine already reflect over component fields, each with
-its own ad-hoc value handling: `ComponentRegistry._instantiate_dataclass`,
-`SceneSerializer`'s two halves, and `InspectorPanel._draw_field`. This is
-the fifth, and the one the others could be rewritten onto -- it is
-deliberately shape-compatible with what `SceneSerializer` writes, so a
-value Studio reports to an agent looks like the value in the scene file
-the agent might open next.
+Shape-compatible with what `SceneSerializer` writes, so a value Studio
+reports looks like the value in the scene file.
 
-The encoding that matters most is the one for a value that **cannot** be
-encoded. A field holding a texture, a material or a live callback is a
-real thing an agent will meet, and `null` is the wrong answer: it reads as
-"the field is empty" when the truth is "I cannot show you this, and you
-cannot set it from JSON". Those come back as
-`{"__unencodable__": "<repr>"}` instead, which says so.
+A value that cannot be encoded (a texture, a material, a live
+callback) comes back as `{"__unencodable__": "<repr>"}`, not `null`,
+which would read as an empty field.
 """
 
 from __future__ import annotations

@@ -1,15 +1,8 @@
 """Short-lived messages, shown over the editor and then forgotten.
 
-The gap this fills: an operation that fails writes a log line and nothing
-else. A person clicking *Add Component > Sprite*, or typing a value the
-component refuses, sees the menu close and nothing happen -- which is
-indistinguishable from a control that does not work, and is exactly how
-it was reported.
-
-Deliberately not a dialog. An authoring tool interrupts for a decision,
-not for a result: a toast says what happened, stays long enough to read,
-and goes away without being dismissed. Failures stay longer than
-successes, because a failure is the one worth reading twice.
+A toast says what an operation did or why it failed, stays long enough
+to read, and goes away without being dismissed. Failures stay longer
+than successes.
 """
 
 from __future__ import annotations

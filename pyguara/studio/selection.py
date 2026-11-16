@@ -1,15 +1,12 @@
 """The editor's shared "which entities are being looked at" state.
 
-Held by id rather than by `Entity`, so a selection cannot keep a destroyed
-entity alive or hand a panel a detached object. Panels resolve the ids
-against the live world every frame; an id that no longer resolves reads as
-nothing selected.
+Held by id, not by `Entity`, so a selection cannot keep a destroyed
+entity alive. Panels resolve the ids against the live world every
+frame; an id that no longer resolves reads as nothing selected.
 
-A selection is an **ordered set with a primary**. Order is insertion order,
-and the primary is the most recently added id -- the one a viewport gizmo
-anchors to and the Inspector shows fields for when several entities are
-selected. Both matter for a multi-select editor: "align to the last one I
-clicked" is the common operation, and it needs a defined last.
+A selection is an ordered set with a primary. Order is insertion
+order, and the primary is the most recently added id: the one a gizmo
+anchors to and the Inspector shows fields for.
 """
 
 from __future__ import annotations

@@ -1,14 +1,10 @@
 """Feed the engine's backend-neutral events into ImGui's IO.
 
-ImGui's own pygame backend is not used, and could not be: it wants raw SDL
-structs, while `Window.poll_events()` deliberately hands back engine events
-so nothing above the backend boundary imports pygame (issue #9). Translating
-here keeps the editor on the right side of that line -- the same reason the
-previous ImGui layer was judged to violate it.
+`Window.poll_events()` returns engine events, not SDL structs, so
+ImGui's own pygame backend is not used; the translation happens here.
 
-Key codes are SDL values, which `pyguara.input.keys` already names as plain
-integers, so the keyboard map below is built from that module rather than
-from pygame constants.
+Key codes are SDL values, which `pyguara.input.keys` names as plain
+integers, so the keyboard map below is built from that module.
 """
 
 from __future__ import annotations

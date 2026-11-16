@@ -1,34 +1,11 @@
 """Play, pause and step the game without leaving the editor.
 
-`Application` already has everything this needs -- `paused`, `time_scale`
-and a `step()` that runs exactly one frame -- so the panel is a face on
-them rather than a second loop. That matters: a second loop would
-double-step physics, and the first symptom would be a game that runs at
-twice speed only while the editor is open.
+The panel drives `Application.paused`, `time_scale` and its frame
+loop; it runs no loop of its own.
 
-Pausing is how the viewport becomes an editor rather than a window onto a
-moving scene. Dragging a gizmo while physics is integrating is possible
-and almost never what anyone means, because the body is re-solved
-underneath the drag.
-
-**Play and Stop are a lifecycle, not a pause button.** Every editor has
-one: Godot runs the game in its own process, Unreal in its own world,
-Unity in the same world and discards the changes on Stop. All three agree
-on the part that matters -- the scene you edit and the game you run are
-not the same thing at the same time. Studio used to attach to a *running*
-game and edit it live, which is the Unity case without the discard, and
-every confusing symptom came from it.
-
-So: **Play** copies the whole world and lets the game run, **Stop** puts
-that copy back, and while it is playing an edit is refused rather than
-silently lost. Pause and Step stay what they were -- they are about
-watching a running game, not about editing one.
-
-This panel used to say outright that there was no "reset to where play
-began", and gave a good reason: the only mechanism for restoring a world
-was `SceneSerializer`, which silently skips any component the registry
-does not know. `WorldSnapshot` does not go through the serializer -- it
-copies the live components -- so nothing can be silently skipped.
+Play copies the whole world into a `WorldSnapshot` and lets the game
+run, and Stop puts that copy back. While playing, an edit is refused.
+Pause and Step are for watching a running game.
 """
 
 from __future__ import annotations
@@ -89,14 +66,9 @@ class PlayControlsPanel(EditorPanel):
     def request_step(self, frames: int = _STEP_FRAMES) -> None:
         """Advance `frames` frames and then pause again.
 
-        Implemented by **unpausing for that many frames**, not by calling
-        `Application.step()`. This runs inside the editor's frame, which
-        is inside the application's frame, so stepping here would re-enter
-        the loop and run a frame inside a frame -- double-integrating
-        physics and drawing the editor from inside itself.
-
-        Letting the application's own loop run the frame costs nothing and
-        cannot re-enter.
+        Implemented by unpausing for that many frames, not by calling
+        `Application.step()`: this runs inside the application's frame, and
+        stepping here would run a frame inside a frame.
 
         Args:
             frames: How many frames to advance.

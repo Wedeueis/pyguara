@@ -1,18 +1,10 @@
 """What has been done and who asked for it, plus the approval queue.
 
-The panel a person watches while an agent works. Two things on it:
+- The journal, newest last, with failures marked.
+- The approval queue, when the session is in `ask` mode. Each entry
+  carries the diff the edit would produce.
 
-- **The journal**, newest last, with failures marked. An agent's mistakes
-  sit in the record next to its successes, which is the point -- the
-  question after forty edits is "what did it do, in order", and the undo
-  stack cannot answer that because an undo *moves* the stack.
-- **The approval queue**, when the session is in `ask` mode. Each entry
-  carries the diff the edit would produce, so the decision is made
-  against the consequence rather than the request.
-
-The filters are the whole interface: an agent run produces a lot of
-entries, and "show me only the failures" is how a person finds the moment
-something went wrong without reading all of them.
+Filters narrow the journal, for example to failures only.
 """
 
 from __future__ import annotations

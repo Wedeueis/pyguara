@@ -1,28 +1,13 @@
 """Studio's menus.
 
-Every editor has a menu bar, and the temptation is to write one that calls
-into the editor's internals. This one does not: an entry that changes the
-scene goes through the **operation registry**, the same surface an agent
-drives over MCP or JSON lines. So a person choosing *Entity > Create
-Empty* and an agent calling `create_entity` take the same path, land in
-the same history, and appear the same way in the journal.
+An entry that changes the scene goes through the operation registry,
+the surface an agent drives. So a person choosing Entity > Create
+Empty and an agent calling `create_entity` share one path, one history
+and one journal, and a menu can only offer what an operation offers.
 
-That has a consequence worth stating: the menus can only offer what the
-operations offer. Where an entry is missing -- opening a scene, prefabs --
-it is missing because the operation is, and the honest fix is to add the
-operation rather than to reach around it from the UI.
-
-The layout follows Godot and Unity where they agree, because a menu bar is
-not the place to be original:
-
-- **Scene** is Godot's name for Unity's File, and this is a scene editor.
-- **Edit** carries undo and redo, as everywhere.
-- **Entity** is this engine's word for Godot's Node and Unity's GameObject.
-- **View** holds the panels and the layout.
-- **Run** is the play controls, which Unity puts in a toolbar and Godot
-  under Debug; here they are a menu because the toolbar is a panel.
-- **Agent** has no equivalent in either, and is the point of Studio: the
-  approval mode, the journal, and the commands that let an agent in.
+The menus are Scene (file commands), Edit (undo and redo), Entity,
+View (panels and layout), Run (play controls) and Agent (the approval
+mode and the journal).
 """
 
 from __future__ import annotations

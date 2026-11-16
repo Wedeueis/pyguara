@@ -1,21 +1,12 @@
 """Driving the operation surface over JSON lines on stdin and stdout.
 
-The dependency-free way in. One JSON object per input line, one per
-output line:
+One JSON object per input line, one per output line. It needs only the
+standard library, so it works in every install, in a shell pipe and
+from a test, and it runs the same dispatch the MCP adapter does.
 
+Example:
     {"op": "scene_summary"}
     {"op": "set_field", "args": {"entity_id": "hero", ...}, "id": 3}
-
-Why this exists alongside the MCP adapter, rather than only MCP: the
-engine's hard-won rule is that an undeclared dependency is how a whole
-subsystem comes to be dead code -- the first `pyguara/editor` imported
-PyOpenGL, which was a dependency nowhere, and never executed once in any
-install. The operation surface is the contract; MCP is one transport over
-it, behind an optional extra. This one needs nothing but the standard
-library, so it works in every install, in a shell pipe, and from a test.
-
-It is also the honest testing seam. A test here exercises the same
-dispatch an agent hits, with no protocol library in between.
 """
 
 from __future__ import annotations

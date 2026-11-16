@@ -1,41 +1,14 @@
 """Reflection-based component editing for the selected entity.
 
-Dispatches on each field's **runtime value type**, not its declared
-annotation: component modules use `from __future__ import annotations`, so
-`dataclasses.field.type` is the *string* `"Vector2"` rather than the class,
-and a type-name lookup would either need a registry to keep in sync or
-silently fall through to read-only for everything.
+Dispatches on each field's runtime value type, not its annotation,
+which is a string under `from __future__ import annotations`. A frozen
+dataclass is drawn read-only.
 
-Two failure modes the previous editor shipped are handled here rather than
-discovered at runtime:
-
-- **Frozen components.** Its `_draw_dataclass` called `setattr`
-  unconditionally, raising `FrozenInstanceError` on any `frozen=True`
-  component. A frozen dataclass is drawn read-only, and says so.
-- **Writes that nothing hears.** Mutating a component behind the
-  `EntityManager`'s back leaves anything mirroring it -- physics bodies,
-  render batches, the spatial index -- holding stale data. Every accepted
-  edit ends with `notify_component_changed()`.
-
-**Where an accepted edit goes depends on who attached the panel**, which
-is the one thing this module has that the reflection does not explain.
-`attach_editor` installs the ImGui layer with no session behind it, and
-there the direct write above is the only thing available. `attach_studio`
-hands the panel the attachment, and then every accepted field becomes the
-same `set_field` operation an agent calls over MCP -- so it lands on the
-same history, in the same journal, and under the same approval mode.
-
-That used to be a `StudioInspectorPanel` subclass in a second package,
-overriding the one method that writes. With the editor layer and Studio in
-one package there is no boundary left for the subclass to cross, and the
-dependency is better said out loud in a constructor argument: this panel
-needs somewhere to send an edit, and which somewhere depends on what
-installed it. A direct write is not a lesser version of the operation
-path; it is what an editor with no history can honestly do.
-
-A refused or failed edit is reported rather than swallowed. The panel that
-accepts a value, reports nothing and changes nothing is what "the controls
-do not seem to have any effect" looks like from the outside.
+Where an accepted edit goes depends on who attached the panel. Under
+`attach_studio` it becomes the `set_field` operation, with history,
+journal and approval mode. Under `attach_editor`, which has no
+session, it is a direct write followed by `notify_component_changed()`.
+A refused or failed edit is reported.
 """
 
 from __future__ import annotations
@@ -170,26 +143,18 @@ class InspectorPanel(EditorPanel):
     ) -> None:
         """Apply one accepted field edit.
 
-        The seam. With an attachment the edit becomes a `set_field`
-        operation, so a field typed here lands on the same history, in the
-        same journal and under the same approval mode as the same field
-        set by an agent. Without one -- the bare `attach_editor` layer,
-        which has no command stack to route through -- it is the direct
-        write, plus the notification, without which anything mirroring the
-        component (a physics body, a render batch, the spatial index)
-        keeps the old value.
+        With an attachment the edit becomes a `set_field` operation, so it
+        lands on the same history, in the same journal and under the same
+        approval mode as an agent's. Without one, it is a direct write plus
+        `notify_component_changed()`.
 
-        What this must never become is a direct write *while* a session
-        exists: that is how an editing surface quietly grows a second way
-        to change the world. It reached no history, appeared in no
-        journal, and applied even in `plan` mode, which is supposed to
-        change nothing.
+        It must never write directly while a session exists: that edit would
+        reach no history or journal and would apply even in `plan` mode.
 
         Args:
             manager: The world the component belongs to. Unused on the
                 operation path, which reaches the world through the
-                session -- writing through the manager handed in here is
-                exactly the second seam above.
+                session.
             entity_id: The owning entity.
             component: The component being edited.
             field_name: The field that changed.

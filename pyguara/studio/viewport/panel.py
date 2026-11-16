@@ -1,28 +1,13 @@
 """The scene viewport: the rendered frame, with editing on top of it.
 
 An ImGui panel showing the render graph's own framebuffer as an image,
-with pan, zoom, a grid, selection and a marquee drawn over it. The frame
-is the one the engine already rendered -- there is no second render path
-to keep in step, and what the viewport shows is by construction what the
-game shows.
+with pan, zoom, a grid, selection and a marquee drawn over it.
 
-Two things make that work, and both were added for this:
-
-- `register_texture()` on the editor's renderer, so that `imgui.image()`
-  can name a framebuffer and not only ImGui's own font atlas.
-- A docked ImGui layout, so the panel has somewhere to live.
-
-**The panel is not the framebuffer.** It shows a frame rendered at the
-game's resolution, scaled into whatever size a docked panel happens to
-be, so every coordinate crosses two mappings: panel space to framebuffer
-space, then framebuffer space to world through the camera.
-`picking.screen_to_world` and `picking.world_to_panel` are that pair, and
-they have to agree exactly -- a gizmo handle drawn where it cannot be
-grabbed is the classic symptom of them not.
-
-Pan and zoom drive the scene's own `Camera2D`, which is what the render
-path already reads. An editor camera that the renderer did not consult
-would show a frame that moved while nothing else agreed it had.
+The frame is rendered at the game's resolution and scaled into the
+panel, so a coordinate crosses two mappings: panel to framebuffer,
+then framebuffer to world. `picking.screen_to_world` and
+`picking.world_to_panel` are that pair. Pan and zoom drive the scene's
+own `Camera2D`.
 """
 
 from __future__ import annotations

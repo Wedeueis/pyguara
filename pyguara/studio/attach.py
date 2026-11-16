@@ -1,43 +1,19 @@
 """Putting the editor layer, and Studio on top of it, into an application.
 
-```python
-from pyguara.application.bootstrap import create_application
-from pyguara.studio import attach_studio
+`attach_editor` installs the ImGui context, the input routing, the
+render pass and two panels over live engine state. `attach_studio`
+calls it and adds the operation registry, the journal, the command
+stack and the rest of the panels. Both are opt-in.
 
-app = create_application()
-studio = attach_studio(app.container)
-app.run(MyScene("game", dispatcher))
-```
+Nothing here imports Dear ImGui at module scope, because the
+JSON-lines transport loads this module. A session is bound to one
+scene's `EntityManager`, so `StudioAttachment` rebuilds it on each
+scene switch.
 
-Two entry points, in one module because the second is the first plus a
-session. `attach_editor` installs the ImGui context, the input routing,
-the render pass and two panels over live engine state. `attach_studio`
-calls it and adds the operation registry, the journal, the command stack
-and the rest of the panels -- it builds on the editor layer rather than
-replacing it, because the context lifecycle is already right there.
-
-Both are opt-in, for the same reason: a shipped game should not pay for
-an ImGui context and an operation registry it never shows.
-
-**Nothing here imports Dear ImGui at module scope.** `pyguara/studio/
-__init__.py` imports this module and `pyguara.studio.ops` goes through
-that `__init__`, so a module-level ImGui import here would make the
-dependency-free JSON-lines transport need ImGui after all -- precisely
-the coupling the optional MCP extra was kept out of. It has happened
-once, when the default dock layout was first wired up, and
-`tests/studio/test_attach.py` now blocks the import and asserts the
-transport still loads. Everything ImGui-adjacent -- the layer, the
-renderer, the panels, and `availability`, which imports `imgui_bundle`
-to find out whether it can -- is imported inside the function that needs
-it.
-
-**The session is bound to a world, and the world changes.** Each scene
-owns its own `EntityManager`, so a session built at attach time would be
-editing the world of whichever scene happened to be active -- usually
-none, since `attach_studio` runs before `app.run()`. `StudioAttachment`
-therefore rebuilds the session on each scene switch, which is also the
-only correct answer for the undo history: one that spanned a scene switch
-would be reverting commands into a world that never saw them applied.
+Example:
+    app = create_application()
+    studio = attach_studio(app.container)
+    app.run(MyScene("game", dispatcher))
 """
 
 from __future__ import annotations
@@ -371,24 +347,13 @@ class StudioAttachment:
     def take_over_screen(self) -> None:
         """Make the editor the only thing on screen, with the game inside it.
 
-        Three changes, which together are the difference between an editor
-        and panels floating over a running game:
+        1. The final blit is disabled, so the game is drawn once, inside the
+           Viewport panel, and not also full-screen behind the panels.
+        2. The game's UI is redirected into the viewport's source buffer, so
+           the HUD lands over the game and not over the editor's panels.
+        3. The dockspace stops passing through.
 
-        1. **The final blit is disabled.** `FinalPass` copies the composed
-           frame to the default framebuffer, so without this the game is
-           drawn twice -- full-screen behind the panels, and again inside
-           the Viewport panel, which shows the same buffer as an image.
-        2. **The game's UI is redirected into that buffer.** `UIRenderer.
-           present()` composites the HUD onto the *screen*, so it landed on
-           top of the editor's panels. Bound to the viewport's source
-           buffer instead, it lands where it belongs: inside the viewport,
-           over the game it annotates. The same redirect
-           `tools/agent_view.py` uses to capture a frame with its UI.
-        3. **The dockspace stops passing through.** With nothing behind it
-           worth seeing, an empty middle is just a hole.
-
-        Reversed by `release_screen()`, so a game can detach Studio and get
-        its own window back.
+        Reversed by `release_screen()`.
         """
         if self._screen_taken:
             return
@@ -437,17 +402,10 @@ class StudioAttachment:
     def _warn_if_not_resizable(self) -> None:
         """Say so when the window cannot be resized, and how to fix it.
 
-        SDL emits no resize event at all for a fixed-size window, and a
-        window manager may still let the frame be maximised -- WSLg does.
-        The engine then carries on rendering at the starting resolution
-        into a corner of a much larger window, with no event to tell it
-        otherwise. That looks like a broken editor and is a one-line
-        configuration fix, so it is worth saying out loud.
-
-        The flag cannot be added to a live window: SDL honours it at
-        creation, and `pygame.Window.resizable` does not take on a window
-        the display module opened. Reopening would recreate the window
-        and the native surface drawn to it.
+        A fixed-size window sends no resize event, but a window manager may
+        still maximise it. The engine then renders at the starting resolution
+        into a corner of a larger window. The flag cannot be added to a live
+        window, so this only warns.
         """
         try:
             from pyguara.config.manager import ConfigManager
@@ -718,32 +676,18 @@ def attach_editor(
     """Add the ImGui editor layer to the container's render graph.
 
     The layer on its own: an ImGui context, the input routing, the render
-    pass, and a Hierarchy and an Inspector over live engine state. No
-    session, no command stack, no operation registry -- `attach_studio`
-    adds those to this.
+    pass, and a Hierarchy and an Inspector over live engine state, with no
+    session or command stack. `attach_studio` adds those.
 
-    wgpu-only by construction: it draws through the native frame the render
-    graph's device owns, and the Pygame backend has none -- its
-    `PygameRenderGraph` is a stub. On that backend this returns `None`
-    rather than half-installing, and the `pyguara/tools` overlay remains
-    the dev surface there.
+    Needs the wgpu backend: it draws through the native frame the render
+    graph's device owns. The layer's teardown is owned by the pass
+    installed into the graph, so `RenderGraph.release()` releases it.
 
     Args:
         container: The engine container. Must already have a `RenderGraph`
             registered, which `create_application()` does for the wgpu
             backend.
         panels: Panels for the layer. Defaults to Hierarchy and Inspector.
-
-    The returned layer's teardown is owned by the pass that is installed
-    into the graph, so `RenderGraph.release()` -- which
-    `Application.shutdown()` calls -- releases the editor too. Releasing it
-    by hand as well is harmless.
-
-    Works under `create_application()` and `create_sandbox_application()`
-    alike: both draw through `Application`'s frame loop, which executes
-    every registered pass. (`SandboxApplication` briefly did not -- it
-    overrode `_render()` and ran no passes at all, so the editor attached
-    and was never drawn. It overrides `_render_overlays()` now.)
 
     Returns:
         The `EditorLayer`, registered in the container so game code can

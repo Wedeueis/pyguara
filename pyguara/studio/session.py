@@ -1,23 +1,13 @@
 """One editing session: a world, its history, its journal, its rules.
 
-Everything that edits a scene goes through a `StudioSession`, which is
-what makes a human's drag and an agent's tool call indistinguishable to
-the layers underneath. The session owns the four things an edit needs:
+Everything that edits a scene goes through a `StudioSession`. It owns
+the `EntityManager` being edited, the `CommandStack`, the `Journal`,
+and the approval mode, which decides whether an edit applies at once,
+waits for a person, or is only described.
 
-- the `EntityManager` being edited,
-- the `CommandStack` that can take any edit back,
-- the `Journal` that records who asked for what,
-- and the **approval mode**, which decides whether an edit applies at
-  once, waits for a person, or is only described.
-
-The approval modes mirror the permission model coding agents already have,
-because the problem is the same one: a capable agent acting on a shared
-artefact needs a setting between "ask me about everything" and "do what
-you like". `PLAN` is the interesting one, and it is free here -- an edit
-is applied, its diff captured, and then reverted. The world ends exactly
-as it started and the caller gets the precise consequence rather than a
-prediction of it. That only works because every command carries its own
-inverse.
+In `PLAN` mode an edit is applied, its diff captured, and then
+reverted, so the caller gets the real consequence and the world ends
+as it started.
 """
 
 from __future__ import annotations
@@ -49,17 +39,9 @@ logger = get_logger(__name__)
 class EditorMode(str, Enum):
     """Whether the scene is being edited or the game is being played.
 
-    The lifecycle every editor has, and the one Studio did not: Godot runs
-    the game in its own process, Unreal in its own world, Unity in the
-    same world and throws the changes away on Stop. All three agree on the
-    part that matters -- **the scene you edit and the game you run are not
-    the same thing at the same time.**
-
-    Studio attached to a *running* game and edited it live, which is the
-    Unity case without the discard, and every confusing symptom came from
-    it: a gizmo drag overwritten by the controller on the next tick, a pan
-    reclaimed by the follow system, an edit that "did nothing" because the
-    game had already moved on.
+    The scene being edited and the game being run are not the same thing
+    at the same time: Play snapshots the world, Stop restores it, and an
+    edit made while playing is refused.
     """
 
     EDIT = "edit"
@@ -458,17 +440,14 @@ class StudioSession:
     def _plan(self, command: EditCommand, *, actor: Actor, action: str) -> EditOutcome:
         """Report what `command` would do, and change nothing.
 
-        Applied and reverted rather than predicted. The diff is then the
-        real consequence, which is only possible because every command
-        carries its own inverse.
+        Applied and reverted, not predicted, so the diff is the real
+        consequence.
 
-        The whole pair runs inside `suppress_notifications()`, so nothing
-        watching the world is told about an edit that is about to be
-        undone. It used to see the edit and its undo go past: harmless for
-        a field change, not harmless for a planned **delete**, which
-        dropped the entity from the spatial index and queued its physics
-        body for teardown before the revert -- and the revert has no
-        `entity_created` hook to put either back.
+        The pair runs inside `suppress_notifications()`, so nothing watching
+        the world reacts to an edit that is about to be undone. A planned
+        delete would otherwise drop the entity from the spatial index and
+        queue its physics body for teardown, and the revert cannot restore
+        either.
 
         Args:
             command: The edit to describe.

@@ -1,28 +1,12 @@
 """A copy of the whole world, to put back after a play session.
 
-The thing an editor's Stop button restores. `PlayControlsPanel` used to
-say outright that there was no "reset to where play began", and gave a
-good reason: the only mechanism for restoring a world was
-`SceneSerializer`, which silently skips any component the registry does
-not know -- which is every component a *game* defines unless it registered
-them. A reset that quietly dropped the player's controller would be worse
-than no reset.
+What the editor's Stop button restores. Every entity is copied with
+`copy_component`: deep, with the owning entity cut out and resources
+shared. It does not go through `SceneSerializer`, so a component the
+registry does not know is copied like any other.
 
-That reason no longer holds. The command stack already captures a subtree
-by holding its live component instances, and `copy_component` already
-knows how to copy one: deep, with the owning entity cut out and resources
-shared. Copying every entity that way needs no registry and no schema, so
-nothing can be silently skipped -- a component this module has never heard
-of is copied exactly as well as one it has.
-
-Measured on `guara_falcao`: 252 entities captured in 1 ms and restored in
-1 ms, with no entity and no component lost.
-
-**Copied, not referenced.** The obvious mistake, and one the existing
-subtree snapshot deliberately makes for its own purpose: holding the live
-component means the game mutates the very objects the snapshot is meant to
-restore, and Stop puts back exactly what play left behind. Verified by
-moving a tile and restoring: with references it came back moved.
+The snapshot holds copies, not the live components, which the game
+goes on mutating during play.
 """
 
 from __future__ import annotations

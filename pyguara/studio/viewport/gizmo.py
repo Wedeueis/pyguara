@@ -1,32 +1,15 @@
 """The transform gizmo: dragging an entity rather than typing at it.
 
-`pyguara/tools/gizmos.py` draws arrows and a ring and that is all it
-does. Its `process_event` switches mode on Q/W/E and click-selects; there
-is no drag state, no handle hit-test, and no write-back to a `Transform`
-anywhere in the file. In the configuration the sandbox actually registers
--- with a selection provider set -- even the click branch is disabled, so
-it is a read-only indicator. The arrow geometry and the Q/W/E convention
-are worth keeping. The manipulation is new.
-
-**One drag is one undo entry, and the entry spans the whole drag.** That
-is the requirement everything here is shaped around, and it is why the
-drag does not emit a command per frame:
+One drag is one undo entry:
 
 1. On drag begin, the starting transform of every selected entity is
    recorded.
-2. While dragging, components are written **directly**, for live
-   feedback with no history churn.
-3. On release, the recorded starting values are put back and a single
-   `CompositeCommand` is applied through the session.
+2. While dragging, components are written directly.
+3. On release, the starting values are put back and one
+   `CompositeCommand` is applied through the session. A command
+   captures its inverse when applied, so it must see the old values.
 
-Step 3 looks redundant and is not. A command captures its inverse when it
-is applied, so applying it against a world already holding the final
-values would record "from final to final" and undo would restore nothing.
-Restoring first costs one frame of nothing visible and makes the history
-correct.
-
-Escape cancels: the recorded values go back and no command is applied, so
-a mis-drag leaves neither a change nor an undo entry.
+Escape cancels: the recorded values go back and no command is applied.
 """
 
 from __future__ import annotations

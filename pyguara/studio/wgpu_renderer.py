@@ -1,17 +1,13 @@
 """Rasterise Dear ImGui draw data through the native wgpu frame.
 
-The editor's renderer, on `NativeGpu.mesh`. A frame's draw lists become one
-indexed triangle list, drawn command by command, each with its own texture
-and clip rectangle, into whatever target is current -- the window, when
-`ImGuiPass` runs.
+A frame's draw lists become one indexed triangle list on
+`NativeGpu.mesh`, drawn command by command, each with its own texture
+and clip rectangle, into the current target.
 
-ImGui 1.92's dynamic textures are honoured: the font atlas
-arrives as a request on the draw data (`want_create`, `want_updates`,
-`want_destroy`), so `ImGuiBackendFlags_RendererHasTextures` is declared.
-
-A render target -- the game's frame, shown in the Viewport panel -- is
-registered as it is, and sampled directly. Its rows run top-down, as
-ImGui's do, so it needs no flip.
+ImGui's dynamic textures are supported: the font atlas arrives as a
+request on the draw data, and `RendererHasTextures` is declared. A
+render target shown in the Viewport panel is sampled directly; its
+rows run top-down, as ImGui's do.
 """
 
 from __future__ import annotations

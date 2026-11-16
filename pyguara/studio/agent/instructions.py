@@ -1,34 +1,12 @@
 """Generating the instruction files coding agents actually read.
 
-An agent opening a game project does not know what a PyGuara scene is,
-which components exist, how to run the tests, or that Studio can be driven
-over MCP. All of that is derivable from the project, and writing it by
-hand means it is wrong within a month.
+`AGENTS.md` is the canonical file. The per-tool files are thin shims
+that import it: `CLAUDE.md` (an `@AGENTS.md` line, since Claude Code
+does not merge the two), `GEMINI.md` and `.cursor/rules/*.mdc`.
+`AGENTS.override.md` is never written; that name is the user's.
 
-**One canonical file, thin per-tool shims.** The landscape as it stands:
-
-- `AGENTS.md` is the cross-tool standard, stewarded by the Agentic AI
-  Foundation. The nearest file in the directory tree wins for the code
-  being edited, and the format has no required fields -- it is plain
-  Markdown with whatever headings suit.
-- **Claude Code** reads `CLAUDE.md`, and falls back to `AGENTS.md` only
-  when there is no `CLAUDE.md`. It does not merge them: if both exist,
-  `CLAUDE.md` wins outright and `AGENTS.md` is never consulted. So the
-  shim is an `@AGENTS.md` **import line**, not a copy -- a copy is a
-  second source of truth that silently rots.
-- **Cursor** uses `.cursor/rules/*.mdc`; `.cursorrules` is legacy.
-- **Gemini CLI** uses `GEMINI.md`.
-- **Codex** truncates an instruction file at 32 KiB
-  (`project_doc_max_bytes`) and prefers `AGENTS.override.md` in the same
-  directory, which is why the generator never writes one: that filename
-  belongs to whoever needs to override what this produces.
-
-**Generated regions are fenced, and nothing outside them is touched.**
-This is the rule everything else bends around. A project's instruction
-file is mostly hand-written knowledge -- the reason a system is the way it
-is, the thing that broke last time -- and a generator that overwrites it
-is a generator nobody runs twice. Regeneration replaces what is between
-the markers and leaves every other byte alone.
+Generated regions are fenced by markers. Regeneration replaces what is
+between them and leaves every other byte of the file alone.
 """
 
 from __future__ import annotations
@@ -355,17 +333,10 @@ def _summary_from(settings: dict[str, Any]) -> str:
 def merge_generated(existing: str | None, generated: str, *, header: str = "") -> str:
     """Put `generated` into `existing`, preserving everything else.
 
-    The rule the whole module bends around. An instruction file is mostly
-    hand-written knowledge -- why a system is the way it is, what broke
-    last time -- and a generator that overwrites it is one nobody runs
-    twice.
-
-    Three cases:
-
-    - **No file.** A new one is written: the header, then the region.
-    - **A file with markers.** Only what is between them is replaced.
-    - **A file without markers.** The region is appended, and not a byte
-      of the existing text changes.
+    - No file: a new one is written, the header and then the region.
+    - A file with markers: only what is between them is replaced.
+    - A file without markers: the region is appended, and none of the
+      existing text changes.
 
     Args:
         existing: The current contents, or None when there is no file.

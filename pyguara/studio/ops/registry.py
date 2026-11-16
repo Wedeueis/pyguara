@@ -1,21 +1,13 @@
 """The operation surface: one registry, three front ends.
 
-A human picking an entry from the command palette, an agent calling a tool
-over MCP, and a script piping JSON into `pyguara studio ops` all reach the
-same `Operation` objects. That is the point. Three parallel surfaces
-would drift, and the one that drifts is always the one the agent uses,
-because nobody is looking at it.
+The command palette, the MCP server and `pyguara studio ops` all reach
+the same `Operation` objects.
 
-Each operation declares its name, a one-line summary, a JSON Schema for
-its arguments and a **risk class**. The risk class is what lets a caller
-decide policy without knowing the operation: "read anything, ask before
-writing to disk" is expressible without enumerating operations.
-
-**The surface is kept small on purpose.** Mature editor integrations
-converge on roughly twenty top-level tools, because a client has a limit
-on how many it will present and an agent's accuracy falls as the list
-grows. Rarer work goes behind one operation with an `operation`
-parameter rather than ten more entries.
+Each operation declares its name, a one-line summary, a JSON Schema
+for its arguments and a risk class. The risk class lets a caller set
+policy ("read anything, ask before writing to disk") without
+enumerating operations. The surface is kept to about twenty
+operations; see `docs/systems/studio.md`.
 """
 
 from __future__ import annotations
