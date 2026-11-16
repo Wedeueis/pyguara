@@ -72,10 +72,12 @@ rather than four. See [ADR 0001](../adr/0001-one-mutation-seam-for-studio.md).
 | **Journal** | What was done and who asked, plus the approval queue |
 | **Components** | Every registered component, its fields and its enum members |
 | **Config** | The engine configuration by section, edited in place and saved on request |
+| **Resources** | The files the resource manager has indexed and the ones it has loaded, with a preview, Spawn and Reload |
 | **Commands** | A person calling the operations an agent calls |
 
 Panels open docked -- hierarchy left, inspector, components and config right,
-viewport centre, play on top, history/journal/commands tabbed below.
+viewport centre, play on top, history/journal/commands/resources tabbed
+below.
 
 ### Finding an entity
 
@@ -272,6 +274,50 @@ Four things to know:
 A setting that holds `None` has no widget in the panel; `set` accepts a
 value for it, and `null` to clear it again.
 
+### Browsing resources
+
+The **Resources** panel shows two lists under one filter: every resource
+currently loaded, with its type and size, and every file
+`ResourceManager.index_directory()` mapped. Both scroll. It opens hidden,
+from *View*. Selecting a row previews it, and two buttons act on it. All
+of it is the `resources` operation:
+
+| Verb | Does |
+| --- | --- |
+| `list` | Reports the indexed files, each with the names that load it, and the loaded resources. Takes a `filter` and a `limit` |
+| `preview` | Describes one resource; a data file comes with its contents |
+| `spawn` | Creates an entity from a data file, as one undoable edit |
+| `reload` | Re-reads a loaded resource from disk |
+
+A data file is whatever loads as a `DataResource`: `.json`, `.manifest`
+and `.config`. `spawn` reads its top-level keys. Each one that names a
+registered component, with an object of fields, becomes that component,
+built through the `ComponentRegistry` as a scene file's are:
+
+```json
+{
+  "Transform": {"position": {"x": 40, "y": 50}},
+  "Tag": {"name": "Crate"}
+}
+```
+
+The entity is named after the file (`crate`, then `crate_2`) unless
+`entity_id` says otherwise, and carries a `ResourceLink` to the file.
+
+Things to know:
+
+- **Keys that are not components are reported, not hidden.** The reply
+  lists them under `skipped`, and the panel's toast names them.
+- **One component that cannot be built refuses the whole spawn.** Nothing
+  is created, and the error names the component.
+- **Previewing a data file loads it**, and it stays in the cache.
+  Previewing anything else never loads it: a texture is described only
+  if the game already loaded it.
+- **`reload` is not undoable**, and code holding the old resource object
+  keeps it; see [Resources](resources.md).
+- The panel reads the listing again every 30 frames and after each
+  action, so a file loaded by the game appears within half a second.
+
 ### The camera the gizmo trusts
 
 `Scene.camera` is **the camera the scene renders with**, and everything
@@ -451,7 +497,7 @@ pyguara studio mcp
 | Reading | `scene_summary`, `scene_tree`, `get_entity`, `find_entities` |
 | Editing | `create_entity`, `destroy_entity`, `duplicate_entity`, `add_component`, `remove_component`, `set_field`, `set_parent`, `set_enabled`, `set_tags` |
 | Running | `run_frames`, `capture_frame` |
-| Session | `history`, `journal`, `approvals`, `scene`, `config` |
+| Session | `history`, `journal`, `approvals`, `scene`, `config`, `resources` |
 
 `scene` carries four verbs behind an "operation" argument -- save, open,
 new and list -- as `history` does. The flat surface is budgeted, because
