@@ -530,6 +530,8 @@ class ResourceManager:
             TypeError: If the loader returns the wrong type.
             ResourceLoadError: If the loader itself fails. The original
                 exception is chained, so nothing is hidden.
+            ResourceError: If the loader fails; a loader's own error is wrapped
+                in `ResourceLoadError`.
         """
         extension = os.path.splitext(actual_path)[1].lower()
         loader = self._extension_map.get(extension)

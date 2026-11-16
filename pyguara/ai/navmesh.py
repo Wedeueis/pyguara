@@ -22,7 +22,11 @@ class NavMeshPolygon:
     neighbors: list[int] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
-        """Calculate polygon center."""
+        """Calculate polygon center.
+
+        Raises:
+            ValueError: If the polygon has fewer than 3 vertices.
+        """
         if len(self.vertices) < 3:
             raise ValueError("Polygon must have at least 3 vertices")
 
@@ -146,6 +150,9 @@ class NavMesh:
 
         Args:
             polygon: Polygon to add
+
+        Raises:
+            ValueError: If a polygon with the same id is already in the mesh.
         """
         if polygon.id in self._polygons:
             raise ValueError(f"Polygon with id {polygon.id} already exists")

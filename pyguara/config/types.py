@@ -54,7 +54,11 @@ class RenderingBackend(Enum):
 
     @classmethod
     def _missing_(cls, value: object) -> RenderingBackend | None:
-        """Refuse the retired ModernGL backend by name, loudly."""
+        """Refuse the retired ModernGL backend by name, loudly.
+
+        Raises:
+            RetiredBackendError: If the value is `moderngl`.
+        """
         if isinstance(value, str) and value.strip().lower() == "moderngl":
             raise RetiredBackendError(
                 "display.backend is 'moderngl', which was retired: the "

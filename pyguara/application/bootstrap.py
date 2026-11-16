@@ -228,6 +228,10 @@ def _setup_container(
         register_sections: Optional hook to register game-defined config
             sections, called before the configuration loads. See
             `RegisterSections`.
+
+    Raises:
+        NoGraphicsAdapterError: If the wgpu backend finds no GPU it can use.
+        RuntimeError: If the window cannot be created for any other reason.
     """
     # 1. Event System (Core)
     event_dispatcher = EventDispatcher()

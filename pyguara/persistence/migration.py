@@ -32,7 +32,12 @@ class Migration:
     description: str = ""
 
     def __post_init__(self) -> None:
-        """Validate migration version ordering."""
+        """Validate migration version ordering.
+
+        Raises:
+            ValueError: If `from_version` is below 1, or `to_version` is not
+                greater than it.
+        """
         if self.from_version < 1:
             raise ValueError(
                 f"Migration from_version must be >= 1, got {self.from_version}"

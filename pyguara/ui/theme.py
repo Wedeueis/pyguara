@@ -133,7 +133,11 @@ class UITheme:
             raise ThemeValidationError("Theme data must be a dictionary")
 
         def dict_to_color(color_dict: dict[str, int]) -> Color:
-            """Convert dict to Color."""
+            """Convert dict to Color.
+
+            Raises:
+                ThemeValidationError: If `color_dict` is not a dictionary.
+            """
             if not isinstance(color_dict, dict):
                 raise ThemeValidationError("Color data must be a dictionary")
             return Color(
@@ -144,7 +148,11 @@ class UITheme:
             )
 
         def dict_to_scheme(scheme_class: type, scheme_dict: dict[str, Any]) -> Any:
-            """Convert dict to scheme dataclass, handling Color fields."""
+            """Convert dict to scheme dataclass, handling Color fields.
+
+            Raises:
+                ThemeValidationError: If `scheme_dict` is not a dictionary.
+            """
             if not isinstance(scheme_dict, dict):
                 raise ThemeValidationError(
                     f"Scheme data for {scheme_class.__name__} must be a dictionary"

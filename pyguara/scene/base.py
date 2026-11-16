@@ -345,7 +345,11 @@ class Scene(ABC):
         return self.translator(key, **values)
 
     def _service(self, service_type: type[_T], purpose: str) -> _T:
-        """Look `service_type` up in this scene's container, or say when to ask."""
+        """Look `service_type` up in this scene's container, or say when to ask.
+
+        Raises:
+            SceneNotReadyError: If the scene has no container yet.
+        """
         if self.container is None:
             raise SceneNotReadyError(
                 f"Scene {self.name!r} cannot {purpose} before "

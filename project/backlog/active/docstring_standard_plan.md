@@ -121,9 +121,17 @@ Two layers, both in the existing `Code Quality` job through `make lint`.
 | Change | Findings today | Fix |
 | --- | --- | --- |
 | `convention = "google"` | 188 (D212) | Automatic |
-| `DOC502`: a documented exception is not raised | 100 | By hand |
-| `DOC202`, `DOC403`: a documented return or yield does not exist | 2 | By hand |
-| `DOC501`: a raised exception is not documented | 59 | By hand; optional |
+| `DOC502`: a documented exception is not raised | 100 | **Not enabled**, see below |
+| `DOC202`, `DOC403`: a documented return or yield does not exist | 2 | **Not enabled**: both are functions that return an iterator |
+| `DOC501`: a raised exception is not documented | 59 | Done in D2 |
+
+**`DOC502` was a mistake in the first version of this plan**, which
+called its 100 findings "docstrings that say something false". Read one
+by one in D2, nearly all document an exception a callee raises:
+`SceneNotReadyError` from a scene accessor, `OSError` from a file read,
+`EditError` from a command helper. Ruff sees only a `raise` in the
+function's own body, so the rule would delete true contracts. It stays
+off.
 
 The `DOC` rules are preview rules in ruff 0.14.10; the config already
 enables preview rules one at a time (`explicit-preview-rules`), so they
@@ -172,8 +180,8 @@ reference text.
 
 | PR | What | Size |
 | --- | --- | --- |
-| **D1** (done, this PR) | The standard as `docs/agents/docstrings.md`, one line in `AGENTS.md` pointing at it; `convention = "google"` and the D212 autofix; `tools/check_docstrings.py` with its baseline; wired into `make lint` | M |
-| **D2** | The `DOC502`, `DOC202` and `DOC403` fixes: 102 docstrings that say something false | S |
+| **D1** (done, #434) | The standard as `docs/agents/docstrings.md`, one line in `AGENTS.md` pointing at it; `convention = "google"` and the D212 autofix; `tools/check_docstrings.py` with its baseline; wired into `make lint` | M |
+| **D2** (done) | `DOC501` enabled: 41 functions gained a `Raises:` entry. Click commands and Studio's operation handlers are exempt | S |
 | **D3 to D8** | The 437 flagged docstrings, one PR per group of packages, each shrinking the baseline: `graphics`; `studio`; `kits` and `ai`; `ui`, `physics`, `audio`, `net`; `scene`, `application`, `systems`, `resources` and the rest; then `ecs`, `di`, `events` | M each |
 | **D9** | Baseline deleted; the same content rules on comments, if decision 2 says so | S |
 

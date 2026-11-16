@@ -142,6 +142,8 @@ class LocaleTable:
         Raises:
             ValueError: If it is not valid JSON or not a valid table; the
                 message names the file.
+            UnsafePlaceholderError: If a string has a placeholder that reaches
+                into an object.
         """
         try:
             data = json.loads(assets.read_text(path))

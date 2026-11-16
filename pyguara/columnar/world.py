@@ -72,7 +72,11 @@ class ColumnArrays(Mapping[str, npt.NDArray[Any]]):
         self.entities = entities
 
     def __getitem__(self, name: str) -> npt.NDArray[Any]:
-        """Return the array for one column."""
+        """Return the array for one column.
+
+        Raises:
+            KeyError: If the component has no column of that name.
+        """
         try:
             return self._columns[name]
         except KeyError:
@@ -352,7 +356,11 @@ class ColumnarWorld:
         )
 
     def _column(self, component: type, name: str) -> int:
-        """Resolve a column name to its index."""
+        """Resolve a column name to its index.
+
+        Raises:
+            KeyError: If the component has no column of that name.
+        """
         schema = self.register(component)
         try:
             return schema.column_names.index(name)

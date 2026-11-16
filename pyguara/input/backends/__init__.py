@@ -21,7 +21,11 @@ __all__ = sorted(_WHERE)
 
 
 def __getattr__(name: str) -> Any:
-    """Import a backend class the first time it is asked for."""
+    """Import a backend class the first time it is asked for.
+
+    Raises:
+        AttributeError: If the module has no backend of that name.
+    """
     module = _WHERE.get(name)
     if module is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

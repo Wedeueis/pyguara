@@ -84,7 +84,12 @@ def _layout_bytes(layout: _Layout) -> int:
 
 
 def _pack(shader: str, layout: _Layout, values: Mapping[str, Any]) -> bytes:
-    """Lay `values` out as a `Params` struct; see `FullscreenShader.pack`."""
+    """Lay `values` out as a `Params` struct; see `FullscreenShader.pack`.
+
+    Raises:
+        KeyError: If `values` lacks one of the layout's uniforms.
+        ValueError: If a value has the wrong number of floats for its kind.
+    """
     out = bytearray(_layout_bytes(layout))
     for name, kind, offset in layout:
         if name not in values:
@@ -146,7 +151,11 @@ class Attribute:
     kind: UniformKind = "f32"
 
     def __post_init__(self) -> None:
-        """Refuse a kind that cannot be a vertex attribute."""
+        """Refuse a kind that cannot be a vertex attribute.
+
+        Raises:
+            ValueError: If the kind cannot be a vertex attribute.
+        """
         if self.kind not in _ATTRIBUTE_FLOATS:
             raise ValueError(f"attribute '{self.name}' cannot be a {self.kind}")
 
@@ -512,6 +521,9 @@ class WgpuFramebuffer:
             width: Width in pixels.
             height: Height in pixels.
             dtype: `"f1"` or `"f2"`.
+
+        Raises:
+            ValueError: If `dtype` is neither `"f1"` nor `"f2"`.
         """
         if dtype not in ("f1", "f2"):
             raise ValueError(f"wgpu buffers are 'f1' or 'f2', not {dtype!r}")
@@ -625,7 +637,12 @@ class WgpuDevice(GraphicsDevice):
     def create_target(
         self, name: str, width: int, height: int, *, samples: int, dtype: str
     ) -> Framebuffer:
-        """Make a buffer in the native frame."""
+        """Make a buffer in the native frame.
+
+        Raises:
+            ValueError: If `samples` is not zero; this backend does not
+                multisample.
+        """
         if samples:
             raise ValueError("the wgpu backend does not multisample its buffers")
         # Same interface; `FramebufferManager` holds either kind.

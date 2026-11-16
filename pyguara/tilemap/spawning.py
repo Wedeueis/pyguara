@@ -138,7 +138,11 @@ def spawn_objects(
 def _selected_objects(
     tilemap: Tilemap, layers: Iterable[str] | None, include_hidden: bool
 ) -> list[MapObject]:
-    """Return the objects to consider, in layer-then-file order."""
+    """Return the objects to consider, in layer-then-file order.
+
+    Raises:
+        MapSpawnError: If a named object layer is not in the map.
+    """
     if layers is None:
         selected = list(tilemap.object_layers.values())
     else:
@@ -172,7 +176,12 @@ def _overrides(
     factory: PrefabFactory,
     offset: Vector2 | None,
 ) -> dict[str, dict[str, Any]]:
-    """Work out the component data one object adds to its prefab."""
+    """Work out the component data one object adds to its prefab.
+
+    Raises:
+        MapSpawnError: If a property names a component that is not
+            registered.
+    """
     x, y = obj.center
     if offset is not None:
         x, y = x + offset.x, y + offset.y

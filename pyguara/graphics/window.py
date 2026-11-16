@@ -25,7 +25,11 @@ class Window:
         self._is_open: bool = False
 
     def create(self) -> None:
-        """Initialize the actual OS window via the backend."""
+        """Initialize the actual OS window via the backend.
+
+        Raises:
+            RuntimeError: If the backend fails to open the window.
+        """
         if self._is_open:
             return
 
@@ -107,7 +111,11 @@ class Window:
 
     @property
     def native_handle(self) -> Any:
-        """Retrieve the raw underlying window object/surface."""
+        """Retrieve the raw underlying window object/surface.
+
+        Raises:
+            RuntimeError: If the window has not been created.
+        """
         if self._native_handle is None:
             raise RuntimeError("Window not created. Call create() first.")
         return self._native_handle
