@@ -33,8 +33,9 @@ jobs:
       matrix:
         # Deliberately not built, so the omissions are decisions:
         # Windows x86 and arm64, and Linux armv7/s390x/ppc64le, because
-        # `pygame-ce` and `pymunk` ship no wheels there -- a PyGuara wheel
-        # for a platform the engine cannot install on is a trap. And no
+        # `pymunk` ships no wheels there, nor does `pygame-ce` for the
+        # `pygame` extra -- a PyGuara wheel for a platform the engine
+        # cannot install on is a trap. And no
         # free-threaded (3.14t) build: `abi3` and free-threading do not
         # combine, so it would need a wheel per interpreter, and the
         # dependencies have no 3.14t wheels either.

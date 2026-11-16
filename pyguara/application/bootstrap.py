@@ -7,6 +7,7 @@ from pyguara.application.application import Application
 from pyguara.application.clock import Clock, FixedClock, WallClock
 from pyguara.audio.audio_system import IAudioSystem
 from pyguara.audio.manager import AudioManager
+from pyguara.common.extras import require_pygame
 from pyguara.config.manager import ConfigManager
 from pyguara.config.types import AudioBackend, GameConfig, RenderingBackend
 from pyguara.di.container import DIContainer
@@ -453,6 +454,7 @@ def _setup_container(
     else:
         # The software Pygame backend. Imported here, not at the top, so a game on
         # wgpu never loads pygame at all.
+        require_pygame('display.backend = "pygame"')
         from pyguara.graphics.backends.pygame.pygame_renderer import PygameBackend
         from pyguara.graphics.backends.pygame.pygame_window import PygameWindow
         from pyguara.graphics.backends.pygame.stubs import PygameRenderGraph
@@ -498,10 +500,13 @@ def _setup_container(
 
     # 5. Core Subsystems
     # Gamepads: gilrs on the wgpu backend, SDL's joysticks through pygame
-    # on the software one. The headless backend keeps pygame's, which has
-    # no display to need.
+    # on the software one. The headless backend has none.
     input_backend: IInputBackend
-    if not headless and disp_cfg.backend == RenderingBackend.WGPU:
+    if headless:
+        from pyguara.input.backends.null_backend import NullInputBackend
+
+        input_backend = NullInputBackend()
+    elif disp_cfg.backend == RenderingBackend.WGPU:
         from pyguara.input.backends.native_backend import NativeInputBackend
 
         input_backend = NativeInputBackend()
@@ -546,6 +551,7 @@ def _setup_container(
         # device is the device's own.
         sound_loader = NativeSoundLoader(native_audio_system.mixer)
     else:
+        require_pygame('audio.backend = "pygame"')
         from pyguara.audio.backends.pygame.loaders import PygameSoundLoader
         from pyguara.audio.backends.pygame.pygame_audio import PygameAudioSystem
 

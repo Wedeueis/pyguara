@@ -10,7 +10,8 @@ rebinding and works across devices.
 1. **Backend** (`IInputBackend`) — abstracts the joystick subsystem so the
    manager can run headless in tests. The bootstrap picks the one that
    matches the renderer: `NativeInputBackend` (gamepads through gilrs) on
-   wgpu, the default, and `PygameInputBackend` on pygame.
+   wgpu, the default, `PygameInputBackend` on pygame, and
+   `NullInputBackend`, which has no devices, on the headless application.
 2. **Raw events** — `InputManager.process_event()` ingests the engine's own
    keyboard, mouse and text events, which the window backend (winit on
    wgpu, SDL on pygame) has already translated;

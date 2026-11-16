@@ -111,6 +111,8 @@ ModernGL is **retired**: `display.backend: moderngl` raises at startup.
 need; a machine with no usable GPU fails at startup with
 `NoGraphicsAdapterError` rather than switching renderer. `pygame` is the
 software renderer, chosen by name, and the reference the pixel tests use.
+It is an extra (`pyguara[pygame]`), installed by `dev`; nothing outside
+the pygame backends, `tools/` and the tests may import it.
 
 ## Rules the code does not enforce
 

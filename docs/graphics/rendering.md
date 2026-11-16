@@ -378,7 +378,7 @@ Procedural shapes (`Box`, `Circle`) that lazy-generate their textures. This allo
 The engine uses the `IRenderer` protocol, allowing for different implementations:
 
 - **WgpuRenderer** (Recommended): GPU-accelerated through wgpu (Vulkan, Metal, DirectX 12). Supports all advanced features (lighting, post-processing, materials). `display.backend: moderngl` was retired and raises `RetiredBackendError` at startup.
-- **PygameBackend**: CPU-based `pygame-ce` rendering. Uses stub implementations for advanced features (renders fully lit, no post-processing).
+- **PygameBackend**: CPU-based `pygame-ce` rendering. Uses stub implementations for advanced features (renders fully lit, no post-processing). Needs the `pygame` extra: `pip install 'pyguara[pygame]'`.
 - **HeadlessBackend**: Discards draw calls. Useful for CI/CD and server-side simulation.
 
 ### Graceful Degradation
