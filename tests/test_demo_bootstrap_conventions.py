@@ -196,3 +196,26 @@ def test_a_scene_with_its_own_camera_assigns_it(scenes: Path) -> None:
         f"the gizmo -- reads `Scene.camera`, and would use the base "
         f"class's untouched one at the origin instead."
     )
+
+
+DEMO_SOURCES = sorted(GAMES_DIR.rglob("*.py"))
+EDITS_THE_IMPORT_PATH = re.compile(r"\bsys\.path\.(append|insert|extend)\s*\(")
+
+
+@pytest.mark.parametrize(
+    "source_file", DEMO_SOURCES, ids=lambda p: str(p.relative_to(GAMES_DIR))
+)
+def test_no_demo_edits_the_import_path(source_file: Path) -> None:
+    """A demo imports `pyguara` and `games` as installed code.
+
+    `uv sync` installs the repository in editable mode, which puts both on
+    the import path. A demo that adds the repository root itself hides a
+    broken install, and is the first thing a reader copies into a game.
+    """
+    source = source_file.read_text(encoding="utf-8")
+
+    assert not EDITS_THE_IMPORT_PATH.search(source), (
+        f"games/{source_file.relative_to(GAMES_DIR)} edits sys.path. "
+        "Run the demo from an environment made by `uv sync`, which already "
+        "has the repository on the import path."
+    )

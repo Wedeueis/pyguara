@@ -1,10 +1,7 @@
 """Vinagre: Matilha - Entry Point."""
 
 import logging
-import os
 import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from games.vinagre_matilha.bootstrap import configure_game_container
 from games.vinagre_matilha.scenes import MenuScene

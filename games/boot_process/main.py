@@ -4,11 +4,7 @@ This file demonstrates the minimal code required to start the PyGuara engine.
 """
 
 import logging
-import os
 import sys
-
-# Ensure we can import pyguara from root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from games.boot_process.bootstrap import configure_game_container
 from games.boot_process.scenes import BootScene

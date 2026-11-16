@@ -13,10 +13,6 @@ its own character, which it runs at once. WASD or the arrows steer. To feel a wo
 from __future__ import annotations
 
 import argparse
-import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from games.net_horde.bootstrap import configure_game_container
 from games.net_horde.scenes import HostScene, JoinScene, SideBySideScene

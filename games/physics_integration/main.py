@@ -1,11 +1,7 @@
 """Module 5: Physics Integration - Entry Point."""
 
 import logging
-import os
 import sys
-
-# Ensure we can import pyguara from root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from games.physics_integration.bootstrap import configure_game_container
 from games.physics_integration.scenes import PhysicsScene

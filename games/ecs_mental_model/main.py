@@ -1,11 +1,7 @@
 """Module 2: ECS Mental Model - Entry Point"""
 
 import logging
-import os
 import sys
-
-# Ensure we can import pyguara from root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from games.ecs_mental_model.bootstrap import configure_game_container
 from games.ecs_mental_model.scenes import ECSScene

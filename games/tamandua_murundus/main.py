@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from games.tamandua_murundus.bootstrap import (  # noqa: E402
+from games.tamandua_murundus.bootstrap import (
     configure_game_container,
 )
-from games.tamandua_murundus.scenes import ClearingScene  # noqa: E402
-from pyguara.application.application import Application  # noqa: E402
-from pyguara.events.dispatcher import EventDispatcher  # noqa: E402
+from games.tamandua_murundus.scenes import ClearingScene
+from pyguara.application.application import Application
+from pyguara.events.dispatcher import EventDispatcher
 
 
 def main() -> None:
