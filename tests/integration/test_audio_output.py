@@ -122,6 +122,25 @@ def test_a_silent_capture_is_reported_as_silent(tmp_path: Path) -> None:
     assert capture.peak == 0
 
 
+@pytest.mark.parametrize("stray_bytes", [1, 2, 3])
+def test_a_capture_cut_inside_a_frame_reads_its_whole_frames(
+    tmp_path: Path, stray_bytes: int
+) -> None:
+    """The disk driver can be closed partway through a frame.
+
+    The file then is not a whole number of frames, and its tail is not a
+    sample. Reading it must give every whole frame and nothing else.
+    """
+    frames = np.full(2048, 1200, dtype=np.int16)
+    cut = tmp_path / "cut.raw"
+    cut.write_bytes(frames.tobytes() + b"\x7f" * stray_bytes)
+
+    capture = read_capture(cut)
+
+    assert capture.samples == 1024
+    assert capture.peak == 1200
+
+
 def test_queued_loop_is_sample_contiguous(audio_env: None, tmp_path: Path) -> None:
     """`Channel.queue` joins segments with no gap and no dropped sample."""
     capture, seam = capture_tone_loop(tmp_path / "seam.raw", laps=3)
