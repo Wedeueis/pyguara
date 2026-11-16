@@ -194,9 +194,20 @@ class Capture:
         return "\n".join(lines)
 
 
+FRAME_BYTES = 4
+"""One stereo frame of 16-bit samples."""
+
+
 def _left_channel(path: Path) -> np.ndarray:
-    """Read the raw stereo capture and return its left channel."""
-    raw = np.frombuffer(path.read_bytes(), dtype=np.int16)
+    """Read the raw stereo capture and return its left channel.
+
+    The disk driver can be closed partway through a frame, which leaves a
+    file whose length is not a whole number of frames. The bytes of that
+    last, incomplete frame are not a sample, so they are left out.
+    """
+    data = path.read_bytes()
+    whole = len(data) - len(data) % FRAME_BYTES
+    raw = np.frombuffer(data[:whole], dtype=np.int16)
     return np.asarray(raw[::2], dtype=np.int64)
 
 
