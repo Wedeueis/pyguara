@@ -289,3 +289,121 @@ def test_margin_and_spacing_reach_the_slicer():
     clip = sheet.clip("walk", 16, 16, margin=2, spacing=2)
 
     assert len(clip.frames) == 3
+
+
+# -- Per-frame durations -------------------------------------------------
+
+
+def _timed(mode: PlaybackMode = PlaybackMode.LOOP, **extra: object) -> Animator:
+    """Three frames held for 0.1, 0.3 and 0.2 seconds."""
+    animator = Animator(Sprite(texture=FakeTexture()))
+    add_clip(
+        animator,
+        AnimationClip(
+            "timed",
+            [FakeTexture(index) for index in range(3)],
+            frame_durations=(0.1, 0.3, 0.2),
+            mode=mode,
+            **extra,  # type: ignore[arg-type]
+        ),
+    )
+    play_clip(animator, "timed")
+    return animator
+
+
+def _frame(animator: Animator) -> int:
+    return animator._current_frame_index
+
+
+def test_each_frame_is_held_for_its_own_duration() -> None:
+    animator = _timed()
+
+    advance_animator(animator, 0.09)
+    assert _frame(animator) == 0
+    advance_animator(animator, 0.02)
+    assert _frame(animator) == 1
+    advance_animator(animator, 0.28)
+    assert _frame(animator) == 1, "frame 1 lasts 0.3 s, not the 0.1 s of frame 0"
+    advance_animator(animator, 0.02)
+    assert _frame(animator) == 2
+
+
+def test_a_long_step_catches_up_across_frames_of_different_lengths() -> None:
+    animator = _timed()
+
+    # 0.1 + 0.3 + 0.2 is one lap; 0.15 more lands inside frame 1.
+    advance_animator(animator, 0.75)
+
+    assert _frame(animator) == 1
+
+
+def test_frame_events_fire_for_every_timed_frame_crossed() -> None:
+    animator = _timed(frame_events={1: ("step",), 2: ("land",)})
+
+    assert advance_animator(animator, 0.45) == ["step", "land"]
+
+
+def test_a_timed_clip_played_once_stops_on_its_last_frame() -> None:
+    animator = _timed(PlaybackMode.ONCE)
+
+    advance_animator(animator, 5.0)
+
+    assert _frame(animator) == 2
+    assert animator.is_finished
+
+
+def test_a_timed_ping_pong_holds_each_frame_its_own_time_both_ways() -> None:
+    animator = _timed(PlaybackMode.PING_PONG)
+
+    advance_animator(animator, 0.61)  # 0, 1, 2 and into the way back
+    assert _frame(animator) == 1
+    advance_animator(animator, 0.28)
+    assert _frame(animator) == 1, "frame 1 lasts 0.3 s on the way back too"
+    advance_animator(animator, 0.03)
+    assert _frame(animator) == 0
+
+
+def test_playback_speed_scales_timed_frames() -> None:
+    animator = _timed()
+    animator.playback_speed = 2.0
+
+    advance_animator(animator, 0.06)
+
+    assert _frame(animator) == 1
+
+
+@pytest.mark.parametrize(
+    "durations", [(0.1, 0.2), (0.1, 0.2, 0.3, 0.4), (0.1, 0.0, 0.2), (0.1, -1.0, 0.2)]
+)
+def test_durations_that_do_not_fit_the_frames_are_refused(
+    durations: tuple[float, ...],
+) -> None:
+    with pytest.raises(ValueError, match="frame_durations"):
+        AnimationClip(
+            "bad",
+            [FakeTexture(index) for index in range(3)],
+            frame_durations=durations,
+        )
+
+
+# -- Finishing -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("mode", "finishes"),
+    [
+        (PlaybackMode.ONCE, True),
+        (PlaybackMode.LOOP_TIMES, True),
+        (PlaybackMode.LOOP, False),
+        (PlaybackMode.PING_PONG, False),
+    ],
+)
+def test_a_clip_that_ends_reports_that_it_finished(
+    mode: PlaybackMode, finishes: bool
+) -> None:
+    animator = _animator(_clip(mode=mode, loop_count=2))
+    assert not animator.is_finished
+
+    advance_animator(animator, 60.0)
+
+    assert animator.is_finished is finishes

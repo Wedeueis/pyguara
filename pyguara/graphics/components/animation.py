@@ -52,6 +52,9 @@ class AnimationClip:
             means "whatever `loop` says" -- `loop` predates this and
             plenty of clips (and every prefab file) still set it.
         loop_count: How many loops `LOOP_TIMES` runs. Ignored otherwise.
+        frame_durations: Seconds each frame is held, one per frame, for a
+            clip whose frames are not all the same length. When set it
+            decides the timing and `frame_rate` is not read.
     """
 
     name: str
@@ -61,6 +64,7 @@ class AnimationClip:
     frame_events: dict[int, tuple[str, ...]] = field(default_factory=dict)
     mode: PlaybackMode | None = None
     loop_count: int = 1
+    frame_durations: tuple[float, ...] | None = None
 
     def __post_init__(self) -> None:
         """Reject clips that cannot be played, and settle the mode.
@@ -75,7 +79,8 @@ class AnimationClip:
             ValueError: If there are no frames, the frame rate is not
                 positive, or `LOOP_TIMES` was asked for without a positive
                 count -- which would stop on the first frame and look like
-                a missing animation.
+                a missing animation. Also if `frame_durations` is not one
+                positive number per frame.
         """
         if not self.frames:
             raise ValueError(f"AnimationClip '{self.name}' has no frames")
@@ -84,6 +89,19 @@ class AnimationClip:
                 f"AnimationClip '{self.name}' frame_rate must be positive, "
                 f"got {self.frame_rate}"
             )
+
+        if self.frame_durations is not None:
+            if len(self.frame_durations) != len(self.frames):
+                raise ValueError(
+                    f"AnimationClip '{self.name}' has {len(self.frames)} frames "
+                    f"and {len(self.frame_durations)} frame_durations; it needs "
+                    "one per frame."
+                )
+            if any(duration <= 0 for duration in self.frame_durations):
+                raise ValueError(
+                    f"AnimationClip '{self.name}' frame_durations must all be "
+                    f"positive, got {self.frame_durations}"
+                )
 
         if self.mode is None:
             self.mode = PlaybackMode.LOOP if self.loop else PlaybackMode.ONCE
@@ -164,8 +182,16 @@ class Animator(StrictComponent):
 
     @property
     def is_finished(self) -> bool:
-        """Check if the current non-looping animation has finished."""
-        if not self._current_clip or self._current_clip.loop:
+        """Whether the current clip has played to its end and stopped.
+
+        Never true for a clip that has no end, a `LOOP` or a `PING_PONG`,
+        which is also why a clip merely stopped is not the test.
+        """
+        clip = self._current_clip
+        if clip is None or clip.playback_mode in (
+            PlaybackMode.LOOP,
+            PlaybackMode.PING_PONG,
+        ):
             return False
         return not self._playing
 
@@ -339,15 +365,20 @@ def advance_animator(animator: Animator, dt: float) -> list[str]:
 
     animator._current_time += scaled
 
-    # frame_rate is > 0; `AnimationClip` validates it.
-    seconds_per_frame = 1.0 / clip.frame_rate
-    if animator._current_time < seconds_per_frame:
-        return []
+    if clip.frame_durations is not None:
+        crossed = _step_timed_cursor(animator, clip, clip.frame_durations)
+        if not crossed:
+            return []
+    else:
+        # frame_rate is > 0; `AnimationClip` validates it.
+        seconds_per_frame = 1.0 / clip.frame_rate
+        if animator._current_time < seconds_per_frame:
+            return []
 
-    frames_advanced = int(animator._current_time / seconds_per_frame)
-    animator._current_time -= frames_advanced * seconds_per_frame
+        frames_advanced = int(animator._current_time / seconds_per_frame)
+        animator._current_time -= frames_advanced * seconds_per_frame
 
-    crossed = _step_cursor(animator, clip, frames_advanced)
+        crossed = _step_cursor(animator, clip, frames_advanced)
 
     total_frames = len(clip.frames)
     frame_events = clip.frame_events
@@ -357,6 +388,33 @@ def advance_animator(animator: Animator, dt: float) -> list[str]:
 
     animator._apply_frame()
     return fired
+
+
+def _step_timed_cursor(
+    animator: Animator, clip: AnimationClip, durations: tuple[float, ...]
+) -> list[int]:
+    """Move the cursor through frames that each last their own time.
+
+    One frame at a time, since how long the next step takes depends on
+    which frame the last one landed on. Each step spends the duration of
+    the frame being left, and the playback mode decides where it goes.
+
+    Args:
+        animator: The animator whose cursor to move.
+        clip: Its current clip.
+        durations: The clip's seconds per frame.
+
+    Returns:
+        The frame indices crossed, oldest first.
+    """
+    crossed: list[int] = []
+    while animator._playing:
+        held = durations[animator._current_frame_index]
+        if animator._current_time < held:
+            break
+        animator._current_time -= held
+        crossed.extend(_step_cursor(animator, clip, 1))
+    return crossed
 
 
 def _step_cursor(

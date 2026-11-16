@@ -262,8 +262,9 @@ play_clip(animator, "run", force_reset=True)  # restart from frame 0
 `AnimationClip` rejects an empty frame list or a non-positive `frame_rate` at
 construction. `advance_animator(animator, dt)` catches up **every** whole frame
 the `dt` covers, so a lag spike or a host slower than the clip's `frame_rate`
-does not drop frames or drift behind. A non-looping clip stops on its last
-frame; `is_finished` then reports `True` (and `is_playing` `False`).
+does not drop frames or drift behind. A clip that ends, `ONCE` or
+`LOOP_TIMES`, stops on its last frame; `is_finished` then reports `True` (and
+`is_playing` `False`).
 `play_clip()` with an unknown clip name logs a warning and does nothing.
 
 ### Playback modes
@@ -314,6 +315,59 @@ action per row. A row past the end, or a `count` larger than the row, raises:
 a clip quietly short of frames animates wrongly rather than visibly failing.
 
 `frame_events` indices are relative to the **clip**, not to the sheet.
+
+### Frames of different lengths
+
+```python
+AnimationClip("attack", frames, frame_durations=(0.08, 0.08, 0.25, 0.05))
+```
+
+`frame_durations` holds each frame for its own time, in seconds, one per
+frame: a wind-up that lingers, a strike that snaps. When it is set it decides
+the timing and `frame_rate` is not read. Catch-up, frame events, the playback
+modes and `playback_speed` all work as they do at a fixed rate; a ping-pong
+holds each frame for its own time in both directions. A list of the wrong
+length, or with a duration that is not positive, raises.
+
+### Importing from Aseprite
+
+```python
+from pyguara.graphics.aseprite import load_aseprite
+
+sheet = load_aseprite("assets/hero.json", texture_factory)
+add_clip(animator, sheet.clip("idle"))
+add_clip(animator, sheet.clip("attack"))
+```
+
+In Aseprite, **File > Export Sprite Sheet** with **JSON Data** ticked writes
+an image and a JSON file. `load_aseprite()` reads the pair, through
+`pyguara.assets`, so it works from a pack too.
+
+| In Aseprite | In the engine |
+| --- | --- |
+| A tag | One `AnimationClip`, under the tag's name |
+| A frame's duration | That frame's entry in `frame_durations`; a plain `frame_rate` when every frame of the tag is as long |
+| Direction: forward, reverse | `LOOP`, with the frames reversed for reverse |
+| Direction: ping-pong, ping-pong reverse | `PING_PONG` |
+| A repeat count on a tag | `LOOP_TIMES` with that count |
+| No tags at all | One looping clip of every frame, named after the file |
+| "Trim" on export | Each frame is put back on a canvas of the sprite's size, so a clip's frames stay aligned |
+
+Both JSON layouts, "Array" and "Hash", are read. The image is looked for
+beside the JSON under the file name the JSON gives, whatever folder the
+artist exported from; `image_path=` names it outright.
+
+`sheet.frames` and `sheet.durations` hold the whole timeline, for a game
+that builds its own clips. `sheet.clip(name)` raises a `KeyError` that lists
+the tags there are.
+
+What it refuses, with an `AsepriteFormatError` that says what to change: a
+JSON file that is not a sprite sheet export, a frame outside the image (the
+JSON and image are from different exports), a rotated frame, and a ping-pong
+tag with a repeat count, which the engine has no playback mode for.
+
+A tag's clip loops unless it has a repeat count. For an attack that plays
+once and then reports `is_finished`, give the tag a repeat of 1 in Aseprite.
 
 ### State machine
 
