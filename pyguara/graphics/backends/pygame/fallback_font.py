@@ -13,6 +13,7 @@ text that needs none renders exactly as before.
 
 from __future__ import annotations
 
+import io
 from typing import Any
 
 import pygame
@@ -52,7 +53,10 @@ class FallbackFont:
             self._generation = generation
             self._fallbacks = []
             for path in fonts.fallback_fonts():
-                font = pygame.font.Font(path, self._size)
+                # From the bytes, not the path: the face may be in a pack.
+                font = pygame.font.Font(
+                    io.BytesIO(fonts.fallback_font_data(path)), self._size
+                )
                 # The fallback has one style; pygame synthesises the rest.
                 font.bold, font.italic = self._bold, self._italic
                 self._fallbacks.append(font)

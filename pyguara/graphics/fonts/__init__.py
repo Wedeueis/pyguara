@@ -18,6 +18,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from pyguara import assets
+
 FONTS = Path(__file__).resolve().parent
 
 _STYLES = {
@@ -51,6 +53,7 @@ def default_font_path(bold: bool = False, italic: bool = False) -> Path:
 # for the player's language first.
 
 _fallbacks: tuple[Path, ...] = ()
+_fallback_data: dict[Path, bytes] = {}
 _generation = 0
 _native_faces: list[Any] | None = None
 _warned_without_extension = False
@@ -62,7 +65,9 @@ def set_fallback_fonts(paths: Iterable[str | Path]) -> None:
     Tried in order: the first with a glyph for a character draws it. Line
     height stays the default face's. Single-face files only (`.ttf` or
     `.otf`, not a `.ttc` collection), because the pygame renderer opens
-    them by path. Replaces the previous list; an empty list clears it.
+    the first face in a file. Replaces the previous list; an empty list
+    clears it. Read through `pyguara.assets`, once, so a face can ship in
+    a pack.
 
     Args:
         paths: The font files, in the order to try them.
@@ -71,13 +76,15 @@ def set_fallback_fonts(paths: Iterable[str | Path]) -> None:
         FileNotFoundError: If a file does not exist.
         OSError: If the native extension finds a file is not a font.
     """
-    global _fallbacks, _generation, _native_faces
+    global _fallbacks, _fallback_data, _generation, _native_faces
     chosen = tuple(Path(path) for path in paths)
     for path in chosen:
-        if not path.is_file():
+        if not assets.is_file(path):
             raise FileNotFoundError(f"fallback font {path} does not exist")
-    faces = _load_native(chosen)
+    data = {path: assets.read_bytes(path) for path in chosen}
+    faces = _load_native(chosen, data)
     _fallbacks = chosen
+    _fallback_data = data
     _native_faces = faces
     _generation += 1
 
@@ -85,6 +92,15 @@ def set_fallback_fonts(paths: Iterable[str | Path]) -> None:
 def fallback_fonts() -> tuple[Path, ...]:
     """Return the fallback faces, in the order they are tried."""
     return _fallbacks
+
+
+def fallback_font_data(path: Path) -> bytes:
+    """Return a fallback face's file, as read when it was set.
+
+    Raises:
+        KeyError: If `path` is not one of the current fallbacks.
+    """
+    return _fallback_data[path]
 
 
 def fallback_generation() -> int:
@@ -100,7 +116,7 @@ def native_fallback_faces() -> list[Any]:
     """Return the fallbacks as `NativeFace`s, read once; none without the extension."""
     global _native_faces
     if _native_faces is None:
-        _native_faces = _load_native(_fallbacks)
+        _native_faces = _load_native(_fallbacks, _fallback_data)
     return list(_native_faces)
 
 
@@ -137,14 +153,14 @@ def _extension() -> Any | None:
         return None
 
 
-def _load_native(paths: tuple[Path, ...]) -> list[Any]:
+def _load_native(paths: tuple[Path, ...], data: dict[Path, bytes]) -> list[Any]:
     extension = _extension()
     if extension is None:
         return []
     faces = []
     for path in paths:
         try:
-            faces.append(extension.NativeFace(path.read_bytes()))
+            faces.append(extension.NativeFace(data[path]))
         except OSError as error:
             raise OSError(f"fallback font {path}: {error}") from error
     return faces

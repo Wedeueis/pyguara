@@ -6,8 +6,9 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from pyguara import assets
 from pyguara.i18n.plurals import plural_category
-from pyguara.i18n.table import LocaleTable
+from pyguara.i18n.table import LocaleTable, locale_files
 from pyguara.log import get_logger
 
 __all__ = ["MissingStringError", "Translator"]
@@ -72,20 +73,21 @@ class Translator:
     ) -> Translator:
         """Load every `<locale>.json` in a directory.
 
+        Read through `pyguara.assets`, so the directory may be in a pack.
+
         Raises:
             FileNotFoundError: If the source locale's file is missing.
             ValueError: If a file is not a valid table; the message names it.
         """
         directory = Path(directory)
         source_file = directory / f"{source}.json"
-        if not source_file.is_file():
+        if not assets.is_file(source_file):
             raise FileNotFoundError(
                 f"{source_file} is missing: the source locale's strings are "
                 "what every other locale falls back to"
             )
         tables = {
-            path.stem: LocaleTable.from_file(path)
-            for path in sorted(directory.glob("*.json"))
+            path.stem: LocaleTable.from_file(path) for path in locale_files(directory)
         }
         return cls(tables, locale=locale, source=source)
 

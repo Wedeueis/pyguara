@@ -421,9 +421,11 @@ fonts.set_fallback_fonts([
 - **Line height stays Liberation Sans's**, so a label does not grow
   because it holds a CJK character. Noto Sans CJK fits inside it.
 - **Single-face `.ttf` or `.otf` files only**, not `.ttc` collections: the
-  pygame renderer opens fonts by path. Noto publishes per-region files
+  pygame renderer opens the first face in a file. Noto publishes per-region files
   (`NotoSansSC`, `NotoSansJP`, `NotoSansKR`) under the SIL Open Font
   License.
+- **Read once, through `pyguara.assets`**, when they are set, so the faces
+  can ship in a pack.
 - The pygame renderer reads the faces' character maps through the native
   extension. Without it, fallbacks have no effect and a warning is logged.
 
