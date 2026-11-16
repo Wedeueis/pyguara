@@ -1,25 +1,13 @@
 """Wave Function Collapse: constraint-propagation grid generation.
 
-Genre-agnostic like `bsp.py` -- states are caller-defined values (a tile
-kind, a biome id, anything hashable), and adjacency is expressed as plain
-`AdjacencyRule`s the caller supplies; nothing here knows what a "state"
-means. `dungeon.py`'s BSP recipe is the roguelike-room flavor of its
-sibling algorithm; a WFC-driven tile palette (cave walls, biome blending)
-is this algorithm's own recipe, left to the caller to build.
+States are caller-defined hashable values (a tile kind, a biome id)
+and adjacency is the `AdjacencyRule`s the caller supplies.
 
-**Which cell collapses next is chosen through a heap**, not by scanning.
-That is a performance property worth stating in the module that depends
-on it: the obvious implementation lists every undecided cell and sorts it
-once per collapse, which is quadratic in the cell count and was 95% of a
-48x48 generation -- 3.5 seconds for a 64x64 grid against 27 ms now.
-`_attempt` carries the invariant that makes the heap sound.
-
-The selection order is also **observable through the seed**: it decides
-which cell is collapsed, so it decides which draw from `rng` lands where.
-A change to it that still produces valid grids will produce *different*
-ones from the same seed, which is a breaking change to every world
-already generated. `tests/test_kits_procgen_wfc.py` pins ten shapes by
-digest for that reason.
+The next cell to collapse is chosen through a heap; `_attempt` carries
+the invariant that makes the heap sound. The selection order decides
+which draw from `rng` lands where, so changing it changes the grid a
+seed produces. That is a breaking change for every world already
+generated.
 """
 
 from __future__ import annotations

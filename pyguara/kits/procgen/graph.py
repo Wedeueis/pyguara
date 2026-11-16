@@ -1,12 +1,8 @@
 """Graph-based layout generation: scattered points connected into a graph.
 
-A second alternative to `bsp.py`'s space-partitioning approach to the same
-problem -- "RTS map-gen and TD path-gen are others on the same algos" (#28)
-applies here too: points and edges are genre-agnostic, with no "room" or
-"node type" vocabulary. Placing points under a minimum-spacing or other
-rule (Poisson-disc-style feature scattering, frequency/dependency rules)
-is `constraint-placement`, a separate deferred algorithm family --
-`scatter_points()` here is a plain uniform scatter, nothing more.
+An alternative to `bsp.py`'s space partitioning. Points and edges
+carry no "room" or "node type" vocabulary. `scatter_points()` is a
+plain uniform scatter; `poisson.py` scatters with a minimum spacing.
 """
 
 from __future__ import annotations

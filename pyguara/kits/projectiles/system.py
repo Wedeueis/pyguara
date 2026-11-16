@@ -49,21 +49,14 @@ EndHandler = Callable[[Projectile, ProjectileEnd], object]
 class ProjectileSystem:
     """A pool of projectiles: spawn, move, hit-check, render.
 
-    Mirrors `ParticleSystem`'s shape (a pre-allocated ring-buffer pool,
-    `spawn`/`update`/`render`, scene-composed rather than DI-registered).
-    Collision is checked against the shared `SpatialHash` (#98) instead of
-    physics -- cheap enough for the volume of projectiles a shmup-style
-    bullet pattern produces, matching the spatial hash's own "shooter
-    bullets" design rationale. A candidate must carry `Hurtbox`, `Health`
-    and a `Transform` to be a valid target -- the index finds it, and its
-    `Transform` says exactly where it is; `StatBlock` is read for mitigation if
-    present, skipped otherwise.
+    A pre-allocated ring-buffer pool composed into a scene, like
+    `ParticleSystem`. Hits are checked against the shared `SpatialHash`,
+    not physics. A target must carry `Hurtbox`, `Health` and a
+    `Transform`; `StatBlock` is read for mitigation if present.
 
-    Each tick checks the whole step, not only where the projectile ends
-    up, so a shot moving further than its own `hit_radius` in a tick still
-    hits what it passes. Candidates are tried in the order the projectile
-    reaches them, then by entity id -- never in the spatial index's own
-    order, which is a set's for the Python store and differs between runs.
+    Each tick checks the whole step, so a fast shot still hits what it
+    passes. Candidates are tried in the order the projectile reaches
+    them, then by entity id, never in the spatial index's own order.
     """
 
     def __init__(

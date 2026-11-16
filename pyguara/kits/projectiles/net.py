@@ -1,33 +1,16 @@
 """Shots over the network: each sent once, and flown by every client itself.
 
-Imported on its own, as `pyguara.kits.projectiles.net`: the kit doesn't import it, so a
-single-player game loads no networking.
+Imported on its own; the kit does not import it, so a single-player
+game loads no networking. The host sends each shot once, as a reliable
+event, and each client flies it on its own `ProjectileSystem`. The
+host alone decides hits, and sends where a shot ended when it stops
+early. A client's own shots appear when fired and are matched to the
+host's copy by `ProjectileKey`. See `docs/systems/networking.md`.
 
-    register_projectiles(schema, kinds, position=..., velocity=...)   # both sides
-    ProjectileHost(projectiles, replication, app)                      # host
-    ProjectileClient(projectiles, dispatcher, replication, dt)         # each client
-
-Projectiles are not replicated in snapshots. Hundreds of bullets read every tick would
-use up the snapshot budget, so the host sends each shot once, as a reliable event: who
-fired it and when, its kind, origin, velocity and life. A client flies it on its own
-`ProjectileSystem`, and the host alone decides what it hits. When a shot stops early, at a
-target, at a wall, or because the host cleared them, the host sends where it ended, and
-the client stops its copy there. One that simply runs out of life ends on its own on
-both sides, so it costs nothing more. A bullet in flight costs no bandwidth at all.
-
-Both events run on the client's delayed timeline with everything else, so a shot leaves
-its shooter where the client draws the shooter, and stops at a target as the target is
-hit. A client's own shots are the exception, since its own character is drawn in the
-present: `ProjectileClient.fire` shows them the moment the player fires, and the host's
-copy of the same shot is recognised by its `ProjectileKey` rather than shown twice. A shot
-the client predicted and the host never fired is taken away, and one the host fired that
-the client didn't predict appears from the network, late. Both mean prediction disagreed
-about whether a skill was ready, and are counted.
-
-On the client, an own shot stops at the first opposing target it reaches, for display:
-nothing is damaged. Hits are the host's, and arrive as its game events. Other players'
-shots pass through what they meet until the host says otherwise. A shot can therefore
-look as though it touched a target and did nothing, which is the accepted trade.
+Example:
+    register_projectiles(schema, kinds, position=..., velocity=...)
+    ProjectileHost(projectiles, replication, app)                # host
+    ProjectileClient(projectiles, dispatcher, replication, dt)   # client
 """
 
 from __future__ import annotations

@@ -1,20 +1,7 @@
 """`SpawnDirector`: a schedule- and pacing-gated queue of waves.
 
-Genre-agnostic on purpose -- a `SpawnEntry.factory` is an opaque
-zero-argument callable that actually does the spawning (creating an
-enemy, dropping a pickup, whatever); this module never knows what's being
-spawned, only when it's allowed to happen. TD wave-clear-to-advance and
-horde/arena continuous pressure are both this same mechanism with
-different `Wave` parameters and a different schedule, not different code
-paths.
-
-**On the release-rate budget this used to have.** The original model was
-a budget: an entry cost something, the director accrued budget over time,
-and released when it could afford to. Every consumer in this repository
-bypassed it (`budget=0.0, cost=0.0`), and `games/tamandua_murundus`
-hand-rolled a time-keyed schedule rather than reach for it -- a horde's
-shape is "more, on a schedule", not "this much weight per second". The
-budget is gone rather than sitting beside the schedule unused; see #163.
+A `SpawnEntry.factory` is an opaque zero-argument callable that does
+the spawning. This module only decides when it may happen.
 """
 
 from __future__ import annotations
@@ -77,18 +64,13 @@ class SpawnDirector:
 
     Three independent gates:
 
-    - **Schedule.** `schedule_at()` holds a wave until the director's own
-      clock reaches a point in the run; `queue_wave()` queues one
-      immediately, behind whatever is already waiting.
-    - **Pacing.** A wave's `interval` caps how fast its entries release,
-      so a wave trickles out rather than dumping in one tick.
-    - **Alive cap.** Nothing releases while `alive_count()` is at
-      `alive_cap`. Every consumer used to enforce this itself, or lean on
-      a pool handing back `None`.
+    - Schedule: `schedule_at()` holds a wave until the director's clock
+      reaches a point in the run; `queue_wave()` queues one immediately,
+      behind whatever is already waiting.
+    - Pacing: a wave's `interval` caps how fast its entries release.
+    - Alive cap: nothing releases while `alive_count()` is at `alive_cap`.
 
-    The clock is the director's own accumulated `dt`. A core run clock is
-    named in #28 and would be the natural input once it exists; keying off
-    `elapsed` in the meantime costs nothing to change later.
+    The clock is the director's own accumulated `dt`.
     """
 
     def __init__(

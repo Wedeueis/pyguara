@@ -55,17 +55,10 @@ class PlatformerInput:
 class PlatformerController(StrictComponent):
     """Component for 2D platformer character movement.
 
-    The PlatformerController provides responsive platformer movement with
-    modern game-feel features. It handles ground detection, jumping, coyote
-    time, jump buffering, wall sliding, and wall jumping.
-
-    The controller requires a RigidBody component to apply movement forces
-    and velocities. Ground detection is performed via raycasting.
-
-    Note:
-        Pure data plus side-effect-free query predicates
-        (`can_jump()`/`can_wall_jump()`/`is_wall_sliding()`). Movement/jump
-        logic lives in `PlatformerSystem`, driven by `pending_input`.
+    Holds the tuning and state for ground detection, jumping, coyote time,
+    jump buffering, wall sliding and wall jumping. It is data plus query
+    predicates (`can_jump()`, `can_wall_jump()`, `is_wall_sliding()`); the
+    movement logic is `PlatformerSystem`, driven by `pending_input`.
 
     Attributes:
         move_speed: Horizontal movement speed in pixels/second.

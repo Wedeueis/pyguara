@@ -1,18 +1,14 @@
 """Echolocation: emitting a pulse, and remembering what it lit.
 
-Genre-specific to "sound reveals the world" games -- a bat, a submarine's
-sonar, a blind protagonist -- but not to any one of them: nothing here
-names a cave or a jaguarundi. Two halves:
+For "sound reveals the world" games. Two halves:
 
-- `PulseEmitter`/`ActivePulse`: the wavefront's own life cycle, expressed
-  as radius and intensity over time.
-- `RevealMemory`: what the wavefront has touched and how brightly that is
-  still remembered, which is what makes the world fade back to black
-  instead of staying revealed forever.
+- `PulseEmitter`/`ActivePulse`: the wavefront's life cycle, as radius
+  and intensity over time.
+- `RevealMemory`: what the wavefront has touched and how brightly it
+  is still remembered, so the world fades back to black.
 
-The raycast fan (`sweep`) takes a callable rather than an `IPhysicsEngine`
-so the kit stays independent of the physics backend -- and so it can be
-tested against a fake without a physics world at all.
+The raycast fan (`sweep`) takes a callable, not an `IPhysicsEngine`,
+so the kit does not depend on the physics backend.
 """
 
 from __future__ import annotations

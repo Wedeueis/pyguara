@@ -1,8 +1,7 @@
 """`Rarity` and its luck-adjusted roll.
 
-A standard 5-tier scale, unlike `kits/effects`' categories (which #28
-explicitly said not to hardcode) -- rarity tiers named this way are a
-near-universal RPG-loot convention, not one game's particular vocabulary.
+A fixed five-tier scale, which is a near-universal convention for RPG
+loot.
 """
 
 from __future__ import annotations
@@ -38,9 +37,8 @@ def roll_rarity(
 ) -> Rarity:
     """Roll a rarity tier, with `luck` boosting every non-`COMMON` tier's odds.
 
-    The `kits.stats` dependency #28 names: same shape as
-    `kits.stats.apply_luck_to_chance` (`weight * (1 + luck)`), applied
-    across a multi-way weighted roll instead of a single chance.
+    The same shape as `kits.stats.apply_luck_to_chance`
+    (`weight * (1 + luck)`), applied across a multi-way weighted roll.
 
     Args:
         rng: Seeded stream driving the roll.

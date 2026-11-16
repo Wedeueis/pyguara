@@ -1,10 +1,8 @@
 """The event `apply_damage()` dispatches.
 
-This is the event #28's kit-dependency notes point at: `kits/projectiles`
-depends on `kits/action_combat`'s damage-event *type* specifically (not on
-Hitbox/Hurtbox, which this kit doesn't build yet), and `kits/effects`
-reacts to it -- and to whatever other kit dispatches its own events -- the
-same way, through core event dispatch, never a direct import.
+Other kits depend on this event type, not on `Hitbox` or `Hurtbox`:
+`kits/projectiles` depends on it, and `kits/effects` reacts to it
+through core event dispatch, with no import of this kit.
 """
 
 from __future__ import annotations
