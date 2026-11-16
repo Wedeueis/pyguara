@@ -1,21 +1,13 @@
 """Base component definitions for the Entity Component System.
 
-Components are data-only containers; logic belongs in Systems. Two base
-classes enforce that rule at different strengths:
+Components are data-only containers; logic belongs in systems, or in a
+free function beside the component (`Transform`/`set_parent`,
+`Health`/`apply_damage`). `BaseComponent` raises `TypeError` when a
+subclass declares a logic method. `StrictComponent` is the same class
+under an older name.
 
-`BaseComponent` raises `TypeError` at class-definition time when a subclass
-declares one. `StrictComponent` is the same thing under an older name, kept
-for the components already using it.
-
-Behaviour goes to a System, or to a free function beside the component:
-`Transform`/`set_parent`, `StatBlock`/`get_stat`, `Health`/`apply_damage`.
-`_allow_methods = True` still opts a component out, and is debt to migrate
-rather than a supported answer.
-
-A component may still declare
-lifecycle hooks (`__init__`, `__post_init__`, `on_attach`, `on_detach`),
-dunder methods, `@property` accessors, and methods marked `@pure_query` --
-side-effect-free reads of the component's own fields.
+A component may declare lifecycle hooks, dunder methods, `@property`
+accessors and methods marked `@pure_query`.
 """
 
 from __future__ import annotations
@@ -77,18 +69,12 @@ _PURE_QUERY_FLAG = "__pyguara_pure_query__"
 def pure_query[F: Callable[..., Any]](method: F) -> F:
     """Mark a component method as a side-effect-free read of its own fields.
 
-    The data-only rule exists so behaviour cannot hide inside components,
-    and a method that only *reads* the component it is called on hides
-    nothing. `tags.has_tag("enemy")` is the same fact as
-    `has_tag(tags, "enemy")` and reads better at the call site, so the
-    rule allows it -- explicitly, at the definition, rather than by
-    accident.
+    A method that only reads the component it is called on hides no
+    behaviour, so the data-only rule allows it when it is marked.
 
-    **This is not an escape hatch.** A pure query may not mutate anything,
-    may not reach a system, a backend or the event dispatcher, and may not
-    touch another entity's state. Anything that does is logic and belongs
-    in a system; `_allow_methods = True` remains the way to say "this is
-    logic and I know it", and remains a thing to migrate rather than keep.
+    A pure query may not mutate anything, may not reach a system, a
+    backend or the event dispatcher, and may not touch another entity's
+    state. Anything that does is logic and belongs in a system.
 
     Example:
         ```python

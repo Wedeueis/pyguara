@@ -32,20 +32,12 @@ DEFAULT_MAX_HISTORY_SIZE = 1000
 class _OwnerRef:
     """A reference to a subscription's owner, weak where that is possible.
 
-    The dispatcher needs to answer one question -- "is this record's owner
-    that object?" -- without being the reason the object stays alive.
+    Answers "is this record's owner that object?" without keeping the
+    object alive, and reports when the owner has been collected. An `id()`
+    would not do: a collected owner's id can be reused.
 
-    `id()` used to serve for this, and had a hazard: once an owner is
-    collected its id can be reused, so `clear_subscribers(owner=new_thing)`
-    could match a stale record belonging to something else entirely. A
-    weakref identifies the object itself and reports honestly when it is
-    gone.
-
-    `owner` is documented as "anything at all", and some things cannot be
-    weakly referenced (an int, a string, a tuple). Those are held
-    **strongly** rather than rejected, because tightening the API is not
-    what this is for -- and noted here because such an owner is then kept
-    alive by its own subscription.
+    An owner that cannot be weakly referenced (an int, a string, a tuple)
+    is held strongly, and so is kept alive by its own subscription.
     """
 
     __slots__ = ("_ref", "_strong")
@@ -84,17 +76,9 @@ class HandlerRecord:
         filter_func: Optional predicate; the callback runs only if it passes.
         owner: Whatever registered this, for bulk teardown, held through
             `_OwnerRef` so the dispatcher adds no strong reference of its
-            own.
-
-            Note this does **not** mean a subscription cannot keep its
-            owner alive, which this attribute's docstring used to claim.
-            The usual call is
-            `dispatcher.subscribe(E, self._on_e, owner=self)`, and the
-            bound method in `callback` holds `__self__` -- the owner --
-            strongly. So the owner lives as long as the subscription does,
-            whatever this field holds. What the weak reference buys is that
-            the *identity* is honest: a collected owner reports as gone
-            instead of leaving an id that a later object can reuse.
+            own. A bound-method `callback` still holds its `__self__`,
+            usually the owner, strongly, so the owner lives as long as
+            the subscription does.
         once: True if the subscription removes itself after one delivery.
     """
 
@@ -109,16 +93,14 @@ class EventDispatcher:
     """Routes events to subscribers, with priority, filtering and queueing.
 
     Subscription is by type, and dispatch walks the event's MRO: a handler
-    subscribed to a base class receives every subclass too. Handlers from the
-    whole MRO merge into one priority-ordered pass, so priority governs call
-    order regardless of which class in the hierarchy a handler subscribed to.
-    Subscribing to `object` therefore receives everything.
+    subscribed to a base class receives every subclass too, and one
+    subscribed to `object` receives everything. Handlers from the whole
+    MRO merge into one priority-ordered pass.
 
-    Thread safety:
-        `queue_event()` is safe to call from any thread. Everything else --
-        `dispatch()`, `subscribe()`, `unsubscribe()`, `clear_subscribers()` --
-        must run on the main thread. Background threads queue; the main loop
-        drains via `process_queue()`.
+    `queue_event()` is safe to call from any thread. Everything else
+    (`dispatch()`, `subscribe()`, `unsubscribe()`, `clear_subscribers()`)
+    must run on the main thread, which drains the queue via
+    `process_queue()`.
     """
 
     def __init__(
@@ -195,11 +177,9 @@ class EventDispatcher:
                 returns True.
             owner: Anything at all -- a scene, a system -- that
                 `clear_subscribers(owner=...)` can later drop in one call.
-                Held weakly where the object allows it, so the dispatcher
-                adds no strong reference of its own. It is **not** true
-                that subscribing cannot keep the owner alive, as this said
-                before: a bound-method handler holds its `self`, which is
-                normally the owner.
+                Held weakly where the object allows it. A bound-method
+                handler still holds its `self`, which is normally the owner,
+                so subscribing can keep the owner alive.
             once: Remove the subscription after its first delivery. The
                 handler still runs; it simply does not run again.
         """
@@ -270,19 +250,15 @@ class EventDispatcher:
     ) -> None:
         """Remove subscribers, by event type, by owner, or all of them.
 
-        `owner` is the teardown half of `subscribe(owner=...)`: a scene
-        drops every handler it registered in one call, without tracking
-        them or knowing what they were. The alternative -- remembering each
-        `(event_type, handler)` pair to unsubscribe in `on_exit` -- is what
-        leaks a handler the moment anyone forgets one, and a leaked handler
-        does not merely linger: it double-fires after a scene reload.
+        `owner` is the teardown half of `subscribe(owner=...)`: a scene drops
+        every handler it registered in one call, without tracking them.
 
-        Given both, only subscriptions matching *both* are removed.
+        Given both, only subscriptions matching both are removed.
 
         Args:
             event_type: The class to clear. None means any.
-            owner: The owner to clear. None means any, **not** "the
-                unowned ones" -- pass the owner to be selective.
+            owner: The owner to clear. None means any, including the unowned
+                ones; pass the owner to be selective.
         """
         if owner is not None:
             types = [event_type] if event_type is not None else list(self._listeners)
@@ -340,17 +316,12 @@ class EventDispatcher:
     def dispatch_after(self, delay: float, event: Event) -> None:
         """Dispatch `event` once `delay` seconds of game time have passed.
 
-        For "spawn the reward half a second after the boss dies", which
-        otherwise becomes a hand-rolled timer on some system that had no
-        other reason to exist.
-
         The delay is measured in whatever time `advance()` is fed, which
-        `Application` scales by `time_scale` and zeroes while paused. A
-        pending event therefore waits out a pause and runs at half speed in
-        slow motion, rather than firing into a frozen world.
+        `Application` scales by `time_scale` and zeroes while paused. So a
+        pending event waits out a pause and runs at half speed in slow motion.
 
         A delay of zero or less dispatches on the next `advance()`, not
-        immediately -- use `dispatch()` to deliver now.
+        immediately; use `dispatch()` to deliver now.
 
         Args:
             delay: Seconds of game time to wait.

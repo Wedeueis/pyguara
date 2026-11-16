@@ -1,16 +1,13 @@
 """Entity Component System core.
 
-Public surface:
-
 - `Entity`: a uniquely identified container for components.
 - `Component`: the structural protocol every component satisfies.
-- `BaseComponent`: reference implementation; warns on logic methods.
-- `StrictComponent`: rejects logic methods at class-definition time.
+- `BaseComponent`: the base class; rejects logic methods when a
+  subclass is defined. `StrictComponent` is an alias for it.
 - `EntityManager`: registration, lifecycle and querying for one world.
-- `ChildOf`: entity ownership, so destruction cascades to what an
-  entity owns. Distinct from `Transform` parenting, which is spatial.
-- `EntityPool`/`Poolable`: acquire/release pooling for entities that spawn
-  and despawn at high frequency, without per-spawn allocation or GC churn.
+- `ChildOf`: ownership, so destruction cascades. `Transform`
+  parenting is the spatial relation.
+- `EntityPool`/`Poolable`: pooling for entities that spawn often.
 """
 
 from pyguara.ecs.component import (

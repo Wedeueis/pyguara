@@ -1,10 +1,9 @@
 """Keyboard and mouse input events.
 
 These are the engine's backend-neutral input events. A window backend
-translates its native events (SDL, via pygame) into these in `poll_events()`,
-so nothing above the backend boundary imports pygame or reads its constants
-(issue #9). Key codes are still SDL values -- the same integers
-`pyguara.input.keys` names.
+translates its native events into these in `poll_events()`, so nothing
+above the backend boundary reads a backend's constants. Key codes are
+SDL values, the integers `pyguara.input.keys` names.
 
 `KeyDownEvent` and `KeyUpEvent` share the `KeyboardEvent` base, so a handler
 subscribed to `KeyboardEvent` receives both -- see `EventDispatcher.dispatch`.
