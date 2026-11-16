@@ -155,6 +155,7 @@ class TestAttachToARealApplication:
             "session_follows_the_scene",
             "frames_and_operations",
             "panels_install_under_the_real_loop",
+            "the_config_panel_edits_the_real_configuration",
             "studio_owns_the_screen",
             "the_layout_follows_the_window",
             "the_menus_are_studios_own",

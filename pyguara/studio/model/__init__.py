@@ -16,6 +16,7 @@ from pyguara.studio.model.schema import (
     ComponentSchema,
     FieldSchema,
     describe_component,
+    describe_fields,
     describe_registry,
 )
 from pyguara.studio.model.snapshot import (
@@ -47,6 +48,7 @@ __all__ = [
     "build_project_map",
     "decode",
     "describe_component",
+    "describe_fields",
     "describe_registry",
     "diff_snapshots",
     "encode",

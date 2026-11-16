@@ -213,6 +213,49 @@ def panels_install_under_the_real_loop() -> None:
         app.shutdown()
 
 
+def the_config_panel_edits_the_real_configuration() -> None:
+    """The Config panel draws under the real loop and edits the live config.
+
+    The panel tests drive it with a stand-in attachment and a
+    configuration built by hand. This is the one place that checks the
+    session was handed the container's own `ConfigManager`: a session
+    given none, or a different one, would pass every one of those and
+    edit nothing a game reads.
+    """
+    from pyguara.config.manager import ConfigManager
+
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=_project_root())
+        assert attachment is not None
+        app.begin(_scene(app))
+        app.step()
+
+        panel = next(p for p in attachment.layer.panels if p.title == "Config")
+        assert panel.visible is False, "the Config panel should open hidden"
+        panel.visible = True
+        for _ in range(5):
+            app.step()
+
+        session = attachment.session
+        assert session is not None
+        manager = app.container.get(ConfigManager)
+        assert session.config_manager is manager, (
+            "the session edits a configuration the engine does not read"
+        )
+
+        before = manager.config.audio.master_volume
+        panel.write("audio", "master_volume", 0.25)
+        assert manager.config.audio.master_volume == 0.25, (
+            "an edit accepted by the panel did not reach the live config"
+        )
+        app.step()
+        session.undo()
+        assert manager.config.audio.master_volume == before
+    finally:
+        app.shutdown()
+
+
 def studio_owns_the_screen() -> None:
     """The game is drawn inside the viewport, not behind the panels.
 
@@ -712,6 +755,9 @@ SCENARIOS = {
     "session_follows_the_scene": session_follows_the_scene,
     "frames_and_operations": frames_and_operations,
     "panels_install_under_the_real_loop": (panels_install_under_the_real_loop),
+    "the_config_panel_edits_the_real_configuration": (
+        the_config_panel_edits_the_real_configuration
+    ),
     "studio_owns_the_screen": studio_owns_the_screen,
     "the_layout_follows_the_window": the_layout_follows_the_window,
     "the_menus_are_studios_own": the_menus_are_studios_own,

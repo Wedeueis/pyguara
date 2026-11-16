@@ -9,7 +9,8 @@ from collections.abc import Mapping
 from dataclasses import fields
 from enum import Enum
 from pathlib import Path
-from typing import Any, TypeVar, get_type_hints
+from types import UnionType
+from typing import Any, TypeVar, Union, get_args, get_origin, get_type_hints
 
 from pyguara.config.events import (
     OnConfigurationChanged,
@@ -261,7 +262,8 @@ class ConfigManager:
 
         The change is rejected, and nothing is mutated, when the section or
         setting is unknown, the value is the wrong type, or the validator
-        considers the result unusable. Rejection is logged.
+        considers the result unusable. Rejection is logged, and
+        `check_setting()` returns the same reason.
 
         Args:
             section: Config section name, e.g. `"display"`.
@@ -271,51 +273,16 @@ class ConfigManager:
         Returns:
             True if the setting was changed.
         """
+        rejection = self._rejection(section, setting, value)
+        if rejection is not None:
+            severity, message = rejection
+            self._log(severity, message)
+            return False
+
         section_obj = self._config.get_section(section)
-        if section_obj is None or not hasattr(section_obj, setting):
-            self._log(
-                ValidationSeverity.WARNING,
-                f"Unknown config setting '{section}.{setting}'.",
-            )
-            return False
-
-        pinned_by = self._pinned_by(section, setting)
-        if pinned_by is not None:
-            self._log(
-                ValidationSeverity.WARNING,
-                f"Rejected '{section}.{setting}': the active profile "
-                f"{pinned_by!r} sets it. Pop the profile first, or accept that "
-                f"it owns this setting -- a run modifier the options menu can "
-                f"switch off is not a modifier.",
-            )
-            return False
-
         old_value = getattr(section_obj, setting)
-        if not _is_assignable(old_value, value):
-            self._log(
-                ValidationSeverity.ERROR,
-                f"Rejected '{section}.{setting}': expected "
-                f"{type(old_value).__name__}, got {type(value).__name__} "
-                f"({value!r}).",
-            )
-            return False
-
         setattr(section_obj, setting, value)
         self._base.setdefault(section, {})[setting] = value
-
-        blocking = [
-            issue
-            for issue in self._validator.validate_section(self._config, section)
-            if issue.severity in _BLOCKING_SEVERITIES and issue.setting == setting
-        ]
-        if blocking:
-            setattr(section_obj, setting, old_value)
-            self._base[section][setting] = old_value
-            self._log(
-                ValidationSeverity.ERROR,
-                f"Rejected '{section}.{setting}' = {value!r}: {blocking[0].message}",
-            )
-            return False
 
         if self._dispatcher:
             self._dispatcher.dispatch(
@@ -327,6 +294,83 @@ class ConfigManager:
                 )
             )
         return True
+
+    def check_setting(self, section: str, setting: str, value: Any) -> str | None:
+        """Say why `update_setting()` would refuse a value.
+
+        Changes nothing and dispatches nothing, so a caller can report the
+        reason to whoever asked instead of pointing them at the log.
+
+        Args:
+            section: Config section name.
+            setting: Field name within that section.
+            value: The candidate value.
+
+        Returns:
+            The reason, or None when the value would be accepted.
+        """
+        rejection = self._rejection(section, setting, value)
+        return None if rejection is None else rejection[1]
+
+    def _rejection(
+        self, section: str, setting: str, value: Any
+    ) -> tuple[ValidationSeverity, str] | None:
+        """Decide whether a value may replace a setting.
+
+        The validator judges the configuration as a whole, so the value is
+        written, checked and put back; the live config is unchanged on
+        return either way.
+
+        Args:
+            section: Config section name.
+            setting: Field name within that section.
+            value: The candidate value.
+
+        Returns:
+            How serious the refusal is and why, or None to accept.
+        """
+        section_obj = self._config.get_section(section)
+        if section_obj is None or not hasattr(section_obj, setting):
+            return (
+                ValidationSeverity.WARNING,
+                f"Unknown config setting '{section}.{setting}'.",
+            )
+
+        pinned_by = self.pinned_by(section, setting)
+        if pinned_by is not None:
+            return (
+                ValidationSeverity.WARNING,
+                f"Rejected '{section}.{setting}': the active profile "
+                f"{pinned_by!r} sets it. Pop the profile first, or accept that "
+                f"it owns this setting -- a run modifier the options menu can "
+                f"switch off is not a modifier.",
+            )
+
+        old_value = getattr(section_obj, setting)
+        expected = _type_mismatch(section_obj, setting, old_value, value)
+        if expected is not None:
+            return (
+                ValidationSeverity.ERROR,
+                f"Rejected '{section}.{setting}': expected "
+                f"{expected}, got {type(value).__name__} "
+                f"({value!r}).",
+            )
+
+        setattr(section_obj, setting, value)
+        try:
+            blocking = [
+                issue
+                for issue in self._validator.validate_section(self._config, section)
+                if issue.severity in _BLOCKING_SEVERITIES and issue.setting == setting
+            ]
+        finally:
+            setattr(section_obj, setting, old_value)
+        if blocking:
+            return (
+                ValidationSeverity.ERROR,
+                f"Rejected '{section}.{setting}' = {value!r}: {blocking[0].message}",
+            )
+        return None
 
     # -- Layered profiles --
 
@@ -554,7 +598,7 @@ class ConfigManager:
                     )
         return problems
 
-    def _pinned_by(self, section: str, setting: str) -> str | None:
+    def pinned_by(self, section: str, setting: str) -> str | None:
         """Return the name of the active profile that sets a field, if any.
 
         Args:
@@ -877,6 +921,78 @@ def _values_of(section: Any) -> dict[str, Any]:
         Field name to value.
     """
     return {f.name: copy.deepcopy(getattr(section, f.name)) for f in fields(section)}
+
+
+def _type_mismatch(
+    section: Any, setting: str, old_value: Any, new_value: Any
+) -> str | None:
+    """Name the type a setting wants when a new value is not one.
+
+    The current value decides, except where None is involved: a setting
+    holding None says nothing about what it accepts, and None itself is
+    acceptable only where the declaration allows it. Those two cases are
+    read from the section's annotations.
+
+    Args:
+        section: The section instance holding the setting.
+        setting: The field name.
+        old_value: The setting's current value.
+        new_value: The candidate value.
+
+    Returns:
+        The expected type's name, or None when the value fits.
+    """
+    if old_value is not None and new_value is not None:
+        if _is_assignable(old_value, new_value):
+            return None
+        return type(old_value).__name__
+
+    try:
+        declared = get_type_hints(type(section)).get(setting)
+    except (NameError, TypeError):
+        declared = None
+    if declared is None:
+        return None
+
+    members = get_args(declared) if _is_union(declared) else (declared,)
+    if new_value is None:
+        return None if type(None) in members else _type_names(members)
+    if any(_fits_type(member, new_value) for member in members):
+        return None
+    return _type_names(members)
+
+
+def _fits_type(declared: Any, value: Any) -> bool:
+    """Report whether a value is an instance of one declared member type.
+
+    `bool` is kept out of the numeric types and an int is accepted where
+    a float is declared, as `_is_assignable` does. An annotation that is
+    not a plain class accepts anything.
+    """
+    if declared is type(None):
+        return False
+    if not isinstance(declared, type):
+        return True
+    if declared is bool:
+        return isinstance(value, bool)
+    if declared in (int, float):
+        accepted = (int,) if declared is int else (int, float)
+        return isinstance(value, accepted) and not isinstance(value, bool)
+    return isinstance(value, declared)
+
+
+def _is_union(declared: Any) -> bool:
+    """Report whether an annotation is `X | Y` or `Optional[X]`."""
+    return get_origin(declared) in (Union, UnionType)
+
+
+def _type_names(members: tuple[Any, ...]) -> str:
+    """Join the names of an annotation's member types, None excluded."""
+    return " or ".join(
+        getattr(member, "__name__", str(member))
+        for member in members
+        if member is not type(None)
+    )
 
 
 def _is_assignable(old_value: Any, new_value: Any) -> bool:
