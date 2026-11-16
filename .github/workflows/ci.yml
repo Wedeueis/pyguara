@@ -90,6 +90,11 @@ jobs:
       - name: Type Checking (Mypy)
         run: make type-check
 
+      # The API reference is generated from the docstrings, so a docstring
+      # the generator cannot read fails here and not in the release's deploy.
+      - name: Build the docs
+        run: make docs-build
+
   tests:
     name: Tests & Coverage (py3.12)
     runs-on: ubuntu-latest

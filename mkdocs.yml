@@ -9,6 +9,27 @@ theme:
     - navigation.expand
     - content.code.copy
 
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - tools/gen_api_reference.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: false
+            show_root_toc_entry: false
+            members_order: source
+            filters: ["!^_"]
+            show_signature_annotations: true
+            separate_signature: true
+
 nav:
   - Home: index.md
   - Guides:
@@ -80,3 +101,4 @@ nav:
       - Issue tracker: agents/issue-tracker.md
       - Triage labels: agents/triage-labels.md
       - Domain docs: agents/domain.md
+  - API Reference: reference/

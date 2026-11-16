@@ -105,9 +105,12 @@ studio = [
 
 docs = [
     "mkdocs>=1.5.0",
+    "mkdocs-gen-files>=0.5,<0.6",
+    "mkdocs-literate-nav>=0.6,<0.6.3",
     "mkdocs-material>=9.0.0",
     "mkdocs-mermaid2-plugin>=0.6.0",
-    "pymdown-extensions>=10.0.0"
+    "mkdocstrings[python]>=0.26",
+    "pymdown-extensions>=10.0.0",
 ]
 
 benchmark = [
