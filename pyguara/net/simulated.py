@@ -169,7 +169,11 @@ class SimulatedNetwork:
         return transport
 
     def address_of(self, transport: NativeTransport) -> str:
-        """Return a transport's address on this network."""
+        """Return a transport's address on this network.
+
+        Raises:
+            KeyError: If the transport is not on this network.
+        """
         for address, candidate in self._endpoints.items():
             if candidate is transport:
                 return address

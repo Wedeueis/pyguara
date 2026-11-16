@@ -65,6 +65,9 @@ class WgpuImGuiRenderer:
 
         Returns:
             The id to hand `imgui.image()`.
+
+        Raises:
+            TypeError: If `texture` is not a wgpu framebuffer.
         """
         target = getattr(texture, "target", None)
         if not isinstance(target, int):

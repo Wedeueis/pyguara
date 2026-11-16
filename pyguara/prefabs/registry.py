@@ -176,6 +176,9 @@ class ComponentRegistry:
 
         Returns:
             Component instance.
+
+        Raises:
+            ValueError: If `data` names a field the component does not have.
         """
         converted_data: dict[str, Any] = {}
 
@@ -277,6 +280,9 @@ class ComponentRegistry:
         Accepts an existing member, an exact or case-insensitive member name,
         or a raw member value. A string that matches nothing raises
         ``ValueError`` naming the valid members rather than a bare ``KeyError``.
+
+        Raises:
+            ValueError: If the value is not a member of the enum.
         """
         if isinstance(value, enum_type):
             return value

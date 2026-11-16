@@ -209,6 +209,7 @@ def read_bytes(path: PathLike) -> bytes:
 
     Raises:
         FileNotFoundError: If neither has it.
+        IsADirectoryError: If the path is a directory.
     """
     found = _find(path)
     if found is not None:

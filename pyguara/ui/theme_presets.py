@@ -225,7 +225,11 @@ class ThemeConstants:
     }
 
     def __getattr__(self, name: str) -> UITheme:
-        """Build and return a fresh instance of the named preset."""
+        """Build and return a fresh instance of the named preset.
+
+        Raises:
+            AttributeError: If there is no preset of that name.
+        """
         try:
             return self._FACTORIES[name]()
         except KeyError:

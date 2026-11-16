@@ -229,6 +229,8 @@ class PersistenceManager:
         Raises:
             ValueError: If the header is missing or the checksum disagrees.
             Exception: Whatever decompression or deserialization raises.
+            UnsupportedSaveFormatError: If the save's container format is newer
+                than this build understands.
         """
         meta_dict, payload = self._unframe(blob)
 

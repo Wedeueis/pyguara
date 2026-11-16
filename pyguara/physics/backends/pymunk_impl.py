@@ -636,6 +636,9 @@ class PymunkEngine:
             gravity_scale: Multiplier on world gravity for this body alone.
                 0.0 floats, 2.0 falls twice as fast -- the usual way to give
                 a character a floaty jump or a fast fall.
+
+        Raises:
+            RuntimeError: If the engine has not been initialized.
         """
         if not self.space:
             raise RuntimeError(
@@ -685,6 +688,9 @@ class PymunkEngine:
 
         Pymunk's own `body.shapes` is authoritative for what's attached, so
         no separate adapter-level shape tracking is needed.
+
+        Raises:
+            TypeError: If the handle is not one of this backend's bodies.
         """
         if not self.space:
             return
@@ -737,6 +743,9 @@ class PymunkEngine:
 
         Returns:
             The pymunk shape, or None if there is no space or shape type.
+
+        Raises:
+            TypeError: If the handle is not one of this backend's bodies.
         """
         if not self.space:
             return None
@@ -1344,6 +1353,9 @@ class PymunkEngine:
 
         Returns:
             Pymunk constraint object.
+
+        Raises:
+            TypeError: If either handle is not one of this backend's bodies.
         """
         if not self.space:
             return None

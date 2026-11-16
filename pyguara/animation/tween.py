@@ -67,7 +67,12 @@ class Tween:
     is_reverse: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
-        """Validate configuration."""
+        """Validate configuration.
+
+        Raises:
+            ValueError: If the duration is not positive, or the start and end
+                values are not both numbers or both sequences of one length.
+        """
         if self.duration <= 0:
             raise ValueError("Duration must be positive")
 

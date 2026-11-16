@@ -279,6 +279,9 @@ class Camera2D:
         Args:
             position: Where to look, or None to take the current position.
             zoom: The scale, or None to take the current one.
+
+        Raises:
+            ValueError: If `zoom` is not positive.
         """
         if self._view_position is None:
             self._view_position = self._position

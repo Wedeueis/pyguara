@@ -218,6 +218,10 @@ class WgpuRenderer:
 
         Returns:
             Whether one was set, so the caller clears it afterwards.
+
+        Raises:
+            ValueError: If the material's shader samples a texture and the
+                material has none.
         """
         material = batch.material
         if material is None:

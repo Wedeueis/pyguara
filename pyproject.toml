@@ -267,12 +267,16 @@ target-version = "py312"
 # SIM  - flake8-simplify.
 # D    - pydocstyle, on the package only (see per-file-ignores). The content
 #        rules ruff has no code for are in tools/check_docstrings.py.
+# DOC501 - an exception the function raises is in its `Raises:` section. A
+#        preview rule, enabled alone as PLW1514 is. Its counterpart DOC502
+#        (a documented exception is not raised) is left off: it cannot see
+#        an exception raised by a callee, which is most of what it reports.
 # PLW1514 - text-mode `open()` / `read_text()` without an `encoding`. The
 #        default is the locale's, which is cp1252 on Windows: a theme or
 #        atlas named in anything but ASCII round-tripped wrongly there, and
 #        nothing ran on Windows to notice. A preview rule, enabled alone by
 #        `explicit-preview-rules` below.
-select = ["E4", "E7", "E9", "F", "UP", "B", "I", "SIM", "D", "PLW1514"]
+select = ["E4", "E7", "E9", "F", "UP", "B", "I", "SIM", "D", "DOC501", "PLW1514"]
 preview = true
 explicit-preview-rules = true
 ignore = [
@@ -304,10 +308,10 @@ convention = "google"
 # `D` globally would newly fail 3,429 findings across tests/, games/ and
 # tools/ -- widening the standard, which is a separate decision from
 # swapping which tool enforces it.
-"tests/**" = ["D"]
-"games/**" = ["D"]
-"tools/**" = ["D"]
-"main.py" = ["D"]
+"tests/**" = ["D", "DOC"]
+"games/**" = ["D", "DOC"]
+"tools/**" = ["D", "DOC"]
+"main.py" = ["D", "DOC"]
 
 # D301 wants `r"""` wherever a docstring contains a backslash. These two
 # Click commands must NOT be raw strings: `\b` has to reach Click as a
@@ -317,6 +321,13 @@ convention = "google"
 # two files specifically rather than for the project.
 "pyguara/cli/atlas_generator.py" = ["D301"]
 "pyguara/cli/build.py" = ["D301"]
+
+# A Click command's docstring is its `--help` text, and exits through
+# SystemExit or ClickException by design.
+"pyguara/cli/*.py" = ["DOC501"]
+# Every operation handler reports a bad argument as OperationError; the
+# operation protocol documents that once.
+"pyguara/studio/ops/builtin.py" = ["DOC501"]
 
 [tool.ruff.lint.flake8-bugbear]
 # Vector2 subclasses pymunk.Vec2d, which is a NamedTuple: instances are

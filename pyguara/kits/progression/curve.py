@@ -91,7 +91,11 @@ class Table:
     costs: list[float] = field(default_factory=lambda: [100.0])
 
     def cost_for(self, level: int) -> float:
-        """Return the experience needed to advance from `level`."""
+        """Return the experience needed to advance from `level`.
+
+        Raises:
+            ValueError: If the table has no costs.
+        """
         if not self.costs:
             raise ValueError("Table: costs must not be empty")
         index = min(max(level, 1), len(self.costs)) - 1

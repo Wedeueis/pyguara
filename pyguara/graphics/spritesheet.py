@@ -126,6 +126,9 @@ class SpriteSheet:
 
         Returns:
             List of Texture objects, one for each extracted frame.
+
+        Raises:
+            ValueError: If a frame dimension is not positive.
         """
         if frame_width <= 0 or frame_height <= 0:
             raise ValueError("frame_width and frame_height must be positive")

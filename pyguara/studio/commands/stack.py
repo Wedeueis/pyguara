@@ -134,6 +134,9 @@ class CommandStack:
         Returns:
             The command that was reverted, or None when the history is
             empty.
+
+        Raises:
+            EditError: If a transaction is open.
         """
         if self._transaction is not None:
             raise EditError(
@@ -155,6 +158,9 @@ class CommandStack:
         Returns:
             The command that was re-applied, or None when there is nothing
             to redo.
+
+        Raises:
+            EditError: If a transaction is open.
         """
         if self._transaction is not None:
             raise EditError(
