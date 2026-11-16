@@ -16,6 +16,11 @@ from pyguara.cli.pack import bake_pack
 
 @pytest.fixture(autouse=True)
 def _clean():
+    # Before as well as after: the bundle is looked for once per process,
+    # on the first read, so a read by any earlier test on this worker (one
+    # from another file, under xdist) leaves "already looked, not frozen".
+    assets.unmount_all()
+    assets._reset_bundled_for_tests()
     yield
     assets.unmount_all()
     assets._reset_bundled_for_tests()
