@@ -222,6 +222,53 @@ def test_a_defined_profile_survives_a_save_load_round_trip(tmp_path):
     assert reloaded.section(BalanceConfig).permadeath is True
 
 
+def test_a_save_under_a_profile_writes_the_values_underneath(tmp_path):
+    """Written layered, a difficulty picked for one run became the file's
+    settings, and the next launch started hard with no profile to pop."""
+    manager = _manager(tmp_path)
+    assert manager.push_profile("hard", HARD)
+    assert manager.push_profile("quiet", QUIET)
+    assert manager.save()
+
+    written = json.loads(manager.file_path.read_text())
+    assert written["balance"] == {"enemy_hp_scale": 1.0, "permadeath": False}
+    assert written["audio"]["master_volume"] == 1.0
+    assert written["audio"]["music_volume"] == 0.6
+
+
+def test_a_save_under_a_profile_leaves_the_profile_applied(tmp_path):
+    manager = _manager(tmp_path)
+    manager.push_profile("hard", HARD)
+    manager.save()
+
+    assert manager.section(BalanceConfig).enemy_hp_scale == 2.5
+    assert manager.active_profiles == ("hard",)
+    assert manager.pop_profile()
+    assert manager.section(BalanceConfig).enemy_hp_scale == 1.0
+
+
+def test_a_save_under_a_profile_keeps_the_players_own_write(tmp_path):
+    """A setting the profile does not own is written as the player set it."""
+    manager = _manager(tmp_path)
+    manager.push_profile("hard", HARD)
+    assert manager.update_setting("audio", "sfx_volume", 0.3)
+    manager.save()
+
+    written = json.loads(manager.file_path.read_text())
+    assert written["audio"]["sfx_volume"] == 0.3
+    assert written["balance"]["permadeath"] is False
+
+
+def test_a_save_under_a_profile_writes_a_colour_it_overrides(tmp_path):
+    manager = _manager(tmp_path)
+    manager.push_profile("night", {"display": {"default_color": Color(1, 2, 3)}})
+    manager.save()
+
+    written = json.loads(manager.file_path.read_text())
+    assert written["display"]["default_color"] == {"r": 0, "g": 0, "b": 0, "a": 255}
+    assert manager.config.display.default_color == Color(1, 2, 3)
+
+
 def test_defining_a_bad_profile_raises_rather_than_waiting_for_the_push(tmp_path):
     """A definition written in code is a programmer error, unlike one read
     from a file."""

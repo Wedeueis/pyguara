@@ -270,6 +270,11 @@ A `load()` drops every active profile: it re-establishes the base, and a stack
 whose values referred to the previous one would re-apply them over unrelated
 settings.
 
+A `save()` writes the base, not the layers: a setting an active profile
+overrides goes to the file with the value underneath it, and the profile stays
+applied. A profile is for a while; the file is what the next launch starts
+from.
+
 ## Validation
 
 ```python
