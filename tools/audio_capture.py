@@ -197,6 +197,9 @@ class Capture:
 FRAME_BYTES = 4
 """One stereo frame of 16-bit samples."""
 
+IDLE_POLLS = 4
+"""Consecutive not-busy readings, 5 ms apart, that mean a channel is done."""
+
 
 def _left_channel(path: Path) -> np.ndarray:
     """Read the raw stereo capture and return its left channel.
@@ -420,8 +423,7 @@ def capture_tone_loop(
                 pygame.time.wait(int(stall * 1000))
                 stalled = True
         pygame.time.wait(2)
-    while channel.get_busy():
-        pygame.time.wait(5)
+    wait_until_idle(channel)
     # "Not busy" means the last sample was handed to the mixer, not that the
     # disk driver has written it: quitting now can cut the tail of the last
     # lap, and a capture shorter than every lap has no seams to compare.
@@ -430,6 +432,24 @@ def capture_tone_loop(
     pygame.mixer.quit()
 
     return read_capture(output, RATE), compare_with_sine(output, laps, len(segment))
+
+
+def wait_until_idle(channel: Any) -> None:
+    """Block until a channel has finished everything queued on it.
+
+    One idle reading is not enough. Between two queued sounds the channel
+    reads as not busy until the mixer thread has taken the interpreter
+    lock and started the next one, and a main thread that polls in that
+    window sees a loop that looks finished a lap early. The wait between
+    polls releases the lock, so a channel still idle `IDLE_POLLS` times
+    running has nothing left to start.
+    """
+    import pygame
+
+    idle = 0
+    while idle < IDLE_POLLS:
+        idle = 0 if channel.get_busy() else idle + 1
+        pygame.time.wait(5)
 
 
 def _drain_ms(buffer: int) -> int:
