@@ -44,26 +44,17 @@ T = TypeVar("T", bound=Resource)
 class ResourceManager:
     """Orchestrate the loading, caching, and lifecycle of game resources.
 
-    Lifecycle model:
-        - ``load()`` is a cache-get. On a miss it reads from disk and caches
-          the result; on a hit it returns the cached instance. Either way the
-          resource sits in the cache **unpinned** (reference count 0).
-        - ``acquire()`` / ``release()`` are the explicit pin API. They must be
-          balanced. A ``release()`` that drops the count to 0 evicts the
-          resource immediately.
-        - ``unload_unused()`` evicts every resource whose count is 0. Call it
-          between scenes to drop everything nothing has acquired.
-        - ``unload(path, force=True)`` evicts regardless of the count.
-        - ``reload()`` re-reads a cached resource from disk and swaps the
-          cached instance in place, keeping the reference count.
-
-    The ResourceManager supports asset metadata via `.meta` sidecar files.
-    When loading a resource, it checks for a corresponding `.meta` file
-    (e.g., `hero.png.meta` for `hero.png`) and applies import settings
-    if the loader supports metadata.
+    - ``load()`` is a cache-get: a miss reads from disk and caches. The
+      resource sits in the cache unpinned (reference count 0).
+    - ``acquire()`` and ``release()`` pin and unpin, and must be balanced.
+      A ``release()`` that drops the count to 0 evicts at once.
+    - ``unload_unused()`` evicts every resource whose count is 0, and
+      ``unload(path, force=True)`` evicts regardless of the count.
+    - ``reload()`` re-reads a cached resource, keeping its count.
 
     Example:
-        Create `hero.png.meta`:
+        A `.meta` sidecar (`hero.png.meta` for `hero.png`) supplies import
+        settings to a loader that supports metadata:
         ```json
         {
             "type": "texture",
@@ -580,14 +571,10 @@ class ResourceManager:
 
         Runs the registered loader again (re-reading the `.meta` sidecar too,
         if the loader is meta-aware) and replaces the cached instance. The
-        reference count is preserved, so anything that acquired the resource
-        keeps its hold.
+        reference count is preserved.
 
-        Note:
-            Callers that already hold a reference to the *previous* instance
-            keep that stale object -- ``reload()`` swaps the cache entry, it
-            does not mutate the old instance. Re-``load()`` after a reload to
-            pick up the new one. This is what a hot-reload watcher does.
+        The old instance is not mutated: a caller holding it keeps a stale
+        object, and must ``load()`` again to get the new one.
 
         Args:
             path_or_name: The full path or indexed filename of the asset.
@@ -790,19 +777,11 @@ class ResourceManager:
     def set_cache_budget(self, budget_bytes: int | None) -> int:
         """Cap the cache's estimated size, evicting least-recently-used first.
 
-        `unload_unused()` is all-or-nothing and manual, so a long run that
-        visits many floors accumulates every texture it ever touched until
-        something thinks to call it. A budget makes the ceiling a property
-        of the manager instead of a thing every scene must remember.
+        Enforced after each load and whenever this is set, so a game sets it
+        once at startup.
 
-        Enforced after each load and whenever this is set, so a game sets
-        it once at startup and never calls it again.
-
-        **A pinned resource is never evicted**, whatever the budget says.
-        `acquire()` means "I am using this"; a cache that evicted it anyway
-        would hand the next `load()` a second instance while the first is
-        still being drawn. A budget smaller than what is pinned is
-        therefore exceeded, and said so once rather than every frame.
+        A pinned resource is never evicted, whatever the budget. A budget
+        smaller than what is pinned is exceeded, and that is logged once.
 
         Args:
             budget_bytes: The ceiling in bytes, or None for unbounded.

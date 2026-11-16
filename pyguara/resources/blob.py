@@ -1,17 +1,11 @@
 """Resources that are just the contents of a file.
 
-Not every asset is a texture, a sound or a parsed document. A shader is a
-string, a save-format fixture or a font file is a pile of bytes, and a
-game that wants one currently goes around `ResourceManager` entirely --
-losing the index, the cache, the reference counting and the hot reload
-along with it.
+A blob is bytes and a text resource is a decoded string, for a shader,
+a fixture or any other file that should go through `ResourceManager`
+(its index, cache, reference counting and hot reload) without a
+backend.
 
-These are the two shapes that need no backend at all: a blob is bytes, a
-text resource is a decoded string. A *font* is the third thing #272 asks
-for and is not here, because a usable font is a backend object (pygame's
-`Font`, or a GL glyph atlas) and so needs a factory protocol the way a
-texture does -- and both UI renderers currently own private font caches
-that would have to be unified first. That is a design, not a loader.
+A font is not one of these: a usable font is a backend object.
 """
 
 from __future__ import annotations

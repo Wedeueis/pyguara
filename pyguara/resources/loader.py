@@ -71,23 +71,14 @@ class IMetaAwareLoader(IResourceLoader, Protocol):
 class ITwoPhaseLoader(IResourceLoader, Protocol):
     """A loader that separates file decode from device upload.
 
-    The split exists because the two halves have different constraints.
-    Decoding a file is CPU work on bytes; creating a GPU texture touches a
-    GL context that belongs to the main thread. `ResourceManager` can
-    therefore run `decode()` on a worker and must run `upload()` on the
-    thread that owns the context.
+    Decoding a file is CPU work on bytes; creating a GPU texture belongs
+    to the main thread. So `ResourceManager` may run `decode()` on a
+    worker and always runs `upload()` on the thread that owns the device.
 
-    **`threaded_decode` is a claim about the GIL, and it is measured, not
-    guessed.** A worker thread only helps if `decode()` spends its time in
-    code that releases the GIL. `pygame-ce` decodes images in SDL with it
-    released and scales ~3x on four threads; `json` parses with it held and
-    runs *0.71x* threaded -- slower than inline, because the contention is
-    real and the parallelism is not. See "Resource loading, and the GIL" in
-    `docs/guides/performance.md`.
-
-    So the flag defaults to `False`: a loader that has not been measured is
-    run on the main thread, where it is merely slow rather than slow *and*
-    fighting the frame for the GIL.
+    `threaded_decode` defaults to False. Set it only for a decode that
+    releases the GIL, such as image decoding; a decode that holds it, such
+    as JSON parsing, runs slower on a worker. See "Resource loading, and
+    the GIL" in `docs/guides/performance.md`.
     """
 
     threaded_decode: bool

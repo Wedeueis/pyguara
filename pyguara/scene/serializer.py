@@ -1,35 +1,13 @@
 """Scene serialization logic.
 
-What a scene file is meant to be: everything needed to rebuild the world a
-designer authored, in a shape a human could have typed. That makes
-round-trip fidelity the whole contract, and five things used to fall
-through it -- each silently, which is the part that mattered:
+A scene file holds everything needed to rebuild an authored world, in
+a shape a person could have typed. Beyond components, it stores each
+entity's tags, its enabled state, its `ChildOf` owner and its spatial
+`Transform` parent.
 
-- **Entity tags.** `entity.tags` is a plain `set[str]` with no component
-  behind it, so component-by-component serialisation never saw it.
-- **Ownership.** `ChildOf` was not in the component registry, so
-  `load_scene` skipped it and every parent/child link -- and the cascade
-  destroy that rides on it -- was lost.
-- **Spatial parenting.** The engine's *other* kind of parent. A
-  `Transform` points at its parent `Transform` rather than at an entity,
-  so there was nothing a file could name, and the field was simply not
-  written. This one does not merely flatten a hierarchy: a parented
-  transform's stored position is *local*, so dropping the link makes it
-  come back as a world coordinate. A turret saved at (10, 0) under a hull
-  at (100, 200) reloaded 190 pixels away.
-- **Enabled state.** `EntityManager` holds disabled ids in a side set, not
-  on the entity, so a disabled entity reloaded as enabled.
-- **Resources.** A `Sprite` holds a live `Texture`, not a path. Encoding it
-  produced a `Texture` object that `json` refused, `PersistenceManager`
-  caught the `TypeError`, and `save_scene` returned `False` -- so a scene
-  containing any sprite at all did not save. Not "saved without its
-  sprites": did not save.
-
-Resources are written as `{"__resource__": path}` and resolved on load by
-the `texture_resolver` the bootstrap injects. A path that will not resolve
-skips the component with a warning rather than attaching a `Sprite` whose
-`texture` is `None`, which would pass here and crash in the renderer
-instead.
+Resources are written as `{"__resource__": path}` and resolved on load
+by the `texture_resolver` the bootstrap injects. A path that will not
+resolve skips the component with a warning.
 """
 
 from __future__ import annotations
@@ -256,19 +234,10 @@ class SceneSerializer:
     ) -> None:
         """Re-link spatial `Transform` hierarchies after every entity exists.
 
-        **`keep_world_transform` is False, and that is the whole point.**
-        The stored `position` of a parented transform is already *local* to
-        its parent -- that is what being parented means. Re-linking with
-        `keep_world_transform=True`, the default, would read that local
-        value as a world coordinate and rewrite the local one to compensate,
-        so a turret stored at (10, 0) under a hull at (100, 200) would come
-        back at local (-90, -200) and the hierarchy would be correct about a
-        position that was never saved. `PrefabFactory._create_children`
-        parents with the same flag for the same reason.
-
-        Order within the pass does not matter: with no world transform to
-        preserve, linking is just a pointer and a child list append, so a
-        chain three deep re-links correctly whichever end is seen first.
+        Links with `keep_world_transform=False`: the stored `position` of a
+        parented transform is already local to its parent, and the default
+        would treat it as a world coordinate. `PrefabFactory._create_children`
+        does the same. The order of linking within the pass does not matter.
 
         Args:
             manager: The entity manager holding every loaded entity.
@@ -317,8 +286,6 @@ class SceneSerializer:
         """Attach one deserialized component to `entity`.
 
         A component the registry does not know is skipped with a warning.
-        It used to be skipped in silence, which made a missing
-        `registry.register()` call look like a save-side bug.
 
         Args:
             entity: The entity to attach to.

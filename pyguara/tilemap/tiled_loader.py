@@ -1,31 +1,13 @@
 """Load a Tiled (`.tmx`) map into a `Tilemap`.
 
-What this reads: embedded **and** external (`.tsx`) tilesets; tile layers
-encoded as CSV, as base64 with no compression, gzip or zlib, or as Tiled's
-original `<tile gid="...">` elements; layers nested inside `<group>`; and
-`<objectgroup>` object layers.
+Reads embedded and external (`.tsx`) tilesets; tile layers encoded as
+CSV, as base64 (uncompressed, gzip or zlib) or as `<tile gid="...">`
+elements; layers nested inside `<group>`; and `<objectgroup>` object
+layers.
 
-Three of those were previously absent, and the three failed differently,
-which is the point:
-
-- An **external tileset** raised. Loud, and fair enough -- except that
-  Tiled writes one by default the moment a tileset is shared between two
-  maps, which is the normal case for a game rather than an edge one.
-- A **non-CSV encoding** raised. Also loud. base64+zlib is what Tiled
-  picks for a large map, and the stated reason for refusing it was "a
-  compression dependency" -- but `gzip` and `zlib` are in the standard
-  library, so there was never one to pull in.
-- An **`<objectgroup>`**, or a layer inside a **`<group>`**, was silently
-  dropped. A map with spawn points loaded "successfully" and lost them.
-  That asymmetry was the real defect: a loud refusal is a decision, and
-  silence is a bug report from a confused author six months later.
-
-Still refused, deliberately: non-square tiles (`Tilemap.tile_size` is one
-integer, and `merge_tile_rects` beneath `TileLayer.collision_rects` takes
-one size, so supporting them is a change to the tilemap model rather than
-to this loader) and `zstd` compression (not in the standard library).
-Infinite maps -- `<data>` split into `<chunk>` elements -- are refused by
-name rather than quietly returning the first chunk.
+Refused, each with an error naming it: non-square tiles, `zstd`
+compression, and infinite maps (`<data>` split into `<chunk>`
+elements).
 """
 
 from __future__ import annotations

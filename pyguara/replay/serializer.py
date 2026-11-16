@@ -151,11 +151,9 @@ class ReplaySerializer:
     def get_metadata(self, path: str) -> dict | None:
         """Read just the metadata block from a replay file.
 
-        Parses the file but returns only ``metadata`` -- for a save/replay menu
-        that needs seed, scene, duration and frame count without building every
-        :class:`~pyguara.replay.types.InputFrame`. (A leading length-framed
-        metadata line would let this skip the frame bytes entirely; that is a
-        possible future format change, tracked in the audit notes.)
+        Parses the whole file but returns only ``metadata``, for a menu that
+        needs seed, scene, duration and frame count without building every
+        :class:`~pyguara.replay.types.InputFrame`.
 
         Args:
             path: File path to load from.

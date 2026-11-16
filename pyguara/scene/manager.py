@@ -331,26 +331,13 @@ class SceneManager:
     def add_layer(self, scene_name: str, order: int = 0) -> None:
         """Activate a scene as a persistent layer above the scene stack.
 
-        A layer lives *outside* the stack, so `switch_to()` -- which unwinds
-        the stack entirely -- leaves it alone. That is the whole point: a
-        roguelike floor transition is "swap the world scene, keep the HUD",
-        and without this the HUD had to be torn down and re-pushed on every
-        transition, losing its state each time.
+        A layer lives outside the stack, so `switch_to()` leaves it alone: a
+        HUD can outlive a change of world scene.
 
-        Layers draw above every scene in the stack, in `order` then
-        insertion order, and **above an in-flight transition** too: a
-        persistent HUD that blinks out during every floor change defeats the
-        point of persisting it. A game that wants one covered by the fade
-        can remove it for the duration.
-
-        They also keep updating during a transition, when the stack does
-        not, so a layer's own animations do not freeze mid-fade.
-
-        `pause_below` does not apply to layers in either direction: a layer
-        neither pauses the stack nor is paused by it. Use `pause_layer()`
-        when a pause menu should freeze the HUD -- explicit, because a HUD
-        that keeps animating while paused is just as often what a game
-        wants.
+        Layers draw above every scene in the stack and above an in-flight
+        transition, in `order` then insertion order, and keep updating during
+        a transition. `pause_below` does not apply to a layer in either
+        direction; use `pause_layer()` to freeze one.
 
         Args:
             scene_name: Name of the registered scene to activate.
@@ -484,19 +471,14 @@ class SceneManager:
     def fixed_update(self, fixed_dt: float) -> None:
         """Fixed-rate update for physics and deterministic game logic.
 
-        Called at a fixed rate (e.g., 60 Hz) regardless of display framerate.
-        Snapshots `previous_position` for every `Transform.interpolate=True`
-        entity first, before any system runs this tick -- a single
-        centralized point every current and future position-mutating system
-        (Steering, Physics, the platformer controller) runs after, rather
-        than each needing its own snapshot logic. Ticks each active scene's
-        own SystemManager (the four engine systems: Steering, AI,
-        AudioSource, Animation) before the scene's own fixed_update() --
-        there's no global SystemManager anymore, each scene owns and ticks
-        its own. Flushes each scene's own EntityManager at the end of its
-        fixed-update work (the frame boundary the ECS lifecycle contract
-        defers physical index cleanup to) -- there's no global EntityManager
-        either, so this can't happen in Application anymore.
+        Called at a fixed rate (60 Hz by default) whatever the display
+        framerate. For each active scene, in order:
+
+        1. Snapshot `previous_position` for every `Transform` with
+           `interpolate=True`, before any system moves it.
+        2. Tick the scene's own `SystemManager`.
+        3. Call the scene's `fixed_update()`.
+        4. Flush the scene's `EntityManager`.
 
         Args:
             fixed_dt: Fixed delta time in seconds.

@@ -63,10 +63,8 @@ class SystemManager:
         """Add a system to the update order.
 
         If `initialize()` has already run, the new system is initialised
-        immediately rather than never: a scene initialises its manager in
-        `resolve_dependencies()`, which happens *before* `on_enter()`, so
-        every system a game registers in `on_enter()` would otherwise go
-        uninitialised.
+        immediately. That covers a system registered in `on_enter()`, which
+        runs after the scene initialises its manager.
 
         Several systems may share a key. They all update, but `get_system()`
         and `unregister()` then reach only the most recently registered, which
@@ -157,7 +155,7 @@ class SystemManager:
         self._initialized = True
 
     def update(self, dt: float) -> None:
-        """Advance every enabled system one **fixed** step, in priority order.
+        """Advance every enabled system one fixed step, in priority order.
 
         `SceneManager` calls this from its own `fixed_update()`, so this is
         the deterministic channel: a constant rate regardless of framerate.

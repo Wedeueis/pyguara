@@ -1,37 +1,13 @@
 """Asynchronous resource loading: a thread pool where it pays, a budget elsewhere.
 
-Shaped by measurement rather than by instinct, and the measurements are in
-"Resource loading, and the GIL" in `docs/guides/performance.md`. In short:
+`ResourceManager.pump(budget_ms)` completes pending work on the main
+thread until the budget is spent. It serves every loader and is where
+device uploads happen. A loader that declares `threaded_decode` also
+has its decode phase run on a worker, which pays only for a decode
+that releases the GIL; see `docs/guides/performance.md`.
 
-- One 2356x1824 jpg decode costs **30.9 ms** -- nearly two 60 Hz frames. A
-  scene loading a dozen textures on entry stalls for a third of a second.
-  That is the cost this module exists to move.
-- `pygame-ce` decodes with the GIL **released** (2.9-3.4x on four threads),
-  so a worker pays. `json` parses with it **held** (0.71x -- *slower*
-  threaded than inline), so a worker costs. Threading is therefore opt-in
-  per loader, never the default.
-- `asyncio` is the wrong tool: it overlaps I/O *waits*, and reading 2.5 MB
-  costs 0.17 ms against 30.9 ms to decode it. There is no wait to overlap,
-  the expense is CPU, and an event loop cannot parallelise CPU on a GIL
-  build -- quite apart from needing an event loop inside a frame loop.
-
-Two tiers follow, and the first matters more than the second:
-
-1. **A time-budgeted main-thread pump.** `ResourceManager.pump(budget_ms)`
-   completes work until the budget is spent, then returns. This alone turns
-   a stall into a spread, works for every loader including GIL-bound ones,
-   is deterministic, and is where device uploads must happen anyway.
-2. **An opt-in decode pool.** Loaders that declare `threaded_decode` have
-   their decode phase run on workers, so by the time the pump reaches them
-   the expensive half is already done.
-
-**Thread affinity, and why there is no cache lock.** #40 asks for a lock
-around `_cache`/`_reference_counts` "once there is a concurrent caller".
-There is none: a worker thread only turns a path into bytes. Every cache
-read and write stays on the thread that calls `load()` and `pump()`, so the
-invariant is thread *affinity* rather than mutual exclusion -- cheaper, and
-with no lock ordering to get wrong. Call `load`, `load_async` and `pump`
-from one thread, as a frame loop naturally does.
+A worker only turns a path into bytes. Call `load()`, `load_async()`
+and `pump()` from one thread; there is no cache lock.
 """
 
 from __future__ import annotations

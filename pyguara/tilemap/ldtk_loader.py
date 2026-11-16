@@ -1,33 +1,14 @@
 """Load an LDtk (`.ldtk`) project into the same `Tilemap` the Tiled loader builds.
 
-**One level model, two front ends.** The alternative -- an `LdtkLevel`
-beside `Tilemap`, each with its own layers, its own tilesets and its own
-collision query -- would mean every consumer in the engine, and every
-game, learning both. `TileLayer.collision_rects`, `Tilemap.properties_for`
-and `MapObject` already exist and already work; this translates LDtk into
-them.
+- An LDtk file holds many levels: `load_ldtk` returns one `Tilemap`
+  per level.
+- LDtk tile ids are per tileset. Global ids are synthesised by laying
+  the tilesets end to end, so `Tilemap.properties_for` works.
+- LDtk tile layers are sparse; the dense `TileLayer` grid is filled
+  from them, and an unplaced cell is `EMPTY_GID`.
+- An IntGrid layer gets a synthetic tileset.
 
-The translation is not a renaming exercise, because the two formats
-disagree about four things:
-
-- **A file is a world, not a map.** An LDtk project holds many levels, so
-  `load_ldtk` returns one `Tilemap` per level rather than one map.
-- **Tile ids are per-tileset.** LDtk has no global id space; a tile is
-  `(tilesetUid, t)`. Tiled's `firstgid` scheme is synthesised here, by
-  laying each tileset's tiles out end to end, so `Tilemap.properties_for`
-  works unchanged.
-- **Tile layers are sparse.** LDtk stores a list of placed tiles with
-  pixel positions; `TileLayer` is a dense grid. The grid is filled from
-  the list, and a cell nothing was placed in stays `EMPTY_GID`.
-- **IntGrid layers have no tileset at all.** They are a dense grid of
-  small integers with names attached in the layer *definition*. Each one
-  gets a synthetic tileset so the values resolve through the same
-  `properties_for` path as everything else -- see `solid_int_grid_values`
-  for the one thing that cannot be inferred.
-
-What is deliberately not translated: level backgrounds, LDtk's
-auto-layer *rules* (the resulting tiles are read; the rules that produced
-them are an editor concern), and entity references between levels.
+Level backgrounds and entity references between levels are not read.
 """
 
 from __future__ import annotations
@@ -65,11 +46,9 @@ def load_ldtk(
             resolved relative to it.
         solid_int_grid_values: Identifiers of IntGrid values that should
             count as solid, so `Tilemap.collision_rects` works on an
-            IntGrid layer. **There is no default and no guess.** LDtk
-            gives an IntGrid value a name and a colour and nothing else,
-            so nothing in the file says whether `"Solid"`, `"Wall"` or
-            `"1"` blocks movement; inferring it from the name would be
-            right for English projects and wrong for the rest.
+            IntGrid layer. There is no default: LDtk gives an IntGrid
+            value a name and a colour, and nothing says which one blocks
+            movement.
 
     Returns:
         One `Tilemap` per level, keyed by the level's identifier, in file
@@ -233,13 +212,10 @@ def _build_tilesets(
 def _tile_custom_data(definition: Mapping[str, Any]) -> dict[int, dict[str, Any]]:
     """Read a tileset definition's per-tile custom data.
 
-    LDtk gives a tile one free-text string rather than a property map.
-    In practice people put JSON in it, so a string that parses as a JSON
-    **object** is used as the properties directly -- which is what makes
-    `{"solid": true}` work with `collision_rects` without a translation
-    table. Anything else is kept verbatim under `"data"`, because
-    throwing away a comment someone wrote on a tile is worse than
-    handing it over unparsed.
+    LDtk gives a tile one free-text string. A string that parses as a
+    JSON object is used as the tile's properties, so `{"solid": true}`
+    works with `collision_rects`. Anything else is kept verbatim under
+    `"data"`.
 
     Args:
         definition: One entry from `defs.tilesets`.
@@ -498,10 +474,9 @@ def _entity_layer(instance: Mapping[str, Any]) -> ObjectLayer:
 def _entity(entity: Mapping[str, Any], index: int) -> MapObject:
     """Build a `MapObject` from one LDtk entity instance.
 
-    LDtk positions an entity by its **pivot**, which an author can put
-    anywhere in the sprite, and reports the resulting top-left in `px`.
-    `px` is what is used, so `MapObject.x`/`y` mean the same thing they
-    do for a Tiled object rather than something pivot-dependent.
+    LDtk positions an entity by its pivot and reports the resulting
+    top-left in `px`. `px` is used, so `MapObject.x` and `y` mean what
+    they do for a Tiled object.
 
     Args:
         entity: The entity instance.

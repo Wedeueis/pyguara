@@ -244,11 +244,8 @@ class Coroutine:
     def result(self) -> Any:
         """What the generator returned, once it has finished.
 
-        A generator's `return value` reaches its caller as
-        `StopIteration.value`, which this used to catch and discard -- so a
-        fire-and-forget sequence had no way to report anything back. None
-        until `done`, and None for a sequence that was stopped rather than
-        allowed to finish.
+        None until `done`, and None for a sequence that was stopped before it
+        finished.
         """
         return self._result
 
@@ -446,15 +443,8 @@ class CoroutineManager:
     def stop_by(self, owner: Any) -> int:
         """Stop every coroutine tagged with `owner`.
 
-        The answer to both of #55's P1 rows with one mechanism. A killed
-        enemy's scripted attack pattern used to keep running against a
-        despawned entity, and a sequence started in one scene kept ticking
-        in the next -- because nothing could name a group to tear down.
-
-        `owner=None` stops nothing, deliberately: that is the untagged
-        default, and treating it as "stop everything anonymous" would make
-        a missing argument quietly destructive. Use `stop_all()` to mean
-        all.
+        `owner=None` stops nothing: that is the untagged default. Use
+        `stop_all()` to stop everything.
 
         Args:
             owner: The tag to match, by equality.

@@ -364,30 +364,13 @@ def circular_cover_points(
 ) -> list[tuple[int, int]]:
     """Return one polygon covering the screen *except* a circular hole.
 
-    The shape a circular wipe needs is an annulus -- everything outside the
-    revealed circle -- and a polygon with a hole in it is not something
-    `UIRenderer.draw_polygon` can express directly. It is expressed as a
-    single self-touching outline instead: round the window rectangle, in
-    along a seam to the circle, round the circle **in the opposite
-    winding**, and back out along the same seam. A scanline fill counts two
-    crossings to reach the hole and leaves it empty, and the two coincident
-    seam edges cancel, so no scar is left behind.
+    The cover is a single self-touching outline: round the window
+    rectangle, in along a seam to the circle, round the circle in the
+    opposite winding, and back out along the same seam. A scanline fill
+    leaves the hole empty, and the two coincident seam edges cancel.
 
-    The alternative decompositions were both measured and both lose. A fan
-    of 68 quads between the arc and the window edge costs 1.04 ms at
-    1280x720, but adjacent quads share an edge and `pygame.draw.polygon`
-    fills boundary pixels, so a translucent cover is blended **twice**
-    along every seam -- visibly, as a spoke pattern: a 50%-black cover over
-    green measured (0, 50, 0) on the seams against (0, 100, 0) everywhere
-    else. Non-overlapping scanline rects, two per row, have no seam but
-    cost 1440 draw calls and 2.62 ms opaque or 5.89 ms translucent. This is
-    one call, 0.3 ms, and measures exactly two distinct colours over a
-    translucent cover at every radius.
-
-    Both real `UIRenderer` implementations rasterise polygons with
-    `pygame.draw.polygon` -- the ModernGL one draws widgets onto an
-    offscreen pygame surface and uploads the result -- so the fill rule
-    this relies on is the same one on both backends.
+    One polygon is used, not a fan of quads, so a translucent cover is
+    blended once everywhere and shows no seams.
 
     Args:
         center_x: Centre of the revealed circle, in pixels.
@@ -476,22 +459,12 @@ class CircularWipeTransition(Transition):
     """An iris wipe: a circular hole that closes on the centre and reopens.
 
     The scene stays visible inside a circle centred on the window. The
-    circle contracts to nothing -- covering the frame from the corners
-    inwards -- and then expands again over the new scene, which is the
-    "expands a circle from center" half of what this class used to promise.
+    circle contracts to nothing, covering the frame from the corners
+    inwards, and then expands again over the new scene.
 
-    It used to promise exactly that and draw a **full-screen fade**, behind
-    a `# TODO: Proper circular mask rendering`. Not approximately a fade:
-    its output was byte-identical to `FadeTransition`'s at the same
-    progress, so the two classes were the same effect under different
-    names, and no test covered this one at all.
-
-    The cover is drawn opaque at `config.color`, matching `WipeTransition`
-    and `SlideTransition` rather than `FadeTransition` -- a wipe whose
-    cover is translucent is a fade with extra steps. A translucent
-    `config.color` is still honoured and still correct, because the cover
-    is a single polygon rather than a decomposition with seams to
-    double-blend; see `circular_cover_points`.
+    The cover is drawn at `config.color`, opaque by default as in
+    `WipeTransition` and `SlideTransition`. A translucent colour is
+    honoured; see `circular_cover_points`.
 
     Attributes:
         segments: Sides in the polygon approximating the circle. See

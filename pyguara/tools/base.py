@@ -34,18 +34,12 @@ class Tool(ABC):
     def _entity_manager(self) -> EntityManager:
         """The active scene's EntityManager.
 
-        There's no global EntityManager to resolve from the container -- each
-        scene owns its own world (see Scene-owned world and SystemManager).
-        Resolved on every access (not cached at construction time, which runs
-        before any scene is registered/active) so tools always see whichever
-        scene is currently on top, same as `editor/layer.py`'s
-        `scene_manager.current_scene.entity_manager` pattern.
+        Each scene owns its own world, so this is resolved on every access and
+        follows whichever scene is current.
 
-        Before the first scene switch there is no world, so this returns a
-        single throwaway empty manager (reused across accesses, not a new one
-        each time). A tool that *mutates* the world in that window is writing
-        into an orphan that no scene will ever see -- read-only use only until
-        a scene is active.
+        Before the first scene is active it returns one empty throwaway
+        manager, reused across accesses. Nothing written to it reaches a
+        scene, so use it read-only until a scene is active.
         """
         from pyguara.scene.manager import SceneManager
 

@@ -1,25 +1,14 @@
 """Deterministic, hierarchical random-number service.
 
-`RandomService` is the DI-registered entry point for engine and game
-randomness. It owns a root seed and hands out named child `RandomStream`s
-derived deterministically from that seed, so two runs with the same root
-seed produce identical sequences for the same stream name -- procgen room
-layout and enemy AI jitter can be seeded independently without one throwing
-the other out of sync.
+`RandomService` owns a root seed and hands out named child
+`RandomStream`s derived from it, so two runs with the same root seed
+produce the same sequence for the same stream name, and one stream's
+draws do not disturb another's.
 
-Determinism guarantee:
-    Child seeds are derived with `hashlib.sha256(f"{root_seed}:{name}")`,
-    never Python's built-in `hash(name)`. String hashing is salted per
-    process (`PYTHONHASHSEED`) unless explicitly disabled, which would make
-    "the same named stream" produce different sequences across runs or
-    machines -- exactly what this service exists to prevent.
-
-State scope:
-    `get_state()`/`restore_state()` cover the root seed and every stream
-    that has been requested via `stream()` so far. A name never requested
-    is not included -- it doesn't need to be, since it's always
-    re-derivable on demand from the root seed the moment it's first asked
-    for.
+Child seeds come from `hashlib.sha256(f"{root_seed}:{name}")`, not
+`hash(name)`, which is salted per process. `get_state()` and
+`restore_state()` cover the root seed and every stream requested so
+far; any other stream is re-derived from the root seed when asked for.
 """
 
 from __future__ import annotations
@@ -52,17 +41,11 @@ class RandomService:
     def reseed(self, root_seed: int) -> None:
         """Re-root every stream on a new seed, discarding draws so far.
 
-        For replay: a recording stores the root seed it ran under, and
-        playback has to put the service back on it before the first frame,
-        or the recorded inputs drive a world making different random
-        choices. `restore_state()` can also do this, but saying
-        `restore_state({"root_seed": s, "streams": {}})` to mean "start
-        again from `s`" reads like a snapshot restore and is not one.
+        For replay: playback puts the service back on the root seed the
+        recording ran under, before the first frame.
 
-        Streams are dropped rather than reseeded in place, so the next
-        `stream(name)` derives from the new root exactly as a fresh service
-        would -- which is what makes a replay reproduce rather than merely
-        continue.
+        Streams are dropped, not reseeded in place, so the next
+        `stream(name)` derives from the new root as a fresh service would.
 
         Args:
             root_seed: The new root seed.
