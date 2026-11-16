@@ -433,13 +433,6 @@ class FlockingSystem:
         # Python path that quietly indexes natively is not one. It also
         # matters to the parity suite, whose Python reference is only a
         # reference while nothing native is inside it.
-        #
-        # It costs something real to insist on, and the figure is worth
-        # knowing: a Python flock of 1000 takes 16.6 ms with this index
-        # and 9.8 ms with the native one, so the index alone is 1.7x of
-        # the 9.0x the full native tick gets. A caller who wants that
-        # middle point asks for `auto` and gets the whole native tick,
-        # which is strictly better.
         spatial_hash: SpatialHash[int] = SpatialHash(
             cell_size=self._cell_size, accelerate=False
         )

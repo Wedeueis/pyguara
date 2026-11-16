@@ -1,4 +1,4 @@
-"""Check what docstrings talk about, which ruff has no rule for.
+"""Check what docstrings and comments talk about, which ruff has no rule for.
 
 Ruff's `D` rules hold the format. This holds the content rules of
 `docs/agents/docstrings.md`: a docstring describes the code as it is, in
@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import re
 import sys
+import tokenize
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +39,13 @@ ALL_RULES = frozenset({"DS001", "DS002", "DS003", "DS004", "DS005", "DS006", "DS
 SCOPES: dict[str, frozenset[str]] = {
     "pyguara": ALL_RULES,
     "tests": frozenset({"DS001", "DS003"}),
+}
+
+# The rules that also apply to `#` comments, by top-level directory. A
+# comment may explain why at any length; it may not tell the code's history,
+# cite a tracker or quote a benchmark.
+COMMENT_SCOPES: dict[str, frozenset[str]] = {
+    "pyguara": frozenset({"DS002", "DS004", "DS005"}),
 }
 
 # A header that ends the prose. `Note:` is left out on purpose: it would
@@ -61,7 +70,7 @@ _HISTORY = re.compile(
     r"|\bthis (?:change|fix|commit|PR)\b"
     r"|\bthis (?:module|class|function|method|file) (?:previously|originally|once)\b"
     r"|\boriginally (?:carried|held|was|were|had|lived|did)\b"
-    r"|\b(?:is|are) no longer[.,:;]|\bno longer (?:holds|true)\b"
+    r"|\b(?:is|are) no longer[.,:;]|\bno longer (?:holds(?=[.,:;])|true\b)"
     r"|\bwas (?:added|introduced|fixed|renamed) (?:in|by|when|after|because|for)\b"
     r"|\breproduced (?:at|in|by|with)\b"
     r"|\bhas since been\b",
@@ -69,7 +78,7 @@ _HISTORY = re.compile(
 
 # `(?<![\w&'"`#])` keeps hex colours (`"#000"`) and HTML entities out.
 _TRACKER = re.compile(
-    r"(?<![\w&'\"`#])#\d{1,5}\b(?![0-9a-fA-F])"
+    r"(?<![\w&'\"`#])(?<!UAX )#\d{1,5}\b(?![0-9a-fA-F])"
     r"|\bRFC-?\d+\b"
     r"|\bW\d{1,2}\b"
     r"|\bP[0-3]-\d{3}\b"
@@ -193,29 +202,84 @@ def _documented_nodes(
                 stack.append((prefix, child))
 
 
-def check_source(source: str, path: str, rules: frozenset[str]) -> list[Finding]:
-    """Check every docstring in one module's source.
+def _comment_blocks(source: str) -> Iterator[tuple[int, str]]:
+    """Yield each comment block as its first line number and its joined text.
+
+    Consecutive whole-line comments form one block, so a phrase that wraps
+    across two lines is still found. A trailing comment is a block of its
+    own.
+    """
+    lines = source.splitlines()
+    start = 0
+    last = 0
+    parts: list[str] = []
+    for token in tokenize.generate_tokens(io.StringIO(source).readline):
+        if token.type != tokenize.COMMENT:
+            continue
+        number = token.start[0]
+        whole_line = lines[number - 1].lstrip().startswith("#")
+        text = token.string.lstrip("#").strip()
+        if parts and whole_line and number == last + 1:
+            parts.append(text)
+        else:
+            if parts:
+                yield start, " ".join(parts)
+            start, parts = number, [text]
+        last = number if whole_line else -1
+    if parts:
+        yield start, " ".join(parts)
+
+
+def _enclosing(spans: list[tuple[int, int, str]], line: int) -> str:
+    """Return the dotted name of the innermost definition around a line."""
+    best = "<module>"
+    size = 0
+    for first, final, qualname in spans:
+        if first <= line <= final and (not size or final - first < size):
+            best, size = qualname, final - first
+    return best
+
+
+def check_source(
+    source: str,
+    path: str,
+    rules: frozenset[str],
+    comment_rules: frozenset[str] = frozenset(),
+) -> list[Finding]:
+    """Check every docstring, and optionally every comment, in one module.
+
+    A finding in a comment is named after the definition around it, with
+    `#comment` appended.
 
     Args:
         source: The module's text.
         path: The path to report, relative to the repository root.
-        rules: The rule codes to apply.
+        rules: The rule codes to apply to docstrings.
+        comment_rules: The rule codes to apply to comments.
 
     Returns:
         The findings, in the order they appear in the file.
     """
     tree = ast.parse(source)
     findings: list[Finding] = []
+    spans: list[tuple[int, int, str]] = []
     for qualname, node in _documented_nodes(tree):
         assert isinstance(
             node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef
         )
+        if not isinstance(node, ast.Module):
+            spans.append((node.lineno, node.end_lineno or node.lineno, qualname))
         docstring = ast.get_docstring(node)
         if not docstring:
             continue
         line = node.body[0].lineno
         for rule, detail in check_docstring(docstring, rules):
             findings.append(Finding(rule, path, qualname, line, detail))
+    if comment_rules:
+        for line, text in _comment_blocks(source):
+            name = f"{_enclosing(spans, line)}#comment"
+            for rule, detail in check_docstring(text, comment_rules):
+                findings.append(Finding(rule, path, name, line, detail))
     findings.sort(key=lambda finding: (finding.line, finding.rule))
     return findings
 
@@ -242,10 +306,14 @@ def check_paths(paths: Iterable[Path], root: Path = REPO_ROOT) -> list[Finding]:
         for file in files:
             relative = file.relative_to(root)
             rules = _rules_for(relative)
-            if rules:
+            comment_rules = COMMENT_SCOPES.get(relative.parts[0], frozenset())
+            if rules or comment_rules:
                 findings.extend(
                     check_source(
-                        file.read_text(encoding="utf-8"), relative.as_posix(), rules
+                        file.read_text(encoding="utf-8"),
+                        relative.as_posix(),
+                        rules,
+                        comment_rules,
                     )
                 )
     findings.sort(key=lambda finding: (finding.path, finding.line, finding.rule))
@@ -285,7 +353,7 @@ def read_keys(path: Path, *, need_reason: bool = False) -> set[str]:
 
 
 _BASELINE_HEADER = """\
-# Docstring findings that existed when tools/check_docstrings.py landed.
+# Findings that existed when this directory came under tools/check_docstrings.py.
 # This file only shrinks: fix a docstring, then run
 #     uv run python tools/check_docstrings.py --prune-baseline
 # Never add a line by hand. A real exception goes in docstring_allowlist.txt.

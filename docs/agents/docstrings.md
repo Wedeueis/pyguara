@@ -5,7 +5,8 @@ code today. It is reference text for someone who has never seen the
 project's history.
 
 `make lint` checks this page's rules: ruff holds the format, and
-`tools/check_docstrings.py` holds the content.
+`tools/check_docstrings.py` holds the content, of docstrings and of
+comments.
 
 ## The shape
 
@@ -84,33 +85,37 @@ material batches with its original.
 
 ## Where the rules apply
 
-| Directory | Format (ruff `D`, Google convention) | Content |
-| --- | --- | --- |
-| `pyguara/` | Yes | `DS001` to `DS007` |
-| `tests/` | No | `DS001` and `DS003`. A regression test may name its issue and tell the bug's story, briefly |
-| `games/`, `tools/` | No | No |
+| Directory | Format (ruff `D`, Google convention) | Docstring content | Comment content |
+| --- | --- | --- | --- |
+| `pyguara/` | Yes | `DS001` to `DS007` | `DS002`, `DS004`, `DS005` |
+| `tests/` | No | `DS001` and `DS003`. A regression test may name its issue and tell the bug's story, briefly | No |
+| `games/`, `tools/` | No | No | No |
+
+## Comments
+
+A `#` comment in `pyguara/` may explain why the code is the way it is, at
+whatever length that takes. It follows three of the rules above: it does
+not say what the code used to do (`DS002`), cite an issue or work item
+(`DS004`) or quote a benchmark figure (`DS005`). Consecutive comment lines
+are read as one block.
+
+A finding in a comment is reported under the definition around it, with
+`#comment` after the name.
 
 ## Running the check
 
 ```bash
 uv run python tools/check_docstrings.py              # what CI runs
 uv run python tools/check_docstrings.py pyguara/ai   # one directory
-uv run python tools/check_docstrings.py --no-baseline pyguara/ai
 ```
 
 A finding prints as `path:line: DS00n message: 'matched text' (name)`.
 
-### The baseline
-
-`tools/docstring_baseline.txt` lists the findings that existed when the
-check landed. They do not fail it; anything new does.
-
-- **It only shrinks.** After fixing docstrings, run
-  `uv run python tools/check_docstrings.py --prune-baseline` and commit
-  the result. An entry left behind for a fixed docstring fails the
-  check.
-- **Never add a line to it.** A new docstring meets the standard.
-- `--no-baseline` shows what a directory still owes.
+There is no baseline: every docstring and comment in scope meets the rules,
+and a new finding fails the check. The check can still read a
+`tools/docstring_baseline.txt`, for the day its scope grows to a directory
+with existing findings; `--write-baseline` creates one and
+`--prune-baseline` shrinks it.
 
 ### When a rule is wrong
 

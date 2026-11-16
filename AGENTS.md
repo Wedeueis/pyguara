@@ -120,8 +120,8 @@ The generated block below has the engine conventions. In addition:
   absolute imports. Mypy is strict on `pyguara/`.
 - **A docstring describes the code as it is**: no history, issue
   numbers, benchmark figures or test names, and at most 8 lines of
-  prose. `make lint` checks it; the standard is
-  `docs/agents/docstrings.md`.
+  prose. A comment may be longer, with the same three exclusions.
+  `make lint` checks both; the standard is `docs/agents/docstrings.md`.
 - **Protocols, not ABCs**, for a new interface.
 - **Emit with `queue_event()` from a background thread**, never
   `dispatch()`.

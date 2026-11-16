@@ -253,3 +253,68 @@ def test_the_repository_passes_its_own_check() -> None:
     )
     assert current - baseline - allowed == set()
     assert (baseline | allowed) - current == set()
+
+
+COMMENTED = '''"""Module summary."""
+
+# A module comment. This used to be a
+# dict keyed on id (#324).
+
+
+class Batcher:
+    """Group commands."""
+
+    def create(self) -> None:
+        """Build the batches."""
+        x = 1  # took 54.9 ms before
+        # Sized against the bottom strip, which is 16 px high. The entity
+        # no longer holds the component here, and the index is
+        # UAX #14 compliant.
+        return None
+'''
+
+COMMENT_RULES = frozenset({"DS002", "DS004", "DS005"})
+
+
+def test_a_comment_block_is_read_as_one_and_named_after_its_definition() -> None:
+    findings = check.check_source(
+        COMMENTED, "pyguara/x.py", check.ALL_RULES, COMMENT_RULES
+    )
+    assert [(f.rule, f.qualname, f.line) for f in findings] == [
+        ("DS002", "<module>#comment", 3),
+        ("DS004", "<module>#comment", 3),
+        ("DS005", "Batcher.create#comment", 12),
+    ]
+
+
+def test_comments_are_not_checked_unless_asked() -> None:
+    assert check.check_source(COMMENTED, "pyguara/x.py", check.ALL_RULES) == []
+
+
+def test_a_comment_has_no_length_limit_and_may_use_emphasis() -> None:
+    long_comment = "\n".join(
+        f"# Line {n} of a **long** explanation." for n in range(30)
+    )
+    assert (
+        check.check_source(
+            long_comment + "\n", "pyguara/x.py", check.ALL_RULES, COMMENT_RULES
+        )
+        == []
+    )
+
+
+def test_only_the_engine_package_has_its_comments_checked(tmp_path: Path) -> None:
+    for name in ("pyguara", "tests"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "mod.py").write_text(
+            "x = 1  # this used to be 2 (#46)\n", encoding="utf-8"
+        )
+    findings = check.check_paths([Path("pyguara"), Path("tests")], tmp_path)
+    assert [(f.path, f.rule) for f in findings] == [
+        ("pyguara/mod.py", "DS002"),
+        ("pyguara/mod.py", "DS004"),
+    ]
+
+
+def test_there_is_no_baseline_left() -> None:
+    assert not (REPO_ROOT / "tools" / "docstring_baseline.txt").exists()

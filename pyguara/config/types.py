@@ -154,7 +154,7 @@ class PhysicsConfig:
 
     # Solver steps per physics tick. Chipmunk has no continuous collision
     # detection, so a body jumps velocity/tick pixels and passes through
-    # anything thinner. Measured against a 10px wall, 1/2/4 substeps stop a
+    # anything thinner. Against a 10px wall, 1/2/4 substeps stop a
     # body up to roughly 200/400/900 px/s. 4 is the default: its cost is
     # modest at the body counts a roguelike scene reaches, and the headroom
     # matters for knockback and explosion-flung props. Drop to 2 only with

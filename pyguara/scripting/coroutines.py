@@ -340,9 +340,8 @@ class Coroutine:
                     return True
 
             except StopIteration as stop:
-                # `.value` is the generator's `return`, which this used to
-                # throw away -- the reason a sequence could not report a
-                # result (#55).
+                # `.value` is the generator's `return`: the sequence's
+                # result.
                 self._finish(stop.value)
                 return False
 

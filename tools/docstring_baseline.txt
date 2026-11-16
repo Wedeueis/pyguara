@@ -1,4 +1,0 @@
-# Docstring findings that existed when tools/check_docstrings.py landed.
-# This file only shrinks: fix a docstring, then run
-#     uv run python tools/check_docstrings.py --prune-baseline
-# Never add a line by hand. A real exception goes in docstring_allowlist.txt.

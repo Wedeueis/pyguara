@@ -384,9 +384,7 @@ class SceneSerializer:
         if dataclasses.is_dataclass(cls):
             # Resolved rather than read off the field. Component modules
             # use `from __future__ import annotations`, so `field.type` is
-            # the *string* "LightType", not the class -- which is why the
-            # original code compared names and could only ever know the
-            # two it had been told about.
+            # the *string* "LightType", not the class.
             hints = _resolved_hints(cls)
             filtered = {}
             for field in dataclasses.fields(cls):
