@@ -1,17 +1,11 @@
 """Leaked wgpu devices do not accumulate across tests.
 
-Each `NativeGpu` owns its own wgpu instance, adapter and device, and a driver
-can segfault past its cap instead of refusing: Mesa's GL-on-D3D12 under WSLg
-does at the tenth live device. Tests that build an application and never
-shut it down leave its device alive, inside reference cycles, until a full
-garbage collection. Whether ten piled up therefore depended on test order:
-the default order passed, while a different one (one xdist worker's share,
-replayed serially) aborted inside `WgpuWindow.present()` every time.
-
-`tests/conftest.py` collects garbage after any test that leaves more than
-its budget alive. The two tests here run in file order: the first leaks the
-way an application left running does, the second checks the next test
-starts within budget.
+Each `NativeGpu` is a whole wgpu device, and Mesa's GL-on-D3D12 under WSLg
+segfaults at the tenth live one. Tests that never shut their application down
+leave its device alive in a reference cycle until a full collection, so test
+order decided whether ten piled up. `tests/conftest.py` collects after any
+test that leaves more than its budget alive; the last two tests here run in
+file order, one leaking and the next checking it starts within budget.
 """
 
 from __future__ import annotations
