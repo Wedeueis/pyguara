@@ -68,6 +68,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Gamepads (gilrs) link libudev, so building the extension needs its
+      # headers on Linux, as every CI job installs them.
+      - name: Install udev headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libudev-dev pkg-config
+
       - name: Install Docs Dependencies
         run: make install
 
