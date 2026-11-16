@@ -225,6 +225,10 @@ class ConfigManager:
     def save(self, file_path: str | Path | None = None) -> bool:
         """Write the current configuration to a JSON file.
 
+        A setting an active profile overrides is written with the value
+        underneath it. A profile holds for a while and is popped; the file
+        is what the game starts from next time.
+
         Args:
             file_path: File to write. Defaults to `file_path` from the
                 constructor. Parent directories are created.
@@ -237,7 +241,7 @@ class ConfigManager:
         try:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             with open(target_path, "w", encoding="utf-8") as handle:
-                json.dump(self._config.to_dict(), handle, indent=4)
+                json.dump(self._document(), handle, indent=4)
         except (OSError, TypeError) as error:
             if self._logger:
                 self._logger.error(f"Failed to save config to {target_path}: {error}")
@@ -248,6 +252,35 @@ class ConfigManager:
                 OnConfigurationSaved(config_file=str(target_path), success=True)
             )
         return True
+
+    def _document(self) -> dict[str, Any]:
+        """Serialize the configuration as it stands under the profiles.
+
+        The live sections are the only thing `to_dict()` reads, so each
+        overridden setting is set to its base value for the call and put
+        back afterwards.
+
+        Returns:
+            The document `save()` writes.
+        """
+        overridden = {
+            (section, setting)
+            for _, layer in self._stack
+            for section, overrides in layer.items()
+            for setting in overrides
+        }
+        live: dict[tuple[str, str], Any] = {}
+        try:
+            for section, setting in overridden:
+                section_obj = self._config.get_section(section)
+                live[(section, setting)] = getattr(section_obj, setting)
+                setattr(
+                    section_obj, setting, copy.deepcopy(self._base[section][setting])
+                )
+            return self._config.to_dict()
+        finally:
+            for (section, setting), value in live.items():
+                setattr(self._config.get_section(section), setting, value)
 
     def validate(self) -> list[ValidationIssue]:
         """Check the current configuration against the engine's limits.
