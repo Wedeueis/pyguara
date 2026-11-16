@@ -1,25 +1,23 @@
-"""World-space query wrapper around the bare flow-field functions.
+"""A cached flow field over a `GridGraph`, queried in world space.
 
-The functions in `flow_field.py` work on any `Graph[Node]` and hold no
-state. This wraps them for a `GridGraph`: it caches one field and
-converts between world positions and cells.
+The field is computed and held in Rust: a `GridGraph` is flat integer
+state, and nothing outside this class reads a cell, so the cost map and
+the descent field never come back to Python and only a query crosses
+the boundary. See `docs/adr/0011-one-rust-engine-python-interface.md`.
 
-It is also where the native accelerator lives, because a `GridGraph`
-is flat integer state a native implementation can hold. See
-`docs/adr/0004-the-native-boundary.md`.
+For a graph that is not a grid, `flow_field.py` has the same two steps
+as plain functions over any `Graph[Node]`.
 """
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable
 from typing import Any, cast
 
-from pyguara.ai.pathfinding.flow_field import dijkstra_map, flow_field
 from pyguara.ai.pathfinding.grid import GridGraph, GridNode
-from pyguara.common.grid import cell_to_world, world_to_cell
+from pyguara.common.grid import world_to_cell
 from pyguara.common.types import Vector2
-from pyguara.native import native_module
+from pyguara.native import require_extension
 
 # Dimensions, topology and the mutable content: see `_graph_key`.
 _GraphKey = tuple[
@@ -37,9 +35,9 @@ _FieldKey = tuple[frozenset[GridNode], float | None, _GraphKey]
 class FlowFieldService:
     """Caches one flow field over a `GridGraph` and answers world-space queries.
 
-    Uses the native extension when it is available. The cost map and the
-    descent field stay native and only a query crosses the boundary. The
-    native field is bit-exact with the Python one.
+    The field lives in the native extension, which this class needs: it
+    has no Python fallback, and `native_acceleration` and
+    `PYGUARA_NO_NATIVE` do not apply to it.
 
     Example:
         >>> service = FlowFieldService(graph)
@@ -47,7 +45,7 @@ class FlowFieldService:
         >>> direction = service.vector_at(dog_transform.position, cell_size=32.0)
     """
 
-    def __init__(self, graph: GridGraph, *, accelerate: bool | None = None) -> None:
+    def __init__(self, graph: GridGraph) -> None:
         """Initialize the service over `graph`.
 
         No field exists until `recompute()` is called -- `vector_at()`
@@ -58,46 +56,22 @@ class FlowFieldService:
                 rather than copied, so a runtime mutation (a pressure plate
                 opening a gate) is picked up without the caller saying
                 anything.
-            accelerate: Whether to compute the field natively. None, the
-                default, defers to the engine-wide setting --
-                `PerformanceConfig.native_acceleration`, resolved once at
-                bootstrap -- so a game decides this in one place rather
-                than per service. True demands the extension and raises if
-                it is missing; False forces the Python path. Both are
-                overrides for tests and for the parity suite, not a second
-                configuration surface.
 
         Raises:
-            RuntimeError: If `accelerate=True` and the extension is absent.
+            RuntimeError: If the native extension cannot be imported.
         """
         self._graph = graph
-        self._cost_map: dict[GridNode, float] = {}
-        self._field: dict[GridNode, GridNode | None] = {}
         self._computed_for: _FieldKey | None = None
-
-        native = native_module() if accelerate is not False else None
-        if accelerate and native is None:
-            raise RuntimeError(
-                "accelerate=True but the native extension is not available. "
-                "Build it with `cargo build --release`, or leave "
-                "`accelerate` unset to fall back to Python."
-            )
-        self._native: Any | None = native.NativeFlowField() if native else None
+        self._native: Any = require_extension("FlowFieldService").NativeFlowField()
         self._uploaded: _GraphKey | None = None
         self._reached = 0
-
-    @property
-    def accelerated(self) -> bool:
-        """Whether this service computes its field natively."""
-        return self._native is not None
 
     def _graph_key(self) -> _GraphKey:
         """Return the graph's content as one hashable value.
 
-        Separate from `_key` because the native path needs the two halves
-        apart: the goals change almost every tick and the graph almost
-        never, so comparing them separately means a moved goal re-uploads
-        nothing. On the Python path the split is invisible.
+        Separate from `_key` because the two halves are compared apart:
+        the goals change almost every tick and the graph almost never, so
+        a moved goal re-uploads nothing.
         """
         graph = self._graph
         return (
@@ -145,7 +119,6 @@ class FlowFieldService:
         for (x, y), weight in graph.weights.items():
             if 0 <= x < width and 0 <= y < height:
                 weights[y * width + x] = weight
-        assert self._native is not None
         self._native.set_grid(width, height, graph.allow_diagonal, blocked, weights)
 
     def recompute(
@@ -159,11 +132,10 @@ class FlowFieldService:
 
         Args:
             goals: Target cells (e.g. the fleeing prey's current cell).
-                Forwarded to `dijkstra_map()` as multiple sources. Order
-                and duplicates are irrelevant -- each is seeded at cost 0 --
-                so they are compared as a set.
-            max_cost: Forwarded to `dijkstra_map()`; caps how far the field
-                extends.
+                Order and duplicates are irrelevant -- each is seeded at
+                cost 0 -- so they are compared as a set.
+            max_cost: Caps how far the field extends; a cell that costs
+                more is left unreached.
 
         Returns:
             True if the field was computed, False if the cached one already
@@ -175,14 +147,10 @@ class FlowFieldService:
         if key == self._computed_for:
             return False
 
-        if self._native is not None:
-            if graph_key != self._uploaded:
-                self._upload()
-                self._uploaded = graph_key
-            self._reached = self._native.recompute(list(collected), max_cost)
-        else:
-            self._cost_map = dijkstra_map(self._graph, collected, max_cost=max_cost)
-            self._field = flow_field(self._graph, self._cost_map)
+        if graph_key != self._uploaded:
+            self._upload()
+            self._uploaded = graph_key
+        self._reached = self._native.recompute(list(collected), max_cost)
         self._computed_for = key
         return True
 
@@ -205,26 +173,13 @@ class FlowFieldService:
             outside `max_cost`, walled off) or is itself a goal.
         """
         cell = world_to_cell(world_pos, cell_size, offset)
-        if self._native is not None:
-            # The whole body below, in one crossing. Worth doing natively
-            # even though the lookup is a dict access: the four `Vector2`
-            # operations after it are nearly all of this method's cost,
-            # and a steering agent calls it every tick.
-            step_x, step_y = self._native.direction_at(
-                cell[0], cell[1], cell_size, offset.x, offset.y
-            )
-            return Vector2(step_x, step_y)
-
-        next_cell = self._field.get(cell)
-        if next_cell is None:
-            return Vector2(0, 0)
-
-        direction = cell_to_world(next_cell, cell_size, offset) - cell_to_world(
-            cell, cell_size, offset
+        # One crossing for the lookup and the cell-centre arithmetic: the
+        # `Vector2` operations after the lookup are nearly all of this
+        # method's cost, and a steering agent calls it every tick.
+        step_x, step_y = self._native.direction_at(
+            cell[0], cell[1], cell_size, offset.x, offset.y
         )
-        if direction.length < 0.001:
-            return Vector2(0, 0)
-        return cast(Vector2, direction.normalized())
+        return Vector2(step_x, step_y)
 
     def cost_at(self, cell: GridNode) -> float:
         """Return `cell`'s cached cost to the nearest goal.
@@ -233,13 +188,9 @@ class FlowFieldService:
             `math.inf` if `cell` was unreached by the last `recompute()` --
             useful for "has the prey escaped the reachable area" checks.
         """
-        if self._native is not None:
-            return cast(float, self._native.cost_at(cell[0], cell[1]))
-        return self._cost_map.get(cell, math.inf)
+        return cast(float, self._native.cost_at(cell[0], cell[1]))
 
     @property
     def is_computed(self) -> bool:
         """Whether `recompute()` has run at least once."""
-        if self._native is not None:
-            return self._reached > 0
-        return bool(self._field)
+        return self._reached > 0

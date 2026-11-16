@@ -4,8 +4,8 @@ Moved out of `AGENTS.md` on 2026-11-14, unchanged, so that file stays short
 enough to read every session. `AGENTS.md` keeps the rules; this has the
 reasons and the detail.
 
-Four subsystems and one shared primitive have a native implementation
-beside the Python one:
+Three subsystems and one shared primitive have a native implementation
+beside the Python one, and `FlowFieldService` has only the native one:
 
 | | native gain | |
 | --- | ---: | --- |
@@ -47,7 +47,26 @@ none was needed before. That is the price, and
 `docs/adr/0006-shipping-the-native-extension.md` has why it is worth
 paying.
 
-The pure-Python implementations are kept and still run: under
+**`FlowFieldService` is Rust-only** (ADR 0011, Decision 3), the first of
+the five to lose its Python store. It takes no `accelerate=`, ignores
+`native_acceleration` and `PYGUARA_NO_NATIVE`, and raises at construction
+if the extension cannot be imported. What it must compute is held three
+ways:
+
+- `tests/golden/flow_field.json`: the cost and direction of every cell
+  in ten scenarios, as float hex, recorded while the Python and Rust
+  stores still agreed. `tests/test_flow_field_golden.py` compares exactly.
+- `tests/reference/flow_field.py`: the Python store that was removed,
+  kept as test code on the generic `dijkstra_map` and `flow_field`
+  functions, which the engine still ships for graphs that are not grids.
+  `tests/test_flow_field_reference.py` compares it cell for cell.
+- Sabotage: `DIAGONAL` set to `SQRT_2` in `rust/src/flowfield.rs` fails
+  30 tests, 9 of them golden.
+
+Those tests fail, not skip, without the extension. The next store to be
+retired follows the same three steps, in that order.
+
+The other pure-Python implementations are kept and still run: under
 `PYGUARA_NO_NATIVE=1`, under `native_acceleration = "off"`, on a platform
 with no wheel, and in a checkout with nothing built yet.
 
@@ -97,15 +116,13 @@ section was placed there and silently deleted on the next regeneration.
 The price of keeping two implementations is that they must agree, which is
 paid by `tests/test_native_particle_parity.py`,
 `tests/test_native_spark_parity.py`,
-`tests/test_native_flow_field_parity.py`,
 `tests/test_native_flocking_parity.py` and
 `tests/test_native_spatial_hash_parity.py` running the same operations
 against both, plus real-GPU pixel comparisons in
 `tests/integration/test_wgpu_pixels.py`. All of those **skip** when the
 extension is not built, so a contributor without Rust sees a green suite
 and has tested none of the accelerator -- build it before trusting a pass
-on anything touching particles, sparks, pathfinding, flocking or spatial
-queries.
+on anything touching particles, sparks, flocking or spatial queries.
 
 **Adding a native store to an existing class changes the meaning of every
 test that constructs it**, which `SpatialHash` demonstrated the hard way:
@@ -120,7 +137,8 @@ should be parametrised over both. See ADR 0004 Decision 7.
 **How closely they have to agree depends on what the subsystem is for.**
 The pools compare with a tolerance, because they hold f32 where Python
 holds f64 and a spark half a pixel away is a spark. The flow field is
-**bit-exact** and tested with `==` on every cell, because a field steers
+**bit-exact** against its reference and tested with `==` on every cell,
+because a field steers
 enemies and one cell pointing elsewhere is a pack that goes the other way
 round a wall. Changing `1.414` to `SQRT_2` in `rust/src/flowfield.rs`, or
 reordering its neighbour table, breaks that on purpose -- both are

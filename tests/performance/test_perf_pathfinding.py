@@ -1,13 +1,13 @@
-"""What a flow-field recompute costs, and what the accelerator buys.
+"""What a flow-field recompute costs, and what computing it in Rust buys.
 
 Two things are guarded. `FlowFieldService.recompute` skips a recompute
 that would reproduce the field it holds. And the sweep itself is
 native, which bounds the worst case when a goal really does move. See
 ADR 0004, Decision 6.
 
-The guards are ratios, never wall-clock budgets; the native comparison
-is a ratio between the two stores in one process. The absolute figures
-are in `docs/guides/performance.md`.
+The guards are ratios, never wall-clock budgets. "Python" here is
+`tests.reference.flow_field`, the implementation the service replaced.
+The absolute figures are in `docs/guides/performance.md`.
 """
 
 from __future__ import annotations
@@ -20,6 +20,14 @@ from pyguara.ai.pathfinding.flow_field_service import FlowFieldService
 from pyguara.ai.pathfinding.grid import GridGraph
 from pyguara.common.types import Vector2
 from tests.performance.conftest import measure
+from tests.reference.flow_field import ReferenceFlowField
+
+SKIP_LIMIT = 0.1
+"""The most a skipped recompute may cost, as a fraction of a real one.
+
+Measured at 1.6% on a 64x64 grid: the fingerprint is Python and the
+sweep is Rust, so this is far closer than when both were Python.
+"""
 
 
 def _graph(side: int, *, walls: float = 0.12, seed: int = 7) -> GridGraph:
@@ -57,18 +65,16 @@ def test_the_skip_costs_a_fraction_of_the_recompute_it_avoids() -> None:
     asserting the premise rather than the constant.
     """
     graph = _graph(64)
-    service = FlowFieldService(graph, accelerate=False)
+    service = FlowFieldService(graph)
     goal = _goal_of(graph)
     service.recompute([goal])
 
     skipped = measure(lambda: service.recompute([goal]))
     # A fresh service each round, or the second recompute would be skipped
     # too and this would measure the same thing twice.
-    computed = measure(
-        lambda: FlowFieldService(graph, accelerate=False).recompute([goal])
-    )
+    computed = measure(lambda: FlowFieldService(graph).recompute([goal]))
 
-    assert skipped < computed * 0.05, (
+    assert skipped < computed * SKIP_LIMIT, (
         f"the skip cost {skipped / max(computed, 1e-9):.1%} of a recompute. "
         f"If fingerprinting the graph has become comparable to sweeping it, "
         f"the guard is no longer worth its soundness and an explicit "
@@ -89,12 +95,8 @@ def test_a_recompute_scales_no_worse_than_the_cell_count() -> None:
     small = _graph(32)
     large = _graph(64)
 
-    small_time = measure(
-        lambda: FlowFieldService(small, accelerate=False).recompute([_goal_of(small)])
-    )
-    large_time = measure(
-        lambda: FlowFieldService(large, accelerate=False).recompute([_goal_of(large)])
-    )
+    small_time = measure(lambda: FlowFieldService(small).recompute([_goal_of(small)]))
+    large_time = measure(lambda: FlowFieldService(large).recompute([_goal_of(large)]))
 
     ratio = large_time / max(small_time, 1e-9)
     assert ratio <= 10.0, (
@@ -105,33 +107,22 @@ def test_a_recompute_scales_no_worse_than_the_cell_count() -> None:
 
 
 @pytest.mark.performance
-def test_the_native_store_is_wired_up_and_materially_faster() -> None:
-    """That the accelerator is reached at all, which is easy to lose.
-
-    `pyguara/native.py` falls back silently when the extension is missing
-    or stale, so a broken build would show only as the Python sweep.
+def test_the_sweep_is_materially_faster_than_the_python_it_replaced() -> None:
+    """The reason the field is in Rust, kept as a measurement.
 
     Asserted at a fifth of the Python cost, loosely, for a shared runner;
-    the exact figure is in `docs/guides/performance.md`. This skips
-    without the extension;
-    `tests/test_flow_field_service.py::TestTheStoreIsOneEngineWideChoice`
-    is what catches a broken lookup.
+    the exact figure is in `docs/guides/performance.md`.
     """
     graph = _graph(64)
     goal = _goal_of(graph)
-    accelerated = FlowFieldService(graph)
-    if not accelerated.accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
 
-    python_time = measure(
-        lambda: FlowFieldService(graph, accelerate=False).recompute([goal])
-    )
+    python_time = measure(lambda: ReferenceFlowField(graph).recompute([goal]))
     native_time = measure(lambda: FlowFieldService(graph).recompute([goal]))
 
     assert native_time < python_time * 0.2, (
-        f"the native store took {native_time / max(python_time, 1e-9):.0%} of "
-        f"the Python one. Either it is not actually being used, or the sweep "
-        f"has regressed to within noise of interpreted Python."
+        f"the service took {native_time / max(python_time, 1e-9):.0%} of the "
+        f"Python reference. The sweep has regressed to within noise of "
+        f"interpreted Python."
     )
 
 
@@ -149,9 +140,7 @@ def test_a_query_is_cheaper_natively_than_in_python() -> None:
     graph = _graph(64)
     goal = _goal_of(graph)
     native = FlowFieldService(graph)
-    if not native.accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
-    python = FlowFieldService(graph, accelerate=False)
+    python = ReferenceFlowField(graph)
     native.recompute([goal])
     python.recompute([goal])
 
@@ -175,12 +164,11 @@ def test_a_query_is_cheaper_natively_than_in_python() -> None:
 @pytest.mark.performance
 @pytest.mark.slow
 @pytest.mark.parametrize("side", [30, 64, 96])
-@pytest.mark.parametrize("accelerate", [False, True], ids=["python", "native"])
-def test_sweep_recompute(benchmark, side: int, accelerate: bool) -> None:
+@pytest.mark.parametrize("native", [False, True], ids=["python", "native"])
+def test_sweep_recompute(benchmark, side: int, native: bool) -> None:
     """Sweep: the `docs/guides/performance.md` figures. Asserts nothing."""
     graph = _graph(side)
     goal = _goal_of(graph)
-    if accelerate and not FlowFieldService(graph).accelerated:
-        pytest.skip("native extension not built; `cargo build --release`")
+    build = FlowFieldService if native else ReferenceFlowField
 
-    benchmark(lambda: FlowFieldService(graph, accelerate=accelerate).recompute([goal]))
+    benchmark(lambda: build(graph).recompute([goal]))

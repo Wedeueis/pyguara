@@ -435,7 +435,7 @@ def price_flow_field(side: int) -> Row:
         lambda: flow_field(graph, cost_map), iterations=5
     )
 
-    if not FlowFieldService(graph).accelerated:
+    if native_module() is None:
 
         def upload() -> tuple[list[int], list[float]]:
             """The grid, flattened. Changes rarely, so this is a ceiling."""
