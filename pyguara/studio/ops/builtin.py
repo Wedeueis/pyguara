@@ -40,6 +40,8 @@ from pyguara.studio.ops.registry import (
     OperationRegistry,
     RiskClass,
 )
+from pyguara.studio.ops.resources import VERBS as RESOURCE_VERBS
+from pyguara.studio.ops.resources import resources_operation
 
 if TYPE_CHECKING:
     from pyguara.studio.session import StudioSession
@@ -1129,6 +1131,56 @@ _OPERATIONS: tuple[Operation, ...] = (
             ["operation"],
         ),
         handler=config_operation,
+    ),
+    Operation(
+        name="resources",
+        summary="Browse, preview, spawn from or reload the project's assets.",
+        detail=(
+            "operation: 'list' reports the files the resource manager has "
+            "indexed, each with the names that load it, and the resources "
+            "currently loaded. 'preview' describes one, with its contents "
+            "when it is a data file. 'spawn' creates an entity from a data "
+            "file whose top-level keys are component names -- one undoable "
+            "entry -- and reports the keys that were not components. "
+            "'reload' re-reads a loaded resource from disk; not undoable."
+        ),
+        risk=RiskClass.EDIT,
+        parameters=_schema(
+            {
+                "operation": {
+                    "type": "string",
+                    "enum": list(RESOURCE_VERBS),
+                    "description": "Which of the four to do.",
+                },
+                "name": {
+                    "type": "string",
+                    "description": (
+                        "An indexed name ('hero', 'hero.json') or a path. "
+                        "Required by 'preview', 'spawn' and 'reload'."
+                    ),
+                },
+                "entity_id": {
+                    "type": "string",
+                    "description": (
+                        "The id 'spawn' gives the entity. Defaults to the "
+                        "file's stem, numbered if that is taken."
+                    ),
+                },
+                "filter": {
+                    "type": "string",
+                    "description": "'list' keeps entries containing this text.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": (
+                        "The most indexed files 'list' returns. "
+                        "'indexed_total' says how many there were."
+                    ),
+                },
+            },
+            ["operation"],
+        ),
+        handler=resources_operation,
     ),
     Operation(
         name="scene",

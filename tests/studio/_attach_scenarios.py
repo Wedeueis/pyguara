@@ -256,6 +256,47 @@ def the_config_panel_edits_the_real_configuration() -> None:
         app.shutdown()
 
 
+def the_resources_panel_browses_the_real_manager() -> None:
+    """The Resources panel draws under the real loop over the engine's assets.
+
+    The panel tests hand it a resource manager built for the purpose.
+    This checks the session got the container's own, which is the one
+    the running game loads through.
+    """
+    from pyguara.resources.manager import ResourceManager
+
+    app = _application()
+    try:
+        attachment = attach_studio(app.container, project_root=_project_root())
+        assert attachment is not None
+        app.begin(_scene(app))
+        app.step()
+
+        panel = next(p for p in attachment.layer.panels if p.title == "Resources")
+        assert panel.visible is False, "the Resources panel should open hidden"
+        panel.visible = True
+        for _ in range(5):
+            app.step()
+
+        session = attachment.session
+        assert session is not None
+        manager = app.container.get(ResourceManager)
+        assert session.resource_manager is manager, (
+            "the session browses a resource manager the game does not load from"
+        )
+
+        result = attachment.operations.invoke(
+            session, "resources", {"operation": "list"}
+        )
+        assert result.ok, result.error
+        cached = {path for path, _ in manager.iter_cached()}
+        assert {entry["path"] for entry in result.result["loaded"]} == cached, (
+            "the listing disagrees with what the game has loaded"
+        )
+    finally:
+        app.shutdown()
+
+
 def studio_owns_the_screen() -> None:
     """The game is drawn inside the viewport, not behind the panels.
 
@@ -757,6 +798,9 @@ SCENARIOS = {
     "panels_install_under_the_real_loop": (panels_install_under_the_real_loop),
     "the_config_panel_edits_the_real_configuration": (
         the_config_panel_edits_the_real_configuration
+    ),
+    "the_resources_panel_browses_the_real_manager": (
+        the_resources_panel_browses_the_real_manager
     ),
     "studio_owns_the_screen": studio_owns_the_screen,
     "the_layout_follows_the_window": the_layout_follows_the_window,

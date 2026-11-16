@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 DEFAULT_LAYOUT_REGIONS: dict[str, tuple[str, ...]] = {
     "left": ("Hierarchy",),
     "right": ("Inspector", "Components", "Config"),
-    "bottom": ("History", "Journal", "Commands"),
+    "bottom": ("History", "Journal", "Commands", "Resources"),
     "top": ("Play",),
     "centre": ("Viewport",),
 }
@@ -220,6 +220,7 @@ class StudioAttachment:
             approval_mode=self._approval_mode,
             scene_io=self._scene_io(),
             config_manager=self._config_manager(),
+            resource_manager=self._resource_manager(),
         )
 
     def _config_manager(self) -> Any:
@@ -257,6 +258,21 @@ class StudioAttachment:
             return None
         return SceneIO(serializer, lambda: manager.current_scene)
 
+    def _resource_manager(self) -> Any:
+        """Return the engine's resource manager for the session to browse.
+
+        Returns:
+            The `ResourceManager`, or None when the container has none, in
+            which case the `resources` operation says so.
+        """
+        try:
+            from pyguara.resources.manager import ResourceManager
+
+            return self._container.get(ResourceManager)
+        except Exception as exc:
+            logger.info(f"Studio cannot browse resources here: {exc}")
+            return None
+
     def _install_panels(self) -> None:
         """Add Studio's panels to the layer, once.
 
@@ -274,6 +290,7 @@ class StudioAttachment:
         from pyguara.studio.panels.journal import JournalPanel
         from pyguara.studio.panels.palette import CommandPalette
         from pyguara.studio.panels.play import PlayControlsPanel
+        from pyguara.studio.panels.resources import ResourcesPanel
         from pyguara.studio.panels.schema import SchemaPanel
         from pyguara.studio.viewport.gizmo import TransformGizmo
         from pyguara.studio.viewport.panel import ViewportPanel
@@ -298,6 +315,7 @@ class StudioAttachment:
             JournalPanel(session),
             SchemaPanel(self._resolve_registry()),
             ConfigPanel(self),
+            ResourcesPanel(self),
             CommandPalette(session, self._operations),
         ]
         application = self._application()

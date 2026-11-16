@@ -24,6 +24,7 @@ from pyguara.config.manager import ConfigManager
 from pyguara.ecs.manager import EntityManager
 from pyguara.log import get_logger
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
+from pyguara.resources.manager import ResourceManager
 from pyguara.studio.agent.journal import Actor, Journal
 from pyguara.studio.commands.base import EditCommand, EditError
 from pyguara.studio.commands.stack import CommandStack
@@ -169,6 +170,7 @@ class StudioSession:
         approval_mode: ApprovalMode = ApprovalMode.AUTO,
         scene_io: Any = None,
         config_manager: ConfigManager | None = None,
+        resource_manager: ResourceManager | None = None,
     ) -> None:
         """Open a session over `world`.
 
@@ -192,6 +194,8 @@ class StudioSession:
             config_manager: The engine's configuration, for the `config`
                 operation. None in a session built by hand, and the
                 operation then says what is missing.
+            resource_manager: The engine's resource manager, for the
+                `resources` operation. None in a session built by hand.
         """
         self._world = world
         self._scene_name = scene_name
@@ -204,6 +208,7 @@ class StudioSession:
         self._journal = journal if journal is not None else Journal()
         self._scene_io = scene_io
         self._config_manager = config_manager
+        self._resource_manager = resource_manager
         # Edit unless something says otherwise: a session built by hand,
         # or driven by the agent harness, is editing a scene that is not
         # running. The editor sets this when Play is pressed.
@@ -259,6 +264,11 @@ class StudioSession:
     def config_manager(self) -> ConfigManager | None:
         """The engine's configuration, or None when the session has none."""
         return self._config_manager
+
+    @property
+    def resource_manager(self) -> ResourceManager | None:
+        """The engine's resource manager, or None when the session has none."""
+        return self._resource_manager
 
     @property
     def world(self) -> EntityManager:

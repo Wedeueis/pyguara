@@ -54,7 +54,7 @@ there instead of something else.
 | F2 `EntityInspector` | Inspect and live-edit components | Studio's **Inspector** panel |
 | F9 `TransformGizmo` | Translate/rotate/scale handles | Studio's **viewport gizmo** |
 | F6 `ConfigInspector` | Live-edit `GameConfig`, `S` to save | Studio's **Config** panel |
-| F7 `AssetsTool` | Browse resources, spawn from a `DataResource` | **nothing yet** — [#330](https://github.com/Wedeueis/pyguara/issues/330) |
+| F7 `AssetsTool` | Browse resources, spawn from a `DataResource` | Studio's **Resources** panel |
 
 The first three were duplicates, and the weaker of the two copies.
 Studio's gizmo is 814 lines against 353: it has drag state, handle
@@ -66,16 +66,16 @@ Keeping both meant two ways to change the world, only one of which kept a
 record.
 
 **The last two were not duplicates**, and removing them removed
-capability. The config editor has since been rebuilt as Studio's
-**Config** panel; the resource browser has not. They went with the rest because they were built on the same
+capability. Both have since been rebuilt in Studio, as the **Config**
+and **Resources** panels. They went with the rest because they were built on the same
 widget layer, `pyguara/tools/tweakable.py`, and that layer is why none of
 these were good enough to keep: **nothing in the overlay scrolls** — a
 grep for `scroll` or `wheel` across the package returned nothing, so a
 list longer than its panel simply ran off the bottom — and its number
 editor stepped by a hard-coded `1.0` when you clicked the left or right
-half of a row, which cannot express a `0.5` damping value at all. #330
-records the resource browser for Studio, which has a scrolling dockable
-surface to put it on.
+half of a row, which cannot express a `0.5` damping value at all.
+Studio has a scrolling dockable surface, and its number fields take any
+value.
 
 > **Screen-space only.** `PhysicsDebugger` draws using `Transform.position`
 > as a *screen* coordinate -- no camera transform. It lines up only with
