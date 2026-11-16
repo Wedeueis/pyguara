@@ -68,11 +68,10 @@ Wheels for Linux (x86_64, aarch64), macOS (x86_64, arm64) and Windows
 ```python
 from dataclasses import dataclass
 
-from pyguara.application import create_application
+import pyguara
 from pyguara.common.components import Transform
 from pyguara.common.types import Color, Rect, Vector2
 from pyguara.ecs.component import BaseComponent
-from pyguara.events.dispatcher import EventDispatcher
 from pyguara.graphics.protocols import IRenderer, UIRenderer
 from pyguara.scene.base import Scene
 
@@ -110,8 +109,7 @@ class Game(Scene):
         pass
 
 
-app = create_application()
-app.run(Game("game", app.container.get(EventDispatcher)))
+pyguara.run(Game)
 ```
 
 Save it as a file and run it with `uv run python your_file.py`.
