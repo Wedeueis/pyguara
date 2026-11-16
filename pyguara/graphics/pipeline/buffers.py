@@ -1,17 +1,10 @@
 """The standard framebuffer chain, and the format it carries.
 
-A frame moves through four named buffers -- world, lightmap, composite,
-post-processed -- and until now nothing owned their format. Each was created
-by whichever pass reached it first, at the manager's 8-bit default, while the
-light map was widened to 16-bit float by each demo's bootstrap doing it by
-hand before `LightPass` could claim it. The extra range died at the composite,
-and `bloom_composite.frag`'s tonemap was commented out to match.
-
-This module is where the chain is described instead: the names, and the format
-they carry. `RenderGraph` declares them on the manager at construction, and the
-effects that own their own scratch buffers declare theirs the same way, so a
-pass downstream asks for a buffer by name and gets the format the chain says it
-has rather than whatever the first caller happened to want.
+A frame moves through four named buffers: world, lightmap, composite
+and post-processed. This module names them and the format each has.
+`RenderGraph` declares them on the manager at construction, and
+effects with their own scratch buffers declare theirs the same way, so
+a pass asking for a buffer by name gets the declared format.
 """
 
 from __future__ import annotations

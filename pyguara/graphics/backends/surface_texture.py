@@ -1,19 +1,8 @@
 """Blitting a texture, or one region of it, onto a pygame surface.
 
-Both UI renderers draw onto a `pygame.Surface` -- the pygame backend's
-display directly, the ModernGL backend's offscreen overlay before it is
-uploaded -- and their `draw_texture` bodies were byte-identical: scale the
-whole surface to the destination, tint a copy if asked, blit. Identical by
-coincidence, not by construction, which is how the pygame stubs drifted
-from the GL ones before (see `test_graphics_protocol_conformance.py`).
-
-`source_rect` is the reason it matters now. A UI texture draw could not
-name a region of its texture, so a widget showing one frame of an atlas
-had to be handed a pre-cut surface -- while the *world* renderer has
-carried `RenderCommand.source_rect` and `RenderBatch.source_rects` all
-along, and the pygame backend blits regions straight out of a sheet. The
-asymmetry was the defect; one shared implementation is what keeps the two
-halves answering the same way.
+The shared implementation of `UIRenderer.draw_texture` for a renderer
+that draws onto a `pygame.Surface`: cut the source region if one is
+named, scale it to the destination, tint a copy if asked, blit.
 """
 
 from __future__ import annotations
@@ -36,15 +25,12 @@ _warned_unusable: set[str] = set()
 def as_surface(texture: Any) -> pygame.Surface | None:
     """Return the surface a UI renderer can blit for `texture`.
 
-    A UI draws onto a CPU surface on every backend, so it can only draw from
-    one. A bare surface passes straight through, and a `resources.Texture`, which
-    is what `ResourceManager.load` hands back, is unwrapped by asking it:
-    `PygameTexture` already holds a surface, and a texture with `read_surface()` reads
-    its pixels back from the GPU the first time and keeps them.
+    A bare surface passes straight through. A `resources.Texture`, which
+    is what `ResourceManager.load` returns, is unwrapped: `PygameTexture`
+    holds a surface, and a texture with `read_surface()` reads its pixels
+    back from the GPU the first time and keeps them.
 
-    Anything else draws nothing, **and says so once**. This used to be a silent
-    `return`, so a widget handed the wrong thing was an empty rectangle with no
-    clue why.
+    Anything else draws nothing, and is logged once.
 
     Args:
         texture: A surface, a `resources.Texture`, or something unusable.
@@ -84,39 +70,25 @@ def blit_texture(
 ) -> bool:
     """Draw `texture`, or the `source_rect` region of it, scaled into `rect`.
 
-    A source region is cut out before any scaling or tinting runs, so the
-    destination holds that region stretched to fill it -- the same order
-    the pygame world renderer's per-instance path uses, and the only order
-    that makes an atlas entry scale the way a standalone texture would.
+    A source region is cut out before any scaling or tinting, so an atlas
+    entry scales as a standalone texture would.
 
-    **An out-of-bounds source region is clipped, not refused.** The caller
-    asked for pixels that do not exist, which is always a bug in its atlas
-    metadata, but the alternative to drawing the overlap is drawing
-    nothing: one wrong entry would then blank a whole HUD rather than show
-    one wrong sprite. The clip is logged once per process, naming the
-    region and the texture, so the bug is findable from the log instead of
-    from the frame. An empty overlap draws nothing at all.
+    A source region that leaves the texture is clipped to the overlap and
+    logged once per process, naming the region and the texture. An empty
+    overlap draws nothing.
 
     Args:
         surface: Destination.
         texture: The source surface.
         rect: Where to draw, in destination coordinates. A non-positive
-            extent draws nothing, matching the shape helpers in
-            `surface_blending`. Zero would survive without the check --
-            `pygame.transform.scale` returns a 0-pixel surface for it --
-            but a negative one raises "Cannot scale to negative size",
-            and `Rect` validates nothing, so a layout subtracting two
-            paddings from a narrow parent reaches here with a negative
-            width without anybody having written one.
-        tint: An `(r, g, b)` multiply, or None for none. Deliberately RGB
-            and not RGBA: a UI tint recolours, where a sprite or particle
-            tint also fades, and the world renderer's batch path uses the
-            full tuple for exactly that reason.
+            extent draws nothing, as in the shape helpers in
+            `surface_blending`.
+        tint: An `(r, g, b)` multiply, or None for none. RGB and not
+            RGBA: a UI tint recolours and does not fade.
         source_rect: The region of `texture` to draw, or None for all of it.
 
     Returns:
-        Whether anything was drawn. The ModernGL backend only has to
-        re-upload its overlay when something was.
+        Whether anything was drawn.
     """
     if rect.width <= 0 or rect.height <= 0:
         return False

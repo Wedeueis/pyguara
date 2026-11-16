@@ -1,19 +1,12 @@
 """Turn a UI polygon into triangles for the GPU.
 
-The wgpu UI renderer draws a polygon as one native `mesh` step: its fill
-triangulated by ear clipping, its outline as a ring of mitred quads. Both
-are plain Python because a UI's polygons are a few small shapes -- a
-dropdown's arrow, a slider's notch.
+The wgpu UI renderer draws a polygon as one native `mesh` step: its
+fill triangulated by ear clipping, its outline as one ring of mitred
+quads, so a translucent outline is blended once at its corners.
 
-**Where the pixels go differs a little from pygame's.** pygame scans a
-polygon into pixels with rules of its own (`draw_fillpoly`,
-`draw_filltri`, `draw_line_width`); a GPU covers a pixel when its centre is
-inside a triangle. Vertices are placed on pixel centres, which is where
-pygame's own edges run, so the two agree inside and differ along the edges;
-`tests/integration/test_wgpu_pixels.py` bounds by how much.
-
-An outline is one ring rather than a quad per edge, so a translucent one is
-blended once at its corners rather than twice where the edges overlap.
+Vertices are placed on pixel centres, where pygame's own edges run, so
+the two renderers agree inside a polygon and differ slightly along its
+edges.
 """
 
 from __future__ import annotations

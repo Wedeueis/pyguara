@@ -1,26 +1,14 @@
 """Ambient light driven around a loop of keyframes -- a day/night cycle.
 
-**Core, not a kit.** "Dawn", "dusk", "the long night" are a game's
-vocabulary, and a 24-hour clock is a world model; neither belongs in the
-engine. What does is the mechanism underneath both: interpolate an
-`AmbientLight` along a ring of keyframes by a normalised phase. A kit
-whose entire content would be four named colour constants is not a kit.
+The mechanism only: interpolate an `AmbientLight` along a ring of
+keyframes by a normalised phase. What the keyframes mean (dawn, dusk)
+is the game's.
 
-The cycle is opt-in per entity and requires `AmbientLight` beside it, so
-`LightingSystem` needs no changes at all -- it already re-reads
-`AmbientLight` from the ECS every tick -- and a scene with no cycle
-behaves exactly as it did before this existed.
-
-`sample_cycle()` is a free function over plain data, mirroring the
-`StatBlock`/`get_stat` and `Health`/`apply_damage` split the repo already
-uses. A game that wants its fog, its particles or its UI tinted by the
-same phase calls it directly, rather than reaching into a system.
-
-**Ownership:** a cycle owns the `AmbientLight` on its entity outright,
-overwriting colour and intensity every tick it plays. A transient flash --
-lightning, an explosion lighting the sky -- is therefore either a
-`LightSource` (arguably what lightning is) or a `playing = False` for its
-duration, not a second writer racing the cycle for the same field.
+The cycle is opt-in per entity and needs an `AmbientLight` beside it.
+It overwrites that light's colour and intensity every tick it plays,
+so a transient flash is a `LightSource`, or `playing = False` for its
+duration. `sample_cycle()` is a free function over plain data, for a
+game that tints fog or UI by the same phase.
 """
 
 from __future__ import annotations

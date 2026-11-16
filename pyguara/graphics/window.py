@@ -69,7 +69,7 @@ class Window:
             Engine events (`pyguara.events.input` / `.lifecycle` / `.window`) --
             `QuitEvent`, `KeyDownEvent`, `KeyUpEvent`, `MouseButtonEvent`,
             `MouseMotionEvent`, `WindowResizeEvent`. The backend translates its
-            native events into these (issue #9), so no caller touches SDL.
+            native events into these, so no caller touches SDL.
         """
         return self._backend.poll_events()
 

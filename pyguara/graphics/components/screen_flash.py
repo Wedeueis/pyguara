@@ -1,13 +1,8 @@
 """A full-viewport color flash that fades out.
 
-The screen-space half of #28's "TintPulse/flash" item. Deliberately not
-a per-sprite tint -- `Renderable`/`Sprite` carries no
-color field, so flashing one specific sprite (a hit-white-flash on an
-enemy) needs a protocol change this does not make. This covers the other
-common case: a full-screen flash on taking damage, a white pulse on
-level-up. Built on the plain `IRenderer.draw_rect` primitive, so it works
-identically on every backend -- unlike `VignetteEffect`, which is
-ModernGL-only and has no color parameter at all.
+For a full-screen flash on taking damage or a pulse on level-up. It
+does not tint a single sprite. Built on `IRenderer.draw_rect`, so it
+works on every backend.
 """
 
 from __future__ import annotations

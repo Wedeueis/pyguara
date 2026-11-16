@@ -124,9 +124,7 @@ class PostProcessStack:
         """The effects, in application order.
 
         A snapshot: change the stack through `add_effect()`,
-        `insert_effect()` and `remove_effect()`. This used to hand back the
-        live list, so `stack.effects.clear()` silently emptied the stack
-        without releasing a single effect.
+        `insert_effect()` and `remove_effect()`.
         """
         return list(self._effects)
 

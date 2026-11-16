@@ -17,66 +17,16 @@ _OPAQUE_WHITE = (255, 255, 255, 255)
 
 
 class Batcher:
-    """Iterates over sorted commands and groups them.
+    """Group sorted render commands into draw batches.
 
-    Groups consecutive commands sharing a texture and a material into one
-    batch, so a backend issues one draw call per group rather than one per
-    sprite. Rotation, scale, per-instance tint and atlas source rects
-    travel as optional parallel columns, which is what lets sprites that
-    differ in any of those still share a draw call.
+    Consecutive commands sharing a texture and a material become one
+    batch, so a backend issues one draw call per group. Rotation, scale,
+    tint and atlas source rect are optional parallel columns, filled only
+    from the first command in a batch that needs one.
 
-    **This loop is the engine's largest single Python cost at scale**, so
-    what it does *not* do matters as much as what it does. At 20,000
-    sprites it used to take 54.9 ms -- more than three frames -- and
-    almost none of that was the grouping. Four things were paid per
-    command and thrown away, and removing them is 3.9x to 5.0x at 20,000
-    sprites and 6.6x to 7.0x at 1,000, for batches that are identical
-    field by field. `docs/guides/performance.md` has the table.
-
-    **The screen transform is four float operations, not two vectors.**
-    `(world_position * zoom) + offset` allocates a `Vector2` for the
-    product and another for the sum, per command, per frame, both dead by
-    the next line. `Vector2` subclasses `pymunk.Vec2d`, so each one is a
-    real object with a real allocation. Multiplying and adding the
-    components directly is the same two float operations in the same
-    order -- bit-identical, and `test_destinations_are_the_camera_
-    transform_exactly` asserts that with `==` rather than a tolerance.
-    **This single change is 2.8x to 3.9x of it**, which is worth knowing
-    before reaching for a faster language: the cost was never the loop.
-
-    **An optional column is filled only once something needs it.** This
-    used to collect rotations, scales, colours and source rects for every
-    command and discard all four if the batch's flag stayed false -- the
-    common case, since most sprites are upright, untinted and whole. The
-    price of filling lazily is that the first non-neutral command has to
-    backfill the neutral value for the commands already appended, which
-    happens at most once per field per batch.
-
-    **The tint test is componentwise.** `color != _OPAQUE_WHITE` against a
-    `Color` runs the dataclass `__eq__`, which builds two tuples and
-    compares them, per command. Comparing four ints does not. It is worth
-    a measurement of its own: the tinted case used to be *slower* than the
-    untinted one and is now faster, because an untinted frame pays the
-    comparison 20,000 times and never the append.
-
-    A fourth, smaller one: the batch-break check consults the
-    `material_id` property only when the two material objects differ, so a
-    game using no materials never calls it. Grouping is still by **id**
-    and not by identity -- `Material._id` is an ordinary field, so a
-    copied or deserialised material carries the id it was given, and
-    `test_two_materials_with_the_same_id_stay_in_one_batch` pins that.
-
-    There used to be a fifth thing: a `_static_batches` dict, described in
-    this docstring as "static batch caching for pre-computed, reusable
-    batches", which **nothing in the engine or the tests ever wrote to**.
-    It cost a `list()` and a list concatenation per frame to prepend
-    nothing. If pre-computed static batches are wanted, they want
-    designing against a caller that has one; an always-empty dict was not
-    a head start on that.
-
-    `tests/test_batcher_output.py` is the oracle for all of it, and
-    `tests/visual/` records the ordered backend call stream a frame
-    produces -- a changed snapshot there is a changed frame.
+    Grouping is by `material_id`, not object identity, so a copied or
+    deserialised material batches with its original. The loop works on
+    floats, not `Vector2`; see `docs/guides/performance.md`.
     """
 
     def create_batches(

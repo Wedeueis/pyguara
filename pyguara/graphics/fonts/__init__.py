@@ -1,15 +1,11 @@
 """The engine's default font: Liberation Sans 2.1.5, in four styles.
 
-Bundled so text looks the same on every platform and both renderers. Before,
-each renderer asked the system for "arial" and got Arial on Windows, Ubuntu
-on Ubuntu, and whatever fontconfig preferred elsewhere -- the same HUD
-measured differently per machine. Liberation Sans has Arial's metrics, so a
-label laid out against Arial on Windows still fits.
+Bundled so text looks and measures the same on every platform and both
+renderers. Liberation Sans has Arial's metrics.
 
 SIL Open Font License 1.1 (`OFL.txt` beside the files), from
 https://github.com/liberationfonts/liberation-fonts, release 2.1.5. The
-native extension embeds these same files (`rust/src/text.rs`), so the two
-cannot drift apart.
+native extension embeds these same files (`rust/src/text.rs`).
 """
 
 from __future__ import annotations

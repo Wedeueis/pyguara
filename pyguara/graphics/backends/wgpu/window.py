@@ -2,14 +2,12 @@
 
 The window, its keyboard and mouse input and its native handle come from
 `NativeWindow` (`rust/src/window.rs`), and wgpu presents straight to that
-handle. Nothing here imports pygame: SDL is no longer part of this path.
+handle. Nothing here imports pygame.
 
-**Offscreen when asked, or when no window can be opened.** Under
-`PYGUARA_WINDOW=offscreen` -- which the test suite, `agent_view` and the
-Studio harness set -- the frame is rendered into the device's own target
-and nothing is shown. SDL's `SDL_VIDEODRIVER` does not reach it. A capture
-reads it back with `read_pixels()`. `frame.gpu.has_surface` says which path
-is in use, and the boot log does too.
+Under `PYGUARA_WINDOW=offscreen`, or when no window can be opened, the
+frame is rendered into the device's own target and nothing is shown; a
+capture reads it back with `read_pixels()`. `frame.gpu.has_surface`
+says which path is in use.
 """
 
 from __future__ import annotations
@@ -269,7 +267,7 @@ class WgpuWindow:
         The GPU object is shared: the renderers hold `frame.gpu` too, so
         dropping this window's reference does not free it. It is told to let
         go of the window explicitly, before the window is destroyed, because
-        a surface must not outlive its window (#405).
+        a surface must not outlive its window.
         """
         if self.frame is not None:
             self.frame.gpu.detach_window()

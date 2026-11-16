@@ -1,25 +1,13 @@
 """Blending a translucent shape onto a pygame surface.
 
-Both UI renderers draw through `pygame.draw`, which **replaces** the
-destination pixel including its alpha rather than compositing into it. The
-consequence differs per backend and neither is what anyone wants:
+`pygame.draw` replaces the destination pixel, alpha included, where a
+translucent shape should composite into it. The helpers here draw the
+shape on a scratch surface and blit it, which composites. Every
+primitive goes through them: rects, circles, lines and polygons.
 
-- on an opaque surface (the pygame backend's display) a 74% scrim lands
-  solid black and hides the frame it was meant to dim;
-- on an `SRCALPHA` surface (the ModernGL backend's UI overlay) the same
-  call punches a **hole** -- a ghost button with a transparent fill erased
-  the panel it was sitting on and showed the world through it.
-
-Blitting composites instead, so both backends share this one path. Every
-primitive goes through it -- rects, circles, lines and polygons -- not
-rects alone: a translucent glow ring or a faded icon is exactly as much a
-hole-puncher as a scrim is. The pygame **world** renderer draws onto the
-same opaque display, so it uses these too.
-
-Text has a problem of its own: `Font.render` ignores the colour's alpha
-altogether, so faded text came out fully opaque on every backend.
-`render_text` bakes the alpha into the glyphs' pixels, which works whether
-the result is blitted or uploaded to the GPU.
+`Font.render` ignores a colour's alpha, so `render_text` bakes the
+alpha into the glyphs' pixels. That works whether the result is
+blitted or uploaded to the GPU.
 """
 
 from __future__ import annotations

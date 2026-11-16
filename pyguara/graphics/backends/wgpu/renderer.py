@@ -3,16 +3,11 @@
 Every call here pushes one primitive into the native frame. Nothing is
 drawn until the window presents.
 
-**It is held to the pygame renderer, pixel for pixel where that is
-possible.** The pygame backend is what games run on today, so this one
-puts a rectangle on the same pixels, a line through the same pixel
-centres, and text at the same integer position. Where the two cannot
-agree exactly -- the edge of a circle, the ends of a thick line -- the
-difference is bounded by `tests/integration/test_wgpu_pixels.py`.
-
-Coordinates: pygame names a pixel by its top-left corner and draws shapes
-through pixel *indices*. The GPU rasterises through pixel *centres*. So a
-circle or a line whose pygame coordinates are `(x, y)` is drawn here about
+It matches the pygame renderer pixel for pixel where that is possible:
+a rectangle on the same pixels, a line through the same pixel centres,
+text at the same integer position. pygame names a pixel by its
+top-left corner and the GPU rasterises through pixel centres, so a
+circle or line at pygame's `(x, y)` is drawn here about
 `(x + 0.5, y + 0.5)`.
 """
 

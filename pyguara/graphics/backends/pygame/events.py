@@ -1,11 +1,10 @@
 """Translate SDL (pygame) events into the engine's backend-neutral events.
 
-The pygame and ModernGL window backends both pump SDL via `pygame.event.get()`
-and call this to hand the rest of the engine `QuitEvent` / `KeyDownEvent` /
-`KeyUpEvent` / `MouseButtonEvent` / `MouseMotionEvent` / `MouseWheelEvent` /
-`TextInputEvent` / `WindowResizeEvent` instead of raw SDL structs -- so
-`application.py`, `InputManager`, `pyguara/tools/*`, `pyguara/studio/*` and
-`sandbox.py` stop importing pygame (issue #9).
+A pygame window pumps SDL via `pygame.event.get()` and calls this, so
+the rest of the engine receives `QuitEvent`, `KeyDownEvent`,
+`KeyUpEvent`, `MouseButtonEvent`, `MouseMotionEvent`,
+`MouseWheelEvent`, `TextInputEvent` and `WindowResizeEvent`, and never
+a raw SDL struct.
 """
 
 from __future__ import annotations

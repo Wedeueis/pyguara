@@ -92,23 +92,11 @@ class PygameBackend:
     ) -> None:
         """Draw a single texture immediately, centred on `destination`.
 
-        Honours `rotation` and `scale`, and treats a negative scale on
-        either axis as a flip -- `IRenderer.draw_texture`'s contract, and
-        what the ModernGL backend has always done. This implementation
-        used to ignore both and blit top-left, so the same call put a
-        sprite in a different place at a different size depending on
-        which backend was running.
-
-        Scales and rotates the same way `render_batch` already does --
-        `pygame.transform.scale` and `.rotate`, which are
-        nearest-neighbour. The two paths are the same backend and must
-        not filter the same texture differently, and nearest is what
-        `loaders.py` tells the world pygame does ("pygame uses nearest by
-        default") when it drops a `TextureMeta.filter` on the floor.
-
-        Untransformed draws still take the plain blit: that is every
-        `draw_text` in the game, and transforming an unrotated, unscaled
-        surface is a copy for nothing.
+        Honours `rotation` and `scale`, and treats a negative scale on either
+        axis as a flip, as `IRenderer.draw_texture` requires. Scaling and
+        rotation are nearest-neighbour (`pygame.transform.scale` and
+        `.rotate`), as in `render_batch`. An untransformed draw is a plain
+        blit.
         """
         surf = texture.native_handle
         flip_x, flip_y = scale.x < 0, scale.y < 0

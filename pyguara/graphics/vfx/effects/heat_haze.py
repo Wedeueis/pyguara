@@ -1,18 +1,13 @@
 """Rising heat and drifting dust as a screen-space post-process effect.
 
-Hot air drawn over the finished frame rather than as entities: the
-shimmer is a refraction in the fragment shader, so a blazing afternoon
-costs exactly what a mild one costs and neither one puts anything through
-the ECS, the render queue, or the batcher.
+The shimmer is a refraction in the fragment shader, drawn over the
+finished frame, so its cost does not depend on how strong it is and
+nothing goes through the ECS or the batcher.
 
-The split of responsibility is the same one `StormEffect` draws. This
-effect owns how the heat *looks*; the game owns how hot it is. Nothing
-here decides that a firefight has kicked up dust -- the caller drives
-`haze`, `dust` and `wind`, which is what lets an explosion raise a gust
-on the same frame it goes off.
+This effect owns how the heat looks; the game owns how hot it is, by
+driving `haze`, `dust` and `wind`.
 
-Typical use, per frame::
-
+Example:
     haze.haze = 5.0          # a steady shimmer, in pixels of offset
     haze.dust = 0.4
     haze.update(dt)          # advances the shader clock

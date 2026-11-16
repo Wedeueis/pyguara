@@ -19,21 +19,14 @@ logger = get_logger(__name__)
 class RenderGraph:
     """Orchestrates the rendering pipeline by executing passes in order.
 
-    The graph maintains:
-    - A FramebufferManager for FBO lifecycle
-    - An ordered list of render passes
-    - Methods to add/remove/query passes
-
-    Typical pass order for a 2D game with lighting and post-processing:
-    1. LightPass - Render lights to light FBO
-    2. CompositePass - Multiply world * light
-    3. PostProcessPass - Apply bloom, vignette, etc.
-    4. FinalPass - Blit result to screen
+    Holds a `FramebufferManager` and an ordered list of passes. A typical
+    order for a 2D game with lighting and post-processing: `LightPass`
+    (lights into the light buffer), `CompositePass` (world times light),
+    `PostProcessPass` (bloom, vignette), `FinalPass` (blit to the screen).
 
     The world itself is not a pass. `Application._render_with_graph` binds
-    and clears the world FBO and then lets the scenes draw straight into
-    it, because that has to happen *before* the scenes render and every
-    pass here runs after them.
+    and clears the world buffer and lets the scenes draw into it before
+    any pass runs.
     """
 
     def __init__(
@@ -79,9 +72,7 @@ class RenderGraph:
         """The render passes, in execution order.
 
         A snapshot: mutate the pipeline through `add_pass()`,
-        `insert_pass()` and `remove_pass()`. This used to hand back the live
-        list, so `graph.passes.clear()` silently emptied the pipeline without
-        releasing a single pass.
+        `insert_pass()` and `remove_pass()`.
         """
         return list(self._passes)
 

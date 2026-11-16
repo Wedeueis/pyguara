@@ -3,18 +3,9 @@
 Nine-patch sprites divide an image into 9 sections (corners, edges, center)
 that can be scaled independently while preserving corner details.
 
-The metrics half of this module was complete and tested for a long time
-while `render_ninepatch` was a bare `pass`, because the slices had
-nowhere to go: `UIRenderer.draw_texture` could not name a region of its
-texture, so the nine source rects this file computes so carefully could
-not be drawn. The protocol grew a `source_rect`, and this is the first
-caller of it.
-
-Nothing here imports a backend or the resource manager. The caller hands
-over a texture it has already resolved, exactly as `ui.components.Image`
-takes one -- reaching for `ResourceManager` from inside `graphics` would
-invert the same layer that `graphics.components` re-exporting
-`pyguara.ui` inverted.
+Nothing here imports a backend or the resource manager. The caller
+hands over a texture it has already resolved, as `ui.components.Image`
+takes one.
 """
 
 from dataclasses import dataclass
@@ -132,15 +123,9 @@ class NinePatchSprite:
     def get_patch_rects(self, source_width: int, source_height: int) -> list[Rect]:
         """Calculate source rectangles for each patch.
 
-        The rects are in **texture** coordinates, not coordinates relative
-        to the sprite. When `source_rect` says this nine-patch lives inside
-        a larger atlas, every rect is offset by that region's origin --
-        which it was not: the field was declared, documented as "Source
-        rectangle in the texture", and read by nothing in the class, so a
-        nine-patch packed into an atlas at (100, 200) reported its
-        top-left corner at (0, 0) and would have drawn whatever sits in
-        the atlas's own corner. The two callers with a bare texture are
-        unaffected, since `source_rect` is None for them.
+        The rects are in texture coordinates. When `source_rect` says this
+        nine-patch lives inside a larger atlas, every rect is offset by that
+        region's origin.
 
         Args:
             source_width: Width of the source region. Ignored when
@@ -152,11 +137,8 @@ class NinePatchSprite:
             in order: TL, T, TR, L, C, R, BL, B, BR
 
         Raises:
-            ValueError: If the edges do not fit inside the source. Overlapping
-                edges leave the centre with negative extent, and five of the
-                nine source rects came out with negative width or height --
-                geometry the renderer has no way to interpret. `get_dest_rects`
-                already clamped its own equivalent; this side did not.
+            ValueError: If the edges do not fit inside the source, which
+                would leave the centre with negative extent.
         """
         m = self.metrics
         if self.source_rect is not None:
@@ -301,19 +283,11 @@ def render_ninepatch(
     """Render a nine-patch sprite: nine draws, one per slice.
 
     Corners keep their pixel size at any destination size, edges stretch
-    along one axis and the centre stretches along both -- which is the
-    whole point, and what makes one 48x48 plate serve a tooltip and a
-    settings panel.
+    along one axis and the centre stretches along both.
 
-    This was a `pass` with a comment saying a real implementation would
-    need to query the texture size. It does, so it takes the texture: the
-    `NinePatchSprite` carries a `texture_path`, and resolving a path to a
-    texture is the resource manager's job, in a layer above this one.
-
-    A slice with no extent is skipped rather than drawn. `metrics.left ==
-    0` makes three of the nine destination rects zero-width, and an edge
-    exactly as thick as half the destination leaves the centre empty;
-    both are ordinary, not errors.
+    A slice with no extent is skipped. `metrics.left == 0` makes three of
+    the nine destination rects zero-width, and an edge as thick as half
+    the destination leaves the centre empty; both are ordinary.
 
     Args:
         renderer: UI renderer to draw with.
@@ -328,10 +302,7 @@ def render_ninepatch(
         color: Optional tint, passed through to every slice.
 
     Returns:
-        How many slices were drawn, 0 to 9. A caller does not need it;
-        it is what lets a test tell "drew nothing" from "drew nine
-        degenerate rects", which is exactly the difference between this
-        function before and after.
+        How many slices were drawn, 0 to 9.
     """
     source_width, source_height = texture_size(texture)
     sources = ninepatch.get_patch_rects(source_width, source_height)
