@@ -2,6 +2,11 @@
 
 This directory contains the tutorial series, seven capstone demos and a networking demo.
 
+Run them from the repository root, in the environment `uv sync --all-extras`
+makes. That install puts `pyguara` and `games` on the import path, so no
+demo edits `sys.path`, and each also runs as a module:
+`uv run python -m games.boot_process.main`.
+
 ## Tutorial Series (The Learning Path)
 
 These modules correspond to the "Tutorial Series Roadmap".

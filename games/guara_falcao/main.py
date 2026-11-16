@@ -9,11 +9,7 @@ A Metroidvania-lite platformer demonstrating:
 """
 
 import logging
-import os
 import sys
-
-# Ensure we can import pyguara from root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from games.guara_falcao.bootstrap import configure_game_container
 from games.guara_falcao.scenes import TitleScene

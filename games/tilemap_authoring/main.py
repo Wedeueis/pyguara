@@ -1,11 +1,7 @@
 """Module 6: Tilemap Authoring - Entry Point."""
 
 import logging
-import os
 import sys
-
-# Ensure we can import pyguara from root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from games.tilemap_authoring.bootstrap import configure_game_container
 from games.tilemap_authoring.scenes import TilemapScene

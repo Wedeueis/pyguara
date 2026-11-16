@@ -13,9 +13,6 @@ import logging
 import os
 import sys
 
-# Ensure we can import pyguara from root
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
-
 # Configure SDL dummy drivers for headless window initialization
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 os.environ["SDL_AUDIODRIVER"] = "dummy"
