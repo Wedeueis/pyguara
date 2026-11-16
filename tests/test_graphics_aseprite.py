@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from PIL import Image
 
-from pyguara.graphics.aseprite import AsepriteFormatError, load_aseprite
+from pyguara.graphics.aseprite import AsepriteFormatError, load_aseprite, split_path
 from pyguara.graphics.backends.pygame.types import PygameTextureFactory
 from pyguara.graphics.components.animation import PlaybackMode
 
@@ -267,3 +267,36 @@ class TestRefusals:
 
         with pytest.raises(AsepriteFormatError, match="ping-pong that repeats"):
             self._load(tmp_path, tags=tags)
+
+
+class TestPaths:
+    """The image is looked for beside the JSON, on any platform's paths."""
+
+    WINDOWS = "/\\"
+
+    def test_a_windows_path_keeps_its_folder(self) -> None:
+        folder, name = split_path("C:\\art\\heroes\\hero.json", self.WINDOWS)
+
+        assert (folder, name) == ("C:\\art\\heroes\\", "hero.json")
+
+    def test_a_pack_path_on_windows_keeps_its_forward_slashes(self) -> None:
+        assert split_path("sprites/hero.json", self.WINDOWS) == (
+            "sprites/",
+            "hero.json",
+        )
+
+    def test_a_bare_file_name_has_no_folder(self) -> None:
+        assert split_path("hero.json") == ("", "hero.json")
+
+    def test_a_backslash_is_part_of_a_posix_file_name(self) -> None:
+        assert split_path("art/odd\\name.json", "/") == ("art/", "odd\\name.json")
+
+    def test_the_default_separators_are_the_platforms(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from pyguara.graphics import aseprite
+
+        monkeypatch.setattr(aseprite.os, "sep", "\\")
+        monkeypatch.setattr(aseprite.os, "altsep", "/")
+
+        assert split_path("C:\\art\\hero.json") == ("C:\\art\\", "hero.json")

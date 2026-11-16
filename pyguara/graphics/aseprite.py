@@ -11,8 +11,8 @@ Read through `pyguara.assets`, so both files load from a pack as well.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
-from pathlib import PurePosixPath
 from typing import Any
 
 from PIL import Image
@@ -113,8 +113,8 @@ def load_aseprite(
             )
         # Only the file name: Aseprite may write the absolute path of the
         # machine that exported it.
-        file_name = PurePosixPath(str(named).replace("\\", "/")).name
-        image_path = str(PurePosixPath(json_path).parent / file_name)
+        file_name = split_path(str(named), "/\\")[1]
+        image_path = split_path(json_path)[0] + file_name
 
     with Image.open(assets.open(image_path)) as opened:
         image = opened.convert("RGBA")
@@ -139,10 +139,32 @@ def load_aseprite(
             for tag in tags
         }
     else:
-        name = PurePosixPath(json_path).stem
+        name = split_path(json_path)[1].rsplit(".", 1)[0]
         clips = {name: _clip(name, frames, durations, PlaybackMode.LOOP, 1)}
 
     return AsepriteSheet(frames, durations, clips)
+
+
+def split_path(path: str, separators: str | None = None) -> tuple[str, str]:
+    """Split a path into its folder, separator included, and its file name.
+
+    Done on the string, so the folder keeps the separators it came with: a
+    path inside a pack stays as the pack spells it, and a Windows path
+    stays a Windows path.
+
+    Args:
+        path: The path to split.
+        separators: The characters that separate folders. Defaults to this
+            platform's, which on Windows is both slashes.
+
+    Returns:
+        The folder, ending in its separator or empty if there is none, and
+        the file name.
+    """
+    if separators is None:
+        separators = "/" + os.sep + (os.altsep or "")
+    cut = max(path.rfind(separator) for separator in separators)
+    return path[: cut + 1], path[cut + 1 :]
 
 
 def _frame_texture(
