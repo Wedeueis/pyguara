@@ -76,6 +76,42 @@ Closing the `Window` from game code also ends the loop, without drawing the
 frame it happened in. `quit()` is the one to use: it says what is meant, and
 it is the only one of the two that announces itself.
 
+## The frame profiler
+
+```json
+{"debug": {"enable_profiler": true}}
+```
+
+That line in `config/game_config.json` shows where each frame's time goes,
+in a shipped build as well as in development: it needs neither the sandbox
+application nor Studio. From code it is `app.enable_frame_profiler()`.
+
+| Row | What it is |
+| --- | --- |
+| *n* fps | The whole frame: its mean, and the longest of the last 120 |
+| work | The frame without `wait`: what the game costs |
+| wait | The clock holding the frame to `display.fps_target`. Idle, not work |
+| input | Polling devices and the window's events |
+| events | Draining the event queue |
+| fixed | Every fixed update the frame ran, with the step hooks around them |
+| update | The variable-rate update |
+| render | Drawing and presenting. With vsync on, this includes waiting for the display |
+| fixed steps | Fixed updates per frame. Above 1 means the simulation is catching up |
+
+The work row turns red when its mean exceeds the frame budget,
+`1000 / fps_target`. The numbers refresh four times a second at 60 fps, so
+they can be read.
+
+```python
+profiler = self.application.enable_frame_profiler(visible=False)
+# ...bound to a key:
+profiler.visible = not profiler.visible
+```
+
+Recording goes on while the overlay is hidden, so it shows a full history the
+moment it appears. `profiler.stats()` returns the same figures as numbers, for
+a game that logs them or sends them with a crash report.
+
 ## Shutdown
 
 `run()` always calls `shutdown()` on the way out — normal exit, `KeyboardInterrupt`,

@@ -1233,6 +1233,8 @@ explains a choice in the code.
 | A Python flocking tick at 1,000 agents, with the Python spatial index and with the native one | 16.6 ms against 9.8 ms | `FlockingSystem`'s Python path still pins its index to `accelerate=False`, so the Python path is Python throughout |
 | `FlowFieldService.vector_at` in Python | 3.27 us, 97% of it four `Vector2` operations | The native path answers the whole lookup in one call |
 | Physics at 4 substeps | 0.65 ms an update at 200 dynamic bodies, 2.5 ms at 500 | 4 is the default; 1/2/4 substeps stop a body crossing a 10px wall up to about 200/400/900 px/s |
+| The frame profiler, recording one frame (seven timestamps), 2026-11-16 | 2.2 us, against nothing when it is off | It can stay on in a shipped build: 0.013% of a 60 Hz frame |
+| The frame profiler's overlay, summarising 120 frames and laying out its rows every frame, before the summary was cached | 157 us a frame | The overlay shows one summary for 15 frames: 33 us a frame, before the renderer's own cost for the text |
 
 ## What the test suite guarantees
 

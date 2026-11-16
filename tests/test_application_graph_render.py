@@ -25,6 +25,7 @@ def _bare_app(app: Application, *, graph: MagicMock | None) -> Application:
     app._ui_renderer = MagicMock()
     app._ui_manager = MagicMock()
     app._window = MagicMock()
+    app._frame_profiler = None
     # `_render()` reads these to compute the interpolation alpha.
     app._accumulator = 0.0
     app._fixed_dt = 1.0 / 60.0
@@ -60,6 +61,7 @@ def test_the_world_buffer_is_rebound_before_each_scene() -> None:
     app._ui_renderer = MagicMock()
     app._ui_manager = MagicMock()
     app._window = MagicMock()
+    app._frame_profiler = None
 
     app._render_with_graph(1.0)
 
