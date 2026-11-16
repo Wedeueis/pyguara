@@ -32,6 +32,8 @@ from pyguara.studio.commands.entity import (
 from pyguara.studio.model.projectmap import build_project_map
 from pyguara.studio.model.schema import describe_component, describe_registry
 from pyguara.studio.model.values import decode
+from pyguara.studio.ops.config import VERBS as CONFIG_VERBS
+from pyguara.studio.ops.config import config_operation
 from pyguara.studio.ops.registry import (
     Operation,
     OperationError,
@@ -1076,6 +1078,57 @@ _OPERATIONS: tuple[Operation, ...] = (
             ["entity_id"],
         ),
         handler=_duplicate_entity,
+    ),
+    Operation(
+        name="config",
+        summary="Read, change or save the engine configuration.",
+        detail=(
+            "operation: 'get' reports every section, or one, with each "
+            "setting's type, value, default and an enum's valid names. "
+            "'set' changes one setting as an undoable edit; it is refused "
+            "with the reason when the value is the wrong type, fails "
+            "validation, or the setting is pinned by an active profile. A "
+            "subsystem that read the setting at startup does not notice "
+            "the change. 'save' writes the configuration file, and is "
+            "refused while a profile is active."
+        ),
+        risk=RiskClass.WRITE_DISK,
+        parameters=_schema(
+            {
+                "operation": {
+                    "type": "string",
+                    "enum": list(CONFIG_VERBS),
+                    "description": "Which of the three to do.",
+                },
+                "section": {
+                    "type": "string",
+                    "description": (
+                        "The section's name, e.g. 'physics'. Required by "
+                        "'set'; narrows 'get' to one section."
+                    ),
+                },
+                "setting": {
+                    "type": "string",
+                    "description": "The setting within the section, for 'set'.",
+                },
+                "value": {
+                    "description": (
+                        "The new value, for 'set'. An enum takes a member "
+                        "name; a colour takes {r, g, b, a}."
+                    ),
+                },
+                "coalesce": {
+                    "type": "boolean",
+                    "description": (
+                        "Fold this 'set' into the previous one when both "
+                        "write the same setting, so a dragged control is "
+                        "one history entry."
+                    ),
+                },
+            },
+            ["operation"],
+        ),
+        handler=config_operation,
     ),
     Operation(
         name="scene",

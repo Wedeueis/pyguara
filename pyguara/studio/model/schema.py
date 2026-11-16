@@ -258,6 +258,25 @@ def describe_component(component_type: type[Component]) -> ComponentSchema:
     )
 
 
+def describe_fields(dataclass_type: type) -> tuple[FieldSchema, ...]:
+    """Reflect the fields of a dataclass that is not a component.
+
+    A config section is described the way a component is, so its types,
+    defaults and enum members read the same in both places.
+
+    Args:
+        dataclass_type: The dataclass to reflect.
+
+    Returns:
+        Its fields, in declaration order.
+    """
+    params = getattr(dataclass_type, "__dataclass_params__", None)
+    as_component: Any = dataclass_type
+    return _dataclass_fields(
+        as_component, frozen=bool(getattr(params, "frozen", False))
+    )
+
+
 def describe_registry(registry: ComponentRegistry) -> dict[str, ComponentSchema]:
     """Describe every component the registry knows.
 

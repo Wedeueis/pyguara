@@ -20,6 +20,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from pyguara.config.manager import ConfigManager
 from pyguara.ecs.manager import EntityManager
 from pyguara.log import get_logger
 from pyguara.prefabs.registry import ComponentRegistry, get_component_registry
@@ -167,6 +168,7 @@ class StudioSession:
         journal: Journal | None = None,
         approval_mode: ApprovalMode = ApprovalMode.AUTO,
         scene_io: Any = None,
+        config_manager: ConfigManager | None = None,
     ) -> None:
         """Open a session over `world`.
 
@@ -187,6 +189,9 @@ class StudioSession:
                 operations that save and open. None in a session built by
                 hand, and those operations then say what is missing
                 rather than failing somewhere deeper.
+            config_manager: The engine's configuration, for the `config`
+                operation. None in a session built by hand, and the
+                operation then says what is missing.
         """
         self._world = world
         self._scene_name = scene_name
@@ -198,6 +203,7 @@ class StudioSession:
         )
         self._journal = journal if journal is not None else Journal()
         self._scene_io = scene_io
+        self._config_manager = config_manager
         # Edit unless something says otherwise: a session built by hand,
         # or driven by the agent harness, is editing a scene that is not
         # running. The editor sets this when Play is pressed.
@@ -248,6 +254,11 @@ class StudioSession:
     def scene_io(self) -> Any:
         """Saving and opening, or None when the session cannot reach them."""
         return self._scene_io
+
+    @property
+    def config_manager(self) -> ConfigManager | None:
+        """The engine's configuration, or None when the session has none."""
+        return self._config_manager
 
     @property
     def world(self) -> EntityManager:

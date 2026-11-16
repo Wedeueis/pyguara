@@ -9,6 +9,7 @@ from pyguara.studio.commands.base import (
     EditCommand,
     EditError,
 )
+from pyguara.studio.commands.config import SetConfigSetting
 from pyguara.studio.commands.entity import (
     AddComponent,
     CreateEntity,
@@ -35,6 +36,7 @@ __all__ = [
     "EditError",
     "EntitySnapshot",
     "RemoveComponent",
+    "SetConfigSetting",
     "SetEnabled",
     "SetField",
     "SetParent",

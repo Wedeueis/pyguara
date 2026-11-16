@@ -40,7 +40,7 @@ logger = get_logger(__name__)
 
 DEFAULT_LAYOUT_REGIONS: dict[str, tuple[str, ...]] = {
     "left": ("Hierarchy",),
-    "right": ("Inspector", "Components"),
+    "right": ("Inspector", "Components", "Config"),
     "bottom": ("History", "Journal", "Commands"),
     "top": ("Play",),
     "centre": ("Viewport",),
@@ -219,7 +219,23 @@ class StudioAttachment:
             journal=self._journal,
             approval_mode=self._approval_mode,
             scene_io=self._scene_io(),
+            config_manager=self._config_manager(),
         )
+
+    def _config_manager(self) -> Any:
+        """Return the engine's configuration for the session to edit.
+
+        Returns:
+            The `ConfigManager`, or None when the container has none, in
+            which case the `config` operation says so.
+        """
+        try:
+            from pyguara.config.manager import ConfigManager
+
+            return self._container.get(ConfigManager)
+        except Exception as exc:
+            logger.info(f"Studio cannot edit the configuration here: {exc}")
+            return None
 
     def _scene_io(self) -> Any:
         """Build the session's way to the serializer and the live scene.
@@ -253,6 +269,7 @@ class StudioAttachment:
             return
         self._panels_installed = True
 
+        from pyguara.studio.panels.config import ConfigPanel
         from pyguara.studio.panels.history import HistoryPanel
         from pyguara.studio.panels.journal import JournalPanel
         from pyguara.studio.panels.palette import CommandPalette
@@ -280,6 +297,7 @@ class StudioAttachment:
             HistoryPanel(session),
             JournalPanel(session),
             SchemaPanel(self._resolve_registry()),
+            ConfigPanel(self),
             CommandPalette(session, self._operations),
         ]
         application = self._application()

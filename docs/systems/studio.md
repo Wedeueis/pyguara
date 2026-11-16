@@ -71,9 +71,10 @@ rather than four. See [ADR 0001](../adr/0001-one-mutation-seam-for-studio.md).
 | **History** | Every edit, oldest first. Clicking a row rewinds to it |
 | **Journal** | What was done and who asked, plus the approval queue |
 | **Components** | Every registered component, its fields and its enum members |
+| **Config** | The engine configuration by section, edited in place and saved on request |
 | **Commands** | A person calling the operations an agent calls |
 
-Panels open docked -- hierarchy left, inspector and components right,
+Panels open docked -- hierarchy left, inspector, components and config right,
 viewport centre, play on top, history/journal/commands tabbed below.
 
 ### Finding an entity
@@ -231,6 +232,45 @@ package boundary. The boundary is gone and so is the subclass. It is now
 one class, and where an edit goes is a constructor argument -- which is
 the honest shape, because a direct write is not a lesser version of the
 operation path, it is what an editor with no history can do.
+
+### Editing the configuration
+
+The **Config** panel lists every section of `GameConfig`, the engine's
+and the ones a game registered, and draws each setting with a widget for
+its type: a checkbox, a number field, a text field committed on Enter, a
+colour picker, or a list of an enum's members. A float is a drag field;
+Ctrl+click types an exact value. It opens hidden, from *View*.
+
+An accepted edit is the `config` operation, which has three verbs:
+
+| Verb | Does |
+| --- | --- |
+| `get` | Reports every section, or one, with each setting's type, value, default and an enum's valid names |
+| `set` | Changes one setting, as an edit on the same history as the scene's |
+| `save` | Writes the configuration file |
+
+`set` writes through `ConfigManager.update_setting()`, so the value is
+type-checked and validated, and a refusal comes back with the manager's
+reason. Because it is an edit like any other, it undoes, it is journaled,
+`plan` mode describes it without making it, and it is refused while the
+game is playing.
+
+Four things to know:
+
+- **Changing a setting does not make a subsystem re-read it.** The write
+  dispatches `OnConfigurationChanged`; whatever read the value once at
+  startup keeps the old one until the next launch. Save, then restart.
+- **Nothing reaches the file until `save`.** Saving leaves the history
+  alone, so an edit can still be undone afterwards, and the file then
+  holds the value from before the undo until it is saved again.
+- **A setting an active profile sets is shown and not editable**, and
+  `save` is refused while any profile is active: the file would be
+  written with the profile's values in place of the ones underneath.
+- **A planned edit announces itself twice.** `plan` mode applies an edit
+  and reverts it, and both writes dispatch `OnConfigurationChanged`.
+
+A setting that holds `None` has no widget in the panel; `set` accepts a
+value for it, and `null` to clear it again.
 
 ### The camera the gizmo trusts
 
@@ -411,7 +451,7 @@ pyguara studio mcp
 | Reading | `scene_summary`, `scene_tree`, `get_entity`, `find_entities` |
 | Editing | `create_entity`, `destroy_entity`, `duplicate_entity`, `add_component`, `remove_component`, `set_field`, `set_parent`, `set_enabled`, `set_tags` |
 | Running | `run_frames`, `capture_frame` |
-| Session | `history`, `journal`, `approvals`, `scene` |
+| Session | `history`, `journal`, `approvals`, `scene`, `config` |
 
 `scene` carries four verbs behind an "operation" argument -- save, open,
 new and list -- as `history` does. The flat surface is budgeted, because
