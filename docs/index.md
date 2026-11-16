@@ -4,7 +4,7 @@ A code-first 2D game engine. Games are written in Python 3.12+; the
 renderer, window, input, audio and the hot paths are a Rust extension
 that ships inside the package.
 
-**Alpha, 0.6.0.** It runs a real game in development, and its APIs still
+**Alpha, 0.7.0.** It runs a real game in development, and its APIs still
 change between versions.
 
 ## Start here
