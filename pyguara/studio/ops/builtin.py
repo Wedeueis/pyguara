@@ -891,9 +891,6 @@ _DEFAULT_REGISTRY: OperationRegistry | None = None
 def default_registry() -> OperationRegistry:
     """Return the shared registry, building it once.
 
-    Args:
-        None.
-
     Returns:
         The process-wide registry. A caller that wants an isolated one --
         a test, or a game adding its own operations -- uses
