@@ -53,20 +53,12 @@ class Particle:
         life (float): Time remaining in seconds.
         texture (Texture): The visual representation.
         active (bool): Whether this particle is currently in use.
-
-        # Physics
         acceleration (Vector2): Constant acceleration (e.g., gravity).
         damping (float): Velocity damping factor (0.0 = no damping, 1.0 = instant stop).
-
-        # Transform (Renderable protocol)
         rotation (float): Rotation in degrees.
         scale (Vector2): Scale factor.
-
-        # Visual effects
         angular_velocity (float): Rotation speed in degrees per second.
         scale_velocity (Vector2): Scale change per second.
-
-        # Color animation
         color_start (Color): Initial color.
         color_end (Color): Final color (lerped based on lifetime).
         life_total (float): Total lifetime for calculating color lerp.

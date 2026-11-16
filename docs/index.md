@@ -26,6 +26,8 @@ uv run python games/guara_falcao/main.py     # a platformer
   game built on the engine.
 - **[Architecture & Style](guides/Archictecture & Style Guide.md)**: the
   conventions the engine's own code follows.
+- **[API Reference](reference/pyguara/index.md)**: every public module,
+  class and function, generated from the docstrings.
 
 ## Core
 

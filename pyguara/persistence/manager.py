@@ -271,9 +271,6 @@ class PersistenceManager:
     def list_saves(self) -> list[str]:
         """Return every key currently in storage.
 
-        Args:
-            None.
-
         Returns:
             The keys, in whatever order the backend reports them.
         """
