@@ -109,11 +109,9 @@ class StateMachine:
     ) -> None:
         """Declare a transition outside the states themselves.
 
-        Transitions used to exist *only* as a `State.update()` return value,
-        which meant every state had to know which states follow it. A table
-        keeps that knowledge in one place, so a state can be written once
-        and reused in several machines, and so an FSM can be authored from
-        data (#46).
+        A transition table keeps "what follows what" in one place, so a state
+        can be reused in several machines and a machine can be built from
+        data.
 
         Args:
             from_state: The state this applies to, or None for "any state"

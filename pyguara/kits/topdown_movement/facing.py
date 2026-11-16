@@ -1,16 +1,9 @@
 """Choosing an animation clip from a facing direction.
 
-Every game this engine targets is top-down, and every top-down character
-has N actions times 4 or 8 facings. Today that means registering
-`walk_down`, `walk_up`, `walk_left`, `walk_right` as flat clips and
-writing the same selection system by hand in each game -- including the
-two details everyone gets wrong the first time: that a *stopped*
-character must keep facing where it last faced rather than snapping to a
-default, and that screen Y grows downward, so a negative Y velocity is
-"up".
-
-A kit rather than core: 8-way facing is a genre's vocabulary, and nothing
-in `pyguara.graphics` should know what "down" means.
+A top-down character has N actions times 4 or 8 facings. This module
+maps a direction vector to a facing and a facing to a clip name.
+Screen Y grows downward, so a negative Y velocity is "up", and a zero
+vector has no facing, so a stopped character keeps its last one.
 """
 
 from __future__ import annotations
@@ -78,9 +71,7 @@ three-quarter view than a back view is.
 def facing_from_vector(direction: Vector2, ways: int = 8) -> Facing | None:
     """Pick the facing a direction vector points at.
 
-    Screen Y grows **downward**, so a negative Y is up. That is the detail
-    that makes a hand-written version of this face backwards for a week
-    before anyone notices.
+    Screen Y grows downward, so a negative Y is up.
 
     Args:
         direction: Any non-zero vector -- a velocity, an aim, a knockback.
@@ -88,9 +79,8 @@ def facing_from_vector(direction: Vector2, ways: int = 8) -> Facing | None:
         ways: 8 for diagonals, 4 for cardinals only.
 
     Returns:
-        The facing, or None for a zero vector. None rather than a default,
-        because a stopped character must keep facing where it last faced:
-        snapping to `DOWN` on every halt is the other classic bug.
+        The facing, or None for a zero vector, so a stopped character can
+        keep the facing it had.
 
     Raises:
         ValueError: If `ways` is neither 4 nor 8.

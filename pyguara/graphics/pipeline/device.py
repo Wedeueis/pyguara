@@ -1,19 +1,14 @@
 """The render graph's view of the GPU.
 
-What a pass does is narrow: read some buffers, run one shader over the
-whole of another buffer -- or many instanced quads into it -- with a few
-uniforms and a blend mode. `GraphicsDevice.run` and `draw_instanced` are
-that. A pass describes the work -- a `FullscreenShader` or an
-`InstancedShader`, its inputs by name, its uniform values, where the result
-goes -- and the device does it. `WgpuDevice` is the device: the native wgpu
-frame.
+A pass reads some buffers and runs one shader over the whole of
+another buffer, or many instanced quads into it, with a few uniforms
+and a blend mode. It describes that work as a `FullscreenShader` or an
+`InstancedShader`, its inputs by name, its uniform values and its
+target; `GraphicsDevice.run` and `draw_instanced` do it. `WgpuDevice`
+is the device.
 
-Shaders are WGSL. A pass used to carry a GLSL twin of each, for the ModernGL
-backend, until stage E of `project/backlog/active/next_engine_plan.md`
-retired it. Two that draw procedural noise -- the heat haze and the storm --
-are still written in GL's coordinate convention, `v_uv` with y up, because
-that is what their noise was approved against; every other shader uses
-wgpu's, `in.uv` with (0, 0) at the top left.
+Shaders are WGSL, with `in.uv` (0, 0) at the top left. The heat haze
+and the storm are the exception: they use `v_uv` with y up.
 """
 
 from __future__ import annotations
@@ -331,26 +326,15 @@ fn quad_corner(index: u32) -> vec2<f32> {
 class SpriteShader:
     """A sprite's own shader: what a `Material` runs in place of the default.
 
-    The author writes one WGSL function, and the engine does the rest: the
-    vertex stage is the sprite pipeline's own, so a material sprite is
-    placed, sized, turned, flipped and batched exactly as any other.
+    The author writes one WGSL function, `material(sprite) -> vec4<f32>`.
+    The vertex stage is the sprite pipeline's own, so a material sprite is
+    placed, sized, turned, flipped and batched as any other.
 
-    ```wgsl
-    fn material(sprite: Sprite) -> vec4<f32> {
-        let texel = textureSample(sprite_texture, sprite_sampler, sprite.uv);
-        return vec4<f32>(mix(texel.rgb, params.flash, params.amount), texel.a) * sprite.color;
-    }
-    ```
-
-    In scope: `sprite.uv` (the texture coordinate, atlas region and flips
-    applied), `sprite.color` (the tint, 0-1 -- a plain sprite is `texel *
-    color`), `sprite_texture` and `sprite_sampler`, `params.<name>` for
-    each uniform, and `material_texture` / `material_sampler` when
-    `texture` is set -- a mask, a ramp, a noise field, from
-    `Material.texture`.
-
-    Compared by identity, like the other shaders: make one per kind of
-    material, at module level, and share it between materials.
+    In scope: `sprite.uv`, `sprite.color` (the tint, 0-1), `sprite_texture`
+    and `sprite_sampler`, `params.<name>` for each uniform, and
+    `material_texture` / `material_sampler` when `texture` is set. See
+    `docs/graphics/rendering.md` for an example. Compared by identity:
+    make one per kind of material, at module level.
 
     Attributes:
         name: For error messages and the cache.

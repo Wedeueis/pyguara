@@ -176,22 +176,13 @@ class Scene(ABC):
     def on_teardown(self, callback: Callable[[], None]) -> None:
         """Register a callback to run when this scene exits.
 
-        The symmetric half of `resolve_dependencies()`. Everything that
-        builds something scene-lived -- a coroutine, a spawned entity, an
-        audio channel, a subscription on a dispatcher the scene does not
-        own -- otherwise re-invents "remember what I made, undo it in
-        `on_exit`", and each re-invention is a place to forget one.
+        For anything scene-lived that needs undoing: a spawned entity, an
+        audio channel, a subscription on a dispatcher the scene does not own.
 
-        Run by `SceneManager._exit_scene()`, not by `on_exit()`: scenes
-        override `on_exit()` without calling `super()`, so a callback
-        registered here would otherwise fire only for the well-behaved
-        ones. They run in reverse registration order, like nested
-        context managers, so a later callback can still rely on what an
-        earlier one set up.
-
-        A callback that raises is logged and the rest still run: teardown
-        that gives up halfway is how a scene leaks the very things this
-        exists to release.
+        Run by `SceneManager`, not by `on_exit()`, so a scene that overrides
+        `on_exit()` without calling `super()` still gets them. Callbacks run
+        in reverse registration order. One that raises is logged and the rest
+        still run.
 
         Args:
             callback: Takes nothing, returns nothing. Called exactly once.
@@ -238,14 +229,9 @@ class Scene(ABC):
     def start_coroutine(self, generator: Generator[Any, None, None]) -> Coroutine:
         """Start a scripted sequence owned by this scene.
 
-        Tagged with the scene, so `SceneManager` stops it on exit. That
-        matters because `CoroutineManager` is an app-global singleton:
-        a sequence started through it directly keeps ticking after the scene
-        is gone, against entities that no longer exist (#55).
-
-        Prefer this over reaching for `CoroutineManager` from the container
-        -- an untagged coroutine is never caught by the scene teardown, and
-        the failure is invisible until something touches a dead entity.
+        Tagged with the scene, so `SceneManager` stops it on exit. A sequence
+        started on `CoroutineManager` directly is untagged, and keeps ticking
+        after the scene is gone.
 
         Args:
             generator: The generator to run.
@@ -420,21 +406,15 @@ class Scene(ABC):
     def render(self, world_renderer: IRenderer, ui_renderer: UIRenderer) -> None:
         """Frame render logic.
 
-        Default implementation: submits every entity carrying a visible
-        `Sprite` component to `self.render_system`, then flushes. When the
-        entity also carries a `Transform`, `Sprite.position` is treated as an
-        offset from it, combined at submission time without ever writing back
-        to `sprite.position` -- preserving that offset instead of the sync
-        silently destroying it every frame. If that `Transform` has
-        `interpolate=True`, the position used is `lerp(previous_position,
-        position, self.render_alpha)` instead of `position` directly,
-        smoothing over the gap between fixed steps at display framerate; every
-        other `Transform` uses `position` directly, unaffected. An entity with
-        only a `Sprite` submits at its own `position` unchanged (the
-        standalone case). Override only to add extra manual draws (debug
-        overlays, UI-adjacent world drawing), calling
-        `super().render(world_renderer, ui_renderer)` first so the default
-        submission still happens.
+        The default submits every entity carrying a visible `Sprite` to
+        `self.render_system`, then flushes. With a `Transform`,
+        `Sprite.position` is an offset from it. If that `Transform` has
+        `interpolate=True`, the position drawn is `lerp(previous_position,
+        position, self.render_alpha)`. An entity with only a `Sprite` is drawn
+        at the sprite's own position.
+
+        Override to add manual draws, calling
+        `super().render(world_renderer, ui_renderer)` first.
         """
         assert self.render_system is not None and self.camera is not None, (
             "Scene.render() called before resolve_dependencies() built "

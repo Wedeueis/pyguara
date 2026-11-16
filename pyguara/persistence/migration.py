@@ -68,7 +68,7 @@ class MigrationManager:
     """Manages schema migrations for save data.
 
     Maintains a registry of migrations and handles chained migration from
-    any historical version to the current version.
+    any earlier version to the current version.
 
     Attributes:
         current_version: The current schema version of the application.
@@ -146,7 +146,7 @@ class MigrationManager:
         return path
 
     def migrate(self, data: dict[str, Any], from_version: int) -> dict[str, Any]:
-        """Migrate data from a historical version to current.
+        """Migrate data from an older schema version to the current one.
 
         Applies all necessary migrations in sequence.
 

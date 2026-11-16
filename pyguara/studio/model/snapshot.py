@@ -1,16 +1,11 @@
 """A readable, comparable picture of a scene at one instant.
 
-Serves two callers with the same structure, which is why it is one module:
+An inspector reads it to know what an entity holds. An agent also
+diffs two of them, to see what an edit or a run changed.
 
-- **An inspector** needs to know what an entity holds right now.
-- **An agent** needs that *and* the ability to compare two instants. Its
-  loop is edit, run, check -- and "check" is almost always "what changed,
-  and was it only what I meant to change?". A snapshot it can diff answers
-  that without re-reading the world and reasoning about it in prose.
-
-Everything is encoded through `studio.model.values`, so the shape matches
-what the scene serializer writes to disk and what an agent passes back in
-to set a field. One vocabulary rather than three.
+Everything is encoded through `studio.model.values`, so the shape
+matches what the scene serializer writes and what an agent passes back
+to set a field.
 """
 
 from __future__ import annotations

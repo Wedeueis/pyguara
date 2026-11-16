@@ -1,18 +1,14 @@
 """Rain and lightning as a screen-space post-process effect.
 
-Weather drawn over the finished frame rather than as entities: the rain is
-procedural in the fragment shader, so a downpour costs exactly what a
-drizzle costs and neither one puts anything through the ECS, the render
-queue, or the batcher.
+The rain is procedural in the fragment shader, drawn over the finished
+frame, so a downpour costs what a drizzle costs and nothing goes
+through the ECS or the batcher.
 
-The split of responsibility matters. This effect owns how the weather
-*looks*; the game owns what the weather is *doing*. A strike is not
-scheduled here -- the caller drives `flash`, `bolt` and friends, which is
-what lets one strike brighten the light map, shake the camera, and fire a
-thunderclap on the same frame it appears.
+This effect owns how the weather looks; the game owns what it is
+doing. A strike is not scheduled here: the caller drives `flash`,
+`bolt` and the rest.
 
-Typical use, per frame::
-
+Example:
     storm.rain = 0.3          # a steady drizzle
     storm.update(dt)          # advances the shader clock
     # ... and when a strike lands:

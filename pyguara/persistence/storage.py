@@ -91,15 +91,8 @@ def user_data_path(
     `~/Library/Application Support/<app>` on macOS. The directory is
     created if absent.
 
-    A default of `"saves"` relative to the working directory -- which is
-    what the engine wires up unless told otherwise -- is wrong for anything
-    installed: the install directory is often read-only, the working
-    directory depends on how the game was launched, and saves belong to the
-    user rather than to the copy of the program.
-
-    There is no sensible default for `app_name`, which is why this is
-    opt-in rather than the engine's default: the engine cannot invent the
-    name of the game it is running.
+    Opt-in: the engine's default is `"saves"` relative to the working
+    directory, which suits a checkout and not an installed game.
 
     Args:
         app_name: The game's name, used as the directory name.
@@ -129,18 +122,13 @@ class FileStorageBackend:
     """Storage backend that saves each key as one file on the local disk.
 
     Each key maps to a single ``{key}.save`` file under ``base_path``,
-    written with an atomic temp-file-then-rename so a crash mid-write never
-    corrupts the previous value.
-
-    Each write also keeps the previous value as ``{key}.save.bak``, which
-    `PersistenceManager` falls back to when the primary will not decode.
-    The atomic rename already prevents a *torn* write; a backup is what
-    covers a write that completed and is still unusable.
+    written to a temporary file and renamed, so a crash mid-write never
+    corrupts the previous value. Each write keeps the previous value as
+    ``{key}.save.bak``, which `PersistenceManager` falls back to when the
+    primary will not decode.
 
     Keys must be filesystem-safe as given: alphanumerics, ``_`` and ``-``.
-    A key that would need rewriting to be safe is rejected with
-    ``ValueError`` rather than silently mangled -- two keys that sanitise to
-    the same name would otherwise overwrite each other.
+    Any other key raises ``ValueError``.
     """
 
     SUFFIX = ".save"

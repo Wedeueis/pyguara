@@ -288,17 +288,9 @@ class NavMesh:
 class NavMeshPathfinder:
     """A* pathfinding on navigation meshes, with string-pulling.
 
-    Two stages. A* over the polygon adjacency graph finds *which*
-    polygons to cross; the funnel algorithm then pulls a string through
-    their shared edges to find the shortest route inside that corridor.
-
-    The second stage used to be walking the polygon centres, which is a
-    route and a poor one -- it detours to the middle of every cell it
-    passes through and emits a waypoint per cell. Measured with this
-    module's own helpers: an L-shaped corridor of five square cells came
-    out 22% longer than the shortest path through its inner corner, and a
-    straight ten-cell corridor produced ten waypoints for a straight
-    line. Both are two or three waypoints now, at the optimal length.
+    Two stages. A* over the polygon adjacency graph finds which polygons
+    to cross; the funnel algorithm then pulls a string through their
+    shared edges to find the shortest route inside that corridor.
     """
 
     def __init__(self, navmesh: NavMesh):
@@ -318,13 +310,11 @@ class NavMeshPathfinder:
 
         Returns:
             Waypoints from start to goal, or None if either end is off
-            the mesh. Interior waypoints are mesh **vertices** -- the
-            corners the corridor bends around -- so `get_polygon_at()`
-            may report one as outside: `NavMeshPolygon.contains_point`
-            excludes part of its own boundary, and a corner is on the
-            boundary of every polygon meeting there. The *segments*
-            between waypoints run inside the mesh, which is the property
-            that matters to something following the path.
+            the mesh. Interior waypoints are mesh vertices, the corners
+            the corridor bends around, so `get_polygon_at()` may report
+            one as outside: a corner is on the boundary of every polygon
+            meeting there. The segments between waypoints run inside the
+            mesh.
         """
         # Find starting and goal polygons
         start_poly = self.navmesh.get_polygon_at(start)
@@ -421,26 +411,12 @@ class NavMeshPathfinder:
     ) -> list[Vector2]:
         """Pull the polygon path straight with the funnel algorithm.
 
-        A* returns the *polygons* to cross, not a route. Walking their
-        centres is a route, and a poor one: it takes a detour to the
-        middle of every cell it passes through and emits a waypoint per
-        cell. Measured on this module's own helpers, an L-shaped corridor
-        of five square cells came out **22% longer** than the shortest
-        two-leg path through the inner corner, and a straight ten-cell
-        corridor produced ten waypoints for what is a straight line.
-
-        The funnel ("simple stupid funnel", Mononen) walks the sequence of
-        portals -- the shared edges between consecutive polygons -- keeping
-        a left and a right bound from the current apex. While a new portal
-        endpoint narrows the funnel it is adopted; when the two bounds
-        cross, the vertex they crossed over is a genuine corner, it becomes
-        the next apex, and the scan restarts from there. What comes out is
-        the shortest path inside the polygon corridor, bending only at
-        actual corners.
-
-        The portal data this needs already existed -- `get_edge_between`
-        and `NavMeshEdge` -- which is why this is a change to one method
-        rather than to the mesh.
+        The funnel walks the portals, the shared edges between consecutive
+        polygons, keeping a left and a right bound from the current apex.
+        A portal endpoint that narrows the funnel is adopted; when the two
+        bounds cross, the vertex they crossed over becomes a waypoint and
+        the next apex. The result is the shortest path inside the polygon
+        corridor.
 
         Args:
             start: Starting position.
@@ -599,23 +575,13 @@ def _orient_portal(
 def _pull_string(portals: list[tuple[Vector2, Vector2]]) -> list[Vector2]:
     """Run the funnel over an oriented portal sequence.
 
-    Mononen's "simple stupid funnel". The apex starts at the first
-    portal, which is the degenerate `(start, start)`; both bounds start
-    there too. Each portal either narrows a bound or crosses the other
-    one, and a crossing means the vertex crossed over is a real corner:
-    it is emitted, becomes the new apex, and the scan **restarts from its
-    index** -- which is why this is a `while` rather than a `for`, and
-    why the algorithm is linear despite appearing to backtrack.
+    Mononen's "simple stupid funnel". The apex and both bounds start at
+    the first portal, `(start, start)`. Each portal either narrows a bound
+    or crosses the other one. On a crossing, the vertex crossed over is
+    emitted, becomes the new apex, and the scan restarts from its index.
 
-    **Why the restart cannot spin.** A crossing is only possible once the
-    bound being crossed has been tightened since the last restart, and a
-    bound can only be tightened at a portal *after* the apex -- so
-    `left_index`/`right_index` is always strictly greater than
-    `apex_index` when a crossing fires, and the apex therefore advances
-    every time. Remove either tightening branch and that stops holding:
-    the apex sticks, `index` resets to the same place forever, and the
-    function never returns. Both are sabotage-tested, and both show up
-    as the suite timing out rather than as an assertion.
+    The apex advances on every crossing, which is what makes the loop
+    terminate: both tightening branches are needed for that.
 
     Args:
         portals: `(left, right)` pairs, starting with `(start, start)`
@@ -676,26 +642,13 @@ def _pull_string(portals: list[tuple[Vector2, Vector2]]) -> list[Vector2]:
 def _drop_collinear(path: list[Vector2], epsilon: float = 1e-9) -> list[Vector2]:
     """Remove waypoints that lie exactly on the line through their neighbours.
 
-    The funnel emits a corner whenever its bounds cross, and they can
-    cross over a vertex that happens to sit *on* the straight line it was
-    already following -- a 4x4 open room gave `(1, 1) -> (30, 30) ->
-    (39, 39)`, three points describing one straight segment. Dropping the
-    middle changes the route by nothing and saves an agent a steering
-    decision.
+    The funnel can emit a vertex that sits on the straight line it was
+    already following. Only an exactly collinear point is dropped: a point
+    merely near the line may be what keeps the route inside the corridor.
 
-    The tolerance is deliberately tiny. A point merely *near* the line
-    cannot be dropped: the segment that would replace it may leave the
-    polygon corridor, and the whole value of the funnel is that its
-    output provably does not.
-
-    **Repeated points are collapsed first, and must be.** The funnel can
-    emit the same corner twice -- it does, on a U-shaped corridor, when
-    the bounds cross again at a portal that shares the apex's vertex --
-    and a duplicate has zero area against *anything*. So the collinear
-    test would see `A, A` as collinear with whatever came before, drop
-    the real corner, and return a path straight through the wall the
-    corner existed to go around. Measured on a comb-shaped mesh: the
-    corner at (30, 20) vanished and the route cut across the gap.
+    Repeated points are collapsed first. A duplicate has zero area against
+    anything, so the collinear test would otherwise drop the real corner
+    beside it.
 
     Args:
         path: The pulled path.

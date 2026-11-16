@@ -1,33 +1,12 @@
-"""#28's projectiles kit: pooled projectile entities on core spatial.
+"""The projectiles kit: pooled projectiles checked against the spatial hash.
 
-Not ECS entities, and not `Hitbox`/`TriggerVolume`-based -- `ProjectileSystem`
-mirrors `ParticleSystem`'s plain-object pool and checks hits against the
-shared spatial hash (#98) directly, matching that data structure's own
-"shooter bullets" design rationale (cheap enough for the volume a
-shmup-style bullet pattern produces; physics-body-per-bullet is not).
-On a hit, calls `kits.action_combat.apply_damage()` the same way `Hitbox`
-does, against any candidate carrying `Hurtbox`, `Health` and a `Transform`.
-
-A game with damage rules of its own passes `on_hit=`, which decides what a
-hit does and whether the projectile is spent; returning False is a dodge,
-and the shot flies on past that target. `solids=` takes an
-`IPhysicsEngine` holding the level's walls, and a shot stops at the first
-one in its path. Each tick checks the whole step, nearest target first and
-then by id, so a fast shot can't pass through a target between ticks and
-the same seed always hits the same thing.
-
-A shot reaches a target at its edge: its own `hit_radius` plus the target's
-`Hurtbox.radius`, which is 0 (a point) unless the game sizes it. A game with
-targets of different sizes sets each one's, rather than padding every shot by
-the widest.
-
-`on_end=` is told each time a projectile stops, with a `ProjectileEnd` saying
-why, and `clear()` stops them all. `pyguara.net.projectiles` uses both to
-tell clients about shots.
-
-Bullet *patterns* (spiral, fan, and so on) are explicitly out of scope
-per #28 -- "a shmup recipe on top" a game builds using `spawn()`, not
-something this kit provides.
+Projectiles are plain pooled objects, not ECS entities. Each tick,
+`ProjectileSystem` checks a shot's whole step against the shared
+`SpatialHash`, nearest target first and then by id. A shot reaches a
+target at its edge: its `hit_radius` plus the target's
+`Hurtbox.radius`. A hit calls `kits.action_combat.apply_damage()`
+unless `on_hit=` replaces it. `solids=` stops a shot at the first
+wall in its path, and `on_end=` is told why each projectile stopped.
 """
 
 from pyguara.kits.projectiles.projectile import Projectile

@@ -1,38 +1,14 @@
 """A title bar the editor draws itself.
 
-What Godot 4 and VS Code do on Windows, and the reason they do not look
-like a 1998 dialog: the OS frame is removed and the application draws the
-bar, so the title, the window buttons and the application's own chrome
-share one surface and one palette.
+Opt-in, through `display.borderless`. It needs a backend that offers
+window controls, and the `resizable` flag, since removing the OS frame
+removes its resize edges.
 
-It is **opt-in**, through `display.borderless`. Two reasons for that
-rather than making it the default:
-
-- It only works where the backend offers window controls. A backend that
-  cannot move or maximise its own window is fine; it just keeps the OS
-  bar.
-- Removing the OS frame also removes the OS's resize edges. A borderless
-  window is only usable if the application provides its own, and the
-  `resizable` flag is what lets the window manager keep doing that.
-
-Dragging moves the window by a delta, but the delta is measured from
-where the bar was **grabbed**, not from the previous frame. The
-distinction is the whole difference between a drag that works and one
-that does not, because the pointer position SDL reports is relative to
-the window the drag is moving:
-
-- Frame to frame, moving the window by the pointer's delta cancels
-  itself. The window moves right by 10, the pointer has not moved on
-  screen, so its window-relative position is now 10 to the left, and the
-  next frame moves the window back. Measured, that window tracked the
-  cursor at exactly half speed, stepping on alternate frames -- which is
-  what a clunky, broken-feeling drag is.
-- From the grab point, it is self-correcting. The offset is the distance
-  the window is *behind* the cursor; moving by it brings the pointer back
-  onto the grab point, and the next frame's offset is zero. Nothing
-  accumulates, and no absolute position is ever set -- which still
-  matters, since a window manager may place a window somewhere other than
-  asked (WSLg offsets by the decoration it would otherwise have drawn).
+Dragging moves the window by the pointer's offset from where the bar
+was grabbed, not by its delta since the previous frame. The pointer
+position is relative to the window being moved, so a frame-to-frame
+delta cancels itself. No absolute position is set, because a window
+manager may place a window somewhere other than asked.
 """
 
 from __future__ import annotations

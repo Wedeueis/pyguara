@@ -244,22 +244,14 @@ class GridContainer(UIElement):
 class ScrollContainer(UIElement):
     """A viewport that clips its contents and scrolls them.
 
-    An inventory grid or a message log holds more than fits. This is the
-    window: children are laid out at their full extent, shifted by the
-    scroll offset, and clipped to this element's rect so the part outside
-    is not drawn.
+    Children are laid out at their full extent, shifted by the scroll
+    offset, and clipped to this element's rect.
 
-    **Children are shifted during layout, not during render.** Translating
-    at draw time would leave every child's `rect` at its unscrolled
-    position, so hit-testing would land on whatever used to be under the
-    cursor -- clicking the fifth inventory slot and getting the second.
-    Moving the rects means the click, the hover and the pixels all agree,
-    which is the only arrangement that does not need a second coordinate
-    space nobody remembers to convert through.
+    They are shifted during layout, not during render, so each child's
+    `rect` is where it is drawn and hit-testing agrees with the pixels.
 
-    Implements `base.Scrollable`, so `UIManager` routes the wheel here when
-    the cursor is anywhere inside -- including over a button in the list,
-    since it walks *up* from whatever it hit.
+    Implements `base.Scrollable`, so `UIManager` routes the wheel here
+    when the cursor is anywhere inside.
     """
 
     def __init__(
@@ -372,18 +364,11 @@ class ScrollContainer(UIElement):
     def layout(self, available_rect: Rect, renderer: UIRenderer) -> None:
         """Stack the children along the scroll axis, then shift by the offset.
 
-        The viewport **places its own children**, like `BoxContainer` does,
-        rather than letting them keep whatever position they were
-        constructed with. That is what makes the layout idempotent: an
-        element without constraints keeps its own `rect`, so a viewport
-        that merely translated whatever it found would translate it *again*
-        next frame, and the contents would walk a little further off screen
-        on every one. Recomputing from the content origin cannot drift.
+        The viewport places its own children from the content origin every
+        time, as `BoxContainer` does, so repeated layouts cannot drift.
 
-        They stack with no spacing and stretch across the cross axis, which
-        is what a list or a grid in a viewport wants. Put a `BoxContainer`
-        or `GridContainer` inside for spacing or columns; it gets the whole
-        content slot and arranges itself in it.
+        Children stack with no spacing and stretch across the cross axis. Put
+        a `BoxContainer` or `GridContainer` inside for spacing or columns.
 
         Args:
             available_rect: The rectangle this viewport may occupy.
@@ -436,9 +421,8 @@ class ScrollContainer(UIElement):
 def _translate_subtree(element: UIElement, dx: int, dy: int) -> None:
     """Move an element and every descendant by a pixel offset.
 
-    The whole subtree, not just the element: a button inside a container
-    inside a scroll view has its own rect, and leaving it behind is how a
-    scrolled list ends up hit-testing against where it used to be.
+    The whole subtree moves, so a button inside a container inside a
+    scroll view is hit-tested where it is drawn.
 
     Args:
         element: The subtree root.

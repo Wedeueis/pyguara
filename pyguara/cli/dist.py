@@ -1,17 +1,9 @@
 """Store distribution templates for a built game.
 
-`pyguara build` produces an executable. Getting that executable in front
-of players is a per-store job whose conventions are easy to get subtly
-wrong and hard to notice afterwards -- a Steam build that lets a customer
-bypass the client, an itch.io upload no player is ever offered because its
-channel name does not name a platform. Both ship successfully and both
-are broken for somebody.
-
-This module writes the scripts rather than running them. Uploading needs
-`steamcmd` or `butler`, a store account and, for Steam, a Steam Guard
-code; none of that belongs inside a game engine, and a command that
-wrapped it would be a thin shell around credentials it cannot hold. So
-every command here generates files, prints what to run, and stops.
+`pyguara build` produces an executable; these commands write the
+files a store upload needs. They generate scripts and print what to
+run. They do not upload: that needs `steamcmd` or `butler` and a store
+account.
 
 Usage:
     pyguara dist icons logo.png --out build/icons

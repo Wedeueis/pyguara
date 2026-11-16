@@ -1,23 +1,11 @@
 """Upgrades, what an entity has taken, and the pick offered on a level-up.
 
-Two composition decisions carry this module.
-
-**`Upgrade.apply` is an opaque callable.** The kit never learns that
-"+10% move speed" means a `StatBlock` modifier, or that "pierce" means an
-`Effect` -- the game writes the closure. So this file imports neither
-`kits.stats` nor `kits.effects` while composing perfectly with both, and
-with whatever a game invents that neither anticipated.
-
-**`offer()` does not reimplement weighted selection.** It filters by
-eligibility and delegates to `common.random.weighted_choice`, sampling
-without replacement. A kit growing its own subtly different weighting is
-how two RNG behaviours end up in one engine.
-
-**Weapon evolution needs no new type.** `requires` plus `UpgradeRecord`
-*is* the mechanism: "evolved whip requires whip x5 and the bracer" is a
-`requires` of `{"whip": 5, "bracer": 1}`. That is what earns `requires`
-its place in an otherwise minimal kit, and it takes evolution trees out of
-the "needs an item model" column entirely.
+- `Upgrade.apply` is an opaque callable the game writes, so this
+  module imports neither `kits.stats` nor `kits.effects`.
+- `offer()` filters by eligibility and delegates to
+  `common.random.weighted_choice`, sampling without replacement.
+- Weapon evolution is `requires` plus `UpgradeRecord`: "evolved whip
+  requires whip x5 and the bracer" is `{"whip": 5, "bracer": 1}`.
 """
 
 from __future__ import annotations

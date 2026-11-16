@@ -1,18 +1,13 @@
 """The concrete edits: entities, components, fields, hierarchy, tags.
 
-Each command here knows two things the engine does not expose: how to make
-its change *through* the `EntityManager`'s own API, and what to put back.
-The first matters because mutating a component behind the manager's back
-leaves everything mirroring it -- physics bodies, render batches, the
-spatial index -- holding stale data; every field write ends with
+Each command makes its change through the `EntityManager`'s own API
+and knows what to put back. Every field write ends with
 `notify_component_changed()`.
 
-The awkward one is `DestroyEntity`. `EntityManager.remove_entity` cascades
-depth-first through `ChildOf`, and removal is terminal -- a removed entity
-raises on further mutation and cannot be re-added. So destroying one
-entity can delete a whole subtree, and undoing it means rebuilding that
-subtree: every entity, its components, its tags, its enabled state and its
-parent link. The command snapshots all of it before it removes anything.
+`EntityManager.remove_entity` cascades through `ChildOf`, and a
+removed entity cannot be re-added. So `DestroyEntity` snapshots the
+whole subtree before removing anything (every entity, its components,
+tags, enabled state and parent link) and undo rebuilds it.
 """
 
 from __future__ import annotations
@@ -392,20 +387,12 @@ class DuplicateEntity(EditCommand):
 def copy_component(component: Component) -> Component:
     """Return an independent copy of `component`.
 
-    Deep, because a component holds mutable values -- a `Vector2`, a list
-    of points -- and two entities sharing one means editing either changes
-    both, with the second never notified.
+    Deep, because a component holds mutable values (a `Vector2`, a list of
+    points) that two entities must not share.
 
-    The owning entity is cut out of the copy rather than followed: an
-    `Entity` refuses `deepcopy` outright, because copying one would alias
-    the live manager callbacks and the physics and audio handles of the
-    original. `add_component` sets the back-reference on the way in, so
-    leaving it None here is what it expects anyway.
-
-    Resources need nothing here. `Resource.__deepcopy__` returns itself,
-    a resource being a shared handle to one loaded asset -- which is where
-    that belongs, since a call site cannot see one nested inside a
-    component's own dataclass field.
+    The owning entity is not copied: the copy's back-reference is None,
+    and `add_component` sets it. A `Resource` is shared, not copied, since
+    `Resource.__deepcopy__` returns itself.
 
     Args:
         component: The component to copy.

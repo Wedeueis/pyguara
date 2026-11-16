@@ -1,21 +1,11 @@
 """Delaunay triangulation, and a graph built from it.
 
-`build_graph()` grows a minimum spanning tree straight over the scattered
-points, which has no notion of spatial locality beyond "nearest point not
-yet in the tree". The result can carry a long edge clear across the map:
-MST is free to join two distant clusters by whichever pair happens to be
-closest, and nothing stops that pair being on opposite sides of open
-space.
+`build_graph()` grows a minimum spanning tree over the scattered
+points, which can carry a long edge across open space. Triangulating
+first limits the candidate edges to pairs of neighbours, so neither
+the tree nor the extra loop edges can cross the map.
 
-Triangulating first bounds the candidate edges to ones between genuine
-neighbours -- a Delaunay edge exists only where the two points share a
-Voronoi boundary -- so the MST drawn from them cannot take a shortcut
-across the map, and the extra loop edges land between adjacent regions
-rather than between whatever two points a dice roll picked.
-
-#119 deliberately shipped the simpler version to avoid a geometry
-dependency. Bowyer-Watson is about seventy lines, so this adds the
-strategy without adding scipy.
+Pure Python, with no geometry dependency.
 """
 
 from __future__ import annotations
@@ -47,29 +37,14 @@ _MAX_FLIP_PASSES = 1000
 def delaunay_triangles(points: Sequence[Vector2]) -> list[Triangle]:
     """Triangulate `points`, by hull fan then split-insert then flips.
 
-    Not Bowyer-Watson, which needs a "super-triangle" enclosing the cloud
-    and then discards the triangles touching it. That step is where the
-    holes come from: a super vertex falling inside the circumcircle of a
-    triangle of *real* points produces an edge from a real point to a
-    super vertex through the middle of the cloud, and dropping it takes a
-    genuine region along with it. Pushing the enclosure further out to
-    avoid that destroys the precision of a determinant that is degree 4
-    in the coordinates. Sweeping the margin from 3x to 1000x the bounding
-    box, every value left some cloud with a hole -- the two failure modes
-    trade against each other and neither disappears.
-
-    So instead:
-
-    1. Fan-triangulate the convex hull. Covers exactly the hull, with no
-       phantom vertices to remove afterwards.
+    1. Fan-triangulate the convex hull.
     2. Insert each remaining point by splitting the triangle (or the two
        triangles, for a point on a shared edge) that contains it.
     3. Flip every edge that is not locally Delaunay, to a fixpoint.
 
-    Steps 2 and 3 both preserve the covered region *exactly*, so the mesh
-    cannot develop a hole however the arithmetic goes, and Lawson's
-    theorem says flipping to a fixpoint from any triangulation reaches
-    the Delaunay one.
+    Steps 2 and 3 preserve the covered region exactly, so the mesh cannot
+    develop a hole. This is not Bowyer-Watson: there is no super-triangle
+    to remove afterwards.
 
     Args:
         points: Node positions. Order fixes each point's index.
@@ -137,16 +112,13 @@ def build_graph_delaunay(
 ) -> list[Edge]:
     """Connect `points` into a graph over their Delaunay triangulation.
 
-    The same shape `build_graph()` returns, and the same guarantee: every
-    point is reachable from every other. The difference is which edges
-    were ever candidates. Here they are triangulation edges only, so no
-    edge joins two points that are not neighbours -- which is what keeps
-    long skinny edges from cutting across open space.
+    Returns the same shape as `build_graph()`, with the same guarantee
+    that every point is reachable from every other. Only triangulation
+    edges are candidates, so no edge joins two points that are not
+    neighbours.
 
-    Falls back to `build_graph()` for a cloud with no triangulation at all
-    (fewer than three points, or every point collinear). That is not a
-    failure mode worth reporting: three points in a row have exactly one
-    sensible graph and the Euclidean MST finds it.
+    Falls back to `build_graph()` for a cloud with no triangulation (fewer
+    than three points, or every point collinear).
 
     Args:
         points: Node positions. Order fixes each point's index.
@@ -303,16 +275,11 @@ def _split_insert(
 def _legalise(vertices: Sequence[Vector2], triangles: list[Triangle]) -> list[Triangle]:
     """Flip every edge that is not locally Delaunay, until none is left.
 
-    Lawson's algorithm: from *any* triangulation of a point set, flipping
-    illegal edges terminates at the Delaunay triangulation. That is what
-    lets step 1 be a plain hull fan, which is a valid triangulation but
-    nothing like a Delaunay one.
-
-    A flip swaps the diagonal of the quadrilateral two triangles form, so
-    it preserves the covered region exactly. Only a *convex*
-    quadrilateral can be flipped; a reflex one's diagonal is already
-    locally Delaunay, so refusing to flip it is correct rather than a
-    compromise.
+    Lawson's algorithm: from any triangulation of a point set, flipping
+    illegal edges terminates at the Delaunay triangulation. A flip swaps
+    the diagonal of the quadrilateral two triangles form, so it preserves
+    the covered region. Only a convex quadrilateral is flipped; a reflex
+    one's diagonal is already locally Delaunay.
 
     Args:
         vertices: Coordinates.
@@ -435,20 +402,9 @@ def _in_circumcircle(
     `point` so the 4x4 form collapses to a 3x3 one. `triangle` is wound
     counter-clockwise by `_wind`, so a positive determinant means inside.
 
-    Args:
-        vertices: Coordinates, indexed by the triangle's entries.
-        triangle: The triangle to test against.
-        point: The point to test.
-
-    A point *on* the circumcircle counts as **outside**, within tolerance.
-    That sense matters because the only caller is the flip test: four
-    cocircular points -- a regular grid, which level generators produce
-    constantly -- give a determinant of zero, and calling that "inside"
-    makes the edge illegal, flips it, finds the flipped diagonal equally
-    on-circle, and flips it back. The pass cap turned that into a
-    thousand wasted flips and a mesh full of violations until this went
-    strict. On-circle means either diagonal is a correct Delaunay answer,
-    so leaving the one already there is right.
+    A point on the circumcircle counts as outside, within tolerance. Four
+    cocircular points (any regular grid) would otherwise flip back and
+    forth for ever; either diagonal is a correct answer for them.
 
     Args:
         vertices: Coordinates, indexed by the triangle's entries.

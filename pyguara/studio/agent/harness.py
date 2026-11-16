@@ -1,32 +1,13 @@
 """The closed loop: open a scene, edit it, run it, look at the result.
 
-`tools/agent_view.py` is the prior art and most of this is its lesson
-generalised. It boots one of fourteen hardcoded demos, advances a fixed
-number of frames and writes PNGs an agent can open. What it cannot do is
-the *loop* -- edit something, run, check, undo, try again -- because it
-has no edit surface and exits when it is done.
+A harness binds a `StudioSession` (edits as undoable, journaled
+commands), `Application.begin()` and `step()` (frames advanced by the
+caller) and the capture path of `tools/agent_view.py`.
 
-A harness binds the three pieces that already exist:
-
-- `StudioSession`, so an edit is a command: undoable, journaled, diffable.
-- `Application.begin()` / `step()`, so frames advance under the caller's
-  control rather than inside `run()`.
-- `agent_view`'s capture path, which is the part that took real work to
-  get right and is reused rather than reimplemented.
-
-**Determinism.** A headless application gets `FixedClock`, so every frame
-is exactly one sixtieth of a second however long it really took. Two runs
-of the same script therefore produce the same physics, the same tweens and
-the same frames -- which is what makes "run it again and diff" an answer
-rather than a coin toss.
-
-**What a capture proves.** It reads the buffer the renderer drew into:
-that proves the render *path* works -- entities queried, sprites
-submitted, batches flushed. It does **not** prove a window appears on
-screen. Those have already diverged in this engine, when vsync silently
-promoted the display to an OpenGL surface that never presented software
-blits: the captures looked perfect and the real window was blank. See
-`docs/guides/agent-visual-inspection.md`.
+A headless application gets `FixedClock`, so every frame is one
+sixtieth of a second and two runs of one script produce the same
+frames. A capture reads the buffer the renderer drew into. It does not
+prove a window appeared; see `docs/guides/agent-visual-inspection.md`.
 """
 
 from __future__ import annotations
@@ -437,16 +418,10 @@ def open_headless(
 ) -> StudioHarness:
     """Boot an application with no visible window and open a harness on it.
 
-    **Headless here means "no window", not "the headless backend".** The
-    distinction is load-bearing: `create_headless_application()` registers
-    no texture loader at all, so any scene that loads an image dies with
-    `No loader registered for extension: .png` before it finishes
-    entering. A real demo is almost entirely images.
-
-    So this boots the *normal* bootstrap under an SDL driver that needs no
-    display -- the same arrangement `tools/agent_view.py` has used all
-    along. `dummy` is enough for every backend: wgpu renders offscreen
-    and needs no GL context from SDL.
+    Headless here means "no window", not `create_headless_application()`,
+    which registers no texture loader and so cannot enter a scene that
+    loads an image. This boots the normal bootstrap under an SDL driver
+    that needs no display; wgpu renders offscreen.
 
     Args:
         scene_factory: Called with the event dispatcher, returns the
@@ -507,16 +482,9 @@ def open_headless(
 def _install_fixed_clock(container: Any) -> None:
     """Make every frame exactly one sixtieth of a second.
 
-    The non-headless bootstrap registers a wall clock (`PygameClock` or
-    `WallClock`, by backend), which measures
-    wall-clock time -- so two runs of the same script step different
-    amounts of simulated time and produce different results. That is the
-    right behaviour for a game and useless for "run it again and diff".
-
-    Only the *headless backend* gets `FixedClock` by default, and that
-    backend registers no texture loader, so a real scene cannot use it.
-    Hence this: the real backend's rendering with the headless backend's
-    clock.
+    The normal bootstrap registers a wall clock, so two runs of one script
+    would step different amounts of simulated time. This replaces it with
+    `FixedClock`, which only the headless bootstrap registers by default.
 
     Args:
         container: The container to replace the clock in.

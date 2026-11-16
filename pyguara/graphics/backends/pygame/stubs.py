@@ -1,13 +1,10 @@
 """No-op stand-ins for the render graph's features, for pygame.
 
 The pygame backend has no framebuffers, no dynamic lighting and no
-post-processing -- the wgpu backend has all three. These stubs let game code that uses those features run
-unchanged on it, rendering a fully lit scene instead of failing.
+post-processing. These stubs let game code that uses those features
+run unchanged on it, rendering a fully lit scene.
 
-Their entire value is interface parity: a method the real class has and the
-stub does not is an `AttributeError` that appears only after switching
-backend. `tests/test_pygame_stubs.py` compares each stub's public surface
-against its counterpart, so drift is caught here rather than in a game.
+Each stub must keep the public surface of the class it stands in for.
 """
 
 from __future__ import annotations

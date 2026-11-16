@@ -45,23 +45,12 @@ class TextInsertable(Protocol):
 class KeyboardEditable(Protocol):
     """A widget that needs the modifier keys held with a keypress.
 
-    An optional capability tested with `isinstance`, not a `modifiers`
-    parameter added to `UIElement.handle_event()` -- the same call
-    `TextInsertable` and `Scrollable` beside it make, for the same
-    reason: widening that signature would break every widget, in this
-    engine and in any game, that already implements the three-argument
-    form, and only an editable field has any use for modifiers.
+    An optional capability, tested with `isinstance`, like
+    `TextInsertable` and `Scrollable`; `UIElement.handle_event()` keeps
+    its three-argument form.
 
-    The gap it fills is real rather than theoretical. `OnRawKeyEvent`
-    has carried `modifiers` all along and `UIManager` dropped it on the
-    way in, so no widget could tell Left from Shift+Left or C from
-    Ctrl+C. Caret selection and clipboard shortcuts were not merely
-    unimplemented; they were unreachable.
-
-    Only **presses** route here. A release still arrives as
-    `UIEventType.KEY_UP` through `handle_event`, because nothing that
-    edits text cares when a key comes back up and a second channel for
-    it would be two ways to hear the same thing.
+    Only presses route here. A release arrives as `UIEventType.KEY_UP`
+    through `handle_event`.
     """
 
     def handle_key(self, key_code: int, modifiers: frozenset[int]) -> bool:
@@ -82,16 +71,12 @@ class KeyboardEditable(Protocol):
 class Scrollable(Protocol):
     """A widget that can scroll its own contents.
 
-    An optional capability tested with `isinstance`, not a `delta`
-    parameter added to `UIElement.handle_event()`. Widening that signature
-    would break every widget -- in this engine and in any game -- that
-    already implements the three-argument form, and only a viewport has any
-    use for a scroll delta. Same shape as `TextInsertable` beside it, and
-    as the storage capabilities in `pyguara/persistence`.
+    An optional capability, tested with `isinstance`;
+    `UIElement.handle_event()` keeps its three-argument form.
 
     `UIManager` routes a wheel event by hit-testing the cursor and walking
-    *up* from whatever is under it to the nearest `Scrollable`, which is
-    how a wheel over a button inside a list still scrolls the list.
+    up from whatever is under it to the nearest `Scrollable`, so a wheel
+    over a button inside a list scrolls the list.
     """
 
     def scroll_by(self, dx: float, dy: float) -> bool:
@@ -172,13 +157,8 @@ class UIElement(ABC):
     def visible(self, value: bool) -> None:
         """Show or hide this element, invalidating the layout if it changed.
 
-        A property rather than a plain attribute because hiding an element
-        changes where every one of its siblings sits: a container skips
-        invisible children when it stacks, so the ones after it move up.
-        Leaving that to the game meant `element.visible = False` silently
-        left a gap until something else happened to invalidate -- the
-        footgun #49's P3 row named, and the same one `Label.set_text()`
-        already closed for text.
+        A container skips invisible children when it stacks, so hiding one
+        moves its siblings.
 
         Args:
             value: True to show.
@@ -380,15 +360,14 @@ class UIElement(ABC):
         """Resolve this element's rect, then its children's, for one frame.
 
         `UIManager` runs this over every root before rendering, and again
-        after a window resize or an explicit `UIManager.invalidate_layout()`.
-        `available_rect` is the space this element may occupy: the screen for
-        a root element, the parent's content rect for a child.
+        after a window resize or `UIManager.invalidate_layout()`.
+        `available_rect` is the screen for a root element and the parent's
+        content rect for a child.
 
-        The default implementation measures the element, applies its
-        `constraints` against `available_rect` if it has any, then lays each
-        visible child out inside this element's content rect (so `padding`
-        finally takes effect). Containers that position their own children --
-        see `BoxContainer` -- override this.
+        The default measures the element, applies its `constraints` against
+        `available_rect`, then lays each visible child out inside this
+        element's content rect. Containers that position their own children
+        override this.
 
         Args:
             available_rect: The rectangle this element may lay itself out in.

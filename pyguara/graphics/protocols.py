@@ -170,16 +170,10 @@ class Renderable(Protocol):
 class ShapeRenderer(Protocol):
     """The primitives `IRenderer` and `UIRenderer` both draw.
 
-    The two renderers are separate for good reason -- one draws the world
-    through the render graph, the other the UI overlay on top of it -- but
-    a rectangle, a circle and a line are drawn identically through either,
-    in the same screen-pixel coordinates. Art helpers that are nothing but
-    those primitives (a plant silhouette, an icon) take this instead, so
-    the same drawing serves the plot *and* a portrait of it in the HUD
-    rather than existing twice, once per renderer type.
-
-    Neither renderer implements this protocol by name: both already
-    satisfy it structurally, which is the whole point of `Protocol`.
+    A rectangle, a circle and a line are drawn identically through either
+    renderer, in the same screen-pixel coordinates. An art helper that
+    uses only those takes this protocol, so one drawing serves the world
+    and the HUD. Both renderers satisfy it structurally.
     """
 
     def draw_rect(self, rect: Rect, color: Color, width: int = 0) -> None:
@@ -209,22 +203,13 @@ class ShapeRenderer(Protocol):
 class ShapeBatchRenderer(Protocol):
     """A renderer that can take many primitives of one kind in one call.
 
-    A capability, not a requirement. Like `ShapeRenderer` above, no
-    renderer implements it by name -- a backend that can batch shapes
-    satisfies it structurally, and one that cannot simply does not, which
-    is what a caller tests with `isinstance`.
+    A capability, not a requirement: a backend that can batch shapes
+    satisfies it structurally, and a caller tests for it with
+    `isinstance`. The wgpu world renderer has it; the software renderer
+    does not, since it would only loop over the rows.
 
-    The two GPU world renderers satisfy it, because batching is free there:
-    ModernGL already accumulates shape instances per kind and draws each
-    kind with one instanced call, so a batch is an `extend` of a list it is
-    holding; wgpu uploads the rows as they are and draws them in one
-    instanced step (`backends/wgpu/shapes.py`). A software backend
-    would have to loop over the rows and draw them one at a time, which is
-    what its caller was doing anyway -- so it gains nothing by claiming the
-    capability, and claiming it would hide that fact.
-
-    Callers therefore keep their per-primitive path and use this when it is
-    offered: see `Sparks.render`.
+    Callers keep their per-primitive path and use this when it is offered;
+    see `Sparks.render`.
     """
 
     def render_shapes(self, batch: ShapeBatch) -> None:
@@ -298,12 +283,11 @@ class IRenderer(Protocol):
         rotation: float = 0.0,
         scale: Vector2 = Vector2(1, 1),
     ) -> None:
-        """Draw a texture **centred** on the given Screen Coordinate.
+        """Draw a texture centred on the given Screen Coordinate.
 
-        Centred, not top-left: a rotation is about the texture's own
-        middle, which is what a caller drawing a character or a spinning
-        pickup means. A caller that wants a top-left anchor shifts by
-        half the texture -- `draw_text` does exactly that.
+        Centred, not top-left, so a rotation is about the texture's own
+        middle. A caller that wants a top-left anchor shifts by half the
+        texture.
 
         Note:
             This method receives coordinates that have *already* been transformed
@@ -505,8 +489,8 @@ class IWindowBackend(Protocol):
             Engine events from `pyguara.events` -- `QuitEvent`, `KeyDownEvent`,
             `KeyUpEvent`, `MouseButtonEvent`, `MouseMotionEvent`,
             `WindowResizeEvent`. The backend owns the translation from its
-            native events (SDL, under pygame); nothing above this boundary
-            reads a backend constant (issue #9).
+            native events; nothing above this boundary reads a backend
+            constant.
         """
         ...
 
@@ -601,24 +585,15 @@ class UIRenderer(Protocol):
     ) -> None:
         """Draw an image texture, or one region of it, scaled into `rect`.
 
-        `source_rect` is what lets a widget draw one frame of an atlas.
-        Without it the only way to show part of a sheet was to hand this
-        method a surface someone had already cut -- while the world side
-        has carried `RenderCommand.source_rect` all along, so the same
-        sheet was addressable for a sprite and not for a HUD icon. The
-        nine-patch renderer is the first caller: nine slices of one
-        texture, each stretched differently.
-
-        The region is cut before the scale, so a sub-rect scales exactly
-        as a standalone texture of that size would. A region the texture
-        does not contain is clipped to the overlap rather than refused;
-        the implementations log it.
+        `source_rect` lets a widget draw one frame of an atlas. The region is
+        cut before the scale, so a sub-rect scales as a standalone texture of
+        that size would. A region the texture does not contain is clipped to
+        the overlap, and the implementation logs it.
 
         Args:
             texture: A `resources.Texture`, as `ResourceManager.load` returns,
                 or a backend surface. Anything else draws nothing and logs
-                once. On ModernGL the first draw of a texture reads it back
-                from the GPU, which is one slow draw per texture.
+                once.
             rect: Where to draw it
             color: Optional tint color
             source_rect: The region of `texture` to draw, in texture
@@ -649,23 +624,13 @@ class UIRenderer(Protocol):
     def push_clip(self, rect: Rect) -> None:
         """Restrict subsequent drawing to `rect`, in screen coordinates.
 
-        **Nesting intersects.** A push inside an active clip narrows to the
-        overlap of the two rather than replacing it, which is the only
-        behaviour that lets a scroll container live inside another one -- an
-        inventory inside a scrolling sidebar must not draw outside the
-        sidebar just because its own viewport is larger. An empty
-        intersection clips everything away, and that is correct: nothing of
-        the inner element is on screen.
+        Nesting intersects: a push inside an active clip narrows to the
+        overlap of the two, so a scroll container can live inside another.
+        An empty intersection clips everything away.
 
         Every push must be matched by a `pop_clip()`. A widget that draws
-        between the two should do it in a `try`/`finally`, or a raised
-        exception leaves the clip set and silently truncates the rest of
-        the frame.
-
-        This is the UI counterpart of `IRenderer.set_viewport`, and
-        deliberately not the same call: the viewport is one absolute region
-        the render pipeline owns, while a UI clip is a stack many widgets
-        push onto during one pass.
+        between the two should do it in a `try`/`finally`, or an exception
+        leaves the clip set for the rest of the frame.
 
         Args:
             rect: The region to clip to, in screen pixels.
@@ -721,11 +686,8 @@ class TextureFactory(Protocol):
     ) -> Texture:
         """Create a texture from raw RGBA pixel data.
 
-        Rows are **top-down**: 4 bytes per pixel, row-major, the image's
-        top row first. Stated because the silence here is how the backends
-        drifted -- "row-major order" says nothing about which end is the
-        top, and the ModernGL factory spent some time reversing rows while
-        its sibling loader did not.
+        Rows are top-down: 4 bytes per pixel, row-major, the image's top row
+        first.
 
         Args:
             path: Identifier/name for the texture (used for caching/debugging).

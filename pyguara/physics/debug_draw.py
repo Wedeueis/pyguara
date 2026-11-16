@@ -32,13 +32,9 @@ AIRBORNE = Color(255, 110, 110)
 class ColliderDebugRenderer:
     """Draws collider outlines for every entity that has one.
 
-    Genre-agnostic, and deliberately so: this used to also draw a
-    platformer's ground and wall probes, which meant core importing
-    `PlatformerController`. That component now lives in
-    `kits.platformer_movement`, and core never imports a kit (see
-    `pyguara.kits`). The probe drawing moved with it, to
-    `PlatformerProbeDebugRenderer` -- compose the two when debugging a
-    platformer.
+    A platformer's ground and wall probes are drawn by
+    `kits.platformer_movement`'s `PlatformerProbeDebugRenderer`; compose
+    the two when debugging a platformer.
 
     Attributes:
         entity_manager: Source of entities to draw.

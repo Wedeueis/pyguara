@@ -39,18 +39,11 @@ from pyguara.physics.types import ShapeType
 class TriggerVolume(StrictComponent):
     """High-level trigger volume component that tracks entities inside it.
 
-    TriggerVolume automatically creates a sensor Collider and subscribes to
-    trigger events to maintain a list of entities currently inside the zone.
-    It supports tag-based filtering to only trigger for specific entity types.
-
-    The component state is automatically updated by TriggerSystem (if registered).
-    Otherwise, you need to manually subscribe to OnTriggerEnter/Exit events.
-
-    Note:
-        Mutation (`entities_inside`/`active`) happens directly as plain field
-        writes in `TriggerSystem`. The query predicates below
-        (`contains_entity()`, `matches_tags()`, etc.) stay on the component --
-        side-effect-free, so there's no ownership question to resolve.
+    A sensor zone that records which entities are inside it, with optional
+    tag filtering. `TriggerSystem`, if registered, keeps `entities_inside`
+    and `active` up to date; otherwise subscribe to
+    `OnTriggerEnter`/`OnTriggerExit` yourself. The query predicates
+    (`contains_entity()`, `matches_tags()`) have no side effects.
 
     Attributes:
         shape_type: Geometric shape of the trigger zone.

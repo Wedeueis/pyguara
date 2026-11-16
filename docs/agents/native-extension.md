@@ -33,6 +33,12 @@ then sweep it -- and quadratic for a caller that alternates `insert` and a
 query: 0.13x the Python speed over 4000 keys. Nothing in the engine does
 that; `accelerate=False` is the answer for a game that does.
 
+A key whose `__hash__` or `__eq__` calls back into the same index raises
+`RuntimeError: Already borrowed` on the native store, which holds an
+exclusive borrow of itself for the length of a call. No engine key does
+that; they are entity ids. Iterating a query's result while removing keys
+is safe on both stores, because a query returns a list.
+
 **The wheel ships it**, so an installed PyGuara runs native by default and
 nobody runs `cargo` to get the numbers above. maturin is the build
 backend, which means a *source* build -- `uv sync`, `uv build`, the sdist,

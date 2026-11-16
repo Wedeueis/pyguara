@@ -66,19 +66,13 @@ def _open_mixer(frequency: int, size: int, channels: int, buffer: int) -> None:
 class PygameAudioSystem:
     """Pygame implementation for the PyGuara AudioSystem.
 
-    Features:
-    - Spatial audio with distance attenuation and stereo panning
-    - Audio bus hierarchy (Master -> SFX/Music/Voice)
-    - Priority-based channel management
-    - Full volume control at bus and global levels
+    Provides spatial audio with distance attenuation and stereo panning,
+    a bus hierarchy (Master -> SFX/Music/Voice), priority-based channel
+    management, and volume control per bus and globally.
 
-    **It reports `AudioCapability.NONE`.** `pygame.mixer` resamples a clip
-    once at load time and plays it back at the mixer's own rate, so there
-    is no per-play pitch control to expose; `Channel.play` takes a loop
-    count and no loop points; and a channel's only processing is a
-    left/right gain pair, so there is nowhere for a bus effect to go.
-    Each of those is declined by raising rather than ignored -- see
-    `AudioCapability`.
+    Reports `AudioCapability.NONE`: `pygame.mixer` has no per-play pitch,
+    no loop points and no per-bus processing. A request for one raises;
+    see `AudioCapability`.
     """
 
     def __init__(
@@ -173,17 +167,12 @@ class PygameAudioSystem:
     ) -> None:
         """Refuse the parts of a play request this mixer cannot honour.
 
-        Called before anything else a play does -- in particular before
-        the spatial path's out-of-earshot shortcut, so whether a bad
-        request is reported does not depend on how far away the listener
-        happens to be standing.
+        Called before anything else a play does, so a bad request is reported
+        wherever the listener is.
 
-        Loop points asked for in an argument raise; the same points read
-        from a clip's `.meta` sidecar warn once and the clip loops whole,
-        which is `resolve_loop_points`'s distinction and the reason it
-        reports who asked. Neither fires for a one-shot: `loops=0` ignores
-        loop points on every backend, so ignoring them here says nothing
-        untrue. A malformed range is still rejected.
+        Loop points passed as arguments raise. Loop points read from a clip's
+        `.meta` sidecar warn once and the clip loops whole. Neither applies to
+        a one-shot (`loops=0`). A malformed range is always rejected.
 
         Args:
             clip: The clip about to play.

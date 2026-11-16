@@ -1,26 +1,13 @@
 """What a component looks like, derived from the component itself.
 
-Drives three things: the Inspector's widgets, the schema browser, and the
-JSON Schema an agent reads to learn what arguments an operation takes.
-One emitter rather than three, because they were going to disagree.
+Drives the Inspector's widgets, the schema browser, and the JSON
+Schema an agent reads to learn an operation's arguments.
 
-Two kinds of component have to be handled, and the second is the reason
-this is not four lines of `dataclasses.fields`:
-
-- **Dataclasses**, which is most of them. Fields, types and defaults all
-  come from the decorator.
-- **`StrictComponent`s built from properties**, of which `Transform` is
-  the one that matters. It is *not* a dataclass -- it stores private
-  fields and exposes `position`, `rotation` and `scale` as properties with
-  setters, plus `interpolate` as a plain attribute. `dataclasses.fields`
-  returns nothing for it, which is why the existing reflection sites all
-  special-case `Transform` by name. Reflecting over writable properties
-  handles it without a name check, and handles the next one like it for
-  free.
-
-Read-only derived properties are reported, not hidden: `Transform.
-world_position` is genuinely useful to see in an inspector and genuinely
-not settable, and an agent told it exists but is read-only will not try.
+Two kinds of component are handled. A dataclass gives its fields,
+types and defaults. A component built from properties, such as
+`Transform`, is reflected through its writable properties. Read-only
+derived properties (`Transform.world_position`) are reported as
+read-only, not hidden.
 """
 
 from __future__ import annotations

@@ -1,19 +1,13 @@
 """Registration of game-defined configuration sections.
 
-`GameConfig` is a closed dataclass -- `display`, `audio`, `input`,
-`physics`, `debug`, full stop. A game that wants its own tunables (enemy HP
-curves, drop-rate tables, XP thresholds) has nowhere to put them, so every
-shipped game grows a second hand-rolled JSON loader beside the engine's,
-with its own parsing, its own coercion and no validation at all.
+A registered section gets what the engine's own sections get: it is
+read from and written to the same file, coerced to its declared types
+on load, overridable from the environment, reachable through
+`update_setting()`, and checked by the validator if it implements
+`ValidatableSection`.
 
-A registered section gets the engine's machinery instead: it is read from
-and written to the same file, coerced back to its declared types on load,
-overridable from the environment, reachable through `update_setting()`, and
-checked by the validator when it chooses to be (see `ValidatableSection`).
-
-Register before `ConfigManager.load()`: a section the registry has not heard
-of is a key `from_dict()` cannot build anything from, and it is dropped with
-a warning naming this function.
+Register before `ConfigManager.load()`. A section the registry does
+not know is dropped from the file with a warning.
 """
 
 from __future__ import annotations
@@ -38,14 +32,11 @@ RESERVED_SECTION_NAMES = ENGINE_SECTION_NAMES | {"version", "custom", "profiles"
 class ValidatableSection(Protocol):
     """A config section that knows what its own valid values are.
 
-    Optional: a registered section without a `validate()` method is loaded,
-    saved and overridden exactly the same way, merely unchecked. Implement
-    it when a bad value has a consequence worth naming -- the engine's own
-    sections do this through `ConfigValidator`, which cannot know anything
-    about a game's fields.
+    Optional: a registered section without a `validate()` method is
+    loaded, saved and overridden the same way, unchecked.
 
-    `ValidationIssue.section` is **overwritten** with the registered name, so
-    a section need not repeat it and cannot get it wrong.
+    `ValidationIssue.section` is overwritten with the registered name, so
+    a section need not set it.
     """
 
     def validate(self) -> list[ValidationIssue]:

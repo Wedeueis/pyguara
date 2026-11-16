@@ -1,16 +1,15 @@
 """Saving during play, without stalling a frame.
 
-`PersistenceManager.save_data` serializes and fsyncs on the calling thread, which
-is right for a save menu and wrong for a save triggered by gameplay: one fsync can
-cost more than a frame. This does that work on a worker thread instead, and writes
-only the newest value for a key, so a burst of XP events costs one write.
+`PersistenceManager.save_data` serializes and fsyncs on the calling
+thread. `QuickSaver` does that work on a worker thread and writes only
+the newest value for a key, so a burst of events costs one write. The
+storage underneath writes atomically, so a crash loses at most the
+last `min_interval` and never corrupts a save.
 
-Crash safety comes from the storage underneath, which writes atomically. So a crash
-loses at most the last `min_interval`, and never corrupts a save.
-
+Example:
     saver = QuickSaver(persistence, min_interval=1.0)
-    saver.request("character", character.to_save_data())   # cheap, each event
-    saver.flush()                                          # at the end of a run
+    saver.request("character", character.to_save_data())   # each event
+    saver.flush()                                          # end of a run
     saver.close()                                          # at shutdown
 """
 
@@ -38,9 +37,9 @@ class _Pending:
 class QuickSaver:
     """Writes saves on a worker thread, newest value wins.
 
-    **Hand over a value you will not mutate.** It is serialized later, on another
-    thread, so a live object changed in the meantime would be saved half-updated.
-    Build a fresh plain structure, which is cheap for the size of a character.
+    Hand over a value you will not mutate. It is serialized later, on
+    another thread, so a live object changed in the meantime would be
+    saved half-updated.
 
     Attributes:
         writes: How many saves have reached storage.

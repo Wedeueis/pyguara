@@ -61,13 +61,10 @@ class EngineLogger:
     keywords become structured fields on the record, reachable by handlers and
     carried into `OnLogEvent`.
 
-    Note:
-        This wraps `logging.getLogger(name)`, which is process-global. Two
-        `LogManager` instances asking for the same name therefore share one
-        underlying logger. Each instance only removes the handlers it installed
-        itself, so they no longer silently tear down each other's -- but
-        settings still apply to the shared logger, last writer winning. Prefer
-        the single `default_log_manager`.
+    This wraps `logging.getLogger(name)`, which is process-global: two
+    `LogManager` instances asking for the same name share one logger, and
+    settings apply to it last writer winning. Prefer the single
+    `default_log_manager`.
     """
 
     def __init__(

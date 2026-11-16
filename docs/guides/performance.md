@@ -1216,6 +1216,18 @@ arrives over the network, calls `settle_memory()` itself once the load is done.
 
 ---
 
+## Smaller measurements
+
+Figures that used to live in docstrings, kept here because each explains a
+choice in the code.
+
+| What | Measured | The choice it explains |
+| --- | --- | --- |
+| `Vector2.__add__` against adding two floats | 452 ns against 69 ns (6.5x) | `flock_force` and `Batcher` do their inner-loop arithmetic on floats and build a `Vector2` only at the boundary |
+| Uploading a 96x96 grid's walls and weights to the native flow field | 0.18 ms, against a 1.36 ms recompute | `FlowFieldService` uploads the whole graph when its contents change, with no incremental path |
+| A circular wipe's cover at 1280x720, as a fan of 68 quads | 1.04 ms, with every seam blended twice under a translucent cover | `circular_cover_points` returns one self-touching polygon: 0.3 ms, and no seams |
+| The same cover as two scanline rectangles per row | 1,440 draw calls; 2.62 ms opaque, 5.89 ms translucent | As above |
+
 ## What the test suite guarantees
 
 `tests/performance/` runs in two tiers, and they exist for different reasons.

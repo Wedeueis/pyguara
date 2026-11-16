@@ -1,14 +1,11 @@
 """The defender's damage-receiving marker.
 
 Not a shape of its own: `HitboxSystem` detects overlap through a
-`Hitbox`'s `TriggerVolume` sensor against whatever solid `Collider` the
-target already has, then checks for this component to confirm the target
-is a valid damage recipient (and reads `team` off it). A `Hurtbox` with
-its own independent shape, smaller than the target's movement collider,
-isn't supported yet -- `pymunk_impl.py`'s sensor-vs-sensor overlap
-resolution is an explicitly documented degenerate case
-(`_sensor_entity_id()`), so giving `Hurtbox` its own sensor would hit
-exactly that.
+`Hitbox`'s `TriggerVolume` sensor against the target's solid
+`Collider`, then checks for this component to confirm the target can
+be damaged, and reads `team` from it. A `Hurtbox` with its own shape,
+smaller than the movement collider, is not supported: the physics
+backend does not resolve sensor-against-sensor overlap.
 """
 
 from __future__ import annotations

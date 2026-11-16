@@ -175,13 +175,9 @@ class Camera2D:
     It handles Zoom and Panning math. It does NOT render anything; it simply
     provides the transformation the renderer applies.
 
-    There is one world-to-screen transform: ``screen * = world * zoom +
-    screen_offset(viewport)``. ``world_to_screen`` / ``screen_to_world`` /
-    ``get_view_bounds`` are conveniences built on that same
-    ``screen_offset``, so the picture on screen and any hit-testing against
-    it cannot disagree. Rotation is deliberately not supported -- the render
-    path never rotated, so a ``rotation`` attribute would have been a silent
-    no-op (see issue #23).
+    There is one world-to-screen transform: ``screen = world * zoom +
+    screen_offset(viewport)``. ``world_to_screen``, ``screen_to_world`` and
+    ``get_view_bounds`` are built on it. Rotation is not supported.
 
     Attributes:
         position (Vector2): The center of the camera in World Coordinates.
@@ -339,13 +335,7 @@ class Camera2D:
             value: The new scale factor. Must be positive.
 
         Raises:
-            ValueError: If `value` is zero or negative. A zero used to be
-                accepted and then handled three different ways: world_to_screen
-                collapsed every point onto the screen centre, screen_to_world
-                substituted 0.001 and returned coordinates six orders of
-                magnitude out, and get_view_bounds raised ZeroDivisionError. A
-                negative silently mirrored the world. Rejecting it here means
-                the invariant holds everywhere downstream.
+            ValueError: If `value` is zero or negative.
         """
         if value <= 0:
             raise ValueError(
@@ -370,16 +360,12 @@ class Camera2D:
         """Compute the translation mapping a zoomed world point into a viewport.
 
         Screen position is `world * zoom + offset`, so a caller batching many
-        points computes this once and adds it per point.
+        points computes this once and adds it per point. This is the single
+        world-to-screen definition; `world_to_screen`, `screen_to_world` and
+        `get_view_bounds` are expressed in terms of it.
 
-        `viewport.center_vec` is `(centerx, centery)` and already absolute --
-        it carries the viewport's origin. Adding `viewport.position` on top of
-        it double-counts that origin, which is what the batcher used to do;
-        a fullscreen viewport hid it because its origin is (0, 0).
-
-        This is the single world-to-screen definition. `world_to_screen`,
-        `screen_to_world` and `get_view_bounds` are all expressed in terms of
-        it, and the batcher / particle system / light pass call it directly.
+        `viewport.center_vec` is absolute and already carries the viewport's
+        origin, so `viewport.position` is not added to it.
 
         Args:
             viewport: The region being drawn into.
@@ -539,17 +525,12 @@ class Camera2D:
     def set_bounds(self, bounds: Rect | None) -> None:
         """Keep the view inside a world box -- "do not show past the wall".
 
-        Clamped in `update()`, against `position` rather than the shaken
-        view, so a shake still reads as a shake at the edge of a room.
-
-        When the view is *larger* than the box on an axis -- a room narrower
-        than the screen -- the camera centres on the box instead of picking
-        one edge, which is the only choice that does not show more wall on
-        one side than the other.
+        Clamped in `update()`, against `position` and not the shaken view, so
+        a shake still shows at the edge of a room. When the view is larger
+        than the box on an axis, the camera centres on the box.
 
         Sized from the camera's fallback viewport, so a split-screen camera
-        must declare its real size with `set_viewport_size()` for the clamp
-        to be right.
+        must declare its real size with `set_viewport_size()`.
 
         Args:
             bounds: The world rectangle, or None to go back to unbounded.

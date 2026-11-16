@@ -1,15 +1,8 @@
 """Integer grid-cell math: coordinates, distances, neighbours, line walks.
 
-`Cell` is a plain `tuple[int, int]`, matching how grid code already treats
-cell coordinates throughout the engine (`ai.pathfinding.grid.GridNode`, a
-`SpatialHash` bucket key) -- a wrapper class would fight every call site
-that already unpacks `x, y = cell` or uses a cell as a dict key.
-
-This exists so pixel<->cell conversion, distance, neighbourhoods, and a
-line-of-sight walk are written and tested once, not once per subsystem.
-`ai/pathfinding/grid.py` carried its own copy of all of this (with a real
-bug in its `int()`-truncating coordinate conversion, since fixed locally)
-before being migrated to call here instead.
+`Cell` is a plain `tuple[int, int]`, so it unpacks as `x, y = cell`
+and works as a dict key, as grid code across the engine expects
+(`ai.pathfinding.grid.GridNode`, a `SpatialHash` bucket key).
 """
 
 from __future__ import annotations

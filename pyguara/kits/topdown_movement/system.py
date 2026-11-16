@@ -142,18 +142,14 @@ class TopDownSystem:
     ) -> list[tuple[str, TopDownBody, Transform, Collider | None]]:
         """Step what the engine can in one call; return what it could not.
 
-        Exact, not approximate: each body the engine answers for ends where
-        `step_body` would have put it, to the bit. The engine only answers
-        while every solid is static, so no body's move depends on another's
-        and the order they are stepped in cannot matter -- which is what
-        lets the rest go through `step_body` afterwards.
+        Exact: each body the engine answers for ends where `step_body` would
+        have put it, to the bit. The engine only answers while every solid is
+        static, so the order bodies are stepped in cannot matter.
 
-        A body whose centre is not a pair of floats is left out: the
-        ordinary path keeps an integer coordinate an integer, and a native
-        double cannot. So is one whose velocity or remainder is anything
-        but a plain `float` or `int` -- a NumPy scalar, say -- since the
-        ordinary path computes in that type and the engine's `sweep_box`
-        declines it for the same reason.
+        A body is left for `step_body` if its centre is not a pair of floats,
+        or its velocity or remainder is not a plain `float` or `int` (a NumPy
+        scalar, say): the ordinary path computes in the body's own types, and
+        a native double cannot.
 
         Args:
             moving: `(entity_id, body, transform, collider)` per body to move.

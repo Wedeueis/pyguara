@@ -1,19 +1,13 @@
 """An append-only record of every edit, and who asked for it.
 
-The reason this exists separately from the undo stack: the stack is a
-*position* -- undo moves it, and what was undone leaves the undoable
-history. The journal is a *log*, and an undo is another entry in it. When
-an agent has made forty edits and something is wrong, the question is "what
-did it do, in order" and the stack cannot answer it.
+The undo stack is a position: an undo moves it. The journal is a log,
+and an undo is another entry in it, so it answers "what was done, in
+order".
 
-Written as JSON Lines, append-only, one object per entry. That format
-rather than a single JSON document because the common operations are
-"append one entry" and "read the tail", and a session that crashes
-mid-write leaves every complete line before it readable.
-
-Entries carry an `actor`, which is how a human edit, an agent's tool call
-and a replayed script are told apart afterwards. Nothing enforces honesty
-about it -- it is provenance, not a permission.
+Written as JSON Lines, one object per entry, so a session that crashes
+mid-write leaves every complete line readable. Entries carry an
+`actor`, which tells a person's edit from an agent's. It is
+provenance, not a permission.
 """
 
 from __future__ import annotations

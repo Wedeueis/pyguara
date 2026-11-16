@@ -1,19 +1,9 @@
 """Build collision geometry from a tile grid.
 
-A tile grid drawn as individual squares is naturally built as one collider
-per tile, and that produces a floor made of dozens of separate boxes. The
-interior faces where they meet are real collision surfaces to the solver,
-even though nothing about the level is there: a character resting on the
-floor sits `collision_slop` deep inside it, so its leading bottom corner is
-below the tops of the tiles ahead and strikes their vertical faces as it
-moves. Measured in guara_falcao, that deflected a walking character upward
-at 47 px/s at a tile boundary; it then fell back and landed 8px inside the
-floor. The same interior corners are what a character jumping against a wall
-snags on.
-
-Merging contiguous tiles into as few rectangles as possible removes those
-faces altogether -- there is nothing left to catch on. Sprites stay
-per-tile; only the collision shape changes.
+Contiguous solid tiles are merged into as few rectangles as possible.
+One collider per tile would leave interior faces where tiles meet, and
+a character moving along a floor or a wall catches on them. Sprites
+stay per-tile; only the collision shape is merged.
 """
 
 from __future__ import annotations

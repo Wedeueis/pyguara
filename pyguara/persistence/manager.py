@@ -393,15 +393,11 @@ class PersistenceManager:
         """Check the payload against the digest recorded in its header.
 
         The digest length picks the algorithm: 64 characters is SHA-256,
-        which is what this build writes, and 32 is the MD5 that saves
-        written earlier carry. Reading both means an existing save still
-        loads without a migration.
+        which is what this build writes, and 32 is MD5, which older saves
+        carry.
 
-        This detects corruption -- a truncated write, a bad sector. It is
-        not a tamper check, and cannot be: the digest sits in the same
-        header as the payload, so anyone who can rewrite one can rewrite
-        the other. What keeps a rewritten save from doing harm is that
-        every format this build will decode produces inert data.
+        This detects corruption, not tampering: the digest sits in the same
+        header as the payload.
 
         Args:
             key: Unique identifier, for the message.

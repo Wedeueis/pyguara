@@ -1,14 +1,11 @@
 """Shared-blackboard coordination vocabulary for a pack of AI agents.
 
-Genre-specific to squad/pack-tactics games (a wolf pack, a Cannon Fodder
-squad, a hive of minions taking one player's orders), not just a bush-dog
-pack: nothing here names a dog. Built on `pyguara.ai.blackboard.Blackboard`,
-which is already safe to share across every pack member's `AIComponent` --
-only a `BehaviorTree` *instance* must stay per-entity (ticking one tree for
-several entities corrupts its composite/decorator node state). This kit
-supplies the read/write vocabulary a shared blackboard needs; the actual
-behavior-tree leaves that call these functions are demo-owned, the same way
-`games/protocolo_bandeira/ai_behaviors.py` owns its own leaf closures.
+For squad and pack-tactics games. Built on
+`pyguara.ai.blackboard.Blackboard`, which is safe to share across
+every pack member's `AIComponent`. A `BehaviorTree` instance must stay
+per-entity. This kit supplies the functions that read and write the
+shared blackboard; the behavior-tree leaves that call them are the
+game's.
 """
 
 from __future__ import annotations

@@ -86,10 +86,8 @@ class SaveProfile:
     """Ties one named store to a run's lifecycle.
 
     Created via `MultiScopePersistence.begin_run()` when a run starts;
-    `end()` closes it out. Deliberately independent of
-    `DIContainer.run_scope` (#65) -- a game wanting a run's DI scope and
-    save data torn down together calls both itself; this class only ever
-    touches storage.
+    `end()` closes it out. Independent of `DIContainer.run_scope`: a game
+    wanting a run's DI scope and save data torn down together calls both.
     """
 
     def __init__(self, store: PersistenceManager, scope_name: str) -> None:

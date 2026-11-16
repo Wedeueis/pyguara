@@ -1,25 +1,15 @@
 """`pyguara studio`: the authoring surface from a terminal.
 
-Three subcommands, each the front door to something built elsewhere:
+Three subcommands:
 
-- **`instructions`** writes or checks the `AGENTS.md` family. Needs no
-  engine at all, so it runs in CI.
-- **`ops`** serves the operation surface as JSON lines on stdio. No
-  dependency beyond the engine.
-- **`mcp`** serves the same operations over the Model Context Protocol,
-  which is what an agent is configured to launch.
+- `instructions` writes or checks the `AGENTS.md` family. It needs no
+  engine, so it runs in CI.
+- `ops` serves the operation surface as JSON lines on stdio.
+- `mcp` serves the same operations over the Model Context Protocol.
 
-`ops` and `mcp` speak on stdout, so **nothing else may**. This is not a
-hypothetical: pygame prints a version banner to stdout the moment it is
-imported, and the engine's `EngineLogger` builds its console handler
-around `sys.stdout`, so a plain boot emits five lines of prose straight
-into the protocol stream. A reader on the other end sees a parse error and
-blames the protocol.
-
-`_protocol_stdout()` is the fix. It hands the real stdout to the server
-and points `sys.stdout` at stderr for everything else, before the engine
-is imported -- so the banner, the boot logs and any stray `print` in game
-code all land on stderr where they are readable and harmless.
+`ops` and `mcp` speak on stdout, so nothing else may write to it.
+`_protocol_stdout()` hands the real stdout to the server and points
+`sys.stdout` at stderr before the engine is imported.
 """
 
 from __future__ import annotations
@@ -45,19 +35,10 @@ APPROVAL_CHOICES = tuple(mode.value for mode in ApprovalMode)
 def _protocol_stdout() -> Iterator[IO[str]]:
     """Reserve stdout for the protocol, and send everything else to stderr.
 
-    Yields the real stdout while `sys.stdout` points at stderr, so the
-    only thing that reaches a client is what the server writes
-    deliberately.
-
-    Entered *before* the engine is imported, because the two worst
-    offenders happen at import time: pygame prints a version banner, and
-    `EngineLogger` builds its console handler around whatever `sys.stdout`
-    is when the handler is constructed. Swapping afterwards would be too
-    late for both.
-
-    `PYGAME_HIDE_SUPPORT_PROMPT` is set as well. The redirect already
-    catches the banner, but stderr is a log a person reads, and a version
-    line nobody asked for is noise in it.
+    Enter it before the engine is imported: pygame prints a banner at
+    import, and `EngineLogger` binds its console handler to whatever
+    `sys.stdout` is when it is built. `PYGAME_HIDE_SUPPORT_PROMPT` is set
+    as well, to keep the banner out of stderr.
 
     Yields:
         The real stdout, to hand to the server.

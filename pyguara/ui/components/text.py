@@ -31,18 +31,9 @@ class Label(Widget):
             color: Text colour, or None for the theme's body text.
             width: A fixed width to lay the text out inside, or None to
                 auto-size the label's rect to the text. Text wider than
-                this **wraps**; it used to overflow, since the label made
-                exactly one `draw_text` call however long the string was
-                -- 423 px of text drawn through a 150 px label. Without a
-                fixed width there is nothing to wrap against and nowhere
-                for `align` to move the text, so an auto-sized label
-                breaks only where the text itself says to.
-            align: Where the text sits inside `width`. A caller centring a
-                label "GUARÁ & FALCÃO" against a 520px-wide panel used to
-                guess the text's width by eye and hardcode an x offset --
-                off by a few pixels, and wrong again the moment the text,
-                the font or the panel changed. `width` + `CENTER` measures
-                it instead.
+                this wraps. An auto-sized label breaks only at newlines.
+            align: Where the text sits inside `width`. Has no effect on an
+                auto-sized label.
         """
         super().__init__(position, Vector2(width if width is not None else 0, 0))
         self.text = text
@@ -78,10 +69,7 @@ class Label(Widget):
 
         A fixed-width label holds its width and takes its height from the
         number of lines; an auto-sizing one takes its width from the
-        widest line. Both used to take the height from a single
-        `get_text_size` call, which is wrong for any text that occupies
-        more than one line -- and newlines already did, because
-        `get_text_size` ignores them and `draw_text` honours them.
+        widest line.
         """
         key = (
             self.text,

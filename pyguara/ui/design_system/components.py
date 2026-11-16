@@ -1,15 +1,12 @@
 """The components the Cerrado look needs beyond what a theme can say.
 
-Deliberately two classes, not a parallel widget tree. A checkbox, slider,
-progress bar or text field styled by this design system is the *stock*
-component reading Cerrado colours out of the theme -- `set_theme
-(cerrado_dusk())` and they are skinned, with their layout, focus traversal
-and both backends intact. Only the bevel needed code, because a raised
-edge is geometry rather than a colour.
+Two classes, not a parallel widget tree. A checkbox, slider or text
+field in this design system is the stock component reading Cerrado
+colours from the theme. A bevel needs code because a raised edge is
+geometry.
 
-`ButtonSkin` exists for the same reason: the brand has button colourways --
-the sage and wood variants -- that are not "the theme's primary action" and
-so have nowhere to live in a theme that describes one action colour.
+`ButtonSkin` holds the brand's button colourways (sage, wood), which a
+theme with one action colour cannot describe.
 """
 
 from __future__ import annotations

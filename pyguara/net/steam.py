@@ -1,43 +1,21 @@
 """Online play through Steam: the transport, and the hub that drives it.
 
-`SteamTransport` is a `Transport`, so `HostSession` and `ClientSession` run
-over it unchanged. Underneath is the Steam core (`rust/src/net/steam_core.rs`):
-`renet` keyed by Steam ID, carried by Steam's peer-to-peer messages, which go
-through Valve's relays -- no port forwarding, and no player's IP address is
-shown to another.
+`SteamTransport` is a `Transport`, so `HostSession` and
+`ClientSession` run over it unchanged. Messages go through Valve's
+relays. `SteamNetwork` owns Steam, the `SteamLobby` and the transport;
+call `update()` once a frame before the session's `poll()`, and
+`flush()` after the frame's fixed updates. A player is admitted by
+being in the host's lobby. The game ships `steam_api` beside its
+executable. See `docs/systems/networking.md`.
 
-`SteamNetwork` owns the three things that share Steam's one callback stream:
-Steam itself, the `SteamLobby`, and the transport once there is one. Call
-`update()` once a frame, before the session's `poll()`::
-
+Example:
     network = SteamNetwork.open()
     network.lobby.host(max_players=4)
-    ...
     for event in network.update():
         if isinstance(event, LobbyOpened):
             session = HostSession(network.host_transport(3), versions)
         elif isinstance(event, LobbyJoined):
             session = ClientSession(network.join_transport(versions.encode()))
-    for event in session.poll():
-        ...
-    ...  # the frame's fixed updates, which send
-    network.flush()
-
-`flush()` sends what the frame queued at once; without it, it leaves on the
-next `update()`, a frame later.
-
-**Being in the host's lobby is what admits a player.** The hub turns members
-entering and leaving the lobby into `allow` and `revoke` on the host's
-transport, and the transport accepts Steam sessions only from admitted players
-(or, on a client, only from its host).
-
-Unlike `UdpTransport` there is no native thread: Steam's API is pumped from
-the frame, so a stalled frame delays acknowledgements too. The core's
-timeout is 10 seconds, far above any frame.
-
-`steam_api` is Valve's library, which this engine cannot ship: the game ships
-it beside its executable (`pyguara dist steam --steam-api`), and
-`find_steam_api` looks for it there.
 """
 
 from __future__ import annotations

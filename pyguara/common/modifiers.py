@@ -1,16 +1,11 @@
 """A stacking, source-tracked numeric value: base + flat + percent + override.
 
-Genre-agnostic stacking mechanism, not a stat schema -- `ModifiableValue`
-knows nothing of "strength" or "armour" (that vocabulary is `kits/stats`'
-job), only how several tagged contributions combine into one number. Mined
-from `reclaimer_legacy`'s `game/combat/combat_stats.py` `Stat`/`Modifier`
-for the arithmetic and the tracked-source removal shape, with its
-character/event-dispatcher coupling stripped out -- this is a plain value
-type, like `RandomStream`, not wired to any particular game's event system.
+`ModifiableValue` knows how several tagged contributions combine into
+one number, and nothing about what the number means; stat names are
+`kits/stats`' job. It is a plain value type, not wired to events.
 
-No duration or expiry: a temporary buff is `kits/effects`' job (it removes
-its own modifier when its own timer elapses), not something this class
-tracks itself.
+It has no duration or expiry. A temporary buff is `kits/effects`' job:
+the effect removes its own modifier when its timer elapses.
 """
 
 from __future__ import annotations

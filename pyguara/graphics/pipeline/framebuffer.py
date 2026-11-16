@@ -64,19 +64,11 @@ class FramebufferManager:
     ) -> Framebuffer:
         """Get the framebuffer called `name`, creating it if it is new.
 
-        **An argument you pass is a requirement, not a preference.** If
-        `name` already exists with a different format, this raises rather
-        than handing back the existing one. It used to hand it back
-        silently, which is what turns a format mismatch into invisible
-        data loss: a caller asking for a 16-bit float buffer and getting
-        an 8-bit one has no way to tell, and the range simply disappears
-        somewhere downstream.
-
-        Arguments you leave out are not requirements. That distinction is
-        what lets the two kinds of caller coexist: `RenderGraph` declares
-        `lightmap` as `f2` because the chain needs the range, and
-        `LightPass` later asks for the same buffer without caring, and
-        gets the format the declaration named.
+        An argument you pass is a requirement: if `name` already exists with
+        a different size, sample count or format, this raises. An argument
+        you leave out accepts whatever exists. So `RenderGraph` can declare
+        `lightmap` as `f2`, and `LightPass` can ask for the same buffer
+        without naming a format.
 
         Args:
             name: Unique identifier for the framebuffer.

@@ -26,14 +26,10 @@ class Widget(UIElement):
         """Draw this widget's drop shadow, if the theme asks for one.
 
         A no-op unless `theme.shadows.enabled`, which every preset leaves
-        off -- so a widget calling this costs nothing until a theme opts in.
-        Call it *before* drawing the widget's own face, since the shadow
+        off. Call it before drawing the widget's own face, since the shadow
         sits underneath.
 
-        Hard-edged, matching `design_system.skin.draw_stamp_shadow`: a
-        blurred shadow is not reachable through the UI renderer's
-        primitives, so `ShadowScheme.blur` is **not** honoured here. That is
-        recorded on the field itself rather than quietly ignored.
+        The shadow is hard-edged; `ShadowScheme.blur` is not honoured.
 
         Args:
             renderer: The UI renderer to draw through.

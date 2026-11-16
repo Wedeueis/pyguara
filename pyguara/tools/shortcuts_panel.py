@@ -21,16 +21,10 @@ from pyguara.tools.manager import ToolManager
 class ShortcutsPanel(Tool):
     """Lists the live tool shortcuts, read from the `ToolManager` itself.
 
-    The toggle table is built from `ToolManager.iter_shortcuts()` at render
-    time, so it cannot drift from what `SandboxApplication` actually
-    registered -- which is the only reason this panel survived the overlay
-    losing five of its tools without needing an edit. Falls back to just
-    F12 if no `ToolManager` is in the container.
+    The table is built from `ToolManager.iter_shortcuts()` at render time.
+    It falls back to F12 alone if no `ToolManager` is in the container.
 
-    One line is hard-coded, and deliberately: that authoring lives in
-    PyGuara Studio. Someone reaching for F2 or F9 out of habit opens this
-    panel next, and an overlay that simply no longer lists them leaves
-    them looking for a key that was removed rather than moved.
+    One line is hard-coded: that authoring lives in PyGuara Studio.
     """
 
     def __init__(self, container: DIContainer) -> None:

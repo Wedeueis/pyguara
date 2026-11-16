@@ -1,24 +1,11 @@
 """Derive a column layout from a component dataclass.
 
-A columnar component is declared exactly like any other: a dataclass with
-typed fields. What makes it columnar is that every field has a fixed-width
-numeric type, so its values can live in native columns rather than in one
-Python object per entity.
-
-| Field type | Columns |
-| --- | --- |
-| `float` | one `f8` |
-| `int` | one `i8` |
-| `bool` | one `u1` |
-| `Vector2` | two `f8`, named `<field>.x` and `<field>.y` |
-
-A Python `float` maps to `f8` and not `f4` on purpose: a column has to hold
-exactly the value that was written, or a system reading it diverges from
-the same arithmetic done on objects in its last bits.
-
-Anything else -- a string, a list, another object -- raises, naming the
-field. Such a component stays in the object ECS; that is the hybrid the
-design calls for, not a gap in this module.
+A columnar component is a dataclass whose every field is a `float`
+(one `f8` column), an `int` (`i8`), a `bool` (`u1`) or a `Vector2`
+(two `f8`, named `<field>.x` and `<field>.y`), so its values can live
+in native columns. A `float` is `f8`, not `f4`, so a column holds
+exactly the value that was written. Any other field type raises,
+naming the field.
 """
 
 from __future__ import annotations

@@ -1,23 +1,22 @@
 """Turn a map's objects into entities, through prefabs.
 
-The loaders stop at data, so `pyguara/tilemap` stays a grid of integers that can
-be tested without a world. This module is the one place the map meets the ECS:
-`load_tmx` says an object has `type` "Bat", and the game says which prefab that
-means.
+The loaders stop at data; this module is where a map meets the ECS.
+A loader says an object has `type` "Bat", and the game says which
+prefab that means.
 
-```python
-map_ = load_tmx("levels/cave.tmx")
-spawned = spawn_objects(
-    map_,
-    factory,
-    {"Bat": bat_prefab, "Door": door_trigger_prefab},
-    ignore_types={"CameraBounds"},  # read through `map_.objects(...)` instead
-)
-```
+In Tiled, a custom property named `Component.field` overrides that
+field on the spawned entity (`Health.max = 30`, or deeper,
+`Transform.scale.x = 2`). Any other property stays on
+`SpawnedObject.source.properties`.
 
-In Tiled, a custom property named `Component.field` overrides that field on the
-spawned entity (`Health.max = 30`, or deeper, `Transform.scale.x = 2`). Any other
-property is the game's own: it stays on `SpawnedObject.source.properties`.
+Example:
+    map_ = load_tmx("levels/cave.tmx")
+    spawned = spawn_objects(
+        map_,
+        factory,
+        {"Bat": bat_prefab, "Door": door_trigger_prefab},
+        ignore_types={"CameraBounds"},
+    )
 """
 
 from __future__ import annotations
@@ -72,22 +71,15 @@ def spawn_objects(
 ) -> list[SpawnedObject]:
     """Spawn an entity for every typed object on a map.
 
-    **All or nothing.** Every object is checked before the first is spawned, so
-    a map with a mistake raises with the whole list of what is wrong, rather than
-    leaving half a level in the world.
+    All or nothing: every object is checked before the first is spawned,
+    and a map with a mistake raises with the whole list. An object with no
+    `type` is skipped. A `type` with no prefab is an error unless it is in
+    `ignore_types`.
 
-    An object with no `type` names nothing, so it is skipped. An object whose
-    `type` has no prefab raises: a silently unspawned enemy is a bug nobody finds
-    until they notice the room is empty. Name a type in `ignore_types` to say it
-    is handled elsewhere.
-
-    The entity's `Transform` is placed at the object's centre, not its `(x, y)`,
-    because a collider is centred on its transform. A sized rectangle or a circle
-    also sets the shape of any `Collider` or `TriggerVolume` in the prefab, unless
-    a `Component.field` property states it outright. A polygon or polyline cannot
-    be a collider, because `Collider.dimensions` cannot carry vertices, and asking
-    for that raises rather than falling back to a bounding box that collides where
-    nothing is drawn.
+    The entity's `Transform` is placed at the object's centre. A sized
+    rectangle or a circle also sets the shape of any `Collider` or
+    `TriggerVolume` in the prefab, unless a `Component.field` property
+    states it. A polygon or polyline cannot be a collider and raises.
 
     Args:
         tilemap: The map to read.

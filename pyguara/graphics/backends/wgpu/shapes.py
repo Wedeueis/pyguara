@@ -1,15 +1,12 @@
-"""`ShapeBatch` on wgpu: ModernGL's shape shader, ported.
+"""`ShapeBatch` on wgpu.
 
-A batch's rows are already the instance layout `shape.vert` reads --
-centre, padded half-size, rotation, colour, stroke, kind -- so they go to
-the GPU as they are, one instanced draw for the whole batch.
+A batch's rows are already the instance layout the shape shader reads
+(centre, padded half-size, rotation, colour, stroke, kind), so they go
+to the GPU as they are, one instanced draw for the whole batch.
 
-**These follow ModernGL's conventions, not pygame's.** A line in a batch is
-a capsule with rounded ends, and a circle's edge is a signed distance at
-the pixel centre. The renderer's per-primitive `draw_line` and
-`draw_circle` match pygame instead. They meet in `Sparks`, the one
-producer of batches, and those are the shapes the demos that use sparks
-were made to look like on ModernGL, which is what stage D holds them to.
+A batched line is a capsule with rounded ends, and a batched circle's
+edge is a signed distance at the pixel centre. The renderer's
+per-primitive `draw_line` and `draw_circle` match pygame instead.
 """
 
 from __future__ import annotations

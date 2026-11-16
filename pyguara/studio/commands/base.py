@@ -1,24 +1,13 @@
 """The edit command: the one way authored state changes in Studio.
 
-Everything that mutates a scene -- a human dragging a gizmo, a command
-palette entry, an agent calling a tool over MCP -- produces one of these
-and hands it to a `CommandStack`. That single seam is what makes undo,
-a reviewable journal and diffable agent edits the same mechanism rather
-than three parallel ones.
+Everything that mutates a scene (a gizmo drag, a palette entry, an
+agent's tool call) produces an `EditCommand` and hands it to a
+`CommandStack`. See ADR 0001.
 
-**Commands capture their own inverse, at apply time.** They are mementos,
-not descriptions: `SetField` records the old value as it writes the new
-one, and `DestroyEntity` snapshots the subtree it is about to cascade
-through. The alternative -- deriving an inverse from the engine's event
-stream -- was considered and rejected when `EventDispatcher._event_history`
-was audited: engine events carry no inverse, so nothing in that stream can
-say what a value was before it changed.
-
-A consequence of capturing at apply time: a command instance is a record
-of one application. `apply()` twice without an intervening `revert()`
-raises, because the second call would overwrite the captured inverse with
-state the first call already produced, and the undo would restore the
-wrong thing.
+A command captures its own inverse when it is applied: `SetField`
+records the old value as it writes the new one. So a command instance
+is a record of one application, and `apply()` twice without a
+`revert()` between raises.
 """
 
 from __future__ import annotations
@@ -32,7 +21,7 @@ from pyguara.ecs.manager import EntityManager
 class EditError(Exception):
     """A command cannot be applied, and nothing was changed.
 
-    Raised by `apply()` **before** it mutates anything, so a failed command
+    Raised by `apply()` before it mutates anything, so a failed command
     never leaves half an edit behind and is never pushed onto the stack.
     The message is shown to whoever asked for the edit -- a human in a
     toast, an agent as a tool error -- so it names what was wrong and, where

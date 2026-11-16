@@ -1,13 +1,10 @@
-"""The flagship #28 recipe: a dungeon of rooms with doors and a critical path.
+"""A dungeon of rooms with corridors and a critical path, built on BSP.
 
-Built entirely on `bsp.py`'s genre-agnostic tree -- a room is a smaller
-`Rect` carved inside a leaf's bounds, and the BSP merge tree itself *is*
-the critical path: connecting each subtree's representative room to its
-sibling's, bottom-up, both guarantees every room is reachable and
-produces the branching structure a roguelike floor wants, with no
-separate graph or MST algorithm needed. "Doors" are left implicit --
-wherever a corridor `Rect` meets a room `Rect` is where one would go; this
-doesn't model them as a separate structure.
+A room is a smaller `Rect` carved inside a leaf's bounds. The BSP tree
+is the critical path: each subtree's representative room is connected
+to its sibling's, bottom-up, which makes every room reachable and
+gives the floor its branching. Doors are not modelled; one would go
+wherever a corridor `Rect` meets a room `Rect`.
 """
 
 from __future__ import annotations

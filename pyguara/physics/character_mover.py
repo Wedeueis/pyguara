@@ -1,30 +1,14 @@
 """Move a character by sweeping it and stopping flush against what it hits.
 
-The engine's platformer characters are dynamic rigid bodies whose velocity is
-assigned each tick. That works until the character is pressed into geometry:
-the solver is left to push it back out, and while it does, the character is
-*inside* the world. Measured in guara_falcao, a character that jumped while
-running landed 8px inside the floor and climbed out at 0.04px a tick -- it
-reads as sinking into the ground.
+The mover steps the character itself and stops it the moment the next
+step would overlap a solid, so it never penetrates geometry. This is
+the model of Celeste's `Actor` and `Solid`.
 
-This is the other approach, and the one platformers generally use (Godot's
-`move_and_slide`, Unity's `CharacterController`, and -- the model this
-follows -- Celeste's `Actor`/`Solid`): move the character yourself, and stop
-it flush the moment the next step would overlap something. Penetration is
-not resolved after the fact because it never happens.
-
-Position is kept to whole pixels. A float `remainder` accumulates whatever
-motion didn't add up to a whole pixel yet -- gravity at 900px/s^2 is 15px a
-tick at 60Hz but rarely a whole number of pixels -- so nothing is lost to
-rounding and nothing drifts: the same input produces the same motion
-regardless of how the sub-pixel amounts happened to fall. Only whole pixels
-are ever stepped, and every one of them is tested, which is what makes
-tunnelling impossible without a bisection to settle where the character
-actually stops -- the last free whole pixel *is* the answer.
-
-What this deliberately does not do: rotate, or handle slopes. It is an
-axis-aligned mover for characters, not a physics solver. Pushing other
-boxes and being carried by moving ones is `SolidMover`, built on top of this.
+Position is kept to whole pixels. A float `remainder` accumulates the
+motion that has not yet added up to a pixel, so nothing is lost to
+rounding. Every whole pixel stepped is tested, so a fast character
+cannot tunnel. It does not rotate or handle slopes. See
+`docs/physics/character-movement.md`.
 """
 
 from __future__ import annotations

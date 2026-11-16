@@ -83,16 +83,12 @@ class Resource(ABC):
     def size_bytes(self) -> int:
         """Roughly how much memory this resource occupies.
 
-        What `ResourceManager`'s cache budget counts. An estimate, not a
-        measurement: the real figure lives in a backend's allocator and
-        often on the GPU, where Python cannot see it at all.
+        What `ResourceManager`'s cache budget counts. An estimate: the real
+        figure is in a backend's allocator, often on the GPU.
 
-        **Zero means "unknown", not "free".** The base class returns zero
-        rather than guessing, and a resource the budget cannot measure is
-        neither counted towards it nor evicted to satisfy it -- evicting
-        something of unknown size frees an unknown amount, which is not a
-        step towards a target. Subclasses that can estimate should, and
-        `Texture` does, which is where the memory actually is.
+        Zero means "unknown", not "free". A resource of unknown size is
+        neither counted towards the budget nor evicted to satisfy it.
+        Subclasses that can estimate should; `Texture` does.
 
         Returns:
             Bytes, or 0 when unknown.
@@ -102,21 +98,13 @@ class Resource(ABC):
     def release(self) -> None:
         """Free whatever this resource holds outside Python's heap.
 
-        A no-op by default, because most resources hold nothing but
-        Python objects and dropping the last reference is enough.
+        A no-op by default. `ResourceManager` calls it on every eviction, so
+        a resource backed by a driver allocation (a GPU texture) frees it
+        here; the garbage collector cannot.
 
-        It exists so `ResourceManager` has something to call on every
-        eviction without knowing what kind of resource it is holding.
-        That matters for anything backed by a driver allocation: a
-        `GLTexture` owns a `moderngl.Texture` in VRAM, which the garbage
-        collector cannot see and will not free, so removing it from the
-        cache without calling this orphans it on the GPU for the life of
-        the process. `size_bytes` above counts that memory towards the
-        budget, so an eviction that does not free it evicts for nothing.
-
-        Implementations must be **idempotent** -- eviction and an explicit
-        teardown can both reach the same resource -- and must leave the
-        object safe to repr and to drop afterwards.
+        Implementations must be idempotent, since eviction and an explicit
+        teardown can both reach the same resource, and must leave the object
+        safe to repr and to drop afterwards.
         """
         return None
 

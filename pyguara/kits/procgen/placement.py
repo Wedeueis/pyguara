@@ -1,21 +1,12 @@
 """Deciding *what* goes where, under rules the caller writes.
 
-`poisson_disc_sample()` answers how far apart things may be.
-`generate_dungeon()` and `build_graph()` answer where the candidate spots
-are. Neither answers the question a level generator actually has to
-settle: which of these spots gets the shop, and which the boss, given that
-there may be only one shop per floor, that the vault needs a key
-somewhere before it, and that the two mini-bosses must not share a wing.
+`poisson_disc_sample()`, `generate_dungeon()` and `build_graph()`
+produce candidate spots. This module decides which spot gets which
+kind of thing, under frequency, spacing, dependency and exclusion
+rules. A rule reads caller-defined string kinds and slot tags; nothing
+here knows what a room is.
 
-#28 named constraint placement as one of `kits/procgen`'s four algorithm
-families and #120 shipped the spacing half of it. This is the other half.
-
-`reclaimer_legacy`'s `constraint_system.py` does all of this already, in
-roguelike-floor vocabulary -- `RoomType`, floor pacing, progression
-curves. Per #28's "mine it per kit, not wholesale", none of that comes
-across: a rule here reads caller-defined string kinds and slot tags, and
-the engine has never heard of a room.
-
+Example:
     slots = [Slot(position=p, tags={"dead_end"}, group=floor) for p in spots]
     result = place_items(
         slots,
@@ -406,17 +397,14 @@ def place_items(
 ) -> PlacementResult:
     """Assign kinds to slots, honouring every rule.
 
-    Greedy, randomised, and retried -- not a backtracking solver. A
-    generator runs inside a frame budget, and a CSP solver's runtime on a
-    bad instance is unbounded, which trades a slightly worse layout for an
-    occasional hang. Instead the whole assignment is attempted several
-    times from a shuffled slot order and the best result kept, which in
-    practice finds a complete placement whenever one is not tight, and
-    reports honestly when it does not.
+    Greedy, randomised and retried; not a backtracking solver, so its
+    running time is bounded. The whole assignment is attempted several
+    times from a shuffled slot order and the best result kept. Whatever
+    could not be placed is reported.
 
-    Requests are ordered by their `Requires` dependencies first -- a
-    prerequisite must be placed before its dependent, or the dependent's
-    rule can never pass -- then by priority, then by count.
+    Requests are ordered by their `Requires` dependencies first, so a
+    prerequisite is placed before its dependent, then by priority, then
+    by count.
 
     Args:
         slots: The candidate spots.

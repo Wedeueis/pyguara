@@ -1,22 +1,13 @@
 """The operations Studio ships with.
 
-Deliberately around twenty, grouped so an agent can hold the list in
-mind: look at the project, look at a scene, change a scene, manage the
-history, manage approvals. Rarer work goes behind `scene_file` and
-`history`, which take an `operation` argument, rather than becoming
-another dozen top-level entries -- a client has a limit on how many tools
-it will present, and an agent's accuracy falls as the list grows.
+About twenty, in five groups: look at the project, look at a scene,
+change a scene, manage the history, manage approvals. Rarer work goes
+behind `scene_file` and `history`, which take an `operation` argument.
 
-Three conventions run through all of them:
-
-- **An entity is named by id.** Not by index, not by a handle from an
-  earlier call. Ids survive undo, redo and reload, so an agent's second
-  call still means what its first one did.
-- **Errors name the alternative.** "No entity 'playr'" is a dead end;
-  "No entity 'playr'. Did you mean 'player'?" is a correction. The error
-  text *is* the agent's recovery path.
-- **Every edit returns its diff.** So the answer to "did that do what I
-  meant?" is in the reply, and does not cost another call.
+- An entity is named by id. Ids survive undo, redo and reload.
+- An error names the alternative: "No entity 'playr'. Did you mean
+  'player'?"
+- Every edit returns its diff.
 """
 
 from __future__ import annotations

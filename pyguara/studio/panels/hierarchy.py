@@ -1,31 +1,14 @@
 """The entity tree, over the ECS parent/child relation.
 
-Reads `EntityManager.parent_of()` / `children_of()` rather than keeping its
-own tree, so reparenting in game code shows up here on the next frame with
-no synchronisation step to get wrong.
+Reads `EntityManager.parent_of()` and `children_of()` each frame and
+keeps no tree of its own.
 
-Two things a flat list of 252 entities needs, both taken from Godot's Scene
-dock, where a real project lives with hundreds of nodes:
+- A filter narrows the list as it is typed.
+- Runs of siblings sharing a name prefix (`tile_0_0` to `tile_19_11`)
+  collapse into one foldable row. The grouping is display only:
+  nothing is reparented, and it disappears while a filter is active.
 
-- **A filter.** Typing narrows the list to what is being worked on. It is
-  the first thing in the dock there, and the reason a large scene is
-  navigable at all.
-- **Grouping.** Godot does not need it because a Godot scene *is* a tree:
-  a level's tiles hang off a `TileMap`. An ECS scene has no such pressure,
-  so a generated level arrives as hundreds of flat siblings -- `tile_0_0`
-  through `tile_19_11` -- and the panel that lists them one per row is
-  unreadable. Runs of siblings sharing a name prefix collapse into one
-  foldable row.
-
-The grouping is **display only**. No entity is named `tile`, nothing is
-reparented, and the groups vanish the moment a filter matches across them.
-Saying so matters: a row that looked like a parent but was not would be a
-worse lie than the long list it replaced.
-
-The panel reads and selects; it does not edit. Every change to the scene
-goes through Studio's operations so that it lands on one history and in
-one journal, and a panel in the base editor has no session to reach them
-through.
+The panel reads and selects; it does not edit.
 """
 
 from __future__ import annotations

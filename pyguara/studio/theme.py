@@ -1,21 +1,10 @@
 """How the editor looks.
 
-Dear ImGui's default style is a debug-overlay style: square corners, thin
-separators, a blue that was chosen to be visible rather than to be lived
-with. It reads as a diagnostic window bolted onto a game, which is what it
-usually is.
-
-An authoring tool is looked at for hours, so this is a deliberate palette
-rather than the default one. Three decisions carry most of it:
-
-- **Neutral greys, one accent.** Everything structural is a grey; the
-  accent is used only for what is selected or active. A UI that colours
-  many things colours nothing.
-- **Rounded, with real padding.** Square corners and tight padding are
-  what make a dense tool look like a form from 1998.
-- **Scaled, not assumed.** A fixed pixel size that is right on a 1280-wide
-  window is unreadable on a 4K one. `scale_for` derives a sensible factor
-  from the window, and a caller can override it.
+- Neutral greys and one accent, used only for what is selected or
+  active.
+- Rounded corners and generous padding.
+- Scaled to the window: `scale_for` derives a factor from the window
+  size, and a caller can override it.
 """
 
 from __future__ import annotations

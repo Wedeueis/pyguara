@@ -17,13 +17,9 @@ class DataResource(Resource):
     'EnemyData', or 'LevelConfig'. It allows these data structures to be
     managed, cached, and hot-reloaded by the ResourceManager.
 
-    The format is whatever the registered loader parsed. Through
-    `ResourceManager` that means **JSON only** today -- `JsonLoader`
-    (`.json`, `.manifest`, `.config`) is the sole data loader registered.
-    This docstring used to say "JSON/YAML"; YAML is reachable only through
-    `pyguara.prefabs.loader`, which has its own optional `yaml` import and
-    does not go through `ResourceManager` at all. Adding a YAML loader here
-    is listed under #40's lesser gaps.
+    Through `ResourceManager` the format is JSON: `JsonLoader` (`.json`,
+    `.manifest`, `.config`) is the only data loader registered. YAML is
+    read only by `pyguara.prefabs.loader`.
 
     Attributes:
         data (Dict[str, Any]): The raw data dictionary loaded from disk.

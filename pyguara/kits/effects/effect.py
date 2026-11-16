@@ -1,13 +1,9 @@
 """The generic, overridable gameplay effect.
 
-A plain domain object, like `Modifier`/`ModifiableValue` -- not an ECS
-component. No fixed subtypes or categories: `reclaimer_legacy` baked in
-four (Augmentation/Response/Tactical/Adaptive); per #28, that's game data
-here, not something this kit's type system imposes. What an effect
-actually *does* -- apply a `kits.stats` modifier, subscribe to a
-`kits.action_combat.DamageDealt` (or any other kit's event), tick damage
-each frame -- is entirely up to the subclass; this kit is coupled to other
-kits only through core event dispatch, never a direct import.
+A plain domain object, like `Modifier`/`ModifiableValue`, not an ECS
+component. It has no fixed subtypes or categories. What an effect does
+(apply a `kits.stats` modifier, subscribe to another kit's event, tick
+damage each frame) is up to the subclass.
 """
 
 from __future__ import annotations

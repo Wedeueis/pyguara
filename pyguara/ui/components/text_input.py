@@ -27,17 +27,8 @@ _CTRL = frozenset({keys.L_CTRL, keys.R_CTRL})
 class TextInput(Widget):
     """An editable text field with a caret, a selection and a clipboard.
 
-    It had none of those. `insert_text` appended, so typing in the middle
-    of a value was impossible; DELETE was aliased to BACKSPACE, so there
-    was only one direction to erase in; and the caret was drawn from the
-    measured width of the whole string, which pinned it to the end
-    whatever you did. There were no arrows, no Home or End, no selection
-    and no clipboard, in 136 lines that read as a finished widget.
-
-    The IME foundation was already right and is unchanged: composed text
-    arrives through `insert_text()` from `TextInputEvent` rather than
-    being guessed from a key code, so accented and non-US input works.
-    What is added sits beside it.
+    Composed text arrives through `insert_text()` from `TextInputEvent`,
+    not from key codes, so accented and IME input works.
 
     Attributes:
         cursor: Where the caret sits, as an index between characters, so
@@ -168,9 +159,6 @@ class TextInput(Widget):
         This is the path real typing takes. It receives the characters the
         platform produced -- after layout, modifiers and IME composition --
         rather than a key code this widget has to guess a character from.
-
-        It used to append, which made typing anywhere but the end of the
-        value impossible.
 
         Args:
             text: The composed text, usually one character.
@@ -342,8 +330,6 @@ class TextInput(Widget):
 
     def _erase(self, direction: int) -> None:
         """Delete the selection, or one character.
-
-        DELETE used to be aliased to BACKSPACE, so the two were one key.
 
         Args:
             direction: -1 to erase before the caret, 1 to erase after.

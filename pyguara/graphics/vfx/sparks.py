@@ -1,35 +1,19 @@
 """Coloured shape particles: sparks, embers, splashes, debris.
 
-A pool of short-lived primitives drawn through `IRenderer.draw_circle` and
-`draw_line` rather than as textured sprites.
+A pool of short-lived primitives drawn through `IRenderer.draw_circle`
+and `draw_line`, not as textured sprites. Use `ParticleSystem` when
+particles are sprites; a spark has no texture, takes a colour per
+primitive, and batches each shape type into one instanced draw.
 
-`ParticleSystem` is the right tool when particles *are* sprites. These are
-not: a spark has no texture to bind, and none worth authoring for a
-two-pixel dot. The shape path takes a colour per primitive, binds no
-texture at all, and still batches each shape type into one instanced draw
-call, so an ember, a blood spray or a rain splash costs less through
-shapes than through sprites.
+Uses the native pool when the extension is built, which hands the
+primitives to the renderer through `ShapeBatch`. See
+`docs/guides/performance.md`.
 
-This module once justified itself differently -- that ModernGL's sprite
-path carried no per-instance tint, so a textured particle could only ever
-be white. That was true, and is no longer: the GL sprite path packs an
-RGBA tint per instance. The reasoning above is the one that survives it.
-
-Typical use, composed into a scene rather than resolved from DI::
-
+Example:
     sparks = Sparks()
     sparks.burst(position, Color(255, 180, 60), count=14, streak=True)
     sparks.update(dt)
     sparks.render(renderer, offset=shake_offset)
-
-Backed by the optional native pool when the extension is built, which is
-13-20x on a spark frame. Unlike `ParticleSystem`, most of that comes from
-the *render* half: a spark costs a whole `draw_circle` or `draw_line` call
-where a particle costs a share of one batch, so 55-71% of a Python spark
-frame is call overhead. The native path packs the primitives in Rust and
-hands them over through `ShapeBatch`, which is why that type exists. A
-renderer that cannot take a batch still gets one call per spark, and the
-pure-Python pool runs when there is no extension at all.
 """
 
 from __future__ import annotations
@@ -216,20 +200,12 @@ class Sparks:
     ) -> None:
         """Emit a burst into the native pool, in one crossing.
 
-        **The random draws stay here on purpose**, for the reason
-        `ParticleSystem._emit_native` gives: a burst takes three draws per
-        spark from the engine's seeded stream, and a replay reproduces a
-        run by restoring that seed. Drawing them in Rust would put them
-        outside what the seed controls. They are computed here and handed
-        over as whole arrays, so this is one FFI call however many sparks
-        it spawns.
+        The random draws stay in Python, as in `ParticleSystem._emit_native`:
+        a burst takes three per spark from the engine's seeded stream, and a
+        replay restores that seed. They are handed over as whole arrays.
 
-        **Only as many as will fit are drawn for**, because the Python pool
-        draws nothing for a spark it cannot place -- it asks for a slot
-        first and gives up when there is none. Drawing `count` sets
-        regardless would leave the two paths' streams at different
-        positions after any burst that overflowed, and every later burst
-        would then differ.
+        Only as many sparks as will fit are drawn for, as the Python pool
+        does, so both leave the stream at the same position.
 
         Args:
             position: Screen-space origin.
@@ -335,18 +311,9 @@ class Sparks:
     def _render_native(self, renderer: IRenderer, offset: Vector2) -> None:
         """Draw the native pool, batched where the renderer can take it.
 
-        This is the half of the port that pays. A spark is one primitive,
-        so the Python pool makes one `draw_circle` or `draw_line` call per
-        live spark and spends most of a busy frame in that call overhead
-        rather than in arithmetic. A renderer that implements
-        `ShapeBatchRenderer` instead receives two calls for the whole pool,
-        with the primitives packed natively: measured 8-15x on the render
-        half and 13-20x on the frame.
-
-        A renderer that cannot batch gets one call per spark, as before --
-        batching is free only on the GPU world renderers (ModernGL, wgpu),
-        and a software backend would be doing this loop internally anyway. The arithmetic is still native, which is the 1.9x that
-        remains.
+        A renderer that implements `ShapeBatchRenderer` receives two calls for
+        the whole pool, with the primitives packed natively. Any other
+        renderer gets one call per spark.
 
         Args:
             renderer: Target renderer, batched if it can be.

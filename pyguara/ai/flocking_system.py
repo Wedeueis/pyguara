@@ -92,32 +92,13 @@ def flock_force(
     """Sum cohesion, alignment and separation in a single pass.
 
     Equivalent to calling `SteeringBehavior.cohesion`, `.alignment` and
-    `.separation` and summing the weighted results -- `test_ai_flocking.py`
-    asserts that equivalence directly, because it is the whole safety net
-    for this function existing at all.
+    `.separation` and summing the weighted results, in one iteration over
+    the neighbours.
 
-    It exists because the three behaviours each want a different reduction
-    over the *same* neighbour list: cohesion needs the mean position,
-    alignment the mean velocity, separation a distance-weighted push. Run
-    separately that is three iterations plus two `sum(..., Vector2(0, 0))`
-    allocations, on top of the pass that collected the neighbours. Fused,
-    it is one.
-
-    The arithmetic is scalar, and that is deliberate rather than an
-    aesthetic lapse. `Vector2` subclasses a `pymunk` NamedTuple whose
-    `__add__` probes `hasattr(other, "x")` and `hasattr(other, "y")` before
-    reconstructing -- measured at 452 ns against 69 ns for the equivalent
-    float pair, 6.5x. An inner loop that runs once per neighbour per agent
-    per tick cannot afford that, so `Vector2` is built only at the two
-    boundaries: the arguments coming in and the force going out.
-
-    Distances are compared squared wherever the comparison allows it, so
-    the loop takes at most one `sqrt` per neighbour and none at all for a
-    neighbour outside the separation radius.
-
-    `seek` is deliberately not folded in: it takes a caller-supplied
-    target rather than anything about the neighbourhood, so it costs one
-    call per agent regardless and reads better left where it is.
+    The arithmetic is on floats, not `Vector2`, on purpose: this loop runs
+    once per neighbour per agent per tick. Distances are compared squared,
+    so there is at most one `sqrt` per neighbour. `seek` is not included;
+    it depends on a caller's target, not on the neighbourhood.
 
     Args:
         position: The steering agent's own world position.
@@ -215,30 +196,16 @@ def flock_force(
 class FlockingSystem:
     """Ticks every `FlockingAgent` toward its neighbors, each frame.
 
-    Neighbor query, weighted force sum, F=ma integration -- the same
-    integration shape as `SteeringSystem`.
+    Neighbor query, weighted force sum, F=ma integration: the same
+    integration shape as `SteeringSystem`. A fresh `SpatialHash` is built
+    every `update()` from the entities' current positions.
 
-    A fresh `SpatialHash` is built every `update()` from the entities'
-    current positions rather than incrementally maintained: this system
-    already visits every `FlockingAgent` each tick regardless, so a full
-    rebuild costs nothing extra and, unlike an incrementally-maintained
-    hash, can never accumulate a stale entry for a despawned entity.
+    Uses the native extension when it is available; see ADR 0004,
+    Decision 3, and `docs/guides/performance.md`.
 
-    Backed by the optional native extension when it is available, which
-    is **8.6x** at 1000 agents -- 16 ms down to 1.9 ms, or 96% of a frame
-    budget down to 11% -- and up to 19x on a clumped flock, which is the
-    case a horde converging on the player creates. It prices far below
-    the flow field's 57x for a structural reason worth knowing before
-    trying to improve it: a flock is not *opaque*. Every agent is an ECS
-    entity whose `Transform` other systems read, so the whole flock
-    crosses the boundary every tick and the crossing is 63% of a native
-    tick. See `docs/adr/0004-the-native-boundary.md`, Decision 3.
-
-    **The sweep order is reproducible across processes**, because
-    `get_entities_with_cached` keeps insertion order. That matters because the
-    sweep is Gauss-Seidel, so the order is part of the simulation: a seeded
-    flock ticks the same way every run, on either store. It used to iterate a
-    set of uuid4 ids, and did not (#324).
+    The sweep is Gauss-Seidel, so its order is part of the simulation. It
+    follows entity insertion order, so a seeded flock ticks the same way
+    every run, on either store.
 
     Example:
         >>> system_manager.register(FlockingSystem(entity_manager), priority=150)
@@ -318,22 +285,13 @@ class FlockingSystem:
     ) -> Iterable[tuple[Vector2, Vector2]]:
         """Yield `(position, velocity)` for each flockmate in range.
 
-        A generator, so the neighbourhood is never materialised as two
-        lists that each get iterated again downstream -- which is the
-        allocation `flock_force` exists to avoid.
+        The hash is keyed on a slot in `transforms`/`agents`, not on an entity
+        id, so resolving a neighbour is two list subscripts.
 
-        The hash is keyed on a position in `transforms`/`agents`, not on an
-        entity id, so resolving a neighbour is two list subscripts instead
-        of a manager lookup plus two component lookups. That is the single
-        largest cost in a flocking tick at scale.
-
-        Both reads are deliberately *live* rather than snapshotted. The
-        pre-existing behaviour is Gauss-Seidel: the hash is built from
-        start-of-tick positions, but an agent steering later in the tick
-        sees the already-moved positions of the agents ahead of it.
-        Snapshotting into flat float arrays would quietly convert that to
-        Jacobi and change how a flock settles, which is not a change a
-        performance commit should be making.
+        Both reads are live, not snapshotted: the hash is built from
+        start-of-tick positions, but an agent steering later in the tick sees
+        the already-moved positions of the agents ahead of it. Snapshotting
+        would change how a flock settles.
 
         Args:
             index: The steering agent's own slot, excluded from its neighbours.
@@ -358,16 +316,9 @@ class FlockingSystem:
     ) -> list[float]:
         """Flatten the flock into one row of `_STRIDE` floats per agent.
 
-        The upload half of the native crossing, and unavoidable: unlike a
-        flow field, a flock is not opaque -- every agent is an ECS entity
-        whose position other systems read -- so there is no version of
-        this that keeps the state native between ticks. Measured at 0.25
-        ms for 1000 agents.
-
-        `seek_weight` is zeroed here when there is no target, rather than
-        sending a presence flag, so the native side's `!= 0.0` is exactly
-        this method's `agent.seek_weight and agent.seek_target is not
-        None`.
+        `seek_weight` is zeroed here when there is no target, so the native
+        side's `!= 0.0` means exactly `agent.seek_weight and
+        agent.seek_target is not None`.
 
         Args:
             agents: This tick's `FlockingAgent` components, by slot.
@@ -417,19 +368,12 @@ class FlockingSystem:
     ) -> None:
         """Steer the whole flock in one crossing, and write the result back.
 
-        The write-back is the expensive half -- 0.6 ms of the 0.9 ms
-        crossing at 1000 agents, against a 0.5 ms native solve -- and
-        almost all of it is building the two `Vector2` each agent needs.
-        Hence `_new_vector`: `tuple.__new__(Vector2, pair)` is what
-        `NamedTuple._make` calls, produces an identical object, and is
-        **1.8x** cheaper than `Vector2(x, y)`, which runs namedtuple's
-        generated `__new__` first. That is 15% of a native tick, so it is
-        worth the one line of explanation.
+        The write-back builds its vectors with `_new_vector`, which is cheaper
+        than `Vector2(x, y)` and produces an identical object.
 
-        A disabled agent is skipped rather than written back with the
-        unchanged row the solver returns for it, so that the Python and
-        native paths leave an identical object graph and not merely
-        identical values.
+        A disabled agent is skipped, not written back with the unchanged row
+        the solver returns for it, so the Python and native paths leave an
+        identical object graph.
 
         Args:
             dt: Delta time in seconds.

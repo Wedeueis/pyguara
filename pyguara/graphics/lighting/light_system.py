@@ -33,14 +33,9 @@ class LightData:
     Contains screen-space position and normalized parameters
     for the GPU.
 
-    The cone terms are resolved here rather than in the shader:
     `spot_cos_half_angle` is the cosine of half the cone's opening,
-    precomputed on the CPU so `light.frag` compares two dot products
-    instead of calling `cos` once per fragment.
-
-    `intensity` is the *resolved* intensity, flicker already folded in --
-    a flickering light's value changes every frame, and nothing downstream
-    needs to know why.
+    computed here so the shader does not call `cos` per fragment.
+    `intensity` is the resolved intensity, flicker included.
     """
 
     position: Vector2  # Screen position (pixels)
@@ -179,17 +174,10 @@ class LightingSystem:
     def _resolve_flicker(self, entity_id: str, light: LightSource, dt: float) -> float:
         """Advance this light's flicker phase and return its intensity now.
 
-        Resolved on the CPU, deliberately. This system already iterates
-        every light every frame and already has `dt`, so doing it here
-        needs no time uniform and no extra instance attribute -- and,
-        decisively, it stays testable without a GL context, which is the
-        only kind of lighting test this repo can run.
-
-        The waveform is two sines at incommensurate frequencies rather
-        than one, so a torch reads as guttering instead of pulsing, and
-        `RandomStream` stays out of it: a light's brightness should not
-        depend on how many other systems drew from a shared stream this
-        frame.
+        Resolved on the CPU, so it needs no time uniform and is testable
+        without a GPU. The waveform is two sines at incommensurate
+        frequencies. It does not draw from `RandomStream`, so a light's
+        brightness does not depend on what else used the stream this frame.
 
         Args:
             entity_id: Identifies this light's phase across frames.
@@ -225,12 +213,8 @@ class LightingSystem:
         """Get lights with positions transformed to screen space.
 
         The transform is `Camera2D`'s single world-to-screen definition:
-        `world * zoom + screen_offset`. This used to subtract the camera
-        position here as well, on top of the `screen_offset` that already
-        has it subtracted out -- so every light was displaced by a whole
-        camera position, which on a centred camera threw the entire light
-        map off the left of the frame. `PulsePass` hit and documented the
-        same double-subtraction; this is the other half of it.
+        `world * zoom + screen_offset`. The camera position is already in
+        `screen_offset` and is not subtracted again.
 
         Args:
             camera_zoom: Camera zoom factor.

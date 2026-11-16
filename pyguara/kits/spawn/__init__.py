@@ -1,10 +1,9 @@
-"""#28's spawn kit: a schedule- and pacing-gated wave/encounter director.
+"""The spawn kit: a schedule- and pacing-gated wave/encounter director.
 
-`SpawnDirector` never knows what's being spawned -- a `SpawnEntry`'s
-factory is an opaque callable the game builds, closing over whatever
-context (position, enemy type) it needs. TD wave-clear-to-advance and
-arena/horde continuous pressure are the same mechanism with different
-`Wave` parameters and a different schedule, not different code paths.
+`SpawnDirector` never knows what is being spawned: a `SpawnEntry`'s
+factory is an opaque callable the game builds. Tower-defence waves and
+continuous horde pressure are the same mechanism with different `Wave`
+parameters and a different schedule.
 """
 
 from pyguara.kits.spawn.director import SpawnDirector, SpawnEntry, Wave

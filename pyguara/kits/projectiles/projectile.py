@@ -14,11 +14,9 @@ from pyguara.resources.types import Texture
 class Projectile:
     """A single pooled projectile, mirroring `ParticleSystem`'s `Particle`.
 
-    Not an ECS entity, and not `TriggerVolume`/`Hitbox`-based -- collision
-    is `ProjectileSystem` querying the core spatial hash (#98) directly,
-    the design the spatial hash's own "shooter bullets" use case was named
-    for. This carries the same combat fields `Hitbox` does, since a hit
-    calls the same `apply_damage()`.
+    Not an ECS entity: `ProjectileSystem` checks it against the core
+    spatial hash. It carries the same combat fields `Hitbox` does, since a
+    hit calls the same `apply_damage()`.
 
     Attributes:
         position: Current world position.

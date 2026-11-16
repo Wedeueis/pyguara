@@ -1,29 +1,13 @@
 """Whether Dear ImGui is importable, resolved once here.
 
-This module exists because of how the engine's *previous* ImGui editor
-died. `pyguara/editor/layer.py` imported `imgui.integrations.pygame`, which
-transitively ran `import OpenGL.GL`; PyOpenGL was a dependency nowhere, so
-`HAS_IMGUI` was unconditionally `False` in **every** install configuration.
-`initialize()` logged "ImGui not found. Editor disabled.", every panel and
-drawer method early-returned, and the whole 705-line subsystem never
-executed once before it was deleted (2026-09-08, `refactor/editor-audit`).
+`imgui_bundle.imgui` needs no OpenGL binding to create a context or
+build a frame; the draw data is rasterised by `WgpuImGuiRenderer`. The
+test suite asserts the flag is true on a dev install, so the editor
+cannot switch itself off unnoticed.
 
-Two things stop that recurring, and both matter more than the flag itself:
-
-1. **Nothing here reaches for a GL loader.** `imgui_bundle.imgui` is the
-   C++ core; it needs no OpenGL binding to create a context or build a
-   frame. The draw data is rasterised by `WgpuImGuiRenderer` through
-   the engine's own native wgpu frame, so there is no second, undeclared
-   GL stack to go missing.
-2. **A test asserts this flag is `True`.**
-   `tests/studio/test_editor_availability.py` fails if a dev install
-   cannot import ImGui, so the editor cannot quietly switch itself off
-   again. A flag nothing asserts on is how the last one hid.
-
-Importing this module imports `imgui_bundle` when it is installed, which
-is the one thing to know before importing it somewhere new: it is not a
-cheap probe. Everything the agent transport loads keeps it inside a
-function -- see `pyguara/studio/attach.py`.
+Importing this module imports `imgui_bundle` when it is installed, so
+it is not a cheap probe. Anything the agent transport loads must
+import it inside a function; see `pyguara/studio/attach.py`.
 """
 
 from __future__ import annotations

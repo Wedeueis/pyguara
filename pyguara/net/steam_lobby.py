@@ -1,21 +1,14 @@
 """Steam lobbies: who may join a hosted game, and where a guest connects.
 
-A host opens a **friends-only** lobby. Steam shows "Join Game" to the host's
-friends through rich presence, and the overlay's invite dialog sends invites.
-Being in the lobby is what admits a player: each member who enters becomes
-`MemberAdmitted` (allow that Steam ID on the transport) and each who leaves
-becomes `MemberRemoved` (revoke it). A guest enters the lobby first and then
-connects to its owner, which `LobbyJoined` names.
+A host opens a friends-only lobby. Each member who enters becomes
+`MemberAdmitted` and each who leaves `MemberRemoved`. A guest enters
+the lobby and then connects to its owner, which `LobbyJoined` names.
 
-`SteamLobby` is sans-IO over the slice of `NativeSteam` it uses
-(`SteamLobbyApi`), so it runs against a fake in tests. It neither drains
-Steam's callbacks nor touches a transport: the caller feeds it every tuple
-`NativeSteam.run_callbacks()` returns, and acts on the events it gives back.
-
-Everything from a lobby or a friend's rich presence is untrusted. A lobby ID
-arriving that way is parsed strictly by `parse_lobby_id`, and a join request
-is only reported -- never acted on -- so the game decides whether to leave
-what it is doing.
+`SteamLobby` is sans-IO: the caller feeds it every tuple
+`NativeSteam.run_callbacks()` returns and acts on the events it gives
+back. Everything from a lobby or a friend's rich presence is
+untrusted: `parse_lobby_id` is strict, and a join request is only
+reported.
 """
 
 from __future__ import annotations

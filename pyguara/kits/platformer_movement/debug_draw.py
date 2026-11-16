@@ -1,21 +1,18 @@
 """Debug drawing for the platformer's ground and wall probes.
 
-Split from `pyguara.physics.debug_draw.ColliderDebugRenderer`, which drew
-these alongside collider outlines and had to import `PlatformerController`
-to do it. Core never imports a kit (see `pyguara.kits`), so the probe
-drawing follows the component it reads.
+Lives in the kit because it reads `PlatformerController`, and core
+never imports a kit. Compose it with
+`pyguara.physics.debug_draw.ColliderDebugRenderer` when debugging a
+platformer.
 
-Compose the two when debugging a platformer:
-
-```python
-self._debug = [
-    ColliderDebugRenderer(self.entity_manager),
-    PlatformerProbeDebugRenderer(self.entity_manager),
-]
-...
-for drawer in self._debug:
-    drawer.render(renderer, camera_offset)
-```
+Example:
+    self._debug = [
+        ColliderDebugRenderer(self.entity_manager),
+        PlatformerProbeDebugRenderer(self.entity_manager),
+    ]
+    ...
+    for drawer in self._debug:
+        drawer.render(renderer, camera_offset)
 """
 
 from __future__ import annotations

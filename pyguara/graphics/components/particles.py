@@ -309,27 +309,14 @@ class ParticleSystem:
     ) -> None:
         """Spawn a burst into the native pool.
 
-        **The random draws stay here on purpose.** `emit` takes three per
-        particle from the engine's seeded `RandomStream` -- angle, speed and
-        initial rotation -- and a replay restores that seed to reproduce a
-        run. Drawing them in Rust would put them outside what the seed
-        controls, so a recorded session would stop reproducing. They are
-        computed here and handed over as whole arrays, which also satisfies
-        the one-crossing-per-burst rule: this is a single FFI call however
-        many particles it spawns.
+        The random draws stay in Python: `emit` takes three per particle from
+        the engine's seeded `RandomStream`, and a replay restores that seed.
+        They are handed over as whole arrays, in one call per burst. The
+        arithmetic matches the Python path exactly, including building each
+        direction through `Vector2.rotate_degrees`.
 
-        The arithmetic is kept identical to the Python path, including
-        building each direction through `Vector2.rotate_degrees` -- a
-        faster formulation here would make the two paths disagree, and
-        parity is worth more than a burst being slightly cheaper.
-
-        **Only as many as will fit are drawn for.** The Python loop asks
-        for a slot before it draws and gives up when there is none, so an
-        overflowing burst consumes nothing for the particles it drops.
-        Drawing `count` sets regardless would leave the two streams at
-        different positions afterwards, and every later emission would
-        then differ -- which is the same thing `_burst_native` guards in
-        `Sparks`.
+        Only as many particles as will fit are drawn for, as the Python path
+        does, so both leave the stream at the same position.
 
         Args:
             texture: Resolved to an index the native pool stores.
@@ -389,12 +376,9 @@ class ParticleSystem:
     ) -> None:
         """Draw the native pool, one `RenderBatch` per texture.
 
-        The world-to-screen transform, the colour lerp and the grouping all
-        happen natively; this turns the result back into the
-        `RenderBatch`es the renderer takes. The lists crossing the boundary
-        are still Python lists, because `RenderBatch` wants
-        `list[tuple[float, float]]` -- handing over a buffer needs the
-        renderer to accept one, which is RFC-0003's Marco 2.
+        The world-to-screen transform, the colour lerp and the grouping happen
+        natively; this turns the result into the `RenderBatch`es the renderer
+        takes, whose fields are Python lists.
 
         Args:
             backend: Receives one batch per texture.

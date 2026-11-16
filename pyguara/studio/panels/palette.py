@@ -1,21 +1,12 @@
 """The command palette: a person calling the operations an agent calls.
 
-The third front end onto `OperationRegistry`, and the reason the registry
-exists rather than a pile of panel methods. A human filtering a list and
-an agent choosing a tool are the same act over the same set, so they go
-through the same code -- which also means an operation cannot be
-available to one and missing from the other.
+A front end onto `OperationRegistry`, so an operation cannot be
+available to an agent and missing here.
 
-Arguments are typed as JSON rather than as generated widgets. A form built
-from each operation's schema would be nicer for the common cases and
-hopeless for the rest -- a nested dataclass, a list of vectors -- and the
-JSON shape is the one the schema browser shows and the scene files use, so
-it is a shape a user of this editor already reads. The result, including
-the diff, is shown underneath.
-
-Arguments the selection can supply are filled in: `entity_id` defaults to
-the primary selection. That covers most of what a palette is used for
-without pretending to generate a form.
+Arguments are typed as JSON, in the shape the schema browser shows and
+scene files use; no form is generated. `entity_id` defaults to the
+primary selection. The result, including the diff, is shown
+underneath.
 """
 
 from __future__ import annotations

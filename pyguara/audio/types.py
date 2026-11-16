@@ -161,16 +161,11 @@ class SpatialAudioConfig:
 class AudioCapability(Flag):
     """What an audio backend can actually do.
 
-    Three of the protocol's features cannot be expressed by every mixer,
-    and the engine ships exactly one backend that expresses none of them.
-    Rather than let `IAudioSystem` advertise methods that quietly do
-    nothing, a backend declares what it supports here and raises
-    `UnsupportedAudioCapability` for the rest.
-
-    Every capability has a request that means "not asked for" --
-    `pitch=1.0`, `loop_start=None`, an empty effect list -- so a game
-    that uses none of them runs on any backend. One that uses them reads
-    `IAudioSystem.capabilities` to find out whether it can.
+    A backend declares the optional features it supports here and raises
+    `UnsupportedAudioCapability` for the rest. Every capability has a
+    request that means "not asked for" (`pitch=1.0`, `loop_start=None`, an
+    empty effect list), so a game that uses none of them runs on any
+    backend.
 
     Attributes:
         NONE: No optional capability. What `PygameAudioSystem` reports.

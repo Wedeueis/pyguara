@@ -14,8 +14,8 @@ class OnConfigurationChanged(Event):
     Attributes:
         section: Config section name, e.g. `"display"`.
         setting: Field name within that section.
-        old_value: Value before the change.
-        new_value: Value after the change.
+        old_value: The value it had.
+        new_value: The value it has now.
         profile: The profile responsible, when the change came from
             `push_profile()` or `pop_profile()` rather than a direct
             `update_setting()`. Lets a settings screen tell a run modifier

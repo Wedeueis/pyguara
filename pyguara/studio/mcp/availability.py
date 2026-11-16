@@ -1,34 +1,14 @@
 """Whether the MCP SDK is importable, resolved once here.
 
-This module exists for the same reason `pyguara/studio/availability.py`
-does, and the history behind it is worth restating because this is the
-second optional dependency the engine has taken on.
+The SDK is a transport, not the contract: the operation surface also
+runs over `pyguara.studio.ops.stdio`, which needs only the standard
+library. If this import fails, only the MCP front end is unavailable.
+`mcp` is in the `dev` extra, and the test suite asserts the flag is
+true there.
 
-The first `pyguara/editor` imported pyimgui's pygame integration, which
-transitively ran `import OpenGL.GL`. PyOpenGL was a dependency nowhere,
-so the editor's `HAS_IMGUI` was unconditionally `False` in **every**
-install configuration, every method early-returned, and 705 lines of
-subsystem never executed once before being deleted. Nothing asserted on
-that flag, which is how it hid.
-
-Two things stop that happening here:
-
-1. **The MCP SDK is a transport, not the contract.** The operation surface
-   runs over `pyguara.studio.ops.stdio`, which needs nothing but the
-   standard library. If this import fails, Studio's agent integration
-   still works -- only the MCP front end is unavailable, and it says so.
-   That is the structural answer: an optional dependency should not be
-   load-bearing for the feature it fronts.
-2. **A test asserts this flag is `True`.** `mcp` is in the `dev` extra, so
-   a dev install that cannot import it fails the suite rather than
-   quietly dropping the MCP server.
-
-The SDK's major version matters. `mcp` 2.x renamed `FastMCP` to
-`MCPServer` and moved the low-level API's handlers from decorators to
-constructor callbacks, so a 1.x install cannot run this module. The check
-below is for the 2.x shape specifically, rather than for the package
-name, so a stale pin reads as "wrong version" instead of a confusing
-`AttributeError` three frames into a request.
+The check is for the 2.x shape of the SDK, which renamed `FastMCP` to
+`MCPServer` and moved the low-level handlers to constructor callbacks,
+so a 1.x install reads as "wrong version".
 """
 
 from __future__ import annotations

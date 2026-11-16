@@ -1,20 +1,13 @@
 """Inline styling: a markup parser, and wrapping that keeps each run's style.
 
-Separate from `text_layout` on purpose. `Label` is in every demo and should not
-grow a parser it never uses, so plain text stays `wrap_text` and this sits beside
-it, built the same way: pure functions over a measuring callback, testable
-against arithmetic instead of whatever font the host has installed.
+Pure functions over a measuring callback, like `text_layout`. Plain
+text stays with `wrap_text`.
 
-The markup is BBCode-style, chosen because it spells colour and size naturally
-and never collides with the punctuation of ordinary dialogue:
-
-```text
-[b]bold[/b] [i]italic[/i] [color=#e2621f]hot[/color] [size=24]big[/size]
-```
-
-Tags nest, and must close in order. `[[` is a literal `[`. A malformed string
-raises `MarkupError` rather than drawing its own tags at the player, so anything
-a player typed goes through `escape_markup` first.
+The markup is BBCode-style: `[b]`, `[i]`, `[color=#e2621f]` and
+`[size=24]`, each closed as `[/b]` and so on. Tags nest and must close
+in order. `[[` is a literal `[`. A malformed string raises
+`MarkupError`, so pass anything a player typed through `escape_markup`
+first.
 """
 
 from __future__ import annotations

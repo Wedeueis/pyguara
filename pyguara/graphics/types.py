@@ -155,16 +155,10 @@ SHAPE_INSTANCE_FLOATS = 11
 class ShapeBatch:
     """Many primitives of one kind, packed for a single instanced draw.
 
-    `RenderBatch` for shapes. It exists because the per-primitive calls are
-    the wrong granularity for anything that draws thousands of them: a
-    1000-spark frame spends 55-71% of itself in `draw_circle`/`draw_line`
-    call overhead, and handing the rows over in one call removes it
-    (measured 8-15x on the render half; see `docs/guides/performance.md`).
-
-    Rows arrive already packed because the producer is usually better
-    placed to pack them -- `Sparks`' native pool fills them in Rust, and
-    anything that re-walked them element by element in Python would give
-    the saving straight back.
+    `RenderBatch` for shapes, for anything that draws thousands of them:
+    one call replaces a `draw_circle` or `draw_line` call per primitive.
+    Rows arrive already packed, because the producer (`Sparks`' native
+    pool, for one) can fill them without a Python loop.
 
     Attributes:
         kind: The primitive every row describes.

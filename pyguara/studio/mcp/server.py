@@ -1,30 +1,14 @@
 """The MCP front end over Studio's operation surface.
 
-A thin adapter, and deliberately thin. Every operation, its schema and
-its error text already exist in `pyguara.studio.ops`; this module's whole
-job is to present them as Model Context Protocol tools and hand the
-results back. Nothing here decides what an operation does, validates an
-argument, or writes an error message -- if it did, the MCP front end and
-the JSON-lines one would start to disagree, and the one that drifts is
-always the one nobody is watching.
+A thin adapter. Every operation, its schema and its error text live in
+`pyguara.studio.ops`; this module presents them as Model Context
+Protocol tools. It validates nothing and writes no error message, so
+it cannot disagree with the JSON-lines front end.
 
-Built on the SDK's **low-level** `Server` rather than `MCPServer` (what
-1.x called `FastMCP`). `MCPServer` derives a tool's schema from a Python
-function's type hints, which is the wrong direction here: the schemas are
-already written, emitted from the component model, and carry enum members
-and field documentation that a hint cannot express. The low-level server
-takes an explicit `inputSchema`, which is exactly what there is.
-
-Results go back as JSON text **and** as structured content. A client that
-understands structured output gets a real object; one that does not still
-gets readable JSON rather than a Python `repr`.
-
-Field names here are the SDK's Python-side ones -- `input_schema`,
-`structured_content`, `is_error` -- which pydantic serialises to the
-protocol's camelCase on the wire. The camelCase spellings are accepted as
-aliases at runtime but are not what the type stubs declare, so using them
-type-checks as an error while working perfectly, which is the worst of
-both.
+Built on the SDK's low-level `Server`, which takes an explicit
+`inputSchema`; the schemas already exist. Results go back as JSON text
+and as structured content. Field names are the SDK's Python-side ones
+(`input_schema`, `structured_content`, `is_error`).
 """
 
 from __future__ import annotations

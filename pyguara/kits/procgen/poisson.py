@@ -1,10 +1,8 @@
 """Poisson-disc sampling: natural, minimum-spacing point placement.
 
-The "constraint-placement" algorithm family #28 names, scoped to the
-specific, well-defined piece: Bridson's algorithm, guaranteeing every
-returned point sits at least `min_distance` from every other. Generic
-frequency/dependency/exclusion rule-checking between placed item types is
-a separate, heavier concern -- deliberately not built here.
+Bridson's algorithm: every returned point sits at least `min_distance`
+from every other. Rules between kinds of placed item are
+`placement.py`'s job.
 """
 
 from __future__ import annotations

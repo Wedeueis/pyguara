@@ -1,18 +1,11 @@
 """What is in this project, compactly enough to read first.
 
-The game-content analogue of the repository map that coding agents build
-over source trees. An agent opening an unfamiliar PyGuara project needs to
-know what scenes exist, what prefabs it can instance, which components are
-registered and what the assets look like -- before it can usefully ask
-anything else. Discovering that by listing directories costs a dozen tool
-calls and arrives as unordered noise.
+A map of a PyGuara project for an agent that has not seen it: its
+scenes, prefabs, registered components and assets.
 
-**Budgeted, deliberately.** Codex truncates an instruction file at 32 KiB
-and every agent pays for context by the token, so `to_markdown()` takes a
-character budget and spends it in priority order: the counts that orient a
-reader first, the long file listings last, each section truncated with an
-honest "+N more" rather than silently cut. A map that lies about being
-complete is worse than a short one.
+`to_markdown()` takes a character budget and spends it in priority
+order: the counts first, the long file listings last, each section
+truncated with "+N more".
 """
 
 from __future__ import annotations

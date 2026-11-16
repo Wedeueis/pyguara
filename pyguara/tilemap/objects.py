@@ -1,18 +1,11 @@
 """Map objects: the things placed on a map that are not tiles.
 
-Spawn points, trigger regions, camera bounds, patrol routes, collision
-shapes drawn by hand. Tiled calls them objects and puts them in an
-`<objectgroup>`; `load_tmx` ignored the element entirely, so a map with
-spawn points loaded "successfully" and lost them -- which is worse than
-the two encodings it *refused*, because nothing told the author.
+Spawn points, trigger regions, camera bounds, patrol routes and
+hand-drawn collision shapes, which Tiled keeps in an `<objectgroup>`.
 
-**These are data, not entities.** Turning an object into an entity means
-knowing which prefab a `type` names, which component a property maps to,
-and which entity manager to put it in -- none of which belongs in a
-module whose other half is a grid of integers. `pyguara/tilemap` imports
-nothing from `prefabs`, `physics` or `ecs`, and keeping it that way is
-what lets `load_tmx` be tested with no world at all. The spawning half is
-`pyguara.tilemap.spawning`, which is deliberately not imported from here.
+These are data, not entities. `pyguara/tilemap` imports nothing from
+`prefabs`, `physics` or `ecs`; turning an object into an entity is
+`pyguara.tilemap.spawning`, which this module does not import.
 """
 
 from __future__ import annotations
@@ -53,17 +46,17 @@ class MapObject:
         type: Tiled's `type` (called `class` since Tiled 1.9; both are
             read into this field). Usually what a game switches on to
             decide what to spawn.
-        x: Left edge in pixels, except for a tile object, where Tiled
-            uses the **bottom** left -- see `shape`.
-        y: Top edge in pixels, with the same exception.
+        x: Left edge in pixels.
+        y: Top edge in pixels, except for a tile object, where Tiled
+            uses the bottom edge -- see `shape`.
         width: Width in pixels; 0 for a point or an unsized polygon.
         height: Height in pixels; 0 likewise.
         rotation: Clockwise rotation in degrees.
         gid: The tile this object stamps, for `TILE` objects; None
             otherwise. Flip flags are already masked off.
         visible: Tiled's per-object visibility toggle.
-        points: Vertices for `POLYGON` and `POLYLINE`, **relative to
-            `(x, y)`** as Tiled stores them, not absolute.
+        points: Vertices for `POLYGON` and `POLYLINE`, relative to
+            `(x, y)` as Tiled stores them, not absolute.
         properties: Custom properties, with Tiled's declared types
             applied -- an `int` property is an `int` here.
     """
@@ -86,9 +79,8 @@ class MapObject:
     def center(self) -> tuple[float, float]:
         """The centre of the object's box as Tiled draws it, in map pixels.
 
-        A point object has no extent, so its centre is its position. Two things
-        make this more than half the size: a tile object's `(x, y)` is its
-        **bottom** left, where everything else's is its top left, and Tiled
+        A point object's centre is its position. A tile object's `(x, y)` is
+        its bottom left, where every other object's is its top left, and Tiled
         rotates about that same corner, not the middle.
         """
         half_height = self.height / 2.0

@@ -4,14 +4,7 @@ Every name here is a component or one of its close data types. Behaviour
 lives in the matching system -- `AnimationSystem` for `Animator`, the
 camera systems for `Camera2D`, `RenderSystem` for `Sprite`.
 
-This module previously held a verbatim copy of
-`pyguara/ui/components/__init__.py`, exporting `Button`, `Panel`,
-`TextInput` and the rest of the widget set from a graphics package. It
-broke nothing only because no caller imports this package root -- every
-call site reaches for the submodule directly -- but it inverted the
-layering: importing anything under `pyguara.graphics.components` pulled
-`pyguara.ui` in behind it. `tests/test_graphics_exports.py` now holds a
-test for that, because nothing else would have caught it coming back.
+Nothing here imports `pyguara.ui`.
 """
 
 from pyguara.graphics.components.animation import (

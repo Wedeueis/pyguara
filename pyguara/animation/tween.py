@@ -25,16 +25,11 @@ class Tween:
     Supports different easing functions, delays, loops, and callbacks.
 
     The endpoints may be two numbers, two ``Vector2``, two ``Color``, or two
-    equal-length tuples/lists of numbers. **``current_value`` comes back as
-    the type that went in**: a ``Vector2`` endpoint yields a ``Vector2``, a
+    equal-length tuples/lists of numbers. ``current_value`` comes back as
+    the type that went in: a ``Vector2`` endpoint yields a ``Vector2``, a
     ``Color`` endpoint a ``Color`` with its channels rounded and clamped.
-    That matters because the usual destination is an attribute -- writing a
-    plain tuple to ``transform.position`` is a bug that surfaces as an
-    ``AttributeError`` several frames later, nowhere near the tween.
 
-    Two ``Tween`` instances are equal only if they are the *same* object, so a
-    ``TweenManager`` can hold many identically configured tweens without them
-    aliasing each other.
+    Two ``Tween`` instances are equal only if they are the same object.
 
     Example:
         >>> # Animate position from (0, 0) to (100, 50) over 1 second

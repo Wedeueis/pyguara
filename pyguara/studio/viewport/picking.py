@@ -1,25 +1,13 @@
 """Working out which entity is under the cursor, or inside a marquee.
 
-Two sources, because neither alone covers a scene:
+Two sources:
 
-- **Physics.** `IPhysicsEngine.point_query` is already written for this --
-  its docstring says "click-picking: what is under the cursor?" -- and it
-  orders results most-deeply-enclosing first, so `result[0]` is the right
-  answer when shapes stack. `region_query` then `overlap_box_all` is the
-  documented broad-then-exact pair for a marquee, and that docstring says
-  "a marquee selection in an editor" in as many words.
-- **Sprite bounds.** A sprite with no collider is invisible to all of the
-  above, and most decoration is exactly that. So this module also builds
-  an axis-aligned box per visible sprite from its transform and texture.
+- Physics: `IPhysicsEngine.point_query` for a click, and
+  `region_query` then `overlap_box_all` for a marquee.
+- Sprite bounds: an axis-aligned box per visible sprite, from its
+  transform and texture, for entities with no collider.
 
-The gap this closes was real: `pyguara/tools/gizmos.py` had the only
-picking code in the tree, and it compared a **world** position against a
-**screen** position with no camera transform at all, against a hardcoded
-32x32 box it invented rather than read. It worked in a demo whose camera
-sat at the origin.
-
-Everything here is pure geometry over the ECS -- no GL, no ImGui, no
-window -- which is what lets it be tested against a real world directly.
+Everything here is geometry over the ECS, with no ImGui and no window.
 """
 
 from __future__ import annotations
@@ -211,17 +199,9 @@ def picks_at(
 ) -> list[Pick]:
     """Return everything under `world_point`, front-most first.
 
-    The plural is what makes a crowded scene usable: clicking the same
-    spot twice walks *back* through what is stacked there, which is how
-    Godot's editor reaches a node behind another one, and the only way to
-    select a background tile under a platform at all.
-
-    Ordered by what is drawn in front. Physics contributes extra
-    candidates -- a collider is a deliberate statement about an entity's
-    extent, where a sprite box is inferred from its image -- but no longer
-    *overrides* the order. It used to: `point_query` returns shapes
-    most-enclosing first, which has nothing to do with what is on top, so
-    clicking the player could hand back the platform it was standing on.
+    Clicking the same spot again walks back through what is stacked
+    there. The order is what is drawn in front. Physics adds candidates
+    that have a collider but does not decide the order.
 
     Args:
         world: The world to read.

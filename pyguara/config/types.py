@@ -34,19 +34,16 @@ class RetiredBackendError(RuntimeError):
 class RenderingBackend(Enum):
     """Available rendering backend options.
 
-    WGPU: The default. GPU-accelerated rendering through the native
-          extension, on whichever of DX12, Metal, Vulkan or GL the machine
-          has, with the render graph -- lighting, post-processing -- and
-          sprite materials. A machine with no usable GPU fails at startup
-          with `NoGraphicsAdapterError`, never silently.
+    WGPU: The default. GPU rendering through the native extension, on
+          whichever of DX12, Metal, Vulkan or GL the machine has, with the
+          render graph and sprite materials. A machine with no usable GPU
+          fails at startup with `NoGraphicsAdapterError`.
 
-    PYGAME: Software rendering using Pygame's SDL2 backend: runs anywhere,
-            more slowly, without lighting or post-processing. Also the
-            reference the wgpu pixel tests are held to.
+    PYGAME: Software rendering through pygame: runs anywhere, more slowly,
+            without lighting or post-processing. Also the reference the
+            wgpu pixel tests are held to.
 
-    ModernGL was the third, and was retired in stage E of
-    `project/backlog/active/next_engine_plan.md`; asking for it raises
-    `RetiredBackendError`.
+    Asking for `moderngl`, which is retired, raises `RetiredBackendError`.
     """
 
     PYGAME = "pygame"
@@ -103,18 +100,16 @@ class WindowConfig:
 class AudioBackend(Enum):
     """Available audio backends.
 
-    Deliberately no `AUTO`: it would give the same game a different set of
-    capabilities on a machine without the extension, which is what
-    `IAudioSystem.capabilities` exists to make impossible to miss.
+    There is no `AUTO`: it would give the same game different capabilities
+    on a machine without the extension.
 
     NATIVE: The default. Decodes and mixes in Rust and owns the output
         device, adding pitch and loop points. Fails at startup if the
         extension cannot be imported; runs silent, and says so, if there is
         no device.
 
-    PYGAME: `pygame.mixer` as it comes. Reports no optional capability. What
-        a checkout with no Rust toolchain needs, and what
-        `PYGUARA_AUDIO_BACKEND=pygame` selects to rule the native one out.
+    PYGAME: `pygame.mixer`. Reports no optional capability. Selected by
+        `PYGUARA_AUDIO_BACKEND=pygame`.
     """
 
     PYGAME = "pygame"

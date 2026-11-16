@@ -1,25 +1,16 @@
 """Named points in a scene's update order.
 
-`SystemManager.register()` takes a bare `priority` int, which works but
-does not read: a game adding a `PoisonSystem` that must run before its
-`DeathSystem` has to pick a number against the engine's, and against every
-other number the game already chose. Nothing says what 175 means.
+`Phase` is an `IntEnum`, so a phase is a priority:
+`register(system, priority=Phase.LOGIC)` mixes with raw ints, and
+`Phase.LOGIC + 10` means "just after".
 
-`Phase` is that number with a name on it. It is an `IntEnum`, so a phase
-*is* a priority -- `register(system, priority=Phase.LOGIC)` needs no new
-machinery, mixes freely with raw ints, and arithmetic works for the
-common "just after that one" case:
+The values are 100 apart and match the bands the engine uses. `Scene`
+registers Tween at 120, Steering at 150, AI at 200, AudioSource at 250
+and Animation at 300.
 
-```python
-systems.register(poison, priority=Phase.LOGIC)
-systems.register(death, priority=Phase.LOGIC + 10)   # after poison
-```
-
-The values are spaced 100 apart and chosen to match the bands the engine
-already occupies, so naming them changes no existing order. `Scene`
-registers Steering at 150, AI at 200, AudioSource at 250 and Animation at
-300 -- which is to say between INPUT and LOGIC, at AI, and either side of
-PRESENTATION.
+Example:
+    systems.register(poison, priority=Phase.LOGIC)
+    systems.register(death, priority=Phase.LOGIC + 10)   # after poison
 """
 
 from __future__ import annotations

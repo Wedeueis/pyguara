@@ -1,25 +1,13 @@
-r"""Breaking a string into the lines a renderer will actually draw.
+"""Breaking a string into the lines a renderer will actually draw.
 
-Pure functions over a measuring callback, deliberately: wrapping needs to
-know how wide a candidate line is, and that is the only thing it needs a
-renderer for. Keeping the measurement at arm's length means the algorithm
-can be tested against a predictable fake rather than against whatever font
-the host happens to have installed.
+Pure functions over a measuring callback: wrapping needs to know how
+wide a candidate line is and nothing else from a renderer, so it can
+be tested against a fake.
 
-Two things made this necessary rather than decorative.
-
-`Label` had a `width` and made exactly one `draw_text` call, so text
-longer than that width simply ran past it -- 423 px of text drawn through
-a 150 px label, overflowing by 273 px and over whatever sat beside it.
-
-Worse, a `UIRenderer`'s measure and draw **disagree about newlines**.
-`get_text_size` is `pygame.font.Font.size`, which measures a single line
-and ignores `\\n`; `draw_text` is `Font.render`, which honours it. So
-`"first line\\nsecond line"` measured 146x18 and drew 79x38: the width too
-wide by 67 px and the height exactly half. A layout that stacks siblings
-from the measured height puts the next widget on top of the second line.
-Splitting the text here and drawing one line per call is what makes the
-two agree.
+A renderer's `get_text_size` measures a single line and ignores
+newlines, while `draw_text` honours them. Splitting the text here and
+drawing one line per call makes the measured size and the drawn size
+agree.
 """
 
 from collections.abc import Callable
@@ -222,17 +210,11 @@ def _place(
 def caret_index_at(text: str, offset: int, measure: MeasureWidth) -> int:
     """Return the caret index nearest `offset` pixels into `text`.
 
-    A caret sits *between* characters, so the answer is a boundary, not a
-    character. Anywhere in the left half of a glyph puts the caret before
-    it and anywhere in the right half puts it after, which is what every
-    text field does and what makes a click at the end of a word land
-    after the word rather than inside it.
+    A caret sits between characters, so the answer is a boundary. The left
+    half of a glyph puts the caret before it and the right half after.
 
-    Linear in the length of the text, measuring each prefix. Bisection
-    would be asymptotically better and is wrong here: in a proportional
-    font with kerning, prefix widths are not guaranteed to behave the way
-    a bisection needs, and a text field holds a line rather than a
-    document.
+    Linear in the length of the text, measuring each prefix. Bisection is
+    not used: with kerning, prefix widths need not be monotonic.
 
     Args:
         text: The string the caret is being placed in.

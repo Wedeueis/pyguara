@@ -29,19 +29,15 @@ def _generate_material_id() -> int:
 class Material:
     """Defines the visual properties of a rendered object.
 
-    Materials combine:
-    - A shader: a `SpriteShader`, one WGSL function
-    - An optional second texture -- a mask, a ramp, a noise field
-    - Uniform values, by name
-
-    Materials are sorted by ID during batching to minimize
+    A material combines a shader (a `SpriteShader`, one WGSL function), an
+    optional second texture (a mask, a ramp, a noise field) and uniform
+    values by name. Materials are sorted by ID during batching to minimize
     shader/texture switches.
 
-    ```python
-    FLASH = SpriteShader("flash", uniforms=(Uniform("amount"),), wgsl=...)
-    sprite.material = Material(FLASH, uniforms={"amount": 0.0})
-    sprite.material.set_uniform("amount", 0.8)   # on a hit
-    ```
+    Example:
+        FLASH = SpriteShader("flash", uniforms=(Uniform("amount"),), wgsl=...)
+        sprite.material = Material(FLASH, uniforms={"amount": 0.0})
+        sprite.material.set_uniform("amount", 0.8)   # on a hit
     """
 
     shader: SpriteShader

@@ -1,10 +1,8 @@
 """Pooled, transient world-space text: damage numbers, pickup labels, prompts.
 
-Mirrors `ParticleSystem`'s shape (a self-contained pool, `spawn`/`update`/
-`render`, scene-composed rather than DI-registered) since this is the same
-category of thing -- a burst of short-lived visual feedback -- built on
-`IRenderer.draw_text` (#71) the same way particles are built on
-`render_batch`.
+Shaped like `ParticleSystem`: a self-contained pool with `spawn`,
+`update` and `render`, composed into a scene and not registered in the
+container. Built on `IRenderer.draw_text`.
 """
 
 from __future__ import annotations

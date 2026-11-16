@@ -20,20 +20,14 @@ from pyguara.resources.types import AudioClip
 class IAudioSystem(Protocol):
     """The main contract for playing audio in the engine.
 
-    Abstracts away the concept of 'Channels' and 'Streams'.
+    Covers sound effects and music, spatial audio with distance
+    attenuation and stereo panning, a bus hierarchy for grouped volume,
+    and priority-based voice management.
 
-    Features:
-    - Basic sound effect and music playback
-    - Spatial audio with distance attenuation and stereo panning
-    - Audio bus hierarchy for grouped volume control
-    - Priority-based channel management
-    - Declared capabilities for what a backend cannot express
-
-    Playing sounds are addressed by `SoundHandle`, not by channel number:
-    see that type for why. Three features -- pitch, loop points and bus
-    DSP -- are optional and declared through `capabilities`; asking a
-    backend for one it does not have raises `UnsupportedAudioCapability`
-    rather than silently doing nothing.
+    Playing sounds are addressed by `SoundHandle`, not by channel number.
+    Pitch, loop points and bus DSP are optional and declared through
+    `capabilities`; asking a backend for one it does not have raises
+    `UnsupportedAudioCapability`.
     """
 
     @property
@@ -374,13 +368,9 @@ def resolve_loop_points(
 ) -> tuple[float | None, float | None, bool]:
     """Work out which loop points apply to a play, and who asked for them.
 
-    An explicit argument wins over the clip's `.meta` sidecar, and the
-    difference matters to the caller of this function: an argument is a
-    programmer asking at a call site, where a sidecar is an asset
-    describing itself. A backend that cannot honour loop points should
-    raise for the first and warn for the second -- refusing to play a
-    clip because somebody wrote loop points in its sidecar would make one
-    line of metadata silence a sound that used to work.
+    An explicit argument wins over the clip's `.meta` sidecar. The caller
+    is told which it was, because a backend that cannot honour loop points
+    should raise for an argument and only warn for a sidecar.
 
     Args:
         clip: The clip being played, read for an `AudioMeta` sidecar.

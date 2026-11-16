@@ -1,15 +1,12 @@
 """Studio's panels, over the ImGui layer this package also provides.
 
-Three groups. `base` is the contract -- a panel is a pure function of the
-world plus the selection -- and is the only module here that does not
-import Dear ImGui. `hierarchy` and `inspector` read the scene. The rest
-read session state: the edit history, the action journal with its
-approval queue, the component schema browser, and the command palette,
-which is a person calling the same operations an agent calls, through the
-same registry.
+`base` is the contract (a panel is a function of the world plus the
+selection) and the only module here that does not import Dear ImGui.
+`hierarchy` and `inspector` read the scene. The rest read session
+state: the edit history, the journal with its approval queue, the
+schema browser and the command palette.
 
-The viewport lives in `pyguara.studio.viewport`, because it is a render
-target and a picking surface before it is a panel.
+The viewport lives in `pyguara.studio.viewport`.
 """
 
 from pyguara.studio.panels.base import EditorPanel, PanelContext

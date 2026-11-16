@@ -1,16 +1,10 @@
 """System picking each character's clip from the way it is moving.
 
-The hand-written version of this appears in every top-down game, which is
-why it is here. It does three things, and the second and third are the
-ones that are easy to get wrong:
-
 1. Derive a facing from the character's velocity.
-2. Leave the facing alone when the velocity is zero, so a character that
-   has stopped keeps facing where it last faced instead of snapping to a
-   default.
-3. Ask for the clip every frame, relying on `play_clip()` ignoring a
-   re-request for the clip already playing -- so walking in a straight
-   line does not restart the walk cycle sixty times a second.
+2. Leave the facing alone when the velocity is zero, so a stopped
+   character keeps facing where it last faced.
+3. Ask for the clip every frame; `play_clip()` ignores a request for
+   the clip already playing.
 """
 
 from __future__ import annotations

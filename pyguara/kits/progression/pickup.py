@@ -1,15 +1,9 @@
 """The XP-orb magnet: pickups that fly to whoever is close enough.
 
-**Not a physics interaction.** A magnet is a radius query and a velocity,
-with no collider, no body and no contact resolution -- an orb passes
-through walls on its way to the player, which is what the genre wants and
-what keeps a thousand of them affordable. A game that needs pickups to
-respect geometry gives them a `Collider` and does not use this.
-
-The second consumer of the shared `SpatialHash` (`kits/projectiles` was
-the first), which is the point: attraction is a "what is near me" question
-and that index already answers it in one cell walk instead of a scan over
-every orb on the field.
+A magnet is a radius query on the shared `SpatialHash` and a velocity,
+with no collider, body or contact resolution, so an orb passes through
+walls on its way to the player. A game whose pickups must respect
+geometry gives them a `Collider` and does not use this.
 """
 
 from __future__ import annotations

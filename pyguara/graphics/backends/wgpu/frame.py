@@ -1,19 +1,14 @@
 """What the wgpu window, world renderer and UI renderer share.
 
-All three draw into one `NativeGpu` frame, in the order they are called,
-so they hold one `GpuFrame` between them: the native device, and the two
-caches that turn CPU-side pixels into GPU textures.
+All three draw into one `NativeGpu` frame, in the order they are
+called, so they hold one `GpuFrame` between them: the native device,
+and the two caches that turn CPU-side pixels into GPU textures.
 
-**Text is rasterised in Rust (`NativeFont`) and cached as a texture.** A
-string is rendered once, in white, and tinted by the instance colour when
-drawn -- so a damage number fading out, or the same label in two colours,
-is one texture. The face is the engine's bundled default
-(`pyguara.graphics.fonts`), which the pygame renderer opens too.
+Text is rasterised in Rust (`NativeFont`) once per string, in white,
+cached as a texture and tinted by the instance colour when drawn.
 
-**Nothing is freed in the middle of a frame.** A primitive already pushed
-names its texture by id, and the frame is only drawn at `end_frame`. So an
-eviction queues the id and `after_frame` frees it once the frame that
-might still use it has been rendered.
+Nothing is freed in the middle of a frame. An eviction queues the
+texture id, and `after_frame` frees it once the frame is rendered.
 """
 
 from __future__ import annotations
