@@ -5,6 +5,7 @@ standalone executables.
 
 Usage:
     pyguara --help
+    pyguara new --help
     pyguara build --help
     pyguara dist --help
     pyguara atlas --help
@@ -21,6 +22,7 @@ from pyguara.cli.atlas_generator import atlas as atlas_command
 from pyguara.cli.build import build as build_command
 from pyguara.cli.dist import dist as dist_command
 from pyguara.cli.i18n import i18n as i18n_command
+from pyguara.cli.new import new as new_command
 from pyguara.cli.sounds import sounds as sounds_command
 from pyguara.cli.studio import studio as studio_command
 
@@ -34,6 +36,7 @@ def main() -> None:
     pass
 
 
+main.add_command(new_command)
 main.add_command(build_command)
 main.add_command(dist_command)
 main.add_command(atlas_command)

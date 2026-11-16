@@ -43,10 +43,32 @@ where native code is slower, is in
 
 ## Install
 
-From source, until there is a release on PyPI. You need Python 3.12 or
-3.13, [uv](https://docs.astral.sh/uv/) and a stable Rust toolchain
-([rustup](https://rustup.rs)), because the install compiles the
-extension.
+```bash
+pip install pyguara
+```
+
+Python 3.12 or newer. The wheels for Linux (x86_64, aarch64), macOS
+(x86_64, arm64) and Windows (x64) carry the compiled extension, so no
+toolchain is needed.
+
+### A new project
+
+```bash
+pyguara new my-game
+cd my-game
+python -m my_game
+```
+
+`pyguara new` writes a package with one scene, an entry point, a
+`pyproject.toml`, an assets folder and an `AGENTS.md` for coding agents.
+It is newer than 0.7.0, the release on PyPI, so until the next release it
+needs the engine installed from source.
+
+### From source
+
+To work on the engine or run the demos. You need
+[uv](https://docs.astral.sh/uv/) and a stable Rust toolchain
+([rustup](https://rustup.rs)), because the install compiles the extension.
 
 ```bash
 git clone https://github.com/Wedeueis/pyguara
@@ -59,9 +81,6 @@ On Linux, gamepad support also needs udev's headers:
 ```bash
 sudo apt install libudev-dev pkg-config
 ```
-
-Wheels for Linux (x86_64, aarch64), macOS (x86_64, arm64) and Windows
-(x64) are built in CI and need no toolchain; they are not published yet.
 
 ## A first scene
 
@@ -102,7 +121,7 @@ class Game(Scene):
         for entity in self.entity_manager.get_entities_with(Transform):
             position = entity.get_component(Transform).position
             world_renderer.draw_rect(
-                Rect(position.x, position.y, 32, 32), Color(240, 180, 60)
+                Rect(int(position.x), int(position.y), 32, 32), Color(240, 180, 60)
             )
 
     def on_exit(self) -> None:

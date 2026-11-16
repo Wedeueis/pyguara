@@ -9,11 +9,12 @@ script:
 pyguara = "pyguara.cli:main"
 ```
 
-`main` is a [Click](https://click.palletsprojects.com/) group with five
+`main` is a [Click](https://click.palletsprojects.com/) group of
 sub-commands:
 
 | Command | What it does |
 |---------|--------------|
+| `pyguara new`    | Create a project that runs: one scene, an entry point, an assets folder. |
 | `pyguara build`  | Package a game into a standalone executable (wraps PyInstaller). |
 | `pyguara dist`   | Generate per-store upload scripts and platform icons. |
 | `pyguara atlas`  | Pack a folder of sprites into one texture atlas + JSON metadata. |
@@ -29,6 +30,36 @@ pyguara atlas --help
 
 `build` and `atlas` exit non-zero on failure (`1` for a usage/tool error, the
 PyInstaller exit code for a failed build), so they compose in scripts and CI.
+
+---
+
+## `pyguara new`
+
+```bash
+pyguara new my-game
+cd my-game
+python -m my_game
+```
+
+Creates `my-game/` and writes into it:
+
+| File | What it is |
+| --- | --- |
+| `my_game/__main__.py` | The entry point: the window's title and size, then `pyguara.run(MainScene)` |
+| `my_game/scenes.py` | One scene, with a component and a box that moves at the fixed rate |
+| `pyproject.toml` | The project, depending on the engine version that created it, with a `my-game` script |
+| `assets/` | Empty, for textures, sounds, fonts and data |
+| `AGENTS.md` and its shims | What `pyguara studio instructions` writes; `--no-instructions` leaves them out |
+
+The package is the name in lower case with hyphens as underscores. A name
+that could not be imported is refused, as is one that would shadow `pyguara`
+or a standard library module. So is a target directory that already has
+something in it; `--directory` puts the project somewhere other than `./NAME`.
+
+No file edits `sys.path`: `python -m my_game` runs from the project folder,
+and `pip install -e .` adds a `my-game` command. Run either from the project
+folder: the engine reads `config/` and `assets/` and writes `logs/` and
+`saves/` relative to the working directory.
 
 ---
 
