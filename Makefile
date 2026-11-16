@@ -35,11 +35,18 @@ build:  ## Build the package (sdist and wheel)
 	uv build
 
 # --- Testing ---
+# Tests run on every core: one worker per CPU halves the suite. `loadgroup`
+# keeps tests marked `xdist_group` on one worker, in file order, for the few
+# that check what an earlier test left behind. Performance runs stay serial,
+# since parallel workers skew their timings. Override for one serial run
+# with `make test PARALLEL=`.
+PARALLEL ?= -n auto --dist loadgroup
+
 test:  ## Run standard tests (skips slow/perf)
-	uv run pytest -m "not performance and not slow"
+	uv run pytest $(PARALLEL) -m "not performance and not slow"
 
 test-unit:  ## Run fast unit tests
-	uv run pytest tests/ -m "not slow and not integration"
+	uv run pytest $(PARALLEL) tests/ -m "not slow and not integration"
 
 perf-guard:  ## Run the complexity-class guards (cheap; no wall-clock asserts)
 	uv run pytest -m "performance and not slow" --no-cov
@@ -54,10 +61,10 @@ benchmark:  ## Run the full sweep (feeds docs/guides/performance.md)
 	uv run pytest -m performance --benchmark-only --benchmark-sort=name --no-cov
 
 coverage:  ## Generate coverage report
-	uv run pytest -m "not performance" --cov=pyguara --cov-report=html --cov-report=term
+	uv run pytest $(PARALLEL) -m "not performance" --cov=pyguara --cov-report=html --cov-report=term
 
 coverage-check:  ## Fail if coverage is below 60%
-	uv run pytest -m "not performance" --cov=pyguara --cov-report=term --cov-report=xml --cov-fail-under=60
+	uv run pytest $(PARALLEL) -m "not performance" --cov=pyguara --cov-report=term --cov-report=xml --cov-fail-under=60
 
 # --- Code Quality ---
 lint:  ## Check code style and docstring content
