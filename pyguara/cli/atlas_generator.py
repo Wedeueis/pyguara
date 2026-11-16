@@ -410,9 +410,8 @@ def atlas(
 def main() -> None:
     """Entry point for ``python -m pyguara.cli.atlas_generator``.
 
-    Delegates straight to the :func:`atlas` Click command so the module-level
-    invocation and ``pyguara atlas`` share one option surface and one code
-    path (they used to be a hand-kept argparse copy that could drift).
+    Delegates to the :func:`atlas` Click command, so the module-level
+    invocation and ``pyguara atlas`` share one option surface.
     """
     atlas.main(prog_name="pyguara.cli.atlas_generator")
 

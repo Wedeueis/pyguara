@@ -1,12 +1,9 @@
 """Frame-timing abstraction for the main loop.
 
-`Application` used `pygame.time.Clock` directly, so the loop -- and therefore
-every backend, ModernGL included -- depended on pygame for its frame pacing
-and could not be driven deterministically in a test. `Clock` is the seam:
-the pygame implementation lives under `graphics/backends/pygame/`, and
-`FixedClock` gives headless runs and tests a wall-clock-free tick.
-
-Part of issue #9 (decouple pygame from the backend-agnostic core).
+`Clock` is the protocol `Application` paces its loop with. `WallClock`
+and the pygame implementation under `graphics/backends/pygame/` follow
+real time; `FixedClock` gives headless runs and tests a tick that does
+not depend on it.
 """
 
 from __future__ import annotations
@@ -58,15 +55,11 @@ class FixedClock:
 class WallClock:
     """A `Clock` on the system's monotonic timer, with no pygame in it.
 
-    `pygame.time.Clock`'s contract, which `PygameClock` wraps, kept for the
-    wgpu backend: `tick()` sleeps out whatever is left of the frame and
-    reports the whole of it, sleep included. It sleeps rather than spinning,
-    as pygame's `tick` does -- a frame may run a millisecond long, which a
-    game cannot see and a laptop battery can.
+    `tick()` sleeps out whatever is left of the frame and reports the
+    whole of it, sleep included, as `pygame.time.Clock` does. It sleeps
+    rather than spinning, so a frame may run a millisecond long.
 
-    Unlike pygame's, the time is not rounded to whole milliseconds: a 60 Hz
-    frame is 16.67 ms, and reporting 16 or 17 alternately is jitter the
-    game's interpolation then has to absorb.
+    The time is not rounded to whole milliseconds.
     """
 
     def __init__(

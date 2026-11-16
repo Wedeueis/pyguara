@@ -235,11 +235,9 @@ class PollingFileWatcher:
         """Check all watched files for changes and fire their callbacks.
 
         Intended for the polling thread or a single-threaded manual caller.
-        The watch set is snapshotted under the lock, then files are stat'd
-        and callbacks fired with the lock **released**: a change callback
-        very commonly calls back into the watcher (`watch()`, `unwatch()`,
-        `watched_count`), and holding this non-reentrant lock across it
-        deadlocks the polling thread.
+        The watch set is snapshotted under the lock, and callbacks fire with
+        the lock released, so a callback may call back into the watcher
+        (`watch()`, `unwatch()`, `watched_count`).
 
         Returns:
             List of changed file paths.

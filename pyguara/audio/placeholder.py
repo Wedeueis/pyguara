@@ -1,33 +1,17 @@
 """Placeholder sound effects, built from simple tones, before any real ones exist.
 
-A game wires its sounds up long before an artist records any. Rather than ship
-silence, this makes short synthesized stand-ins -- a thud, a blip, a hiss -- from
-the standard library alone, and writes them as `.wav` files the game then loads
-like any other. Replacing one with a real recording later changes no code: the
-file name is the contract.
+Short synthesized stand-ins (a thud, a blip, a hiss) made with the
+standard library and written as `.wav` files. There are two ways in:
+functions that build and combine samples, and recipes, the same tree
+as data. `docs/systems/cli.md` describes the recipe format and the
+`pyguara sounds` command.
 
-Two ways in, the same sounds out:
+Output is deterministic. Noise draws from a stream seeded by the
+sound's own name, so editing one sound never changes another's bytes.
 
-- **Functions**, which build and combine samples in Python:
-
-      hit = envelope(mix(transient(0.03, 0.5, rng), sine(140.0, 0.12, 0.6)),
-                     decay_rate=20.0)
-
-- **Recipes**, the same tree as data, for a game that keeps its tuning in files:
-
-      {"hit": {"envelope": {"decay_rate": 20.0, "of": {"mix": [
-          {"transient": {"duration": 0.03, "amplitude": 0.5}},
-          {"sine": {"freq": 140.0, "duration": 0.12, "amplitude": 0.6}}]}}}}
-
-  A recipe node is an object with one key, naming a function below, whose value
-  holds that function's arguments: `envelope` and `concat` take what they wrap
-  as `of`, and `mix` takes a list. `build_placeholders` checks the whole tree
-  and names the exact place a mistake is, with the closest valid name. From
-  the command line: `pyguara sounds recipes.json out/`.
-
-Output is deterministic. Noise draws from a stream seeded by the sound's own
-name, so editing one sound never changes another's bytes, and a rebuild without
-edits writes identical files -- a diff means a sound changed.
+Example:
+    hit = envelope(mix(transient(0.03, 0.5, rng), sine(140.0, 0.12, 0.6)),
+                   decay_rate=20.0)
 """
 
 from __future__ import annotations

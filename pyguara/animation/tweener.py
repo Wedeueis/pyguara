@@ -1,21 +1,14 @@
 """Tweening an entity's own properties, ticked by the engine.
 
-Before this, tweening one property was about forty lines of boilerplate
-per effect: hold a reference, own a `TweenManager`, tick it in a system
-you wrote, read `current_value`, write it back every frame. The worked
-example was `games/true_coral/systems.py`'s `BlockMoveSystem`, and every
-game that wanted damage numbers floating up, a pickup magnetising, or a
-chest lid lerping wrote it again.
+`tween_property` starts a tween on a dotted property path, and
+`TweenSystem` advances it and writes the value back each step.
 
+`TweenSystem` is a scene system, not a container service, so its
+tweens end with the scene whose entities they animate.
+
+Example:
     tween_property(entity, "transform.position", to=target, duration=0.3,
                    easing=EasingType.EASE_OUT_QUAD)
-
-`TweenSystem` does the rest. It is a **scene** system rather than a
-DI-registered global, which #37 suggested: an app-wide manager outlives
-the scene whose entities it animates, and goes on writing to components of
-entities that no longer exist. That is the same leak #55 fixed for
-coroutines, and a scene-owned system cannot have it -- the scene's
-`SystemManager.cleanup()` takes the tweens with it.
 """
 
 from __future__ import annotations
@@ -170,26 +163,10 @@ def resolve_property(entity: Entity, path: str) -> TweenTarget:
 def _interpolate_position_tween(target: TweenTarget) -> Transform | None:
     """Switch a position-driving tween's transform into visual interpolation.
 
-    `TweenSystem` runs on the **fixed** step, so a tween moves a position 60
-    times a second however fast the display is. For a physics body that is
-    already handled: `PhysicsSystem` sets `Transform.interpolate`, the scene
-    manager snapshots `previous_position` before each tick, and the render
-    path lerps between the two. A tween on an entity with no `RigidBody`
-    had none of that, so on a 120 or 144 Hz display the sprite held still
-    for two or three frames and then jumped -- the judder
-    `render_position`'s own docstring describes.
-
-    Opting the transform in is the fix that keeps the fixed step. Moving
-    the tick to `variable_update` would also look smooth and would cost
-    two things worth more: the ordering guarantee documented at
-    `scene/base.py:120-123` (a tween driving a position must be applied
-    before steering, AI or the scene's update reads it this tick), and
-    reproducibility -- a framerate-dependent tween does not replay, which
-    is the thing `RandomService` seeding was just fixed to protect.
-
-    Mirrors `PhysicsSystem`'s own opt-in, including seeding
-    `previous_position`: without it the first rendered frame lerps from
-    whatever the field happened to hold.
+    `TweenSystem` runs on the fixed step. Without interpolation, a tweened
+    position on an entity with no `RigidBody` would move at the fixed rate
+    and judder on a faster display. This mirrors `PhysicsSystem`'s opt-in,
+    including seeding `previous_position`.
 
     Args:
         target: The resolved destination.

@@ -1,15 +1,9 @@
 """Taking a value apart into numbers, and putting it back as itself.
 
-`Tween` interpolates numbers. Games tween `Vector2` positions and `Color`
-tints, and the old answer was "tween the components and rebuild it
-yourself" -- so every call site carried the same three lines, and
-`Tween.current_value` handed back a plain tuple where a `Vector2` went in.
-Writing that tuple back to `transform.position` is a bug that surfaces as
-an `AttributeError` several frames later.
-
-Decomposing here instead means one place knows that a `Color`'s channels
-are bytes that must be rounded and clamped, that a `Vector2` is floats, and
-that a plain tuple should come back a plain tuple.
+`Tween` interpolates numbers. This module decomposes a `Vector2`, a
+`Color` or a tuple into floats and rebuilds the same type from the
+result: a `Color`'s channels are rounded and clamped, a `Vector2` is
+floats, and a plain tuple comes back a plain tuple.
 """
 
 from typing import Any

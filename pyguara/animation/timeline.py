@@ -1,11 +1,10 @@
 """Composing tweens in sequence and in parallel.
 
-Chaining through nested `on_complete` callbacks stops being readable past
-two steps, and there is no way to say "these two at once, then that one"
-at all. Combat juice is naturally a timeline -- anticipation, strike,
-hitstop, knockback, recovery -- and so is a card dealing, a chest opening,
-a UI screen sliding in.
+A `Timeline` has the same `update(dt) -> bool` contract as a `Tween`,
+so `TweenManager` holds either, and a timeline can be a step inside
+another timeline.
 
+Example:
     (Timeline()
         .then(wind_up)
         .wait(0.05)
@@ -13,10 +12,6 @@ a UI screen sliding in.
         .parallel(knockback, screen_shake)
         .then(recover)
         .start())
-
-A `Timeline` ticks with the same `update(dt) -> bool` contract a `Tween`
-has, so `TweenManager` holds either without knowing which, and a timeline
-can be a step inside another timeline.
 """
 
 from __future__ import annotations
@@ -392,19 +387,12 @@ class Timeline:
         """Advance the timeline by `dt`.
 
         A step that finishes with time left over hands the remainder to the
-        next one in the *same* call, so a chain of short waits does not
-        take one frame each -- five 1 ms callbacks in a timeline would
-        otherwise take 83 ms at 60 Hz.
+        next one in the same call. A step that takes no time (a callback, an
+        empty parallel group, a zero wait) also runs in the same call, so
+        `then(tween).call(f)` calls `f` on the frame the tween ends.
 
-        A step that takes *no* time -- a callback, an empty parallel group,
-        a zero wait -- also runs in the same call, even with nothing left
-        over. Otherwise `then(tween).call(spawn_hitbox)` fires the callback
-        one frame after the tween it belongs to, which is exactly the kind
-        of off-by-one-frame that makes a combat timeline feel loose.
-
-        At most one full pass over the steps happens per call. Without that
-        bound, a looping timeline of nothing but instant steps would spin
-        here forever instead of merely misbehaving.
+        At most one full pass over the steps happens per call, so a looping
+        timeline of instant steps cannot spin here.
 
         Args:
             dt: Seconds since the last call.

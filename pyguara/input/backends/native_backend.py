@@ -15,10 +15,8 @@ from pyguara import native
 class NativeClipboard:
     """The desktop clipboard, through arboard.
 
-    Implements `pyguara.ui.clipboard.Clipboard`, as `PygameClipboard` does,
-    with the same promise: **no call raises.** A clipboard that cannot be
-    opened -- no clipboard manager, no display -- reads as empty and
-    swallows writes, because a text field is no place to surface either.
+    Implements `pyguara.ui.clipboard.Clipboard`. No call raises: a
+    clipboard that cannot be opened reads as empty and swallows writes.
     """
 
     def __init__(self) -> None:

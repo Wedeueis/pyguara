@@ -1,51 +1,14 @@
 """A uniform-grid spatial hash for fast "what's near this point" queries.
 
-Bucketing world positions into fixed-size cells turns a radius or rectangle
-query into "look at a handful of cells" instead of "scan every entry" --
-the same trade physics engines make for broad-phase collision, generalised
-here for gameplay code with no physics body at all: pooled projectiles, AI
-perception targets, click-picking, RTS selection. It knows nothing about
-entities or components -- callers supply whatever key they like (an entity
-id, typically) alongside a position and an optional filter mask.
+Positions are bucketed into fixed-size cells, so a radius or rectangle
+query looks at a handful of cells. Callers supply any key (usually an
+entity id) with a position and an optional filter mask. It is a
+broad-phase index: `query_radius` confirms exact distance, but nothing
+here knows a key's size or shape.
 
-This is a broad-phase index only. `query_radius` confirms exact distance
-before returning a key (cheap, since positions are already tracked), but it
-knows nothing of a key's own size or shape -- a caller wanting exact overlap
-fetches its own per-key extent data and confirms it, the same way
-`IPhysicsEngine.region_query` is a cheap AABB filter that callers refine
-with `overlap_box_all`/`overlap_circle`.
-
-**There is a native implementation behind the same methods**, worth
-8-10x on a tick of insert-everything-then-query-everything and reached
-through `accelerate=` or the engine-wide switch. Every consumer gets it
-without changing a line, which is the point: the index is shared by
-flocking, actor separation, magnet pickups, projectile hits and two
-demos, so one port pays for all of them. See
-`docs/adr/0004-the-native-boundary.md`, Decision 7 -- which also records
-that the ADR had previously ruled this shape out, on reasoning a
-measurement contradicted, and what each *consumer* actually gains, which
-is far less than the index does.
-
-**One exotic key shape diverges**: the native store holds an exclusive
-borrow of itself for the duration of a call, so a key whose `__hash__` or
-`__eq__` re-enters the same index raises `RuntimeError: Already
-borrowed`. The Python store survives a re-entry that fires once and
-recurses to a stack overflow if it fires every time, so this is one store
-failing loudly where the other fails slowly rather than one being safe.
-No engine key does either -- they are entity ids. The *safe* version of
-that shape is relied on throughout, though: a query returns a
-materialised list, so iterating one while removing keys from the index is
-fine on both stores, and that is pinned by a test rather than left to
-chance.
-
-**One pattern is slower on the native store**, and asymptotically so:
-alternating `insert` and a query, rather than syncing the whole index and
-then sweeping it. The native grid rebuilds on the first query after any
-write, so an alternating loop pays O(n) per query where Python pays O(1)
-per insert -- measured at 0.13x the Python speed over 4000 keys. Nothing
-in the engine does this (`SpatialIndexSystem` syncs, then the consumers
-query), but a game could, and `accelerate=False` is the answer if it
-does.
+A native implementation sits behind the same methods, reached through
+`accelerate=` or the engine-wide switch. See ADR 0004, Decision 7, and
+`docs/agents/native-extension.md` for how the two stores differ.
 """
 
 from __future__ import annotations
@@ -177,19 +140,9 @@ class SpatialHash[K]:
     ) -> list[K]:
         """Every key within `radius` of `center`, confirmed by exact distance.
 
-        The cell range is derived straight from `center +/- radius` rather
-        than by building a `Rect` and asking `_cell_of` about its corners,
-        and the distance test is squared, so a query costs no `Rect`, no
-        `Vector2` and no `sqrt` per candidate.
-
-        **The order of the result is not defined and differs between the
-        two stores.** Python yields from `set[K]`, so its order is the
-        keys' hash order -- which `PYTHONHASHSEED` randomises per process
-        for the string keys the engine actually uses, making it unstable
-        even between two runs of the same code. The native index returns
-        slot order, which is at least stable. A caller that wants a
-        particular one of several results must pick it (by distance, by
-        id), not take the first.
+        The order of the result is not defined and differs between the two
+        stores. A caller that wants a particular one of several results must
+        pick it (by distance, by id), not take the first.
         """
         if self._native is not None:
             return cast("list[K]", self._native.query_radius(center, radius, mask))

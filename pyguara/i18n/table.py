@@ -1,20 +1,16 @@
 """One locale's strings: keys to text, or to plural forms of text.
 
-A file is a flat JSON object, one per locale, named for it (`ru.json`):
+A file is a flat JSON object, one per locale, named for it (`ru.json`).
+Placeholders are `{name}`, optionally with a format spec
+(`{ratio:.0%}`). Anything else, such as `{player.__class__}`, is
+refused when the file is loaded.
 
-```json
-{
-  "_meta": {"reviewed": false, "translator": "machine draft"},
-  "room.waiting": "Waiting for {player}...",
-  "hud.salvage": {"one": "{count} scrap", "other": "{count} scraps"}
-}
-```
-
-Placeholders are `{name}`, optionally with a format spec (`{ratio:.0%}`).
-Nothing else: a translation file is data from outside the code, and
-`str.format` on arbitrary text could walk the attributes of whatever is
-passed in (`{player.__class__}`), so anything but a plain name is refused
-when the file is loaded.
+Example:
+    {
+      "_meta": {"reviewed": false, "translator": "machine draft"},
+      "room.waiting": "Waiting for {player}...",
+      "hud.salvage": {"one": "{count} scrap", "other": "{count} scraps"}
+    }
 """
 
 from __future__ import annotations

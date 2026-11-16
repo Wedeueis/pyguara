@@ -1,35 +1,14 @@
 """Native acceleration, and how the engine decides to use it.
 
-Track R moves parts of the engine into a compiled extension. The wheel
-ships it, so an installed PyGuara runs native by default -- but this is
-still the seam that makes it *absent-tolerant*: the module is used when it
-is present and the pure-Python implementation runs when it is not, which
-is what `PYGUARA_NO_NATIVE=1`, a platform with no wheel and
-`native_acceleration = "off"` all rely on.
+The compiled extension is used when it is present and allowed, and the
+pure-Python implementations run otherwise. `PYGUARA_NO_NATIVE=1`, a
+platform with no wheel and `native_acceleration = "off"` rely on that.
 
-It lives at the top of the package rather than under `graphics/` because
-it is no longer a graphics concern -- `ParticleSystem` and `Sparks` were
-merely first. It deliberately imports nothing from `pyguara` but the
-compiled extension itself, which imports nothing back, so it can be
-consulted from anywhere, including from modules loaded before the engine
-is bootstrapped.
+This module imports nothing from `pyguara` but the extension itself,
+so it can be consulted from anywhere, including before bootstrap.
 
-The cost of that choice is two implementations to keep in agreement, which
-is paid by running the same tests against both -- see
-`tests/test_native_particle_parity.py`.
-
-Building it, in a checkout:
-
-    uv sync        # maturin is the build backend, so this compiles it
-    make native    # rebuild in place after editing Rust
-
-`cargo build --release` also works and is what `_candidate_paths` finds,
-but it is now the *second* place looked at. An install wins over it, so a
-bare `cargo build` after `uv sync` leaves the older installed library in
-force and the new code silently unused -- rebuild with `make native`,
-which is `maturin develop --release`; plain `maturin develop` builds a
-*debug* extension that is slower than the Python it replaces.
-See `docs/adr/0006-shipping-the-native-extension.md`.
+Building the extension is covered in `AGENTS.md` and
+`docs/adr/0006-shipping-the-native-extension.md`.
 """
 
 from __future__ import annotations
@@ -55,26 +34,16 @@ class NativeAcceleration(Enum):
     """Whether the engine uses the compiled extension.
 
     One value for the whole process, resolved once at bootstrap from
-    `PerformanceConfig.native_acceleration`. It is a single engine-wide
-    choice rather than a per-subsystem one on purpose, and the purpose is
-    reproducibility: a store picked silently from whether a `.so` happens
-    to be on disk means the same game, with the same code and the same
-    seed, behaves differently on a machine that built the extension and
-    one that did not. That is invisible for a particle effect and is
-    gameplay for a flock of enemies. See
-    `docs/adr/0004-the-native-boundary.md`, Decision 4.
+    `PerformanceConfig.native_acceleration`, so the same game with the
+    same seed behaves the same wherever it runs. See ADR 0004, Decision 4.
 
     OFF: never native. The pure-Python implementations run even when the
          extension is built and importable.
 
-    AUTO: native where available, Python otherwise. The default, and the
-          right setting for development and for a game that does not
-          depend on native behaviour.
+    AUTO: native where available, Python otherwise. The default.
 
-    REQUIRED: native, and **fail at startup** if the extension is missing.
-              What a game ships with once it depends on native
-              performance, so the failure is a clear error at boot rather
-              than a frame-rate mystery or a divergent simulation.
+    REQUIRED: native, and fail at startup if the extension is missing.
+              For a game that depends on native performance.
     """
 
     OFF = "off"
@@ -91,13 +60,9 @@ _source: str | None = None
 def _repository_root() -> Path:
     """Return the checkout this module was imported from.
 
-    One level up from `pyguara/`, and derived rather than hardcoded
-    because getting it wrong fails *silently*: a wrong root finds no
-    library, `native_module()` falls back to Python exactly as it is
-    designed to, and the suite goes green having tested none of the
-    accelerator. That is precisely what happened when this module moved
-    here from `pyguara/graphics/components/`, where the same expression
-    needed `parents[3]`. `tests/test_native_loader.py` now fails instead.
+    One level up from `pyguara/`. A wrong root finds no library and the
+    engine falls back to Python without an error, so this is derived from
+    the module's own path.
     """
     return Path(__file__).resolve().parents[1]
 
@@ -212,16 +177,8 @@ def store_name() -> str:
 def describe() -> str:
     """Return one line saying which store is in force and why.
 
-    Logged at bootstrap, because Decision 4 of ADR 0004 asks for the
-    resolved store to be *observable*: a choice that changes behaviour and
-    is not reported is the thing being fixed.
-
-    The store is named with `store_name()`'s token rather than spelled
-    out in prose. It used to read "-> Python" in one branch and
-    "-> native" in the other, which is one fact in two spellings -- and
-    the moment a second reporter existed, `status()`, the two could not
-    be checked against each other without a case fudge. Same fact, same
-    token, in every report of it.
+    Logged at bootstrap. The store is named with `store_name()`'s token,
+    the same one `status()` reports.
     """
     mode = _effective_mode()
     overridden = (
@@ -247,22 +204,11 @@ def describe() -> str:
 def status() -> dict[str, Any]:
     """Return the resolved store as structured facts.
 
-    `describe()`'s companion, and the split is deliberate: that one is one
-    line of prose for a boot log, this one is for anything that has to
-    *compare* or render the same facts -- Studio's `project_overview`,
-    and the tests that assert the two agree.
+    The structured form of `describe()`, for anything that compares or
+    renders the facts, such as Studio's `project_overview`.
 
-    ADR 0004's Decision 4 asks for the resolved store to be observable,
-    on the grounds that a silent choice which changes behaviour is the
-    defect being fixed. A boot line satisfies that for whoever starts the
-    process; an agent or an author who attached to a running Studio
-    session never saw it.
-
-    `source` is a path on this machine and is meant to be: two people
-    reading the same project get different answers, which is exactly the
-    thing worth seeing. That is also why this is **not** part of
-    `ProjectMap` -- `pyguara studio instructions` renders one into a
-    committed `AGENTS.md`, and a local `.so` path has no business there.
+    `source` is a path on this machine, so it is not part of `ProjectMap`,
+    which is rendered into a committed `AGENTS.md`.
 
     Returns:
         `store` ("native" or "python"), `mode` (the configured setting),
@@ -282,19 +228,12 @@ def status() -> dict[str, Any]:
 def native_module() -> Any | None:
     """Return the native extension, or None when it is unavailable.
 
-    Looked up once and cached, including the failure: an engine that has
-    decided it is running pure Python should not pay a filesystem probe per
-    `ParticleSystem` constructed.
-
-    Tried in two ways. An installed `pyguara.pyguara_core_rs` wins, which
-    is what the wheel provides and what `uv sync` builds in a checkout.
-    Failing that, a library built in place by `cargo build` is loaded from
-    `target/`, which is what a contributor gets who ran cargo and nothing
-    else.
+    Looked up once and cached, including the failure. An installed
+    `pyguara.pyguara_core_rs` wins; failing that, a library built in place
+    by `cargo build` is loaded from `target/`.
 
     Returns None whenever the resolved mode is `OFF`, which includes
-    `PYGUARA_NO_NATIVE=1` -- the first thing to try when a bug might be
-    the accelerator's, and what the parity tests use.
+    `PYGUARA_NO_NATIVE=1`.
 
     Returns:
         The module, or None.

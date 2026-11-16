@@ -1,28 +1,20 @@
 """Crash reports: an unhandled exception leaves a file behind, and says where.
 
-A shipped game has no terminal. On Windows a windowed build has no stderr
-at all, so a crash shows the player a window closing and nothing else, and
-the developer gets "it just closed". This writes what is needed to diagnose
-it -- the traceback, the engine and Python versions, the platform, which
-native store was in force, and whatever the engine noted on the way, such
-as the renderer -- to a file in the player's data directory.
+The report holds the traceback, the engine and Python versions, the
+platform, which native store was in force, and whatever the engine
+noted on the way, such as the renderer. It is written to the player's
+data directory, and holds paths from their machine.
 
-Opt-in, because the directory is named after the game and the engine
-cannot invent that name (see `pyguara.persistence.storage.user_data_path`):
+Opt-in, because the directory is named after the game. Install it
+before the application is built, so a failure at startup is reported
+too.
 
-```python
-from pyguara.crash import install_crash_reporter
+Example:
+    from pyguara.crash import install_crash_reporter
 
-install_crash_reporter("Reclaimer")
-app = create_application()
-app.run(TitleScene(...))
-```
-
-Install it first, before the application is built, so a failure at
-startup -- no GPU, a broken config -- is reported too.
-
-The report holds paths from the player's machine, including their home
-directory. It stays on that machine; sharing it is the player's choice.
+    install_crash_reporter("Reclaimer")
+    app = create_application()
+    app.run(TitleScene(...))
 """
 
 from __future__ import annotations

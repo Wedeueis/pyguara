@@ -1,28 +1,19 @@
 """One way to read a game's files, whether they are loose or packed.
 
-A shipped game should not install hundreds of loose files: they are slow to
-copy, easy to break, and an invitation to edit. `pyguara build` can bake the
-assets into one pack (a ZIP), and at run time the pack is mounted over the
-folder it was made from. Every engine loader reads through this module, so a
-path that names a packed file finds it there, and anything not in a pack is
-read from disk as before:
+`pyguara build` can bake the assets into one pack (a ZIP), which is
+mounted at run time over the folder it was made from. Every engine
+loader reads through this module. A pack holds paths relative to its
+`root`, and a path is looked up in a pack only if it lies under that
+root, so the same paths work loose or packed. The last mounted pack is
+consulted first, then the earlier ones, then the disk. Packs are
+read-only.
 
-```python
-from pyguara import assets
+Example:
+    from pyguara import assets
 
-assets.mount_pack("Reclaimer.pak", root=game_dir)
-assets.read_bytes(game_dir / "assets/sprites/hero.png")   # from the pack
-assets.read_bytes("saves/slot1.save")                     # not packed: disk
-```
-
-**A path keeps its meaning.** A pack holds paths relative to its `root`; a
-path asked for -- absolute, or relative to the working directory -- is looked
-up in a pack only if it lies under that root. So game code and the resource
-index use the same paths, loose or packed, and `files_under()` lists packed
-files as the paths they would have on disk.
-
-The last mounted pack is consulted first, then the earlier ones, then the
-disk. Packs are read-only; writing (saves, settings, logs) is the disk's.
+    assets.mount_pack("Reclaimer.pak", root=game_dir)
+    assets.read_bytes(game_dir / "assets/sprites/hero.png")   # the pack
+    assets.read_bytes("saves/slot1.save")                     # the disk
 """
 
 from __future__ import annotations

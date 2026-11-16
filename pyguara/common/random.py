@@ -1,15 +1,11 @@
 """A serializable random-number stream.
 
-`RandomStream` wraps `random.Random` so gameplay code can hold an explicit,
-inspectable source of randomness instead of reaching into Python's global
-`random` module (which is shared, unseeded, and impossible to snapshot).
+`RandomStream` wraps `random.Random` so gameplay code holds an
+explicit source of randomness that can be seeded and snapshotted,
+unlike the global `random` module.
 
-State caveat:
-    `random.Random.getstate()` returns a nested tuple of ints. Round-tripped
-    through JSON (as `pyguara/persistence` and `pyguara/replay` do),
-    `json.loads` decodes tuples back as lists, and `random.Random.setstate()`
-    raises `TypeError` on a list. `restore_state()` re-tuples defensively so
-    a JSON round trip is safe.
+`restore_state()` accepts state that has been through JSON, where the
+tuples `random.Random.getstate()` returns come back as lists.
 """
 
 from __future__ import annotations

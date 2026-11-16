@@ -106,16 +106,12 @@ class ConfigManager:
     def register_section(self, name: str, section_type: type[Any]) -> None:
         """Add a game-defined section to the config, before loading.
 
-        The section then gets everything the engine's own sections get: it
-        is read from and written to the same file under `name`, coerced back
-        to its declared types, overridable from `PYGUARA_<NAME>_<FIELD>`,
-        writable through `update_setting()`, layerable by a profile, and
-        checked by `validate()` if it implements
-        `sections.ValidatableSection`.
-
-        Registering installs the section at its declared defaults
-        immediately, so reads work before `load()` -- and so a game whose
-        config file does not exist yet still has usable values.
+        The section is then read from and written to the same file under
+        `name`, coerced to its declared types, overridable from
+        `PYGUARA_<NAME>_<FIELD>`, writable through `update_setting()`,
+        layerable by a profile, and checked by `validate()` if it implements
+        `sections.ValidatableSection`. It is installed at its defaults
+        immediately, so reads work before `load()`.
 
         Args:
             name: Key for this section in the config document.
@@ -663,20 +659,13 @@ class ConfigManager:
     def _apply_env_overrides(self) -> None:
         """Let `PYGUARA_*` environment variables override loaded settings.
 
-        Two layers. The four short aliases are applied first because they
-        are what every existing launch script and CI job already sets, and
-        their names do not follow the general rule
-        (`PYGUARA_WINDOW_WIDTH` means `display.screen_width`). Then the
-        generic `PYGUARA_<SECTION>_<FIELD>` pass, which wins on the overlap:
-        it names the exact field, so it is the more deliberate of the two.
+        Two layers. The four short aliases are applied first; their names do
+        not follow the general rule (`PYGUARA_WINDOW_WIDTH` means
+        `display.screen_width`). Then the generic `PYGUARA_<SECTION>_<FIELD>`
+        pass, which wins where both name a field and also reaches
+        game-defined sections.
 
-        The generic form is what makes a game-defined section reachable from
-        the environment at all -- without it, `register_section()` would
-        hand a game the file and the validator but not the override that
-        makes a headless CI run or a packaged build configurable.
-
-        An unparseable value is reported and skipped rather than silently
-        ignored, since a typo in a launch script is otherwise invisible.
+        An unparseable value is reported and skipped.
         """
         self._override_enum(
             "PYGUARA_LOG_LEVEL", self._config.debug, "log_level", LogLevel
@@ -856,9 +845,6 @@ class ConfigManager:
 
     def _log(self, severity: ValidationSeverity, message: str) -> None:
         """Emit a message at the level matching a validation severity.
-
-        Everything used to be logged as a warning, which hid ERROR and
-        CRITICAL problems among the merely suboptimal ones.
 
         Args:
             severity: Severity to map to a log level.

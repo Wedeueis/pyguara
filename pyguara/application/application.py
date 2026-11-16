@@ -390,25 +390,14 @@ class Application:
 
         Each frame measures its own duration, clamps it to
         `physics.max_frame_time`, accumulates it, and runs as many fixed-rate
-        updates as that buys before rendering once. Physics therefore behaves
-        identically regardless of display framerate. While a replay loaded via
-        `load_replay()` is driving the game, each frame's duration is taken from
-        the recording instead, so a replay reproduces time-dependent state on
-        any machine.
+        updates as that buys before rendering once.
 
-        `self.time_scale`/`self.paused` (see `_effective_time_scale()`) scale
-        that measured duration before it reaches the accumulator and
-        `_update()` -- not `fixed_dt` itself, which stays constant so physics
-        step size and stability are unaffected; slow-mo means fewer fixed
-        steps per real second, not smaller ones. Ignored entirely while a
-        replay drives the game: `recorded_dt` already fixes exactly how much
-        simulated time -- and therefore how many fixed steps -- the original
-        recording session spent on that frame, and scaling it here would
-        reproduce a different physics simulation than what was recorded.
+        `time_scale` and `paused` scale the measured duration, not `fixed_dt`,
+        so slow motion means fewer fixed steps per real second. While a replay
+        loaded via `load_replay()` drives the game, each frame's duration
+        comes from the recording and the scale is ignored.
 
-        Exceptions propagate: `run()` owns the logging and the `shutdown()`,
-        so a caller driving frames by hand decides for itself what a crash
-        in frame N means.
+        Exceptions propagate; `run()` owns the logging and the `shutdown()`.
 
         Returns:
             True while the loop should continue -- the app is running and the
@@ -743,22 +732,8 @@ class Application:
     def _resize_render_output(self, width: int, height: int) -> None:
         """Point everything that draws at the new window size.
 
-        Nothing did this. `WindowResizeEvent` was dispatched to whoever
-        subscribed -- the UI manager -- and the render graph, which is not
-        a subscriber, never heard: its framebuffers kept the size they were
-        created at for the life of the process, and every pass's
-        `on_resize` was dead code. Resizing a window left the scene
-        rendering at the old resolution and stretched, and left an editor
-        overlay drawing its panels into the old window's bounds.
-
-        The renderers are the other half, and they are resized whether or
-        not there is a graph: the ModernGL one builds its projection from
-        the size it was constructed with, and the UI one draws onto a
-        surface of that size which it then composites as a fullscreen
-        quad. Both left alone, a wider window stretched the world and the
-        HUD by the ratio between the old aspect and the new -- 1.37x
-        horizontally for a 1280x720 renderer in a 1990x820 window, which
-        is a circle drawn as an ellipse.
+        Resizes the render graph's framebuffers, if there is a graph, and the
+        world and UI renderers, which are resized either way.
 
         Args:
             width: The new window width in pixels.
@@ -788,22 +763,13 @@ class Application:
     ) -> tuple[tuple[int, int], tuple[int, int, int, int]]:
         """Return what the game renders at, and where that lands.
 
-        With `display.keep_aspect` the game keeps rendering at the
-        configured resolution however the window is dragged, and the
-        result is scaled into the largest rectangle of that shape the
-        window holds; the leftover becomes bars. Every player then sees
-        exactly the same framing.
+        With `display.keep_aspect` the game renders at the configured
+        resolution whatever the window's size, and the result is scaled into
+        the largest rectangle of that shape the window holds; the rest is
+        bars. Every player sees the same framing.
 
-        Rendering at the configured resolution rather than at the
-        window's is the point, and the half that is easy to miss: a
-        framebuffer grown to match a bigger window is not distorted, but
-        it does hold *more pixels*, and a renderer working in pixel
-        coordinates fills them with more world. The window's shape would
-        be respected and the framing still would not be. This is Godot's
-        `viewport` stretch mode, and the reason it is the one to copy.
-
-        Without the flag the game fills the window and a wider one shows
-        more world, which is what an ultrawide-aware game wants.
+        Without the flag the game fills the window, and a wider one shows more
+        world.
 
         Args:
             width: The window width in pixels.
@@ -941,19 +907,9 @@ class Application:
         """Draw through the multi-pass render graph (wgpu backend).
 
         The world is drawn into an offscreen buffer, every other registered
-        pass then runs in registration order (light, composite,
-        post-process, final -- whatever a bootstrap actually assembled),
-        and UI is drawn on top.
-
-        Before this, only the graph's `"final"` pass ever ran here -- a
-        game whose graph had passes in between (lighting, post-processing)
-        had to execute them itself, which every ModernGL demo in this repo
-        (`true_coral`, `protocolo_bandeira`, `mourisco_ressonancia`) did,
-        each hand-rolling the identical `for name in (...): pass.execute()`
-        loop from its own scene code. That workaround still configures
-        each pass's per-frame state (a camera, a set of lights) that only
-        the scene knows -- this loop cannot invent that -- but the
-        executing itself belongs here, once, not once per game.
+        pass then runs in registration order, and UI is drawn on top. A scene
+        still configures each pass's per-frame state (a camera, a set of
+        lights); this method only executes them.
 
         Args:
             alpha: Interpolation factor between the last two fixed steps.

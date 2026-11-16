@@ -71,26 +71,14 @@ def _stereo(volume: float, pan: float) -> tuple[float, float]:
 class NativeAudioSystem:
     """An audio system on the native mixer (`rust/src/mixer.rs`).
 
-    The mixer owns the device, through cpal, and plays voices; this decides
-    what they are. The policy is `PygameAudioSystem`'s -- buses, spatial
-    attenuation and pan, a fixed number of voices with lower priorities
-    stolen first -- so a game switching backend hears the same mix, plus:
+    The mixer owns the device and plays voices; this class decides what
+    they are. Buses, spatial attenuation and voice priorities follow
+    `PygameAudioSystem`. It adds continuous pitch, sample-exact loop
+    points, and bus volumes that reach sounds already playing.
 
-    - **Pitch, continuously.** 2.0 is an octave up and half as long.
-    - **Loop points.** An intro, then laps of a region, wrapped sample-exact
-      in the mixer.
-    - **Bus volumes reach sounds already playing.** pygame fixed a channel's
-      loudness when it started; here moving a slider moves a loop that is
-      going on.
-
-    **Selected by `AudioConfig.backend`, not by `native_acceleration`.**
-    Nothing in Python can stand in for it, so `PYGUARA_NO_NATIVE=1` must not
-    change what a game is allowed to ask for: `PYGUARA_AUDIO_BACKEND=pygame`
-    is what isolates a bug here. See ADR 0004, Decision 4.
-
-    With no output device -- or an extension built without the
-    `audio-output` feature -- the mixer runs against a silent clock and
-    sounds still end on time; `output` says which.
+    Selected by `AudioConfig.backend`, not by `native_acceleration`; see
+    ADR 0004, Decision 4. With no output device, the mixer runs against a
+    silent clock and sounds still end on time; `output` says which.
     """
 
     def __init__(

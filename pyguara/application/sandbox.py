@@ -1,17 +1,9 @@
 """An `Application` with the runtime developer overlay already installed.
 
-The overlay is `pyguara/tools`: frame timing, the event stream, collision
-wireframes and the shortcut table, drawn on the engine's own `UIRenderer`
-so they work on every backend. It is a *diagnostic* surface.
-
-**It is not the authoring surface, and does not try to be.** Selecting an
-entity, editing its components, dragging a transform handle, editing the
-config and browsing resources were registered here too, on F2/F5/F9/F6/F7.
-They are gone: `pyguara.studio` does all of that with an undo stack, an
-audit journal and a scrolling, dockable surface, and keeping a second,
-weaker copy meant two ways to change the world, only one of which kept a
-record. `attach_studio(app.container)` is the authoring answer, on the
-ModernGL backend; this is what a running game gets on any backend.
+The overlay is `pyguara/tools`: frame timing, the event stream,
+collision wireframes and the shortcut table, drawn on the engine's own
+`UIRenderer` so they work on every backend. It is a diagnostic
+surface. Authoring (selecting, editing, undo) is `pyguara.studio`.
 """
 
 from pyguara.application.application import Application
@@ -140,20 +132,8 @@ class SandboxApplication(Application):
     def _render_overlays(self) -> None:
         """Draw the developer tool overlay above the game and its UI.
 
-        This used to be a wholesale override of `_render()`, which restated
-        the frame loop and in doing so dropped two things from every sandbox
-        frame:
-
-        - **The render graph.** It never executed a single pass, so on the
-          ModernGL backend the sandbox skipped lighting, compositing,
-          post-processing and the `final` blit -- `Application` and
-          `SandboxApplication` disagreed about how a GL frame is drawn.
-        - **The game's own UI.** It called `ToolManager.render()` but never
-          `UIManager.render()`, so no game UI widget drew under the sandbox
-          app at all.
-
-        Overriding the overlay hook instead inherits whichever path the
-        backend provides and adds only what the sandbox is actually for.
+        Overriding this hook, not `_render()`, keeps the render graph and the
+        game's own UI in every sandbox frame.
         """
         if self._tool_manager:
             self._tool_manager.render(self._ui_renderer)

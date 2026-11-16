@@ -101,14 +101,11 @@ class PygameClipboard:
     """The desktop clipboard, via SDL.
 
     Implements `pyguara.ui.clipboard.Clipboard`. It lives in an input
-    backend rather than in `pyguara/ui` because the clipboard belongs to
-    the windowing system, and that is the layer allowed to import pygame.
+    backend because the clipboard belongs to the windowing system, and
+    that is the layer allowed to import pygame.
 
-    **Every call is guarded.** `pygame.scrap` needs a display, so it
-    raises under a headless run, and `get_text()` returns None for an
-    empty clipboard or one holding an image. A text field is not a place
-    to surface either of those: a paste that cannot happen should insert
-    nothing.
+    No call raises. `pygame.scrap` needs a display and `get_text()` can
+    return None; either reads as an empty clipboard.
     """
 
     def get_text(self) -> str:

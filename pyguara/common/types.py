@@ -1,18 +1,13 @@
 """Foundational value types for the PyGuara engine.
 
 `Vector2`, `Color` and `Rect` are the primitives every other subsystem shares.
+`Vector2` subclasses `pymunk.Vec2d`, so it passes into the physics
+backend without conversion. `Color` and `Rect` are plain dataclasses;
+no rendering backend is imported here.
 
-`Vector2` subclasses `pymunk.Vec2d` for C-optimised math and to pass into the
-physics backend without conversion. `Color` and `Rect` are plain dataclasses
-with no backend dependency -- neither pygame nor ModernGL is imported here.
-Conversion to a backend's native types happens only at that backend's
-boundary, in `graphics/backends/pygame/conversions.py`.
-
-Axis convention:
-    Y increases downwards, matching SDL, pygame and the engine's own default
-    gravity (`PhysicsConfig.gravity_y` is positive for a platformer). "Up" is
-    therefore negative Y. Every direction helper in this module and in
-    `Transform` follows that convention.
+Y increases downwards, matching SDL and the engine's default gravity,
+so "up" is negative Y. Every direction helper here and in `Transform`
+follows that.
 """
 
 from __future__ import annotations
@@ -56,26 +51,10 @@ class Vector2(pymunk.Vec2d):
     def length(self) -> float:
         """The length of the vector.
 
-        Overrides `pymunk.Vec2d.length`, which spells the same thing
-        `math.sqrt(self.x**2 + self.y**2)`. The difference is not
-        cosmetic: `x**2` goes through the platform's `pow`, which glibc
-        does not promise to round correctly, so it disagrees with `x * x`
-        for about **0.08%** of inputs. Neither spelling is more accurate
-        -- measured over 200k random vectors, 70 lengths differ and the
-        `pow` form is closer 34 times to the other's 36 -- so the reason
-        to pick one is not precision.
-
-        The reasons are that this one is **1.6x faster** on the same
-        values, and that it is *reproducible*: a length derived from
-        `pow` is only as portable as the libm underneath it, which no
-        other implementation of this engine's arithmetic can match. A
-        native flocking tick has to agree with this one bit-for-bit, and
-        anything deriving from `normalized()` -- which divides by this
-        length -- inherits whichever answer it gives. See
-        `docs/adr/0004-the-native-boundary.md`, Decision 5.
-
-        `sqr_magnitude` above, written here rather than inherited,
-        already spelled it `x * x + y * y`; only `length` disagreed.
+        Overrides `pymunk.Vec2d.length` to compute `sqrt(x * x + y * y)`
+        instead of using `**`. The two differ in the last bit for a small
+        share of inputs, and this spelling is the one native code can
+        reproduce exactly. See ADR 0004, Decision 5.
         """
         return math.sqrt(self.x * self.x + self.y * self.y)
 
@@ -200,7 +179,7 @@ class Vector2(pymunk.Vec2d):
         return Vector2(v.x, v.y)
 
     def rotated(self, angle_radians: float) -> Vector2:
-        """Return this vector rotated by an angle in **radians**.
+        """Return this vector rotated by an angle in radians.
 
         Args:
             angle_radians: Rotation angle in radians.
@@ -212,11 +191,7 @@ class Vector2(pymunk.Vec2d):
         return Vector2(v.x, v.y)
 
     def rotate_degrees(self, angle_degrees: float) -> Vector2:
-        """Return this vector rotated by an angle in **degrees**.
-
-        Named explicitly rather than `rotate`: a bare `rotate`/`rotated` pair
-        differing only in angle unit is impossible to read correctly at a call
-        site, and `Transform.rotate()` takes radians.
+        """Return this vector rotated by an angle in degrees.
 
         Args:
             angle_degrees: Rotation angle in degrees.
@@ -359,9 +334,7 @@ class Vector2(pymunk.Vec2d):
     def from_angle_degrees(degrees: float, length: float = 1.0) -> Vector2:
         """Return a vector at `degrees`, measured anticlockwise from +X.
 
-        pymunk's inherited `from_polar()` takes **radians**, which is the
-        easy mistake to make -- `from_polar(1, 90)` is 90 *radians*, not a
-        quarter turn.
+        The inherited `from_polar()` takes radians.
 
         Args:
             degrees: The angle in degrees.
@@ -896,10 +869,8 @@ class Rect:
     def clamp(self, other: Rect) -> Rect:
         """Return a copy moved to sit inside `other`, keeping its size.
 
-        A rectangle too large to fit is **centred** on `other` rather than
-        aligned to a corner, which is what `pygame.Rect.clamp` does and is
-        the behaviour a camera clamped to a level smaller than the viewport
-        wants.
+        A rectangle too large to fit is centred on `other`, as
+        `pygame.Rect.clamp` does.
 
         Args:
             other: The rectangle to stay inside.
@@ -936,16 +907,8 @@ class Rect:
         """Return a copy scaled to fit inside `other`, aspect ratio kept.
 
         The result is centred in `other` on whichever axis has room left
-        over. Letterboxing a fixed-aspect render target into a resized
-        window is the usual caller.
-
-        **Exact where `pygame.Rect.fit` is not.** pygame divides by a float
-        ratio, so fitting a 36-high rectangle into a 35-high one computes
-        `36 / (36 / 35)` as `34.999...` and truncates to 34 -- a unit short
-        of the height it just asked for. The integer arithmetic below lands
-        on `other`'s dimension exactly. Differentially tested at ~4% of
-        random inputs diverging, every one of them pygame losing a unit.
-        Matching that artefact deliberately would be perverse.
+        over. The arithmetic is integer, so the fitted axis lands on `other`'s
+        dimension exactly; `pygame.Rect.fit` can come out one unit short.
 
         Args:
             other: The rectangle to fit inside.
@@ -978,15 +941,9 @@ class Rect:
     def scale_by(self, sx: float, sy: float | None = None) -> Rect:
         """Return a copy scaled about its own centre.
 
-        **This is the one helper here that does not bit-match
-        `pygame.Rect`**, and the divergence is deliberate. pygame-ce's
-        rounding is not reproducible from any single rule -- probing
-        `scale_by(1.5)` across inputs, some results match "integer centre,
-        truncated size", others match "float centre, truncated at the end",
-        and others match neither. Rather than reverse-engineer that by
-        trial, this truncates towards zero the way `inflate` does, which is
-        consistent with the rest of this class and never off by more than a
-        pixel.
+        Truncates towards zero, as `inflate` does. This does not bit-match
+        `pygame.Rect.scale_by`, whose rounding follows no single rule; the two
+        never differ by more than a pixel.
 
         Args:
             sx: Horizontal scale factor.

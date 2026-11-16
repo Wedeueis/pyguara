@@ -63,15 +63,9 @@ class Transform(StrictComponent):
     World values are cached and recomputed lazily: a setter marks the subtree
     dirty, and the next `world_*` read rebuilds only what it needs.
 
-    Angles are in **radians** throughout, except `rotation_degrees`.
-
-    Note:
-        Everything here is a property, which the data-only rule permits: the
-        stored values, the cached `world_*` trio and its dirty propagation,
-        and the direction vectors. The *behaviour* -- `set_parent`,
-        `teleport`, `look_at`, the coordinate conversions -- lives beside
-        this class as free functions, the same split `StatBlock`/`get_stat`
-        and `Health`/`apply_damage` use. See "Transform behaviour" below.
+    Angles are in radians throughout, except `rotation_degrees`. Behaviour
+    (`set_parent`, `teleport`, `look_at`, the coordinate conversions) is
+    free functions beside this class.
 
     Attributes:
         interpolate: Whether the renderer draws this between fixed ticks.
@@ -240,8 +234,7 @@ class Transform(StrictComponent):
     def up(self) -> Vector2:
         """The world-space up direction, `(0, -1)` at zero rotation.
 
-        Y increases downwards, so up is negative Y -- the same convention as
-        `Vector2.up()`, which this used to contradict by returning `(0, 1)`.
+        Y increases downwards, so up is negative Y, as in `Vector2.up()`.
         """
         return Vector2.up().rotated(self.world_rotation)
 
@@ -356,19 +349,11 @@ def teleport(transform: Transform, position: Vector2) -> None:
 def render_position(transform: Transform, alpha: float) -> Vector2:
     """Return where this transform should be drawn between two ticks.
 
-    Physics advances at a fixed rate while frames are presented at the
-    display's rate, so drawing `position` directly shows the last
-    completed tick. When those rates are not locked together some frames
-    show no movement and the next shows two ticks' worth -- motion that
-    reads as stutter even though the simulation is perfectly regular.
-    At 60Hz physics on a 75Hz display, a body moving 300 px/s is drawn
-    in steps of 0 to 5 pixels where every step should be 4.
-
-    Interpolating between the previous tick and the current one, by how
-    far the frame sits between them, removes that. It costs one tick of
-    latency, which is why it is opt-in through `interpolate`; a transform
-    that has not opted in is drawn where it is, and `previous_position`
-    is not maintained for it.
+    A transform with `interpolate` set is drawn between its position at
+    the previous fixed tick and the current one, by how far the frame sits
+    between them. That removes the stutter of a fixed-rate body on a
+    display running at another rate, and costs one tick of latency. A
+    transform that has not opted in is drawn where it is.
 
     Args:
         transform: The transform to locate.
@@ -479,7 +464,7 @@ def translate(transform: Transform, translation: Vector2) -> None:
 
 
 def rotate(transform: Transform, angle_radians: float) -> None:
-    """Turn by an angle in **radians**.
+    """Turn by an angle in radians.
 
     Args:
         transform: The transform to turn.

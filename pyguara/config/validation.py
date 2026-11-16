@@ -80,20 +80,13 @@ class ConfigValidator:
     def _validate_custom(self, config: GameConfig) -> list[ValidationIssue]:
         """Ask each game-defined section to check itself.
 
-        The engine cannot know what a game's values mean, so a registered
-        section carries its own rules by implementing
-        `sections.ValidatableSection`. One without a `validate()` method is
-        simply unchecked -- the protocol is opt-in.
+        A registered section carries its own rules by implementing
+        `sections.ValidatableSection`; one without `validate()` is unchecked.
 
         `section` is overwritten with the registered name on every issue
-        returned: the name is the registry's to know, not the section's, and
-        a mismatch would quietly route the issue past
-        `validate_section()` and past `update_setting()`'s blocking check.
-
-        A section whose `validate()` raises becomes one ERROR naming it,
-        rather than taking down the startup path that called it -- a buggy
-        rule in a game's own config should not stop the engine from
-        reporting everything else.
+        returned, so `validate_section()` and `update_setting()`'s blocking
+        check find it. A section whose `validate()` raises becomes one ERROR
+        naming it.
 
         Args:
             config: The configuration whose custom sections to check.

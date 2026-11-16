@@ -175,9 +175,8 @@ class CompositeNode(BehaviorNode):
             children: List of child nodes
             name: Optional name for debugging
             memory: Whether to resume at the child that was RUNNING instead
-                of re-ticking from the first one. True keeps the historical
-                behaviour; see the subclasses for why False is usually what
-                an author meant.
+                of re-ticking from the first one. The reactive subclasses
+                pass False.
         """
         super().__init__(name)
         self.children = children
@@ -263,10 +262,9 @@ class SequenceNode(CompositeNode):
         Args:
             children: List of child nodes to execute in order
             name: Optional name for debugging
-            memory: Resume at the RUNNING child (True, the historical
-                behaviour) or re-tick from the first child every tick
-                (False). See `ReactiveSequenceNode` for why False is
-                usually what a guarded sequence meant.
+            memory: Resume at the RUNNING child (True, the default) or
+                re-tick from the first child every tick (False). See
+                `ReactiveSequenceNode`.
         """
         super().__init__(children, name, memory=memory)
 
@@ -325,9 +323,9 @@ class SelectorNode(CompositeNode):
         Args:
             children: List of child nodes to try in order
             name: Optional name for debugging
-            memory: Resume at the RUNNING child (True, the historical
-                behaviour) or re-tick from the first child every tick
-                (False). See `ReactiveSelectorNode`.
+            memory: Resume at the RUNNING child (True, the default) or
+                re-tick from the first child every tick (False). See
+                `ReactiveSelectorNode`.
         """
         super().__init__(children, name, memory=memory)
 
@@ -362,31 +360,18 @@ class SelectorNode(CompositeNode):
 class ReactiveSequenceNode(SequenceNode):
     """A sequence that re-checks its guards every tick.
 
-    The ordinary `SequenceNode` has *memory*: once it advances past a child
-    it resumes at the one that was RUNNING and never re-ticks the earlier
-    ones. That quietly breaks the most common way a behaviour tree is
-    written:
+    `SequenceNode` resumes at the child that was RUNNING, so a condition
+    at the front is checked once. This node starts from the first child on
+    every tick, so a guard holds for as long as the branch runs. When a
+    failing guard pre-empts a RUNNING child, that child is `reset()`, so it
+    does not resume half-finished later.
 
-        >>> SequenceNode([
+    Example:
+        >>> ReactiveSequenceNode([
         ...     ConditionNode(is_player_visible),
         ...     ActionNode(chase),
         ...     ActionNode(attack),
         ... ])
-
-    The condition is checked once. The moment the sequence moves on to
-    `chase`, `is_player_visible` stops being evaluated -- so the enemy keeps
-    chasing and attacking after the player breaks line of sight, and
-    nothing anywhere reports a problem. The tree reads correctly; it just
-    does not do what it says.
-
-    A reactive sequence starts from the first child on every tick, so a
-    guard at the front is a guard for as long as the branch runs. When a
-    failing guard pre-empts a child that was RUNNING, that child is
-    `reset()` -- the abort -- so it does not resume half-finished later.
-
-    This is what most authors mean by a sequence; the memory variant is the
-    specialised one. The default is unchanged only because changing it would
-    silently alter every tree already written against it.
     """
 
     def __init__(self, children: list[BehaviorNode], name: str = "ReactiveSequence"):
@@ -402,23 +387,17 @@ class ReactiveSequenceNode(SequenceNode):
 class ReactiveSelectorNode(SelectorNode):
     """A selector that re-checks higher-priority branches every tick.
 
-    The ordinary `SelectorNode` resumes at the child that was RUNNING, so a
-    higher-priority branch that becomes viable mid-action never gets a
-    chance to take over:
+    `SelectorNode` resumes at the child that was RUNNING, so a
+    higher-priority branch that becomes viable mid-action does not take
+    over. This node re-ticks from the top, so the first viable branch wins
+    on every tick. The pre-empted child is `reset()`.
 
-        >>> SelectorNode([
+    Example:
+        >>> ReactiveSelectorNode([
         ...     SequenceNode([is_health_low, flee]),
         ...     SequenceNode([is_enemy_close, attack]),
         ...     ActionNode(patrol),
         ... ])
-
-    Once `patrol` is RUNNING, dropping to low health does not interrupt it.
-    A reactive selector re-ticks from the top, so the first viable branch
-    wins on every tick -- which is the entire point of ordering a selector
-    by priority.
-
-    The pre-empted child is `reset()` when a higher branch takes over, so
-    `patrol` does not resume mid-stride once the danger passes.
     """
 
     def __init__(self, children: list[BehaviorNode], name: str = "ReactiveSelector"):
@@ -438,16 +417,10 @@ class ParallelNode(CompositeNode):
     Returns FAILURE if failure_threshold children fail.
     Returns RUNNING otherwise.
 
-    A child that has finished is **latched**: its result is remembered and
-    it is not ticked again until this node itself resolves. Without that,
-    every tick re-ran children that had already succeeded --
-    `ParallelNode([fire_weapon_once, wait_5s])` fired the weapon on all
-    ~300 ticks of the wait rather than once (#46, reproduced at 60/60
-    before this change).
-
-    Latching is the conventional parallel semantic and is on by default;
-    `latch=False` restores the historical re-tick-everything behaviour for
-    a node whose children are all idempotent polls.
+    A child that has finished is latched: its result is remembered and it
+    is not ticked again until this node itself resolves. `latch=False`
+    re-ticks every child on every tick, for children that are all
+    idempotent polls.
 
     Example:
         >>> parallel = ParallelNode(
@@ -537,14 +510,9 @@ class ParallelNode(CompositeNode):
 class BlackboardCondition(BehaviorNode):
     """Compare a blackboard value without writing a closure.
 
-    Every behaviour-tree leaf used to be a hand-written lambda, which makes
-    a data-driven or editor-authored tree impossible -- you cannot
-    serialise a closure (#46). These stock nodes are the authoring
-    vocabulary: a tree built from them is describable as data.
-
-    The operator set is deliberately small and total: equality and ordering
-    cover the conditions a game actually asks about, and anything stranger
-    is still a `ConditionNode` away.
+    One of the stock nodes a tree can be built from as data, since a
+    closure cannot be serialised. The operators are equality and ordering;
+    anything else is a `ConditionNode`.
 
     Example:
         >>> BlackboardCondition("health", "<", 20)
@@ -747,16 +715,12 @@ class DecoratorNode(BehaviorNode):
 class CooldownNode(DecoratorNode):
     """Refuse to run a child again until a delay has elapsed.
 
-    The rate limit every ability needs. Without it a tree re-attempts its
-    child on every tick, so a dash, a shout or a special attack fires as
-    fast as the frame rate allows.
+    The cooldown starts when the child finishes, not when it starts, so a
+    long-running action is not cut short. A child that returns RUNNING is
+    left alone.
 
-    The cooldown starts when the child **finishes**, not when it starts, so
-    a long-running action is not cut short and the gap is measured from the
-    end of the last use. A child that returns RUNNING is left alone.
-
-    Reads `context.dt`, as `WaitNode` does: wall-clock time would make the
-    cooldown depend on how long the game spent paused.
+    Reads `context.dt`, as `WaitNode` does, so time spent paused does not
+    count.
 
     Example:
         >>> CooldownNode(5.0, ActionNode(cast_fireball))

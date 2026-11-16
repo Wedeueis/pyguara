@@ -1,32 +1,23 @@
 """`ColumnarWorld`: component state held in native columns.
 
-The object ECS keeps one Python object per component and lends that state
-to native code a call at a time. Here it is the other way round: the
-columns live in Rust (`rust/src/world.rs`), a native system works on them
-in place, and Python reaches them three ways.
+The columns live in Rust (`rust/src/world.rs`). This is a spike beside
+the object ECS, not wired into `EntityManager`, scenes or systems; see
+ADR 0008.
 
-```python
-world = ColumnarWorld()
-entity = world.spawn()
-world.add(entity, Position(Vector2(1.0, 2.0)))
+`arrays()` returns NumPy arrays over the column memory itself. While
+one is alive, anything that would move that memory (an `add` that
+grows the column, a `flush` with removals pending) raises
+`BufferError`. Removal is deferred, as in `EntityManager`: the rows
+leave the columns at the next `flush`.
 
-world.view(entity, Position).value = Vector2(3.0, 4.0)   # one entity
-xs = world.arrays(Position)["value.x"]                   # every entity
-world.add_scaled(Position, "value.x", Velocity, "value.x", dt)  # natively
-```
+Example:
+    world = ColumnarWorld()
+    entity = world.spawn()
+    world.add(entity, Position(Vector2(1.0, 2.0)))
 
-**An array pins its component.** `arrays()` returns NumPy arrays over the
-column memory itself, with no copy. While one is alive, anything that
-would move that memory -- an `add` that has to grow the column, a `flush`
-with removals pending -- raises `BufferError`. Drop the arrays before
-changing the world's structure; reading and writing values is always fine.
-
-**Removal is deferred**, as in `EntityManager`: `remove` and `despawn`
-take effect at once for every lookup, and the rows leave the columns at
-the next `flush`, in order.
-
-This is a spike. It stands beside the object ECS and is not wired into
-`EntityManager`, scenes or systems.
+    world.view(entity, Position).value = Vector2(3.0, 4.0)   # one entity
+    xs = world.arrays(Position)["value.x"]                   # every entity
+    world.add_scaled(Position, "value.x", Velocity, "value.x", dt)
 """
 
 from __future__ import annotations
@@ -376,8 +367,7 @@ def _build_view_class(schema: Schema, table: int) -> type:
 
     A subclass of the native `RowView` carrying one native `FieldAccessor`
     per field, so an attribute access goes from the interpreter's
-    descriptor call straight into Rust. A Python `property` in between
-    was measured at about 35 ns per access -- as much as the read itself.
+    descriptor call straight into Rust, with no Python `property` between.
     """
     extension = native.require_extension("pyguara.columnar")
     namespace: dict[str, Any] = {
