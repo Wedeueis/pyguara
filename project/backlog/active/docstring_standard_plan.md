@@ -1,5 +1,8 @@
 # Docstrings: one standard, checked in CI
 
+**Status: done on 2026-11-16**, in six pull requests (#434, #441 to #444,
+and the one that deletes the baseline). The outcome is at the end.
+
 Written 2026-11-15, measured against `main` at `015a89d` with ruff
 0.14.10. Answers finding 4 of phase 6 in `engine_completion_roadmap.md`
 ("about half the non-blank lines in `pyguara/` are docstrings and
@@ -181,9 +184,11 @@ reference text.
 | PR | What | Size |
 | --- | --- | --- |
 | **D1** (done, #434) | The standard as `docs/agents/docstrings.md`, one line in `AGENTS.md` pointing at it; `convention = "google"` and the D212 autofix; `tools/check_docstrings.py` with its baseline; wired into `make lint` | M |
-| **D2** (done) | `DOC501` enabled: 41 functions gained a `Raises:` entry. Click commands and Studio's operation handlers are exempt | S |
-| **D3 to D8** | The 437 flagged docstrings, one PR per group of packages, each shrinking the baseline: `graphics`; `studio`; `kits` and `ai`; `ui`, `physics`, `audio`, `net`; `scene`, `application`, `systems`, `resources` and the rest; then `ecs`, `di`, `events` | M each |
-| **D9** | Baseline deleted; the same content rules on comments, if decision 2 says so | S |
+| **D2** (#441) | `DOC501` enabled: 41 functions gained a `Raises:` entry. Click commands and Studio's operation handlers are exempt | S |
+| **D3** (#442) | The 341 flagged docstrings in `pyguara/` outside the core, one commit per group of packages | L |
+| **D4** (#443) | The 28 in `ecs`, `di` and `events`, as their own PR | S |
+| **D5** (#444) | `tests/`: 110 docstrings over the length limit rewritten, bold stripped from 63 | M |
+| **D6** (this PR) | Baseline deleted; `DS002`, `DS004` and `DS005` applied to comments in `pyguara/`, and the 16 comment blocks that broke them rewritten | S |
 
 Every cleanup PR changes docstrings and nothing else. Each one proves it
 with a comparison of every touched module's AST, docstrings stripped,
@@ -221,3 +226,29 @@ The owner took all five recommendations on 2026-11-15.
    name its issue. `games/` and `tools/` wait for #267.
 5. **`DOC501` is enabled in D2**: an exception a caller can meet is
    part of the contract.
+
+## Outcome
+
+Measured on `pyguara/` after the last PR, against the first table:
+
+| | Before | After |
+| --- | --- | --- |
+| Docstring lines | 34,947 | 32,185 |
+| Non-blank lines | 77,550 | 75,033 |
+| Docstrings and comments, as a share of the package | 50.4% | 48.3% |
+| Longest docstring | 52 lines | 32 lines |
+| Docstrings over 20 lines | 104 | 32 |
+| Findings from the content check | 563 in 369 docstrings | 0 |
+
+The share moved two points, as the first section said it would: most
+docstring lines are `Args:` and `Attributes:` sections, which the standard
+keeps. What changed is what the prose says.
+
+Left open:
+
+- `games/` and `tools/` are under no docstring rule (#267).
+- The comments in `pyproject.toml` have the same habits and no check.
+- `DS001` is not applied to comments, by decision 2: a comment may be as
+  long as its explanation needs.
+- The content rules are patterns. They miss history told in other words,
+  and a reviewer still has to read a new docstring.

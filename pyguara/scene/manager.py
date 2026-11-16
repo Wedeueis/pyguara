@@ -715,14 +715,12 @@ class SceneManager:
         scene.event_dispatcher.clear_subscribers(owner=scene)
         # Coroutines the scene started, by the same owner-tag mechanism and
         # for the same reason: `CoroutineManager` is an app-global singleton,
-        # so a sequence started in one scene went on ticking in the next --
-        # against entities that no longer exist (#55).
+        # so a sequence left running would tick in the next scene, against
+        # entities that no longer exist.
         #
         # Treated as optional, like `Application` treats `RenderGraph`: a
         # hand-built container need not register it, and a scene exit must
         # not fail because the service a *tidy-up* step wanted is absent.
-        # Asking for it unconditionally broke 41 tests that build minimal
-        # containers.
         if self._container is not None:
             with contextlib.suppress(ServiceNotFoundException):
                 self._container.get(CoroutineManager).stop_by(scene)

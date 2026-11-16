@@ -111,7 +111,7 @@ class PygameAudioSystem:
         # Sound tracking for priority management, keyed by the handle the
         # caller holds. `_handle_sounds` mirrors `_playing_sounds` with the
         # concrete Sound started for each handle, so a recycled channel can
-        # be told apart from the sound it used to carry (see
+        # be told apart from the sound it carried before (see
         # `is_sound_active`).
         self._playing_sounds: dict[SoundHandle, PlayingSoundInfo] = {}
         self._handle_sounds: dict[SoundHandle, pygame.mixer.Sound] = {}

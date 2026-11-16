@@ -208,8 +208,8 @@ class FlowFieldService:
         if self._native is not None:
             # The whole body below, in one crossing. Worth doing natively
             # even though the lookup is a dict access: the four `Vector2`
-            # operations after it are 97% of this method's 3.27 us, and
-            # a steering agent calls it every tick.
+            # operations after it are nearly all of this method's cost,
+            # and a steering agent calls it every tick.
             step_x, step_y = self._native.direction_at(
                 cell[0], cell[1], cell_size, offset.x, offset.y
             )

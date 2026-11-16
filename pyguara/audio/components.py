@@ -129,9 +129,7 @@ class AudioEmitter(StrictComponent):
 # These set flags; `AudioSourceSystem` is what reaches the backend. They
 # are free functions rather than methods because they mutate, which is
 # the same line `Transform`/`set_parent` and `Health`/`apply_damage`
-# draw. The issue that tracked this (#75, CC-6) recorded them as
-# "reaching the audio backend from the component" -- they do not, and
-# have not for some time.
+# draw. They do not reach the audio backend.
 
 
 def play(source: AudioSource) -> None:

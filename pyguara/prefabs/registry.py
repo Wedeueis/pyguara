@@ -195,8 +195,8 @@ class ComponentRegistry:
         }
 
         # A key that matches no field is an authoring mistake (a typo, a
-        # renamed field, wrong component). Silently dropping it — the old
-        # behaviour — hid the error until the value was missing at runtime.
+        # renamed field, wrong component). Dropping it silently would hide
+        # the error until the value was missing at runtime.
         unknown = set(data) - assignable
         if unknown:
             raise ValueError(

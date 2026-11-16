@@ -918,8 +918,7 @@ class Application:
             return
 
         # Honour the configured clear colour, as the direct path does through
-        # window.clear(). This used to be a hardcoded black, so
-        # display.default_color silently did nothing under ModernGL.
+        # window.clear().
         world_fbo = self._render_graph.fbo_manager.get_or_create("world")
         world_fbo.bind()
         world_fbo.clear(self._config_manager.config.display.default_color)
@@ -927,10 +926,7 @@ class Application:
         # Render scenes straight into the world FBO. This is where the
         # world is drawn: there is no "world" pass, because the bind above
         # has to happen *before* the scenes render and every pass runs
-        # after them. (There used to be a `WorldPass`, carrying its own
-        # camera-gated `Renderable` queue that no game ever submitted to;
-        # it was registered, skipped here by name, and deleted once that
-        # was established.)
+        # after them.
         # Re-bound before *each* stacked scene, not once: a scene below
         # may still execute a pass itself and leave its output bound.
         self._scene_manager.render(

@@ -286,11 +286,8 @@ class StudioAttachment:
         if application is not None:
             panels.insert(1, PlayControlsPanel(application, lambda: self.session))
             # Edit mode: the scene is the thing on screen and it is
-            # editable. Studio used to attach to a *running* game, which
-            # is where every "the controls have no effect" symptom came
-            # from -- a gizmo drag overwritten by the controller, a pan
-            # reclaimed by the follow system, an edit outlived before it
-            # could be seen. Press Play to run it.
+            # editable. A running game would overwrite an edit on its
+            # next tick. Press Play to run it.
             application.paused = True
         # `attach_editor` installed an Inspector with no attachment, so
         # it writes straight onto the component -- right for a layer with

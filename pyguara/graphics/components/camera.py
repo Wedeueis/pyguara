@@ -213,11 +213,8 @@ class Camera2D:
         self._follow_velocity: Vector2 = Vector2.zero()
 
         # This frame's shake displacement, recomputed by `update()` and read
-        # through `view_position`. Separate from `position` because shake
-        # used to be *added into* it: the offset oscillates around zero but
-        # never subtracted what it added last frame, so every shake left the
-        # camera permanently somewhere else -- a random walk across a scene
-        # with explosions in it.
+        # through `view_position`. Separate from `position`, so a shake
+        # never moves the camera's real position and leaves nothing to undo.
         self._shake_offset: Vector2 = Vector2.zero()
 
         # Framing: the level box the view may not leave, and the multi-target

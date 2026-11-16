@@ -603,7 +603,7 @@ class EditorLayer:
             + imgui.get_frame_height_with_spacing()
             + style.window_padding.y * 2.0
         )
-        # Measured against what is left after the bottom strip, not against
+        # Sized against what is left after the bottom strip, not against
         # the whole window: the top split is taken last, from the remainder,
         # so a ratio of the full height under-allocates it by exactly the
         # bottom's share -- which is what left the Play panel one row short

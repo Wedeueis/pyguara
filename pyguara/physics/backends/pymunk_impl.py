@@ -21,10 +21,9 @@ from pyguara.physics.types import (
 
 # One 1/60s step lets a body jump velocity/60 pixels; at 600 px/s that is 10
 # pixels, which clears a 10px wall outright. Substepping shortens the jump:
-# measured against a 10px wall, substeps 1/2/4 stop a body up to roughly
-# 200/400/900 px/s respectively. Four is kept as the default because the cost
-# is far lower than once feared -- 0.65ms/update at 200 dynamic bodies, 2.5ms
-# at 500, well under a 16.7ms frame -- while the extra headroom matters for
+# against a 10px wall, substeps 1/2/4 stop a body up to roughly
+# 200/400/900 px/s respectively. Four is the default because its cost is
+# small at the body counts a scene reaches, and the extra headroom matters for
 # knockback and explosion-flung props in a top-down game. Drop to 2 only when
 # simulating many hundreds of fast bodies; fast projectiles should raycast
 # rather than lean on the solver catching them.
